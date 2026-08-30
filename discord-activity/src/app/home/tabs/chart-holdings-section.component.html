@@ -1,6 +1,6 @@
 <div class="card">
   <div class="card-head">
-    <div class="card-title">{{ boardLabel }} Pop Item Holdings</div>
+    <div class="card-title">{{ boardLabel }} {{ tracksDrops ? 'Holdings' : 'Pop Item Holdings' }}</div>
 
     <div class="card-head-right">
       @if (!isEmpty()) {
@@ -11,14 +11,14 @@
 
   @if (isEmpty()) {
     <div class="empty-state">
-      Nothing is tracked yet. Add pop items to a boss above and they are listed here.
+      Nothing is tracked yet. Add items to a boss above and they are listed here.
     </div>
   } @else {
     <div class="table-wrap">
       <table class="chart-holdings">
         <thead>
           <tr>
-            <th>Pop Item</th>
+            <th>{{ tracksDrops ? 'Item' : 'Pop Item' }}</th>
             <th>Held By</th>
             <th>Qty</th>
             <th>Farming Credit</th>
@@ -35,6 +35,13 @@
                 @if (!row.continues) {
                   <span class="chart-holdings__item">
                     <span class="chart-holdings__name">{{ row.item.itemName }}</span>
+                    <!-- Only DROP rows wear a pill. Pop is the default and the common case, so the
+                         badge marks the exception rather than labelling every row on Sky. A badge
+                         inside this cell rather than a new column, because the table's colspans are
+                         written in three places. -->
+                    @if (row.item.kind === 'Drop') {
+                      <span class="chart-holdings__kind">Drop</span>
+                    }
                     <span class="chart-holdings__boss" [ngClass]="themeClass(row.themeKey)">{{ row.boss }}</span>
                   </span>
                 } @else {

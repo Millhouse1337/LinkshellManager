@@ -181,7 +181,15 @@ public sealed partial class ActivityDataController
             }
 
             await _dbContext.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
+            // The ToD itself is already committed above and stays — the kill happened. Only the
+            // unaffordable loot is rejected; the officer can re-add it from Loot History once the
+            // winner's DKP is sorted.
+            var insufficient = await AdjustTodLootDkpAsync(
+                _dbContext, _dkpLedger, _dkpPools, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
+            if (insufficient is not null)
+            {
+                return BadRequest(new { error = $"{insufficient} The ToD was recorded without its loot." });
+            }
             await _dbContext.SaveChangesAsync(cancellationToken);
             tod.TodLootDetails = normalizedLootDetails;
         }
@@ -189,6 +197,11 @@ public sealed partial class ActivityDataController
         // A new ToD = a new pop window, so reset any party sign-ups assigned to
         // this monster (the old roster is for the pop that just happened).
         await PartySetupController.ClearSignupsForMonsterAsync(_dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
+
+        // The tracker writes only the Tod row, so any board parked waiting to re-post would keep
+        // showing the old pop time until it actually re-posted. Re-point it at this ToD's repop.
+        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
+            _dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
         return Ok(MapTodDto(tod));
     }
@@ -225,6 +238,11 @@ public sealed partial class ActivityDataController
         DeleteUploadedTodImage(tod.ImagePath);
         _dbContext.Tods.Remove(tod);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Deleting the ToD a parked board was counting on leaves it advertising a pop that no
+        // longer exists — fall back to the monster's next-newest ToD, or to no time at all.
+        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
+            _dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
         return Ok(new { success = true });
     }
@@ -324,7 +342,7 @@ public sealed partial class ActivityDataController
         }
 
         var cooldown = string.IsNullOrWhiteSpace(request.Cooldown)
-            ? GetDefaultTodCooldown(monsterName)
+            ? await GetDefaultTodCooldownAsync(_monsterTimings, tod.LinkshellId, monsterName, cancellationToken)
             : request.Cooldown.Trim();
         if (!IsAcceptableTodCooldown(cooldown))
         {
@@ -387,8 +405,18 @@ public sealed partial class ActivityDataController
 
         var nowUtc = DateTime.UtcNow;
 
+        // A request that carries NO loot list at all means "leave the loot alone", not "delete it".
+        //
+        // That distinction exists because loot can no longer be entered from a ToD -- the form
+        // stopped sending a list. Without this, editing the time on an old ToD that still carries
+        // legacy loot would refund and destroy it as a side effect of fixing a typo.
+        //
+        // An explicit list (including an empty one) still replaces, which is what an older client
+        // and the submission-approval path both send.
+        var replaceLoot = request.LootDetails is not null;
+
         // Reverse DKP impact from existing loot, remove it, then apply the new set.
-        if (tod.TodLootDetails.Count > 0)
+        if (replaceLoot && tod.TodLootDetails.Count > 0)
         {
             await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, tod.TodLootDetails.ToList(), nowUtc, isRefund: true, cancellationToken);
             _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
@@ -421,14 +449,26 @@ public sealed partial class ActivityDataController
             }
 
             await _dbContext.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
+            // The edit to the ToD itself is already committed above. Only the unaffordable loot is
+            // rejected — the old loot was already refunded at the top of this method.
+            var insufficient = await AdjustTodLootDkpAsync(
+                _dbContext, _dkpLedger, _dkpPools, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
+            if (insufficient is not null)
+            {
+                return BadRequest(new { error = $"{insufficient} The ToD was updated without its loot." });
+            }
             await _dbContext.SaveChangesAsync(cancellationToken);
             tod.TodLootDetails = normalizedLootDetails;
         }
-        else
+        else if (replaceLoot)
         {
             tod.TodLootDetails = new List<TodLootDetail>();
         }
+
+        // A corrected repop has to reach any board parked waiting on it: re-point its displayed
+        // pop / re-post time, and re-open the cycle if the poller had already given up on it.
+        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
+            _dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(previousImage) && !string.Equals(previousImage, newImage, StringComparison.Ordinal))
         {

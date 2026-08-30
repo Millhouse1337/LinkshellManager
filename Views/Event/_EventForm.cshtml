@@ -1,26 +1,20 @@
 @model EventViewModel
 @{
-    // Mirror the Discord Activity's eventTypeOptions list exactly so both UIs pick from
-    // the same vocabulary. "Other" is appended in the markup and reveals a free-text input.
+    // The create/edit event form, laid out as the Discord Activity's own create-event modal
+    // (discord-activity/src/app/home/activity-queue-panel.component.html): a numbered
+    // 01-05 section stack, event type as chips, options as switches, a derived Duration
+    // readout and a pinned footer. Styles come from wwwroot/css/event-form.css, which is a
+    // port of the Activity's _create-event-modal.scss. The host page supplies the <form
+    // class="cem cem--page">; this partial renders its header, body and footer.
+    //
+    // Mirror the Activity's eventTypeOptions list exactly so both UIs pick from the same
+    // vocabulary. "Other" is appended in the markup and reveals a free-text input.
     var currentEventType = Model.Event.EventType ?? string.Empty;
-    // "HNM" events are created automatically by the in-game addon (never by hand), so
-    // it's not offered as a manual create option. Keep it selectable only when editing
-    // an existing HNM event so its type still displays and round-trips on save.
-    var eventTypeOptions = new List<string> { "Sky", "Sea", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
-    // HNM signup boards are roster-only / no-DKP. Offer "HNM" as a create option when the
-    // linkshell has opted into HNM Outside Sign Up (parity with the Discord Activity). Always
-    // keep it selectable when editing an existing HNM event so its type round-trips on save.
     // "NM" rides in beside "HNM" and is NOT a separate event type: picking it posts
     // EventType "HNM" (see the picker JS) and only re-cuts the monster list to the NMs.
     // The same split the addon's preset panel draws between "HNMS" and "NMS", and the same
     // one it files both of under EventType "HNM".
-    if ((Model.HnmOutsideSignupEnabled
-            || string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase))
-        && !eventTypeOptions.Contains("HNM"))
-    {
-        eventTypeOptions.Insert(2, "HNM");
-        eventTypeOptions.Insert(3, "NM");
-    }
+    var eventTypeOptions = new List<string> { "Sky", "Sea", "HNM", "NM", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
     var isHnmEvent = string.Equals(currentEventType, "HNM", StringComparison.OrdinalIgnoreCase);
     // Which of the two the picker opens on when EDITING an existing camp. The stored type is
     // "HNM" either way, so the monster is the only thing that can tell them apart -- an
@@ -30,259 +24,734 @@
         && !LinkshellManagerDiscordApp.Services.HnmConfig.IsHnmTierMonster(Model.Event.AssignedMonsterName);
     var isKnownEventType = eventTypeOptions.Any(option =>
         string.Equals(option, currentEventType, StringComparison.OrdinalIgnoreCase));
-    var initialPickerValue = string.IsNullOrEmpty(currentEventType) ? string.Empty
+    var initialChipValue = string.IsNullOrEmpty(currentEventType) ? string.Empty
         : (isNmTierEvent ? "NM" : (isKnownEventType ? currentEventType : "Other"));
     var initialOtherValue = isKnownEventType ? string.Empty : currentEventType;
 
     // Edit-mode auto-tick: if we're editing a saved event (Id > 0) and the field is null,
-    // pre-check the matching "Not specified" checkbox so addon-created HNM events (which
-    // have null EndTime + Duration) display correctly. On Create (Id == 0) all boxes
-    // start unchecked.
+    // start in the matching "not specified" state so addon-created HNM events (which have
+    // null EndTime + Duration) display correctly. On Create (Id == 0) nothing is pre-set.
     var isEditMode             = Model.Event.Id > 0;
     var endTimeNotSpecified    = isEditMode && Model.Event.EndTime is null;
-    var durationNotSpecified   = isEditMode && Model.Event.Duration is null;
     var partySetupNotSpecified = isEditMode && !Model.PartySetupId.HasValue;
     // A LIVE (commenced) event's party board is now edited inline on the board, so the
-    // setup picker is omitted while editing one (matches the Activity edit-live-event
-    // modal). A hidden input preserves the current PartySetupId so saving the event
-    // details doesn't clear it.
+    // setup picker is omitted while editing one. A hidden input preserves the current
+    // PartySetupId so saving the event details doesn't clear it.
     var isLiveEdit = isEditMode && Model.Event.CommencementStartTime.HasValue;
-    // "No DKP" runs award nothing -- modelled as DkpPerHour == 0. Pre-tick the
-    // toggle when editing such an event so it round-trips.
-    var noDkp                  = Model.Event.DkpPerHour == 0;
+
+    var linkshellName = Model.Linkshells.FirstOrDefault(l => l.Id == Model.Event.LinkshellId)?.LinkshellName
+        ?? Model.Linkshells.FirstOrDefault(l => l.Id == Model.LinkshellId)?.LinkshellName;
+
+    var monsterValue = Model.Event.AssignedMonsterName ?? string.Empty;
+    // Options already carry the combined "Base/Stronger" label, so a stored value matches
+    // an option directly; "Other" only when it isn't one of the known options.
+    var monsterIsKnown = Model.MonsterOptions.Any(m => string.Equals(m, monsterValue, StringComparison.OrdinalIgnoreCase));
+    var monsterPickerValue = string.IsNullOrEmpty(monsterValue) ? string.Empty : (monsterIsKnown ? monsterValue : "Other");
+    var monsterOtherValue = monsterIsKnown ? string.Empty : monsterValue;
+    var monsterIsOther = monsterPickerValue == "Other";
+    var monsterHasDayCycle = LinkshellManagerDiscordApp.Services.HnmConfig.HasHqVariant(monsterValue);
+
+    // What the camp pays, in whichever shape the linkshell's attendance mode uses
+    // (Standard: open/close/claim/kill -- Manual Check In: per window/claim/kill). The
+    // amounts come from the linkshell's HNM settings; "Change DKP" prices this ONE camp
+    // without moving that setting. Mirrors the Activity's STANDARD_BONUS_FIELDS /
+    // MANUAL_CHECK_IN_BONUS_FIELDS pair, whose labels and hints these are.
+    var isWdMode = string.Equals(Model.HnmAttendanceMode, LinkshellManagerDiscordApp.Models.HnmAttendanceModes.Wd,
+        StringComparison.OrdinalIgnoreCase);
+    var bonusFields = new[]
+    {
+        new
+        {
+            Key = "HnmPerWindowOverride",
+            Label = isWdMode ? "Per window" : "Regular window",
+            Suffix = "per window",
+            Hint = isWdMode ? "Each window the member is checked in for" : "Every window the member is scanned in, open and close included",
+            Default = Model.HnmDefaultWindowBonus,
+            Value = Model.Event.HnmPerWindowOverride
+        },
+        new
+        {
+            Key = "HnmOpenBonusOverride",
+            Label = "Open",
+            Suffix = "for open",
+            Hint = isWdMode ? "Checked in from window 1" : "On the roster when the camp opens",
+            Default = Model.HnmDefaultOpenBonus,
+            Value = Model.Event.HnmOpenBonusOverride
+        },
+        new
+        {
+            Key = "HnmCloseBonusOverride",
+            Label = "Close",
+            Suffix = "for close",
+            Hint = isWdMode ? "Still checked in at the camp's last window" : "On the roster when the camp closes",
+            Default = Model.HnmDefaultCloseBonus,
+            Value = Model.Event.HnmCloseBonusOverride
+        },
+        new
+        {
+            Key = "HnmClaimBonusOverride",
+            Label = "Claim",
+            Suffix = "for claim",
+            Hint = isWdMode ? "Paid once when the camp is claimed" : "Camp claimed, and present at close",
+            Default = Model.HnmDefaultClaimBonus,
+            Value = Model.Event.HnmClaimBonusOverride
+        },
+        new
+        {
+            Key = "HnmKillBonusOverride",
+            Label = "Kill",
+            Suffix = "for kill",
+            Hint = isWdMode ? "Paid once when the camp is killed" : "Camp killed, and present at close",
+            Default = Model.HnmDefaultKillBonus,
+            Value = Model.Event.HnmKillBonusOverride
+        }
+    };
+    // Any override already set opens section 03 on the expanded editor, so an officer sees
+    // the amounts this camp actually carries rather than a collapsed "linkshell defaults".
+    var hasBonusOverrides = bonusFields.Any(field => field.Value.HasValue);
+
+    string Num(double value) => value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
 }
 
-<div asp-validation-summary="ModelOnly" class="alert alert-danger" style="margin-bottom:12px"></div>
+<header class="cem__header">
+    <div class="cem__heading">
+        <div class="cem__title-row">
+            <span class="cem__dot" aria-hidden="true"></span>
+            <h1 class="cem__title">
+                @(isLiveEdit ? "Edit live event" : isEditMode ? "Edit event" : "Create event")
+            </h1>
+        </div>
+        <p class="cem__subtitle">
+            @if (isLiveEdit)
+            {
+                @:Update a live event in progress.
+            }
+            else if (isEditMode)
+            {
+                @:Update a queued event.
+            }
+            else
+            {
+                @:Stage a new signup card.
+            }
+        </p>
+    </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;align-items:start">
-    @if (isEditMode)
-    {
-        <div class="field" style="display:flex;flex-direction:column">
-            <label for="Event_LinkshellId">Linkshell</label>
-            <select class="form-select" id="Event_LinkshellId" name="Event.LinkshellId">
+    @* On the Activity the linkshell is fixed (it follows the active linkshell) and reads as
+       a static chip. The web can move an event between the linkshells you manage, so on the
+       edit form the same chip holds the picker instead of plain text. *@
+    <div class="cem__linkshell" title="@(isEditMode ? "Move this event to another linkshell you manage" : "Set by the active linkshell")">
+        <span class="cem__linkshell-label">Linkshell</span>
+        <span class="cem__linkshell-sep" aria-hidden="true"></span>
+        @if (isEditMode)
+        {
+            <select class="cem__linkshell-select" id="Event_LinkshellId" name="Event.LinkshellId" aria-label="Linkshell">
                 @foreach (var linkshell in Model.Linkshells)
                 {
-                    if (linkshell.Id == Model.Event.LinkshellId)
-                    {
-                        <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
-                    }
-                    else
-                    {
-                        <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                    }
+                    <option value="@linkshell.Id" selected="@(linkshell.Id == Model.Event.LinkshellId)">@linkshell.LinkshellName</option>
                 }
             </select>
-        </div>
-    }
-    else
-    {
-        <input type="hidden" id="Event_LinkshellId" name="Event.LinkshellId" value="@Model.Event.LinkshellId" />
-    }
-    <div class="field" style="display:flex;flex-direction:column">
-        <label for="Event_EventName">Event name</label>
-        <input class="form-control" id="Event_EventName" name="Event.EventName" value="@Model.Event.EventName" />
+        }
+        else
+        {
+            <span class="cem__linkshell-name">@(linkshellName ?? "—")</span>
+            <input type="hidden" id="Event_LinkshellId" name="Event.LinkshellId" value="@Model.Event.LinkshellId" />
+        }
     </div>
-    <div class="field" style="display:flex;flex-direction:column">
-        <label for="event-type-picker">Event type</label>
-        <div style="display:flex;gap:8px">
-            <select class="form-select" id="event-type-picker" style="flex:1;min-width:0">
-                <option value="" disabled selected="@(string.IsNullOrEmpty(initialPickerValue))">Select event type</option>
+
+    <a class="cem__close" asp-action="Index" aria-label="Close the form" title="Close the form">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </a>
+</header>
+
+<div class="cem__body">
+    <div asp-validation-summary="ModelOnly" class="cem__alert"></div>
+
+    <section class="cem__section">
+        <div class="cem__section-head">
+            <span class="cem__section-title">01 — Event details</span>
+            <span class="cem__rule"></span>
+        </div>
+
+        <div class="cem__grid">
+            <label class="cem__field">
+                <span class="cem__label">Event name</span>
+                <input class="cem__input" id="Event_EventName" name="Event.EventName"
+                       value="@Model.Event.EventName" placeholder="e.g. Dynamis — Xarcabard" required />
+            </label>
+
+            <label class="cem__field">
+                <span class="cem__label">Location <em>optional</em></span>
+                <input class="cem__input" id="Event_EventLocation" name="Event.EventLocation"
+                       value="@Model.Event.EventLocation" placeholder="Zone or meetup point" />
+            </label>
+        </div>
+
+        @* Chips instead of a dropdown: the option list is short enough to show at
+           once, so picking a type is one click rather than open-scroll-select. *@
+        <div class="cem__field">
+            <span class="cem__label">Event type</span>
+            <div class="cem__chips" id="event-type-chips">
                 @foreach (var option in eventTypeOptions)
                 {
-                    if (string.Equals(option, initialPickerValue, StringComparison.OrdinalIgnoreCase))
-                    {
-                        <option value="@option" selected>@option</option>
-                    }
-                    else
-                    {
-                        <option value="@option">@option</option>
-                    }
+                    <button type="button" class="cem__chip @(string.Equals(option, initialChipValue, StringComparison.OrdinalIgnoreCase) ? "is-active" : null)"
+                            data-event-type-chip="@option">@option</button>
                 }
-                @if (initialPickerValue == "Other")
-                {
-                    <option value="Other" selected>Other</option>
-                }
-                else
-                {
-                    <option value="Other">Other</option>
-                }
-            </select>
-            <input class="form-control" type="text" id="event-type-other"
+                <button type="button" class="cem__chip @(initialChipValue == "Other" ? "is-active" : null)"
+                        data-event-type-chip="Other">Other</button>
+            </div>
+            <input class="cem__input" type="text" id="event-type-other"
                    placeholder="Specify event type" value="@initialOtherValue"
-                   style="flex:1;min-width:0;@(initialPickerValue == "Other" ? string.Empty : "display:none")" />
+                   style="@(initialChipValue == "Other" ? null : "display:none")" />
+            <input type="hidden" id="event-type-hidden" name="Event.EventType" value="@currentEventType" />
         </div>
-        <input type="hidden" id="event-type-hidden" name="Event.EventType" value="@currentEventType" />
-    </div>
-    @{
-        var monsterValue = Model.Event.AssignedMonsterName ?? string.Empty;
-        // Options already carry the combined "Base/Stronger" label, so a stored value matches
-        // an option directly; "Other" only when it isn't one of the known options.
-        var monsterIsKnown = Model.MonsterOptions.Any(m => string.Equals(m, monsterValue, StringComparison.OrdinalIgnoreCase));
-        var monsterPickerValue = string.IsNullOrEmpty(monsterValue) ? string.Empty : (monsterIsKnown ? monsterValue : "Other");
-        var monsterOtherValue = monsterIsKnown ? string.Empty : monsterValue;
-    }
-    @* HNM signup board: monster picker (revealed by the event-type JS when HNM is chosen).
-       Posts Event.AssignedMonsterName; "Other" reveals a free-text input. Merge pairs are
-       shown as one combined "Base/Stronger" entry; the Day input only changes what the
-       sign-up board prints (server-side), not this list. *@
-    <div class="field" id="hnm-monster-field" style="@(isHnmEvent ? "display:flex" : "display:none");flex-direction:column">
-        <label for="hnm-monster-picker">Monster</label>
-        <div style="display:flex;gap:8px">
-            <select class="form-select" id="hnm-monster-picker" style="flex:1;min-width:0">
-                <option value="" disabled selected="@(string.IsNullOrEmpty(monsterPickerValue))">Select a monster</option>
-                @* data-tier is what the HNM / NM buttons filter on: "hnm" for the wyrms and
-                   the three NQ/HQ families, "nm" for everything else. *@
-                @foreach (var m in Model.MonsterOptions)
-                {
-                    var tier = LinkshellManagerDiscordApp.Services.HnmConfig.IsHnmTierMonster(m) ? "hnm" : "nm";
-                    <option value="@m" data-tier="@tier" selected="@(string.Equals(m, monsterPickerValue, StringComparison.OrdinalIgnoreCase))">@m</option>
-                }
-                <option value="Other" selected="@(monsterPickerValue == "Other")">Other</option>
-            </select>
-            <input class="form-control" type="text" id="hnm-monster-other"
-                   placeholder="Monster name" value="@monsterOtherValue"
-                   style="flex:1;min-width:0;@(monsterPickerValue == "Other" ? string.Empty : "display:none")" />
-        </div>
-        <input type="hidden" id="hnm-monster-hidden" name="Event.AssignedMonsterName" value="@monsterValue" />
-    </div>
-    @* Day number (HNM only). Controls what the SIGN-UP BOARD prints for a merge pair:
-       days 1–3 show just the base monster; day 4+ (and no day) show the combined pair. *@
-    <div class="field" id="hnm-day-field" style="@(isHnmEvent ? "display:flex" : "display:none");flex-direction:column">
-        <label for="Event_DayNumber">Day</label>
-        <input class="form-control" type="number" min="1" step="1" id="Event_DayNumber"
-               name="Event.DayNumber" value="@(Model.Event.DayNumber?.ToString())" placeholder="e.g. 3" />
-        <span style="font-size:12px;color:var(--fg-3)">
-            On the sign-up board, days 1–3 show just the base monster (e.g. Adamantoise); day 4+ shows the combined pair (Adamantoise/Aspidochelone).
-        </span>
-    </div>
-    <div class="field" style="display:flex;flex-direction:column">
-        <label for="Event_EventLocation">Location</label>
-        <input class="form-control" id="Event_EventLocation" name="Event.EventLocation" value="@Model.Event.EventLocation" />
-    </div>
-    <div class="field" style="display:flex;flex-direction:column">
-        <label for="Event_StartTime">Start</label>
-        <input class="form-control" id="Event_StartTime" name="Event.StartTime" type="datetime-local" step="1" value="@(Model.Event.StartTime?.ToString("yyyy-MM-ddTHH:mm:ss"))" />
-        @* Auto-start: a background service stamps the event live at its Start time
-           so nobody has to click Start. HNM events ignore this (addon-driven).
-           Hidden "false" makes an unchecked box post false (MVC checkbox pattern). *@
-        <label id="hnm-hide-autostart" style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);margin:6px 0 0">
-            <input type="checkbox" name="Event.AutoStart" value="true" @(Model.Event.AutoStart ? "checked" : null) />
-            <input type="hidden" name="Event.AutoStart" value="false" />
-            Auto start at start time
-        </label>
-    </div>
-    <div class="field" style="display:flex;flex-direction:column">
-        <label for="Event_EndTime">End</label>
-        <div style="display:flex;gap:8px;align-items:center">
-            <input class="form-control" id="Event_EndTime" name="Event.EndTime" type="datetime-local" step="1" value="@(Model.Event.EndTime?.ToString("yyyy-MM-ddTHH:mm:ss"))" style="flex:1;min-width:0" />
-            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);white-space:nowrap;margin:0">
-                <input type="checkbox" id="Event_EndTime_NotSpecified" @(endTimeNotSpecified ? "checked" : null) />
-                Not specified
-            </label>
-        </div>
-    </div>
-    <div class="field" style="display:flex;flex-direction:column">
-        <label for="Event_Duration">Duration (hours)</label>
-        <div style="display:flex;gap:8px;align-items:center">
-            <div class="num-stepper" style="flex:1;min-width:0">
-                <input class="form-control num-stepper__input" id="Event_Duration" name="Event.Duration" type="number" step="0.25" min="0" value="@Model.Event.Duration" />
-                <button type="button" class="num-stepper__btn" data-stepper-dec aria-label="Decrease duration">&minus;</button>
-                <button type="button" class="num-stepper__btn" data-stepper-inc aria-label="Increase duration">+</button>
-            </div>
-            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);white-space:nowrap;margin:0">
-                <input type="checkbox" id="Event_Duration_NotSpecified" @(durationNotSpecified ? "checked" : null) />
-                Not specified
-            </label>
-        </div>
-    </div>
-    <div class="field" style="display:flex;flex-direction:column">
-        <label for="Event_DkpPerHour">DKP/hour</label>
-        <div style="display:flex;gap:8px;align-items:center">
-            <div class="num-stepper" style="flex:1;min-width:0">
-                <input class="form-control num-stepper__input" id="Event_DkpPerHour" name="Event.DkpPerHour" type="number" min="0" step="1" value="@Model.Event.DkpPerHour" />
-                <button type="button" class="num-stepper__btn" data-stepper-dec aria-label="Decrease DKP per hour">&minus;</button>
-                <button type="button" class="num-stepper__btn" data-stepper-inc aria-label="Increase DKP per hour">+</button>
-            </div>
-            <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);white-space:nowrap;margin:0">
-                <input type="checkbox" id="Event_NoDkp" @(noDkp ? "checked" : null) />
-                No DKP
-            </label>
-        </div>
-    </div>
-    <div class="field" id="hnm-hide-countsactive" style="display:flex;flex-direction:column;grid-column:1/-1">
-        @* Activity tracking: when checked, attendees of this event earn active-member
-           credit (reconciled at close). Hidden "false" makes an unchecked box post
-           false (MVC checkbox pattern), same as Auto start above. *@
-        <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--fg-2);margin:0">
-            <input type="checkbox" name="Event.CountsTowardActive" value="true" @(Model.Event.CountsTowardActive ? "checked" : null) />
-            <input type="hidden" name="Event.CountsTowardActive" value="false" />
-            Counts toward active-member status
-        </label>
-        <span style="font-size:11px;color:var(--fg-4);margin-top:2px">Attendees get active credit (checked by default; reconcile per member when the event closes).</span>
-    </div>
 
-    @{
-        var monsterIsOther = monsterPickerValue == "Other";
-    }
-    @* HNM signup board: optionally re-post the board before the next predicted pop
-       when a new ToD for the monster is recorded. Disabled for a free-text "Other"
-       monster (recurrence needs an exact ToD match). Revealed by the JS for HNM.
-       HOW FAR ahead it re-posts is NOT asked here — that's set on the End Camp /
-       Post ToD form, where the officer actually knows the next pop. Asking in both
-       places meant two answers for one setting. *@
-    <div class="field" id="hnm-repeat-field" style="@(isHnmEvent ? "display:flex" : "display:none");flex-direction:column;grid-column:1/-1">
-        <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--fg-2);margin:0">
-            <input type="checkbox" name="RepeatOnTod" value="true" id="hnm-repeat-toggle" @(Model.RepeatOnTod ? "checked" : null) />
-            <input type="hidden" name="RepeatOnTod" value="false" />
-            Repeat post when ToD is updated
-        </label>
-        <span style="font-size:11px;color:var(--fg-4);margin-top:2px">When a new ToD for this monster is recorded, re-post the signup board ahead of the next pop.</span>
-        <div id="hnm-lead-field" style="@(Model.RepeatOnTod ? "display:block" : "display:none");margin-top:6px">
-            <span style="font-size:11px;color:var(--fg-4)">Set how many hours before the pop it re-posts on the End Camp / Post ToD form.</span>
+        @* HNM signup board: monster picker (revealed by the event-type JS when HNM is
+           chosen). Posts Event.AssignedMonsterName; "Other" reveals a free-text input.
+           Merge pairs are shown as one combined "Base/Stronger" entry; the Day input only
+           changes what the sign-up board prints (server-side), not this list. *@
+        <div class="cem__grid" id="hnm-monster-grid" style="@(isHnmEvent ? null : "display:none")">
+            <label class="cem__field">
+                <span class="cem__label">Monster</span>
+                <select class="cem__select" id="hnm-monster-picker">
+                    <option value="" disabled selected="@(string.IsNullOrEmpty(monsterPickerValue))">Select a monster</option>
+                    @* data-tier is what the HNM / NM chips filter on: "hnm" for the wyrms and
+                       the three NQ/HQ families, "nm" for everything else. data-daycycle marks
+                       the three NQ/HQ families, the only monsters with a pop cycle to number --
+                       it is what reveals the Day field beside it. *@
+                    @foreach (var m in Model.MonsterOptions)
+                    {
+                        var tier = LinkshellManagerDiscordApp.Services.HnmConfig.IsHnmTierMonster(m) ? "hnm" : "nm";
+                        var hasDayCycle = LinkshellManagerDiscordApp.Services.HnmConfig.HasHqVariant(m) ? "1" : "0";
+                        <option value="@m" data-tier="@tier" data-daycycle="@hasDayCycle" selected="@(string.Equals(m, monsterPickerValue, StringComparison.OrdinalIgnoreCase))">@m</option>
+                    }
+                    <option value="Other" selected="@(monsterIsOther)">Other</option>
+                </select>
+                <input type="hidden" id="hnm-monster-hidden" name="Event.AssignedMonsterName" value="@monsterValue" />
+            </label>
+
+            @* Day number. Offered for the three NQ/HQ families and nothing else (see
+               syncDayField): day counts a pop cycle and only they have one. It controls what
+               the SIGN-UP BOARD prints for the pair -- days 1-3 show just the base monster;
+               day 4+ (and no day) show the pair. *@
+            <label class="cem__field" id="hnm-day-field" style="@(isHnmEvent && monsterHasDayCycle ? null : "display:none")">
+                <span class="cem__label">Day number <em>optional</em></span>
+                <input class="cem__input" type="number" min="1" step="1" id="Event_DayNumber"
+                       name="Event.DayNumber" value="@(Model.Event.DayNumber?.ToString())" placeholder="e.g. 3"
+                       title="On the sign-up board, days 1–3 show just the base monster; day 4+ shows the combined pair (e.g. Adamantoise/Aspidochelone)" />
+            </label>
+
+            <label class="cem__field" id="hnm-monster-other-field" style="@(monsterIsOther ? null : "display:none")">
+                <span class="cem__label">Monster name</span>
+                <input class="cem__input" type="text" id="hnm-monster-other"
+                       placeholder="Enter the monster's name" value="@monsterOtherValue" />
+            </label>
         </div>
-        <small id="hnm-repeat-other-note" style="font-size:11px;color:var(--fg-4);margin-top:6px;@(monsterIsOther ? string.Empty : "display:none")">
-            Enter the custom monster name above to enable this. Recurrence re-posts when a new ToD is logged under that exact name.
+
+        @* Recurring camp: does this board come back on its own, and how long before the next
+           predicted pop? BOTH halves are asked here now, on create as well as on edit — a
+           camp made with the lead unasked took the 1-hour default silently and the officer had
+           no say until End Camp, by which point the first re-post had already been scheduled.
+
+           Disabled for a free-text "Other" monster until a name is typed, since recurrence keys
+           on an exact ToD name match. The toggle and the lead both PRE-FILL from the picked
+           monster's standing board (EventViewModel.MonsterRepeatLeads), so the form opens
+           showing what that monster is already configured for rather than a blank choice that
+           would switch it off on submit. An empty lead box still posts null, which means "keep
+           the board's current lead" — so this form and the End Camp / Post ToD form, which sets
+           the same value, can't fight over it. *@
+        <div class="cem__field" id="hnm-repeat-field" style="@(isHnmEvent ? null : "display:none")">
+            <div class="cem__switches">
+                <button type="button" class="cem__switch @(Model.RepeatOnTod ? "is-on" : null)" id="hnm-repeat-switch"
+                        aria-pressed="@(Model.RepeatOnTod ? "true" : "false")">
+                    <span class="cem__track"><span class="cem__knob"></span></span>
+                    <span class="cem__switch-text">
+                        <span class="cem__switch-title">Repeat post when ToD is updated</span>
+                        <span class="cem__switch-hint">When a new ToD for this monster is recorded, re-post the signup board ahead of the next pop</span>
+                    </span>
+                </button>
+            </div>
+            <input type="hidden" name="RepeatOnTod" id="RepeatOnTod" value="@(Model.RepeatOnTod ? "true" : "false")" />
+            <small class="cem__hint" id="hnm-repeat-other-note" style="@(monsterIsOther ? null : "display:none")">
+                Enter the custom monster name above to enable this. Recurrence re-posts when a new ToD is logged under that exact name.
+            </small>
+            <div id="hnm-lead-field" style="@(Model.RepeatOnTod ? null : "display:none")">
+                <label class="cem__field">
+                    <span class="cem__label">Hours before repop <em>optional</em></span>
+                    @* step=".25" so the lead can be given in quarter-hours (1.5 = 1h30m),
+                       matching the End Camp / Post ToD form. No value attribute when null:
+                       an empty box is the "leave the existing lead alone" signal, not 0. *@
+                    <input class="cem__input" id="RepostLeadHours" name="RepostLeadHours" type="number" min="0" max="168" step="0.25"
+                           placeholder="e.g. 2"
+                           title="How many hours before the predicted next pop the event and sign-up board are re-posted"
+                           value="@(Model.RepostLeadHours?.ToString(System.Globalization.CultureInfo.InvariantCulture))" />
+                    <small class="cem__hint">
+                        Blank keeps this monster's current setting (1 hour if it has never had one).
+                        The End Camp / Post ToD form opens on whatever is set here.
+                    </small>
+                </label>
+            </div>
+        </div>
+    </section>
+
+    <section class="cem__section">
+        <div class="cem__section-head">
+            <span class="cem__section-title">02 — Schedule</span>
+            <span class="cem__rule"></span>
+        </div>
+
+        <div class="cem__grid">
+            <label class="cem__field">
+                <span class="cem__label">Starts</span>
+                <input class="cem__input cem__input--mono" id="Event_StartTime" name="Event.StartTime"
+                       type="datetime-local" step="1" value="@(Model.Event.StartTime?.ToString("yyyy-MM-ddTHH:mm:ss"))" />
+            </label>
+
+            <label class="cem__field" id="cem-ends-field" style="@(isHnmEvent ? "display:none" : null)">
+                <span class="cem__label">Ends</span>
+                <input class="cem__input cem__input--mono" id="Event_EndTime" name="Event.EndTime"
+                       type="datetime-local" step="1" value="@(Model.Event.EndTime?.ToString("yyyy-MM-ddTHH:mm:ss"))"
+                       style="@(endTimeNotSpecified ? "display:none" : null)" />
+                @* Stand-in shown while the event is open-ended. The real input above is
+                   cleared and disabled then, so nothing posts and EndTime lands null. *@
+                <input class="cem__input cem__input--mono" id="Event_EndTime_OpenEnded" value="Open-ended" disabled
+                       style="@(endTimeNotSpecified ? null : "display:none")" />
+            </label>
+        </div>
+
+        @* The picked monster already has a predicted pop (a ToD is logged and its repop
+           hasn't happened yet), so that IS the start time this camp is being staged for.
+           Filled in automatically when Start is empty; offered as a button when it isn't, so
+           an event's real start time — or one typed by hand — is never silently rewritten. *@
+        <small class="cem__hint cem__hint--inline" id="hnm-repop-note" style="display:none">
+            <span id="hnm-repop-text"></span>
+            <button type="button" class="cem__chip cem__chip--sm" id="hnm-repop-apply" style="display:none">Use this time</button>
         </small>
-    </div>
-    <div class="field" style="display:flex;flex-direction:column;grid-column:1/-1">
-        <label for="Event_Details">Details</label>
-        <textarea class="form-control" id="Event_Details" name="Event.Details" rows="4">@Model.Event.Details</textarea>
-    </div>
+
+        @* Duration is derived from Start + End, so it reads out here instead of being a
+           field. The button next to it is the old "Not specified" toggle: an event with no
+           end time runs until it's closed by hand. The hidden input is what posts. *@
+        <div class="cem__summary" id="cem-duration-summary" style="@(isHnmEvent ? "display:none" : null)">
+            <span class="cem__summary-key">Duration</span>
+            <span class="cem__summary-val" id="cem-duration-label">Not Specified</span>
+            <span class="cem__spacer"></span>
+            <button type="button" class="cem__chip cem__chip--sm @(endTimeNotSpecified ? "is-active" : null)" id="cem-open-ended">
+                @(endTimeNotSpecified ? "Open-ended" : "Set open-ended")
+            </button>
+        </div>
+        <input type="hidden" id="Event_Duration" name="Event.Duration" value="@(Model.Event.Duration?.ToString(System.Globalization.CultureInfo.InvariantCulture))" />
+    </section>
+
+    <section class="cem__section">
+        <div class="cem__section-head">
+            <span class="cem__section-title" id="cem-section-03-title">03 — @(isHnmEvent ? "Camp DKP" : "Points & automation")</span>
+            <span class="cem__rule"></span>
+        </div>
+
+        @* HNM camps: what this camp pays, in whichever shape the linkshell's attendance mode
+           uses. Collapsed it reads out the effective amounts; "Change DKP" prices this ONE
+           camp without moving the linkshell's own settings. *@
+        <div id="cem-camp-dkp" style="@(isHnmEvent ? null : "display:none")">
+            <div id="cem-camp-dkp-summary" style="@(hasBonusOverrides ? "display:none" : null)">
+                <div class="cem__bonus-row">
+                    @foreach (var field in bonusFields)
+                    {
+                        <div class="cem__bonus" title="@field.Hint">
+                            <span class="cem__bonus-val" data-bonus-readout="@field.Key">@Num(field.Value ?? field.Default)</span>
+                            <span class="cem__bonus-key">@field.Suffix</span>
+                        </div>
+                    }
+                    <span class="cem__spacer"></span>
+                    <button type="button" class="cem__btn cem__btn--dashed" id="cem-open-bonus-override">Change DKP</button>
+                </div>
+                <small class="cem__hint">Linkshell defaults. DKP is credited when an officer posts the camp for review.</small>
+            </div>
+
+            @* An emptied box posts nothing, which the server reads as null = "use the
+               linkshell default for this amount". *@
+            <div id="cem-camp-dkp-editor" style="@(hasBonusOverrides ? null : "display:none")">
+                <div class="cem__bonus-grid">
+                    @foreach (var field in bonusFields)
+                    {
+                        <label class="cem__field">
+                            <span class="cem__label">@field.Label <em>@field.Hint</em></span>
+                            <input class="cem__input" type="number" min="0" step="0.25"
+                                   name="Event.@field.Key" data-bonus-input="@field.Key"
+                                   data-bonus-default="@Num(field.Default)"
+                                   value="@(field.Value.HasValue ? Num(field.Value.Value) : null)"
+                                   placeholder="@Num(field.Default)" />
+                        </label>
+                    }
+                </div>
+                <div class="cem__bonus-row">
+                    <small class="cem__hint">This camp only — the linkshell's own settings are unchanged.</small>
+                    <span class="cem__spacer"></span>
+                    <button type="button" class="cem__btn cem__btn--dashed" id="cem-reset-bonus-override">Use linkshell defaults</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="cem__automation" id="cem-points-standard" style="@(isHnmEvent ? "display:none" : null)">
+            @if (Model.IsDkpLootStructure)
+            {
+                <div class="cem__field">
+                    <span class="cem__label">DKP / hour</span>
+                    <div class="cem__stepper">
+                        <button type="button" data-stepper-dec aria-label="Decrease DKP per hour">&minus;</button>
+                        <input id="Event_DkpPerHour" name="Event.DkpPerHour" type="number" min="0" step="1"
+                               value="@Model.Event.DkpPerHour" aria-label="DKP per hour" />
+                        <button type="button" data-stepper-inc aria-label="Increase DKP per hour">+</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                @* Loot-council linkshells don't run on DKP, so the field is omitted rather
+                   than shown at zero (the Activity hides it the same way). *@
+                <input type="hidden" name="Event.DkpPerHour" value="@Model.Event.DkpPerHour" />
+            }
+
+            <div class="cem__field">
+                <span class="cem__label">Options</span>
+                <div class="cem__switches">
+                    @* Auto-start: a background service stamps the event live at its Start time
+                       so nobody has to click Start. HNM events ignore this (addon-driven). *@
+                    <button type="button" class="cem__switch @(Model.Event.AutoStart ? "is-on" : null)"
+                            data-switch-for="Event_AutoStart" aria-pressed="@(Model.Event.AutoStart ? "true" : "false")">
+                        <span class="cem__track"><span class="cem__knob"></span></span>
+                        <span class="cem__switch-text">
+                            <span class="cem__switch-title">Auto start</span>
+                            <span class="cem__switch-hint">Starts the event at the scheduled time</span>
+                        </span>
+                    </button>
+
+                    @* Activity tracking: attendees of this event earn active-member credit
+                       (reconciled at close); no-shows earn an inactive one. *@
+                    <button type="button" class="cem__switch @(Model.Event.CountsTowardActive ? "is-on" : null)"
+                            data-switch-for="Event_CountsTowardActive" aria-pressed="@(Model.Event.CountsTowardActive ? "true" : "false")">
+                        <span class="cem__track"><span class="cem__knob"></span></span>
+                        <span class="cem__switch-text">
+                            <span class="cem__switch-title">Counts toward active / inactive</span>
+                            <span class="cem__switch-hint">Attendees get an active credit, no-shows an inactive one</span>
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* A single hidden per switch: MVC binds "true"/"false" straight to the bool, so
+           there's no checkbox + hidden-false pair to keep in step. *@
+        <input type="hidden" id="Event_AutoStart" name="Event.AutoStart" value="@(Model.Event.AutoStart ? "true" : "false")" />
+        <input type="hidden" id="Event_CountsTowardActive" name="Event.CountsTowardActive" value="@(Model.Event.CountsTowardActive ? "true" : "false")" />
+    </section>
+
+    <section class="cem__section">
+        <div class="cem__section-head">
+            <span class="cem__section-title">04 — Details</span>
+            <span class="cem__rule"></span>
+        </div>
+        @* Not a <label> wrapper: the formatting buttons are interactive, and a label would
+           re-route their clicks to the textarea. The toolbar is built by
+           wwwroot/js/markdown-toolbar.js. *@
+        <div class="cem__field">
+            <span class="cem__label">Notes <em>shown on the signup card</em></span>
+            <div class="mdta" data-markdown-toolbar>
+                <textarea class="mdta__area" id="Event_Details" name="Event.Details" rows="4"
+                          aria-label="Event notes"
+                          placeholder="Loot rules, required jobs, meetup instructions…">@Model.Event.Details</textarea>
+            </div>
+        </div>
+    </section>
+
+    <section class="cem__section">
+        <div class="cem__section-head">
+            <span class="cem__section-title">05 — Party setup</span>
+            <span class="cem__rule"></span>
+        </div>
+
+        @if (isLiveEdit)
+        {
+            @* Live event: the party board is edited inline on the board itself, so the
+               picker is omitted and the current setup id is preserved as-is. *@
+            <input type="hidden" name="PartySetupId" value="@Model.PartySetupId" />
+            <p class="cem__hint">
+                This event is live. Its party board is edited on the board itself, so the linked
+                setup stays as it is.
+            </p>
+        }
+        else
+        {
+            <div class="cem__party-row">
+                <div class="cem__segment" role="radiogroup" aria-label="Use a party setup">
+                    <button type="button" role="radio" id="party-setup-linked"
+                            class="@(partySetupNotSpecified ? null : "is-active")"
+                            aria-checked="@(partySetupNotSpecified ? "false" : "true")">Linked</button>
+                    <button type="button" role="radio" id="party-setup-none"
+                            class="@(partySetupNotSpecified ? "is-active" : null)"
+                            aria-checked="@(partySetupNotSpecified ? "true" : "false")">None</button>
+                </div>
+                @* The segment's real state. Kept as a checkbox with this id because the inline
+                   "New Party Setup" modal flips it and dispatches `change` on it after saving
+                   (Views/Event/_PartySetupCreateModal.cshtml, selectNewSetup). *@
+                <input type="checkbox" id="party_setup_not_specified" @(partySetupNotSpecified ? "checked" : null)
+                       hidden aria-hidden="true" tabindex="-1" />
+
+                <select class="cem__select cem__party-select" id="PartySetupId" name="PartySetupId"
+                        aria-label="Linked party setup" style="@(partySetupNotSpecified ? "display:none" : null)">
+                    <option value="">— Select party setup —</option>
+                    @foreach (var option in Model.AvailablePartySetups)
+                    {
+                        var label = string.IsNullOrWhiteSpace(option.AssignedMonsterName)
+                            ? option.Name
+                            : $"{option.Name} — {option.AssignedMonsterName}";
+                        <option value="@option.Id" data-event-type="@option.EventType" selected="@(Model.PartySetupId == option.Id)">@label</option>
+                    }
+                </select>
+
+                @* Opens the inline "New Party Setup" modal (rendered outside this form by the
+                   host page); on save it auto-selects the fresh setup in the dropdown. *@
+                @if (Model.PartySetupEditor is not null)
+                {
+                    <button type="button" class="cem__btn cem__btn--dashed ps-open-create-modal" id="party-setup-new"
+                            style="@(partySetupNotSpecified ? "display:none" : null)">+ New setup</button>
+                }
+            </div>
+
+            @if (Model.AvailablePartySetups.Count == 0)
+            {
+                <p class="cem__hint" id="party-setup-empty-note" style="@(partySetupNotSpecified ? "display:none" : null)">
+                    No party setups exist for this linkshell yet. Create one with “+ New setup” above.
+                </p>
+            }
+
+            @* Live preview of the selected party setup, rendered to match the View Party Setup
+               page (alliance card -> party columns -> requirement rows). Populated by JS from
+               /PartySetup/Preview when a setup is picked; hidden otherwise. *@
+            <div id="ps-preview" class="ps-preview" style="display:none"></div>
+        }
+    </section>
 </div>
 
+<footer class="cem__footer">
+    <span class="cem__footer-note">
+        @(isEditMode ? "Changes apply to the event right away." : "The event is queued as soon as it is created.")
+    </span>
+    <span class="cem__spacer"></span>
+    <a class="cem__btn cem__btn--ghost" asp-action="Index">Cancel</a>
+    <button type="submit" class="cem__btn cem__btn--go">@(isEditMode ? "Update event" : "Create event")</button>
+</footer>
+
 <script nonce="@Html.CspNonce()">
+    // Schedule: Duration is DERIVED from Start + End (as in the Activity, where it is a
+    // read-out rather than a field) and posted through a hidden input. "Set open-ended"
+    // clears and disables the End input, so nothing posts for it and EndTime lands null --
+    // an event that runs until it is closed by hand.
     (function () {
-        var picker = document.getElementById('event-type-picker');
-        var other  = document.getElementById('event-type-other');
-        var hidden = document.getElementById('event-type-hidden');
-        if (!picker || !other || !hidden) return;
+        var startEl    = document.getElementById('Event_StartTime');
+        var endEl      = document.getElementById('Event_EndTime');
+        var openEndEl  = document.getElementById('Event_EndTime_OpenEnded');
+        var durationEl = document.getElementById('Event_Duration');
+        var label      = document.getElementById('cem-duration-label');
+        var toggle     = document.getElementById('cem-open-ended');
+        if (!startEl || !endEl || !durationEl || !toggle) return;
+
+        var openEnded = toggle.classList.contains('is-active');
+        // What End held before "open-ended" blanked it, so turning it back off restores the
+        // time rather than making the officer re-enter it.
+        var lastEnd = endEl.value;
+
+        function parseLocal(value) {
+            if (!value) return null;
+            var d = new Date(value);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        // Human-readable Start->End span for the read-only Duration field ("3h 30m").
+        function durationLabel(hours) {
+            if (hours == null || hours <= 0) return 'Not Specified';
+            var totalMinutes = Math.round(hours * 60);
+            var h = Math.floor(totalMinutes / 60);
+            var m = totalMinutes % 60;
+            if (h > 0 && m > 0) return h + 'h ' + m + 'm';
+            return h > 0 ? h + 'h' : m + 'm';
+        }
+
+        function recompute() {
+            var hours = null;
+            if (!openEnded) {
+                var start = parseLocal(startEl.value);
+                var end   = parseLocal(endEl.value);
+                if (start && end) {
+                    var span = (end.getTime() - start.getTime()) / 3600000;
+                    if (span >= 0) hours = Math.round(span * 100) / 100;
+                }
+            }
+            durationEl.value = hours == null ? '' : String(hours);
+            if (label) label.textContent = openEnded ? 'Open-ended' : durationLabel(hours);
+        }
+
+        function applyOpenEnded() {
+            toggle.classList.toggle('is-active', openEnded);
+            toggle.textContent = openEnded ? 'Open-ended' : 'Set open-ended';
+            if (openEnded) {
+                if (endEl.value) lastEnd = endEl.value;
+                endEl.value = '';
+                endEl.disabled = true;
+            } else {
+                endEl.disabled = false;
+                if (!endEl.value && lastEnd) endEl.value = lastEnd;
+            }
+            if (endEl.style) endEl.style.display = openEnded ? 'none' : '';
+            if (openEndEl) openEndEl.style.display = openEnded ? '' : 'none';
+            recompute();
+        }
+
+        toggle.addEventListener('click', function () {
+            openEnded = !openEnded;
+            applyOpenEnded();
+        });
+        ['input', 'change'].forEach(function (evt) {
+            startEl.addEventListener(evt, recompute);
+            endEl.addEventListener(evt, recompute);
+        });
+
+        // An HNM camp has no end time or duration at all (the server nulls both), so it is
+        // forced open-ended while HNM is the chosen type and released when it isn't.
+        var beforeHnm = null;
+        document.addEventListener('cem:hnm-changed', function (e) {
+            if (e.detail && e.detail.isHnm) {
+                if (beforeHnm === null) beforeHnm = openEnded;
+                openEnded = true;
+            } else if (beforeHnm !== null) {
+                openEnded = beforeHnm;
+                beforeHnm = null;
+            }
+            applyOpenEnded();
+        });
+
+        applyOpenEnded();
+    })();
+</script>
+
+<script nonce="@Html.CspNonce()">
+    // Event type + HNM camp controls. Same behaviour as the Activity's queue-panel form:
+    // the type chips drive a hidden Event.EventType, and choosing HNM/NM reveals the
+    // monster picker while hiding the fields the server forces for a camp.
+    (function () {
+        var chipBox = document.getElementById('event-type-chips');
+        var other   = document.getElementById('event-type-other');
+        var hidden  = document.getElementById('event-type-hidden');
+        if (!chipBox || !other || !hidden) return;
+
+        var chips = Array.prototype.slice.call(chipBox.querySelectorAll('[data-event-type-chip]'));
+        // Which chip is lit. Read this, not Event.EventType, to tell HNM from NM: an NM camp
+        // is stored as EventType "HNM" (see below), so the stored type cannot tell them apart.
+        var selection = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(initialChipValue));
 
         var partySelect = document.getElementById('PartySetupId');
 
-        // HNM signup-board controls: the monster picker + repeat-on-ToD toggle, plus
-        // the fields hidden when HNM is chosen (the server forces their values).
-        var monsterField    = document.getElementById('hnm-monster-field');
+        var monsterGrid     = document.getElementById('hnm-monster-grid');
         var monsterPicker   = document.getElementById('hnm-monster-picker');
         var monsterOther    = document.getElementById('hnm-monster-other');
+        var monsterOtherFld = document.getElementById('hnm-monster-other-field');
         var monsterHidden   = document.getElementById('hnm-monster-hidden');
         var dayField        = document.getElementById('hnm-day-field');
         var repeatField     = document.getElementById('hnm-repeat-field');
-        var repeatToggle    = document.getElementById('hnm-repeat-toggle');
+        var repeatSwitch    = document.getElementById('hnm-repeat-switch');
+        var repeatHidden    = document.getElementById('RepeatOnTod');
         var leadField       = document.getElementById('hnm-lead-field');
         var repeatOtherNote = document.getElementById('hnm-repeat-other-note');
-        function fieldOf(id) { var e = document.getElementById(id); return e ? e.closest('.field') : null; }
-        var endField    = fieldOf('Event_EndTime');
-        var durField    = fieldOf('Event_Duration');
-        var dkpField    = fieldOf('Event_DkpPerHour');
-        var autostart   = document.getElementById('hnm-hide-autostart');
-        var countsField = document.getElementById('hnm-hide-countsactive');
+        var endsField       = document.getElementById('cem-ends-field');
+        var durationSummary = document.getElementById('cem-duration-summary');
+        var pointsStandard  = document.getElementById('cem-points-standard');
+        var campDkp         = document.getElementById('cem-camp-dkp');
+        var sectionTitle    = document.getElementById('cem-section-03-title');
         function setShown(el, shown) { if (el) el.style.display = shown ? '' : 'none'; }
 
-        // Show only party setups whose type matches the chosen event type, plus
-        // universal ("Any") and untyped/legacy setups (so nothing existing
-        // disappears). With no event type chosen yet, all are shown. The
-        // already-linked setup is always kept so editing an event never silently
-        // unlinks a setup whose type doesn't match the event.
+        // ===== Predicted-repop pre-fill for Start =====
+        //
+        // A camp is almost always staged for a pop the linkshell has already predicted: a ToD
+        // is logged and its repop hasn't happened yet, so that repop IS the start time. It's
+        // also the instant HnmAutoEventService stamps when it builds the event from the ToD
+        // itself, so a hand-made camp lands on the same schedule an auto-made one would.
+        var startInput = document.getElementById('Event_StartTime');
+        var repopNote  = document.getElementById('hnm-repop-note');
+        var repopText  = document.getElementById('hnm-repop-text');
+        var repopApply = document.getElementById('hnm-repop-apply');
+
+        // Every spelling of a waiting spawn -> the Start input's wall-clock value, lower-cased
+        // for lookup. Built server-side (EventViewModel.UpcomingRepopStarts /
+        // UpcomingRepopLookup) so the merge pairs are matched by the same code the rest of the
+        // app uses.
+        var repopStarts = (function () {
+            var raw = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.UpcomingRepopStarts));
+            var map = {};
+            for (var key in raw) {
+                if (Object.prototype.hasOwnProperty.call(raw, key)) { map[key.trim().toLowerCase()] = raw[key]; }
+            }
+            return map;
+        })();
+
+        // The exact value this script last wrote into Start. Anything else in the box was
+        // typed by the user (or belongs to the event being edited) and is never overwritten.
+        var autoFilledStart = null;
+
+        function upcomingRepopFor(monster) {
+            var name = (monster || '').trim().toLowerCase();
+            if (!name) return null;
+            if (repopStarts[name]) return repopStarts[name];
+            // A combined "Base/Stronger" pick also answers to a ToD logged under either half.
+            var parts = name.split('/');
+            for (var i = 0; i < parts.length; i++) {
+                var part = parts[i].trim();
+                if (part && repopStarts[part]) return repopStarts[part];
+            }
+            return null;
+        }
+
+        function currentRepop() {
+            return isHnm() ? upcomingRepopFor(monsterHidden ? monsterHidden.value : '') : null;
+        }
+
+        function setStartFromRepop(value) {
+            if (!startInput) return;
+            startInput.value = value;
+            autoFilledStart = value;
+            // Keeps the Start / End / Duration block below in step with the new value.
+            startInput.dispatchEvent(new Event('change', { bubbles: true }));
+            syncRepopNote();
+        }
+
+        function syncRepopNote() {
+            if (!repopNote) return;
+            var value = currentRepop();
+            if (!value) { repopNote.style.display = 'none'; return; }
+            var parsed = new Date(value);
+            var atRepop = !!startInput && startInput.value === value;
+            repopNote.style.display = 'flex';
+            if (repopText) {
+                repopText.textContent = 'Next predicted pop: '
+                    + (isNaN(parsed.getTime()) ? value : parsed.toLocaleString())
+                    + (atRepop ? ' — Starts is set to it.' : '');
+            }
+            setShown(repopApply, !atRepop);
+        }
+
+        // Only writes into an EMPTY Start box or over this script's own previous pre-fill; the
+        // button is how an officer takes the time when the box already holds something else.
+        function applyRepopPrefill() {
+            var value = currentRepop();
+            if (value && startInput && (!startInput.value || startInput.value === autoFilledStart)) {
+                setStartFromRepop(value);
+                return;
+            }
+            syncRepopNote();
+        }
+
+        // Show only party setups whose type matches the chosen event type, plus universal
+        // ("Any") and untyped/legacy setups (so nothing existing disappears). With no event
+        // type chosen yet, all are shown. The already-linked setup is always kept so editing
+        // an event never silently unlinks a setup whose type doesn't match the event.
         function filterPartySetups() {
             if (!partySelect) return;
             var selected = (hidden.value || '').trim().toLowerCase();
@@ -298,31 +767,106 @@
 
         function isOtherMonster() { return !!monsterPicker && monsterPicker.value === 'Other'; }
 
-        function syncRepeatLead() {
-            setShown(leadField, !!repeatToggle && repeatToggle.checked && !repeatToggle.disabled);
+        // Day counts a monster's POP CYCLE, and only the three NQ/HQ families have one
+        // (HnmConfig.HnmDayCycles: Nidhogg, King Behemoth, Aspidochelone) -- the picked option
+        // carries data-daycycle to say so. Tiamat, Cerberus and a linkshell's own monster have
+        // no day to be on, and "Other" is free text that names no pair, so the box is hidden
+        // for them rather than collecting a number the board would then print.
+        function monsterHasDayCycle() {
+            if (!monsterPicker) return false;
+            var opt = monsterPicker.options[monsterPicker.selectedIndex];
+            return !!opt && opt.getAttribute('data-daycycle') === '1';
+        }
+
+        // Hidden means not asked, so the box is emptied on the way out -- a day typed for a
+        // Fafnir/Nidhogg must not still post once the monster is switched to a Tiamat.
+        function syncDayField() {
+            var show = isHnm() && selection !== 'NM' && monsterHasDayCycle();
+            setShown(dayField, show);
+            var dayInput = document.getElementById('Event_DayNumber');
+            if (!show && dayInput) dayInput.value = '';
+        }
+
+        function repeatOn() { return !!repeatHidden && repeatHidden.value === 'true'; }
+
+        function setRepeat(on) {
+            if (repeatHidden) repeatHidden.value = on ? 'true' : 'false';
+            if (repeatSwitch) {
+                repeatSwitch.classList.toggle('is-on', on);
+                repeatSwitch.setAttribute('aria-pressed', on ? 'true' : 'false');
+            }
+            setShown(leadField, on && !(repeatSwitch && repeatSwitch.disabled));
+        }
+
+        // ===== Recurrence pre-fill from the picked monster's standing board =====
+        //
+        // Recurrence is per MONSTER, not per event: one HnmRecurringBoard row per spawn, shared
+        // by every camp made for it. So switching the picker to a monster that is already
+        // repeating has to move the toggle and the lead with it — otherwise the form shows a
+        // blank choice and submitting it as displayed switches that monster's board off.
+        //
+        // Keyed by every spelling of the spawn, built server-side off HnmConfig.MonsterMatchNames
+        // so a board created under "Fafnir" answers for a "Fafnir/Nidhogg" pick.
+        var repeatLeads = (function () {
+            var raw = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.MonsterRepeatLeads));
+            var map = {};
+            for (var key in raw) {
+                if (Object.prototype.hasOwnProperty.call(raw, key)) { map[key.trim().toLowerCase()] = raw[key]; }
+            }
+            return map;
+        })();
+        var leadInput = document.getElementById('RepostLeadHours');
+
+        // Armed only AFTER the initial sync. The server already rendered the right answer for the
+        // monster the form opened on (and on Edit it read that event's own linkshell, which this
+        // map may not be for), so the first pass must leave what it rendered alone. Every later
+        // pass is a deliberate monster change and does re-derive.
+        var repeatPrefillArmed = false;
+
+        function currentMonsterName() {
+            if (!monsterHidden) return '';
+            return (monsterHidden.value || '').trim().toLowerCase();
+        }
+
+        function applyRepeatPrefill() {
+            if (!repeatPrefillArmed) return;
+            var lead = repeatLeads[currentMonsterName()];
+            var repeating = typeof lead === 'number';
+            setRepeat(repeating);
+            // Cleared rather than left holding the previous monster's number: an empty box posts
+            // null, which the server reads as "keep this board's current lead" — the only honest
+            // default for a monster we know nothing about.
+            if (leadInput) leadInput.value = repeating ? String(lead) : '';
         }
 
         function syncMonster() {
             if (!monsterPicker || !monsterHidden) return;
             if (isOtherMonster()) {
-                if (monsterOther) { monsterOther.style.display = ''; monsterHidden.value = monsterOther.value; }
+                setShown(monsterOtherFld, true);
+                monsterHidden.value = monsterOther ? monsterOther.value : '';
             } else {
-                if (monsterOther) monsterOther.style.display = 'none';
+                setShown(monsterOtherFld, false);
                 monsterHidden.value = monsterPicker.value || '';
             }
-            // Repeat-on-ToD keys on an exact (case-insensitive) ToD name match. For a
-            // custom "Other" monster that's the typed name, so it's allowed once a
-            // non-empty name is entered; disabled (with a prompt) while it's blank.
+            // Repeat-on-ToD keys on an exact (case-insensitive) ToD name match. For a custom
+            // "Other" monster that's the typed name, so it's allowed once a non-empty name is
+            // entered; disabled (with a prompt) while it's blank.
             var needName = isOtherMonster() && (!monsterOther || monsterOther.value.trim() === '');
-            if (repeatToggle) { repeatToggle.disabled = needName; if (needName) repeatToggle.checked = false; }
+            if (repeatSwitch) {
+                repeatSwitch.disabled = needName;
+                if (needName) setRepeat(false);
+            }
             setShown(repeatOtherNote, needName);
-            syncRepeatLead();
+            if (!needName) applyRepeatPrefill();
+            setRepeat(repeatOn());
+            syncDayField();
+            applyRepopPrefill();
         }
 
-        // Narrow the monster list to the tier the picker names. Options carry data-tier;
-        // the ones from the other tier are hidden AND disabled, so a keyboard user can't
-        // land on one either. A selection left over from the other tier is cleared rather
-        // than posted -- picking NM must not be able to submit a Behemoth.
+        // Narrow the monster list to the tier the chips name. Options carry data-tier; the
+        // ones from the other tier are hidden AND disabled, so a keyboard user can't land on
+        // one either. A selection left over from the other tier is cleared rather than posted
+        // -- picking NM must not be able to submit a Behemoth.
         function filterMonstersByTier(tier) {
             if (!monsterPicker) return;
             var cleared = false;
@@ -338,154 +882,109 @@
             if (cleared) { monsterPicker.value = ''; if (monsterHidden) monsterHidden.value = ''; }
         }
 
-        function applyHnm(isHnm) {
-            var isNmTier = picker.value === 'NM';
-            setShown(monsterField, isHnm);
-            // Day walks the three NQ/HQ families through their pop cycle, so it belongs to
-            // the HNM tier only -- no NM has one.
-            setShown(dayField, isHnm && !isNmTier);
-            setShown(repeatField, isHnm);
-            if (isHnm) filterMonstersByTier(isNmTier ? 'nm' : 'hnm');
-            // These are hidden for HNM (the server nulls/zeros them server-side).
-            setShown(endField, !isHnm);
-            setShown(durField, !isHnm);
-            setShown(dkpField, !isHnm);
-            setShown(autostart, !isHnm);
-            setShown(countsField, !isHnm);
-            if (isHnm) syncMonster();
+        function applyHnm(hnm) {
+            var isNmTier = selection === 'NM';
+            setShown(monsterGrid, hnm);
+            setShown(repeatField, hnm);
+            if (hnm) filterMonstersByTier(isNmTier ? 'nm' : 'hnm');
+            // After the tier filter, which can clear a selection from the other tier.
+            syncDayField();
+            // A camp has no end, duration or DKP/hour, and no auto-start or activity credit
+            // (the server nulls/zeros them all); it pays through section 03's camp amounts.
+            setShown(endsField, !hnm);
+            setShown(durationSummary, !hnm);
+            setShown(pointsStandard, !hnm);
+            setShown(campDkp, hnm);
+            if (sectionTitle) sectionTitle.textContent = hnm ? '03 — Camp DKP' : '03 — Points & automation';
+            // syncMonster() runs the repop pre-fill itself; leaving HNM only has to drop the note.
+            if (hnm) { syncMonster(); } else { syncRepopNote(); }
+            // Let the schedule block clear End/Duration for a camp, and restore them after.
+            document.dispatchEvent(new CustomEvent('cem:hnm-changed', { detail: { isHnm: hnm } }));
         }
 
         function isHnm() { return (hidden.value || '').trim().toUpperCase() === 'HNM'; }
 
         function sync() {
-            if (picker.value === 'Other') {
-                other.style.display = '';
+            if (selection === 'Other') {
+                setShown(other, true);
                 hidden.value = other.value;
-            } else if (picker.value === 'NM') {
-                // NM is a tier, not a type: the camp is stored as "HNM" like every other
-                // one. A stored "NM" would fall out of every HNM path at once -- the board's
-                // window controls, the timed window auto-advance, the HNM DKP pool, and any
-                // Discord channel route filtered on HNM.
-                other.style.display = 'none';
+            } else if (selection === 'NM') {
+                // NM is a tier, not a type: the camp is stored as "HNM" like every other one.
+                // A stored "NM" would fall out of every HNM path at once -- the board's window
+                // controls, the timed window auto-advance, the HNM DKP pool, and any Discord
+                // channel route filtered on HNM.
+                setShown(other, false);
                 hidden.value = 'HNM';
             } else {
-                other.style.display = 'none';
-                hidden.value = picker.value;
+                setShown(other, false);
+                hidden.value = selection;
             }
+            chips.forEach(function (chip) {
+                chip.classList.toggle('is-active', chip.getAttribute('data-event-type-chip') === selection);
+            });
             applyHnm(isHnm());
             filterPartySetups();
         }
 
-        picker.addEventListener('change', sync);
+        chips.forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var value = chip.getAttribute('data-event-type-chip');
+                var previous = selection;
+                selection = value;
+                // Arriving at "Other" from a named type starts the free-text box empty;
+                // re-clicking the chip that is already lit leaves what's in it alone.
+                if (value === 'Other' && previous !== 'Other') { other.value = ''; }
+                // Switching between the two tiers re-cuts the monster list, so a monster picked
+                // from the old tier is no longer on offer. Clear it rather than post a Behemoth
+                // as an NM.
+                if ((value === 'NM') !== (previous === 'NM') && monsterPicker) {
+                    monsterPicker.value = '';
+                    if (monsterHidden) monsterHidden.value = '';
+                    if (monsterOther) monsterOther.value = '';
+                }
+                sync();
+            });
+        });
         other.addEventListener('input', function () { hidden.value = other.value; applyHnm(isHnm()); filterPartySetups(); });
         if (monsterPicker) monsterPicker.addEventListener('change', syncMonster);
-        if (monsterOther) monsterOther.addEventListener('input', function () { if (monsterHidden && isOtherMonster()) monsterHidden.value = monsterOther.value; syncMonster(); });
-        if (repeatToggle) repeatToggle.addEventListener('change', syncRepeatLead);
+        if (monsterOther) monsterOther.addEventListener('input', function () {
+            if (monsterHidden && isOtherMonster()) monsterHidden.value = monsterOther.value;
+            syncMonster();
+        });
+        if (repeatSwitch) repeatSwitch.addEventListener('click', function () {
+            if (repeatSwitch.disabled) return;
+            setRepeat(!repeatOn());
+        });
+        if (repopApply) repopApply.addEventListener('click', function () {
+            var value = currentRepop();
+            if (value) setStartFromRepop(value);
+        });
+        if (startInput) {
+            // Editing Start by hand takes ownership of it, so changing the monster afterwards
+            // can't overwrite what was entered.
+            ['input', 'change'].forEach(function (evt) {
+                startInput.addEventListener(evt, function () {
+                    if (startInput.value !== autoFilledStart) autoFilledStart = null;
+                    syncRepopNote();
+                });
+            });
+        }
 
         sync();
+        // Arm the monster-driven recurrence pre-fill only now, so the initial sync above kept
+        // the toggle + lead the server rendered.
+        repeatPrefillArmed = true;
     })();
 </script>
 
 <script nonce="@Html.CspNonce()">
-    // Start / End / Duration sync — mirrors the Discord Activity logic so editing
-    // any two of the three keeps the third in step.
-    //   Start changes: recompute Duration if End is set, else recompute End if Duration is set.
-    //   End changes:   recompute Duration.
-    //   Duration changes: recompute End.
-    // The "Not specified" checkboxes blank + disable their fields so the form posts
-    // an empty value (= null on the server side).
+    // The DKP/hour stepper, the Auto start / Counts-toward-active switches, and section 03's
+    // per-camp DKP override panel.
     (function () {
-        var startEl    = document.getElementById('Event_StartTime');
-        var endEl      = document.getElementById('Event_EndTime');
-        var durationEl = document.getElementById('Event_Duration');
-        var endNs      = document.getElementById('Event_EndTime_NotSpecified');
-        var durNs      = document.getElementById('Event_Duration_NotSpecified');
-        if (!startEl || !endEl || !durationEl || !endNs || !durNs) return;
-
-        function pad(n) { return String(n).padStart(2, '0'); }
-        function formatLocal(date) {
-            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
-                 + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
-        }
-        function parseLocal(value) {
-            if (!value) return null;
-            var d = new Date(value);
-            return isNaN(d.getTime()) ? null : d;
-        }
-
-        function recomputeDurationFromStartEnd() {
-            if (durNs.checked || endNs.checked) return;
-            var start = parseLocal(startEl.value);
-            var end   = parseLocal(endEl.value);
-            if (!start || !end) return;
-            var hours = (end - start) / 3600000;
-            if (hours < 0) return;
-            durationEl.value = (Math.round(hours * 100) / 100).toString();
-        }
-
-        function recomputeEndFromStartDuration() {
-            if (endNs.checked || durNs.checked) return;
-            var start = parseLocal(startEl.value);
-            var hours = parseFloat(durationEl.value);
-            if (!start || isNaN(hours) || hours < 0) return;
-            var end = new Date(start.getTime() + hours * 3600000);
-            endEl.value = formatLocal(end);
-        }
-
-        function onStartEdited() {
-            if (!endNs.checked && endEl.value) {
-                recomputeDurationFromStartEnd();
-            } else if (!durNs.checked && durationEl.value !== '') {
-                recomputeEndFromStartDuration();
-            }
-        }
-        // Listen on both `input` (fires while typing / picker ticks) and `change`
-        // (fires on commit). The `input` handler is what makes Duration update
-        // live before the user clicks off the field.
-        startEl.addEventListener('input', onStartEdited);
-        startEl.addEventListener('change', onStartEdited);
-        endEl.addEventListener('input', recomputeDurationFromStartEnd);
-        endEl.addEventListener('change', recomputeDurationFromStartEnd);
-        durationEl.addEventListener('input', recomputeEndFromStartDuration);
-        durationEl.addEventListener('change', recomputeEndFromStartDuration);
-
-        function applyEndNotSpecified() {
-            if (endNs.checked) {
-                endEl.value = '';
-                endEl.disabled = true;
-            } else {
-                endEl.disabled = false;
-                recomputeEndFromStartDuration();
-            }
-        }
-        function applyDurationNotSpecified() {
-            if (durNs.checked) {
-                durationEl.value = '';
-                durationEl.disabled = true;
-            } else {
-                durationEl.disabled = false;
-                if (durationEl.value === '') durationEl.value = '1';
-                recomputeEndFromStartDuration();
-            }
-        }
-        endNs.addEventListener('change', applyEndNotSpecified);
-        durNs.addEventListener('change', applyDurationNotSpecified);
-
-        // Initial load: only reflect the "Not specified" checkboxes' disabled
-        // state. Do NOT auto-fill Duration or recompute End -- End starts blank
-        // by default; the Start/End/Duration sync only kicks in once the user
-        // edits one of the fields.
-        if (endNs.checked) { endEl.value = ''; endEl.disabled = true; }
-        if (durNs.checked) { durationEl.value = ''; durationEl.disabled = true; }
-    })();
-</script>
-
-<script nonce="@Html.CspNonce()">
-    // Custom +/- steppers (native number-input arrows are hidden site-wide
-    // because they can't be themed on the dark UI) plus the "No DKP" toggle.
-    (function () {
-        document.querySelectorAll('.num-stepper').forEach(function (wrap) {
-            var input = wrap.querySelector('.num-stepper__input');
+        // ± buttons on the stepper. The middle stays a typable number input, so this only has
+        // to clamp at the input's min -- negative payouts are never intended.
+        document.querySelectorAll('.cem__stepper').forEach(function (wrap) {
+            var input = wrap.querySelector('input');
             if (!input) return;
             var step = parseFloat(input.getAttribute('step')) || 1;
             var min  = input.hasAttribute('min') ? parseFloat(input.getAttribute('min')) : null;
@@ -496,7 +995,6 @@
                 var next = Math.round((cur + dir * step) * 100) / 100;
                 if (min !== null && next < min) next = min;
                 input.value = next;
-                // Re-run the Start/End/Duration sync wired on these inputs.
                 input.dispatchEvent(new Event('input', { bubbles: true }));
                 input.dispatchEvent(new Event('change', { bubbles: true }));
             }
@@ -506,94 +1004,85 @@
             if (inc) inc.addEventListener('click', function () { bump(1); });
         });
 
-        // "No DKP": zero + lock DKP/hour so the event posts DkpPerHour = 0
-        // (a no-dkp run). Unchecking restores an editable value.
-        var noDkp = document.getElementById('Event_NoDkp');
-        var dkp   = document.getElementById('Event_DkpPerHour');
-        if (noDkp && dkp) {
-            var dkpWrap = dkp.closest('.num-stepper');
-            function applyNoDkp() {
-                if (noDkp.checked) {
-                    dkp.value = '0';
-                    dkp.readOnly = true;
-                    if (dkpWrap) dkpWrap.classList.add('is-disabled');
-                } else {
-                    dkp.readOnly = false;
-                    if (dkpWrap) dkpWrap.classList.remove('is-disabled');
-                    if (dkp.value === '' || dkp.value === '0') dkp.value = '1';
-                }
-            }
-            noDkp.addEventListener('change', applyNoDkp);
-            applyNoDkp();
+        // Each switch drives one hidden "true"/"false" input, which is what MVC binds.
+        document.querySelectorAll('[data-switch-for]').forEach(function (button) {
+            var target = document.getElementById(button.getAttribute('data-switch-for'));
+            if (!target) return;
+            button.addEventListener('click', function () {
+                var on = target.value !== 'true';
+                target.value = on ? 'true' : 'false';
+                button.classList.toggle('is-on', on);
+                button.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+        });
+
+        // ===== Per-camp DKP override (section 03, HNM only) =====
+        var summary = document.getElementById('cem-camp-dkp-summary');
+        var editor  = document.getElementById('cem-camp-dkp-editor');
+        var open    = document.getElementById('cem-open-bonus-override');
+        var reset   = document.getElementById('cem-reset-bonus-override');
+        if (!summary || !editor || !open || !reset) return;
+
+        var inputs = Array.prototype.slice.call(editor.querySelectorAll('[data-bonus-input]'));
+
+        function hasOverrides() {
+            return inputs.some(function (input) { return input.value.trim() !== ''; });
         }
+
+        // The collapsed row reads out what the camp will actually pay: its own override where
+        // there is one, else the linkshell's amount.
+        function syncReadouts() {
+            inputs.forEach(function (input) {
+                var key = input.getAttribute('data-bonus-input');
+                var readout = summary.querySelector('[data-bonus-readout="' + key + '"]');
+                if (!readout) return;
+                var typed = input.value.trim();
+                readout.textContent = typed === '' ? input.getAttribute('data-bonus-default') : typed;
+            });
+        }
+
+        function show(expanded) {
+            summary.style.display = expanded ? 'none' : '';
+            editor.style.display  = expanded ? '' : 'none';
+        }
+
+        // Opening seeds each box with the linkshell default, so the officer edits real numbers
+        // rather than blanks and every field is explicit about what the camp pays.
+        open.addEventListener('click', function () {
+            if (!hasOverrides()) {
+                inputs.forEach(function (input) { input.value = input.getAttribute('data-bonus-default'); });
+            }
+            show(true);
+        });
+
+        // Clearing every box posts nothing for them, which the server reads as "back to the
+        // linkshell defaults".
+        reset.addEventListener('click', function () {
+            inputs.forEach(function (input) { input.value = ''; });
+            syncReadouts();
+            show(false);
+        });
+
+        inputs.forEach(function (input) { input.addEventListener('input', syncReadouts); });
+        syncReadouts();
     })();
 </script>
 
-@if (isLiveEdit)
+@if (!isLiveEdit)
 {
-    @* Live event: the party board is edited inline on the board itself. Keep the
-       current setup id so saving the event details doesn't null it out. *@
-    <input type="hidden" name="PartySetupId" value="@Model.PartySetupId" />
-}
-else
-{
-<div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;margin-bottom:12px;gap:12px;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:12px">
-        <h2 style="font-size:14px;font-weight:600;color:var(--fg);margin:0">Party setup <span style="color:var(--fg-3);font-weight:400">(optional)</span></h2>
-        <label style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--fg-3);margin:0">
-            <input type="checkbox" id="party_setup_not_specified" @(partySetupNotSpecified ? "checked" : null) />
-            Do Not Include
-        </label>
-    </div>
-    @* Opens the inline "New Party Setup" modal (rendered outside this form by the
-       host page); on save it auto-selects the fresh setup in the dropdown below. *@
-    @if (Model.PartySetupEditor is not null)
-    {
-        <button type="button" class="btn sm ps-open-create-modal">+ Create New Party Setup</button>
-    }
-</div>
-
-<div id="party-setup-row" class="field" style="display:flex;flex-direction:column;max-width:520px">
-    <label for="PartySetupId">Linked party setup</label>
-    <select class="form-select" id="PartySetupId" name="PartySetupId">
-        <option value="">— Select party setup —</option>
-        @foreach (var option in Model.AvailablePartySetups)
-        {
-            var label = string.IsNullOrWhiteSpace(option.AssignedMonsterName)
-                ? option.Name
-                : $"{option.Name} — {option.AssignedMonsterName}";
-            if (Model.PartySetupId == option.Id)
-            {
-                <option value="@option.Id" data-event-type="@option.EventType" selected>@label</option>
-            }
-            else
-            {
-                <option value="@option.Id" data-event-type="@option.EventType">@label</option>
-            }
-        }
-    </select>
-    @if (Model.AvailablePartySetups.Count == 0)
-    {
-        <small style="color:var(--fg-4);font-size:11px;margin-top:4px">No party setups exist for this linkshell yet. Create one from the Party Setup page first.</small>
-    }
-</div>
-
-@* Live preview of the selected party setup, rendered to match the View Party
-   Setup page (alliance card -> party columns -> requirement rows). Populated by
-   JS from /PartySetup/Preview when a setup is picked; hidden otherwise. *@
-<div id="ps-preview" class="ps-preview" style="display:none;margin-top:14px"></div>
-}
-
 <script nonce="@Html.CspNonce()">
-    // "Do Not Include" toggle: when checked, hide the dropdown, blank the value,
-    // and disable the select so it posts back as null PartySetupId. Also renders
-    // a live preview of the selected setup matching the View Party Setup page.
+    // Party setup: the Linked/None segment drives the hidden #party_setup_not_specified
+    // checkbox (which the inline "New Party Setup" modal also flips), and picking a setup
+    // renders a live preview matching the View Party Setup page.
     (function () {
         var notSpecified = document.getElementById('party_setup_not_specified');
-        var row          = document.getElementById('party-setup-row');
+        var linkedBtn    = document.getElementById('party-setup-linked');
+        var noneBtn      = document.getElementById('party-setup-none');
+        var newBtn       = document.getElementById('party-setup-new');
+        var emptyNote    = document.getElementById('party-setup-empty-note');
         var select       = document.getElementById('PartySetupId');
         var preview      = document.getElementById('ps-preview');
-        if (!notSpecified || !row || !select) return;
+        if (!notSpecified || !select || !linkedBtn || !noneBtn) return;
 
         var leaderSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 7.5l4.6 3.2L12 3.5l4.9 7.2 4.6-3.2-1.9 11.5H4.4L2.5 7.5z"/></svg>';
 
@@ -672,20 +1161,38 @@ else
                 .catch(clearPreview);
         }
 
+        // "None" hides the picker, blanks the value and disables the select so it posts back
+        // as a null PartySetupId.
         function apply() {
-            if (notSpecified.checked) {
-                row.style.display = 'none';
+            var none = notSpecified.checked;
+            linkedBtn.classList.toggle('is-active', !none);
+            linkedBtn.setAttribute('aria-checked', none ? 'false' : 'true');
+            noneBtn.classList.toggle('is-active', none);
+            noneBtn.setAttribute('aria-checked', none ? 'true' : 'false');
+            select.style.display = none ? 'none' : '';
+            if (newBtn) newBtn.style.display = none ? 'none' : '';
+            if (emptyNote) emptyNote.style.display = none ? 'none' : '';
+            if (none) {
                 select.value = '';
                 select.disabled = true;
                 clearPreview();
             } else {
-                row.style.display = '';
                 select.disabled = false;
                 loadPreview();
             }
         }
+
+        function choose(none) {
+            if (notSpecified.checked === none) return;
+            notSpecified.checked = none;
+            apply();
+        }
+        linkedBtn.addEventListener('click', function () { choose(false); });
+        noneBtn.addEventListener('click', function () { choose(true); });
+        // The create-setup modal flips the checkbox and dispatches `change` on it.
         notSpecified.addEventListener('change', apply);
         select.addEventListener('change', loadPreview);
         apply();
     })();
 </script>
+}

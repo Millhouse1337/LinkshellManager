@@ -1,0 +1,230 @@
+@model EventSystemPageViewModel
+@using LinkshellManagerDiscordApp.Models
+@using LinkshellManagerDiscordApp.Services
+@{
+    // Section 2b: captures the addon posted that aren't filed under an attendance event yet.
+    //
+    // This used to be one branch of ../WindowEvents/_AttendanceSections, mounted alongside the
+    // closed-event archive under a single "Attendance Archive" heading. That framing was wrong
+    // twice over: these are live work, not archive leftovers, and they are the ONLY place a
+    // capture from a member without moderation rights can land — an unnamed post, or a named one
+    // for a camp no officer has opened, never mints an event of its own (see
+    // WindowEventLinkService.FindOrCreateAsync's allowCreate). Filing them under "archive" meant
+    // the queue nobody was watching was the one holding unpaid attendance.
+    var attendance = Model.Attendance!;
+    var snapshots = attendance.UnlinkedSnapshots;
+    var pendingCount = snapshots.Count(s => s.IsPending);
+    var linkshellId = attendance.LinkshellId;
+
+    string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
+}
+
+<div class="page-head fade d3" id="unlinked-snapshots" style="margin-top:22px;margin-bottom:12px">
+    <div>
+        <h2 class="page-title" style="font-size:16px">Unlinked Snapshots</h2>
+        <div class="page-sub">
+            <span>In-game captures waiting to be filed against an attendance event</span>
+        </div>
+    </div>
+    <div class="we-unlinked-head-tags">
+        <span class="tag">@snapshots.Count</span>
+        @if (attendance.UnlinkedTotalCount > snapshots.Count)
+        {
+            @* Every /lsm now capture lands here now, so this list can genuinely be hiding some.
+               Saying so beats letting the oldest quietly fall off the end unnoticed. *@
+            <span class="tag danger" title="Older captures are not shown. File or ignore some to see them.">
+                showing @snapshots.Count of @attendance.UnlinkedTotalCount — resolve these
+            </span>
+        }
+        @if (pendingCount > 0)
+        {
+            <span class="tag warning">@pendingCount awaiting verification</span>
+        }
+    </div>
+</div>
+
+@if (snapshots.Count == 0)
+{
+    <div class="card fade d3">
+        <div class="empty" style="padding:16px">
+            Captures posted from in-game that aren't attached to an attendance event land here.
+            Name one and link it to an event, or create an event from it.
+        </div>
+    </div>
+}
+else
+{
+    <div class="card fade d3" style="margin-bottom:14px">
+        <section class="we-snapshots we-snapshots--unlinked">
+            @foreach (var snapshot in snapshots)
+            {
+                <details class="we-snapshot@(snapshot.IsPending ? " we-snapshot--pending" : "")">
+                    <summary class="we-snapshot__head">
+                        <span class="we-snapshot__caret" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
+                        </span>
+                        <span class="we-snapshot__title">
+                            <span class="tag we-alliance-chip">@snapshot.AllianceLabel</span>
+                            @if (snapshot.IsPending)
+                            {
+                                <span class="tag warning">Pending</span>
+                            }
+                            <strong>@snapshot.CapturedAtDisplay</strong>
+                            <span class="we-snapshot__meta">
+                                · posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong>
+                                · @snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")
+                                @if (!string.IsNullOrWhiteSpace(snapshot.PrimaryZone))
+                                {
+                                    <text>· @snapshot.PrimaryZone.Replace('_', ' ')</text>
+                                }
+                            </span>
+                        </span>
+                    </summary>
+
+                    @if (attendance.CanManage)
+                    {
+                        @if (snapshot.IsPending)
+                        {
+                            <div class="we-unlinked-review">
+                                <span class="we-unlinked-review__note">
+                                    Posted by a member without moderation rights. Its people are not
+                                    in any roster and earn nothing until you confirm it.
+                                </span>
+                                <form asp-controller="WindowEvents" asp-action="VerifySnapshot"
+                                      asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn sm primary">Confirm</button>
+                                </form>
+                                <form asp-controller="WindowEvents" asp-action="RejectSnapshot"
+                                      asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id" method="post"
+                                      onsubmit="return confirm('Reject this capture? Its members will not be counted.');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn sm danger-outline">Reject</button>
+                                </form>
+                            </div>
+                        }
+
+                        <div class="we-unlinked-actions">
+                            @* Names the capture and nothing else. Creating an event is the two
+                               controls below, deliberately separate — an officer labelling a
+                               snapshot for their own sake should not conjure a camp. *@
+                            <form asp-controller="WindowEvents" asp-action="RenameSnapshot"
+                                  asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id"
+                                  method="post" class="we-unlinked-form">
+                                @Html.AntiForgeryToken()
+                                <label class="we-unlinked-label" for="snapshot-name-@snapshot.Id">Snapshot name</label>
+                                <input class="input we-unlinked-name" id="snapshot-name-@snapshot.Id" type="text"
+                                       name="name" value="@snapshot.Name" placeholder="e.g. Fafnir pop 2" maxlength="128" />
+                                <button type="submit" class="btn sm">Save name</button>
+                            </form>
+
+                            <form asp-controller="WindowEvents" asp-action="AttachSnapshot"
+                                  asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id"
+                                  method="post" class="we-unlinked-form">
+                                @Html.AntiForgeryToken()
+                                <label class="we-unlinked-label" for="snapshot-link-@snapshot.Id">Link to Event</label>
+                                @if (attendance.OpenEvents.Count > 0)
+                                {
+                                    <select class="form-select we-unlinked-select" id="snapshot-link-@snapshot.Id"
+                                            name="windowEventId" required>
+                                        <option value="" selected disabled>— choose an attendance event —</option>
+                                        @foreach (var ev in attendance.OpenEvents)
+                                        {
+                                            <option value="@ev.Id">@Dash(ev.Name) (@ev.CombinedMemberCount members)</option>
+                                        }
+                                    </select>
+                                    @* The slot is the whole filing decision now: ingest classifies
+                                       nothing, so this is where a capture becomes a window post or a
+                                       misc post. A plain number input rather than a per-event window
+                                       list — the count differs per event and the server clamps. *@
+                                    <select class="form-select we-unlinked-slot" name="slotKind"
+                                            aria-label="Slot">
+                                        <option value="@AttendanceSnapshotSlotKinds.Window" selected>Window</option>
+                                        <option value="@AttendanceSnapshotSlotKinds.Misc">Misc</option>
+                                    </select>
+                                    <input class="input we-unlinked-window" type="number" name="windowNumber"
+                                           min="1" max="@HnmConfig.MaxWindow" placeholder="auto"
+                                           aria-label="Window number"
+                                           title="Leave blank to place it by capture time. Ignored when the slot is Misc." />
+                                    <button type="submit" class="btn sm">Link</button>
+                                }
+                                else
+                                {
+                                    <select class="form-select we-unlinked-select" id="snapshot-link-@snapshot.Id" disabled>
+                                        <option>No open attendance events</option>
+                                    </select>
+                                    <span class="we-unlinked-hint">Create one instead.</span>
+                                }
+                            </form>
+
+                            @* createNew=true, so a repeat camp doesn't silently swallow this
+                               capture into yesterday's event of the same name. *@
+                            <form asp-controller="WindowEvents" asp-action="AttachSnapshot"
+                                  asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id"
+                                  method="post" class="we-unlinked-form">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="createNew" value="true" />
+                                <input type="hidden" name="name" value="@snapshot.Name" />
+                                @* A brand-new event starts at its first window; an officer who meant
+                                   Misc moves it with the slot control on the card. *@
+                                <input type="hidden" name="slotKind" value="@AttendanceSnapshotSlotKinds.Window" />
+                                @if (string.IsNullOrWhiteSpace(snapshot.Name))
+                                {
+                                    <button type="submit" class="btn sm primary" disabled
+                                            title="Give this snapshot a name first — it becomes the event name.">
+                                        Make a New Event from this Snapshot
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="submit" class="btn sm primary"
+                                            title="Creates a new attendance event named after this snapshot.">
+                                        Make a New Event from this Snapshot
+                                    </button>
+                                }
+                            </form>
+
+                            @* The alliance is the one field the game cannot supply, so it is the
+                               one most likely to arrive wrong. Correctable here rather than only
+                               by asking the poster to capture again. *@
+                            <form asp-controller="WindowEvents" asp-action="SetSnapshotAlliance"
+                                  asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id"
+                                  method="post" class="we-unlinked-form">
+                                @Html.AntiForgeryToken()
+                                <label class="we-unlinked-label" for="snapshot-alliance-@snapshot.Id">Alliance</label>
+                                <select class="form-select we-unlinked-alliance" id="snapshot-alliance-@snapshot.Id" name="allianceNumber">
+                                    @for (var n = 1; n <= AttendanceSnapshotAlliances.MaxAllianceNumber; n++)
+                                    {
+                                        <option value="@n" selected="@(snapshot.AllianceNumber == n)">Alliance @n</option>
+                                    }
+                                </select>
+                                <button type="submit" class="btn sm ghost">Set</button>
+                            </form>
+
+                            <div class="we-unlinked-form we-unlinked-form--end">
+                                <form asp-controller="WindowEvents" asp-action="SetSnapshotStatus"
+                                      asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="status" value="@AttendanceSnapshotStatuses.Ignored" />
+                                    <button type="submit" class="btn sm ghost">Ignore</button>
+                                </form>
+                                <form asp-controller="WindowEvents" asp-action="DeleteSnapshot"
+                                      asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id" method="post"
+                                      onsubmit="return confirm('Permanently delete this snapshot? This cannot be undone.');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn sm danger-outline">Delete</button>
+                                </form>
+                            </div>
+                        </div>
+                    }
+
+                    @await Html.PartialAsync("../WindowEvents/_WindowSnapshotEntries", snapshot, new ViewDataDictionary(ViewData)
+                    {
+                        ["LinkshellId"] = linkshellId,
+                        ["CanManage"] = attendance.CanManage,
+                    })
+                </details>
+            }
+        </section>
+    </div>
+}

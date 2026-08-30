@@ -318,6 +318,7 @@
    made the row read as two equal fields when they are two different choices. */
 .we-unlinked-name { width: 180px; flex: none; }
 .we-unlinked-select { width: 230px; flex: none; }
+.we-unlinked-alliance { width: 130px; flex: none; }
 /* Divider between "attach to something that exists" and "make a new one". */
 .we-unlinked-sep {
   width: 1px;
@@ -326,6 +327,37 @@
   margin: 0 2px;
   background: var(--border);
 }
+
+/* Per-alliance attendance. A snapshot is one alliance, so this chip is what
+   tells two same-minute captures apart; quieter than .tag.warning on purpose,
+   since it is an identity rather than an alert. */
+.we-alliance-chip {
+  border-color: var(--accent-weak);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* An unverified capture. Full-height stripe so it stays findable while
+   scrolling a camp with a dozen snapshots, without tinting the roster text. */
+.we-snapshot--pending { border-left: 3px solid var(--warning); }
+
+/* Confirm / Reject. ABOVE the filing controls because it is the blocking
+   decision: an unconfirmed capture earns nothing whatever it is filed under. */
+.we-unlinked-review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 14px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warning);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.we-unlinked-review__note { flex: 1 1 240px; font-size: 12px; color: var(--muted); }
+/* Keeps "Alliance" attached to its select when the action row wraps — without
+   it the selects were indistinguishable from each other. */
+.we-unlinked-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
 
 /* DKP override + add row */
 .we-tab .we-dkp-input { width: 84px; text-align: right; height: 32px; }
@@ -340,8 +372,81 @@
 .we-closed-list .we-card,
 .we-open-list .we-card { margin-bottom: 0; }
 
+/* ===== Attendance Archive ===== */
+
+/* The block heading. Extra top margin so it reads as a break from the Pending Events queue
+   above it rather than as that panel's footer. */
+.we-archive-head { margin-top: 22px; }
+
+/* Search row, sitting between the card head and the list it filters. */
+.we-archive-search {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 18px;
+}
+/* Takes the leftover width; the global input theming supplies the frame and focus ring. */
+.we-archive-search__input { flex: 1 1 260px; min-width: 0; }
+.we-archive-search__input::-webkit-search-cancel-button { cursor: pointer; }
+/* Pushed to the far end so the tally reads as a summary of the row, not another control. */
+.we-archive-tally { margin-left: auto; font-size: 12px; color: var(--fg-3); white-space: nowrap; }
+
+.we-archive-pager {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 0 18px 16px;
+}
+.we-archive-pager__at { font-size: 12px; color: var(--fg-3); min-width: 92px; text-align: center; }
+.we-archive-pager .btn:disabled { opacity: 0.45; cursor: default; }
+
+@media (max-width: 560px) {
+  /* Below this the tally wraps onto its own line; keeping it right-aligned there would strand it
+     under the Clear button. */
+  .we-archive-tally { margin-left: 0; }
+}
+
 @media (max-width: 760px) {
   .we-card__controls { align-items: stretch; }
   .we-card__actions { margin-left: 0; }
   .we-tab .we-table { min-width: 0; }
+}
+
+
+
+/* ===== Misc posts: at the camp, outside any window ===== */
+
+/* Amber, not the window chip's blue: the two are different KINDS of thing, not two states of one. */
+.we-snapshot__misc {
+  background: var(--warning-weak); border-color: var(--warning); color: var(--warning);
+  white-space: nowrap;
+}
+
+/* "Windows" / "Miscellaneous Posts" headings inside a card's snapshot list. */
+.we-snapshots__group-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px 6px; border-top: 1px solid var(--border);
+  &:first-child { border-top: 0; }
+  &--misc .we-snapshots__group-title { color: var(--warning); }
+}
+.we-snapshots__group-title {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--fg-2);
+}
+.we-snapshots__group-count, .we-snapshots__group-help { font-size: 11px; color: var(--muted); }
+
+/* The Misc rate rides the card's existing DKP draft, so Save/Post/Update all carry it. */
+.we-misc-dkp {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  font-size: 11px; color: var(--fg-2);
+  .we-dkp-input { width: 84px; text-align: right; height: 30px; }
+}
+
+.we-slot-picker { display: inline-flex; align-items: center; gap: 4px; }
+.we-slot-picker__kind, .we-slot-picker__window { width: 124px; flex: none; height: 30px; }
+.we-unlinked-slot { width: 120px; flex: none; }
+.we-unlinked-window { width: 96px; flex: none; }
+
+/* Why one member on the combined roster is priced differently from the one above them. */
+.we-credit-chip {
+  font-size: 10px; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap;
+  &--window { border-color: var(--accent-weak); color: var(--accent); }
+  &--misc { border-color: var(--warning-weak); color: var(--warning); }
+  &--both { border-color: var(--success-weak); color: var(--success); }
 }

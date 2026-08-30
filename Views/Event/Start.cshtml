@@ -191,10 +191,21 @@
                 <div class="card-head">
                     <div class="card-title">
                         Attendance Windows
-                        <span class="tag">@Model.AttendanceWindows.Count@(Model.WindowCount > 1 ? $" of {Model.WindowCount}" : string.Empty)</span>
+                        @* The Post Kill roster is counted separately: it is not one of the camp's
+                           roster reads, and folding it in made a 2-post camp read "3 of 2" the
+                           moment it was filed. *@
+                        @{
+                            var postedCampWindows = Model.AttendanceWindows.Count(w => !w.IsKillWindow);
+                            var hasKillRoster = Model.AttendanceWindows.Any(w => w.IsKillWindow);
+                        }
+                        <span class="tag">@postedCampWindows@(Model.WindowCount > 1 ? $" of {Model.WindowCount}" : string.Empty)</span>
+                        @if (hasKillRoster)
+                        {
+                            <span class="tag">+ kill</span>
+                        }
                     </div>
                 </div>
-                @if (Model.AttendanceWindows.Count == 0)
+                @if (Model.AttendanceWindowTabs.Count == 0)
                 {
                     <div class="empty">
                         Tabs will appear here as windows are posted from the lsm addon.
@@ -202,50 +213,106 @@
                 }
                 else
                 {
-                    @* Each window carries its OWN resolved value (EventAttendanceWindowViewModel
-                       .DkpAmount) — an officer's explicit price when they set one, otherwise the
-                       camp's open / close bonus for that sequence. This used to read
-                       Model.Event.DkpPerHour, the column HnmStandardCampFinalizer ignores outright,
-                       so this page and the Discord Activity showed two different numbers for the
-                       same window. Editing lives in the Activity; this page reports. *@
+                    @* One tab per window the camp has SAT THROUGH (EventController
+                       .BuildAttendanceWindowTabs) — a window that was reached but never posted is
+                       dimmed rather than dropped, because that gap is what tells an officer to go
+                       back and file one. Opens on the LAST posted window, not the first tab: on a
+                       25-window wyrm the first tab is usually an unrecorded one, and landing there
+                       would hide the roster the officer came to read. *@
+                    var windowTabs = Model.AttendanceWindowTabs;
+                    var lastPostedIndex = windowTabs.FindLastIndex(tab => tab.Window is not null);
+                    var activeTabIndex = lastPostedIndex >= 0 ? lastPostedIndex : windowTabs.Count - 1;
                     <div style="padding:0 16px 16px" data-attendance-windows>
                         <ul class="nav nav-tabs" role="tablist"
                             style="display:flex;flex-wrap:wrap;flex-direction:row;list-style:none;padding-left:0;margin:0;gap:6px">
-                            @for (var i = 0; i < Model.AttendanceWindows.Count; i++)
+                            @for (var i = 0; i < windowTabs.Count; i++)
                             {
-                                var window = Model.AttendanceWindows[i];
-                                var paneId = $"window-pane-{window.Id}";
+                                var tab = windowTabs[i];
+                                @* Keyed on the SEQUENCE, not the window id: an unposted tab has no
+                                   row and so no id to key on. *@
+                                var paneId = $"window-pane-{tab.SequenceNumber}";
+                                var isActive = i == activeTabIndex;
                                 <li class="nav-item" role="presentation"
                                     style="list-style:none;display:inline-block;width:auto;padding:0;background:transparent">
-                                    <a class="nav-link @(i == 0 ? "active" : string.Empty)"
+                                    <a class="nav-link @(isActive ? "active" : string.Empty)"
                                        data-window-tab="@paneId" href="#@paneId" role="tab"
-                                       aria-controls="@paneId" aria-selected="@(i == 0 ? "true" : "false")"
-                                       title="Posted @window.PostedAt.ToString("g")"
-                                       style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px">
+                                       aria-controls="@paneId" aria-selected="@(isActive ? "true" : "false")"
+                                       title="@(tab.Window is { } posted ? $"Posted {posted.PostedAt:g}" : "No roster posted for this window")"
+                                       style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px@(tab.Window is null ? ";opacity:.55" : string.Empty)">
                                         <span style="display:inline-flex;align-items:center;gap:6px">
-                                            @window.DisplayLabel
-                                            <span class="tag">@window.Attendees.Count</span>
+                                            @tab.Label
+                                            <span class="tag">@tab.AttendeeCount</span>
                                         </span>
                                         <span style="font-size:11px;color:var(--fg-3);font-weight:400">
-                                            @window.PostedAt.ToString("MMM d, h:mm tt")
+                                            @(tab.Window is { } postedAtWindow
+                                                ? postedAtWindow.PostedAt.ToString("MMM d, h:mm tt")
+                                                : "Not posted")
                                         </span>
                                     </a>
                                 </li>
                             }
                         </ul>
+                        @* Each window carries its OWN resolved value (EventAttendanceWindowViewModel
+                           .DkpAmount) — an officer's explicit price when they set one, otherwise the
+                           camp's open / close bonus for that sequence. This used to read
+                           Model.Event.DkpPerHour, the column HnmStandardCampFinalizer ignores outright,
+                           so this page and the Discord Activity showed two different numbers for the
+                           same window. Editing lives in the Activity; this page reports. *@
                         <div class="tab-content" style="margin-top:12px">
-                            @for (var i = 0; i < Model.AttendanceWindows.Count; i++)
+                            @for (var i = 0; i < windowTabs.Count; i++)
                             {
-                                var window = Model.AttendanceWindows[i];
-                                var paneId = $"window-pane-{window.Id}";
+                                var tab = windowTabs[i];
+                                var paneId = $"window-pane-{tab.SequenceNumber}";
+                                var isActive = i == activeTabIndex;
+
+                                if (tab.Window is null)
+                                {
+                                    @* Reached but never recorded. Say what happened and what to do
+                                       about it — "no attendees" would read as "nobody showed up",
+                                       which is a different and much less alarming fact. *@
+                                    <div class="tab-pane fade @(isActive ? "show active" : string.Empty)"
+                                         id="@paneId" role="tabpanel">
+                                        <div class="empty">
+                                            No roster was posted for @tab.Label — this window came and went
+                                            without a snapshot. Post it from the lsm addon's window tab to
+                                            record who was there.
+                                        </div>
+                                    </div>
+                                    continue;
+                                }
+
+                                var window = tab.Window;
                                 var windowDkp = window.DkpAmount ?? 0;
                                 var windowTotal = windowDkp * window.Attendees.Count;
-                                <div class="tab-pane fade @(i == 0 ? "show active" : string.Empty)"
+                                <div class="tab-pane fade @(isActive ? "show active" : string.Empty)"
                                      id="@paneId" role="tabpanel">
                                     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:8px">
                                         <div style="font-size:11px;color:var(--fg-3)">
                                             Posted @window.PostedAt.ToString("g")
                                         </div>
+                                        @* Which window closes the camp out. Ticking it is the ONLY
+                                           thing that pays the close bonus — it used to be guessed
+                                           as "the newest window posted", which is what put a close
+                                           bonus on every window of every camp. A Post Kill roster
+                                           is filed after the close and pays through the kill bonus,
+                                           so it is never offered the box. *@
+                                        @if (Model.CanMarkClosingWindow && !window.IsKillWindow)
+                                        {
+                                            <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--fg-3);cursor:pointer">
+                                                <input type="checkbox"
+                                                       data-mark-closing-window="@window.Id"
+                                                       @(window.IsClosingWindow ? "checked" : string.Empty) />
+                                                Closing window
+                                            </label>
+                                        }
+                                        else if (window.IsClosingWindow)
+                                        {
+                                            <span class="badge">Closing window</span>
+                                        }
+                                        @if (window.IsKillWindow)
+                                        {
+                                            <span class="badge">Post Kill roster</span>
+                                        }
                                         @if (windowDkp > 0)
                                         {
                                             @* "for", not "awarded": on an HNM camp this is staged
@@ -278,7 +345,17 @@
                                                 @foreach (var attendee in window.Attendees)
                                                 {
                                                     <tr data-window-attendee-row="@attendee.Id">
-                                                        <td>@attendee.CharacterName</td>
+                                                        @* The character the scan actually SAW, with
+                                                           their main beside it when that was an alt
+                                                           — the same "(alt of X)" the addon prints
+                                                           in-game, so the two rosters read alike. *@
+                                                        <td>
+                                                            @attendee.CharacterName
+                                                            @if (!string.IsNullOrWhiteSpace(attendee.MainCharacterName))
+                                                            {
+                                                                <span style="color:var(--fg-3);font-size:12px">(alt of @attendee.MainCharacterName)</span>
+                                                            }
+                                                        </td>
                                                         <td>@attendee.JobName/@attendee.SubJobName</td>
                                                         @* An em dash is a real answer, not missing
                                                            data: a middle window on a Standard camp
@@ -302,6 +379,81 @@
                                 </div>
                             }
                         </div>
+
+                        @* Claim Shield: who from the linkshell actually landed an action on the mob
+                           before the lottery resolved. Sits at the BOTTOM of this card, under the
+                           snapshots, because it is evidence about the same camp.
+
+                           No longer read-only evidence — this list is WHO GETS THE CLAIM BONUS.
+                           Both finalizers gate the claim on a tag here rather than on having been
+                           scanned in the close window, so what is on screen is part of the payout. *@
+                        @if (Model.ClaimShieldCaptures.Count > 0)
+                        {
+                            @* Per-MEMBER, not per-capture: a contested pop produces several
+                               lotteries and someone can tag in more than one, but the bonus is paid
+                               once. Adding up the captures would overstate what the camp owes. *@
+                            var paidNames = Model.ClaimShieldCaptures
+                                .SelectMany(c => c.Members)
+                                .Where(m => m.Matched && !string.IsNullOrWhiteSpace(m.CharacterName))
+                                .Select(m => m.CharacterName.Trim())
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                                .ToList();
+                            <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                                    <h4 style="margin:0;font-size:13px">Claim Shield</h4>
+                                    <span class="badge">@Model.ClaimShieldCaptures.Count</span>
+                                </div>
+                                @if (paidNames.Count > 0)
+                                {
+                                    <div style="font-size:12px;color:var(--fg-2);margin-bottom:10px">
+                                        @paidNames.Count @(paidNames.Count == 1 ? "member" : "members")
+                                        tagged this camp and will earn the claim bonus when it is ended
+                                        and posted — <strong>@string.Join(", ", paidNames)</strong>.
+                                    </div>
+                                }
+                                @foreach (var capture in Model.ClaimShieldCaptures)
+                                {
+                                    <div style="margin-bottom:10px">
+                                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                                            <span class="badge">@(capture.Won ? "WON" : "LOST")</span>
+                                            <strong>@capture.MonsterName</strong>
+                                            <span style="font-size:11px;color:var(--fg-3)">
+                                                @capture.CapturedAtUtc.ToString("g")
+                                                · @capture.Members.Count of ours
+                                                · @capture.TotalPlayers in the lottery
+                                            </span>
+                                        </div>
+                                        @if (capture.Members.Count == 0)
+                                        {
+                                            <div class="empty" style="margin-top:6px">
+                                                No linkshell member landed an action before the lottery resolved.
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <ul style="margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--fg-2)">
+                                                @foreach (var member in capture.Members)
+                                                {
+                                                    @* The sentence IS the record — falling back to
+                                                       the bare name only happens on captures from
+                                                       before actions were stored. *@
+                                                    <li>
+                                                        @(string.IsNullOrWhiteSpace(member.ActionMessage)
+                                                            ? member.CharacterName
+                                                            : member.ActionMessage)
+                                                        @if (!member.Matched)
+                                                        {
+                                                            <span class="badge">not on roster — not paid</span>
+                                                        }
+                                                    </li>
+                                                }
+                                            </ul>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
                 }
             </div>
@@ -786,6 +938,47 @@
                         } catch (err) {
                             btn.disabled = false;
                             window.alert('Network error removing attendee.');
+                        }
+                    });
+                });
+
+                // "Closing window" tick. Reloads on success rather than patching the DOM: marking
+                // one window UNMARKS another, and the server also clears this window's explicit
+                // price so the close bonus can come through — three rows change, not one.
+                container.querySelectorAll('[data-mark-closing-window]').forEach((box) => {
+                    box.addEventListener('change', async () => {
+                        const id = box.dataset.markClosingWindow;
+                        if (!id) return;
+                        const desired = box.checked;
+                        box.disabled = true;
+                        try {
+                            const res = await fetch(`/api/addon/management/attendance-windows/${id}/closing`, {
+                                method: 'PATCH',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    '@antiforgeryTokens.HeaderName': '@antiforgeryTokens.RequestToken'
+                                },
+                                body: JSON.stringify({ isClosingWindow: desired })
+                            });
+                            if (res.ok) {
+                                window.location.reload();
+                                return;
+                            }
+                            // Put the box back where it was: the server refused, so the camp's
+                            // close is still whatever it was before the click.
+                            box.checked = !desired;
+                            box.disabled = false;
+                            let message = `HTTP ${res.status}`;
+                            try {
+                                const payload = await res.json();
+                                if (payload && payload.error) message = payload.error;
+                            } catch (parseErr) { /* keep the status */ }
+                            window.alert('Could not set the closing window. ' + message);
+                        } catch (err) {
+                            box.checked = !desired;
+                            box.disabled = false;
+                            window.alert('Network error setting the closing window.');
                         }
                     });
                 });

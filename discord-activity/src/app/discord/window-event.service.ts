@@ -23,13 +23,26 @@ export class WindowEventService {
   private loadedAt = 0;
   private inFlight: Promise<void> | null = null;
 
+  // ----- Attendance Archive search + paging -----
+  //
+  // Server-side, and held HERE rather than in the component, because the archive is paged by the
+  // endpoint: a client-side filter could only ever search the one page it was handed, so a hit on
+  // an older event would silently read as "no results". Keeping it on the service also means the
+  // 5s poll and every write's refetch re-issue the officer's current query instead of resetting it.
+  readonly closedQuery = signal('');
+  readonly closedPage = signal(1);
+
   // Force a refetch. Used after every write and by the manual Refresh button.
   async load(linkshellId: number): Promise<void> {
     if (!linkshellId) {
       this.data.set(null);
       this.loadedFor = 0;
+      this.resetClosedPaging();
       return;
     }
+    // A different linkshell's archive is a different list, so neither the query nor the page
+    // carries over — page 3 of the old one is very likely past the end of the new one.
+    if (this.loadedFor && this.loadedFor !== linkshellId) this.resetClosedPaging();
     // Since attendance moved into the Event System tab there are three callers that can land in the
     // same frame — the tab's first-paint effect, the refresh timer, and a write's refetch. Share one
     // request rather than firing three.
@@ -52,13 +65,49 @@ export class WindowEventService {
     await this.load(linkshellId);
   }
 
+  // Run the archive's search from page 1. Any page but the first is meaningless against a
+  // different result set.
+  async searchClosed(linkshellId: number, query: string): Promise<void> {
+    this.closedQuery.set((query ?? '').trim());
+    this.closedPage.set(1);
+    await this.reloadArchive(linkshellId);
+  }
+
+  async goToClosedPage(linkshellId: number, page: number): Promise<void> {
+    this.closedPage.set(Math.max(1, page));
+    await this.reloadArchive(linkshellId);
+  }
+
+  // Refetch with the archive state as it stands NOW. Deliberately does not join an in-flight
+  // request the way load() does: that one was issued with the previous query/page, so joining it
+  // would land a stale payload as the answer to this search and leave the input disagreeing with
+  // the cards under it.
+  private async reloadArchive(linkshellId: number): Promise<void> {
+    if (!linkshellId) return;
+    // Let a poll already on the wire settle first, or its late response would overwrite ours.
+    const pending = this.inFlight;
+    if (pending) await pending.catch(() => undefined);
+    await this.load(linkshellId);
+  }
+
+  private resetClosedPaging(): void {
+    this.closedQuery.set('');
+    this.closedPage.set(1);
+  }
+
   private async loadCore(linkshellId: number): Promise<void> {
     this.busy.set(true);
     this.auth.setActionError(null);
     try {
+      const query = this.closedQuery();
       const result = await this.http.fetchActivityJson<ActivityWindowEventsResponse>(
         `/api/activity/window-events?linkshellId=${linkshellId}`
+        + `&attQ=${encodeURIComponent(query)}&attPage=${this.closedPage()}`
       );
+      // The server clamps the page to the result set, so mirror its answer back into our state —
+      // otherwise a page that no longer exists (a search narrowed the archive, or an event was
+      // deleted) stays in the pager and every later request asks for it again.
+      this.closedPage.set(result.closedPage);
       this.data.set(result);
       this.loadedFor = linkshellId;
       this.loadedAt = Date.now();
@@ -96,6 +145,10 @@ export class WindowEventService {
       name?: string | null;
       linkedEventId?: number | null;
       createNew?: boolean;
+      // The filing decision. Ingest classifies nothing now, so this is where a capture first
+      // becomes a window post or a misc post.
+      slotKind?: string | null;
+      windowNumber?: number | null;
     },
   ): Promise<void> {
     await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/attach`, input, 'Snapshot attached.');
@@ -105,30 +158,60 @@ export class WindowEventService {
     await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/status`, { status }, 'Snapshot updated.');
   }
 
+  // Renames the SNAPSHOT, and nothing else. Distinct from attachSnapshot's `name`, which
+  // find-or-creates an attendance event to file it under.
+  async renameSnapshot(snapshotId: number, linkshellId: number, name: string | null): Promise<void> {
+    await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/rename`,
+      { name }, 'Snapshot renamed.');
+  }
+
+  // Corrects the alliance a poster claimed. It cannot be detected in game — the client only sees
+  // your own alliance — so it is typed at a pop and is the field most likely to arrive wrong.
+  async setSnapshotAlliance(snapshotId: number, linkshellId: number, allianceNumber: number): Promise<void> {
+    await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/alliance`,
+      { allianceNumber }, 'Snapshot alliance updated.');
+  }
+
+  // Moves an already-filed capture between a numbered window and Misc, without detaching it.
+  // Filing is entirely manual now, so mis-filing is routine rather than exceptional.
+  async setSnapshotSlot(
+    snapshotId: number, linkshellId: number, slotKind: string, windowNumber?: number | null,
+  ): Promise<void> {
+    await this.run(linkshellId, `/api/activity/window-events/snapshots//slot`,
+      { slotKind, windowNumber: windowNumber ?? null }, "Snapshot moved.");
+  }
+
+  // Confirm (verified: true) or Reject (verified: false) a member-posted capture. Confirming is
+  // what puts its members into the combined roster and therefore into the payout.
+  async verifySnapshot(snapshotId: number, linkshellId: number, verified: boolean): Promise<void> {
+    await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/verify`,
+      { verified }, verified ? 'Snapshot confirmed.' : 'Snapshot rejected.');
+  }
+
   // DKP posting (set amount + entry type + per-character overrides, then
   // push/reconcile the AttInput tab).
   async saveDkp(
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
-    memberDkp?: ActivityWindowEventMemberDkpInput[]
+    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null
   ): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/save-dkp`,
-      { dkpAmount, entryType, memberDkp }, 'DKP details saved.');
+    await this.run(linkshellId, `/api/activity/window-events//save-dkp`,
+      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null }, "DKP details saved.");
   }
 
   async postToSheet(
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
-    memberDkp?: ActivityWindowEventMemberDkpInput[]
+    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null
   ): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/post`,
-      { dkpAmount, entryType, memberDkp }, 'Posting to the DKP sheet...');
+    await this.run(linkshellId, `/api/activity/window-events//post`,
+      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null }, "Posting to the DKP sheet...");
   }
 
   async editPosted(
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
-    memberDkp?: ActivityWindowEventMemberDkpInput[]
+    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null
   ): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/edit-posted`,
-      { dkpAmount, entryType, memberDkp }, 'Updating the DKP sheet...');
+    await this.run(linkshellId, `/api/activity/window-events//edit-posted`,
+      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null }, "Updating the DKP sheet...");
   }
 
   async deleteEvent(windowEventId: number, linkshellId: number): Promise<void> {

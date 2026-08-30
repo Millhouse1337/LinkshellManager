@@ -14,58 +14,30 @@ public class ManageItemController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly ItemSaleRecorder _itemSales;
 
     public ManageItemController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         ItemSaleRecorder itemSales)
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _itemSales = itemSales;
     }
 
-    // `view=sold` shows the archive of things already gone; anything else shows what is still held.
-    public async Task<IActionResult> Index(string? view = null)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Challenge();
-
-        var linkshellId = user.PrimaryLinkshellId;
-        var canManage = await CanManageAsync(user.Id, linkshellId);
-
-        var items = new List<ManageItemViewModel>();
-        if (linkshellId.HasValue)
-        {
-            items = await _context.Items
-                .Where(i => i.LinkshellId == linkshellId.Value)
-                .OrderByDescending(i => i.CreatedAt)
-                .Select(i => new ManageItemViewModel
-                {
-                    Id = i.Id,
-                    LinkshellId = i.LinkshellId,
-                    LinkshellName = i.LinkshellName,
-                    ItemName = i.ItemName,
-                    ItemType = i.ItemType,
-                    Quantity = i.Quantity,
-                    Notes = i.Notes,
-                    CreatedByCharacterName = i.CreatedByCharacterName,
-                    CreatedAt = i.CreatedAt,
-                    UpdatedAt = i.UpdatedAt,
-                    IsSold = i.IsSold,
-                    SoldPrice = i.SoldPrice,
-                    SoldByCharacterName = i.SoldByCharacterName,
-                    CanManage = canManage
-                })
-                .ToListAsync();
-        }
-
-        ViewBag.CanManage = canManage;
-        ViewBag.LinkshellName = user.PrimaryLinkshellName;
-        ViewBag.View = view;
-        return View(items);
-    }
+    // Items live on the one Treasury page now, as a section between the balance sheet and the
+    // transactions list. This stays as a redirect rather than being deleted: every write action
+    // below still lands here afterwards, and so does anything anyone bookmarked.
+    //
+    // `view=sold` carries across as `items=sold`, so unselling still returns to the archive it was
+    // done from. #items lands the browser on the section rather than at the top of a page that now
+    // starts with gil.
+    public IActionResult Index(string? view = null) =>
+        RedirectToAction("Index", "ManageFinances", new { items = view }, "items");
 
     public async Task<IActionResult> AddItem()
     {
@@ -212,7 +184,7 @@ public class ManageItemController : Controller
     // updates Finances. Reversible via Unsell.
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> MarkSold(int id, long salePrice)
+    public async Task<IActionResult> MarkSold(int id, long salePrice, string? soldBy)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -224,6 +196,17 @@ public class ManageItemController : Controller
 
         if (salePrice < 0) salePrice = 0;
 
+        // Who sold it, which is not necessarily whoever is clicking. Required, because they are the
+        // one left holding the gil and the treasury's who-has-what list is only worth reading if
+        // every arrival names a mule. The modal marks the field required; this is the server half of
+        // the same rule, for a post that arrives without it.
+        var seller = soldBy?.Trim();
+        if (string.IsNullOrWhiteSpace(seller))
+        {
+            TempData["Error"] = "Say who sold it — they are the one holding the gil.";
+            return RedirectToAction(nameof(Index));
+        }
+
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == user.Id && ul.LinkshellId == item.LinkshellId);
         var characterName = membership?.CharacterName ?? user.CharacterName;
@@ -231,7 +214,13 @@ public class ManageItemController : Controller
         // Shared with the Activity's mark-sold endpoint, so the two surfaces cannot record a sale
         // differently.
         await _itemSales.RecordSaleAsync(
-            item, salePrice, new TreasuryActor(user.Id, characterName), HttpContext.RequestAborted);
+            item,
+            salePrice,
+            new TreasuryActor(user.Id, characterName),
+            // Name only: the seller is picked off the roster datalist but may be typed freely, and a
+            // mule is regularly not a roster row at all.
+            new TreasuryHolder(null, seller),
+            HttpContext.RequestAborted);
 
         return RedirectToAction(nameof(Index));
     }
@@ -265,7 +254,9 @@ public class ManageItemController : Controller
         if (!linkshellId.HasValue) return false;
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == appUserId && ul.LinkshellId == linkshellId.Value);
-        return membership is not null && LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+        if (membership is null) return false;
+        return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
+               || await _adminOverride.IsActiveForAsync(appUserId, HttpContext.RequestAborted);
     }
 
     private async Task<List<Linkshell>> GetManageableLinkshellsAsync(string appUserId)

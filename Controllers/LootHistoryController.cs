@@ -19,6 +19,7 @@ public class LootHistoryController : Controller
 
     private readonly DkpLedgerWriter _dkpLedger;
     private readonly DkpPoolResolver _dkpPools;
+    private readonly ManualLootService _manualLoot;
 
     public LootHistoryController(
         ApplicationDbContext context,
@@ -26,7 +27,8 @@ public class LootHistoryController : Controller
         TimeZoneConversionService timeZones,
         LootEditService lootEditService,
         DkpLedgerWriter dkpLedger,
-        DkpPoolResolver dkpPools)
+        DkpPoolResolver dkpPools,
+        ManualLootService manualLoot)
     {
         _context = context;
         _userManager = userManager;
@@ -34,10 +36,11 @@ public class LootHistoryController : Controller
         _lootEditService = lootEditService;
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
+        _manualLoot = manualLoot;
     }
 
     [HttpGet("/LootHistory/Add")]
-    public async Task<IActionResult> Add()
+    public async Task<IActionResult> Add(string? eventQuery)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -56,18 +59,20 @@ public class LootHistoryController : Controller
         if (!await ResolveCanAddLootAsync(membership)) return Forbid();
 
         var addPoolMap = await _dkpPools.GetMapAsync(linkshellId.Value, HttpContext.RequestAborted);
-        return View(new LootAddViewModel
+        var model = new LootAddViewModel
         {
             LinkshellId = linkshellId.Value,
             LinkshellName = linkshellName,
             LinkshellLootStructure = membership.Linkshell?.LootStructure,
-            LinkshellType = membership.Linkshell?.LinkshellType,
             RosterCharacterNames = await LoadRosterCharacterNamesAsync(linkshellId.Value),
-            // Defaults to the pool HNM maps to — a linkshell that separates HNM DKP wants its ToD
-            // loot paid from that wallet, which is the whole reason this defaults rather than asks.
+            EventQuery = eventQuery,
+            // Defaults to the pool HNM maps to. An event-linked pick re-derives from that event's
+            // own type server-side, so this only really decides the "No event" case.
             DkpPoolId = addPoolMap.Resolve("HNM"),
             DkpPools = addPoolMap.Pools.Select(pool => new LootDkpPoolOption { Id = pool.Id, Name = pool.Name }).ToList()
-        });
+        };
+        await LoadEventOptionsAsync(model, HttpContext.RequestAborted);
+        return View(model);
     }
 
     [HttpPost("/LootHistory/Add")]
@@ -86,88 +91,102 @@ public class LootHistoryController : Controller
         if (membership is null) return Forbid();
         if (!await ResolveCanAddLootAsync(membership)) return Forbid();
 
-        var roster = await LoadRosterCharacterNamesAsync(linkshellId.Value);
-
-        // "Other" in the Source/monster picker means the real label was
-        // typed into the free-text field; fold it into Context so the rest
-        // of the pipeline (and history) only ever sees the actual value.
-        // Context is optional, so a blank pick / blank custom stays null.
-        if (string.Equals(model.Context?.Trim(), TodManagerViewModel.OtherMonster,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            model.Context = string.IsNullOrWhiteSpace(model.CustomContext)
-                ? null
-                : model.CustomContext.Trim();
-        }
-        else
-        {
-            model.Context = string.IsNullOrWhiteSpace(model.Context)
-                ? null
-                : model.Context.Trim();
-        }
-
-        if (ModelState.IsValid
-            && !roster.Any(n => string.Equals(n, model.ItemWinner, StringComparison.OrdinalIgnoreCase)))
-        {
-            ModelState.AddModelError(nameof(model.ItemWinner), "Winner must be a current linkshell member.");
-        }
-
         var poolMap = await _dkpPools.GetMapAsync(linkshellId.Value, HttpContext.RequestAborted);
 
-        if (!ModelState.IsValid)
+        async Task<IActionResult> RedisplayAsync()
         {
             model.LinkshellId = linkshellId.Value;
             model.LinkshellName = linkshellName;
             model.LinkshellLootStructure = membership.Linkshell?.LootStructure;
-            model.LinkshellType = membership.Linkshell?.LinkshellType;
-            model.RosterCharacterNames = roster;
+            model.RosterCharacterNames = await LoadRosterCharacterNamesAsync(linkshellId.Value);
             model.DkpPools = poolMap.Pools.Select(pool => new LootDkpPoolOption { Id = pool.Id, Name = pool.Name }).ToList();
+            await LoadEventOptionsAsync(model, HttpContext.RequestAborted);
             return View(model);
         }
 
-        var nowUtc = DateTime.UtcNow;
-        // One lightweight backing ToD per submission so the loot flows through
-        // the existing ToD-loot DKP deduction + ManualPoints per-day pipeline
-        // and shows in history (Source = ToD) with full edit support.
-        // Time stays null: nobody logged a Time of Death here, this row only exists to carry the
-        // loot. Stamping "now" made it the newest row for its monster, so a manual loot entry with
-        // Context = "Fafnir" would hijack that monster's ToD Tracker card with a time nobody
-        // entered. TimeStamp still records when the row was written.
-        var tod = new Tod
+        if (!ModelState.IsValid)
         {
-            LinkshellId = linkshellId.Value,
-            MonsterName = string.IsNullOrWhiteSpace(model.Context) ? "Manual Loot" : model.Context!.Trim(),
-            Claim = true,
-            TimeStamp = nowUtc,
-            TotalClaims = 1
-        };
-        var detail = new TodLootDetail
-        {
-            Tod = tod,
-            ItemName = model.ItemName!.Trim(),
-            ItemWinner = model.ItemWinner!.Trim(),
-            WinningDkpSpent = model.WinningDkpSpent,
-            // Stamped here so the refund path later reads it back and credits the same wallet the
-            // debit came out of, even if the officer has remapped event types in between.
-            DkpPoolId = model.DkpPoolId is int chosen && poolMap.Pools.Any(pool => pool.Id == chosen)
-                ? chosen
-                : poolMap.Resolve("HNM")
-        };
-        _context.Tods.Add(tod);
-        _context.TodLootDetails.Add(detail);
-        await ActivityDataController.AdjustTodLootDkpAsync(
-            _context, _dkpLedger, _dkpPools, tod, new[] { detail }, nowUtc, isRefund: false, HttpContext.RequestAborted);
-        await _context.SaveChangesAsync();
+            return await RedisplayAsync();
+        }
 
-        TempData["LootHistoryMessage"] = $"Loot added: {detail.ItemName} → {detail.ItemWinner} ({detail.WinningDkpSpent} DKP).";
+        // Everything below — roster match, affordability, the debit, the DkpDebitedAt stamp that
+        // keeps a live event's close from charging this a second time — is ManualLootService's.
+        var result = await _manualLoot.AddAsync(
+            linkshellId.Value,
+            ManualLootTarget.Parse(model.SourceKind, model.EventId, model.EventHistoryId),
+            model.ItemName,
+            model.ItemWinner,
+            model.WinningDkpSpent.GetValueOrDefault(),
+            model.DkpPoolId,
+            HttpContext.RequestAborted);
+
+        if (!result.Success)
+        {
+            // Attached to the field it is about where that is knowable, so the officer sees the
+            // problem next to the input rather than as a banner at the top.
+            var key = result.Error?.Contains("member", StringComparison.OrdinalIgnoreCase) == true
+                ? nameof(model.ItemWinner)
+                : string.Empty;
+            ModelState.AddModelError(key, result.Error ?? "Adding loot failed.");
+            return await RedisplayAsync();
+        }
+
+        TempData["LootHistoryMessage"] =
+            $"Loot added: {result.Detail!.ItemName} → {result.Detail.ItemWinner} ({result.Detail.WinningDkpSpent} DKP).";
         return RedirectToAction(nameof(Index));
+    }
+
+    // Live and past events for the Add loot pickers.
+    //
+    // Live is short by nature. Past is NOT — a linkshell accumulates hundreds — so it is the most
+    // recent RecentPastEventCount, widened by a search when the officer types one. Without the
+    // search the older half of the archive would simply be unreachable, which is the same trap the
+    // attendance archive's flat Take() fell into.
+    private async Task LoadEventOptionsAsync(LootAddViewModel model, CancellationToken cancellationToken)
+    {
+        const int RecentPastEventCount = 25;
+
+        model.LiveEvents = await _context.Events
+            .AsNoTracking()
+            .Where(evt => evt.LinkshellId == model.LinkshellId)
+            .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
+            .Select(evt => new LootEventOption
+            {
+                Id = evt.Id,
+                Name = evt.EventName ?? "Event",
+                Detail = evt.EventType
+            })
+            .ToListAsync(cancellationToken);
+
+        var pastQuery = _context.EventHistories
+            .AsNoTracking()
+            .Where(history => history.LinkshellId == model.LinkshellId);
+
+        var search = model.EventQuery?.Trim();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = $"%{search}%";
+            pastQuery = pastQuery.Where(history =>
+                (history.EventName != null && EF.Functions.ILike(history.EventName, pattern))
+                || (history.EventType != null && EF.Functions.ILike(history.EventType, pattern)));
+        }
+
+        model.PastEvents = await pastQuery
+            .OrderByDescending(history => history.StartTime ?? history.TimeStamp)
+            .Take(RecentPastEventCount)
+            .Select(history => new LootEventOption
+            {
+                Id = history.Id,
+                Name = history.EventName ?? "Event",
+                Detail = history.EventType
+            })
+            .ToListAsync(cancellationToken);
     }
 
     // GET /LootHistory — paginated combined ToD + Event loot for the user's
     // primary linkshell. Edit buttons render only when the caller has the
     // CanAddLoot role flag on their membership.
     public async Task<IActionResult> Index(
-        string? source = "all",
         string? q = null,
         int page = 1)
     {
@@ -182,7 +201,6 @@ public class LootHistoryController : Controller
         {
             SelectedLinkshellId = linkshellId,
             SelectedLinkshellName = linkshellName,
-            SourceFilter = (source ?? "all").Trim().ToLowerInvariant(),
             QueryFilter = string.IsNullOrWhiteSpace(q) ? null : q.Trim()
         };
 
@@ -201,7 +219,7 @@ public class LootHistoryController : Controller
 
         viewModel.CanEdit = await ResolveCanAddLootAsync(membership);
 
-        var entries = await LoadEntriesAsync(linkshellId.Value, viewModel.SourceFilter, user.TimeZone);
+        var entries = await LoadEntriesAsync(linkshellId.Value, user.TimeZone);
         if (!string.IsNullOrWhiteSpace(viewModel.QueryFilter))
         {
             var needle = viewModel.QueryFilter;
@@ -533,57 +551,64 @@ public class LootHistoryController : Controller
             .ToListAsync();
     }
 
-    private async Task<List<LootHistoryEntryViewModel>> LoadEntriesAsync(int linkshellId, string sourceFilter, string? userTimeZone)
+    // Loot is no longer SPLIT by where it came from — every new row is an EventLootDetail filed
+    // against a live event, a past event, or nothing — so the All/ToDs/Events filter went with it.
+    //
+    // ToD rows are still READ. The addon and the old Log ToD form wrote real ones, people paid real
+    // DKP for them, and hiding them would look exactly like losing loot.
+    private async Task<List<LootHistoryEntryViewModel>> LoadEntriesAsync(int linkshellId, string? userTimeZone)
     {
-        var todRows = sourceFilter is "all" or "tod"
-            ? await _context.TodLootDetails
-                .AsNoTracking()
-                .Where(detail => detail.Tod != null && detail.Tod.LinkshellId == linkshellId)
-                .Select(detail => new LootHistoryEntryViewModel
-                {
-                    LootDetailId = detail.Id,
-                    Source = "Tod",
-                    ParentId = detail.TodId ?? 0,
-                    Context = detail.Tod!.MonsterName,
-                    OccurredAt = detail.Tod.Time ?? detail.Tod.TimeStamp,
-                    ItemName = detail.ItemName,
-                    ItemWinner = detail.ItemWinner,
-                    WinningDkpSpent = detail.WinningDkpSpent,
-                    ActualDeductedDkp = detail.ActualDeductedDkp,
-                    LastEditReason = detail.LastEditReason,
-                    EditedAt = detail.EditedAt,
-                    EditedByCharacterName = detail.EditedByCharacterName
-                })
-                .ToListAsync()
-            : new();
+        var todRows = await _context.TodLootDetails
+            .AsNoTracking()
+            .Where(detail => detail.Tod != null && detail.Tod.LinkshellId == linkshellId)
+            .Select(detail => new LootHistoryEntryViewModel
+            {
+                LootDetailId = detail.Id,
+                Source = "Tod",
+                ParentId = detail.TodId ?? 0,
+                Context = detail.Tod!.MonsterName,
+                OccurredAt = detail.Tod.Time ?? detail.Tod.TimeStamp,
+                ItemName = detail.ItemName,
+                ItemWinner = detail.ItemWinner,
+                WinningDkpSpent = detail.WinningDkpSpent,
+                ActualDeductedDkp = detail.ActualDeductedDkp,
+                LastEditReason = detail.LastEditReason,
+                EditedAt = detail.EditedAt,
+                EditedByCharacterName = detail.EditedByCharacterName
+            })
+            .ToListAsync();
 
-        var eventRows = sourceFilter is "all" or "event"
-            ? await _context.EventLootDetails
-                .AsNoTracking()
-                .Where(detail =>
-                    (detail.Event != null && detail.Event.LinkshellId == linkshellId) ||
-                    (detail.EventHistory != null && detail.EventHistory.LinkshellId == linkshellId))
-                .Select(detail => new LootHistoryEntryViewModel
-                {
-                    LootDetailId = detail.Id,
-                    Source = "Event",
-                    ParentId = detail.EventHistoryId ?? detail.EventId ?? 0,
-                    Context = detail.EventHistory != null
-                        ? detail.EventHistory.EventName
-                        : (detail.Event != null ? detail.Event.EventName : null),
-                    OccurredAt = detail.EventHistory != null
-                        ? detail.EventHistory.EndTime
-                        : (detail.Event != null ? (detail.Event.EndTime ?? detail.Event.StartTime) : null),
-                    ItemName = detail.ItemName,
-                    ItemWinner = detail.ItemWinner,
-                    WinningDkpSpent = detail.WinningDkpSpent,
-                    ActualDeductedDkp = detail.ActualDeductedDkp,
-                    LastEditReason = detail.LastEditReason,
-                    EditedAt = detail.EditedAt,
-                    EditedByCharacterName = detail.EditedByCharacterName
-                })
-                .ToListAsync()
-            : new();
+        var eventRows = await _context.EventLootDetails
+            .AsNoTracking()
+            // LinkshellId leads: a "No event" row has neither parent to reach a linkshell through,
+            // and this is the only predicate that finds one. The two parent tests stay for rows
+            // written before that column existed and never backfilled.
+            .Where(detail =>
+                detail.LinkshellId == linkshellId
+                || (detail.Event != null && detail.Event.LinkshellId == linkshellId)
+                || (detail.EventHistory != null && detail.EventHistory.LinkshellId == linkshellId))
+            .Select(detail => new LootHistoryEntryViewModel
+            {
+                LootDetailId = detail.Id,
+                Source = "Event",
+                ParentId = detail.EventHistoryId ?? detail.EventId ?? 0,
+                Context = detail.EventHistory != null
+                    ? detail.EventHistory.EventName
+                    : (detail.Event != null ? detail.Event.EventName : null),
+                // A "No event" row has no event dates to borrow, so it falls back to when the DKP
+                // actually moved — which for hand-entered loot is the moment it happened.
+                OccurredAt = detail.EventHistory != null
+                    ? detail.EventHistory.EndTime
+                    : (detail.Event != null ? (detail.Event.EndTime ?? detail.Event.StartTime) : detail.DkpDebitedAt),
+                ItemName = detail.ItemName,
+                ItemWinner = detail.ItemWinner,
+                WinningDkpSpent = detail.WinningDkpSpent,
+                ActualDeductedDkp = detail.ActualDeductedDkp,
+                LastEditReason = detail.LastEditReason,
+                EditedAt = detail.EditedAt,
+                EditedByCharacterName = detail.EditedByCharacterName
+            })
+            .ToListAsync();
 
         var unified = todRows
             .Concat(eventRows)

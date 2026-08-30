@@ -20,9 +20,10 @@ public static class EventPartySignupService
     // Role/MainJob/SubJob pins are read) and verified linkshell membership. When
     // `claimAsLeader` is true the member is also made the party's leader, unless
     // the party already has one (first-claim-wins — the slot claim still
-    // succeeds, they just join as a regular member). Does NOT commit; the caller
-    // owns SaveChanges and should then call ResolvePartyLeadershipAsync so a
-    // now-full leaderless party auto-promotes its earliest signup.
+    // succeeds, they just join as a regular member). A party is never given a
+    // leader it didn't claim: leadership is always an explicit act ("Sign Up as
+    // Party Leader" / "Make Me Party Lead"), so a full party can be leaderless.
+    // Does NOT commit; the caller owns SaveChanges.
     public static async Task<ClaimResult> ClaimSlotAsync(
         ApplicationDbContext db,
         int eventId,
@@ -314,6 +315,98 @@ public static class EventPartySignupService
         return mine.StayNextWindow;
     }
 
+    // "🎖️ My Readiness": writes the clicker's own readiness tags (EventReadiness) onto every
+    // row they hold for this event — their party slot AND their attendance row when they have
+    // both. Writing both is what keeps the tags on the board after an officer benches them out
+    // of a slot (or seats a bench member), since the board reads the slot row for a seated
+    // member and the attendance row for an "Also Attending" one.
+    //
+    // The three flags are written as a SET, not toggled: the picker submits everything the
+    // member still claims, so unticking is how a tag comes off. Returns false when the clicker
+    // isn't on the board at all. Does NOT commit — the caller owns SaveChanges.
+    public static async Task<bool> SetReadinessAsync(
+        ApplicationDbContext db, int eventId, string? appUserId, string? discordUserId,
+        bool enfeeb, bool resist, bool relic, CancellationToken cancellationToken)
+    {
+        var isOutside = string.IsNullOrEmpty(appUserId);
+
+        // Identity matches the same way Withdraw does: an account row by AppUserId (or the
+        // clicker's Discord id, which also finds a placeholder-matched row), an outside
+        // clicker by Discord id alone.
+        var slots = isOutside
+            ? await db.EventPartySlotSignups
+                .Where(s => s.EventId == eventId && s.DiscordUserId == discordUserId)
+                .ToListAsync(cancellationToken)
+            : await db.EventPartySlotSignups
+                .Where(s => s.EventId == eventId
+                    && (s.AppUserId == appUserId
+                        || (discordUserId != null && s.DiscordUserId == discordUserId)))
+                .ToListAsync(cancellationToken);
+
+        var attendance = isOutside
+            ? await db.AppUserEvents
+                .Where(a => a.EventId == eventId && a.DiscordUserId == discordUserId)
+                .ToListAsync(cancellationToken)
+            : await db.AppUserEvents
+                .Where(a => a.EventId == eventId
+                    && (a.AppUserId == appUserId
+                        || (discordUserId != null && a.DiscordUserId == discordUserId)))
+                .ToListAsync(cancellationToken);
+
+        if (slots.Count == 0 && attendance.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var slot in slots)
+        {
+            slot.EnfeebReady = enfeeb;
+            slot.ResistReady = resist;
+            slot.RelicWeapon = relic;
+        }
+        foreach (var row in attendance)
+        {
+            row.EnfeebReady = enfeeb;
+            row.ResistReady = resist;
+            row.RelicWeapon = relic;
+        }
+        return true;
+    }
+
+    // The readiness tags the clicker currently carries, for pre-ticking their picker. Reads
+    // the slot row first (a seated member is the common case) and falls back to the
+    // attendance row. NULL means they hold neither, i.e. they aren't on this board at all —
+    // distinct from holding a row with no tags set, which is (false, false, false).
+    public static async Task<(bool Enfeeb, bool Resist, bool Relic)?> GetReadinessAsync(
+        ApplicationDbContext db, int eventId, string? appUserId, string? discordUserId,
+        CancellationToken cancellationToken)
+    {
+        var isOutside = string.IsNullOrEmpty(appUserId);
+
+        var slot = isOutside
+            ? await db.EventPartySlotSignups.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.EventId == eventId && s.DiscordUserId == discordUserId, cancellationToken)
+            : await db.EventPartySlotSignups.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.EventId == eventId
+                    && (s.AppUserId == appUserId
+                        || (discordUserId != null && s.DiscordUserId == discordUserId)), cancellationToken);
+        if (slot is not null)
+        {
+            return (slot.EnfeebReady, slot.ResistReady, slot.RelicWeapon);
+        }
+
+        var attendance = isOutside
+            ? await db.AppUserEvents.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.EventId == eventId && a.DiscordUserId == discordUserId, cancellationToken)
+            : await db.AppUserEvents.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.EventId == eventId
+                    && (a.AppUserId == appUserId
+                        || (discordUserId != null && a.DiscordUserId == discordUserId)), cancellationToken);
+        return attendance is null
+            ? null
+            : (attendance.EnfeebReady, attendance.ResistReady, attendance.RelicWeapon);
+    }
+
     // "🔒 Lock Member" (officer): toggles the stay-next-window lock on the member occupying
     // a SPECIFIC slot (chosen by an officer), mirroring SetPartyLeaderBySlotAsync. Returns
     // success, the NEW locked state, and the member's name (for the confirmation line).
@@ -342,8 +435,17 @@ public static class EventPartySignupService
     // drift from the wipe, because it happens here or not at all. Pass a number below 1 to skip the
     // snapshot (a caller with no meaningful window to attribute it to).
     //
+    // A CHECKED-IN participation is spared as well, locked or not. On a Manual Check In wyrm the
+    // grid wipes every window like any other wyrm, but AppUserEvent.WdArrivalWindow /
+    // WdDepartureWindow ARE that camp's attendance — WdCampFinalizer.BuildRosterAsync pays
+    // arrival..departure off these very rows at End Camp — so deleting them at the hour boundary
+    // would erase everyone's credit back to whoever happened to check in during the final window.
+    // Their slot still goes; only the record that they were here survives, which is exactly what
+    // "check in once, stay credited" means. Standard camps never set the column, so this spares
+    // nothing there and their behaviour is unchanged.
+    //
     // Called by the automatic window advance; the caller decides WHETHER a clear applies (wyrms
-    // only, Standard mode) and owns SaveChanges.
+    // only, either attendance mode) and owns SaveChanges.
     public static async Task ClearWindowRosterAsync(
         ApplicationDbContext db, int eventId, int closingWindow, CancellationToken cancellationToken)
     {
@@ -390,7 +492,8 @@ public static class EventPartySignupService
             .Where(p => p.EventId == eventId)
             .ToListAsync(cancellationToken);
         db.AppUserEvents.RemoveRange(attendees.Where(p =>
-            !(p.AppUserId != null && keptAppUserIds.Contains(p.AppUserId))
+            p.WdArrivalWindow is null   // a Manual Check In camp's attendance record — never wiped
+            && !(p.AppUserId != null && keptAppUserIds.Contains(p.AppUserId))
             && !(p.DiscordUserId != null && keptDiscordIds.Contains(p.DiscordUserId))));
     }
 
@@ -420,46 +523,6 @@ public static class EventPartySignupService
         var affectedPartyId = held[0].PartySetupSlot?.PartySetupPartyId;
         db.EventPartySlotSignups.RemoveRange(held);
         return affectedPartyId;
-    }
-
-    // After a claim/leave is committed, ensures a party that is now FULL has a
-    // leader: if none was claimed, the party's earliest signup is promoted. A
-    // no-op when the party isn't full or already has a leader. Self-committing
-    // (reads fresh, saves only when it changes something) so callers can fire it
-    // right after their own SaveChanges. `partyId` may be null (no-op).
-    public static async Task ResolvePartyLeadershipAsync(
-        ApplicationDbContext db, int eventId, int? partyId, CancellationToken cancellationToken)
-    {
-        if (partyId is not { } pid)
-        {
-            return;
-        }
-
-        var slotCount = await db.PartySetupSlots.CountAsync(s => s.PartySetupPartyId == pid, cancellationToken);
-        if (slotCount == 0)
-        {
-            return;
-        }
-
-        var partySignups = await db.EventPartySlotSignups
-            .Where(s => s.EventId == eventId && s.PartySetupSlot!.PartySetupPartyId == pid)
-            .ToListAsync(cancellationToken);
-
-        // Already has a leader, or the party isn't full yet → nothing to do.
-        if (partySignups.Any(s => s.IsPartyLeader) || partySignups.Count < slotCount)
-        {
-            return;
-        }
-
-        var earliest = partySignups
-            .OrderBy(s => s.SignedUpAtUtc)
-            .ThenBy(s => s.Id)
-            .FirstOrDefault();
-        if (earliest is not null)
-        {
-            earliest.IsPartyLeader = true;
-            await db.SaveChangesAsync(cancellationToken);
-        }
     }
 
     // Turns party-slot signups into live-event participations when the event
@@ -668,7 +731,28 @@ public static class EventPartySignupService
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        await ResolvePartyLeadershipAsync(db, eventId, affectedPartyId, cancellationToken);
+    }
+
+    // Wipes an event's sign-up board: every slot signup is dropped, so the board re-renders
+    // empty and members claim their slots again. Participation (AppUserEvents) is deliberately
+    // LEFT ALONE — on a live camp those rows carry the running timer, the DKP already earned and
+    // the attendance credit, and re-seating the board must not cost anyone any of it. Used when
+    // an event's party setup is swapped or removed, where the old setup's slot ids no longer
+    // exist on the new board. Does NOT commit — the caller owns SaveChanges. Returns the number
+    // of signups removed.
+    public static async Task<int> ClearSlotSignupsAsync(
+        ApplicationDbContext db, int eventId, CancellationToken cancellationToken)
+    {
+        var signups = await db.EventPartySlotSignups
+            .Where(s => s.EventId == eventId)
+            .ToListAsync(cancellationToken);
+        if (signups.Count == 0)
+        {
+            return 0;
+        }
+
+        db.EventPartySlotSignups.RemoveRange(signups);
+        return signups.Count;
     }
 
     // When an event's party setup changes, its slot signups are keyed to the OLD

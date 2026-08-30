@@ -84,7 +84,83 @@
         var participants = Model.AppUserEventHistories.OrderBy(p => p.CharacterName).ToList();
         var absentees = ViewBag.Absentees as List<LinkshellManagerDiscordApp.Models.AppUserLinkshell>
             ?? new List<LinkshellManagerDiscordApp.Models.AppUserLinkshell>();
+        // HNM-style camps archive their posted windows at close; a timed event has none, and so
+        // does any camp closed before the archive shipped.
+        var windowArchive = ViewBag.WindowArchive as LinkshellManagerDiscordApp.Services.ArchivedWindowSet
+            ?? LinkshellManagerDiscordApp.Services.ArchivedWindowSet.Empty;
+        // The Windows column only earns its place on a windowed event, where it — not Duration —
+        // is what the member's DKP was computed from.
+        var showWindows = participants.Any(p => p.WindowsAttended.HasValue) || windowArchive.HasWindows;
+        var windowDenominator = windowArchive.WindowCount > 0
+            ? windowArchive.WindowCount
+            : LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(Model.EventName);
     }
+    @if (windowArchive.HasWindows)
+    {
+        <div class="card">
+            <div class="card-head">
+                <div class="card-title">
+                    Attendance windows <span class="tag">@windowArchive.Windows.Count</span>
+                </div>
+                <span class="tag" title="Distinct characters scanned across every window. Can exceed the participant list: the addon records who was standing there, which isn't always who joined on the site.">
+                    @windowArchive.DistinctAttendeeCount scanned
+                </span>
+            </div>
+            <div style="padding:10px 16px 0;font-size:12px;color:var(--fg-3)">
+                What this camp actually posted, kept from before the event closed. DKP shows only where
+                an officer priced that window explicitly — the camp's open/close bonuses aren't
+                recoverable once the board is gone.
+            </div>
+            <div style="padding:12px 16px 16px;display:flex;flex-direction:column;gap:6px">
+                @foreach (var window in windowArchive.Windows)
+                {
+                    <details style="border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+                        <summary style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                            <strong>@window.Label</strong>
+                            <span class="tag">@window.SequenceNumber of @windowArchive.WindowCount</span>
+                            @if (window.IsClosingWindow)
+                            {
+                                <span class="tag accent" title="The window the officer marked as closing the camp out — the one the close bonus paid on.">closing</span>
+                            }
+                            @if (window.IsKillWindow)
+                            {
+                                <span class="tag warning" title="The addon's Post Kill roster: who was there when the mob died. Worth nothing as a window; being on it earns the kill bonus.">kill</span>
+                            }
+                            @if (window.DkpAmount.HasValue)
+                            {
+                                <span class="tag success num">@window.DkpAmount.Value.ToString("0.##") DKP</span>
+                            }
+                            <span style="margin-left:auto;font-size:12px;color:var(--fg-3)">
+                                @window.Attendees.Count present · @window.PostedAt.ToString("g")
+                            </span>
+                        </summary>
+                        @if (window.Attendees.Count == 0)
+                        {
+                            <div style="padding:8px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--fg-4)">
+                                Nobody was scanned in this window.
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="padding:8px 12px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px">
+                                @foreach (var attendee in window.Attendees)
+                                {
+                                    // Both hoisted out of the markup: Razor attribute values are a bad
+                                    // place for nested quotes and interpolation.
+                                    var zoneTitle = attendee.Zone ?? "Zone not recorded";
+                                    var altSuffix = attendee.MainCharacterName is null
+                                        ? string.Empty
+                                        : $" (alt of {attendee.MainCharacterName})";
+                                    <span class="tag" title="@zoneTitle">@attendee.CharacterName@altSuffix</span>
+                                }
+                            </div>
+                        }
+                    </details>
+                }
+            </div>
+        </div>
+    }
+
     <div class="card">
         <div class="card-head">
             <div class="card-title">Participants <span class="tag">@Model.AppUserEventHistories.Count</span></div>
@@ -119,6 +195,10 @@
                             <th>Character</th>
                             <th>Job</th>
                             <th style="text-align:right">Duration</th>
+                            @if (showWindows)
+                            {
+                                <th style="text-align:right" title="Attendance windows this member was scanned in. On a windowed camp this is what their DKP was computed from, not the duration.">Windows</th>
+                            }
                             <th style="text-align:right">DKP</th>
                             <th>Verification</th>
                             <th style="text-align:center">Active credit</th>
@@ -132,6 +212,12 @@
                                 <td style="font-weight:500">@participant.CharacterName</td>
                                 <td>@participant.JobName/@participant.SubJobName</td>
                                 <td style="text-align:right;font-family:var(--font-mono)">@((participant.Duration ?? 0).ToString("0.##")) h</td>
+                                @if (showWindows)
+                                {
+                                    <td style="text-align:right;font-family:var(--font-mono)">
+                                        @(participant.WindowsAttended.HasValue ? $"{participant.WindowsAttended} of {windowDenominator}" : "—")
+                                    </td>
+                                }
                                 <td style="text-align:right;font-family:var(--font-mono)" class="num">@((participant.EventDkp ?? 0).ToString("0.##"))</td>
                                 <td>@Html.Raw(VerificationTag(participant.IsVerified))</td>
                                 <td style="text-align:center">
@@ -212,6 +298,10 @@
                         <th>Character</th>
                         <th>Job</th>
                         <th style="text-align:right">Duration</th>
+                        @if (showWindows)
+                        {
+                            <th style="text-align:right" title="Attendance windows this member was scanned in. On a windowed camp this is what their DKP was computed from, not the duration.">Windows</th>
+                        }
                         <th style="text-align:right">DKP</th>
                         <th>Verification</th>
                         @if (showCredit)
@@ -227,6 +317,12 @@
                             <td style="font-weight:500">@participant.CharacterName</td>
                             <td>@participant.JobName/@participant.SubJobName</td>
                             <td style="text-align:right;font-family:var(--font-mono)">@((participant.Duration ?? 0).ToString("0.##")) h</td>
+                            @if (showWindows)
+                            {
+                                <td style="text-align:right;font-family:var(--font-mono)">
+                                    @(participant.WindowsAttended.HasValue ? $"{participant.WindowsAttended} of {windowDenominator}" : "—")
+                                </td>
+                            }
                             <td style="text-align:right;font-family:var(--font-mono)" class="num">@((participant.EventDkp ?? 0).ToString("0.##"))</td>
                             <td>@Html.Raw(VerificationTag(participant.IsVerified))</td>
                             @if (showCredit)

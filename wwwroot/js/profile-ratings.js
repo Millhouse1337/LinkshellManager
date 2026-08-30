@@ -144,6 +144,8 @@
         relicWrap.style.marginTop = '6px';
         function renderRelics() {
             relicWrap.innerHTML = '';
+            // Jobs with no relic weapon (BLU/COR/PUP) drop the block entirely.
+            if ((RELICS[jobIndex] || []).length === 0 && entry.relicNames.length === 0) { return; }
             var lbl = document.createElement('div');
             lbl.textContent = 'RELIC';
             lbl.style.fontSize = '10px';

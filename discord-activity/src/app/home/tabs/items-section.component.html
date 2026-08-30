@@ -90,14 +90,25 @@
 
           @if (canManage) {
             @if (sellingItemId() === item.id) {
+              <!-- Two answers, not one. "Who sold it" is asked because the seller is the person left
+                   holding the gil, and the Treasury tab's who's-holding-the-gil list is only worth
+                   reading if every arrival names somebody. It is NOT whoever is clicking: officers
+                   record other people's sales constantly, which is exactly what the old code got
+                   wrong by filing the clicker as the seller. -->
               <div class="entry-item__actions" style="align-items:center;gap:8px;flex-wrap:wrap">
                 <input type="number" min="0" step="1" inputmode="numeric" placeholder="Sale price (gil)"
                        [(ngModel)]="sellPrice" style="max-width:160px" />
+                <input type="text" list="sellSellers" autocomplete="off" placeholder="Who sold it"
+                       [(ngModel)]="soldBy" style="max-width:180px" />
                 <button type="button" class="btn primary sm" (click)="confirmSell(item.id)"
-                        [disabled]="activity.busyItemId() === item.id">
+                        [disabled]="activity.busyItemId() === item.id || sellPriceMissing || sellerMissing">
                   {{ activity.busyItemId() === item.id ? 'Saving…' : 'Confirm sale' }}
                 </button>
                 <button type="button" class="btn ghost sm" (click)="cancelSell()">Cancel</button>
+                <div class="fin-help" style="flex-basis:100%">
+                  Whoever sold it is holding the gil until they hand it on — the Treasury tab lists
+                  who has what.
+                </div>
               </div>
             } @else {
               <div class="entry-item__actions">
@@ -133,5 +144,16 @@
         <div class="empty-state-desc">No items tracked yet. Add items to manage loot drops and inventory.</div>
       }
     </div>
+  }
+
+  <!-- One datalist for the whole list rather than one per row: only ever one sell form is open, and
+       an option list repeated per item is the same markup a hundred times over. Suggestions only —
+       the box takes any name, because gil regularly lands on a mule that is not on the roster. -->
+  @if (canManage) {
+    <datalist id="sellSellers">
+      @for (name of roster(); track name) {
+        <option [value]="name"></option>
+      }
+    </datalist>
   }
 </div>

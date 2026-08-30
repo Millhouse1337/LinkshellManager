@@ -14,14 +14,16 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class ActivityDataController
 {
-    private static ActivityLinkshellSettingsDto MapLinkshellSettingsDto(Linkshell? linkshell)
+    private static ActivityLinkshellSettingsDto MapLinkshellSettingsDto(
+        Linkshell? linkshell,
+        IReadOnlyList<ActivityMonsterSetupDto>? monsterSetups = null)
     {
         if (linkshell is null)
         {
             return new ActivityLinkshellSettingsDto(
                 "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
-                Array.Empty<string>(), LinkshellTypes.Both, null, null, false,
-                false, 3, 2, EventBoardThemes.Default, false, true, false, false);
+                Array.Empty<string>(), null, null, false,
+                false, 3, 2, EventBoardThemes.Default, false, false);
         }
 
         return new ActivityLinkshellSettingsDto(
@@ -37,7 +39,6 @@ public sealed partial class ActivityDataController
             linkshell.EnableRevenue,
             NormalizeDkpRounding(linkshell.DkpRoundingIncrement),
             ParseHiddenTodMonsters(linkshell.HiddenTodMonsters),
-            LinkshellTypes.Normalize(linkshell.LinkshellType),
             linkshell.DiscordGuildId,
             linkshell.DiscordGuildName,
             linkshell.LockToDiscordGuild,
@@ -46,8 +47,6 @@ public sealed partial class ActivityDataController
             linkshell.ActiveAfterAttendances,
             EventBoardThemes.Resolve(linkshell.EventBoardTheme),
             linkshell.OutsidePartySignupEnabled,
-            linkshell.FillAlliancesInOrder,
-            linkshell.HnmOutsideSignupEnabled,
             linkshell.UseComponentsV2Boards,
             linkshell.DiscussionChannelId,
             HnmAttendanceModes.Normalize(linkshell.HnmAttendanceMode),
@@ -58,7 +57,7 @@ public sealed partial class ActivityDataController
             linkshell.HnmStandardCloseBonus,
             linkshell.HnmStandardClaimBonus,
             linkshell.HnmStandardKillBonus,
-            ParseTodMonsterTimings(linkshell.TodMonsterTimings),
+            monsterSetups,
             linkshell.HnmAutoSnapshotEnabled,
             linkshell.HnmAutoSnapshotDelaySeconds,
             linkshell.HnmStandardWindowBonus,
@@ -86,7 +85,7 @@ public sealed partial class ActivityDataController
     // so any timing a linkshell saved for one while it still was is dropped here rather than
     // handed to a client — otherwise the picker would show it back as a "custom" monster.
     // Filtering on the read path also means the stored value self-cleans on the next save.
-    private static IReadOnlyList<ActivityTodMonsterTimingDto> ParseTodMonsterTimings(string? raw)
+    internal static IReadOnlyList<ActivityTodMonsterTimingDto> ParseTodMonsterTimings(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<ActivityTodMonsterTimingDto>();
 
@@ -106,25 +105,6 @@ public sealed partial class ActivityDataController
         {
             return Array.Empty<ActivityTodMonsterTimingDto>();
         }
-    }
-
-    internal static string SerializeTodMonsterTimings(IReadOnlyList<ActivityTodMonsterTimingDto>? timings)
-    {
-        if (timings is null || timings.Count == 0) return string.Empty;
-
-        var normalized = timings
-            .Where(timing => !string.IsNullOrWhiteSpace(timing.MonsterName)
-                && !HnmConfig.PopOnlyNms.Contains(timing.MonsterName.Trim())
-                && timing.CooldownHours > 0
-                && timing.IntervalHours >= 0
-                && timing.IntervalMinutes >= 0
-                && timing.IntervalMinutes < 60)
-            .GroupBy(timing => timing.MonsterName.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.Last() with { MonsterName = group.Key })
-            .OrderBy(timing => timing.MonsterName, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        return normalized.Length == 0 ? string.Empty : JsonSerializer.Serialize(normalized);
     }
 
     // Joins the wire form back into the pipe-separated storage form.
@@ -153,8 +133,17 @@ public sealed partial class ActivityDataController
     private static ActivityPermissionsDto? ResolvePermissionsFor(
         int linkshellId,
         string? rank,
-        Dictionary<int, Dictionary<string, LinkshellRole>> rolesByLinkshellAndName)
+        Dictionary<int, Dictionary<string, LinkshellRole>> rolesByLinkshellAndName,
+        bool adminOverrideActive)
     {
+        // The app-wide admin override short-circuits to every permission. The caller
+        // only ever passes memberships, so this cannot unlock a linkshell the user
+        // has not joined. See AdminOverrideService.
+        if (adminOverrideActive)
+        {
+            return ActivityPermissions.All;
+        }
+
         if (!rolesByLinkshellAndName.TryGetValue(linkshellId, out var rolesByName))
         {
             return null;
@@ -216,6 +205,15 @@ public sealed partial class ActivityDataController
             role.CanManageInvites,
             role.CanBid);
     }
+
+    private static IReadOnlyList<ActivityHnmClaimSliceDto> MapHnmClaimSlices(IReadOnlyList<HnmClaimSlice> slices) =>
+        slices
+            .Select(slice => new ActivityHnmClaimSliceDto(
+                slice.MonsterName,
+                slice.Count,
+                slice.Percent,
+                slice.ColorClass))
+            .ToList();
 
     private static ActivityTodDto MapTodDto(Tod tod)
     {

@@ -1,25 +1,29 @@
 export const EVENT_MAIN_JOB_OPTIONS = [
   'Any Tank', 'Any Heal', 'Any Support', 'Any DPS',
   'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK',
-  'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN'
+  'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN',
+  'BLU', 'COR', 'PUP'
 ] as const;
 
 export const EVENT_SUB_JOB_OPTIONS = [
   'ANY',
   'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK',
-  'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN'
+  'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN',
+  'BLU', 'COR', 'PUP'
 ] as const;
 
 export const EVENT_JOB_TYPE_OPTIONS = ['Tank', 'Heal', 'Support', 'DPS'] as const;
 
-// The 15 classic jobs in the exact order of the backend's
+// The 18 selectable jobs in the exact order of the backend's
 // EventJobCatalog.MainJobOptions. The profile "My Jobs" editor binds level
 // inputs to this list by index, matching the catalog-aligned jobLevels array
-// the API sends/accepts (index 0 = WAR ... 14 = SMN). Keep in sync with the
-// backend list.
+// the API sends/accepts (index 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP).
+// The order is a contract — it tracks FFXI job ids (index i = job id i + 1), so
+// only ever APPEND, in job-id order. Keep in sync with the backend list.
 export const PROFILE_JOB_OPTIONS = [
   'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK',
-  'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN'
+  'BST', 'BRD', 'RNG', 'SAM', 'NIN', 'DRG', 'SMN',
+  'BLU', 'COR', 'PUP'
 ] as const;
 
 // The nine crafts, catalog-aligned with the API's craftLevels arrays
@@ -30,9 +34,10 @@ export const PROFILE_CRAFT_OPTIONS = [
 ] as const;
 
 // The relic weapons each job can equip, catalog-aligned with PROFILE_JOB_OPTIONS
-// (index 0 = WAR ... 14 = SMN). When a job is marked as having its relic, the
-// profile shows this list as a dropdown. (BLU/COR/PUP/DNC/SCH have no relic and
-// aren't part of the classic-15 grid.)
+// (index 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP). When a job is marked as having
+// its relic, the profile shows this list as a dropdown. The ToAU jobs (BLU/COR/PUP)
+// have no relic weapon, so their entries are empty and the profile hides the relic
+// block for them. Mirrors the backend JobRelicCatalog — keep in sync.
 export const JOB_RELIC_OPTIONS: readonly (readonly string[])[] = [
   ['Bravura', 'Ragnarok'],              // WAR
   ['Spharai'],                          // MNK
@@ -48,5 +53,8 @@ export const JOB_RELIC_OPTIONS: readonly (readonly string[])[] = [
   ['Amanomurakumo', 'Yoichinoyumi'],    // SAM
   ['Kikoku'],                           // NIN
   ['Gungnir'],                          // DRG
-  ['Claustrum']                         // SMN
+  ['Claustrum'],                        // SMN
+  [],                                   // BLU — no relic
+  [],                                   // COR — no relic
+  []                                    // PUP — no relic
 ];

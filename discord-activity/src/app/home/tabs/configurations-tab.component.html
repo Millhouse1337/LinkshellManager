@@ -111,8 +111,9 @@
           </div>
         } @else {
           <form class="customize-form" (ngSubmit)="$event.preventDefault(); saveCustomizeDraft()">
-            <div class="customize-cards-row" style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch">
-              <section class="card" style="flex:1 1 0;min-width:280px;margin:0">
+            <!-- Every setting is its own bordered card, laid out 4 per row. -->
+            <div class="customize-cards-grid">
+              <section class="card">
                 <div class="card-head"><div class="card-title">Loot structure</div></div>
                 <div class="card-body">
                   <p class="muted">Choose how loot is awarded for this linkshell.</p>
@@ -148,46 +149,6 @@
                 </div>
               </section>
 
-              <section class="card" style="flex:1 1 0;min-width:280px;margin:0">
-                <div class="card-head"><div class="card-title">Linkshell type</div></div>
-                <div class="card-body">
-                  <p class="muted">Tells the addon and website which content this linkshell runs.</p>
-                  <div class="customize-form__options">
-                    <label class="customize-form__option">
-                      <input type="radio" name="linkshellTypeDraft" value="SkySeaDynamis"
-                        [ngModel]="customizeDraft.linkshellType"
-                        (ngModelChange)="customizeDraft.linkshellType = $event; onCustomizeFieldChange()" />
-                      <span>
-                        <strong>Timed Events Only</strong>
-                        <span class="muted">Timed-event experience only.</span>
-                      </span>
-                    </label>
-                    <label class="customize-form__option">
-                      <input type="radio" name="linkshellTypeDraft" value="HnmOnly"
-                        [ngModel]="customizeDraft.linkshellType"
-                        (ngModelChange)="customizeDraft.linkshellType = $event; onCustomizeFieldChange()" />
-                      <span>
-                        <strong>Snapshot Only</strong> <span class="muted">(requires addon)</span>
-                        <span class="muted">Snapshot sessions only</span>
-                      </span>
-                    </label>
-                    <label class="customize-form__option">
-                      <input type="radio" name="linkshellTypeDraft" value="Both"
-                        [ngModel]="customizeDraft.linkshellType"
-                        (ngModelChange)="customizeDraft.linkshellType = $event; onCustomizeFieldChange()" />
-                      <span>
-                        <strong>Both</strong>
-                        <span class="muted">timed events and snapshots. Default.</span>
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              </section>
-            </div>
-
-            <!-- Every setting below is its own bordered card, the same shell as the Loot
-                 structure / Linkshell type cards above, laid out 4 per row. -->
-            <div class="customize-cards-grid">
               @if (customizeDraft.lootStructure === 'Dkp' || customizeDraft.lootStructure === 'Hybrid') {
                 <section class="card">
                   <div class="card-head"><div class="card-title">DKP rounding increment</div></div>
@@ -328,10 +289,11 @@
                 <div class="card-head"><div class="card-title">Outside Party Signup</div></div>
                 <div class="card-body customize-form__section">
                   <p class="muted">
-                    Let Discord-server members who have <strong>never launched the app</strong> sign up for
-                    events from the party board, identified by their Discord account. Their first signup adds them
-                    to your roster as a placeholder member, so they <strong>earn DKP and count toward attendance</strong>
-                    like anyone else (and aren't re-asked for their name next time).
+                    Let Discord-server members who have <strong>never launched the app</strong> sign up — or
+                    <strong>Check In</strong> on an HNM camp — straight from the board, identified by their Discord
+                    account. Their first click adds them to your roster as a placeholder member, so they
+                    <strong>earn DKP and count toward attendance</strong> like anyone else (and aren't re-asked for
+                    their name next time). Covers <strong>every event type</strong>, HNM included.
                   </p>
                   <label class="customize-form__toggle">
                     <input type="checkbox" name="outsidePartySignupEnabledDraft"
@@ -343,38 +305,22 @@
               </section>
 
               <section class="card">
-                <div class="card-head"><div class="card-title">Fill alliances in order</div></div>
-                <div class="card-body customize-form__section">
-                  <p class="muted">
-                    When someone signs up for a later alliance while an open slot their job can fill is still
-                    free in an earlier alliance, they're warned and offered that earlier slot first. A soft,
-                    job-aware nudge (they can still sign up where they chose); no effect on single-alliance events.
-                  </p>
-                  <label class="customize-form__toggle">
-                    <input type="checkbox" name="fillAlliancesInOrderDraft"
-                      [ngModel]="customizeDraft.fillAlliancesInOrder"
-                      (ngModelChange)="customizeDraft.fillAlliancesInOrder = $event; onCustomizeFieldChange()" />
-                    <span>Nudge members to fill earlier alliances first</span>
-                  </label>
-                </div>
-              </section>
-
-              <section class="card">
                 <div class="card-head">
-                  <div class="card-title">Components V2 boards <span class="muted">(experimental)</span></div>
+                  <div class="card-title">Full-width event boards <span class="muted">(experimental)</span></div>
                 </div>
                 <div class="card-body customize-form__section">
                   <p class="muted">
-                    Post Discord event sign-up boards as Discord <strong>Components V2</strong> messages: the rendered
-                    board sits in a <strong>full-width media gallery</strong> (no embed frame) and is drawn on a
-                    <strong>wider canvas</strong>, so it reads larger. Same buttons and signup flow. Discord won't let a
+                    Post sign-up boards as a <strong>full-width text grid</strong>: parties in three columns with role,
+                    leader and readiness icons, spanning the whole message column. No rendered image &mdash; the grid
+                    already shows every slot, so boards post faster too. Off, a rendered picture <em>is</em> the board and
+                    Discord caps it at roughly a third of that width. Same buttons and signup flow. Discord won't let a
                     board switch modes once posted, so this only affects boards posted <strong>after</strong> you turn it on.
                   </p>
                   <label class="customize-form__toggle">
                     <input type="checkbox" name="useComponentsV2BoardsDraft"
                       [ngModel]="customizeDraft.useComponentsV2Boards"
                       (ngModelChange)="customizeDraft.useComponentsV2Boards = $event; onCustomizeFieldChange()" />
-                    <span>Use Components V2 event boards</span>
+                    <span>Full-width text boards</span>
                   </label>
                 </div>
               </section>
@@ -409,67 +355,6 @@
               </section>
             </div>
 
-            <div class="customize-form__row tod-timings" style="margin-top:24px">
-              <button type="button" class="tod-timings__toggle" (click)="todTimingsOpen = !todTimingsOpen"
-                [attr.aria-expanded]="todTimingsOpen" aria-controls="tod-timings-content">
-                <span class="tod-timings__toggle-chevron" [class.is-open]="todTimingsOpen" aria-hidden="true">&#9656;</span>
-                <span class="tod-timings__intro">
-                  <strong>ToD Cooldowns</strong>
-                  <span class="muted">Set the default cooldown and repop interval for each monster.</span>
-                </span>
-              </button>
-              @if (todTimingsOpen) {
-                <div id="tod-timings-content" class="tod-timings__content">
-                  <div class="tod-timings__content-actions">
-                    <button type="button" class="btn ghost sm" (click)="openNewTodMonsterDialog()">+ New Monster</button>
-                  </div>
-                  @for (group of todMonsterGroups(); track group.label) {
-                    <section class="tod-timings__section">
-                      <header class="tod-timings__section-header">
-                        <span class="tod-timings__section-mark" aria-hidden="true">{{ group.label.charAt(0) }}</span>
-                        <h4>{{ group.label }}</h4>
-                        <span class="tod-timings__section-line"></span>
-                      </header>
-                      <div class="tod-timings__grid">
-                        @for (monster of group.names; track monster) {
-                          <article class="tod-timings__monster">
-                            <header class="tod-timings__monster-header">
-                              <strong>{{ monster }}</strong>
-                              @if (isCustomTodMonster(monster)) {
-                                <button type="button" class="btn ghost sm tod-timings__delete"
-                                  (click)="deleteCustomTodMonster(monster)">Delete</button>
-                              }
-                              <span class="tod-timings__monster-mark" aria-hidden="true">{{ monster.charAt(0) }}</span>
-                            </header>
-                            <label>
-                              <span>Cooldown hours</span>
-                              <input type="number" min="0" step="1" [name]="'todCooldownHours_' + monster"
-                                [ngModel]="todCooldownHours(monster)" (ngModelChange)="updateTodCooldownHours(monster, $event)" />
-                            </label>
-                            <label>
-                              <span>Cooldown mins</span>
-                              <input type="number" min="0" max="59" step="1" [name]="'todCooldownMinutes_' + monster"
-                                [ngModel]="todCooldownMinutes(monster)" (ngModelChange)="updateTodCooldownMinutes(monster, $event)" />
-                            </label>
-                            <label>
-                              <span>Interval hours</span>
-                              <input type="number" min="0" step="1" [name]="'todIntervalHours_' + monster"
-                                [(ngModel)]="todMonsterTiming(monster).intervalHours" (ngModelChange)="onCustomizeFieldChange()" />
-                            </label>
-                            <label>
-                              <span>Interval mins</span>
-                              <input type="number" min="0" max="59" step="1" [name]="'todIntervalMinutes_' + monster"
-                                [(ngModel)]="todMonsterTiming(monster).intervalMinutes" (ngModelChange)="onCustomizeFieldChange()" />
-                            </label>
-                          </article>
-                        }
-                      </div>
-                    </section>
-                  }
-                </div>
-              }
-            </div>
-
             <div class="customize-form__actions">
               <button type="submit" class="btn primary" [disabled]="!customizeDirty">
                 {{ customizeDirty ? 'Save changes' : 'Saved' }}
@@ -480,51 +365,6 @@
             </div>
           </form>
 
-          <dialog #newTodMonsterDialog class="event-edit-modal-dialog tod-new-monster-dialog">
-            <div class="card-head">
-              <div class="card-title">New ToD Monster</div>
-              <button type="button" class="btn ghost sm" (click)="closeNewTodMonsterDialog()">Close</button>
-            </div>
-            <form class="card-body tod-new-monster-form" (ngSubmit)="addNewTodMonster()">
-              <label class="field">
-                <span class="form-label">Category</span>
-                <select class="form-select" [(ngModel)]="newTodMonsterCategory" name="newTodMonsterCategory">
-                  @for (category of newTodMonsterCategories; track category) {
-                    <option [value]="category">{{ category }}</option>
-                  }
-                </select>
-              </label>
-              <label class="field">
-                <span class="form-label">Monster name</span>
-                <input class="form-input" [(ngModel)]="newTodMonsterName" name="newTodMonsterName" maxlength="128" required />
-              </label>
-              <div class="tod-new-monster-form__timings">
-                <label class="field">
-                  <span class="form-label">Cooldown hours</span>
-                  <input class="form-input" type="number" min="0" step="1" [(ngModel)]="newTodMonsterCooldownHours" name="newTodMonsterCooldownHours" required />
-                </label>
-                <label class="field">
-                  <span class="form-label">Cooldown mins</span>
-                  <input class="form-input" type="number" min="0" max="59" step="1" [(ngModel)]="newTodMonsterCooldownMinutes" name="newTodMonsterCooldownMinutes" required />
-                </label>
-                <label class="field">
-                  <span class="form-label">Interval hours</span>
-                  <input class="form-input" type="number" min="0" step="1" [(ngModel)]="newTodMonsterIntervalHours" name="newTodMonsterIntervalHours" required />
-                </label>
-                <label class="field">
-                  <span class="form-label">Interval mins</span>
-                  <input class="form-input" type="number" min="0" max="59" step="1" [(ngModel)]="newTodMonsterIntervalMinutes" name="newTodMonsterIntervalMinutes" required />
-                </label>
-              </div>
-              @if (newTodMonsterError) {
-                <p class="form-error">{{ newTodMonsterError }}</p>
-              }
-              <div class="form-actions">
-                <button type="button" class="btn ghost" (click)="closeNewTodMonsterDialog()">Cancel</button>
-                <button type="submit" class="btn primary">Add Monster</button>
-              </div>
-            </form>
-          </dialog>
         }
       </div>
 
@@ -545,48 +385,16 @@
                    Save at the bottom still persists the whole payload. -->
               <div class="customize-cards-grid">
                 <section class="card">
-                  <div class="card-head"><div class="card-title">HNM Outside Sign Up</div></div>
-                  <div class="card-body customize-form__section">
-                    <p class="muted">
-                      A separate switch for <strong>HNM signup boards</strong>. Turning this on adds the HNM event type
-                      when creating an event and lets outside Discord members sign up to HNM boards. HNM is
-                      <strong>roster memory only</strong> — players are remembered so they don't retype their name, but
-                      HNM signups earn <strong>no DKP and no attendance credit</strong>. Works independently of Outside
-                      Party Signup in Customize Linkshell.
-                    </p>
-                    <label class="customize-form__toggle">
-                      <input type="checkbox" name="hnmOutsideSignupEnabledDraft"
-                        [ngModel]="customizeDraft.hnmOutsideSignupEnabled"
-                        (ngModelChange)="customizeDraft.hnmOutsideSignupEnabled = $event; onCustomizeFieldChange()" />
-                      <span>Allow HNM outside sign-ups (roster only — no DKP)</span>
-                    </label>
-                  </div>
-                </section>
-
-                <section class="card">
                   <div class="card-head">
-                    <div class="card-title">HNM Attendance Mode <span class="muted">(Manual Check In)</span></div>
+                    <div class="card-title">HNM Attendance Mode</div>
                   </div>
                   <div class="card-body customize-form__section">
                     <p class="muted">
-                      <strong>Manual Check In</strong>: members self-serve <strong>Check In</strong> from a button on the
-                      Discord camp board, marking the window they arrived. DKP is <strong>per window attended</strong>
-                      (a fraction like 0.25) plus optional <strong>claim</strong> / <strong>kill</strong> bonuses.
-                      <strong>Standard</strong> scores from the addon's window scans:
-                      <strong>open</strong> to everyone scanned in window 1,
-                      <strong>close</strong> to everyone in the camp's last scan, plus
-                      <strong>claim</strong> / <strong>kill</strong> for the outcome entered on the End Camp form.
-                      Leave a bonus at 0 to switch it off.
-                      (HNM Outside Sign Up should be on so account-less members can Check In.)
-                      <br /><br />
-                      Either way these amounts are only what a camp <strong>proposes</strong>. Ending a camp no
-                      longer pays anyone: it posts the roster to <strong>Current Field Activity</strong> on the
-                      Event System tab as a pending row, and DKP moves when an officer reviews it and hits
-                      <strong>Post</strong> — so a camp with every bonus at 0 still shows up there and can be
-                      priced by hand.
-                      Changing this applies to new boards and to any camp that hasn't started yet — a camp
-                      already running keeps its current mode until it pops, because switching mid-camp
-                      would strand the attendance already collected.
+                      <strong>Standard (addon needed)</strong>: attendance captured using the addon UI or
+                      /lsm command — anyone with the addon can post their ally's attendance.
+                      <br />
+                      <strong>Manual Check In</strong>: members self-<strong>Check In/Out</strong> from a button on
+                      the Discord sign up board, marking the window they arrived.
                     </p>
                     <label class="customize-form__field">
                       <select name="hnmAttendanceModeDraft"
@@ -611,17 +419,9 @@
                       <span>Enable automatic window snapshots</span>
                     </label>
                     <p class="muted">
-                      When on, an officer running the LSM addon can <strong>arm</strong> auto-posting on a live camp.
-                      About the delay below after each window opens, the addon captures <strong>their alliance</strong>
-                      (not the whole zone) and posts it as that window's attendance snapshot.
-                      Arming is <strong>per-officer and per-camp</strong> — never automatic — so people in the zone who
-                      shouldn't be counted stay out. If the camp runs more than one alliance,
-                      <strong>one officer in each alliance</strong> must arm. Only members who can moderate live events
-                      can arm.
-                      <br />
-                      <strong>Standard</strong>: these snapshots are what the open / close / claim / kill bonuses are paid
-                      from. <strong>Manual Check In</strong>: they are a <strong>record only</strong> — DKP still comes
-                      from Check In / Check Out.
+                      When on, an officer running the LSM addon can auto-post on a live camp.
+                      (alliance only). If the camp runs more than one alliance,
+                      <strong>one officer in each alliance</strong> must have this setting on.
                     </p>
                     @if (customizeDraft.hnmAutoSnapshotEnabled) {
                       <label class="customize-form__field" style="max-width:180px">
@@ -635,8 +435,9 @@
                 </section>
 
                 <!-- Scoring for whichever mode is selected. The card title carries the mode so the
-                     bare bonus fields below always say which scheme they belong to. -->
-                <section class="card">
+                     bare bonus fields below always say which scheme they belong to. It spans two
+                     columns so it shares the top row with the two cards beside it. -->
+                <section class="card card--span2">
                   <div class="card-head">
                     <div class="card-title">
                       @if (customizeDraft.hnmAttendanceMode === 'Wd') {
@@ -649,23 +450,24 @@
                   <div class="card-body customize-form__section">
                     @if (customizeDraft.hnmAttendanceMode === 'Standard') {
                       <p class="muted">
-                        <strong>Regular window</strong> is the base rate EVERY window a member is scanned
-                        in pays — including the ones in between, which used to be worth nothing unless an
-                        officer priced them one at a time. <strong>Open</strong> and <strong>close</strong>
-                        are added on top of it. Leave it at 0 to keep the open/close-only payout.
+                        Specify what each camp window offers
                       </p>
-                      <div style="display:flex;gap:16px;flex-wrap:wrap">
-                        <label class="customize-form__field" style="flex:0 0 120px">
-                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Regular window</span>
-                          <input type="number" min="0" step="0.05" name="hnmStandardWindowBonusDraft"
-                            [ngModel]="customizeDraft.hnmStandardWindowBonus"
-                            (ngModelChange)="customizeDraft.hnmStandardWindowBonus = $event; onCustomizeFieldChange()" />
-                        </label>
+                      <!-- Centred so the WRAPPED line reads as part of the same block: five fields
+                           over three columns leaves the last two hanging off the left edge, which
+                           looks like a different group rather than the tail of this one. A full
+                           line has no slack to centre, so this only ever moves the short one. -->
+                      <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
                         <label class="customize-form__field" style="flex:0 0 120px">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Open bonus</span>
                           <input type="number" min="0" step="0.05" name="hnmStandardOpenBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardOpenBonus"
                             (ngModelChange)="customizeDraft.hnmStandardOpenBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Regular window</span>
+                          <input type="number" min="0" step="0.05" name="hnmStandardWindowBonusDraft"
+                            [ngModel]="customizeDraft.hnmStandardWindowBonus"
+                            (ngModelChange)="customizeDraft.hnmStandardWindowBonus = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field" style="flex:0 0 120px">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Close bonus</span>
@@ -696,7 +498,9 @@
                         anyone still checked in at the camp's last window. Leave a bonus at 0 to switch
                         it off.
                       </p>
-                      <div style="display:flex;gap:16px;flex-wrap:wrap">
+                      <!-- Centred for the same reason as the Standard row above: this mode also
+                           carries five fields, so the wrap leaves a short last line. -->
+                      <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
                         <label class="customize-form__field" style="flex:0 0 120px">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">DKP / window</span>
                           <input type="number" min="0" step="0.05" name="wdDkpPerWindowDraft"
@@ -733,58 +537,6 @@
                 </section>
               </div>
 
-              <!-- Row 2: the read-only reference pair. Its own flex row rather than another
-                   customize-cards-grid so the monster table keeps the wide column it needs and
-                   the short prose card beside it stays its natural height. -->
-              <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px">
-                <section class="card" style="flex:0 0 280px;margin:0;min-width:0">
-                  <div class="card-head">
-                    <div class="card-title">Spawn windows <span class="muted">(built-in)</span></div>
-                  </div>
-                  <div class="card-body customize-form__section">
-                    <p class="muted">
-                      Window counts and auto-advance cadence are built in per monster — nothing to configure.
-                      Window 1 opens at the camp's start time and window N opens (N−1) × cadence later.
-                      Boards march their window automatically; officers can still click
-                      <strong>Next Window</strong> to move ahead early. Monsters not listed run a single
-                      window and advance only by hand.
-                    </p>
-                  </div>
-                </section>
-
-                <!-- Read-only per-monster setups, served from HnmConfig via the overview payload so
-                     these numbers always match what the boards actually run. -->
-                <section class="card" style="flex:1 1 300px;margin:0;min-width:280px">
-                  <div class="card-head">
-                    <div class="card-title">Window setups <span class="muted">(per monster)</span></div>
-                  </div>
-                  <div class="card-body customize-form__section">
-                    @if (hnmWindowSetups().length > 0) {
-                      <table class="hnm-window-setups">
-                        <thead>
-                          <tr>
-                            <th scope="col">Monster</th>
-                            <th scope="col">Windows</th>
-                            <th scope="col">Cadence</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          @for (setup of hnmWindowSetups(); track setup.monster) {
-                            <tr>
-                              <td>{{ setup.monster }}</td>
-                              <td>{{ setup.windows }}</td>
-                              <td>{{ setup.minutes }} min</td>
-                            </tr>
-                          }
-                        </tbody>
-                      </table>
-                    } @else {
-                      <p class="muted">Window setups unavailable — reload the app to fetch them.</p>
-                    }
-                  </div>
-                </section>
-              </div>
-
               <div class="customize-form__actions">
                 <button type="submit" class="btn primary" [disabled]="!customizeDirty">
                   {{ customizeDirty ? 'Save changes' : 'Saved' }}
@@ -794,6 +546,159 @@
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      }
+
+      <!-- Monster setups. Deliberately its OWN card outside the HNM settings form: it saves through
+           its own endpoint, and nesting it in that form would make Enter-in-a-cell persist the
+           whole linkshell settings payload instead. -->
+      @if (canCustomizeSelectedLinkshell()) {
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">📋 Monster setups</div>
+            @if (activeLinkshellName(); as activeName) {
+              <span class="tag accent" title="Editing the currently active linkshell">{{ activeName }}</span>
+            }
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+            <p class="muted" style="font-size:12px;margin:0">
+              What each monster's camp runs on: how many spawn <strong>windows</strong> it sits
+              through, how far apart those windows open (<strong>cadence</strong>), and how long
+              after a kill it repops (<strong>cooldown</strong>). These drive the monster list on
+              the event and ToD forms, and a camp captures them when it is created — editing here
+              never changes a camp that is already running.
+            </p>
+            <p class="muted" style="font-size:12px;margin:0">
+              Leave <strong>windows</strong> blank for a monster with no spawn-window cycle; its
+              cadence is then just how often the ToD form suggests re-checking.
+            </p>
+
+            <!-- (A "Claim Shield is switched off server-wide" notice sat here. While the switch is
+                 off the whole Claim Shield COLUMN is hidden below, so there is nothing on this card
+                 for the notice to explain — it was a banner about an absence. The admin Settings
+                 page is where that state belongs and where it is already shown.) -->
+
+            @for (group of monsterTimingGroups(); track group.label) {
+              <section class="monster-setups__section">
+                <header class="monster-setups__section-header">
+                  <h4>{{ group.label }}</h4>
+                  <span class="monster-setups__section-line"></span>
+                  <button type="button" class="btn ghost sm" (click)="addCustomMonsterRow(group.label)">
+                    + Add monster
+                  </button>
+                </header>
+
+                <!-- Column labels only when there is something to label. "Other NMs" is empty until
+                     a linkshell adds its own, and a header row over nothing reads as a broken table. -->
+                @if (group.rows.length) {
+                  <div class="monster-setups__row-head">
+                    <div class="monster-setups__col-name">Monster</div>
+                    <div class="monster-setups__col-windows">Windows</div>
+                    <div class="monster-setups__col-duration">Cadence</div>
+                    <div class="monster-setups__col-duration">Cooldown</div>
+                    @if (!claimShieldGloballyDisabled()) {
+                      <div class="monster-setups__col-claim"
+                        title="Record who tagged this monster during a claim-shield lottery. Off for monsters you don't contest.">Claim Shield</div>
+                    }
+                    <div class="monster-setups__col-actions"></div>
+                  </div>
+                }
+
+                @for (row of group.rows; track $index) {
+                  <div class="monster-setups__row">
+                    <div class="monster-setups__col-name">
+                      @if (row.isCustom) {
+                        <input type="text" [(ngModel)]="row.monsterName" (ngModelChange)="markMonsterTimingsDirty()"
+                          [name]="'monsterName_' + $index" maxlength="128" placeholder="Monster name" />
+                      } @else {
+                        <span>{{ row.monsterName }}</span>
+                      }
+                    </div>
+                    <div class="monster-setups__col-windows">
+                      <input type="number" min="1" [max]="monsterTimingMaxWindows" step="1"
+                        [(ngModel)]="row.windows" (ngModelChange)="markMonsterTimingsDirty()"
+                        [name]="'monsterWindows_' + $index"
+                        [placeholder]="monsterWindowsPlaceholder(row)"
+                        title="How many spawn windows this camp sits through. Blank = no window cycle." />
+                    </div>
+                    <div class="monster-setups__col-duration">
+                      <!-- Placeholder 0, not an em dash: a blank cadence means this monster has no
+                           interval at all, which is a real answer for most NMs someone adds. -->
+                      <input type="number" min="0" step="1"
+                        [(ngModel)]="row.cadenceValue" (ngModelChange)="markMonsterTimingsDirty()"
+                        [name]="'monsterCadence_' + $index" placeholder="0" />
+                      <select [(ngModel)]="row.cadenceUnit" (ngModelChange)="markMonsterTimingsDirty()"
+                        [name]="'monsterCadenceUnit_' + $index">
+                        @for (unit of monsterDurationUnits; track unit) {
+                          <option [value]="unit">{{ unit }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div class="monster-setups__col-duration">
+                      <!-- min 0 rather than 1: a new row starts blank, and typing 0 is how someone
+                           says "I don't know the repop yet". The server fills the built-in band for
+                           that monster on save rather than storing a zero cooldown. -->
+                      <input type="number" min="0" step="1"
+                        [(ngModel)]="row.cooldownValue" (ngModelChange)="markMonsterTimingsDirty()"
+                        [name]="'monsterCooldown_' + $index" placeholder="0" />
+                      <select [(ngModel)]="row.cooldownUnit" (ngModelChange)="markMonsterTimingsDirty()"
+                        [name]="'monsterCooldownUnit_' + $index">
+                        @for (unit of monsterDurationUnits; track unit) {
+                          <option [value]="unit">{{ unit }}</option>
+                        }
+                      </select>
+                    </div>
+                    <!-- Hidden entirely while an admin has Claim Shield off server-wide: there is
+                         nothing useful to set. row.claimShieldEnabled is untouched by this and is
+                         still sent on save, so every per-monster choice comes back exactly as it was
+                         when Claim Shield is re-enabled. -->
+                    @if (!claimShieldGloballyDisabled()) {
+                      <div class="monster-setups__col-claim">
+                        <label class="check">
+                          <input type="checkbox" [(ngModel)]="row.claimShieldEnabled"
+                            (ngModelChange)="markMonsterTimingsDirty()"
+                            [name]="'monsterClaimShield_' + $index" />
+                          <span>{{ row.claimShieldEnabled ? 'On' : 'Off' }}</span>
+                        </label>
+                      </div>
+                    }
+                    <div class="monster-setups__col-actions">
+                      @if (row.isCustom) {
+                        <button type="button" class="btn ghost sm monster-setups__delete"
+                          (click)="removeMonsterRow(row)" title="Remove this monster">Remove</button>
+                      } @else if (canResetMonsterRow(row)) {
+                        <button type="button" class="btn ghost sm"
+                          (click)="resetMonsterRow(row)" title="Back to the built-in values">Reset</button>
+                      }
+                    </div>
+                  </div>
+                }
+
+                @if (!group.rows.length) {
+                  <p class="muted" style="font-size:12px;margin:0">No monsters in this group yet.</p>
+                }
+              </section>
+            }
+
+            @if (!monsterTimingRows.length) {
+              <p class="muted" style="font-size:12px;margin:0">
+                Monster setups unavailable — reload the app to fetch them.
+              </p>
+            }
+
+            <div class="customize-form__actions">
+              <button type="button" class="btn primary"
+                (click)="saveMonsterTimings()"
+                [disabled]="!monsterTimingsDirty || activity.busyMonsterTimings()">
+                {{ monsterTimingsDirty ? 'Save changes' : 'Saved' }}
+              </button>
+              <button type="button" class="btn ghost"
+                (click)="discardMonsterTimings()"
+                [disabled]="!monsterTimingsDirty || activity.busyMonsterTimings()">
+                Discard
+              </button>
+            </div>
           </div>
         </div>
       }

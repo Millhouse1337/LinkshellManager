@@ -20,7 +20,8 @@ import type {
   ActivityLinkshellRolePermissionsInput,
   ActivityLinkshellRolesResponse,
   ActivityLootStructure,
-  ActivityTodMonsterTiming
+  ActivityMonsterTimingInput,
+  ActivityMonsterTimingsResponse
 } from './discord-activity.types';
 
 @Injectable({ providedIn: 'root' })
@@ -35,6 +36,7 @@ export class LinkshellService {
   readonly busyRoles = signal(false);
   readonly busyDiscordChannels = signal(false);
   readonly busyDkpPools = signal(false);
+  readonly busyMonsterTimings = signal(false);
   readonly busyJobsRoster = signal(false);
 
   async loadLinkshellDetail(linkshellId: number): Promise<void> {
@@ -102,20 +104,13 @@ export class LinkshellService {
       activeAfterAttendances?: number | null;
       // null = leave unchanged; [] = clear; [...names] = replace.
       hiddenTodMonsters?: string[] | null;
-        todMonsterTimings?: ActivityTodMonsterTiming[] | null;
-      // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
-      linkshellType?: string | null;
       // null = leave unchanged; "" = clear association; digits = associate with
       // that Discord server (does NOT lock — use setLinkshellGuildLock for that).
       discordGuildId?: string | null;
       // null/blank = leave unchanged. One of the EVENT_BOARD_THEMES keys.
       eventBoardTheme?: string | null;
-      // null = leave unchanged. Allow account-less Discord party-board signups (non-HNM).
+      // null = leave unchanged. Allow account-less Discord board signups (every event type).
       outsidePartySignupEnabled?: boolean | null;
-      // null = leave unchanged. "Fill earlier alliances first" signup nudge.
-      fillAlliancesInOrder?: boolean | null;
-      // null = leave unchanged. Gate HNM (event type + account-less HNM-board signups).
-      hnmOutsideSignupEnabled?: boolean | null;
       // null = leave unchanged. Post event boards as Components V2 (wide media-gallery card).
       useComponentsV2Boards?: boolean | null;
       // Manual Check In HNM attendance (null = leave unchanged). Mode: 'Standard' | 'Wd'.
@@ -159,13 +154,9 @@ export class LinkshellService {
         inactiveAfterAbsences: input.inactiveAfterAbsences ?? null,
         activeAfterAttendances: input.activeAfterAttendances ?? null,
         hiddenTodMonsters: input.hiddenTodMonsters ?? null,
-          todMonsterTimings: input.todMonsterTimings ?? null,
-        linkshellType: input.linkshellType ?? null,
         discordGuildId: input.discordGuildId ?? null,
         eventBoardTheme: input.eventBoardTheme ?? null,
         outsidePartySignupEnabled: input.outsidePartySignupEnabled ?? null,
-        fillAlliancesInOrder: input.fillAlliancesInOrder ?? null,
-        hnmOutsideSignupEnabled: input.hnmOutsideSignupEnabled ?? null,
         useComponentsV2Boards: input.useComponentsV2Boards ?? null,
         hnmAttendanceMode: input.hnmAttendanceMode ?? null,
         wdDkpPerWindow: input.wdDkpPerWindow ?? null,
@@ -401,6 +392,52 @@ export class LinkshellService {
       return false;
     } finally {
       this.busyDkpPools.set(false);
+    }
+  }
+
+  // ---- Monster setups ----
+  //
+  // Same reasoning as the DKP pools above: its own endpoint pair, so the Configurations tab's
+  // whole-payload settings save can never wipe the per-monster rows.
+
+  async loadMonsterTimings(linkshellId: number): Promise<ActivityMonsterTimingsResponse | null> {
+    this.busyMonsterTimings.set(true);
+    this.auth.setActionError(null);
+    try {
+      return await this.http.fetchActivityJson<ActivityMonsterTimingsResponse>(
+        `/api/activity/linkshells/${linkshellId}/monster-timings`,
+        this.auth.currentAccessToken()
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading monster setups failed.'));
+      return null;
+    } finally {
+      this.busyMonsterTimings.set(false);
+    }
+  }
+
+  async saveMonsterTimings(
+    linkshellId: number,
+    rows: ActivityMonsterTimingInput[]
+  ): Promise<ActivityMonsterTimingsResponse | null> {
+    this.busyMonsterTimings.set(true);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      const saved = await this.http.postActivityJson<ActivityMonsterTimingsResponse>(
+        `/api/activity/linkshells/${linkshellId}/monster-timings`,
+        { rows }
+      );
+      this.auth.setActionMessage('Monster setups updated.');
+      // The overview carries the compact copy the ToD form and the create-event picker read, so
+      // it has to be refreshed or those two keep offering the old catalog until the next poll.
+      await this.auth.refreshOverview();
+      return saved;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Saving monster setups failed.'));
+      return null;
+    } finally {
+      this.busyMonsterTimings.set(false);
     }
   }
 

@@ -34,6 +34,7 @@ import type {
   ActivityEventAddMemberCandidate,
   ActivityEventCommentsResponse,
   ActivityEventHistoryResponse,
+  ActivityEventHistoryWindowsResponse,
   ActivityHistory,
   ActivityLootEditInput,
   ActivityLootHistoryList,
@@ -48,7 +49,7 @@ import type {
   ActivityLinkshellRolesResponse,
   ActivityLootInput,
   ActivityLootStructure,
-  ActivityTodMonsterTiming,
+  ActivityMonsterTimingInput,
   ActivityQuickJoinInput,
   ActivityRevenueInput,
   ActivityStatus,
@@ -187,6 +188,7 @@ export class DiscordActivityService {
   readonly busyRoles = this.linkshellService.busyRoles;
   readonly busyDiscordChannels = this.linkshellService.busyDiscordChannels;
   readonly busyDkpPools = this.linkshellService.busyDkpPools;
+  readonly busyMonsterTimings = this.linkshellService.busyMonsterTimings;
   readonly linkshellDetail = this.linkshellService.linkshellDetail;
   readonly linkshellDetailBusy = this.linkshellService.linkshellDetailBusy;
   readonly inviteSearchResults = this.inviteService.inviteSearchResults;
@@ -756,8 +758,9 @@ export class DiscordActivityService {
   clearDkpAuditAddCandidates(): void { this.dkpService.clearAddCandidates(); }
 
   // --- LootHistoryService ---
-  loadLootHistory(source: 'all' | 'tod' | 'event' = 'all', page = 1, pageSize = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(source, page, pageSize); }
-  addManualLoot(input: { context: string | null; itemName: string; itemWinner: string; winningDkpSpent: number }): Promise<boolean> { return this.lootHistoryService.addLoot(input); }
+  loadLootHistory(page = 1, pageSize = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(page, pageSize); }
+  loadLootEventOptions(query?: string | null) { return this.lootHistoryService.loadLootEventOptions(query); }
+  addManualLoot(input: { sourceKind: "none" | "live" | "past"; eventId: number | null; eventHistoryId: number | null; itemName: string; itemWinner: string; winningDkpSpent: number }): Promise<boolean> { return this.lootHistoryService.addLoot(input); }
   async editTodLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
     const ok = await this.lootHistoryService.editTodLoot(lootDetailId, input);
     if (ok) { await this.auth.refreshOverview(); }
@@ -850,7 +853,7 @@ export class DiscordActivityService {
   loadLinkshellDetail(linkshellId: number): Promise<void> { return this.linkshellService.loadLinkshellDetail(linkshellId); }
   clearLinkshellDetail(): void { this.linkshellService.clearLinkshellDetail(); }
   createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
-  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; enableActivityTracking?: boolean | null; inactiveAfterAbsences?: number | null; activeAfterAttendances?: number | null; hiddenTodMonsters?: string[] | null; todMonsterTimings?: ActivityTodMonsterTiming[] | null; linkshellType?: string | null; discordGuildId?: string | null; eventBoardTheme?: string | null; outsidePartySignupEnabled?: boolean | null; fillAlliancesInOrder?: boolean | null; hnmOutsideSignupEnabled?: boolean | null; useComponentsV2Boards?: boolean | null; hnmAttendanceMode?: string | null; wdDkpPerWindow?: number | null; wdClaimBonus?: number | null; wdKillBonus?: number | null; wdOpenBonus?: number | null; wdCloseBonus?: number | null; hnmStandardOpenBonus?: number | null; hnmStandardCloseBonus?: number | null; hnmStandardClaimBonus?: number | null; hnmStandardKillBonus?: number | null; hnmStandardWindowBonus?: number | null; hnmAutoSnapshotEnabled?: boolean | null; hnmAutoSnapshotDelaySeconds?: number | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
+  updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableMissions?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableItems?: boolean | null; enableRevenue?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; enableActivityTracking?: boolean | null; inactiveAfterAbsences?: number | null; activeAfterAttendances?: number | null; hiddenTodMonsters?: string[] | null; discordGuildId?: string | null; eventBoardTheme?: string | null; outsidePartySignupEnabled?: boolean | null; useComponentsV2Boards?: boolean | null; hnmAttendanceMode?: string | null; wdDkpPerWindow?: number | null; wdClaimBonus?: number | null; wdKillBonus?: number | null; wdOpenBonus?: number | null; wdCloseBonus?: number | null; hnmStandardOpenBonus?: number | null; hnmStandardCloseBonus?: number | null; hnmStandardClaimBonus?: number | null; hnmStandardKillBonus?: number | null; hnmStandardWindowBonus?: number | null; hnmAutoSnapshotEnabled?: boolean | null; hnmAutoSnapshotDelaySeconds?: number | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }
   loadEligibleGuilds(): Promise<ActivityGuildOption[]> { return this.linkshellService.loadEligibleGuilds(); }
   setLinkshellGuild(linkshellId: number, guildId: string | null, guildName: string | null): Promise<boolean> { return this.linkshellService.setLinkshellGuild(linkshellId, guildId, guildName); }
@@ -862,6 +865,8 @@ export class DiscordActivityService {
   loadDkpPools(linkshellId: number) { return this.linkshellService.loadDkpPools(linkshellId); }
   previewDkpPools(linkshellId: number, pools: ActivityDkpPoolInput[]) { return this.linkshellService.previewDkpPools(linkshellId, pools); }
   saveDkpPools(linkshellId: number, pools: ActivityDkpPoolInput[]) { return this.linkshellService.saveDkpPools(linkshellId, pools); }
+  loadMonsterTimings(linkshellId: number) { return this.linkshellService.loadMonsterTimings(linkshellId); }
+  saveMonsterTimings(linkshellId: number, rows: ActivityMonsterTimingInput[]) { return this.linkshellService.saveMonsterTimings(linkshellId, rows); }
   uploadLinkshellBanner(linkshellId: number, dataUrl: string): Promise<boolean> { return this.linkshellService.uploadBanner(linkshellId, dataUrl); }
   removeLinkshellBanner(linkshellId: number): Promise<boolean> { return this.linkshellService.removeBanner(linkshellId); }
   // Discord guild id the Activity is launched in (null on web). Drives the
@@ -907,7 +912,9 @@ export class DiscordActivityService {
   quickJoinLiveEvent(eventId: number, input: ActivityQuickJoinInput): Promise<void> { return this.eventService.quickJoinLiveEvent(eventId, input); }
   removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> { return this.eventService.removeAttendanceWindowAttendee(attendeeId); }
   setAttendanceWindowDkp(windowId: number, dkpAmount: number | null): Promise<boolean> { return this.eventService.setAttendanceWindowDkp(windowId, dkpAmount); }
+  setAttendanceWindowClosing(windowId: number, isClosingWindow: boolean): Promise<boolean> { return this.eventService.setAttendanceWindowClosing(windowId, isClosingWindow); }
   loadEventHistory(linkshellId: number): Promise<ActivityEventHistoryResponse | null> { return this.eventService.loadEventHistory(linkshellId); }
+  loadEventHistoryWindows(id: number): Promise<ActivityEventHistoryWindowsResponse | null> { return this.eventService.loadEventHistoryWindows(id); }
   editEventHistory(id: number, input: ActivityEditEventHistoryInput): Promise<boolean> { return this.eventService.editEventHistory(id, input); }
   deleteEventHistory(id: number): Promise<boolean> { return this.eventService.deleteEventHistory(id); }
   setEventHistoryParticipantDkp(id: number, participantId: number, amount: number): Promise<boolean> { return this.eventService.setEventHistoryParticipantDkp(id, participantId, amount); }
@@ -943,7 +950,7 @@ export class DiscordActivityService {
   createItem(linkshellId: number, input: ActivityItemInput): Promise<void> { return this.linkshellContentService.createItem(linkshellId, input); }
   updateItem(itemId: number, input: ActivityItemInput): Promise<void> { return this.linkshellContentService.updateItem(itemId, input); }
   deleteItem(itemId: number): Promise<void> { return this.linkshellContentService.deleteItem(itemId); }
-  markItemSold(itemId: number, salePrice: number): Promise<void> { return this.linkshellContentService.markItemSold(itemId, salePrice); }
+  markItemSold(itemId: number, salePrice: number, soldByCharacterName: string): Promise<void> { return this.linkshellContentService.markItemSold(itemId, salePrice, soldByCharacterName); }
   unsellItem(itemId: number): Promise<void> { return this.linkshellContentService.unsellItem(itemId); }
   createRevenueEntry(linkshellId: number, input: ActivityRevenueInput): Promise<void> { return this.linkshellContentService.createRevenueEntry(linkshellId, input); }
   updateRevenueEntry(entryId: number, input: ActivityRevenueInput): Promise<void> { return this.linkshellContentService.updateRevenueEntry(entryId, input); }

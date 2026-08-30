@@ -1,0 +1,89 @@
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.ChartAddItemFormContext
+@*
+    ONE add card. The page renders this TWICE on Sky and Sea - a pop card and a drop card, stacked -
+    so every element id is built from Model.IdPrefix rather than written as a literal.
+
+    That is not tidiness. Two forms sharing "add-item" would point every <label for> in the second
+    card at the first card's control, AND the picker-swap script at the foot of Board.cshtml sets
+    picker.id from data-chart-item-id whenever a boss changes, so whichever form changed last would
+    steal the id out from under the other one's label.
+
+    chart-form-card lifts the card's overflow: hidden, which would otherwise clip the credit dropdown
+    where it hangs past the bottom of the card.
+*@
+<div class="card chart-form-card fade d2">
+    <div class="card-head"><div class="card-title">@Model.Title</div></div>
+    <div class="card-body">
+        <form asp-action="AddItem" method="post" class="chart-form" data-chart-kind="@Model.Kind">
+            <input type="hidden" name="board" value="@Model.Board.BoardKey" />
+            @* The kind is a hidden field rather than a second action: one AddItem means one place
+               the board-allows-this-kind check lives, and the server refuses a forged one. *@
+            <input type="hidden" name="kind" value="@Model.Kind" />
+            <div class="chart-form__field">
+                <label for="@($"{Model.IdPrefix}-boss")">Boss</label>
+                <select id="@($"{Model.IdPrefix}-boss")" name="boss">
+                    @foreach (var boss in Model.Board.Bosses)
+                    {
+                        <option value="@boss.Boss">@boss.Boss</option>
+                    }
+                </select>
+            </div>
+            @* Rendered for the boss the select above opens on — the first card on the board.
+               The script at the foot of the page swaps it when that changes. *@
+            <div class="chart-form__field">
+                <label for="@($"{Model.IdPrefix}-item")">@Model.ItemLabel</label>
+                <partial name="_ChartPopItemField"
+                         model='new ChartPopItemFieldContext(Model.OpeningOptions, null, $"{Model.IdPrefix}-item", Model.Kind)' />
+            </div>
+            <div class="chart-form__field">
+                <label for="@($"{Model.IdPrefix}-holder")">Held by</label>
+                <input id="@($"{Model.IdPrefix}-holder")" name="heldByCharacterName" class="input" type="text"
+                       list="chart-roster-names" placeholder="Character name or alt" />
+            </div>
+            <div class="chart-form__field">
+                <label for="@($"{Model.IdPrefix}-qty")">Qty</label>
+                <input id="@($"{Model.IdPrefix}-qty")" name="quantity" class="input" type="number" min="0" value="1" />
+            </div>
+            @* Farming credit, picked while the row is written rather than in a second pass
+               through the row's Credits drawer. A <details> rather than a <select multiple>:
+               crediting a whole farm night is the common case, and ctrl-clicking fifteen
+               names is not that — and this needs no script at all. Unticked boxes do not
+               post, so it is the same set-wise contract SetCredits uses. *@
+            <div class="chart-form__field">
+                <label for="@($"{Model.IdPrefix}-credits")">Farming credit</label>
+                <details id="@($"{Model.IdPrefix}-credits")" class="chart-multiselect">
+                    <summary class="chart-multiselect__toggle">
+                        <span class="chart-multiselect__value">Nobody credited</span>
+                    </summary>
+                    <div class="chart-multiselect__panel">
+                        @if (Model.Board.Roster.Count == 0)
+                        {
+                            <div class="chart-multiselect__none">No members on the roster to credit.</div>
+                        }
+                        else
+                        {
+                            <div class="chart-multiselect__list">
+                                @foreach (var member in Model.Board.Roster)
+                                {
+                                    <label class="chart-multiselect__row">
+                                        <input type="checkbox" name="membershipIds" value="@member.MembershipId" />
+                                        @member.CharacterName
+                                    </label>
+                                }
+                            </div>
+                        }
+                    </div>
+                </details>
+            </div>
+
+            <div class="chart-form__field">
+                <label for="@($"{Model.IdPrefix}-notes")">Notes</label>
+                <input id="@($"{Model.IdPrefix}-notes")" name="notes" class="input" type="text" placeholder="Optional" />
+            </div>
+            <div class="chart-form__actions">
+                <button type="submit" class="btn primary">@Model.SubmitLabel</button>
+            </div>
+        </form>
+    </div>
+</div>

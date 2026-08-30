@@ -1,0 +1,72 @@
+<div class="section-head">
+  <div>
+    <div class="section-label">Charts</div>
+    <div class="section-title">Key Item Progress</div>
+  </div>
+
+  <div class="section-head-right">
+    <span class="tag">{{ completeCount() }} of {{ rows().length }} complete</span>
+  </div>
+</div>
+
+<div class="card chart-keyitems">
+  @if (columns().length === 0 || rows().length === 0) {
+    <div class="chart-card__empty">Nobody on the roster yet, so there is nothing to track.</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="chart-ledger">
+        <thead>
+          <tr>
+            <th>Member</th>
+            @for (column of columns(); track column.name) {
+              <th class="chart-keyitems__head" [title]="column.caption || column.name">
+                <span class="chart-keyitems__name">{{ column.name }}</span>
+                <span class="chart-keyitems__count">{{ column.haveCount }} / {{ column.totalMembers }}</span>
+              </th>
+            }
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.membershipId) {
+            <tr [class.is-you]="isYou(row)">
+              <td>
+                <strong class="chart-holdings__holder">{{ row.characterName }}</strong>
+                @if (row.rank) {
+                  <span class="chart-holdings__note">{{ row.rank }}</span>
+                }
+              </td>
+
+              @for (column of columns(); track column.name; let index = $index) {
+                <td class="chart-keyitems__cell"
+                    [class.is-has]="row.has[index]" [class.is-needs]="!row.has[index]">
+                  @if (canSet(row.membershipId)) {
+                    <button type="button" class="chart-keyitems__toggle"
+                            [disabled]="charts.busySave()"
+                            [title]="(row.has[index] ? 'Clear ' : 'Tick off ') + column.name"
+                            (click)="toggle(row, index)">
+                      {{ row.has[index] ? '✓' : '—' }}
+                    </button>
+                  } @else {
+                    <span class="chart-keyitems__static">{{ row.has[index] ? '✓' : '—' }}</span>
+                  }
+                </td>
+              }
+
+              <td>
+                <span class="chart-ledger__total" [class.is-zero]="row.haveCount === 0">
+                  {{ row.haveCount }} / {{ row.totalColumns }} <small>{{ row.havePercent }}%</small>
+                </span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <p class="chart-holdings__footer">
+    Tick your own key items off as you earn them. Officers can tick anybody's, and every change
+    records who made it.
+  </p>
+</div>

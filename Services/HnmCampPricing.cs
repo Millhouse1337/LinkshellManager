@@ -22,7 +22,7 @@ namespace LinkshellManagerDiscordApp.Services;
 //      the four bonuses cannot price its own next window without also being told the posted set.
 //      One scalar, recomputed on every poll, tracks it for free.
 //
-// The cost is that the addon can show the number but not the breakdown ("0.5 open + 0.5 close").
+// The cost is that the addon can show the number but not which of the four it is ("0.5, the open").
 // That is fine — explaining the payout model is the Activity's job, and
 // EventsTabComponent.attendanceWindowDkpNote already does it.
 public static class HnmCampPricing
@@ -30,10 +30,11 @@ public static class HnmCampPricing
     // Standard-mode amounts, already gated on the camp outcome. Lifted verbatim from
     // HnmStandardCampFinalizer.BuildRosterAsync, which now calls this instead.
     //
-    // `Window` is the base rate EVERY scanned window pays; Open and Close ride on top of it, which
-    // is what makes them read as bonuses. It shares Event.HnmPerWindowOverride with the Manual
-    // Check In rate — one column, and the camp's mode decides which linkshell default it falls back
-    // to, exactly as the claim / kill overrides have always worked across both modes.
+    // `Window` is what a REGULAR window pays — the ones that are neither the open nor the close.
+    // The three do not stack: see HnmStandardCampFinalizer.WindowValue, which owns that rule. It
+    // shares Event.HnmPerWindowOverride with the Manual Check In rate — one column, and the camp's
+    // mode decides which linkshell default it falls back to, exactly as the claim / kill overrides
+    // have always worked across both modes.
     public static (double Window, double Open, double Close, double Claim, double Kill) StandardBonuses(
         Event ev, Linkshell? linkshell, bool claimed, bool killed)
         => (
@@ -75,7 +76,8 @@ public static class HnmCampPricing
     // `closeWindow` is what HnmStandardCampFinalizer.ResolveCloseWindow would return right now.
     // `explicitAmount` is the officer's EventAttendanceWindow.DkpAmount for this sequence.
     public static double? WindowValueFor(
-        Event ev, Linkshell? linkshell, int sequence, int closeWindow, double? explicitAmount)
+        Event ev, Linkshell? linkshell, int sequence, int closeWindow, double? explicitAmount,
+        bool isKillWindow = false)
     {
         // The snapshot pays NOTHING on a Manual Check In camp — credit comes from Check In /
         // Check Out, which is exactly what the Activity's card says on its face.
@@ -85,7 +87,7 @@ public static class HnmCampPricing
         {
             var (window, open, close, _, _) = StandardBonuses(ev, linkshell, claimed: false, killed: false);
             return HnmStandardCampFinalizer.WindowValue(
-                sequence, closeWindow, explicitAmount, window, open, close);
+                sequence, closeWindow, explicitAmount, window, open, close, isKillWindow);
         }
 
         // Claim/Kill-style windowed events really do pay windowsAttended × DkpPerHour via
@@ -99,10 +101,17 @@ public static class HnmCampPricing
 
     // What ONE MORE window, posted right now against `sequence`, would be worth per attendee.
     //
-    // closeWindow := sequence, because posting a window MAKES it the close (ResolveCloseWindow
-    // takes the highest posted sequence). So a fresh Standard camp's window 1 is priced as
-    // open + close, and drops to open alone once a later window lands. This number moves on
-    // purpose — it is a prediction about the next post, not a fact about the past.
+    // closeWindow := 0, i.e. "this post is NOT the close". It used to be `sequence` — posting a
+    // window made it the close under the old derivation, so the quote read open + close on a fresh
+    // camp and every later post quoted the close bonus again. The addon writes its quote back as
+    // EventAttendanceWindow.DkpAmount, which REPLACES the window's computed value, so that moving
+    // prediction got frozen into every window on the camp: window 1 at open + close + rate, all the
+    // rest at close + rate. That is the stacking this whole change removes.
+    //
+    // The close is now an explicit officer mark (EventAttendanceWindow.IsClosingWindow), and it is
+    // not knowable at post time — so this quotes the OPEN on window 1 and the regular window rate
+    // everywhere else, and the close bonus is applied when the box is ticked. The number no longer
+    // moves: what is quoted is what is paid.
     public static double? DefaultWindowValue(Event ev, Linkshell? linkshell, int sequence)
-        => WindowValueFor(ev, linkshell, sequence, closeWindow: sequence, explicitAmount: null);
+        => WindowValueFor(ev, linkshell, sequence, closeWindow: 0, explicitAmount: null);
 }

@@ -44,19 +44,6 @@
     // is selected, gate by the matching LinkshellRole flag.
     bool Allow(Func<LinkshellRole, bool> selector) => perms is null || selector(perms);
 
-    // Linkshell Type gating. The snapshot Attendance pages folded into the Event System group, so
-    // that group is now shown to EVERY type — hiding it from HNM Only would strand exactly the
-    // linkshells that live on snapshots. Sky/Sea/Dynamis still hides the attendance SUB-ITEMS, since
-    // those linkshells run timed events only. Unknown/null fail-opens to Both.
-    var activeLinkshellType =
-        LinkshellManagerDiscordApp.Models.LinkshellTypes.Normalize(
-            ViewData["ActiveLinkshellType"] as string);
-    var showAttendanceNav =
-        activeLinkshellType != LinkshellManagerDiscordApp.Models.LinkshellTypes.SkySeaDynamis;
-    // ToDs are available to every linkshell type; the per-linkshell feature
-    // toggle below remains the visibility control.
-    var showToDsNav = true;
-
     // Feature Toggles (Customize page): unchecked hides the group. Fail-open
     // to shown when there's no active linkshell, matching Allow(...) above.
     // Missions isn't built yet — force its nav off until it ships, regardless of the stored flag.
@@ -75,7 +62,13 @@
             <div class="ls-avatar">@(string.IsNullOrEmpty(activeLinkshellInitials) ? "LS" : activeLinkshellInitials)</div>
             <div class="ls-meta">
                 <div class="ls-name">@(activeLinkshellName ?? "No linkshell")</div>
-                <div class="ls-role">@(activeRole ?? "Member")</div>
+                <div class="ls-role">
+                    @(activeRole ?? "Member")
+                    @if (ViewData["IsAppAdminHere"] is true)
+                    {
+                        <span class="tag accent" title="App-wide admin override is ON — you have every permission in this linkshell.">🔧 ADMIN</span>
+                    }
+                </div>
             </div>
             <div class="ls-switch-icon">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 6l3 3 3-3M5 10l3-3 3 3" opacity="0.6"/></svg>
@@ -96,7 +89,15 @@
                                 <span class="ls-menu-avatar">@LinkshellInitials(m.Linkshell?.LinkshellName)</span>
                                 <span class="ls-menu-text">
                                     <span class="ls-menu-name">@(m.Linkshell?.LinkshellName ?? "Unnamed linkshell")</span>
-                                    <span class="ls-menu-role">@(m.Rank ?? "Member")</span>
+                                    @* The override applies to every linkshell in this list, so each
+                                       row shows it beside the rank that linkshell actually gave you. *@
+                                    <span class="ls-menu-role">
+                                        @(m.Rank ?? "Member")
+                                        @if (ViewData["IsAppAdmin"] is true)
+                                        {
+                                            <span class="tag accent">🔧 ADMIN</span>
+                                        }
+                                    </span>
                                 </span>
                                 @if (m.LinkshellId == activeLinkshellId)
                                 {
@@ -203,7 +204,7 @@
             <a class="nav-sub-item @IsSubActive("Event", "Index")" asp-controller="Event" asp-action="Index">All Events</a>
             @if (Allow(p => p.CanManageEvents))
             {
-                <a class="nav-sub-item create @IsSubActive("Event", "Create")" asp-controller="Event" asp-action="Create">Create Timed Event</a>
+                <a class="nav-sub-item create @IsSubActive("Event", "Create")" asp-controller="Event" asp-action="Create">Create Event</a>
             }
             @* Past Events and Attendance History are now sections of the Event System page, so
                these jump to their anchors rather than to the standalone pages (which still work,
@@ -211,8 +212,12 @@
                controller + action only and the server never sees the fragment, so all three
                Event/Index rows would light up at once. *@
             <a class="nav-sub-item" asp-controller="Event" asp-action="Index" asp-fragment="past-events">Past Events</a>
-            @if (showAttendanceNav && activeLinkshellId.HasValue)
+            @if (activeLinkshellId.HasValue)
             {
+                @* Unlinked snapshots are unpaid attendance waiting on an officer, so they get a
+                   jump of their own rather than being reachable only by scrolling past the
+                   pending-events board. *@
+                <a class="nav-sub-item" asp-controller="Event" asp-action="Index" asp-fragment="unlinked-snapshots">Unlinked Snapshots</a>
                 <a class="nav-sub-item" asp-controller="Event" asp-action="Index" asp-fragment="attendance-archive">Attendance History</a>
                 @if (Allow(p => p.CanManageTods) || Allow(p => p.CanModerateLiveEvent))
                 {
@@ -221,21 +226,18 @@
             }
         </div>
 
-        @if (showToDsNav)
-        {
-            <button type="button" class="nav-item nav-group @IsExpanded("Tod")" data-target="#nav-tods">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-                ToD Tracker
-                <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-            </button>
-            <div id="nav-tods" class="nav-sub">
-                <a class="nav-sub-item @IsSubActive("Tod", "Index")" asp-controller="Tod" asp-action="Index">View ToDs</a>
-                @if (Allow(p => p.CanManageTods))
-                {
-                    <a class="nav-sub-item create @IsSubActive("Tod", "Create")" asp-controller="Tod" asp-action="Create">Add ToD</a>
-                }
-            </div>
-        }
+        <button type="button" class="nav-item nav-group @IsExpanded("Tod")" data-target="#nav-tods">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            ToD Tracker
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+        <div id="nav-tods" class="nav-sub">
+            <a class="nav-sub-item @IsSubActive("Tod", "Index")" asp-controller="Tod" asp-action="Index">View ToDs</a>
+            @if (Allow(p => p.CanManageTods))
+            {
+                <a class="nav-sub-item create @IsSubActive("Tod", "Create")" asp-controller="Tod" asp-action="Create">Add ToD</a>
+            }
+        </div>
 
         <button type="button" class="nav-item nav-group @IsExpanded("PartySetup")" data-target="#nav-party-setups">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 20c0-2 2-3 4-3s4 1 4 3"/></svg>
@@ -324,40 +326,24 @@
 
     @* Everything the linkshell OWNS, as opposed to Management, which is its people. Gil and Items
        belong together: an item is unsold value and gil is realised value, and selling one turns it
-       into the other in a single transaction.
+       into the other in a single transaction — which is why they are now one PAGE as well as one
+       section, in the order the Discord Activity's Treasury tab uses.
 
-       Both are readable by every member. A treasury only officers can see is how arguments start, and
+       ONE link, because there is one page. This was two collapsible groups of two sub-links each:
+       four rows of menu in front of a screen that shows all of it at once, two of them duplicating
+       a button that sits on the page anyway.
+
+       Readable by every member. A treasury only officers can see is how arguments start, and
        member-visible history is the compensating control for there being no second signature on a
-       recording. Only changing things needs a permission — CanManageTreasury for gil,
-       CanManageInventory for items. *@
+       recording. Only changing things needs a permission, and the page asks for it per section —
+       CanManageTreasury for gil, leader-or-officer for items. *@
     <nav class="nav-section">
-        <div class="nav-label">Treasury</div>
-
-        <button type="button" class="nav-item nav-group @IsExpanded("ManageFinances", "ManageRevenue")" data-target="#nav-gil">
+        <div class="nav-label">@TreasuryLabels.Section</div>
+        <a class="nav-item @IsOn("ManageFinances", "ManageItem", "ManageRevenue")"
+           asp-controller="ManageFinances" asp-action="Index">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6"/></svg>
-            Gil
-            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-        <div id="nav-gil" class="nav-sub">
-            <a class="nav-sub-item @IsSubActive("ManageFinances", "Index")" asp-controller="ManageFinances" asp-action="Index">Gil on hand</a>
-            @if (Allow(p => p.CanManageTreasury))
-            {
-                <a class="nav-sub-item create @IsSubActive("ManageFinances", "Record")" asp-controller="ManageFinances" asp-action="Record">@TreasuryLabels.RecordAction</a>
-            }
-        </div>
-
-        <button type="button" class="nav-item nav-group @IsExpanded("ManageItem")" data-target="#nav-items">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>
-            Items
-            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 6l6 6-6 6"/></svg>
-        </button>
-        <div id="nav-items" class="nav-sub">
-            <a class="nav-sub-item @IsSubActive("ManageItem", "Index")" asp-controller="ManageItem" asp-action="Index">View Items</a>
-            @if (Allow(p => p.CanManageInventory))
-            {
-                <a class="nav-sub-item create @IsSubActive("ManageItem", "AddItem")" asp-controller="ManageItem" asp-action="AddItem">Add Item</a>
-            }
-        </div>
+            View Treasury
+        </a>
     </nav>
 
     <nav class="nav-section">

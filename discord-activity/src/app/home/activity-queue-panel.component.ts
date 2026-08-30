@@ -19,9 +19,11 @@ import {
   EVENT_MAIN_JOB_OPTIONS,
   EVENT_SUB_JOB_OPTIONS
 } from './event-job-options';
-import { combinedMonsterOptions, isHnmTierMonster } from './activity-home.types';
+import { hasHqVariant, isHnmTierMonster } from './activity-home.types';
 import { PartySetupService } from '../discord/party-setup.service';
-import type { ActivityPartySetupListRow } from '../discord/discord-activity.types';
+import { TodService } from '../discord/tod.service';
+import { ADMIN_BADGE, canManageLinkshellIn } from './activity-home.helpers';
+import type { ActivityPartySetupListRow, ActivityUpcomingRepop } from '../discord/discord-activity.types';
 import { MarkdownTextareaComponent } from './tabs/markdown-textarea.component';
 import { PartySetupEditorComponent } from './tabs/party-setup-editor.component';
 import { PartySetupPanelComponent } from './tabs/party-setup-panel.component';
@@ -64,6 +66,7 @@ interface HnmBonusField {
 export class ActivityQueuePanelComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetups = inject(PartySetupService);
+  private readonly tods = inject(TodService);
   private readonly cdr = inject(ChangeDetectorRef);
   // The live-event edit form renders inside a native <dialog> opened with
   // showModal() so it escapes the .panel-tab.fade ancestor's stacking context
@@ -104,7 +107,14 @@ export class ActivityQueuePanelComponent {
     autoStart: false,
     countsTowardActive: true,
     monsterName: null,
-    repeatOnTod: false,
+    // Tri-state. Null = "this form has no opinion, leave the monster's standing re-post board
+    // exactly as it is" — what an edit of a LIVE camp posts, since that form has no recurrence
+    // control. Create and queued-camp edit ASK, and set a real true/false the moment a monster
+    // is picked (see applyRepeatPrefillForMonster).
+    repeatOnTod: null,
+    // Null = leave the board's existing lead alone. Only non-null once the officer types one,
+    // or once the picked monster's standing lead is pre-filled.
+    repostLeadHours: null,
     dayNumber: null,
     // Null = pay the linkshell's HNM bonus. Only non-null once "Change DKP" is used.
     hnmOpenBonusOverride: null,
@@ -117,9 +127,8 @@ export class ActivityQueuePanelComponent {
   // Free-text monster name when "Other" is picked in the HNM monster dropdown.
   protected customMonsterName = '';
 
-  // Base manual event types. "HNM" is appended only when the active linkshell has
-  // Outside Party Signup enabled (see eventTypeOptionsForForm) — a manual HNM event
-  // is a no-DKP outside-signup board. The addon still auto-creates real HNM events.
+  // Base manual event types. HNM + NM are spliced in after Sea by eventTypeOptionsForForm()
+  // so the picker order matches the web form; they are not gated on anything.
   protected readonly eventTypeOptions = ['Sky', 'Sea', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
   protected eventTypeSelection = '';
   protected eventTypeError = false;
@@ -144,6 +153,21 @@ export class ActivityQueuePanelComponent {
   // selected event type, PLUS universal ("Any") and untyped/legacy setups (so
   // nothing existing disappears). With no event type chosen yet, all are shown.
   // The already-linked setup is always kept so it's never silently unlinked.
+  // Name of the setup the edited event is currently linked to, for the "current board" option
+  // (a per-event snapshot never appears in the template list). Null on create.
+  protected editingCurrentSetupName: string | null = null;
+
+  // The event's own setup id when the template list can't represent it — i.e. it's a per-event
+  // snapshot made by the live board editor. Null otherwise (create, no setup, or an ordinary
+  // template that the list already offers).
+  protected currentBoardSetupId(): number | null {
+    const id = this.editingOriginalPartySetupId;
+    if (id === null) {
+      return null;
+    }
+    return this.availablePartySetups().some(setup => setup.id === id) ? null : id;
+  }
+
   protected availablePartySetups(): ActivityPartySetupListRow[] {
     const all = this.partySetups.list()?.items ?? [];
     const selected = (this.createModel.eventType ?? '').trim().toLowerCase();
@@ -200,26 +224,78 @@ export class ActivityQueuePanelComponent {
       if (!this.createModel.monsterName) {
         this.createModel.monsterName = this.monsterOptions().find(m => m !== 'Other') ?? null;
       }
+      // The seeded (or already-picked) monster may have an outstanding pop — that's the start
+      // time this camp is being staged for.
+      this.applyRepopStartPrefill();
+      this.applyRepeatPrefillForMonster();
     } else {
       this.createModel.monsterName = null;
       this.customMonsterName = '';
-      this.createModel.repeatOnTod = false;
+      // Back to "no opinion": a non-HNM event has no board to repeat, so it must not carry a
+      // true/false that would rewrite some monster's standing template.
+      this.createModel.repeatOnTod = null;
+      this.createModel.repostLeadHours = null;
     }
   }
 
-  // HNM Outside Sign Up gates manual HNM creation: the HNM option (and the form's HNM
-  // branch) only appear when the active linkshell has HNM Outside Sign Up enabled.
-  // Independent of Outside Party Signup.
-  protected isHnmSignupEnabledForSelected(): boolean {
-    const link = this.linkshellMemberships().find(l => l.id === this.createModel.linkshellId);
-    return !!link?.settings?.hnmOutsideSignupEnabled;
+  // ===== Recurrence pre-fill from the picked monster's standing board =====
+  //
+  // Recurrence is per MONSTER, not per event: one recurring-board row per spawn, shared by every
+  // camp made for it. So the toggle and the lead have to move with the picker — otherwise the
+  // form shows a blank choice for a monster that is already repeating, and submitting it as
+  // displayed switches that monster's board off.
+  //
+  // Skipped while editing a LIVE camp (that form has no recurrence control and must keep posting
+  // null) and for an "Other" monster with no name typed yet.
+  private applyRepeatPrefillForMonster(): void {
+    if (this.isEditingLiveEvent || !this.canRepeatOnTod()) {
+      return;
+    }
+    const lead = this.standingRepeatLeadHours();
+    this.createModel.repeatOnTod = lead !== null;
+    // Cleared rather than left holding the previous monster's number: null posts as "keep this
+    // board's current lead", the only honest default for a monster we know nothing about.
+    this.createModel.repostLeadHours = lead;
   }
 
-  // HNM and NM are appended together: both make the same kind of camp and both are gated on
-  // the same HNM Outside Sign Up setting. They differ only in which monsters they offer.
+  // The picked monster's standing lead in fractional hours, or null when it has no enabled
+  // recurring board. Matched case-insensitively against the linkshell's monster catalog, which
+  // already carries the merged "Base/Stronger" spellings the server keyed the board on.
+  private standingRepeatLeadHours(): number | null {
+    const monster = (this.isOtherMonsterSelected()
+      ? this.customMonsterName
+      : this.createModel.monsterName ?? '').trim().toLowerCase();
+    if (!monster) {
+      return null;
+    }
+    const setup = (this.selectedLinkshellSettings()?.monsterSetups ?? [])
+      .find(row => (row.monsterName ?? '').trim().toLowerCase() === monster);
+    const lead = setup?.repeatLeadHours;
+    return typeof lead === 'number' ? lead : null;
+  }
+
+  // The switch under the monster picker. Turning it ON with no lead of its own seeds the
+  // monster's standing lead so the box opens on the number already in effect; turning it OFF
+  // clears the box, since a disabled board's lead is stale bookkeeping.
+  protected toggleRepeatOnTod(): void {
+    const next = this.createModel.repeatOnTod !== true;
+    this.createModel.repeatOnTod = next;
+    if (next) {
+      this.createModel.repostLeadHours ??= this.standingRepeatLeadHours();
+    } else {
+      this.createModel.repostLeadHours = null;
+    }
+  }
+
+  // HNM and NM ride in together after Sea, matching the web form's order (see
+  // Views/Event/_EventForm.cshtml). Both make the same kind of camp — they differ only in
+  // which monsters they offer — and nothing gates them: HNM is an ordinary event type that
+  // any linkshell can run.
   protected eventTypeOptionsForForm(): string[] {
-    const base = [...this.eventTypeOptions];
-    return this.isHnmSignupEnabledForSelected() ? [...base, 'HNM', 'NM'] : base;
+    const base: string[] = [...this.eventTypeOptions];
+    const afterSea = base.indexOf('Sea') + 1;
+    base.splice(afterSea, 0, 'HNM', 'NM');
+    return base;
   }
 
   protected isHnmSelected(): boolean {
@@ -233,17 +309,43 @@ export class ActivityQueuePanelComponent {
     return this.eventTypeSelection === 'NM';
   }
 
-  // The canonical monsters (from the party-setup list payload) + the "Other" sentinel,
-  // narrowed to the tier the chosen button names: HNM offers the wyrms and the three NQ/HQ
-  // families, NM offers everything else. The three merge pairs are always shown as ONE
-  // combined "Base/Stronger" entry; the Day input only changes what the sign-up board prints
-  // (server-side), not this list.
+  // The linkshell's own monster catalog + the "Other" sentinel, narrowed to the tier the chosen
+  // button names: HNM offers the wyrms and the three NQ/HQ families, NM offers everything else.
+  //
+  // Sourced from the linkshell's monster setups rather than the party-setup list endpoint. That
+  // endpoint serves the RAW per-half catalog, which party setups genuinely need (a setup can target
+  // Fafnir or Nidhogg separately) — this picker needs the merged form, and now also needs to see a
+  // monster the linkshell added itself. The rows already arrive merged, so there is no
+  // client-side merge pass here any more.
+  //
+  // The tier filter stays: which tier a monster belongs to is a different question from its timing.
+  // The Day input only changes what the sign-up board prints (server-side), not this list.
   protected monsterOptions(): string[] {
-    const raw = this.partySetups.list()?.monsterOptions ?? [];
+    const setups = this.selectedLinkshellSettings()?.monsterSetups ?? [];
     const wantHnmTier = !this.isNmTierSelected();
-    const inTier = combinedMonsterOptions(raw)
+    const inTier = setups
+      .map(setup => setup.monsterName)
       .filter(monster => isHnmTierMonster(monster) === wantHnmTier);
+
+    // The monster an edited camp already carries is always on offer, even when the linkshell's
+    // catalog no longer lists it (a monster setup renamed or deleted since, or a camp made with
+    // a name the catalog never had). Without this the picker would open on "Select a monster"
+    // for a camp that plainly has one, and saving would then re-monster it by accident.
+    const current = (this.createModel.monsterName ?? '').trim();
+    if (current && current !== 'Other'
+        && !inTier.some(monster => monster.trim().toLowerCase() === current.toLowerCase())) {
+      inTier.unshift(current);
+    }
+
     return [...inTier, 'Other'];
+  }
+
+  // Whether this option is the picked one. Case-insensitive because the stored
+  // AssignedMonsterName is whatever the camp was made with (addon, Discord modal, import),
+  // which need not match the catalog's casing letter for letter.
+  protected isMonsterSelected(monster: string): boolean {
+    const current = (this.createModel.monsterName ?? '').trim().toLowerCase();
+    return current.length > 0 && monster.trim().toLowerCase() === current;
   }
 
   // Native-select change handler for the monster dropdown. Driven by the option's
@@ -252,10 +354,132 @@ export class ActivityQueuePanelComponent {
   // the old "you picked one but it says Select a monster" bug.
   protected onMonsterSelect(value: string): void {
     this.createModel.monsterName = value ? value : null;
+    this.applyRepopStartPrefill();
+    this.applyRepeatPrefillForMonster();
+  }
+
+  protected onCustomMonsterNameChange(): void {
+    this.applyRepopStartPrefill();
+    this.applyRepeatPrefillForMonster();
   }
 
   protected isOtherMonsterSelected(): boolean {
     return (this.createModel.monsterName ?? '') === 'Other';
+  }
+
+  // Day counts a monster's POP CYCLE, and only the three NQ/HQ families have one (mirrors
+  // HnmConfig.HnmDayCycles: Nidhogg, King Behemoth, Aspidochelone). Tiamat, Cerberus, a
+  // linkshell's own monster -- none of them have a day to be on, so the box is hidden rather
+  // than collecting a number the board would then print. Same predicate the ToD form's Day box
+  // and HQ toggle use. A custom "Other" monster is read off the typed name, so typing one of
+  // the pairs by hand still offers it.
+  protected dayNumberVisible(): boolean {
+    if (!this.isHnmSelected() || this.isNmTierSelected()) {
+      return false;
+    }
+    const picked = this.isOtherMonsterSelected()
+      ? this.customMonsterName
+      : (this.createModel.monsterName ?? '');
+    return hasHqVariant(picked);
+  }
+
+  // ===== Predicted-repop pre-fill for Start =====
+  //
+  // A camp is almost always staged for a pop the linkshell has already predicted: a ToD was
+  // logged, so its repop time IS the start time. Picking that monster fills Start in with it,
+  // which is also the instant HnmAutoEventService stamps when it builds the event itself — so a
+  // hand-made camp lands on the same schedule an auto-made one would.
+
+  // The linkshell's outstanding pops, loaded when the form opens (see loadUpcomingRepops).
+  protected readonly upcomingRepops = signal<ActivityUpcomingRepop[]>([]);
+
+  // The exact value this component last wrote into Start. Anything else in the box was typed by
+  // the officer (or belongs to the event being edited) and is never overwritten.
+  private autoFilledStartTimeLocal: string | null = null;
+
+  private loadUpcomingRepops(): void {
+    this.upcomingRepops.set([]);
+    const linkshellId = this.createModel.linkshellId;
+    if (!linkshellId) {
+      return;
+    }
+
+    void this.tods.loadUpcomingRepops(linkshellId).then(entries => {
+      this.upcomingRepops.set(entries);
+      this.applyRepopStartPrefill();
+      this.cdr.markForCheck();
+    });
+  }
+
+  // The outstanding pop the picked monster is waiting on, or null. Matched against the server's
+  // matchNames (every spelling of the spawn) so a "Fafnir" ToD answers a "Fafnir/Nidhogg" camp,
+  // and on each half of a combined pick so it works the other way round too.
+  protected selectedUpcomingRepop(): ActivityUpcomingRepop | null {
+    if (!this.isHnmSelected()) {
+      return null;
+    }
+
+    const picked = (this.isOtherMonsterSelected()
+      ? this.customMonsterName
+      : (this.createModel.monsterName ?? '')).trim().toLowerCase();
+    if (!picked) {
+      return null;
+    }
+
+    const spellings = new Set<string>([picked]);
+    for (const segment of picked.split('/')) {
+      const trimmed = segment.trim();
+      if (trimmed) {
+        spellings.add(trimmed);
+      }
+    }
+
+    return this.upcomingRepops().find(entry =>
+      entry.matchNames.some(name => spellings.has(name.trim().toLowerCase()))) ?? null;
+  }
+
+  // Whether Start already sits on the picked monster's predicted pop.
+  protected isStartAtUpcomingRepop(): boolean {
+    const repop = this.selectedUpcomingRepop();
+    return !!repop
+      && (this.createModel.startTimeLocal ?? '') === this.activity.toViewerLocalInputValue(repop.repopTime, true);
+  }
+
+  // Write the predicted pop into Start, but only into an EMPTY box or over this component's own
+  // previous pre-fill. Editing an event opens with its real start time in there, and an officer
+  // who typed a time meant it — neither may be silently rewritten by changing the monster.
+  private applyRepopStartPrefill(): void {
+    const repop = this.selectedUpcomingRepop();
+    if (!repop) {
+      return;
+    }
+
+    const current = this.createModel.startTimeLocal ?? '';
+    if (current && current !== this.autoFilledStartTimeLocal) {
+      return;
+    }
+
+    this.setStartTimeFromRepop(repop);
+  }
+
+  // The "Use this time" button next to the hint: the explicit version of the pre-fill, for when
+  // the box already holds something this component won't overwrite on its own.
+  protected useUpcomingRepopStartTime(): void {
+    const repop = this.selectedUpcomingRepop();
+    if (repop) {
+      this.setStartTimeFromRepop(repop);
+    }
+  }
+
+  private setStartTimeFromRepop(repop: ActivityUpcomingRepop): void {
+    const value = this.activity.toViewerLocalInputValue(repop.repopTime, true);
+    if (!value) {
+      return;
+    }
+
+    this.createModel.startTimeLocal = value;
+    this.autoFilledStartTimeLocal = value;
+    this.recomputeDuration();
   }
 
   // Repeat-on-ToD keys on an exact (case-insensitive) Tod.MonsterName match. For a
@@ -269,6 +493,25 @@ export class ActivityQueuePanelComponent {
       return this.customMonsterName.trim().length > 0;
     }
     return true;
+  }
+
+  // The lead box as the server wants it: a real number clamped to the same 0–168h range
+  // HnmRecurringBoardService enforces, or null. Null matters — the server reads it as "keep
+  // the board's current lead", so an empty (or junk) box must not post 0, which would mean
+  // "re-post exactly at the pop" and silently discard a lead set at End Camp.
+  // Whether THIS form asked the recurrence question, and may therefore answer it. Mirrors the
+  // template's `!isEditingLiveEvent && canRepeatOnTod()` guard on the switch — the two must agree
+  // or the form would post an answer to a question it never showed.
+  private recurrenceAsked(): boolean {
+    return !this.isEditingLiveEvent && this.canRepeatOnTod();
+  }
+
+  private normalizedRepostLeadHours(): number | null {
+    const lead = this.createModel.repostLeadHours;
+    if (lead === null || lead === undefined || Number.isNaN(Number(lead))) {
+      return null;
+    }
+    return Math.min(Math.max(Number(lead), 0), 168);
   }
 
   // ===== HNM camp DKP =====
@@ -401,6 +644,11 @@ export class ActivityQueuePanelComponent {
   }
 
   protected onStartTimeChange(): void {
+    // Typing in the box takes ownership of it, so switching monsters afterwards can't overwrite
+    // what the officer entered (see applyRepopStartPrefill).
+    if ((this.createModel.startTimeLocal ?? '') !== this.autoFilledStartTimeLocal) {
+      this.autoFilledStartTimeLocal = null;
+    }
     this.recomputeDuration();
   }
 
@@ -499,9 +747,7 @@ export class ActivityQueuePanelComponent {
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {
-    const membership = this.linkshellMemberships().find(link => link.id === linkshellId);
-    const rank = (membership?.rank ?? '').toLowerCase();
-    return rank === 'leader' || rank === 'officer';
+    return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }
 
   protected linkshellLootStructure(linkshellId: number): 'Dkp' | 'LootCouncil' | 'Hybrid' {
@@ -573,19 +819,26 @@ export class ActivityQueuePanelComponent {
     hnmAwaitingRepost?: boolean;
     sourceTodId?: number | null;
     dayNumber?: number | null;
+    repeatOnTod?: boolean;
+    repeatLeadHours?: number | null;
   }): void {
     const monster = event.assignedMonsterName ?? event.partySetupAssignedMonsterName ?? null;
     const dayNumber = event.dayNumber ?? null;
+    // The monster's standing re-post settings, so the board ToD form opens on what the
+    // create-event form (or the last End Camp) actually configured rather than on "off".
+    const repeatOnTod = event.repeatOnTod ?? false;
+    const repeatLeadHours = event.repeatLeadHours ?? null;
     // Already defeated/awaiting re-post → "Edit ToD": pre-fill the board's logged ToD.
     if (event.hnmAwaitingRepost && event.sourceTodId != null) {
       const tod = (this.activity.overview()?.recentTods ?? []).find(t => t.id === event.sourceTodId);
       if (tod) {
-        this.todForm()?.openEditForBoard(tod, event.id, monster ?? '', dayNumber);
+        this.todForm()?.openEditForBoard(tod, event.id, monster ?? '', dayNumber, repeatOnTod, repeatLeadHours);
         return;
       }
     }
     if (monster) {
-      this.todForm()?.openForBoard(event.linkshellId, monster, event.id, dayNumber);
+      this.todForm()?.openForBoard(
+        event.linkshellId, monster, event.id, dayNumber, null, repeatOnTod, repeatLeadHours);
     } else {
       this.todForm()?.openCreate(event.linkshellId, null);
     }
@@ -609,6 +862,8 @@ export class ActivityQueuePanelComponent {
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);
     }
+    this.autoFilledStartTimeLocal = null;
+    this.loadUpcomingRepops();
     this.showEditDialog();
   }
 
@@ -677,14 +932,17 @@ export class ActivityQueuePanelComponent {
     const nextPartySetupId = this.partySetupNotSpecified ? null : (this.createModel.partySetupId ?? null);
 
     // Editing an event that already had a party setup, and the setup is being
-    // changed/removed: the current slot signups belong to the old setup's slots.
-    // Saving moves those members to "no slot" attendance on the new board (rather
-    // than dropping them). Warn and let the user back out.
+    // changed/removed: the current slot signups belong to the OLD setup's slots, so the
+    // server wipes them and the board re-posts empty. Participation (and with it every
+    // timer, DKP award and attendance credit) survives untouched — the wipe is the board's
+    // seating only. Warn and let the user back out.
     if (this.editingEventId
         && this.editingOriginalPartySetupId !== null
         && nextPartySetupId !== this.editingOriginalPartySetupId) {
       const ok = await this.requestConfirm(
-        'Changing the party setup will move everyone currently signed up to “no slot” attendance on the new board. Continue?');
+        this.isEditingLiveEvent
+          ? 'Changing the party setup wipes the live sign-up board — every slot is cleared and members have to claim again. Their participation, timers and DKP are not affected. Continue?'
+          : 'Changing the party setup wipes the sign-up board — everyone currently signed up loses their slot and has to sign up again. Continue?');
       if (!ok) {
         return;
       }
@@ -697,9 +955,21 @@ export class ActivityQueuePanelComponent {
         ...this.createModel,
         partySetupId: nextPartySetupId,
         monsterName,
-        // No lead here: this form only switches recurrence on/off. The lead lives on the
-        // End Camp / Post ToD form, and omitting it leaves whatever was set there intact.
-        repeatOnTod: this.canRepeatOnTod() && !!this.createModel.repeatOnTod
+        // A day the form didn't ask for is not a day the board should print: switching the
+        // monster from a merge pair to anything else must not post the number that was typed
+        // while the box was still on offer. The model keeps it, so switching back restores it.
+        dayNumber: this.dayNumberVisible() ? this.createModel.dayNumber : null,
+        // Recurrence, tri-state. The form ASKS on create and on a queued-camp edit, so it sends
+        // the real answer. Editing a LIVE camp shows no recurrence control, so it sends null =
+        // "no opinion, leave the monster's standing board alone" — sending false there is what
+        // used to disable the re-post as a side effect of an unrelated edit.
+        repeatOnTod: this.recurrenceAsked() ? this.createModel.repeatOnTod === true : null,
+        // Null means "keep whatever lead the board already has", including one entered at End
+        // Camp. Only sent alongside an explicit yes, so turning recurrence OFF can't also
+        // rewrite the lead of the board it just disabled.
+        repostLeadHours: this.recurrenceAsked() && this.createModel.repeatOnTod === true
+          ? this.normalizedRepostLeadHours()
+          : null
       };
       if (this.editingEventId) {
         await this.activity.updateEvent(this.editingEventId, payload);
@@ -728,11 +998,13 @@ export class ActivityQueuePanelComponent {
     dkpPerHour?: number | null;
     details?: string | null;
     partySetupId?: number | null;
+    partySetupName?: string | null;
     autoStart?: boolean;
     countsTowardActive?: boolean;
     assignedMonsterName?: string | null;
     dayNumber?: number | null;
     repeatOnTod?: boolean;
+    repeatLeadHours?: number | null;
     hnmOpenBonusOverride?: number | null;
     hnmCloseBonusOverride?: number | null;
     hnmClaimBonusOverride?: number | null;
@@ -750,7 +1022,13 @@ export class ActivityQueuePanelComponent {
     if (!incomingType) {
       this.eventTypeSelection = '';
     } else if (incomingType.trim().toUpperCase() === 'HNM') {
-      this.eventTypeSelection = 'HNM';
+      // An NM camp is STORED as EventType "HNM" (see onEventTypeSelectionChange), so the
+      // stored type can't tell the two tiers apart — the monster can. Lighting the wrong chip
+      // would cut the monster out of monsterOptions()' tier filter and open the picker on
+      // "Select a monster" for a camp that has one.
+      this.eventTypeSelection = event.assignedMonsterName && !isHnmTierMonster(event.assignedMonsterName)
+        ? 'NM'
+        : 'HNM';
     } else {
       this.eventTypeSelection = (this.eventTypeOptions as readonly string[]).includes(incomingType) ? incomingType : 'Other';
     }
@@ -765,19 +1043,31 @@ export class ActivityQueuePanelComponent {
     this.endTimeNotSpecified = !this.createModel.endTimeLocal;
     this.createModel.partySetupId = event.partySetupId ?? null;
     this.editingOriginalPartySetupId = event.partySetupId ?? null;
+    this.editingCurrentSetupName = event.partySetupName ?? null;
     this.partySetupNotSpecified = event.partySetupId == null;
     this.createModel.autoStart = event.autoStart ?? false;
     this.createModel.countsTowardActive = event.countsTowardActive ?? true;
-    // HNM repeat-board fields so editing preserves the monster + repeat-on-ToD. The lead
-    // time isn't shown here (End Camp owns it) and isn't sent back, so it survives an edit.
+    // HNM repeat-board fields so editing preserves the monster and shows the board's current
+    // lead. repeatLeadHours is only sent for an ENABLED board, so a null here leaves the box
+    // empty and the edit submits null = "keep the board's current lead".
     this.createModel.monsterName = event.assignedMonsterName ?? null;
     this.customMonsterName = '';
     this.createModel.dayNumber = event.dayNumber ?? null;
-    this.createModel.repeatOnTod = !!event.repeatOnTod;
+    // Straight off the event's OWN board state rather than re-derived from the monster catalog:
+    // this is the camp that exists, and what its board is set to now is what the form must open
+    // on. repeatLeadHours is only sent for an ENABLED board, so a null leaves the box empty and
+    // the edit submits null = "keep the board's current lead".
+    this.createModel.repeatOnTod = event.repeatOnTod ?? false;
+    this.createModel.repostLeadHours = event.repeatLeadHours ?? null;
     // Lazy-load the linkshell's PartySetup list so the dropdown populates.
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);
     }
+    // The event's own start time is already in the box, so nothing is pre-filled here — the
+    // outstanding pops are loaded only so the hint (and its "Use this time" button) can offer
+    // the predicted repop if the monster is changed.
+    this.autoFilledStartTimeLocal = null;
+    this.loadUpcomingRepops();
     this.recomputeDuration();
     this.createModel.dkpPerHour = event.dkpPerHour ?? 0;
     this.createModel.details = event.details ?? '';
@@ -839,11 +1129,14 @@ export class ActivityQueuePanelComponent {
     this.createModel.autoStart = false;
     this.createModel.countsTowardActive = true;
     this.createModel.monsterName = null;
-    this.createModel.repeatOnTod = false;
+    this.createModel.repeatOnTod = null;
+    this.createModel.repostLeadHours = null;
     this.createModel.dayNumber = null;
     this.customMonsterName = '';
     this.isEditingLiveEvent = false;
     this.editingOriginalPartySetupId = null;
+    this.editingCurrentSetupName = null;
+    this.autoFilledStartTimeLocal = null;
     this.resetHnmDkpOverride();
   }
 

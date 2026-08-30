@@ -6,14 +6,6 @@
     ViewData["Title"] = editing ? "Edit draft" : TreasuryLabels.RecordAction;
     ViewData["BodyClass"] = "lsm-page";
     var action = editing ? "EditDraft" : "Record";
-    // Grouped so the everyday options come first and the "gil promised but not yet moved" ones sit
-    // together further down, out of the way of anyone who never needs them.
-    var groups = new[]
-    {
-        (Key: TreasuryTransactionKinds.GroupCommon, Label: "Everyday"),
-        (Key: TreasuryTransactionKinds.GroupOwed, Label: "Gil promised but not moved yet"),
-        (Key: TreasuryTransactionKinds.GroupSetup, Label: "Setup"),
-    };
 }
 
 <div class="page-head fade d1">
@@ -29,27 +21,7 @@
         <div asp-validation-summary="ModelOnly" class="text-danger"></div>
 
         <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));column-gap:24px;align-items:end">
-            <div class="field" style="grid-column:1/-1">
-                <label asp-for="TransactionKind"></label>
-                <select asp-for="TransactionKind" class="form-select" id="TransactionKind" required>
-                    @foreach (var group in groups)
-                    {
-                        var options = Model.Options.Where(option => option.Group == group.Key).ToList();
-                        if (options.Count == 0) { continue; }
-                        <optgroup label="@group.Label">
-                            @foreach (var option in options)
-                            {
-                                <option value="@option.Key" data-help="@option.Help" data-preview="@option.PreviewTemplate"
-                                        data-member="@(option.ShowsMember ? "1" : "0")"
-                                        data-split="@(option.IsSplittable ? "1" : "0")"
-                                        data-settles="@(option.SettlesMemberDebt ? "1" : "0")">@option.Label</option>
-                            }
-                        </optgroup>
-                    }
-                </select>
-                <span asp-validation-for="TransactionKind" class="text-danger"></span>
-                <div id="kindHelp" style="font-size:12px;color:var(--fg-3);margin-top:4px"></div>
-            </div>
+            <partial name="_TreasuryKindPicker" model="Model" />
 
             <div class="field">
                 <label asp-for="Amount"></label>
@@ -81,22 +53,42 @@
                 <span asp-validation-for="Member" class="text-danger"></span>
             </div>
 
-            <partial name="_TreasuryRecipients" model="Model" />
+            @* WHOSE MULE. The one question gil on hand could never be broken down by, asked at the
+               only moment anyone knows the answer — a linkshell has no bank, and gil on hand is only
+               the sum of what sits on people's characters.
 
-            <div class="field" style="grid-column:1/-1">
-                <label asp-for="Memo"></label>
-                <textarea asp-for="Memo" class="form-control" rows="2" maxlength="1024"></textarea>
-                <span asp-validation-for="Memo" class="text-danger"></span>
+               Deliberately a separate box from Member above: on a Gil Out to a member the two are
+               different people, because the gil leaves the treasurer's mule and arrives at theirs.
+               The label is set by the script from the chosen option's own wording, so it flips
+               between "who's holding this gil" and "whose gil is this coming out of" with the
+               direction. A datalist, not a select: gil regularly sits on a mule nobody has added to
+               the roster. *@
+            <div class="field" id="holderField">
+                <label asp-for="Holder" id="holderLabel"></label>
+                <input asp-for="Holder" class="form-control" maxlength="256" autocomplete="off"
+                       list="holderOptions" placeholder="Search members…" />
+                <datalist id="holderOptions">
+                    @foreach (var option in Model.Roster)
+                    {
+                        <option value="@option.CharacterName"></option>
+                    }
+                </datalist>
+                <span asp-validation-for="Holder" class="text-danger"></span>
             </div>
+
+            <partial name="_TreasuryRecipients" model="Model" />
         </div>
 
         @* Free confidence for someone who just picked an option they are not sure about. *@
         <div id="preview" style="margin-top:16px;padding:10px 12px;border:1px solid var(--border);
                                 border-radius:6px;font-size:13px;color:var(--fg-2)"></div>
 
+        @* Confirm only. "Save as draft" is gone from every form: nobody was using it, and a
+           half-recorded entry that looks recorded is a worse answer than one more click. Drafts
+           already in the books keep their Confirm / Edit / Discard buttons in the transactions list
+           — this only stops new ones being made, which is why the Confirm field still posts. *@
         <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
             <button type="submit" name="Confirm" value="true" class="btn primary">@TreasuryLabels.ConfirmAction</button>
-            <button type="submit" name="Confirm" value="false" class="btn ghost">@TreasuryLabels.SaveDraftAction</button>
             <a class="btn ghost" asp-action="Index">Cancel</a>
         </div>
     </form>

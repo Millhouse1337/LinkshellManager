@@ -456,4 +456,131 @@ public class TreasuryBalanceServiceTests
             new[] { "Zeid", "Millhouse", "Ashira" },
             TreasuryBalanceService.ProjectByMember(lines).Select(row => row.CharacterName).ToArray());
     }
+
+    // ---- who's holding the gil ---------------------------------------------------------------
+    //
+    // A linkshell has no bank: gil on hand is the sum of what sits on members' mules. The holder
+    // lives on the SIGNED gil-on-hand line for one reason, and these pin it — the breakdown adds up
+    // to the figure it sits under by construction rather than by anyone remembering to keep a
+    // separate "who has what" list in step.
+
+    // Gil arriving on a named mule.
+    private static IEnumerable<LedgerLineRow> SoldAnItemHeldBy(string holder, long amount) =>
+        new[]
+        {
+            new LedgerLineRow(TreasuryAccounts.GilOnHand, amount, null, holder),
+            new LedgerLineRow(TreasuryAccounts.ItemSales, -amount),
+        };
+
+    // Gil leaving one.
+    private static IEnumerable<LedgerLineRow> SpentFrom(string holder, long amount) =>
+        new[]
+        {
+            new LedgerLineRow(TreasuryAccounts.OtherMoneyOut, amount),
+            new LedgerLineRow(TreasuryAccounts.GilOnHand, -amount, null, holder),
+        };
+
+    [Fact]
+    public void ProjectByHolder_AddsUpToGilOnHand()
+    {
+        var lines = SoldAnItemHeldBy("Edicius", 8_000_000)
+            .Concat(SoldAnItemHeldBy("Ukiya", 2_000_000))
+            .Concat(SpentFrom("Edicius", 3_000_000))
+            .ToList();
+
+        var holders = TreasuryBalanceService.ProjectByHolder(lines);
+
+        // The whole claim of the panel, in one assertion.
+        Assert.Equal(
+            TreasuryBalanceService.Project(lines).CashOnHand,
+            holders.Sum(holder => holder.Amount));
+    }
+
+    [Fact]
+    public void ProjectByHolder_NetsSpendingAgainstTheMuleItLeft()
+    {
+        var lines = SoldAnItemHeldBy("Edicius", 8_000_000)
+            .Concat(SpentFrom("Edicius", 3_000_000))
+            .ToList();
+
+        var holder = Assert.Single(TreasuryBalanceService.ProjectByHolder(lines));
+        Assert.Equal("Edicius", holder.CharacterName);
+        Assert.Equal(5_000_000, holder.Amount);
+    }
+
+    // The bug this shape exists to prevent: both halves of an entry carry the same magnitude, so a
+    // holder written onto the second half too would double every arrival.
+    [Fact]
+    public void ProjectByHolder_IgnoresEveryLineThatIsNotGilOnHand()
+    {
+        var lines = SoldAnItemHeldBy("Edicius", 8_000_000)
+            .Append(new LedgerLineRow(TreasuryAccounts.ItemSales, -1_000_000, null, "Edicius"))
+            .ToList();
+
+        var holder = Assert.Single(TreasuryBalanceService.ProjectByHolder(lines));
+        Assert.Equal(8_000_000, holder.Amount);
+    }
+
+    // Every line recorded before holders existed has no name, and neither does a gil-auction payout.
+    // Dropping that bucket would make the rows visibly fail to add up to the figure above them.
+    [Fact]
+    public void ProjectByHolder_KeepsGilNobodyWasNamedFor()
+    {
+        var lines = SoldAnItem(5_000_000)
+            .Concat(SoldAnItemHeldBy("Edicius", 1_000_000))
+            .ToList();
+
+        var holders = TreasuryBalanceService.ProjectByHolder(lines);
+
+        Assert.Equal(2, holders.Count);
+        var unnamed = Assert.Single(holders, holder => holder.CharacterName is null);
+        Assert.Equal(5_000_000, unnamed.Amount);
+        Assert.Equal(
+            TreasuryBalanceService.Project(lines).CashOnHand,
+            holders.Sum(holder => holder.Amount));
+    }
+
+    // Same reason ProjectByCounterparty keys on the name: the two write paths populate the account
+    // id differently, so casing must not split one person into two rows.
+    [Fact]
+    public void ProjectByHolder_TreatsTheSameNameAsOnePersonWhateverTheCasing()
+    {
+        var lines = SoldAnItemHeldBy("Edicius", 4_000_000)
+            .Concat(SoldAnItemHeldBy("edicius", 1_000_000))
+            .ToList();
+
+        var holder = Assert.Single(TreasuryBalanceService.ProjectByHolder(lines));
+        Assert.Equal(5_000_000, holder.Amount);
+    }
+
+    // A mule that has handed everything on drops off; one spent past zero is KEPT, because hiding it
+    // would both break the add-up and bury the only evidence of the mistake.
+    [Fact]
+    public void ProjectByHolder_DropsSettledMulesAndKeepsOverspentOnes()
+    {
+        var lines = SoldAnItemHeldBy("Edicius", 4_000_000)
+            .Concat(SpentFrom("Edicius", 4_000_000))
+            .Concat(SpentFrom("Ukiya", 1_000_000))
+            .ToList();
+
+        var holders = TreasuryBalanceService.ProjectByHolder(lines);
+
+        var holder = Assert.Single(holders);
+        Assert.Equal("Ukiya", holder.CharacterName);
+        Assert.Equal(-1_000_000, holder.Amount);
+    }
+
+    // A reversal copies the original's holder, so undoing a sale takes the gil back off the SAME
+    // mule rather than stranding it and pushing the difference into the unattributed bucket.
+    [Fact]
+    public void ProjectByHolder_ReversalTakesTheGilBackOffTheSameMule()
+    {
+        var sale = SoldAnItemHeldBy("Edicius", 8_000_000).ToList();
+        var lines = sale
+            .Concat(sale.Select(line => new LedgerLineRow(
+                line.AccountNumber, -line.Amount, line.CounterpartyCharacterName, line.HolderCharacterName)))
+            .ToList();
+
+        Assert.Empty(TreasuryBalanceService.ProjectByHolder(lines));
+    }
 }

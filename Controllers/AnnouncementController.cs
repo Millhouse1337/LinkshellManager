@@ -13,11 +13,13 @@ public class AnnouncementController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly Services.AdminOverrideService _adminOverride;
 
-    public AnnouncementController(ApplicationDbContext context, UserManager<AppUser> userManager)
+    public AnnouncementController(ApplicationDbContext context, UserManager<AppUser> userManager, Services.AdminOverrideService adminOverride)
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
     }
 
     public async Task<IActionResult> Index()
@@ -197,7 +199,9 @@ public class AnnouncementController : Controller
         if (!linkshellId.HasValue) return false;
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == appUserId && ul.LinkshellId == linkshellId.Value);
-        return membership is not null && LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+        if (membership is null) return false;
+        return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
+               || await _adminOverride.IsActiveForAsync(appUserId, HttpContext.RequestAborted);
     }
 
     private async Task<List<Linkshell>> GetManageableLinkshellsAsync(string appUserId)

@@ -57,13 +57,18 @@
   --av-d-1: #f59e0b; --av-d-2: #ff6b6b;
   --av-e-1: #8b5cf6; --av-e-2: #4f7cff;
 
-  // Chart / donut segments — 6 distinct web hues, blue-led.
+  // Chart / donut segments — distinct web hues, blue-led. a–f are the originals; g–i extend the
+  // run to nine so the HNM Claims donut can give each chartable monster its own colour instead
+  // of truncating to the first six. Kept in the same family, just shifted around the wheel.
   --chart-a: #4f7cff;
   --chart-b: #43d17a;
   --chart-c: #d6a93f;
   --chart-d: #ff6b6b;
   --chart-e: #38bdf8;
   --chart-f: #8b5cf6;
+  --chart-g: #ec4899;
+  --chart-h: #14b8a6;
+  --chart-i: #f97316;
 
   // --cyan / --purple / --orange never got a -weak the way --accent/--success/--warning/--danger/
   // --gold did.

@@ -4,6 +4,7 @@
 @inject SignInManager<AppUser> SignInManager
 @inject UserManager<AppUser> UserManager
 @inject ApplicationDbContext DbContext
+@inject LinkshellManagerDiscordApp.Services.AdminOverrideService AdminOverride
 
 @{
     var isSignedIn = SignInManager.IsSignedIn(User);
@@ -22,9 +23,18 @@
 
     string? activeLinkshellName = null;
     string? activeLinkshellInitials = null;
-    string activeLinkshellType = LinkshellManagerDiscordApp.Models.LinkshellTypes.Both;
     string? activeRole = null;
     LinkshellManagerDiscordApp.Models.LinkshellRole? activePermissions = null;
+    // True when the app-wide admin override is on AND this account carries it. Account-
+    // level, not per-linkshell: it applies to EVERY linkshell the user is a member of,
+    // so the sidebar's switcher (which lists only memberships) badges every row. What it
+    // must NOT do is unlock a linkshell they have not joined — that stays gated on the
+    // membership lookup below. See AdminOverrideService.
+    bool isAppAdmin = currentUser is not null
+        && await AdminOverride.IsActiveForAsync(currentUser, Context.RequestAborted);
+    // The same override, narrowed to the ACTIVE linkshell (set only once membership
+    // there is confirmed below), for the current-role line.
+    bool isAppAdminHere = false;
     // Feature toggles that gate sidebar groups. Default true so a user with no
     // active linkshell still sees the nav (matches the sidebar's fail-open).
     bool activeEnableMissions = true;
@@ -38,7 +48,6 @@
         if (ls is not null)
         {
             activeLinkshellName = ls.LinkshellName;
-            activeLinkshellType = LinkshellManagerDiscordApp.Models.LinkshellTypes.Normalize(ls.LinkshellType);
             activeEnableMissions = ls.EnableMissions;
             activeEnableEndgame = ls.EnableEndgame;
             activeLinkshellInitials = string.Concat(
@@ -72,8 +81,25 @@
                     .AsNoTracking()
                     .FirstOrDefaultAsync(r => r.LinkshellId == activeLinkshellId && r.Name == "Member");
             }
+
+            // App-wide admin override: swap in a synthetic all-true role so the whole
+            // sidebar unlocks. Gated on `membership is not null` so an admin viewing a
+            // linkshell they have not joined gets no elevation. See AdminOverrideService.
+            if (isAppAdmin && membership is not null)
+            {
+                activePermissions = LinkshellManagerDiscordApp.Services.LinkshellRoleDefaults
+                    .BuildFullAccessRole(activeLinkshellId);
+                isAppAdminHere = true;
+            }
         }
     }
+
+    // Two flags, because they answer different questions: "…Here" is the ACTIVE
+    // linkshell (badge next to the current role line — false if the primary linkshell
+    // points somewhere the user is no longer a member of), while "IsAppAdmin" is the
+    // account (badge on every row of the switcher, which lists only memberships).
+    ViewData["IsAppAdminHere"] = isAppAdminHere;
+    ViewData["IsAppAdmin"] = isAppAdmin;
 
     // All of the signed-in user's memberships, for the sidebar linkshell
     // switcher (name + rank per linkshell).
@@ -88,7 +114,6 @@
 
     ViewData["UserLinkshells"] = userLinkshells;
     ViewData["ActiveLinkshellId"] = currentUser?.PrimaryLinkshellId;
-    ViewData["ActiveLinkshellType"] = activeLinkshellType;
     ViewData["ActiveEnableMissions"] = activeEnableMissions;
     ViewData["ActiveEnableEndgame"] = activeEnableEndgame;
     ViewData["ActiveLinkshellName"] = activeLinkshellName;
@@ -114,6 +139,9 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/lsm-theme.css" asp-append-version="true" />
+    @* Create/Edit event form — a port of the Discord Activity's create-event modal.
+       Namespaced under .cem / .mdta, so it applies only where those classes are used. *@
+    <link rel="stylesheet" href="~/css/event-form.css" asp-append-version="true" />
 </head>
 <body>
     @if (isSignedIn && currentUser is not null)

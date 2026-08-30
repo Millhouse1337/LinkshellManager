@@ -112,6 +112,10 @@ public class HnmStandardCloseWindowTests
     public void ResolveCloseWindow_SingleScan_IsBothOpenAndClose()
     {
         // One scan, taken at window 1: that window is simultaneously the open and the close.
+        //
+        // Which is now inert at payout — WindowValue prices sequence 1 as the OPEN whether or not
+        // it also resolves as the close, so this answer costs nobody anything. It used to pay both,
+        // which is how posting the opening window on a 1 open / 1 close linkshell read as 2 DKP.
         var posted = new[] { 1 };
         Assert.Equal(1, HnmStandardCampFinalizer.ResolveCloseWindow(posted, popWindow: 1));
     }

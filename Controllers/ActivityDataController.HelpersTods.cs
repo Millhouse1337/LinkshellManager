@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -33,7 +34,12 @@ public sealed partial class ActivityDataController
     // share the same DKP-ledger logic without depending on an
     // ActivityDataController instance. _dbContext references became the
     // explicit `dbContext` parameter; behavior is otherwise identical.
-    internal static async Task AdjustTodLootDkpAsync(
+    //
+    // Returns null when the DKP was applied, or a human-readable error when the batch would
+    // overdraw a winner — same contract as LootDkpGuard.CheckEventLootAsync, which is what event
+    // loot has always used. Nothing is appended when an error is returned. ToD loot went years
+    // without this check, which is how members ended up with negative balances.
+    internal static async Task<string?> AdjustTodLootDkpAsync(
         ApplicationDbContext dbContext,
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools,
@@ -41,14 +47,18 @@ public sealed partial class ActivityDataController
         IReadOnlyList<TodLootDetail> lootDetails,
         DateTime occurredAtUtc,
         bool isRefund,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        // Run the affordability pre-pass and return its verdict WITHOUT appending anything. For
+        // callers that must persist a parent row before they can charge loot (submission approval)
+        // and would otherwise be left with an orphaned ToD when the batch is rejected.
+        bool checkOnly = false)
     {
         var actionableLoot = lootDetails
             .Where(detail => !string.IsNullOrWhiteSpace(detail.ItemWinner) && detail.WinningDkpSpent.GetValueOrDefault() > 0)
             .ToList();
         if (actionableLoot.Count == 0)
         {
-            return;
+            return null;
         }
 
         var linkshell = tod.Linkshell ?? await dbContext.Linkshells
@@ -59,7 +69,7 @@ public sealed partial class ActivityDataController
         if (structure == "LootCouncil")
         {
             // Loot council linkshells skip DKP math entirely.
-            return;
+            return null;
         }
         var isHybrid = structure == "Hybrid";
         var roundingStep = DkpRounding.StepFor(linkshell?.DkpRoundingIncrement);
@@ -79,7 +89,7 @@ public sealed partial class ActivityDataController
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         if (membershipsByCharacterName.Count == 0)
         {
-            return;
+            return null;
         }
 
         // A ToD has a monster, not an event type, so its pool can't be derived — it's PINNED.
@@ -89,6 +99,51 @@ public sealed partial class ActivityDataController
         // officer has remapped event types in between.
         var map = await dkpPools.GetMapAsync(tod.LinkshellId, cancellationToken);
         var hnmPoolId = map.Resolve("HNM");
+
+        // Affordability pre-pass — runs BEFORE a single row is appended, so a rejected batch
+        // leaves nothing half-charged and the officer gets a message naming the member and the
+        // shortfall instead of DkpLedgerWriter's backstop exception.
+        //
+        // Costs are summed PER WALLET, so two items won by the same member in one ToD can't each
+        // pass individually and together overdraw.
+        //
+        // Two exemptions: refunds are credits, and a Hybrid debit is a percentage of a balance
+        // already clamped at zero (ComputeHybridDebit below), so it can shrink a wallet but never
+        // push it under.
+        if (!isRefund && !isHybrid)
+        {
+            var plannedByWallet = new Dictionary<(int MembershipId, int PoolId), double>();
+            foreach (var detail in actionableLoot)
+            {
+                if (!membershipsByCharacterName.TryGetValue(detail.ItemWinner!.Trim(), out var winner)
+                    || string.IsNullOrWhiteSpace(winner.AppUserId))
+                {
+                    continue;
+                }
+                var key = (winner.Id, detail.DkpPoolId ?? hnmPoolId);
+                plannedByWallet[key] = plannedByWallet.GetValueOrDefault(key)
+                    + detail.WinningDkpSpent.GetValueOrDefault();
+            }
+
+            foreach (var (key, planned) in plannedByWallet)
+            {
+                var winner = memberships.First(link => link.Id == key.MembershipId);
+                var available = await dkpLedger.GetPoolBalanceAsync(winner, key.PoolId, cancellationToken);
+                if (planned > available + DkpLedgerWriter.OverdraftEpsilon)
+                {
+                    // Name the pool only when the linkshell actually has more than one — mirrors
+                    // the wording LootDkpGuard has always used for event loot.
+                    var poolLabel = map.HasMultiplePools ? $" {map.NameFor(key.PoolId)}" : string.Empty;
+                    return $"{winner.CharacterName} only has {available:0.##}{poolLabel} DKP available "
+                        + $"— not enough for this loot ({planned:0.##} DKP).";
+                }
+            }
+        }
+
+        if (checkOnly)
+        {
+            return null;
+        }
 
         foreach (var detail in actionableLoot)
         {
@@ -174,115 +229,61 @@ public sealed partial class ActivityDataController
                     SourceTodLootDetailId: detail.Id > 0 ? detail.Id : null),
                 cancellationToken);
         }
+
+        return null;
     }
 
-    internal static double ResolveTodCooldownHours(string? cooldown)
+    // Tod.Cooldown is stored as a human label ("22 Hour", "45 Min") because a dozen surfaces print
+    // it verbatim. This turns it back into the number RepopTime is computed from.
+    //
+    // Every preset the form used to offer parses through the shared parser identically ("84 Hour"
+    // -> 84, "5 Min" -> 5/60), so the old preset-by-preset chain is gone rather than kept beside
+    // it. A bare number still means HOURS, which is the unit this field has always been written in.
+    internal static double ResolveTodCooldownHours(string? cooldown) =>
+        TodDurationFormat.TryParseMinutes(cooldown, TodDurationFormat.HoursUnit, out var minutes)
+            ? minutes / 60d
+            : 22d;
+
+    // Cooldowns and intervals are free-form now that each monster carries its own configured
+    // value: anything the shared parser reads as a positive duration is acceptable. The preset
+    // lists are still what the pickers OFFER, they are just no longer what validation ALLOWS.
+    internal static bool IsAcceptableTodCooldown(string? cooldown) =>
+        TodDurationFormat.TryParseMinutes(cooldown, TodDurationFormat.HoursUnit, out _);
+
+    // A bare number in an interval means MINUTES — the opposite default to a cooldown, matching
+    // how the two fields have always been written. The old "minutes must be < 60" cap is gone: it
+    // existed because an interval was always an (hours, minutes) pair, and a configured cadence of
+    // 90 minutes is now a legitimate answer.
+    internal static bool IsAcceptableTodInterval(string? interval) =>
+        TodDurationFormat.TryParseMinutes(interval, TodDurationFormat.MinutesUnit, out _);
+
+    // The GLOBAL default cooldown/interval for a monster, as a label. MonsterTimingDefaults owns
+    // the underlying numbers so the seeded table and these fallbacks cannot disagree; these are
+    // only the formatting wrappers.
+    //
+    // Prefer the per-linkshell overloads below — these are the answer for a linkshell that has
+    // never configured anything.
+    internal static string GetDefaultTodCooldown(string? monsterName) =>
+        MonsterTimingDefaults.DefaultCooldownLabel(monsterName);
+
+    internal static string GetDefaultTodInterval(string? monsterName) =>
+        MonsterTimingDefaults.DefaultIntervalLabel(monsterName);
+
+    // The per-linkshell defaults, which is what every ToD-posting path should use: the addon, the
+    // Discord End Camp button and the web form all ignored the linkshell's configured cooldown
+    // before this existed, because the config only ever reached the Activity's client.
+    internal static async Task<string> GetDefaultTodCooldownAsync(
+        MonsterTimingResolver resolver, int linkshellId, string? monsterName, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(cooldown))
-        {
-            return 22d;
-        }
-
-        var trimmed = cooldown.Trim();
-
-        if (SupportedTodCooldowns.Contains(trimmed))
-        {
-            if (string.Equals(trimmed, TodManagerViewModel.EightyFourHourCooldown, StringComparison.OrdinalIgnoreCase))
-                return 84d;
-            if (string.Equals(trimmed, TodManagerViewModel.SeventyTwoHourCooldown, StringComparison.OrdinalIgnoreCase))
-                return 72d;
-            if (string.Equals(trimmed, TodManagerViewModel.SeventyOneHourCooldown, StringComparison.OrdinalIgnoreCase))
-                return 71d;
-            if (string.Equals(trimmed, TodManagerViewModel.TwoHourCooldown, StringComparison.OrdinalIgnoreCase))
-                return 2d;
-            if (string.Equals(trimmed, TodManagerViewModel.FiveMinuteCooldown, StringComparison.OrdinalIgnoreCase))
-                return 5d / 60d;
-            return 22d;
-        }
-
-        var match = System.Text.RegularExpressions.Regex.Match(trimmed, @"^\s*(\d+(?:\.\d+)?)\s*(?:Hours?|Hr|H)?\s*$",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (match.Success && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var hours) && hours > 0)
-        {
-            return hours;
-        }
-
-        return 22d;
+        var timing = await resolver.ResolveAsync(linkshellId, monsterName, cancellationToken);
+        return TodDurationFormat.Format(timing.CooldownMinutes);
     }
 
-    private static bool IsAcceptableTodCooldown(string? cooldown)
+    internal static async Task<string> GetDefaultTodIntervalAsync(
+        MonsterTimingResolver resolver, int linkshellId, string? monsterName, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(cooldown))
-        {
-            return false;
-        }
-
-        if (SupportedTodCooldowns.Contains(cooldown.Trim()))
-        {
-            return true;
-        }
-
-        var match = System.Text.RegularExpressions.Regex.Match(cooldown.Trim(), @"^\s*(\d+(?:\.\d+)?)\s*(?:Hours?|Hr|H)?\s*$",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        return match.Success
-            && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var hours)
-            && hours > 0;
-    }
-
-    private static bool IsAcceptableTodInterval(string? interval)
-    {
-        if (string.IsNullOrWhiteSpace(interval)) return false;
-        if (SupportedTodIntervals.Contains(interval.Trim())) return true;
-
-        var match = System.Text.RegularExpressions.Regex.Match(interval,
-            @"^\s*(?:(\d+)\s*(?:Hours?|Hr|H))?\s*(?:(\d+)\s*(?:Minutes?|Mins?|Min|M))?\s*$",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (!match.Success) return false;
-
-        var hours = match.Groups[1].Success ? int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : 0;
-        var minutes = match.Groups[2].Success ? int.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) : 0;
-        return hours >= 0 && minutes is >= 0 and < 60 && hours + minutes > 0;
-    }
-
-    internal static string GetDefaultTodCooldown(string? monsterName)
-    {
-        if (string.IsNullOrWhiteSpace(monsterName))
-        {
-            return TodManagerViewModel.TwentyTwoHourCooldown;
-        }
-        var trimmed = monsterName.Trim();
-        if (trimmed.Equals("Tiamat", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("Jormungand", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("Vrtra", StringComparison.OrdinalIgnoreCase))
-        {
-            return TodManagerViewModel.EightyFourHourCooldown;
-        }
-        if (HnmConfig.LongWindowHnms.Contains(trimmed))
-        {
-            return TodManagerViewModel.SeventyTwoHourCooldown;
-        }
-        // Bloodsucker repops on a 71-hour cycle, unlike the other ground NMs it's grouped with
-        // (which all fall through to the 22-hour default below).
-        if (trimmed.Equals("Bloodsucker", StringComparison.OrdinalIgnoreCase))
-        {
-            return TodManagerViewModel.SeventyOneHourCooldown;
-        }
-        if (HnmConfig.SkyGods.Contains(trimmed) || HnmConfig.SeaNms.Contains(trimmed))
-        {
-            return TodManagerViewModel.FiveMinuteCooldown;
-        }
-        if (HnmConfig.SkyFarmNms.Contains(trimmed))
-        {
-            return TodManagerViewModel.TwoHourCooldown;
-        }
-        return TodManagerViewModel.TwentyTwoHourCooldown;
-    }
-
-    internal static string GetDefaultTodInterval(string? monsterName)
-    {
-        return !string.IsNullOrWhiteSpace(monsterName) && HnmConfig.LongWindowHnms.Contains(monsterName.Trim())
-            ? TodManagerViewModel.OneHourInterval
-            : TodManagerViewModel.TenMinuteInterval;
+        var timing = await resolver.ResolveAsync(linkshellId, monsterName, cancellationToken);
+        return TodDurationFormat.Format(timing.TodIntervalMinutes);
     }
 
     // "Popped on window" off the ToD forms. Windows are 1-based, so 0/negative (or a blanked

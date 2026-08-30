@@ -4,6 +4,9 @@
     ViewData["Title"] = TreasuryLabels.Title;
     ViewData["BodyClass"] = "lsm-page";
     var error = TempData["TreasuryError"] as string;
+    // What a payout run recorded. Its own banner rather than the error one: "paid 550,000 gil to 2
+    // members" is a confirmation, and a confirmation printed in red reads as a problem.
+    var message = TempData["TreasuryMessage"] as string;
     // Chip labels and their query values. "In" and "out" mean the direction gil actually moved, not a
     // string match on a type column — matching a string is what used to hide entries under both chips.
     var filters = new[]
@@ -11,13 +14,18 @@
         (Key: (string?)null, Label: "All"),
         (Key: (string?)"in", Label: TreasuryLabels.MoneyIn),
         (Key: (string?)"out", Label: TreasuryLabels.MoneyOut),
-        (Key: (string?)"drafts", Label: "Drafts"),
+        (Key: (string?)"fixed", Label: TreasuryLabels.FixedChip),
         (Key: (string?)"reversed", Label: TreasuryLabels.ReversedChip),
     };
 }
 
+@* Gil first: it is the number people open this page for. The eyebrow says which half of Treasury
+   this is, because the Items section further down carries the same one — the two read as sections
+   of one page rather than as two pages that happen to be stacked. Same shape the Discord Activity's
+   Treasury tab uses. *@
 <div class="page-head fade d1">
     <div>
+        <div class="page-eyebrow">@TreasuryLabels.Section</div>
         <h1 class="page-title">@TreasuryLabels.Title</h1>
         <div class="page-sub">
             @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
@@ -25,9 +33,10 @@
                 <span>@Model.LinkshellName</span>
                 <span class="dot"> · </span>
             }
+            @* BasisNote is NOT repeated here: the net-worth strip inside the balance sheet now says
+               it, next to the figure it qualifies, and printing the same sentence twice a screen
+               apart reads as two different claims. *@
             <span><span class="num">@Model.TotalEntries.ToString("N0")</span> entr@(Model.TotalEntries == 1 ? "y" : "ies")</span>
-            <span class="dot"> · </span>
-            <span>@TreasuryLabels.BasisNote</span>
         </div>
     </div>
     @if (Model.CanManage)
@@ -38,56 +47,74 @@
     }
 </div>
 
+
 @if (!string.IsNullOrWhiteSpace(error))
 {
     <div class="card fade d1" style="padding:12px 16px;color:var(--danger)">@error</div>
 }
 
-@* Card 1: what the linkshell has. Holdings only — the flow figures live in their own card, because a
-   balance and a movement over a period are different kinds of number and stacking them invites reading
-   one as the other. *@
-<div class="card fade d2">
-    @* What moved is the headline and the sheet is the working, so the flow chips live INSIDE the
-       <summary> — they are the whole of what a collapsed card shows — and everything else is the
-       disclosure. A native <details> rather than script: this page is server-rendered and has no JS
-       of its own.
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="card fade d1" style="padding:12px 16px;color:var(--green-main)">@message</div>
+}
+
+@* Card 1: the balance sheet. What we have on the left, what we owe on the right, the period's flow
+   across the top, and what all of that leaves underneath both. A balance and a movement over a
+   period are different kinds of number, so they sit in different bands of the card rather than in
+   one column where the first invites being read as the second.
+
+   The card IS the sheet: .balance-sheet re-dresses .card rather than nesting a second panel inside
+   it, so there is one border and one background, not two. *@
+<div class="card fade d2 balance-sheet">
+    @* The header is the whole of what a collapsed card shows — the title, the status chips AND the
+       flow figures — so all of it lives inside the <summary> and all of it is the hit target. A
+       native <details> rather than script: this page is server-rendered and has no JS of its own.
 
        open: expanded is the default. Collapsing is there for someone who wants the flow figures
        alone, not the state the page opens in. *@
     <details class="lsm-balance" open>
         <summary class="lsm-balance__summary">
-            <div class="card-head lsm-balance__head">
-                <span class="card-title">@TreasuryLabels.BalanceCard</span>
-                <span class="lsm-balance__chev" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-                </span>
-                <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                    @if (Model.Balances)
-                    {
-                        <span class="tag success">@TreasuryLabels.BooksBalance</span>
-                    }
-                    else
-                    {
-                        <span class="tag" style="color:var(--danger)">@TreasuryLabels.DoesNotBalance</span>
-                    }
-                    @if (Model.UncategorizedCount > 0)
-                    {
-                        <span class="tag">@TreasuryLabels.Uncategorized @Model.UncategorizedCount</span>
-                    }
-                    @if (Model.LockedThrough.HasValue)
-                    {
-                        <span class="tag">Locked through @Model.LockedThrough.Value.ToString("MMM d, yyyy")</span>
-                    }
-                </span>
-            </div>
+            <div class="balance-header">
+                <div class="balance-title">
+                    <span class="gil-emblem" aria-hidden="true">G</span>
+                    <div>
+                        <h2>@TreasuryLabels.BalanceCard</h2>
+                        <div class="balance-status">
+                            @if (Model.Balances)
+                            {
+                                <span class="tag success">@TreasuryLabels.BooksBalance</span>
+                            }
+                            else
+                            {
+                                <span class="tag" style="color:var(--danger)">@TreasuryLabels.DoesNotBalance</span>
+                            }
+                            @if (Model.LockedThrough.HasValue)
+                            {
+                                <span class="tag">Locked through @Model.LockedThrough.Value.ToString("MMM d, yyyy")</span>
+                            }
+                        </div>
+                    </div>
+                    <span class="lsm-balance__chev" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+                    </span>
+                </div>
 
-            @* What moved, in and out. Inside the summary so it is the whole of what a collapsed card
-               shows: the period's flow is the headline, the sheet below is the working. *@
-            <div class="lsm-flow">
-                <span class="tag success num">@TreasuryLabels.MoneyIn @Model.MoneyIn.ToString("N0")</span>
-                <span class="tag warning num">@TreasuryLabels.MoneyOut @Model.MoneyOut.ToString("N0")</span>
-                <span class="tag num">@TreasuryLabels.NetChange @Model.NetChange.ToString("N0")</span>
+                @* What moved, in and out. The card's headline, so it reads at the top in both states. *@
+                <div class="summary-cards">
+                    <div class="summary-card income">
+                        <span class="summary-label">@TreasuryLabels.MoneyIn</span>
+                        <strong class="num">@Model.MoneyIn.ToString("N0")</strong>
+                    </div>
+                    <div class="summary-card expense">
+                        <span class="summary-label">@TreasuryLabels.MoneyOut</span>
+                        <strong class="num">@Model.MoneyOut.ToString("N0")</strong>
+                    </div>
+                    <div class="summary-card change">
+                        <span class="summary-label">@TreasuryLabels.NetChange</span>
+                        <strong class="num">@Model.NetChange.ToString("N0")</strong>
+                    </div>
+                </div>
             </div>
         </summary>
 
@@ -97,66 +124,153 @@
            Every line shows, including zeros: a subtotal over conditionally-hidden components does not
            add up on screen, and a liability that disappears at zero reads as "there is no such thing"
            rather than "there is none right now". *@
-        <div class="lsm-sheet__cols">
-            <div class="lsm-sheet__col">
-                <div class="lsm-sheet__section">@TreasuryLabels.WhatWeHave</div>
-                <div class="lsm-sheet__row">
-                    <span>@TreasuryLabels.CashOnHand</span>
-                    <span class="num">@Model.CashOnHand.ToString("N0")</span>
+        <div class="balance-grid">
+            <section class="balance-panel">
+                <div class="panel-heading">
+                    <span class="panel-icon" aria-hidden="true">▣</span>
+                    <h3>@TreasuryLabels.WhatWeHave</h3>
                 </div>
-                <div class="lsm-sheet__row">
-                    <span>@TreasuryLabels.OwedToUs</span>
-                    <span class="num">@Model.OwedToUs.ToString("N0")</span>
-                </div>
-                <div class="lsm-sheet__row lsm-sheet__row--total">
-                    <span></span>
-                    <span class="num">@((Model.CashOnHand + Model.OwedToUs).ToString("N0"))</span>
-                </div>
-            </div>
 
-            <div class="lsm-sheet__col">
-                <div class="lsm-sheet__section">@TreasuryLabels.WhatWeOweSection</div>
-                <div class="lsm-sheet__row">
-                    <span>@TreasuryLabels.OwedToMembers</span>
-                    <span class="num">@Model.WeOwe.ToString("N0")</span>
+                @* The exact shape of the panel opposite: the figure, the names behind it, and the
+                   tick-and-record panel that settles them. Gil on hand is NOT here — it is not owed
+                   by anybody, it has no names behind it, and it lives on the bottom line with the
+                   arithmetic it feeds. *@
+                <div class="owe-summary">
+                    <span>@TreasuryLabels.OwedToUs</span>
+                    <strong class="num">@Model.OwedToUs.ToString("N0")</strong>
                 </div>
+
+                @if (Model.OwedToUsBy.Count > 0)
+                {
+                    @* Who owes it, and the tick-and-record panel that clears it. The mirror of the
+                       panel on the other side, from the same partial: clearing an owed-to-us debt is
+                       a tick, never a typed entry, which is why the Record form offers no option for
+                       it at all. *@
+                    <partial name="_SettlePanel" model="Model.CollectPanel" />
+                }
+
+                <div class="panel-total">
+                    <span>@TreasuryLabels.TotalOwedToUs</span>
+                    <strong class="num">@Model.OwedToUs.ToString("N0")</strong>
+                </div>
+            </section>
+
+            <section class="balance-panel">
+                <div class="panel-heading">
+                    <span class="panel-icon" aria-hidden="true">⚖</span>
+                    <h3>@TreasuryLabels.WhatWeOweSection</h3>
+                </div>
+
+                <div class="owe-summary">
+                    <span>@TreasuryLabels.OwedToMembers</span>
+                    <strong class="num">@Model.WeOwe.ToString("N0")</strong>
+                </div>
+
                 @if (Model.OwedToMembers.Count > 0)
                 {
-                    @* open: the sheet itself is now behind a disclosure, so hiding the names behind a
-                       SECOND one meant two clicks to answer "who do we owe". *@
-                    <details class="lsm-sheet__who" open>
-                        <summary>@TreasuryLabels.ShowWhoWeOwe</summary>
-                        <div class="lsm-sheet__members">
-                            @foreach (var owed in Model.OwedToMembers)
-                            {
-                                <div class="lsm-sheet__row">
-                                    <span>@owed.CharacterName</span>
-                                    <span class="num">@owed.Amount.ToString("N0")</span>
-                                </div>
-                            }
-                        </div>
-                    </details>
+                    @* Names AND the tick-to-pay panel. Its own partial because it grew a form, and a
+                       form has no business being spelled out inside a column of figures — and
+                       because the other half of the sheet now renders the same one. *@
+                    <partial name="_SettlePanel" model="Model.PayPanel" />
                 }
-                <div class="lsm-sheet__row lsm-sheet__row--total">
-                    <span></span>
-                    <span class="num">@Model.WeOwe.ToString("N0")</span>
+
+                <div class="panel-total">
+                    <span>@TreasuryLabels.TotalLiabilities</span>
+                    <strong class="num">@Model.WeOwe.ToString("N0")</strong>
+                </div>
+            </section>
+        </div>
+
+        @* The bottom line of the sheet, so it belongs to the sheet: inside the disclosure with the
+           two columns that produce it, not stranded under a collapsed card.
+
+           Gil on hand sits here rather than in the panel above, because it is the one figure the two
+           panels do NOT explain: they are lists of names, and gil on hand is owed by nobody. Here it
+           is beside the two columns it is added to and subtracted from, which is the only place the
+           bottom line's arithmetic can be read off the screen —
+           gil on hand + total owed to us − total liabilities = what we're worth. *@
+        <div class="net-worth-panel">
+            <div class="net-worth-info">
+                <span class="net-worth-icon" aria-hidden="true">⚖</span>
+                <div>
+                    <h3>@TreasuryLabels.NetWorth</h3>
+                    <p>@TreasuryLabels.BasisNote</p>
                 </div>
             </div>
-        </div>
-        @* The bottom line of the sheet, so it belongs to the sheet: inside the disclosure with the
-           two columns that produce it, not stranded under a collapsed card. *@
-        <div class="lsm-sheet lsm-sheet--answer">
-            <div class="lsm-sheet__row lsm-sheet__row--worth">
-                <span>@TreasuryLabels.NetWorth</span>
-                <span class="num">@Model.NetWorth.ToString("N0")</span>
+            @* Gil on hand is the only figure on this sheet with somewhere to go, so it is the only
+               one that is a BUTTON. The two panels above are already lists of names; this was the
+               figure with nothing behind it, and a linkshell's gil is not in a vault — it is spread
+               across members' mules, and "who actually has it" was answered from memory or from
+               Discord scrollback.
+
+               A <details> rather than script: the sheet around it is already one, the page works
+               without JavaScript, and the chevron rotates on [open] in CSS. The whole affordance is
+               the chevron plus the hint under it — a figure that is also a button looks exactly like
+               a figure that is not, and nobody clicks a number on a balance sheet on the off-chance. *@
+            <details class="net-worth-holders">
+                <summary class="net-worth-cash net-worth-cash--open">
+                    <span class="row-icon gold" aria-hidden="true">G</span>
+                    <span class="net-worth-cash__label">@TreasuryLabels.CashOnHand</span>
+                    <strong class="num">@Model.CashOnHand.ToString("N0")</strong>
+                    <span class="net-worth-chev" aria-hidden="true">▾</span>
+                </summary>
+                <div class="holders-panel">
+                    <div class="holders-panel__head">
+                        <span>@TreasuryLabels.GilHoldersTitle</span>
+                        <span class="holders-panel__total num">@Model.CashOnHand.ToString("N0")</span>
+                    </div>
+                    @if (Model.GilHolders.Count > 0)
+                    {
+                        <ul class="holders-list">
+                            @foreach (var holder in Model.GilHolders)
+                            {
+                                <li class="holders-row @(holder.IsUnnamed ? "is-unnamed" : "")">
+                                    <span class="holders-row__name">@holder.CharacterName</span>
+                                    @* The share of the biggest row, so a line reads as "most of it"
+                                       or "a sliver" without anyone dividing two seven-digit numbers
+                                       in their head. *@
+                                    <span class="holders-row__bar" aria-hidden="true">
+                                        <span class="holders-row__fill" style="width:@holder.SharePercent%"></span>
+                                    </span>
+                                    <span class="holders-row__amount num">@holder.Amount.ToString("N0")</span>
+                                </li>
+                            }
+                        </ul>
+                        <p class="holders-panel__note">
+                            Recorded on each transaction as the gil moves — these add up to gil on hand.
+                        </p>
+                    }
+                    else
+                    {
+                        <p class="holders-panel__note">@TreasuryLabels.GilHoldersEmpty</p>
+                    }
+                </div>
+            </details>
+            @* The answer, styled as the twin of gil on hand beside it: they are the two figures the
+               bottom line is made of and they read together. Only the medallion tells them apart. *@
+            <div class="net-worth-value">
+                <span class="row-icon crystal" aria-hidden="true">◆</span>
+                <span class="net-worth-value__label">@TreasuryLabels.NetWorthFigure</span>
+                <strong class="num">@Model.NetWorth.ToString("N0")</strong>
             </div>
+            @* Under the chip it points at, not under the heading on the far side of the band. It is
+               what makes the figure look clickable at all. *@
+            <p class="net-worth-hint">@TreasuryLabels.GilHoldersHint</p>
         </div>
     </details>
 </div>
 
-@* margin-top so this card does not sit flush against the balance sheet above — .card carries no
-   margin of its own, so stacked cards need the gap stated here. *@
-<div class="card fade d3" style="margin-top:16px">
+@* Treasury > Items. Rendered by a component rather than spelled out here, because items answer to
+   their own permission rule and their own table — see TreasuryItemsViewComponent. It lands between
+   the balance sheet and the transactions list: selling an item is what moves the figures above it,
+   and the list below runs long enough to bury anything placed under it. *@
+<div id="items">
+    @await Component.InvokeAsync("TreasuryItems", new { view = Model.ItemView })
+</div>
+
+@* margin-top so this card does not sit flush against the section above — .card carries no margin of
+   its own, so stacked cards need the gap stated here. *@
+<div class="card fade d4" style="margin-top:16px">
     <div class="card-head">
         <div class="card-title">@TreasuryLabels.TransactionsCard</div>
     </div>
@@ -197,7 +311,7 @@
                     <th>@TreasuryLabels.Date</th>
                     <th>@TreasuryLabels.EntryNumberField</th>
                     <th>@TreasuryLabels.WhatHappened</th>
-                    <th>@TreasuryLabels.Note</th>
+                    <th>@TreasuryLabels.ReasonField</th>
                     <th>@TreasuryLabels.Member</th>
                     <th>@TreasuryLabels.EnteredBy</th>
                     <th style="text-align:right">@TreasuryLabels.Amount</th>
@@ -219,13 +333,24 @@
                             {
                                 <span class="tag">@TreasuryLabels.DraftChip</span>
                             }
-                            @if (entry.IsReversed)
+                            @* Fixed beats Reversed: both are true of an entry someone corrected, and
+                               "Reversed" alone reads as "called off" when the numbers were merely
+                               wrong. The chips split the same way, so the word here and the chip
+                               that finds it always agree. *@
+                            @if (entry.IsFixed)
+                            {
+                                <span class="tag warning">@TreasuryLabels.FixedChip</span>
+                            }
+                            else if (entry.IsReversed)
                             {
                                 <span class="tag warning">@TreasuryLabels.ReversedChip</span>
                             }
                             @if (!string.IsNullOrWhiteSpace(entry.ReversesEntryNumber))
                             {
-                                <span class="tag">Reverses @TreasuryLabels.EntryReference(entry.ReversesEntryNumber)</span>
+                                var replaced = entry.Kind == JournalEntryKinds.Correction;
+                                <span class="tag">
+                                    @(replaced ? "Fixes" : "Reverses") @TreasuryLabels.EntryReference(entry.ReversesEntryNumber)
+                                </span>
                             }
                             @* The two halves, for the one officer who wants to see them. Collapsed by
                                default: nobody logging a Kirin's Osode sale needs to know. *@
@@ -270,6 +395,15 @@
                             else
                             {
                                 @(entry.Member ?? "")
+                            }
+                            @* Whose mule the gil landed on, under the member it concerns. On a Gil Out
+                               to a member the two ARE different people — the gil leaves the
+                               treasurer's mule and arrives at theirs — so they cannot share a line. *@
+                            @if (!string.IsNullOrWhiteSpace(entry.Holder))
+                            {
+                                <div style="font-size:11px;color:var(--fg-3)">
+                                    @(entry.CashDelta < 0 ? "from" : "held by") @entry.Holder
+                                </div>
                             }
                         </td>
                         <td style="font-size:12px;color:var(--fg-3)">@(entry.EnteredBy ?? "")</td>
@@ -348,6 +482,59 @@
             form.addEventListener('submit', function (event) {
                 if (!window.confirm(form.getAttribute('data-confirm'))) { event.preventDefault(); }
             });
+        });
+
+
+        // The running total under each tick-and-record panel. BOTH halves of the sheet have one now —
+        // paying members off on the right, recording gil arriving on the left — so this wires up
+        // every .lsm-settle form rather than the first one it finds.
+        //
+        // Progressive: with no script the ticks and the button still post and the server still
+        // settles exactly the ticked rows. This only says what is about to happen before it happens,
+        // which is the whole reason ticking does not settle on the spot.
+        document.querySelectorAll('form.lsm-settle').forEach(function (form) {
+            var ticks = form.querySelectorAll('.lsm-settle__tick');
+            var hint = form.querySelector('.lsm-settle__hint');
+            var submit = form.querySelector('button[type="submit"]');
+            var restingHint = hint ? hint.textContent : '';
+
+            // Empty on the collecting panel: gil arriving cannot overdraw anything, so there is no
+            // shortfall to warn about and no figure to measure one against.
+            var cashAttr = form.getAttribute('data-cash');
+            var checksShortfall = cashAttr !== null && cashAttr !== '';
+            var cashOnHand = Number(cashAttr || 0);
+
+            function update() {
+                var picked = 0;
+                var total = 0;
+                ticks.forEach(function (tick) {
+                    if (!tick.checked) { return; }
+                    picked += 1;
+                    total += Number(tick.getAttribute('data-amount') || 0);
+                });
+
+                if (submit) { submit.disabled = picked === 0; }
+                if (!hint) { return; }
+
+                if (picked === 0) {
+                    hint.textContent = restingHint;
+                    hint.classList.remove('is-short');
+                    return;
+                }
+
+                var sentence = picked + (picked === 1 ? ' name · ' : ' names · ')
+                    + total.toLocaleString() + ' gil';
+                // Said, not blocked: the Record form has never refused a payout for want of gil on
+                // hand, and a rule only one surface enforced would be worse than no rule.
+                var short = checksShortfall && total > cashOnHand;
+                hint.textContent = short
+                    ? sentence + ' — ' + form.getAttribute('data-shortfall')
+                    : sentence;
+                hint.classList.toggle('is-short', short);
+            }
+
+            ticks.forEach(function (tick) { tick.addEventListener('change', update); });
+            update();
         });
     </script>
 }

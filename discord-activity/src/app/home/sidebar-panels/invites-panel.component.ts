@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, effect, inject, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DiscordActivityService } from '../../discord/discord-activity.service';
+import { DiscordActivityService } from '../../discord/discord-activity.service';import { ADMIN_BADGE, canManageLinkshellIn } from '../activity-home.helpers';
 
 @Component({
   selector: 'app-invites-panel',
@@ -155,9 +155,7 @@ export class InvitesPanelComponent {
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {
-    const membership = this.linkshellMemberships().find(link => link.id === linkshellId);
-    const rank = (membership?.rank ?? '').toLowerCase();
-    return rank === 'leader' || rank === 'officer';
+    return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }
 
   protected inviteTargetLinkshellId(): number {

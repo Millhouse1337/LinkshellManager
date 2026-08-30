@@ -38,6 +38,24 @@
 
 /* ---------- Page header ---------- */
 .lsm-page .page-title { color: var(--text-main); font-weight: 800; letter-spacing: .01em; }
+
+/* The eyebrow over a heading. A page with two named sections — Treasury's Gil and Items — needs the
+   second heading to read as a section of THIS page rather than as the start of a different one, and
+   the word above it is what says so. Twin of .section-label in the Activity. */
+.lsm-page .page-eyebrow {
+    margin-bottom: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--blue-main);
+}
+
+/* A page-head that is NOT the top of the page: it follows a card, so it has to make its own gap —
+   the first one gets that from the page padding. The heading is an h2 at h1's weight, one step
+   smaller, because there is only ever one h1 on a page. */
+.lsm-page .lsm-section-head { margin-top: 28px; }
+.lsm-page .lsm-section-head .page-title { font-size: 18px; }
 .lsm-page .page-sub { color: var(--text-muted); }
 .lsm-page .page-sub .num { color: var(--text-main); font-weight: 600; }
 .lsm-page .card-link { color: #bcd0ff; }
@@ -321,9 +339,37 @@
 }
 .mt-modal.mt-modal--open > .mt-modal__dialog.mt-modal__dialog--lg { max-width: 780px; }
 
-/* ---------- Rules & Announcements cards ---------- */
-/* Each card carries an accent class that sets --acc; the icon + tag + hover all read
-   it, so a card's whole color theme follows its category. */
+/* ---------- Rules & Announcements: Discord-styled channel ---------- */
+/* These pages show text members write in Discord and paste in, so they are drawn the
+   way Discord draws it: a channel panel, one message per rule/announcement (avatar,
+   author, timestamp, hover toolbar) and a body rendered by Utils/DiscordMarkdown.cs.
+   The --dc-* values below are Discord's own palette, deliberately NOT the site tokens --
+   this is the one place they are defined; everything else reads them through var(). */
+.lsm-page .dc-channel {
+    --dc-bg: #313338;
+    --dc-bg-2: #2b2d31;
+    --dc-bg-3: #1e1f22;
+    --dc-hover: #2e3035;
+    --dc-divider: #3f4147;
+    --dc-text: #dbdee1;
+    --dc-strong: #f2f3f5;
+    --dc-muted: #949ba4;
+    --dc-link: #00a8fc;
+    --dc-blurple: #5865f2;
+    --dc-mention-bg: rgba(88, 101, 242, .3);
+    --dc-mention-fg: #c9cdfb;
+    --dc-chip: rgba(255, 255, 255, .06);
+    --dc-quote-bar: #4e5058;
+    --dc-danger: #f23f43;
+
+    font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: var(--dc-bg);
+    border: 1px solid var(--dc-bg-3);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Accent per category -- used as the "role color" on the author name + the avatar wash. */
 .lsm-page .acc-blue   { --acc: var(--blue-main); }
 .lsm-page .acc-purple { --acc: var(--purple-main); }
 .lsm-page .acc-green  { --acc: var(--green-main); }
@@ -331,119 +377,242 @@
 .lsm-page .acc-cyan   { --acc: var(--cyan-main); }
 .lsm-page .acc-orange { --acc: var(--orange-main); }
 
-.lsm-page .rule-list { display: grid; gap: 10px; }
-
-.lsm-page .rule-card {
-    display: grid;
-    grid-template-columns: 56px 1fr minmax(150px, auto);
-    align-items: start;
-    gap: 16px;
-    padding: 16px 18px;
-    border-radius: 14px;
-    background: linear-gradient(135deg, var(--bg-panel-light), var(--bg-panel));
-    border: 1px solid var(--border-soft);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
-}
-.lsm-page .rule-card:hover {
-    border-color: color-mix(in srgb, var(--acc) 55%, var(--border-soft));
-    transform: translateY(-1px);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.30);
-}
-
-.lsm-page .rule-ico {
-    width: 52px;
-    height: 52px;
-    display: grid;
-    place-items: center;
-    border-radius: 14px;
-    font-size: 24px;
-    color: var(--acc);
-    background: color-mix(in srgb, var(--acc) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--acc) 30%, transparent);
-}
-
-.lsm-page .rule-content { min-width: 0; }
-.lsm-page .rule-content h3 {
-    margin: 0 0 6px;
-    color: var(--text-main);
-    font-size: 17px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-}
-.lsm-page .rule-content p {
-    margin: 4px 0;
-    color: color-mix(in srgb, var(--text-main) 80%, var(--text-muted));
-    font-size: 13.5px;
-    line-height: 1.5;
-}
-.lsm-page .rule-content ul {
-    margin: 6px 0 0;
-    padding-left: 18px;
-    color: color-mix(in srgb, var(--text-main) 80%, var(--text-muted));
-    font-size: 13.5px;
-    line-height: 1.55;
-}
-.lsm-page .rule-content ul li { margin: 2px 0; }
-.lsm-page .rule-content ul.cols { columns: 2; column-gap: 28px; }
-.lsm-page .rule-content ul.cols li { break-inside: avoid; }
-
-.lsm-page .rule-meta {
+/* Channel header: #name, a divider, then the topic -- as in Discord. */
+.lsm-page .dc-channel-head {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    align-items: center;
     gap: 8px;
-    text-align: right;
-    white-space: nowrap;
+    padding: 12px 16px;
+    background: var(--dc-bg-2);
+    border-bottom: 1px solid var(--dc-bg-3);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, .2);
 }
-.lsm-page .rule-tag {
-    font-size: 12px;
-    font-weight: 700;
-    padding: 5px 11px;
-    border-radius: 8px;
-    color: var(--acc);
-    background: color-mix(in srgb, var(--acc) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--acc) 28%, transparent);
+.lsm-page .dc-channel-hash { color: var(--dc-muted); font-size: 22px; line-height: 1; font-weight: 400; }
+.lsm-page .dc-channel-name { color: var(--dc-strong); font-size: 16px; font-weight: 600; }
+.lsm-page .dc-channel-rule {
+    width: 1px; align-self: stretch; margin: 2px 4px;
+    background: var(--dc-divider);
 }
-.lsm-page .rule-by { color: var(--text-muted); font-size: 12px; }
-.lsm-page .rule-by .dot { opacity: .6; }
+.lsm-page .dc-channel-topic {
+    color: var(--dc-muted); font-size: 14px; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lsm-page .dc-channel-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
-.lsm-page .rule-tools { display: flex; gap: 6px; }
-.lsm-page .rule-iconbtn {
-    width: 32px;
-    height: 32px;
+.lsm-page .dc-messages { padding: 8px 0 16px; }
+
+/* One message. The 40px gutter is Discord's avatar column. */
+.lsm-page .dc-message {
+    position: relative;
     display: grid;
-    place-items: center;
-    border-radius: 9px;
-    border: 1px solid var(--border-soft);
-    background: var(--bg-card);
-    color: var(--text-muted);
+    grid-template-columns: 40px 1fr;
+    gap: 16px;
+    padding: 8px 48px 8px 16px;
+    margin-top: 12px;
+}
+.lsm-page .dc-message:first-child { margin-top: 0; }
+.lsm-page .dc-message:hover { background: var(--dc-hover); }
+
+.lsm-page .dc-avatar {
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    font-size: 19px;
+    background: color-mix(in srgb, var(--acc) 22%, var(--dc-bg-3));
+    color: var(--acc);
+    user-select: none;
+}
+
+.lsm-page .dc-body { min-width: 0; }
+.lsm-page .dc-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 2px; }
+.lsm-page .dc-author { color: var(--acc); font-size: 16px; font-weight: 500; line-height: 1.375; }
+/* Discord's BOT/APP tag, reused for the category label. */
+.lsm-page .dc-tag {
+    display: inline-flex; align-items: center; height: 15px;
+    padding: 0 4px; border-radius: 3px;
+    background: var(--dc-blurple); color: #fff;
+    font-size: 10px; font-weight: 600; line-height: 1; text-transform: uppercase;
+    letter-spacing: .02em;
+    position: relative; top: -1px;
+}
+.lsm-page .dc-time { color: var(--dc-muted); font-size: 12px; font-weight: 500; }
+
+.lsm-page .dc-title {
+    margin: 0 0 4px;
+    color: var(--dc-strong);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+/* Hover toolbar, pinned to the message's top-right like Discord's message actions. */
+.lsm-page .dc-toolbar {
+    position: absolute;
+    top: -8px; right: 12px;
+    display: flex;
+    background: var(--dc-bg-2);
+    border: 1px solid var(--dc-bg-3);
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .1), 0 2px 6px rgba(0, 0, 0, .3);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .1s ease;
+}
+.lsm-page .dc-message:hover .dc-toolbar,
+.lsm-page .dc-message:focus-within .dc-toolbar { opacity: 1; pointer-events: auto; }
+.lsm-page .dc-toolbtn {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    border: 0; border-radius: 6px;
+    background: transparent;
+    color: var(--dc-muted);
+    font-size: 15px; line-height: 1;
     cursor: pointer;
     text-decoration: none;
-    font-size: 14px;
-    line-height: 1;
 }
-.lsm-page .rule-iconbtn:hover {
-    color: var(--text-main);
-    border-color: var(--border-glow);
-    background: var(--bg-card-hover);
-}
-.lsm-page .rule-iconbtn.danger { color: var(--red-main); border-color: color-mix(in srgb, var(--red-main) 32%, transparent); }
-.lsm-page .rule-iconbtn.danger:hover { background: color-mix(in srgb, var(--red-main) 14%, transparent); border-color: var(--red-main); }
+.lsm-page .dc-toolbtn:hover { background: rgba(255, 255, 255, .06); color: var(--dc-strong); }
+.lsm-page .dc-toolbtn.danger:hover { color: var(--dc-danger); }
+.lsm-page .dc-toolform { display: inline-flex; }
 
-@media (max-width: 900px) {
-    .lsm-page .rule-card { grid-template-columns: 44px 1fr; }
-    .lsm-page .rule-meta {
-        grid-column: 1 / -1;
-        flex-direction: row;
-        align-items: center;
-        flex-wrap: wrap;
-        justify-content: flex-start;
-        gap: 10px;
-        text-align: left;
-        white-space: normal;
-    }
-    .lsm-page .rule-content ul.cols { columns: 1; }
+/* ----- Rendered Discord markdown (Utils/DiscordMarkdown.cs) ----- */
+.lsm-page .dc-md {
+    color: var(--dc-text);
+    font-size: 16px;
+    line-height: 1.375;
+    overflow-wrap: break-word;
+}
+.lsm-page .dc-md > * { margin: 0; }
+.lsm-page .dc-md > * + * { margin-top: 8px; }
+.lsm-page .dc-md .dc-h1,
+.lsm-page .dc-md .dc-h2,
+.lsm-page .dc-md .dc-h3 { color: var(--dc-strong); font-weight: 700; line-height: 1.25; }
+.lsm-page .dc-md .dc-h1 { font-size: 24px; }
+.lsm-page .dc-md .dc-h2 { font-size: 20px; }
+.lsm-page .dc-md .dc-h3 { font-size: 16px; font-weight: 600; }
+.lsm-page .dc-md > .dc-h1 + *,
+.lsm-page .dc-md > .dc-h2 + *,
+.lsm-page .dc-md > .dc-h3 + * { margin-top: 4px; }
+.lsm-page .dc-md > * + .dc-h1,
+.lsm-page .dc-md > * + .dc-h2,
+.lsm-page .dc-md > * + .dc-h3 { margin-top: 16px; }
+.lsm-page .dc-md .dc-subtext { color: var(--dc-muted); font-size: 13px; line-height: 1.3; }
+.lsm-page .dc-md .dc-list { padding-left: 22px; list-style: disc; }
+.lsm-page .dc-md ol.dc-list { list-style: decimal; }
+.lsm-page .dc-md .dc-list li { margin-top: 4px; }
+.lsm-page .dc-md .dc-list li:first-child { margin-top: 0; }
+.lsm-page .dc-md .dc-list .dc-list { margin-top: 4px; list-style: circle; }
+.lsm-page .dc-md .dc-quote {
+    border-left: 4px solid var(--dc-quote-bar);
+    border-radius: 4px;
+    padding: 0 8px 0 12px;
+    color: var(--dc-text);
+}
+.lsm-page .dc-md .dc-code {
+    padding: .2em .3em;
+    border-radius: 4px;
+    background: var(--dc-bg-2);
+    border: 1px solid var(--dc-bg-3);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 85%;
+}
+.lsm-page .dc-md .dc-codeblock {
+    padding: 8px 10px;
+    border-radius: 4px;
+    background: var(--dc-bg-2);
+    border: 1px solid var(--dc-bg-3);
+    color: var(--dc-text);
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 14px;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    overflow-x: auto;
+}
+.lsm-page .dc-md .dc-codeblock code { font: inherit; }
+.lsm-page .dc-md .dc-link { color: var(--dc-link); text-decoration: none; }
+.lsm-page .dc-md .dc-link:hover { text-decoration: underline; }
+.lsm-page .dc-md .dc-mention {
+    padding: 0 2px;
+    border-radius: 3px;
+    background: var(--dc-mention-bg);
+    color: var(--dc-mention-fg);
+    font-weight: 500;
+}
+.lsm-page .dc-md .dc-timestamp {
+    padding: 0 2px;
+    border-radius: 3px;
+    background: var(--dc-chip);
+}
+.lsm-page .dc-md .dc-emoji {
+    width: 1.375em; height: 1.375em;
+    vertical-align: bottom;
+    object-fit: contain;
+}
+/* Click (which focuses it) reveals, exactly like Discord's spoiler blocks. */
+.lsm-page .dc-md .dc-spoiler {
+    border-radius: 4px;
+    background: var(--dc-bg-3);
+    color: transparent;
+    cursor: pointer;
+}
+.lsm-page .dc-md .dc-spoiler > * { visibility: hidden; }
+.lsm-page .dc-md .dc-spoiler:focus,
+.lsm-page .dc-md .dc-spoiler:active {
+    background: var(--dc-chip);
+    color: var(--dc-text);
+    outline: none;
+}
+.lsm-page .dc-md .dc-spoiler:focus > *,
+.lsm-page .dc-md .dc-spoiler:active > * { visibility: visible; }
+
+/* Empty channel state. */
+.lsm-page .dc-empty { padding: 28px 16px; text-align: center; color: var(--dc-muted); font-size: 14px; }
+.lsm-page .dc-empty strong { display: block; color: var(--dc-strong); font-size: 16px; margin-bottom: 4px; }
+
+/* ----- Compact preview rows (dashboard Rules / Announcements cards) ----- */
+.lsm-page .dc-mini {
+    --dc-strong: #f2f3f5;
+    --dc-text: #dbdee1;
+    --dc-muted: #949ba4;
+    --dc-hover: #2e3035;
+    font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    padding: 6px 0;
+}
+.lsm-page .dc-mini-row {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 10px;
+    padding: 6px 16px;
+    text-decoration: none;
+}
+.lsm-page a.dc-mini-row:hover { background: var(--dc-hover); }
+.lsm-page .dc-mini-avatar {
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    font-size: 14px;
+    background: color-mix(in srgb, var(--acc) 22%, rgba(0, 0, 0, .25));
+    color: var(--acc);
+}
+.lsm-page .dc-mini-body { min-width: 0; }
+.lsm-page .dc-mini-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.lsm-page .dc-mini-author { color: var(--acc); font-size: 14px; font-weight: 500; }
+.lsm-page .dc-mini-time { color: var(--dc-muted); font-size: 11px; }
+.lsm-page .dc-mini-title { color: var(--dc-strong); font-size: 14px; font-weight: 600; }
+.lsm-page .dc-mini-text {
+    color: var(--dc-text);
+    font-size: 13px;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+@media (max-width: 700px) {
+    .lsm-page .dc-message { grid-template-columns: 32px 1fr; gap: 10px; padding: 8px 12px; }
+    .lsm-page .dc-avatar { width: 32px; height: 32px; font-size: 16px; }
+    .lsm-page .dc-toolbar { right: 8px; }
+    .lsm-page .dc-channel-rule, .lsm-page .dc-channel-topic { display: none; }
 }
 
 /* ---------- Treasury: sharing one amount between several members ----------
@@ -503,15 +672,34 @@
 }
 
 /* ---------- Treasury: the balance sheet ----------
-   What we have on the left, what we owe on the right, and what that leaves underneath both. The two
-   sides carry a subtotal each so the bottom line visibly comes from subtracting one from the other.
-   Mirrors .fin-sheet in the Discord Activity. */
-.lsm-page .lsm-sheet {
-    padding: 14px 16px 10px;
+   The card IS the sheet: this block re-dresses .card rather than nesting a second panel inside one,
+   so there is a single border and a single background. What we have on the left, what we owe on the
+   right, the period's flow across the top, and what all of that leaves underneath both. Each side
+   totals itself, so the bottom line visibly comes from subtracting one from the other.
+   Mirrors .fin-sheet in the Discord Activity.
+
+   --bal-* is the only place this block names a colour, and every value is mixed from a page token.
+   A sheet leans on gold edges, coloured glows and half-lit inks that the flat tokens do not carry;
+   deriving them once here keeps the whole card following the theme from a single line each. */
+.lsm-page .balance-sheet {
+    --bal-edge: color-mix(in srgb, var(--gold-main) 34%, transparent);
+    --bal-rule: color-mix(in srgb, var(--gold-main) 22%, transparent);
+    --bal-heading: color-mix(in srgb, var(--blue-main) 40%, var(--text-main));
+    --bal-figure: color-mix(in srgb, var(--blue-main) 55%, var(--text-main));
+    --bal-well: color-mix(in srgb, var(--bg-main) 55%, transparent);
+
+    padding: 24px;
+    border-color: var(--bal-edge);
+    background:
+        radial-gradient(760px 420px at 6% -10%, color-mix(in srgb, var(--blue-main) 12%, transparent), transparent 62%),
+        linear-gradient(180deg, var(--bg-panel), var(--bg-main));
 }
 
-/* The working, behind a disclosure. The summary is the whole two-row header — the title strip AND
-   the flow chips — so everything a collapsed card shows is also its hit target. */
+/* Figures line up column-wise wherever two of them sit above one another. */
+.lsm-page .balance-sheet .num { font-variant-numeric: tabular-nums; }
+
+/* The working, behind a disclosure. The summary is the whole header — the title strip, the status
+   chips AND the flow cards — so everything a collapsed card shows is also its hit target. */
 .lsm-page .lsm-balance__summary {
     display: block;
     cursor: pointer;
@@ -522,24 +710,66 @@
 
 .lsm-page .lsm-balance__summary::-webkit-details-marker { display: none; }
 
-/* What moved, in and out. The card's headline, so it reads at the top in both states. The rule under
-   it only appears once there is something below it to divide from. */
-.lsm-page .lsm-flow {
+.lsm-page .balance-header {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
     flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 6px;
-    padding: 12px 18px;
+    gap: 20px;
+    padding-bottom: 20px;
 }
 
-.lsm-page .lsm-balance[open] .lsm-flow { border-bottom: 1px solid var(--border-soft); }
+/* The rule under the header only appears once there is something below it to divide from. */
+.lsm-page .lsm-balance[open] .balance-header { border-bottom: 1px solid var(--bal-rule); }
 
-/* flex:1 rather than absolute centring: the chevron takes the whole gap between the title and the
-   chips and centres inside it, so it can never overlap either of them. */
-.lsm-page .lsm-balance__chev {
-    flex: 1;
+.lsm-page .balance-title {
     display: flex;
-    justify-content: center;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.lsm-page .balance-title h2 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-main);
+}
+
+.lsm-page .balance-status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.lsm-page .gil-emblem {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 2px solid var(--gold-main);
+    background: radial-gradient(circle,
+        color-mix(in srgb, var(--gold-main) 55%, var(--bg-main)),
+        color-mix(in srgb, var(--gold-main) 12%, var(--bg-main)));
+    box-shadow:
+        0 0 16px color-mix(in srgb, var(--gold-main) 34%, transparent),
+        inset 0 0 12px color-mix(in srgb, var(--gold-main) 22%, transparent);
+    color: color-mix(in srgb, var(--gold-main) 45%, var(--text-main));
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 23px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.lsm-page .lsm-balance__chev {
+    display: flex;
+    align-items: center;
     color: var(--text-muted);
 }
 
@@ -552,81 +782,541 @@
 .lsm-page .lsm-balance[open] .lsm-balance__chev svg { transform: rotate(180deg); }
 .lsm-page .lsm-balance__summary:hover .lsm-balance__chev { color: var(--text-main); }
 
-/* auto-fit so a narrow window folds it back to one column instead of squeezing two columns of
-   numbers together. */
-.lsm-page .lsm-sheet__cols {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 4px 32px;
-    padding: 14px 16px 10px;
+/* ---------- Treasury: what moved, in and out ----------
+   Three cards rather than three chips: these are the figures a collapsed card exists to show, and a
+   chip-sized number reads as a label. Each wears the colour of its direction. */
+.lsm-page .summary-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
-.lsm-page .lsm-sheet__col { min-width: 0; }
+.lsm-page .summary-card {
+    flex: 1 1 150px;
+    min-width: 140px;
+    padding: 10px 16px;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    background: var(--bal-well);
+}
 
-/* The answer, outside the disclosure, so a collapsed card still shows it. */
-.lsm-page .lsm-sheet--answer { padding-top: 0; }
-
-.lsm-page .lsm-sheet__section {
-    margin-top: 14px;
+.lsm-page .summary-label {
+    display: block;
     margin-bottom: 4px;
     font-size: 11px;
     font-weight: 700;
+    letter-spacing: .1em;
     text-transform: uppercase;
-    letter-spacing: .06em;
-    color: var(--text-muted);
 }
 
-.lsm-page .lsm-sheet__section:first-child { margin-top: 0; }
+.lsm-page .summary-card strong {
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+}
 
-.lsm-page .lsm-sheet__row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
+.lsm-page .summary-card.income {
+    border-color: color-mix(in srgb, var(--green-main) 38%, transparent);
+    box-shadow: inset 0 0 18px color-mix(in srgb, var(--green-main) 8%, transparent);
+}
+
+.lsm-page .summary-card.income .summary-label,
+.lsm-page .summary-card.income strong { color: var(--green-main); }
+
+.lsm-page .summary-card.expense {
+    border-color: color-mix(in srgb, var(--orange-main) 38%, transparent);
+    box-shadow: inset 0 0 18px color-mix(in srgb, var(--orange-main) 8%, transparent);
+}
+
+.lsm-page .summary-card.expense .summary-label,
+.lsm-page .summary-card.expense strong { color: var(--orange-main); }
+
+.lsm-page .summary-card.change {
+    border-color: color-mix(in srgb, var(--blue-main) 38%, transparent);
+    box-shadow: inset 0 0 18px color-mix(in srgb, var(--blue-main) 8%, transparent);
+}
+
+.lsm-page .summary-card.change .summary-label,
+.lsm-page .summary-card.change strong { color: var(--bal-figure); }
+
+/* ---------- Treasury: the two sides ----------
+   auto-fit so a narrow window folds them back to one column instead of squeezing two columns of
+   numbers together. */
+.lsm-page .balance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 16px;
-    padding: 3px 0;
-    font-size: 13px;
-    color: var(--text-muted);
+    margin-top: 20px;
 }
 
-.lsm-page .lsm-sheet__row .num { color: var(--text-main); }
-
-/* Section subtotal: a rule above it, the way it would be written on paper. */
-.lsm-page .lsm-sheet__row--total {
-    margin-top: 4px;
-    padding-top: 6px;
-    border-top: 1px solid var(--border-soft);
+.lsm-page .balance-panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    background: linear-gradient(180deg, var(--bg-panel-light), var(--bg-panel));
+    box-shadow: 0 8px 25px rgba(0, 0, 0, .18);
 }
 
-/* The bottom line, marked off so it reads as the answer rather than one more row. */
-.lsm-page .lsm-sheet__row--worth {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 2px solid var(--border-soft);
+.lsm-page .panel-heading {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.lsm-page .panel-heading h3 {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--bal-heading);
+}
+
+.lsm-page .panel-icon { font-size: 17px; line-height: 1; color: var(--text-muted); }
+
+/* ---------- Treasury: the gil-on-hand medallion ----------
+   Only the bottom line wears one now. The two panels above it are lists of NAMES — money-row and
+   its shield variant went with the boxed lines that used to sit there, because a panel whose every
+   row is a person does not need a per-row icon to say so. */
+.lsm-page .row-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.lsm-page .row-icon.gold {
+    border: 1px solid color-mix(in srgb, var(--gold-main) 60%, transparent);
+    background: radial-gradient(circle, color-mix(in srgb, var(--gold-main) 30%, var(--bg-main)), var(--bg-main));
+    color: color-mix(in srgb, var(--gold-main) 55%, var(--text-main));
+}
+
+.lsm-page .owe-summary strong {
+    font-size: 17px;
+    font-weight: 700;
     color: var(--text-main);
 }
 
-.lsm-page .lsm-sheet__row--worth .num { font-size: 22px; font-weight: 700; }
+/* The panel's figure, with the names it is made of underneath. Its own rule rather than a boxed
+   line: the table below belongs to it, so it reads as that table's caption. Both panels use it —
+   "Owed to us" on one side, "Owed to members" on the other. */
+.lsm-page .owe-summary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 16px 4px 12px;
+    font-size: 13.5px;
+    color: var(--text-main);
+}
 
-/* Who the "owed to members" figure is owed to. Collapsed, because the total is what most people
-   came for and the names only matter when someone is about to settle up. */
-.lsm-page .lsm-sheet__who { margin: 2px 0 0 12px; }
+/* Section total: a rule above it and the sheet's own colour, the way it would be written on paper.
+   margin-top:auto pins it to the foot of the panel, so both sides' totals sit on one line however
+   many members the right-hand side is listing. */
+.lsm-page .panel-total {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-soft);
+    color: var(--bal-figure);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+}
 
-.lsm-page .lsm-sheet__who > summary {
-    font-size: 11px;
+.lsm-page .panel-total > span {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 12px;
+}
+
+.lsm-page .panel-total strong { font-size: 20px; font-weight: 700; letter-spacing: .02em; }
+
+/* ---------- Treasury: the bottom line ---------- */
+.lsm-page .net-worth-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 16px;
+    padding: 16px 22px;
+    border: 1px solid var(--bal-edge);
+    border-radius: 12px;
+    background: linear-gradient(90deg, var(--bg-panel-light), var(--bg-panel));
+    box-shadow: inset 0 0 30px color-mix(in srgb, var(--blue-main) 7%, transparent);
+}
+
+.lsm-page .net-worth-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    min-width: 0;
+}
+
+.lsm-page .net-worth-info h3 {
+    margin: 0 0 4px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--bal-heading);
+}
+
+.lsm-page .net-worth-info p { margin: 0; font-size: 12px; color: var(--text-muted); }
+
+.lsm-page .net-worth-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 1px solid var(--border-soft);
+    background: radial-gradient(circle, color-mix(in srgb, var(--blue-main) 22%, var(--bg-main)), var(--bg-main));
+    color: var(--text-main);
+    font-size: 21px;
+    line-height: 1;
+}
+
+/* ---------- Treasury: the two figures on the bottom line ----------
+   Gil on hand and net worth, styled as one thing because they ARE one thing: the two figures the
+   bottom line is made of, read together. The answer used to be a wide glowing slab three times the
+   size of everything else, which made the sheet above it look like preamble; matching them makes the
+   band read as a row of figures. Only the medallion tells them apart. */
+.lsm-page .net-worth-cash,
+.lsm-page .net-worth-value {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-width: 0;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: var(--bal-well);
+}
+
+.lsm-page .net-worth-cash { border: 1px solid color-mix(in srgb, var(--gold-main) 30%, transparent); }
+.lsm-page .net-worth-value { border: 1px solid color-mix(in srgb, var(--blue-main) 34%, transparent); }
+
+.lsm-page .net-worth-cash__label,
+.lsm-page .net-worth-value__label {
+    font-size: 12.5px;
     color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.lsm-page .net-worth-cash strong,
+.lsm-page .net-worth-value strong {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+/* The heading takes the slack, so the two figures sit together at the end of the row rather than
+   being scattered across it by the panel's space-between. */
+.lsm-page .net-worth-info { margin-right: auto; }
+
+/* ---------- Treasury: who's holding the gil ----------
+   Gil on hand is the only figure on the sheet that opens, so it is the only one that is a control —
+   and it still has to read as the twin of the net-worth chip beside it, because the two are the
+   figures the bottom line is made of. A <details>, so the page works with no script at all.
+
+   The <details> is the flex child; the <summary> inside it is the chip. Without this the chip would
+   be wrapped in a block that stretched across the band and broke the pairing. */
+.lsm-page .net-worth-holders {
+    min-width: 0;
+    /* Wide enough for the list once open, chip-sized while closed — the panel is names against
+       figures and has to line up in a column. */
+    flex: 0 1 auto;
+}
+
+.lsm-page .net-worth-holders[open] { flex-basis: 100%; }
+
+.lsm-page .net-worth-cash--open {
+    /* The marker is replaced by the chevron span, which can be positioned at the end of the row. */
+    list-style: none;
     cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
 }
 
-.lsm-page .lsm-sheet__members {
-    margin-top: 4px;
-    padding: 6px 10px;
-    border-radius: 6px;
-    background: var(--bg-panel);
+.lsm-page .net-worth-cash--open::-webkit-details-marker { display: none; }
+
+.lsm-page .net-worth-cash--open:hover,
+.lsm-page .net-worth-cash--open:focus-visible {
+    border-color: color-mix(in srgb, var(--gold-main) 55%, transparent);
+    background: color-mix(in srgb, var(--gold-main) 8%, var(--bal-well));
 }
 
-.lsm-page .lsm-sheet__members .lsm-sheet__row { font-size: 12px; }
+.lsm-page .net-worth-chev {
+    font-size: 11px;
+    line-height: 1;
+    color: var(--gold-main);
+    transition: transform .15s ease;
+}
+
+.lsm-page .net-worth-holders[open] .net-worth-chev { transform: rotate(180deg); }
+
+/* The hint under the chips. It is what makes the figure look clickable at all — a number that is
+   also a control looks exactly like a number that is not, and nobody clicks a balance sheet on spec.
+   Hidden once the list is open: it would be pointing at the thing already on screen. */
+.lsm-page .net-worth-hint {
+    flex-basis: 100%;
+    margin: -10px 0 0;
+    text-align: right;
+    font-size: 11.5px;
+    color: var(--text-muted);
+}
+
+.lsm-page .net-worth-panel:has(.net-worth-holders[open]) .net-worth-hint { display: none; }
+
+.lsm-page .holders-panel {
+    margin-top: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--bal-edge);
+    border-radius: 10px;
+    background: var(--bal-well);
+}
+
+.lsm-page .holders-panel__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 12.5px;
+    color: var(--text-muted);
+}
+
+/* The total repeated at the top of the list, because the whole claim of this panel is that the rows
+   add up to it — and the figure they add up to has just been scrolled past. */
+.lsm-page .holders-panel__total { font-size: 15px; font-weight: 700; color: var(--text-main); }
+
+.lsm-page .holders-panel__note { margin: 12px 0 0; font-size: 11.5px; color: var(--text-muted); }
+
+.lsm-page .holders-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+
+/* Name, bar, figure. The bar is a middle column that eats the slack rather than a background fill,
+   so names stay left-aligned and figures stay right-aligned however long a name runs. */
+.lsm-page .holders-row {
+    display: grid;
+    grid-template-columns: minmax(90px, max-content) 1fr minmax(0, max-content);
+    align-items: center;
+    gap: 12px;
+    font-size: 13.5px;
+}
+
+.lsm-page .holders-row__name {
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Gil nobody was asked about. Muted and italic: it IS recorded, it just has nobody attached, and it
+   must not read as a member actually called "Nobody named". */
+.lsm-page .holders-row.is-unnamed .holders-row__name {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.lsm-page .holders-row__bar {
+    height: 6px;
+    min-width: 28px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--text-muted) 22%, transparent);
+    overflow: hidden;
+}
+
+.lsm-page .holders-row__fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--gold-main) 55%, transparent), var(--gold-main));
+}
+
+.lsm-page .holders-row.is-unnamed .holders-row__fill {
+    background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+
+.lsm-page .holders-row__amount { font-weight: 600; color: var(--text-main); }
+
+/* The mule box on the two settle panels. It shares a row with the hint and the Record button, so it
+   is sized to a name and no wider — full width there would push the action off the end. */
+.lsm-page .lsm-settle__holder {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.lsm-page .lsm-settle__holder input {
+    width: 160px;
+    max-width: 40vw;
+}
+
+/* The blue twin of .row-icon.gold. The crystal keeps a glow the gil coin does not, because it is
+   the answer — but at medallion size now, not as a 30px character. */
+.lsm-page .row-icon.crystal {
+    border: 1px solid color-mix(in srgb, var(--blue-main) 45%, transparent);
+    background: radial-gradient(circle, color-mix(in srgb, var(--blue-main) 26%, var(--bg-main)), var(--bg-main));
+    color: var(--cyan-main);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--cyan-main) 60%, transparent);
+}
+
+/* One column at the width where two columns of figures start colliding, and a stacked header so the
+   flow cards keep a line of their own rather than being squeezed against the title. */
+@media (max-width: 900px) {
+    .lsm-page .balance-header { flex-direction: column; align-items: stretch; }
+    .lsm-page .summary-cards { width: 100%; }
+    .lsm-page .net-worth-panel { flex-direction: column; align-items: stretch; }
+    /* Stacked, each label and figure wants the full width between them rather than sitting shoulder
+       to shoulder in the middle of an empty row. */
+    .lsm-page .net-worth-cash,
+    .lsm-page .net-worth-value { justify-content: space-between; }
+    .lsm-page .net-worth-cash__label,
+    .lsm-page .net-worth-value__label { flex: 1 1 auto; }
+}
+
+@media (max-width: 620px) {
+    .lsm-page .balance-sheet { padding: 16px; }
+    .lsm-page .summary-cards { flex-direction: column; }
+}
+
+/* ---------- Treasury: the "what happened" action row ----------
+   Layout only — the buttons are the ordinary `.btn sm primary/ghost` pair the filter chips already
+   use, so there is no second button style to keep in step. Hidden until script un-hides it: with no
+   script the grouped select below is the whole picker. */
+.lsm-page .lsm-actionrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.lsm-page .lsm-actionrow[hidden] { display: none; }
+
+/* Divides the three everyday actions from the two that are neither frequent nor about gil moving. */
+.lsm-page .lsm-actionrow__sep {
+    width: 1px;
+    align-self: stretch;
+    min-height: 20px;
+    margin: 0 4px;
+    background: var(--border-soft);
+}
+
+/* ---------- Treasury: who we owe, and paying them off ----------
+   The same names read as a two-column table, with a tick in front of each for an officer who can
+   settle. Mirrors .fin-settle in the Discord Activity. Ticking only selects — the gil moves when the
+   button below is pressed — so the rows stay legible as a report for the officer who only came to
+   read them. */
+.lsm-page .member-table {
+    overflow: hidden;
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    background: var(--bal-well);
+}
+
+.lsm-page .member-table-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 8px 13px;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.lsm-page .member-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 0;
+    padding: 11px 13px;
+    background: var(--bg-card);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-main);
+}
+
+.lsm-page .member-row + .member-row { border-top: 1px solid var(--border-soft); }
+
+.lsm-page label.member-row { cursor: pointer; transition: background .15s ease; }
+.lsm-page label.member-row:hover { background: var(--bg-card-hover); }
+
+/* A row with nothing to pay: no tick, so it must not offer a pointer or a hover either. The padding
+   keeps its name in line with the ticked ones above and below it — and is scoped to the form,
+   because in the read-only table NO row has a tick and every name would be indented past nothing. */
+.lsm-page .lsm-settle .member-row.is-fixed .member-info { padding-left: 27px; }
+
+.lsm-page .member-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.lsm-page .member-row strong { font-weight: 700; }
+
+.lsm-page .lsm-settle__tick {
+    flex: 0 0 auto;
+    width: 17px;
+    height: 17px;
+    margin: 0;
+    accent-color: var(--blue-main);
+}
+
+.lsm-page .lsm-settle__name { min-width: 0; }
+
+.lsm-page .payment-area {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+/* Takes the slack, so the mule box and the Record button group together at the end of the row
+   rather than being scattered across it by the area's space-between. */
+.lsm-page .lsm-settle__hint { margin-right: auto; font-size: 11px; color: var(--text-muted); }
+
+/* Ticking past what the linkshell holds. Said, never blocked — see TreasuryLabels.SettleShortfall. */
+.lsm-page .lsm-settle__hint.is-short { color: var(--orange-main); }
+
+/* The ordinary primary button, dressed for the panel rather than restyled: a second blue button in
+   the same card is one more thing to keep in step with the theme. */
+.lsm-page .payment-button {
+    flex: 0 0 auto;
+    font-family: Georgia, "Times New Roman", serif;
+    letter-spacing: .04em;
+}
+
+.lsm-page .payment-button__mark { color: color-mix(in srgb, var(--cyan-main) 70%, var(--text-main)); }
+
+@media (max-width: 620px) {
+    .lsm-page .payment-area { flex-direction: column; align-items: stretch; }
+    .lsm-page .payment-button { width: 100%; }
+}
 
 /* Who a line belongs to, inside the bookkeeping-details panel. A split writes one line per member
    on the same category, so the name is the only thing telling those rows apart. */
@@ -1227,3 +1917,67 @@
     border-top: 1px solid var(--border-soft);
 }
 .lsm-page .chart-subnav { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---- Charts: drop items, item requests, key items -------------------------------
+   Twins of the .chart-wishlist / .chart-keyitems blocks in the Activity's
+   src/styles/_chart-board.scss. Tokens only - nothing here carries a literal colour. */
+
+/* Only DROP rows wear a pill. Pop is the default and the common case, so the badge marks
+   the exception rather than labelling every row on Sky. */
+.lsm-page .chart-holdings__kind {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--gold-main);
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+}
+
+.lsm-page .chart-card__keyitem { color: var(--gold-main); }
+.lsm-page .chart-card__requests { padding: 0 12px 8px; }
+
+/* Several one-button forms sit side by side in a row's action cell; each posts on its own,
+   so they need to lay out as buttons rather than as blocks. */
+.lsm-page .chart-inline-form { display: inline-block; margin: 0; }
+
+.lsm-page .chart-wishlist__item { display: inline-flex; align-items: baseline; gap: 8px; }
+.lsm-page .chart-wishlist__actions { white-space: nowrap; }
+.lsm-page .chart-wishlist__actions > * + * { margin-left: 6px; }
+/* Settled requests stay listed - the queue is history as well as a to-do - but recede. */
+.lsm-page .chart-wishlist tr.is-settled { opacity: .6; }
+
+.lsm-page .chart-keyitems__head { vertical-align: bottom; }
+.lsm-page .chart-keyitems__name { display: block; font-weight: 500; color: var(--text-main); }
+.lsm-page .chart-keyitems__count {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-muted);
+}
+.lsm-page .chart-keyitems__cell.is-has { color: var(--green-main); }
+.lsm-page .chart-keyitems__cell.is-needs { color: var(--text-muted); }
+/* A bare glyph button: the cell IS the control, so it carries no chrome of its own until
+   hovered. Not .btn - those are sized for a form's action row, not for a grid cell. */
+.lsm-page .chart-keyitems__toggle {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+.lsm-page .chart-keyitems__toggle:hover {
+    border-color: var(--border);
+    background: var(--bg-card);
+}
+.lsm-page .chart-keyitems__static { opacity: .75; }
+/* The viewer's own row, so the one line they can edit is findable in a roster of forty. */
+.lsm-page .chart-keyitems tr.is-you { background: var(--bg-card-hover); }

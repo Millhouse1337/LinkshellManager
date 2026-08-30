@@ -24,7 +24,7 @@ The top strip shows the active linkshell name and member count, a clock, a refre
 
 - **Dashboard** — Linkshell overview stat strip (members · items · revenue · upcoming events · upcoming auctions · upcoming ToDs) · Rules · Announcements · searchable Roster · **News & Updates** (newsy feed: announcements, rules, new auctions, new members, big DKP changes) · **Upcoming Events** · **ToD Tracker** (countdowns + loot history) · **HNM Claims** donut (7d / 30d / All) · **Recent Activity** (operational feed — filter All / Kills / Claims / Events / Loot). Officers can post rules and announcements inline.
 
-- **Event System** — Upcoming events you can sign up for, plus in-progress events with attendance and break tracking. **Current Field Activity** also lists open **attendance events** — the window/snapshot rosters captured in-game and the review rows an ended HNM camp hands off; review each snapshot's roster, set DKP, and post it (officers), and posted ones can still be edited. Unlinked snapshots and closed attendance events sit below the queue. *(Attendance sections are hidden when Linkshell type = Sky/Sea/Dynamis, which never posts snapshots.)*
+- **Event System** — Upcoming events you can sign up for, plus in-progress events with attendance and break tracking. **Current Field Activity** also lists open **attendance events** — the window/snapshot rosters captured in-game and the review rows an ended HNM camp hands off; review each snapshot's roster, set DKP, and post it (officers), and posted ones can still be edited. Unlinked snapshots and closed attendance events sit below the queue.
 
 - **ToDs** — Add a ToD manually (mob, time, day, cooldown) from the full monster list. Grouped history per monster — expand for loot per kill. When a monster has an assigned **Party Setup**, an inline sign-up panel lets you claim a slot right there.
 
@@ -50,7 +50,7 @@ The top strip shows the active linkshell name and member count, a clock, a refre
 ## Configurations tab *(officer/leader)*
 - **Switch Linkshells** — change which linkshell is active (when you belong to more than one).
 - **Create a New Linkshell** — start one and invite members.
-- **Customize Linkshell** — Loot structure and Linkshell type (side by side, with Save), DKP rounding increment, Feature toggles, and **Hide ToD Mobs** (grouped, collapsible).
+- **Customize Linkshell** — Loot structure, DKP rounding increment, Feature toggles, and **Hide ToD Mobs** (grouped, collapsible).
 - **Permissions** — the role/permission matrix; create, edit, and delete roles.
 - **Game Addon (lsm)** — generate one-time pairing codes for the in-game addon.
 

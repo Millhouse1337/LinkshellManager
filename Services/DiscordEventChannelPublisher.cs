@@ -91,6 +91,48 @@ public sealed class DiscordEventChannelPublisher
                 ? null
                 : await EventPartySignupService.GetSignupsForEventAsync(_db, ev.Id, cancellationToken);
 
+            // A wide board is a SET of messages, one per alliance, so its whole lifecycle goes
+            // through SendWideAsync — which edits each in place, posts any the setup gained, and
+            // deletes any it lost. Posting and editing are the same call here because matching
+            // messages to alliances by position makes "post" just "edit nothing that exists yet".
+            var wide = useV2 && ev.PartySetup is not null && slotSignups is not null;
+            if (wide)
+            {
+                var channel = ev.DiscordChannelId;
+                if (string.IsNullOrEmpty(channel))
+                {
+                    channel = await _routes.ResolveEventChannelIdAsync(
+                        ev.LinkshellId, ev.EventType, ev.AssignedMonsterName, cancellationToken);
+                    if (string.IsNullOrEmpty(channel))
+                    {
+                        LogNoRoute(eventId, ev);
+                        return;
+                    }
+                }
+
+                var posted = await _poster.SendWideAsync(
+                    channel!, ev, signups, slotSignups!, BoardMessageIds(ev), cancellationToken);
+                if (posted is null || posted.Count == 0)
+                {
+                    _logger.LogWarning(
+                        "Event {EventId} board: the bot failed to post to channel {ChannelId} (linkshell {LinkshellId}). " +
+                        "Check the bot is a member of the server and has the \"Send Messages\" permission there.",
+                        eventId, channel, ev.LinkshellId);
+                    return;
+                }
+
+                ev.DiscordChannelId = channel;
+                ev.DiscordMessageId = posted[0];
+                ev.DiscordExtraMessageIds = posted.Count > 1
+                    ? string.Join(',', posted.Skip(1))
+                    : null;
+                await _db.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation(
+                    "Event {EventId} board is {Count} message(s) in channel {ChannelId}.",
+                    eventId, posted.Count, channel);
+                return;
+            }
+
             // Already announced → edit the posted message in place so detail edits
             // (name, time, DKP/hour, location, party setup) AND signup changes show,
             // without waiting for a signup interaction to refresh it.
@@ -110,11 +152,7 @@ public sealed class DiscordEventChannelPublisher
             var channelId = await _routes.ResolveEventChannelIdAsync(ev.LinkshellId, ev.EventType, ev.AssignedMonsterName, cancellationToken);
             if (string.IsNullOrEmpty(channelId))
             {
-                _logger.LogInformation(
-                    "Event {EventId} not announced: linkshell {LinkshellId} has no Discord channel route that posts " +
-                    "events for type \"{EventType}\" (and no unfiltered event route). Set one under " +
-                    "Linkshell → Configurations → Discord channel routes.",
-                    eventId, ev.LinkshellId, ev.EventType ?? "(none)");
+                LogNoRoute(eventId, ev);
                 return;
             }
 
@@ -145,17 +183,44 @@ public sealed class DiscordEventChannelPublisher
         }
     }
 
+    // Every message this board occupies, in display order: the first id plus the continuation
+    // ids a wide (one-message-per-alliance) board carries.
+    private static IReadOnlyList<string> BoardMessageIds(Event ev)
+    {
+        var ids = new List<string>();
+        if (!string.IsNullOrWhiteSpace(ev.DiscordMessageId)) { ids.Add(ev.DiscordMessageId!); }
+        if (!string.IsNullOrWhiteSpace(ev.DiscordExtraMessageIds))
+        {
+            ids.AddRange(ev.DiscordExtraMessageIds!
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+        return ids;
+    }
+
+    private void LogNoRoute(int eventId, Event ev)
+        => _logger.LogInformation(
+            "Event {EventId} not announced: linkshell {LinkshellId} has no Discord channel route that posts " +
+            "events for type \"{EventType}\" (and no unfiltered event route). Set one under " +
+            "Linkshell → Configurations → Discord channel routes.",
+            eventId, ev.LinkshellId, ev.EventType ?? "(none)");
+
     private async Task<List<EventSignupLine>> LoadSignupsAsync(int eventId, CancellationToken cancellationToken)
     {
         var rows = await _db.AppUserEvents
             .AsNoTracking()
             .Where(signup => signup.EventId == eventId)
             .OrderBy(signup => signup.CharacterName)
-            .Select(signup => new { signup.CharacterName, signup.JobName, signup.SubJobName, signup.JobType, signup.WdArrivalWindow })
+            .Select(signup => new
+            {
+                signup.CharacterName, signup.JobName, signup.SubJobName, signup.JobType, signup.WdArrivalWindow,
+                signup.EnfeebReady, signup.ResistReady, signup.RelicWeapon,
+            })
             .ToListAsync(cancellationToken);
 
         return rows
-            .Select(row => new EventSignupLine(row.CharacterName ?? "Unknown", row.JobName, row.SubJobName, row.JobType, row.WdArrivalWindow))
+            .Select(row => new EventSignupLine(
+                row.CharacterName ?? "Unknown", row.JobName, row.SubJobName, row.JobType, row.WdArrivalWindow,
+                row.EnfeebReady, row.ResistReady, row.RelicWeapon))
             .ToList();
     }
 }

@@ -7,54 +7,71 @@
     </div>
     @if (canManage()) {
       <div class="fin-head-actions">
-        <button type="button" class="btn ghost sm" (click)="toggleCheckGil()">Gil on Hand</button>
         <button type="button" class="btn primary sm" (click)="toggleForm()">
           {{ showForm() ? 'Cancel' : 'Record Transaction' }}
         </button>
       </div>
     }
   </div>
-
   <!-- The one gil card: what moved over the period, and — behind a disclosure — the sheet that
        explains where that leaves the linkshell. A balance and a movement are different kinds of
-       number, so they are still separated; they are separated by a fold now rather than by a card. -->
-  <div class="card">
+       number, so they sit in different bands of the card rather than in one column where the first
+       invites being read as the second.
+
+       The card IS the sheet: .fin-balance-card re-dresses .card rather than nesting a second panel
+       inside it, so there is one border and one background, not two. Twin of .balance-sheet on the
+       web (wwwroot/css/lsm-theme.css) — same layout, this app's tokens. -->
+  <div class="card fin-balance-card">
     <!--
-      What moved is the headline and the sheet is the working, so the flow chips live INSIDE the
-      <summary> — they are the whole of what a collapsed card shows — and everything else is the
-      disclosure. Native <details> rather than a signal: no state to hold, no OnPush to think about,
-      and the whole two-row header is the hit target.
+      The header is the whole of what a collapsed card shows — the title, the status chips AND the
+      flow figures — so all of it lives inside the <summary> and all of it is the hit target.
 
       open: expanded is the default. Collapsing is there for someone who wants the flow figures
       alone, not the state the tab opens in.
     -->
     <details class="fin-balance" open>
       <summary class="fin-balance__summary">
-        <div class="card-head fin-balance__head">
-          <span class="card-title">Balance Sheet</span>
-          <span class="fin-balance__chev" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-          </span>
-          <!-- What moved sits in the header itself: it is the card's headline, and it was costing a
-               whole second row to say. -->
-          <span class="fin-chips">
-            <span class="tag success num">Gil in {{ totals.moneyIn | number }}</span>
-            <span class="tag warning num">Gil out {{ totals.moneyOut | number }}</span>
-            <span class="tag default num">Net change {{ totals.netChange | number }}</span>
+        <div class="fin-bal-header">
+          <div class="fin-bal-title">
+            <span class="fin-gil-emblem" aria-hidden="true">G</span>
+            <div>
+              <h2>Balance Sheet</h2>
 
-            <!-- Only the FAILURE is worth a chip. "Adds up" was the answer on every healthy board,
-                 which is a lot of green to say nothing; a sheet that does not balance still says so. -->
-            @if (!totals.balances) {
-              <span class="tag warning">Does not add up</span>
-            }
-            @if (totals.uncategorizedCount > 0) {
-              <span class="tag default">Uncategorized {{ totals.uncategorizedCount }}</span>
-            }
-            @if (totals.lockedThroughUtc) {
-              <span class="tag default">Locked through {{ activity.formatDate(totals.lockedThroughUtc) }}</span>
-            }
-          </span>
+              <!-- Only the FAILURE is worth a chip. "Adds up" was the answer on every healthy board,
+                   which is a lot of green to say nothing; a sheet that does not balance still says so. -->
+              @if (!totals.balances || totals.lockedThroughUtc) {
+                <div class="fin-bal-status">
+                  @if (!totals.balances) {
+                    <span class="tag warning">Does not add up</span>
+                  }
+                  @if (totals.lockedThroughUtc) {
+                    <span class="tag default">Locked through {{ activity.formatDate(totals.lockedThroughUtc) }}</span>
+                  }
+                </div>
+              }
+            </div>
+            <span class="fin-balance__chev" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+            </span>
+          </div>
+
+          <!-- What moved, in and out. Cards rather than chips: these are the figures a collapsed
+               card exists to show, and a chip-sized number reads as a label. -->
+          <div class="fin-summary-cards">
+            <div class="fin-summary-card is-in">
+              <span class="fin-summary-label">Gil in</span>
+              <strong class="num">{{ totals.moneyIn | number }}</strong>
+            </div>
+            <div class="fin-summary-card is-out">
+              <span class="fin-summary-label">Gil out</span>
+              <strong class="num">{{ totals.moneyOut | number }}</strong>
+            </div>
+            <div class="fin-summary-card is-change">
+              <span class="fin-summary-label">Net change</span>
+              <strong class="num">{{ totals.netChange | number }}</strong>
+            </div>
+          </div>
         </div>
       </summary>
 
@@ -64,87 +81,261 @@
            Every line shows, including zeros: a subtotal over conditionally-hidden components does not
            add up on screen, and a liability that disappears at zero reads as "there is no such thing"
            rather than "there is none right now". -->
-      <div class="fin-sheet__cols">
-        <div class="fin-sheet__col">
-          <div class="fin-sheet__section">What we have</div>
-          <div class="fin-sheet__row">
-            <span>Gil on hand</span>
-            <span class="num">{{ totals.cashOnHand | number }}</span>
-          </div>
-          <div class="fin-sheet__row">
-            <span>Owed to us</span>
-            <span class="num">{{ totals.owedToUs | number }}</span>
-          </div>
-          <div class="fin-sheet__row fin-sheet__row--total">
-            <span></span>
-            <span class="num">{{ totals.cashOnHand + totals.owedToUs | number }}</span>
-          </div>
-        </div>
+      <!--
+        The tick-and-record panel, ONCE, used by both halves of the sheet.
 
-        <div class="fin-sheet__col">
-          <div class="fin-sheet__section">What we owe</div>
-          <div class="fin-sheet__row">
-            <span>Owed to members</span>
-            <span class="num">{{ totals.weOwe | number }}</span>
+        Ticking a row and recording it writes one ordinary transaction per ticked name — paying a
+        member off on one side, recording gil arriving on the other. Nothing is a flag being flipped:
+        a name leaves its list when its lines sum to zero, so each list is the report AND the
+        worksheet and the two cannot disagree.
+
+        One template rather than two copies, because the rules that make ticking safe — settle in
+        full only, and the expectedAmount re-check that stops a stale figure being settled — must not
+        come out different on one side than the other.
+
+        Not behind a disclosure of its own: the sheet is already one, and hiding the names behind a
+        SECOND one meant two clicks to answer "who". The Member/Amount header does that job.
+      -->
+      <ng-template #settlePanel let-side="side" let-rows="rows" let-hint="hint" let-verb="verb">
+        <div class="fin-member-table">
+          <div class="fin-member-table__head">
+            <span>Member</span>
+            <span>Amount</span>
           </div>
-          @if (totals.owedToMembers.length > 0) {
-            <!-- open: the sheet itself is now behind a disclosure, so hiding the names behind a
-                 SECOND one meant two clicks to answer "who do we owe". -->
-            <details class="fin-details fin-sheet__who" open>
-              <summary>Who</summary>
-              <div class="fin-sheet__members">
-                @for (owed of totals.owedToMembers; track owed.characterName) {
-                  <div class="fin-sheet__row">
-                    <span>{{ owed.characterName }}</span>
-                    <span class="num">{{ owed.amount | number }}</span>
-                  </div>
-                }
+
+          @for (owed of rows; track owed.characterName) {
+            @if (canSettleAny(side) && owed.canSettle) {
+              <!-- role="checkbox" on a button rather than a real one: the only native checkbox
+                   style in this app is a toggle switch, which reads wrong for a name list. Same
+                   reason the who-this-is-for picker below is built this way. -->
+              <button
+                type="button"
+                role="checkbox"
+                class="fin-member-row {{ isOwedPicked(side, owed.characterName) ? 'is-picked' : '' }}"
+                [attr.aria-checked]="isOwedPicked(side, owed.characterName)"
+                [disabled]="treasury.busySave()"
+                (click)="toggleOwed(side, owed.characterName)">
+                <span class="fin-member-info">
+                  <span class="fin-payout__tick" aria-hidden="true"></span>
+                  <span class="fin-settle__name">{{ owed.characterName }}</span>
+                </span>
+                <strong class="num">{{ owed.amount | number }}</strong>
+              </button>
+            } @else {
+              <!-- Read-only: a member is looking, or this row is the "no member named" bucket or one
+                   settled into a negative. Both are real and both belong on screen; settling just
+                   has nothing to mean against them. -->
+              <div class="fin-member-row {{ canSettleAny(side) ? 'is-fixed' : '' }}">
+                <span class="fin-member-info">{{ owed.characterName }}</span>
+                <strong class="num">{{ owed.amount | number }}</strong>
               </div>
-            </details>
+            }
           }
-          <div class="fin-sheet__row fin-sheet__row--total">
-            <span></span>
-            <span class="num">{{ totals.weOwe | number }}</span>
+        </div>
+
+        @if (canSettleAny(side)) {
+          <div class="fin-payment-area">
+            @if (settlePicks(side).length === 0) {
+              <span class="fin-settle__hint">{{ hint }}</span>
+            } @else {
+              <span class="fin-settle__hint {{ settleShort(side) ? 'is-short' : '' }}">
+                {{ settlePicks(side).length }}
+                {{ settlePicks(side).length === 1 ? 'name' : 'names' }} ·
+                {{ settleTotal(side) | number }} gil@if (settleShort(side)) {<span> — that is more than the linkshell has on hand.</span>}
+              </span>
+            }
+
+            <span class="fin-settle__actions">
+              <!-- Which mule. Ticking a name here writes a real gil movement, so it answers the same
+                   question the record form asks — without it a whole payout run would file itself
+                   under "nobody named" on the who's-holding-it list. One box for the run, because a
+                   payout is one person at one mule. -->
+              <input
+                type="text"
+                class="fin-settle__holder"
+                autocomplete="off"
+                list="finSettleHolders"
+                [placeholder]="settleHolderLabel(side) + '…'"
+                [attr.aria-label]="settleHolderLabel(side)"
+                [ngModel]="settleHolder(side)"
+                [ngModelOptions]="{ standalone: true }"
+                (ngModelChange)="setSettleHolder(side, $event)" />
+              @if (settleConfirmingSide(side)) {
+                <button type="button" class="btn ghost sm" (click)="clearOwedPicks(side)">Cancel</button>
+              }
+              <!-- Two presses, because Discord's iframe suppresses window.confirm() and this moves
+                   real gil. Armed per side, so confirming one panel never arms the other. -->
+              <button
+                type="button"
+                class="btn sm {{ settleConfirmingSide(side) ? 'warn' : 'primary' }}"
+                [disabled]="settlePicks(side).length === 0
+                  || !settleHolder(side).trim()
+                  || treasury.busySave()"
+                (click)="settleOwed(side)">
+                {{ settleConfirmingSide(side) ? 'Confirm — ' + verb : 'Record payment' }}
+              </button>
+            </span>
+          </div>
+        }
+      </ng-template>
+
+      <!-- Shared by both settle panels: only one mule box is ever being typed into, and a per-panel
+           option list would be the roster twice. Suggestions only — gil regularly sits on a mule
+           that is not a roster row. -->
+      <datalist id="finSettleHolders">
+        @for (person of members(); track person.membershipId) {
+          <option [value]="person.characterName"></option>
+        }
+      </datalist>
+
+      <div class="fin-bal-grid">
+        <section class="fin-bal-panel">
+          <div class="fin-panel-heading">
+            <span class="fin-panel-icon" aria-hidden="true">▣</span>
+            <h3>What we have</h3>
+          </div>
+
+          <!-- The exact shape of the panel opposite: the figure, the names behind it, and the panel
+               that settles them. Gil on hand is NOT here — it is not owed by anybody, it has no
+               names behind it, and it lives on the bottom line with the arithmetic it feeds. -->
+          <div class="fin-owe-summary">
+            <span>Owed to us</span>
+            <strong class="num">{{ totals.owedToUs | number }}</strong>
+          </div>
+
+          @if (totals.owedToUsBy.length > 0) {
+            <!-- Who owes it, and the panel that clears it. Ticking a name here is the ONLY way an
+                 owed-to-us debt is ever cleared: the Record form deliberately offers no option for
+                 it, because ticking a name off a list the app already knows beats typing the name
+                 and the figure back in. -->
+            <ng-container
+              *ngTemplateOutlet="settlePanel; context: {
+                side: 'owedToUs',
+                rows: totals.owedToUsBy,
+                hint: 'Tick who has paid us. Each one is settled in full.',
+                verb: 'the gil has arrived'
+              }"></ng-container>
+          }
+
+          <!-- Not "Total assets": gil on hand moved to the bottom line, so this panel lists only what
+               the linkshell is owed and says so. A total naming everything it holds, over a list that
+               no longer shows the largest part of it, would not add up on screen. -->
+          <div class="fin-panel-total">
+            <span>Total owed to us</span>
+            <strong class="num">{{ totals.owedToUs | number }}</strong>
+          </div>
+        </section>
+
+        <section class="fin-bal-panel">
+          <div class="fin-panel-heading">
+            <span class="fin-panel-icon" aria-hidden="true">⚖</span>
+            <h3>What we owe</h3>
+          </div>
+
+          <div class="fin-owe-summary">
+            <span>Owed to members</span>
+            <strong class="num">{{ totals.weOwe | number }}</strong>
+          </div>
+
+          @if (totals.owedToMembers.length > 0) {
+            <ng-container
+              *ngTemplateOutlet="settlePanel; context: {
+                side: 'weOwe',
+                rows: totals.owedToMembers,
+                hint: 'Tick who has been paid. Each one is settled in full.',
+                verb: 'gil has been handed over'
+              }"></ng-container>
+          }
+
+          <div class="fin-panel-total">
+            <span>Total liabilities</span>
+            <strong class="num">{{ totals.weOwe | number }}</strong>
+          </div>
+        </section>
+      </div>
+
+      <!-- The bottom line of the sheet, so it belongs to the sheet: inside the disclosure with the
+           two columns that produce it, not stranded under a collapsed card. The basis note sits
+           beside the figure it qualifies rather than under the whole card.
+
+           Gil on hand sits here rather than in the panel above, because it is the one figure the two
+           panels do NOT explain: they are lists of names, and gil on hand is owed by nobody. Here it
+           is beside the two columns it is added to and subtracted from, which is the only place the
+           bottom line's arithmetic can be read off the screen —
+           gil on hand + total owed to us − total liabilities = what we're worth. -->
+      <div class="fin-worth">
+        <div class="fin-worth__info">
+          <span class="fin-worth__icon" aria-hidden="true">⚖</span>
+          <div>
+            <h3>What we're worth</h3>
+            <p class="fin-basis">{{ totals.basisNote }}</p>
           </div>
         </div>
-      </div>
-      <!-- The bottom line of the sheet, so it belongs to the sheet: inside the disclosure with the
-           two columns that produce it, not stranded under a collapsed card. -->
-      <div class="fin-sheet fin-sheet--answer">
-        <div class="fin-sheet__row fin-sheet__row--worth">
-          <span>What we're worth</span>
-          <span class="num">{{ totals.netWorth | number }}</span>
-        </div>
-      </div>
-      <div class="fin-basis">{{ totals.basisNote }}</div>
-    </details>
+        <!-- Gil on hand is the only figure on this sheet with somewhere to go, so it is the only one
+             that is a BUTTON. The two panels above are already lists of names; this was the figure
+             with nothing behind it, and a linkshell's gil is not in a vault — it is spread across
+             members' mules, and "who actually has it" was answered from memory or from Discord
+             scrollback.
 
-    @if (showCheckGil() && canManage()) {
-      <form class="inline-form" (submit)="$event.preventDefault(); submitCheckGil()">
-        <div class="inline-form__row">
-          <label>
-            <span>How much gil is actually there?</span>
-            <input type="text" inputmode="numeric" name="countedGil" autocomplete="off"
-                   [value]="countedGilText" (input)="onCountedGilInput($event)" />
-          </label>
+             The chevron and the hint carry the whole affordance: a figure that is also a button
+             looks exactly like a figure that is not, and nobody clicks a number on a balance sheet
+             on the off-chance. -->
+        <button
+          type="button"
+          class="fin-worth__cash fin-worth__cash--open"
+          [class.is-open]="holdersOpen()"
+          [attr.aria-expanded]="holdersOpen()"
+          (click)="holdersOpen.set(!holdersOpen())">
+          <span class="fin-row-icon is-gold" aria-hidden="true">G</span>
+          <span class="fin-worth__cash-label">Gil on hand</span>
+          <strong class="num">{{ totals.cashOnHand | number }}</strong>
+          <span class="fin-worth__chev" aria-hidden="true">▾</span>
+        </button>
+        <!-- The answer, styled as the twin of gil on hand beside it: they are the two figures the
+             bottom line is made of and they read together. Only the medallion tells them apart. -->
+        <div class="fin-worth__value">
+          <span class="fin-row-icon is-crystal" aria-hidden="true">◆</span>
+          <span class="fin-worth__value-label">Net worth</span>
+          <strong class="num">{{ totals.netWorth | number }}</strong>
         </div>
-        <div class="fin-basis">
-          @if (difference() === 0) {
-            The books already say {{ countedGil | number }}. Nothing to record.
-          } @else if (difference() > 0) {
-            That is {{ difference() | number }} gil more than the books say. Recording the difference.
-          } @else {
-            That is {{ -difference() | number }} gil less than the books say. Recording the difference.
-          }
-        </div>
-        <div class="inline-form__actions">
-          <button type="submit" class="btn primary sm" [disabled]="treasury.busySave() || difference() === 0">
-            Record the difference
-          </button>
-          <button type="button" class="btn ghost sm" (click)="toggleCheckGil()">Cancel</button>
-        </div>
-      </form>
-    }
+
+        <!-- Only while closed: once the list is open it IS the answer, and a line still telling you
+             to click for it is noise on top of the thing it was pointing at. -->
+        @if (!holdersOpen()) {
+          <p class="fin-worth__hint">Click gil on hand to see who's holding the gil</p>
+        }
+
+        <!-- Spans the whole band rather than dropping under the chip: it is a list of names and
+             figures that has to line up in a column, and a popover hanging off a chip would be
+             narrower than the shortest row in it. -->
+        @if (holdersOpen()) {
+          <div class="fin-holders">
+            <div class="fin-holders__head">
+              <span>{{ holdersTitle }}</span>
+              <span class="fin-holders__total num">{{ totals.cashOnHand | number }}</span>
+            </div>
+            @if (gilHolders().length > 0) {
+              <ul class="fin-holders__list">
+                @for (holder of gilHolders(); track holder.characterName ?? '') {
+                  <li class="fin-holders__row" [class.is-unnamed]="!holder.characterName">
+                    <span class="fin-holders__name">{{ holder.characterName || unnamedHolder }}</span>
+                    <!-- The share of the total, so a row reads as "most of it" or "a sliver" without
+                         anyone dividing two seven-digit numbers in their head. -->
+                    <span class="fin-holders__bar" aria-hidden="true">
+                      <span class="fin-holders__fill" [style.width.%]="holderShare(holder.amount)"></span>
+                    </span>
+                    <span class="fin-holders__amount num">{{ holder.amount | number }}</span>
+                  </li>
+                }
+              </ul>
+              <p class="fin-basis">{{ holdersFootnote }}</p>
+            } @else {
+              <p class="fin-basis">No gil recorded yet.</p>
+            }
+          </div>
+        }
+      </div>
+    </details>
   </div>
 
 }
@@ -163,13 +354,17 @@
 <ng-content />
 
 @if (summary()) {
-  <!-- Card 3: the transactions. -->
-  <div class="card">
-    <div class="card-head">
-      <div class="card-title">Transactions</div>
-    </div>
-
-    @if (showForm() && canManage()) {
+  <!-- Card 3: recording one. Its own card rather than a band inside the transactions card below,
+       because the form is taller than a screen once a split's roster opens, and a form that pushes
+       the list it belongs to out of sight reads as having replaced it. Two cards say what one card
+       in two moods could not: the list is still there, underneath. The head carries the mood —
+       recording, fixing, or editing a draft — so "what is this about to do?" is answered at the top
+       of the form rather than only by the button at the bottom. -->
+  @if (showForm() && canManage()) {
+    <div class="card fin-form-card">
+      <div class="card-head">
+        <div class="card-title">{{ formTitle() }}</div>
+      </div>
       <form class="inline-form" (submit)="$event.preventDefault(); submit(true)">
         @if (fixingEntry(); as fixing) {
           <div class="fin-basis">
@@ -177,25 +372,42 @@
             the list with an opposite entry beside it, so nothing disappears.
           </div>
         }
+        <!-- What happened: the action, and then — only where an action genuinely has two movements
+             behind it — a reason. Gil In and Gil Out offer one thing each, so their select never
+             renders and the box below is the whole of the question. -->
+        <div class="fin-actions" role="group" aria-label="What happened?">
+          @for (option of actions(); track option.key) {
+            <button
+              type="button"
+              class="btn sm {{ action() === option.key ? 'primary' : 'ghost' }}"
+              [attr.aria-pressed]="action() === option.key"
+              (click)="setAction(option.key)">{{ option.label }}</button>
+          }
+        </div>
 
-        <label>
-          <span>What happened?</span>
-          <select
-            name="transactionKind"
-            [ngModel]="transactionKind()"
-            (ngModelChange)="transactionKind.set($event)">
-            @for (group of kindGroups(); track group.label) {
-              <optgroup [label]="group.label">
-                @for (kind of group.kinds; track kind.key) {
-                  <option [value]="kind.key">{{ kind.label }}</option>
-                }
-              </optgroup>
-            }
-          </select>
-        </label>
+        <!-- No "Which one?" select. Every button now asks exactly one thing — "Owed to us" was the
+             last action with two reasons behind it, and its second half ("They paid what they owed")
+             has a button of its own now, so picking the action IS picking the kind. Rendering the
+             select conditionally was the old answer; the condition is dead, and dead markup that
+             could quietly resurrect a dropdown is worse than none. NoPickableActionAsksASecondQuestion
+             fails if a second reason is ever filed under an action. -->
         @if (selectedKind(); as kind) {
+          <!-- Shown for a retired kind too, which is how someone fixing an old entry can see what
+               it was recorded as when the picker no longer offers it. -->
+          @if (!kind.isPickable) {
+            <div class="fin-help">Recorded as “{{ kind.label }}”, which is no longer offered.</div>
+          }
           <div class="fin-help">{{ kind.help }}</div>
         }
+
+        <!-- The reason, in the officer's own words. This IS the note the transactions list shows —
+             there is no second box, because two free-text fields on one form is two places to look
+             for the same sentence and nothing to say which. -->
+        <label>
+          <span>Reason</span>
+          <textarea name="note" [(ngModel)]="note" rows="2" maxlength="1024"
+                    placeholder="In your own words — this is what the transactions list will show."></textarea>
+        </label>
 
         <div class="inline-form__row">
           <label>
@@ -207,22 +419,27 @@
             <input type="datetime-local" name="transactionDate" [(ngModel)]="transactionDate" />
           </label>
           @if (showsSingleMember()) {
-            <!-- The typed name doubles as the search term, so it is one box rather than a filter
-                 plus a select. mousedown is swallowed so a click lands before blur closes the menu. -->
+            <!-- One box, named by the option: "Member" where it is one, "Who owes us" / "Who paid
+                 us" on the owed-to-us pair, where the party usually is NOT on the roster.
+
+                 The roster menu only drops down where the app knows the amount — settling a debt the
+                 linkshell owes a member. Everywhere else the typed name is the answer, and a menu of
+                 members would only get in the way of typing one that is not in it. mousedown is
+                 swallowed so a click lands before blur closes the menu. -->
             <div class="fin-memberpick">
               <label>
-                <span>Member</span>
+                <span>{{ memberLabel() }}</span>
                 <input
                   type="text"
                   name="member"
                   autocomplete="off"
-                  placeholder="Search members…"
+                  [placeholder]="settlesMemberDebt() ? 'Search members…' : 'Type a name'"
                   [ngModel]="member()"
                   (ngModelChange)="member.set($event); memberPickerOpen.set(true)"
                   (focus)="memberPickerOpen.set(true)"
                   (blur)="closeMemberPicker()" />
               </label>
-              @if (memberPickerOpen() && filteredMemberOptions().length > 0) {
+              @if (settlesMemberDebt() && memberPickerOpen() && filteredMemberOptions().length > 0) {
                 <div class="fin-memberpick__list">
                   @for (person of filteredMemberOptions(); track person.characterName) {
                     <button
@@ -242,6 +459,42 @@
               }
             </div>
           }
+
+          <!-- WHOSE MULE. The one question gil on hand could never be broken down by, asked at the
+               only moment anyone knows the answer. It sits in this row rather than under the form
+               because it is a field of the movement, not a footnote to it.
+
+               Separate from the member box beside it on purpose: on a Gil Out to a member the two
+               are different people — the gil leaves the treasurer's mule and arrives at theirs. -->
+          @if (showsHolder()) {
+            <div class="fin-memberpick">
+              <label>
+                <span>{{ holderLabel() }}</span>
+                <input
+                  type="text"
+                  name="holder"
+                  autocomplete="off"
+                  placeholder="Search members…"
+                  [ngModel]="holder()"
+                  (ngModelChange)="holder.set($event); holderPickerOpen.set(true)"
+                  (focus)="holderPickerOpen.set(true)"
+                  (blur)="closeHolderPicker()" />
+              </label>
+              @if (holderPickerOpen() && filteredHolderOptions().length > 0) {
+                <div class="fin-memberpick__list">
+                  @for (name of filteredHolderOptions(); track name) {
+                    <button
+                      type="button"
+                      class="fin-memberpick__row"
+                      (mousedown)="$event.preventDefault()"
+                      (click)="chooseHolder(name)">
+                      <span class="fin-memberpick__name">{{ name }}</span>
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          }
         </div>
 
         <!-- Settling hands over what was already promised, so the figure is not the officer's to
@@ -252,12 +505,13 @@
           </div>
         }
 
-        <!-- Sharing one amount between several members. Buttons rather than checkboxes: the only
-             checkbox style in this app is a toggle switch, which reads wrong for a roster. -->
+        <!-- Who the amount is for: one member, or several to split it between. Buttons rather than
+             checkboxes: the only checkbox style in this app is a toggle switch, which reads wrong
+             for a roster. -->
         @if (isSplittable()) {
           <div class="fin-payout">
             <div class="fin-payout__head">
-              <span>Who gets a share</span>
+              <span>Who this is for</span>
               <input
                 type="search"
                 class="fin-payout__search"
@@ -309,16 +563,12 @@
               </div>
             }
 
-            @if (splitBlocker(); as blocker) {
+            @if (formBlocker(); as blocker) {
               <div class="fin-payout__warn">{{ blocker }}</div>
             }
           </div>
         }
 
-        <label>
-          <span>Note</span>
-          <textarea name="note" [(ngModel)]="note" rows="2"></textarea>
-        </label>
 
         @if (fixingEntry()) {
           <label>
@@ -338,24 +588,28 @@
             <button
               type="submit"
               class="btn primary sm"
-              [disabled]="treasury.busySave() || !reason.trim() || !!splitBlocker()">Fix</button>
+              [disabled]="treasury.busySave() || !reason.trim() || !!formBlocker()">Fix</button>
           } @else {
+            <!-- Confirm only. "Save as draft" is gone from every form: nobody was using it, and a
+                 half-recorded entry that looks recorded is a worse answer than one more click.
+                 Drafts already in the books keep their Confirm / Edit / Discard buttons in the
+                 transactions list — this only stops new ones being made. -->
             <button
               type="submit"
               class="btn primary sm"
-              [disabled]="treasury.busySave() || !!splitBlocker()">Confirm</button>
-            <button
-              type="button"
-              class="btn ghost sm"
-              [disabled]="treasury.busySave() || !!splitBlocker()"
-              (click)="submit(false)">
-              Save as draft
-            </button>
+              [disabled]="treasury.busySave() || !!formBlocker()">Confirm</button>
           }
           <button type="button" class="btn ghost sm" (click)="closeForm()">Cancel</button>
         </div>
       </form>
-    }
+    </div>
+  }
+
+  <!-- Card 4: the transactions. -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Transactions</div>
+    </div>
 
     @if (page(); as loaded) {
       <div class="fin-toolbar">
@@ -397,11 +651,20 @@
                         @if (entry.status === 'Draft') {
                           <span class="tag default">Draft</span>
                         }
-                        @if (entry.isReversed) {
+                        <!-- Fixed beats Reversed: both are true of an entry someone corrected, and
+                             "Reversed" alone reads as "called off" when the numbers were merely
+                             wrong. The chips split the same way, so the word here and the chip that
+                             finds it always agree. -->
+                        @if (entry.isFixed) {
+                          <span class="tag warning">Fixed</span>
+                        } @else if (entry.isReversed) {
                           <span class="tag warning">Reversed</span>
                         }
                         @if (entry.reversesEntryNumber) {
-                          <span class="tag default">Reverses {{ entryRef(entry.reversesEntryNumber) }}</span>
+                          <span class="tag default">
+                            {{ entry.kind === 'Correction' ? 'Fixes' : 'Reverses' }}
+                            {{ entryRef(entry.reversesEntryNumber) }}
+                          </span>
                         }
                       </div>
 
@@ -416,6 +679,13 @@
                           <span>&middot; {{ recipientSummary(entry) }}</span>
                         } @else if (entry.counterpartyCharacterName) {
                           <span>&middot; {{ entry.counterpartyCharacterName }}</span>
+                        }
+                        <!-- Whose mule the gil moved through. Worth a slot on the row rather than
+                             only in the bookkeeping details, because "where did that 8M go" is the
+                             question this whole field exists to answer. -->
+                        @if (entry.holderCharacterName) {
+                          <span>&middot; {{ entry.cashDelta < 0 ? 'from' : 'held by' }}
+                            {{ entry.holderCharacterName }}</span>
                         }
                         <span>&middot; Entered by {{ entry.enteredByCharacterName || 'Unknown' }}</span>
                         @if (activity.formatDateTime(entry.transactionDate); as when) {
@@ -452,18 +722,49 @@
                             <button type="button" class="btn ghost sm"
                               [disabled]="treasury.busyEntryId() === entry.id"
                               (click)="confirmEntry(entry)">Confirm</button>
-                            <button type="button" class="btn ghost sm"
+                            <!-- Two presses. Discord's iframe suppresses window.confirm(), so the
+                                 button itself has to do the asking. -->
+                            <button type="button" class="btn sm {{ discardingId() === entry.id ? 'warn' : 'ghost' }}"
                               [disabled]="treasury.busyEntryId() === entry.id"
-                              (click)="discardDraft(entry)">Discard</button>
+                              (click)="discardDraft(entry)">
+                              {{ discardingId() === entry.id ? 'Discard it — nothing was recorded' : 'Discard' }}
+                            </button>
+                            @if (discardingId() === entry.id) {
+                              <button type="button" class="btn ghost sm"
+                                (click)="discardingId.set(null)">Cancel</button>
+                            }
                           } @else if (!entry.isReversed) {
                             <button type="button" class="btn ghost sm"
                               [disabled]="treasury.busyEntryId() === entry.id"
                               (click)="beginFix(entry)">Fix</button>
                             <button type="button" class="btn ghost sm"
-                              [disabled]="treasury.busyEntryId() === entry.id"
-                              (click)="reverseEntry(entry)">Reverse</button>
+                              [disabled]="treasury.busyEntryId() === entry.id || reversingEntry()?.id === entry.id"
+                              (click)="beginReverse(entry)">Reverse</button>
                           }
                         </div>
+
+                        <!-- Reversing asks WHY, and the server refuses without it. An inline panel
+                             rather than window.prompt(), which draws nothing inside Discord. -->
+                        @if (reversingEntry()?.id === entry.id) {
+                          <div class="fin-reverse">
+                            <div class="fin-reverse__what">
+                              This adds an opposite entry that cancels this one out. The original
+                              stays in the list, marked Reversed.
+                            </div>
+                            <div class="fin-reverse__row">
+                              <input
+                                type="text"
+                                maxlength="512"
+                                placeholder="Why is it being reversed?"
+                                [(ngModel)]="reverseReason"
+                                (keydown.enter)="confirmReverse()" />
+                              <button type="button" class="btn sm warn"
+                                [disabled]="!reverseReason.trim() || treasury.busyEntryId() === entry.id"
+                                (click)="confirmReverse()">Reverse it</button>
+                              <button type="button" class="btn ghost sm" (click)="cancelReverse()">Cancel</button>
+                            </div>
+                          </div>
+                        }
                       }
                     </li>
                   }

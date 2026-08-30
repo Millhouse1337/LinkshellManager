@@ -64,7 +64,18 @@ public sealed record ChartLedger(IReadOnlyList<string> Bosses, IReadOnlyList<Cha
 /// <summary>What an officer typed, before it is trusted.</summary>
 public sealed record ChartPopItemDraft(
     string Board, string Boss, string ItemName, string? HeldByCharacterName, int? HeldByMembershipId,
-    int Quantity, string? Notes);
+    int Quantity, string? Notes)
+{
+    /// <summary>
+    /// ChartItemKinds.Pop or Drop.
+    ///
+    /// An init property rather than an eighth positional member: every member of this record is a
+    /// string or a string?, so a new positional one inserted anywhere but the very end would rebind
+    /// silently at the single construction site with nothing worse than a nullable warning. Same
+    /// hazard ChartBoss keeps warning about, and the same answer ChartBoard.Features gives.
+    /// </summary>
+    public string Kind { get; init; } = ChartItemKinds.Pop;
+}
 
 /// <summary>One credit as requested. Either a roster membership id, or just a name for an unsynced farmer.</summary>
 public sealed record ChartCreditDraft(int? MembershipId, string? CharacterName, string? Detail);
@@ -202,6 +213,11 @@ public sealed class ChartBoardService
     ///
     /// Bosses with nothing tracked contribute 0 to BOTH sides of that fraction, so an empty board
     /// reads 0 / 0 rather than everyone sitting at 100%.
+    ///
+    /// POP AND DROP ROWS COUNT ALIKE, and this method does not look at Kind at all. A drop is farmed
+    /// by the same people on the same night and credited through the same rows, so splitting the
+    /// fraction by kind would say somebody who was there is only partly square. That the ledger
+    /// needed no change is the direct payoff of Kind being a column rather than a second table.
     /// </summary>
     public static ChartLedger BuildLedger(
         ChartBoard board,
@@ -297,10 +313,20 @@ public sealed class ChartBoardService
     /// has no name — the caller refuses rather than storing a row that would group under no card and
     /// be invisible.
     /// </summary>
+    /// <param name="kind">ChartItemKinds.Pop or Drop; anything else, including null, reads as Pop.
+    /// LAST and defaulted so every caller written before drop items existed compiles unchanged.</param>
     public static ChartPopItemDraft? NormalizeDraft(
         string? board, string? boss, string? itemName, string? heldByCharacterName,
-        int? heldByMembershipId, int quantity, string? notes)
+        int? heldByMembershipId, int quantity, string? notes, string? kind = null)
     {
+        // Deliberately NO check of board.AllowsPopItems / AllowsDropItems here.
+        //
+        // This method is on the EDIT path as well as the add path. Dynamis and Limbus no longer
+        // offer an add form, but they still hold rows that officers entered before that, and those
+        // rows have to stay editable and deletable. A feature check in here would refuse every one
+        // of them and strand the lot. The check belongs in the two Add actions only - see
+        // ChartsController.AddItem and ActivityDataController.AddChartPopItemAsync - and
+        // ChartItemKindTests.NormalizeDraft_DoesNotRefuseARowOnABoardThatNoLongerTakesAdds pins it.
         var canonicalBoard = ChartBoardCatalog.NormalizeBoard(board);
         if (canonicalBoard is null)
         {
@@ -316,7 +342,8 @@ public sealed class ChartBoardService
         // Canonicalised against the boss's own pop item list, so a name picked out of the dropdown —
         // or typed in whatever case on a board that has no list — is stored one way. Unknown names
         // pass through: see ChartBoardCatalog.NormalizePopItemName for why this does not reject.
-        var name = ChartBoardCatalog.NormalizePopItemName(canonicalBoard, canonicalBoss, itemName);
+        var canonicalKind = ChartBoardCatalog.NormalizeItemKind(kind);
+        var name = ChartBoardCatalog.NormalizeItemName(canonicalBoard, canonicalBoss, itemName, canonicalKind);
         if (string.IsNullOrWhiteSpace(name))
         {
             return null;
@@ -331,7 +358,10 @@ public sealed class ChartBoardService
             // Clamped rather than rejected: 0 is a real state ("we used it, none left") and the check
             // constraint refuses negatives anyway.
             Math.Max(0, quantity),
-            Truncate(NullIfBlank(notes), 512));
+            Truncate(NullIfBlank(notes), 512))
+        {
+            Kind = canonicalKind,
+        };
     }
 
     /// <summary>

@@ -16,22 +16,28 @@ public sealed class WindowEventsController : Controller
 {
     private readonly ApplicationDbContext _db;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly TimeZoneConversionService _timeZones;
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
     private readonly AttendanceSectionsBuilder _attendanceSections;
+    private readonly WindowEventLinkService _windowEventLinks;
 
     public WindowEventsController(
         ApplicationDbContext db,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         TimeZoneConversionService timeZones,
         WindowEventDkpLedgerService windowEventDkpLedger,
-        AttendanceSectionsBuilder attendanceSections)
+        AttendanceSectionsBuilder attendanceSections,
+        WindowEventLinkService windowEventLinks)
     {
         _db = db;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _timeZones = timeZones;
         _windowEventDkpLedger = windowEventDkpLedger;
         _attendanceSections = attendanceSections;
+        _windowEventLinks = windowEventLinks;
     }
 
     // The standalone "Attendance Events" page is gone: open attendance events and unlinked snapshots
@@ -74,7 +80,7 @@ public sealed class WindowEventsController : Controller
         var vm = await _attendanceSections.BuildClosedAsync(
             linkshellId,
             linkshell.LinkshellName,
-            IsLeaderOrOfficer(membership),
+            await CanManageAsync(membership, cancellationToken),
             _timeZones.Resolve(user.TimeZone),
             q,
             page,
@@ -150,6 +156,8 @@ public sealed class WindowEventsController : Controller
         int linkshellId,
         int windowEventId,
         [FromForm] double? dkpAmount,
+        // Null means "misc pays what a window pays", which is the default.
+        [FromForm] double? miscDkpAmount,
         [FromForm] string? entryType,
         [FromForm(Name = "MemberDkp")] List<WindowEventMemberDkpInput>? memberDkp,
         CancellationToken cancellationToken)
@@ -158,6 +166,9 @@ public sealed class WindowEventsController : Controller
 
         var windowEvent = await _db.WindowEvents
             .Include(e => e.MemberDkpOverrides)
+            // Needed to tell who is misc-ONLY. Nothing here loaded snapshots before: the misc rate
+            // is the first thing on this path that depends on how a capture was filed.
+            .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
             .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
         if (windowEvent is null) return NotFound();
 
@@ -183,6 +194,12 @@ public sealed class WindowEventsController : Controller
         windowEvent.DkpAmount = resolvedDkp;
         windowEvent.EntryType = entryType;
         ApplyMemberDkpOverrides(windowEvent, resolvedDkp, memberDkp);
+        // Resolved BEFORE the assignment below, or the stored-value fallback would read the
+        // value we are about to overwrite and a save that carries no misc field would reset it.
+        var resolvedMisc = WindowEventDkp.ResolveMisc(miscDkpAmount, windowEvent.MiscDkpAmount, resolvedDkp);
+        windowEvent.MiscDkpAmount = miscDkpAmount;
+        WindowEventMiscDkp.ApplyMiscOverrides(
+            windowEvent, resolvedDkp, resolvedMisc, WindowEventMiscDkp.SubmittedNames(memberDkp));
         await _db.SaveChangesAsync(cancellationToken);
 
         TempData["WindowEventStatus"] = $"Saved DKP details for \"{windowEvent.Name}\".";
@@ -200,6 +217,8 @@ public sealed class WindowEventsController : Controller
         int linkshellId,
         int windowEventId,
         [FromForm] double? dkpAmount,
+        // Null means "misc pays what a window pays", which is the default.
+        [FromForm] double? miscDkpAmount,
         [FromForm] string? entryType,
         [FromForm(Name = "MemberDkp")] List<WindowEventMemberDkpInput>? memberDkp,
         CancellationToken cancellationToken)
@@ -208,6 +227,9 @@ public sealed class WindowEventsController : Controller
 
         var windowEvent = await _db.WindowEvents
             .Include(e => e.MemberDkpOverrides)
+            // Needed to tell who is misc-ONLY. Nothing here loaded snapshots before: the misc rate
+            // is the first thing on this path that depends on how a capture was filed.
+            .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
             .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
         if (windowEvent is null) return NotFound();
 
@@ -237,7 +259,13 @@ public sealed class WindowEventsController : Controller
         // silently refusing to credit.
         var typeChanged = !string.Equals(windowEvent.EntryType, entryType, StringComparison.Ordinal);
         var overrideChanged = HasMemberDkpChange(windowEvent, resolvedDkp, memberDkp);
-        if (!amountChanged && !typeChanged && !overrideChanged)
+        // A misc-rate change moves only misc-only members, so it shows up in neither the default
+        // amount nor in a per-member override the form already carried. Without this term an edit
+        // that only retunes Misc DKP would report "No changes to apply" and quietly do nothing.
+        var miscChanged = windowEvent.MiscDkpAmount.HasValue != miscDkpAmount.HasValue
+            || (windowEvent.MiscDkpAmount.HasValue && miscDkpAmount.HasValue
+                && Math.Abs(windowEvent.MiscDkpAmount.Value - miscDkpAmount.Value) > 0.0001);
+        if (!amountChanged && !typeChanged && !overrideChanged && !miscChanged)
         {
             TempData["WindowEventStatus"] = "No changes to apply.";
             return RedirectToAction(nameof(Index), new { linkshellId });
@@ -246,6 +274,12 @@ public sealed class WindowEventsController : Controller
         windowEvent.DkpAmount = resolvedDkp;
         windowEvent.EntryType = entryType;
         ApplyMemberDkpOverrides(windowEvent, resolvedDkp, memberDkp);
+        // Resolved BEFORE the assignment below, or the stored-value fallback would read the
+        // value we are about to overwrite and a save that carries no misc field would reset it.
+        var resolvedMisc = WindowEventDkp.ResolveMisc(miscDkpAmount, windowEvent.MiscDkpAmount, resolvedDkp);
+        windowEvent.MiscDkpAmount = miscDkpAmount;
+        WindowEventMiscDkp.ApplyMiscOverrides(
+            windowEvent, resolvedDkp, resolvedMisc, WindowEventMiscDkp.SubmittedNames(memberDkp));
         await _db.SaveChangesAsync(cancellationToken);
 
         // Reconcile the already-credited ledger + per-member DKP by the delta.
@@ -265,6 +299,8 @@ public sealed class WindowEventsController : Controller
         int linkshellId,
         int windowEventId,
         [FromForm] double? dkpAmount,
+        // Null means "misc pays what a window pays", which is the default.
+        [FromForm] double? miscDkpAmount,
         [FromForm] string? entryType,
         [FromForm(Name = "MemberDkp")] List<WindowEventMemberDkpInput>? memberDkp,
         CancellationToken cancellationToken)
@@ -273,6 +309,9 @@ public sealed class WindowEventsController : Controller
 
         var windowEvent = await _db.WindowEvents
             .Include(e => e.MemberDkpOverrides)
+            // Needed to tell who is misc-ONLY. Nothing here loaded snapshots before: the misc rate
+            // is the first thing on this path that depends on how a capture was filed.
+            .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
             .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
         if (windowEvent is null) return NotFound();
 
@@ -289,6 +328,17 @@ public sealed class WindowEventsController : Controller
             TempData["WindowEventError"] = "This Window Event has already been posted to the DKP sheet.";
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
+        // Unverified captures are excluded from the combined roster, so posting with any still
+        // outstanding would pay a roster that is visibly missing people — and posting is one-way.
+        // Force the decision first; rejecting is one click if the capture is junk.
+        var pendingCount = await _windowEventLinks.CountPendingSnapshotsAsync(windowEvent.Id, cancellationToken);
+        if (pendingCount > 0)
+        {
+            TempData["WindowEventError"] =
+                $"{pendingCount} snapshot{(pendingCount == 1 ? " is" : "s are")} awaiting verification. "
+                + "Confirm or reject them before posting — their members are not in the roster below yet.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
         if (!TryValidateMemberDkp(memberDkp, out var memberDkpError))
         {
             TempData["WindowEventError"] = memberDkpError;
@@ -298,6 +348,12 @@ public sealed class WindowEventsController : Controller
         windowEvent.DkpAmount = resolvedDkp;
         windowEvent.EntryType = entryType;
         ApplyMemberDkpOverrides(windowEvent, resolvedDkp, memberDkp);
+        // Resolved BEFORE the assignment below, or the stored-value fallback would read the
+        // value we are about to overwrite and a save that carries no misc field would reset it.
+        var resolvedMisc = WindowEventDkp.ResolveMisc(miscDkpAmount, windowEvent.MiscDkpAmount, resolvedDkp);
+        windowEvent.MiscDkpAmount = miscDkpAmount;
+        WindowEventMiscDkp.ApplyMiscOverrides(
+            windowEvent, resolvedDkp, resolvedMisc, WindowEventMiscDkp.SubmittedNames(memberDkp));
         windowEvent.PostedToSheetAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -329,6 +385,12 @@ public sealed class WindowEventsController : Controller
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
+    // Files an unlinked snapshot under an attendance event: an existing one when `windowEventId`
+    // is set ("Link to Event"), otherwise one found-or-created from `name`.
+    //
+    // `createNew` forces a brand-new event rather than folding into an open one of the same name —
+    // what the "Make a New Event from this Snapshot" button means, as opposed to the dropdown's
+    // link. Without it a repeat camp would silently swallow today's snapshot into yesterday's row.
     [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/attach")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AttachSnapshot(
@@ -336,6 +398,12 @@ public sealed class WindowEventsController : Controller
         int snapshotId,
         [FromForm] int? windowEventId,
         [FromForm] string? name,
+        [FromForm] bool createNew,
+        // The slot the officer picked: a numbered window, or Misc. Ingest no longer derives
+        // either, so this is the only place a capture is ever classified.
+        [FromForm] string? slotKind,
+        [FromForm] int? windowNumber,
+        [FromServices] AllianceIdentityService allianceIdentity,
         CancellationToken cancellationToken)
     {
         if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
@@ -353,36 +421,205 @@ public sealed class WindowEventsController : Controller
         }
         else
         {
-            var trimmed = TrimToNull(name, 128);
+            // Falls back to the snapshot's own name so "Make a New Event" works straight off a
+            // capture the addon already named, with no retyping.
+            var trimmed = TrimToNull(name, 128) ?? TrimToNull(snapshot.Name, 128);
             if (trimmed is null)
             {
-                TempData["WindowEventError"] = "Choose an existing Window Event or enter a name.";
+                TempData["WindowEventError"] = "Choose an existing attendance event, or name this snapshot first.";
                 return RedirectToAction(nameof(Index), new { linkshellId });
             }
-            windowEvent = await FindOrCreateOpenEventAsync(
+            windowEvent = await _windowEventLinks.FindOrCreateAsync(
                 linkshellId,
                 trimmed,
                 snapshot.CapturedAtUtc,
                 snapshot.CapturedByCharacterName,
                 DateTime.UtcNow,
-                cancellationToken);
+                cancellationToken,
+                forceNew: createNew);
             snapshot.Name ??= trimmed;
         }
 
         if (windowEvent is null) return NotFound();
 
-        snapshot.WindowEventId = windowEvent.Id;
-        snapshot.SnapshotStatus = AttendanceSnapshotStatuses.Active;
-        snapshot.DuplicateOfSnapshotId = null;
-        windowEvent.FirstCapturedAtUtc = Min(windowEvent.FirstCapturedAtUtc, snapshot.CapturedAtUtc);
-        windowEvent.LastCapturedAtUtc = Max(windowEvent.LastCapturedAtUtc, snapshot.CapturedAtUtc);
+        WindowEventLinkService.ApplySlot(snapshot, windowEvent, slotKind, windowNumber);
+
+        // The alliance NUMBER is assigned here, not at ingest: it is an ordinal within THIS camp,
+        // and until a capture is filed there is no camp to be first, second or third on.
+        snapshot.AllianceNumber = await allianceIdentity.ResolveNumberAsync(
+            windowEvent.Id, snapshot.AllianceKey, cancellationToken);
+
+        // Note what is NOT here: the snapshot's status. Filing a capture and vouching for it are
+        // separate decisions, and this used to force Active — which would have verified a Pending
+        // capture the instant an officer sorted it into the right camp.
+        _windowEventLinks.Attach(snapshot, windowEvent);
 
         await _db.SaveChangesAsync(cancellationToken);
-        await MarkLikelyDuplicateAsync(snapshot.Id, cancellationToken);
 
         // Sheet sync is officer-initiated via the Post to DKP Sheet button on
         // the Window Event card -- attaching a snapshot no longer auto-pushes
         // rows so the user has a chance to fill in DKP + Entry Type first.
+        TempData["WindowEventStatus"] =
+            $"Snapshot linked to \"{windowEvent.Name}\" as {DescribeSlot(snapshot)}.";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    // Renames the SNAPSHOT itself, and nothing else. Separate from AttachSnapshot's name field,
+    // which conflated naming a capture with creating an event to file it under — an officer
+    // labelling "Fafnir pop 2" for their own sake would find a camp had appeared.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/rename")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RenameSnapshot(
+        int linkshellId,
+        int snapshotId,
+        [FromForm] string? name,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var snapshot = await _db.AttendanceSnapshots
+            .FirstOrDefaultAsync(s => s.Id == snapshotId && s.LinkshellId == linkshellId, cancellationToken);
+        if (snapshot is null) return NotFound();
+
+        snapshot.Name = TrimToNull(name, 128);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        TempData["WindowEventStatus"] = snapshot.Name is null
+            ? "Snapshot name cleared."
+            : $"Snapshot renamed to \"{snapshot.Name}\".";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    // Corrects the alliance a poster claimed. The number cannot be detected in game — the client
+    // only ever sees your own alliance — so it is typed by a member under pressure at a pop, and
+    // getting it wrong collapses two alliances into one row on the card.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/alliance")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetSnapshotAlliance(
+        int linkshellId,
+        int snapshotId,
+        [FromForm] int allianceNumber,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var snapshot = await _db.AttendanceSnapshots
+            .FirstOrDefaultAsync(s => s.Id == snapshotId && s.LinkshellId == linkshellId, cancellationToken);
+        if (snapshot is null) return NotFound();
+
+        snapshot.AllianceNumber = AttendanceSnapshotAlliances.Resolve(allianceNumber);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        TempData["WindowEventStatus"] =
+            $"Snapshot moved to {AttendanceSnapshotAlliances.Label(snapshot.AllianceNumber, snapshot.AllianceKey, snapshot.AllianceLeaderName)}.";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+    // Moves a capture between a numbered window and Misc, in place.
+    //
+    // Filing is entirely manual now — ingest classifies nothing — so mis-filing is not an edge
+    // case, it is the expected cost of the trade. Detach-and-refile would work but throws away the
+    // link and the officer has to find the capture again in the triage queue.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/slot")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetSnapshotSlot(
+        int linkshellId,
+        int snapshotId,
+        [FromForm] string? slotKind,
+        [FromForm] int? windowNumber,
+        CancellationToken cancellationToken)
+    {
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var snapshot = await _db.AttendanceSnapshots
+            .Include(s => s.WindowEvent)
+            .FirstOrDefaultAsync(s => s.Id == snapshotId && s.LinkshellId == linkshellId, cancellationToken);
+        if (snapshot is null) return NotFound();
+
+        if (snapshot.WindowEvent is null)
+        {
+            TempData["WindowEventError"] = "File this capture to an event before choosing a slot.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        // Re-slotting a POSTED event would move members between the window rate and the misc rate
+        // after the DKP has already been paid, and this action does not reconcile the ledger. Edit
+        // the posted event instead, which does.
+        if (snapshot.WindowEvent.PostedToSheetAt.HasValue)
+        {
+            TempData["WindowEventError"] =
+                "This event is already posted. Use Edit on the event to change DKP after a re-slot.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
+
+        WindowEventLinkService.ApplySlot(snapshot, snapshot.WindowEvent, slotKind, windowNumber);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        TempData["WindowEventStatus"] = $"Snapshot moved to {DescribeSlot(snapshot)}.";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    // How a slot reads back to the officer who just chose it. "Misc" rather than a window number,
+    // and a bare "the camp roster" on an ungridded camp where there is no number to name.
+    private static string DescribeSlot(AttendanceSnapshot snapshot)
+        => AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind)
+            ? "Miscellaneous"
+            : snapshot.WindowNumber is int window ? $"Window {window}" : "the camp roster";
+
+    // Confirms a member-posted capture: Pending -> Active, which is what puts its members into the
+    // combined roster and therefore into the payout. Deliberately its own action rather than a
+    // value on SetSnapshotStatus, because it is the one status change that has to record WHO.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/verify")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> VerifySnapshot(
+        int linkshellId,
+        int snapshotId,
+        CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var snapshot = await _db.AttendanceSnapshots
+            .FirstOrDefaultAsync(s => s.Id == snapshotId && s.LinkshellId == linkshellId, cancellationToken);
+        if (snapshot is null) return NotFound();
+
+        snapshot.SnapshotStatus = AttendanceSnapshotStatuses.Active;
+        snapshot.VerifiedAtUtc = DateTime.UtcNow;
+        snapshot.VerifiedByAppUserId = user.Id;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        TempData["WindowEventStatus"] =
+            $"Confirmed the {AttendanceSnapshotAlliances.Label(snapshot.AllianceNumber, snapshot.AllianceKey, snapshot.AllianceLeaderName)} capture posted by "
+            + $"{snapshot.CapturedByCharacterName ?? "an unknown character"}.";
+        return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    // Rejects a capture. Lands on Ignored rather than getting a status of its own: every query that
+    // has to exclude a rejected snapshot — the combined roster, the DKP ledger, the unlinked list,
+    // the merge-target search — already excludes Ignored, so a sixth status would have meant six
+    // new filters and one of them eventually being missed. The verifier stamp is what records that
+    // a person looked at this and said no, rather than it being junk nobody ever triaged.
+    [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/reject")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RejectSnapshot(
+        int linkshellId,
+        int snapshotId,
+        CancellationToken cancellationToken)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+        if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
+
+        var snapshot = await _db.AttendanceSnapshots
+            .FirstOrDefaultAsync(s => s.Id == snapshotId && s.LinkshellId == linkshellId, cancellationToken);
+        if (snapshot is null) return NotFound();
+
+        snapshot.SnapshotStatus = AttendanceSnapshotStatuses.Ignored;
+        snapshot.VerifiedAtUtc = DateTime.UtcNow;
+        snapshot.VerifiedByAppUserId = user.Id;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        TempData["WindowEventStatus"] = "Snapshot rejected.";
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
@@ -399,9 +636,11 @@ public sealed class WindowEventsController : Controller
         var normalized = status switch
         {
             AttendanceSnapshotStatuses.Active => AttendanceSnapshotStatuses.Active,
-            AttendanceSnapshotStatuses.Duplicate => AttendanceSnapshotStatuses.Duplicate,
             AttendanceSnapshotStatuses.Ignored => AttendanceSnapshotStatuses.Ignored,
-            AttendanceSnapshotStatuses.PossibleDuplicate => AttendanceSnapshotStatuses.PossibleDuplicate,
+            // Accepted so an officer can send a capture BACK for review after promoting it by
+            // mistake. Confirming still goes through VerifySnapshot, which is the only path that
+            // records who vouched for it.
+            AttendanceSnapshotStatuses.Pending => AttendanceSnapshotStatuses.Pending,
             _ => null
         };
         if (normalized is null) return BadRequest("Unsupported snapshot status.");
@@ -413,7 +652,6 @@ public sealed class WindowEventsController : Controller
         snapshot.SnapshotStatus = normalized;
         if (normalized == AttendanceSnapshotStatuses.Active || normalized == AttendanceSnapshotStatuses.Ignored)
         {
-            snapshot.DuplicateOfSnapshotId = null;
         }
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -425,10 +663,8 @@ public sealed class WindowEventsController : Controller
 
     // Hard-deletes a snapshot (and its entries). Used from the Unlinked
     // Snapshots list for junk/typo captures the officer doesn't want kept
-    // even as "Ignored". Entries cascade via the required SnapshotId FK;
-    // any sibling snapshot pointing here via DuplicateOfSnapshotId is
-    // SetNull'd by the configured delete behavior. Rows already appended to
-    // the sheet are not touched -- AttInput is append-only.
+    // even as "Ignored". Entries cascade via the required SnapshotId FK. Rows
+    // already appended to the sheet are not touched -- AttInput is append-only.
     [HttpPost("/linkshells/{linkshellId:int}/window-events/snapshots/{snapshotId:int}/delete")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteSnapshot(
@@ -515,7 +751,8 @@ public sealed class WindowEventsController : Controller
             return RedirectToAction(nameof(Index), new { linkshellId });
         }
 
-        // FFXI alliance caps at 18; match the addon snapshot invariant.
+        // An FFXI alliance is 18 people, and a snapshot is exactly one alliance — the same ceiling
+        // the addon ingest enforces, for the same reason.
         if (snapshot.Entries.Count >= 18)
         {
             TempData["WindowEventStatus"] = "Snapshot already has the 18-member alliance maximum.";
@@ -550,97 +787,6 @@ public sealed class WindowEventsController : Controller
     private static string? Clip(string? value, int max)
         => string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max];
 
-    private async Task<WindowEvent> FindOrCreateOpenEventAsync(
-        int linkshellId,
-        string name,
-        DateTime capturedAtUtc,
-        string? capturedByCharacterName,
-        DateTime nowUtc,
-        CancellationToken cancellationToken)
-    {
-        var normalized = NormalizeName(name)!;
-        var staleCutoff = capturedAtUtc.AddHours(-21);
-        var existing = await _db.WindowEvents
-            .Where(e =>
-                e.LinkshellId == linkshellId &&
-                e.Status == WindowEventStatuses.Open &&
-                e.NormalizedName == normalized &&
-                e.LastCapturedAtUtc >= staleCutoff)
-            .OrderByDescending(e => e.LastCapturedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (existing is not null) return existing;
-
-        var windowEvent = new WindowEvent
-        {
-            LinkshellId = linkshellId,
-            Name = name,
-            NormalizedName = normalized,
-            Status = WindowEventStatuses.Open,
-            CreatedAtUtc = nowUtc,
-            FirstCapturedAtUtc = capturedAtUtc,
-            LastCapturedAtUtc = capturedAtUtc,
-            CreatedByCharacterName = capturedByCharacterName,
-            // Pre-select the camp from the monster name so officers don't
-            // have to set it manually on every newly created event.
-            EntryType = WindowEventEntryTypes.FromMonsterName(name),
-        };
-        _db.WindowEvents.Add(windowEvent);
-        await _db.SaveChangesAsync(cancellationToken);
-        return windowEvent;
-    }
-
-    private async Task MarkLikelyDuplicateAsync(int snapshotId, CancellationToken cancellationToken)
-    {
-        var snapshot = await _db.AttendanceSnapshots
-            .Include(s => s.Entries)
-            .FirstOrDefaultAsync(s => s.Id == snapshotId, cancellationToken);
-        if (snapshot is null || !snapshot.WindowEventId.HasValue || snapshot.Entries.Count == 0) return;
-
-        var names = snapshot.Entries
-            .Select(e => NormalizeName(e.CharacterName))
-            .Where(n => n is not null)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (names.Count == 0) return;
-
-        var fromUtc = snapshot.CapturedAtUtc.AddMinutes(-8);
-        var toUtc = snapshot.CapturedAtUtc.AddMinutes(8);
-        var candidates = await _db.AttendanceSnapshots
-            .Include(s => s.Entries)
-            .Where(s =>
-                s.Id != snapshot.Id &&
-                s.WindowEventId == snapshot.WindowEventId &&
-                s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored &&
-                s.SnapshotStatus != AttendanceSnapshotStatuses.Duplicate &&
-                s.CapturedAtUtc >= fromUtc &&
-                s.CapturedAtUtc <= toUtc)
-            .ToListAsync(cancellationToken);
-
-        AttendanceSnapshot? best = null;
-        var bestOverlap = 0d;
-        foreach (var candidate in candidates)
-        {
-            var otherNames = candidate.Entries
-                .Select(e => NormalizeName(e.CharacterName))
-                .Where(n => n is not null)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var denominator = Math.Min(names.Count, otherNames.Count);
-            if (denominator == 0) continue;
-            var overlap = names.Count(n => otherNames.Contains(n!)) / (double)denominator;
-            if (overlap > bestOverlap)
-            {
-                bestOverlap = overlap;
-                best = candidate;
-            }
-        }
-
-        if (best is not null && bestOverlap >= 0.75)
-        {
-            snapshot.SnapshotStatus = AttendanceSnapshotStatuses.PossibleDuplicate;
-            snapshot.DuplicateOfSnapshotId = best.Id;
-            await _db.SaveChangesAsync(cancellationToken);
-        }
-    }
-
     // Row mapping moved to AttendanceSectionsBuilder when the open-events sections were folded into
     // the Event System page — EventController needs the identical shape. These stay as forwarders so
     // the call sites throughout this controller read the same as they always did.
@@ -664,8 +810,15 @@ public sealed class WindowEventsController : Controller
             .AsNoTracking()
             .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId, cancellationToken);
         if (membership is null) return Forbid();
-        return IsLeaderOrOfficer(membership) ? null : Forbid();
+        return await CanManageAsync(membership, cancellationToken) ? null : Forbid();
     }
+
+    // Leader/Officer by rank, OR the app-wide admin override. The membership row must
+    // already be non-null when this is called — the override never reaches a linkshell
+    // the user has not joined. See AdminOverrideService.
+    private async Task<bool> CanManageAsync(AppUserLinkshell membership, CancellationToken cancellationToken)
+        => IsLeaderOrOfficer(membership)
+           || await _adminOverride.IsActiveForAsync(membership.AppUserId, cancellationToken);
 
     private static bool IsLeaderOrOfficer(AppUserLinkshell membership)
         => membership.Rank?.Equals("Leader", StringComparison.OrdinalIgnoreCase) == true
@@ -783,9 +936,6 @@ public sealed class WindowEventsController : Controller
         var parts = value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return string.Join(' ', parts).ToUpperInvariant();
     }
-
-    private static DateTime Min(DateTime a, DateTime b) => a <= b ? a : b;
-    private static DateTime Max(DateTime a, DateTime b) => a >= b ? a : b;
 
     private static string FormatPretty(DateTime utc, DateTimeZone zone)
         => AttendanceSectionsBuilder.FormatPretty(utc, zone);

@@ -14,6 +14,7 @@ public class LinkshellController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly Services.DiscordTodBoardQueue _todBoardQueue;
     private readonly GlobalSettingsService _globalSettings;
     private readonly DiscordIdentityService _discordIdentity;
@@ -23,10 +24,13 @@ public class LinkshellController : Controller
     private readonly Services.DkpPoolResolver _dkpPools;
     private readonly Services.DkpPoolEditor _dkpPoolEditor;
     private readonly Services.DkpPoolEventTypeCatalog _dkpPoolEventTypes;
+    private readonly Services.LinkshellMonsterTimingProvisioner _monsterTimingProvisioner;
+    private readonly Services.MonsterTimingEditor _monsterTimingEditor;
 
     public LinkshellController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         Services.DiscordTodBoardQueue todBoardQueue,
         GlobalSettingsService globalSettings,
         DiscordIdentityService discordIdentity,
@@ -34,10 +38,13 @@ public class LinkshellController : Controller
         Services.ChannelRouteEditor channelRoutes,
         Services.DkpPoolResolver dkpPools,
         Services.DkpPoolEditor dkpPoolEditor,
-        Services.DkpPoolEventTypeCatalog dkpPoolEventTypes)
+        Services.DkpPoolEventTypeCatalog dkpPoolEventTypes,
+        Services.LinkshellMonsterTimingProvisioner monsterTimingProvisioner,
+        Services.MonsterTimingEditor monsterTimingEditor)
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _todBoardQueue = todBoardQueue;
         _globalSettings = globalSettings;
         _discordIdentity = discordIdentity;
@@ -46,11 +53,24 @@ public class LinkshellController : Controller
         _dkpPools = dkpPools;
         _dkpPoolEditor = dkpPoolEditor;
         _dkpPoolEventTypes = dkpPoolEventTypes;
+        _monsterTimingProvisioner = monsterTimingProvisioner;
+        _monsterTimingEditor = monsterTimingEditor;
     }
 
     // Fills the DKP-pools card: the linkshell's pools, plus one assignment row per assignable event
     // type. Assignments bind by pool INDEX, so an officer can add a pool and move event types into
     // it in a single save — a new pool has no id to bind to yet.
+    // The linkshell's per-monster setups for the Monster Setups card. Loading is what SEEDS the
+    // catalog, exactly as the Activity's GET does — both converge on the same provisioner so a
+    // linkshell ends up with one catalog whichever surface it opens first.
+    private async Task LoadMonsterTimingInputsAsync(LinkshellCustomizeViewModel model, int linkshellId)
+    {
+        var rows = await _monsterTimingProvisioner.EnsureSeededAsync(linkshellId, HttpContext.RequestAborted);
+        model.MonsterTimings = rows.Select(MonsterTimingInput.From).ToList();
+        model.MonsterTimingCategories = Services.MonsterTimingDefaults.Categories.ToList();
+        model.MonsterTimingMaxWindows = Services.HnmConfig.MaxWindow;
+    }
+
     private async Task LoadDkpPoolInputsAsync(LinkshellCustomizeViewModel model, int linkshellId)
     {
         var map = await _dkpPools.GetMapAsync(linkshellId, HttpContext.RequestAborted);
@@ -223,8 +243,8 @@ public class LinkshellController : Controller
             .ThenInclude(link => link.AppUser)
             .FirstOrDefaultAsync(ls => ls.Id == id);
 
-        ViewBag.CanEditLinkshell = CanManageLinkshell(membership);
-        ViewBag.CanDeleteLinkshell = IsLeader(membership);
+        ViewBag.CanEditLinkshell = await CanManageLinkshellAsync(membership);
+        ViewBag.CanDeleteLinkshell = await IsLeaderAsync(membership);
 
         return linkshell is null ? NotFound() : View(linkshell);
     }
@@ -237,7 +257,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, id);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -271,7 +291,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, id);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -297,7 +317,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, id);
-        if (!IsLeader(membership))
+        if (!await IsLeaderAsync(membership))
         {
             return Forbid();
         }
@@ -330,7 +350,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, id);
-        if (!IsLeader(membership))
+        if (!await IsLeaderAsync(membership))
         {
             return Forbid();
         }
@@ -451,7 +471,7 @@ public class LinkshellController : Controller
         var vm = BuildCustomizeViewModel(
             target,
             manageableLinkshells,
-            CanRole(roles, membership?.Rank, role => role.CanManageRoles));
+            await CanRoleAsync(roles, membership, role => role.CanManageRoles));
         vm.DiscordGuildId = target.DiscordGuildId;
         vm.DiscordGuildName = target.DiscordGuildName;
         vm.DiscussionChannelId = target.DiscussionChannelId;
@@ -466,9 +486,11 @@ public class LinkshellController : Controller
         vm.EligibleGuilds = await BuildEligibleGuildsAsync(user.Id, HttpContext.RequestAborted);
         await PopulateDiscordChannelsAsync(vm, target, HttpContext.RequestAborted);
         await LoadDkpPoolInputsAsync(vm, target.Id);
+        await LoadMonsterTimingInputsAsync(vm, target.Id);
         // Hide the Game Addon pairing card while a super admin has globally
         // disabled the addon (the pairing-code endpoints reject requests anyway).
         vm.AddonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(HttpContext.RequestAborted);
+        vm.ClaimShieldGloballyDisabled = await _globalSettings.IsClaimShieldGloballyDisabledAsync(HttpContext.RequestAborted);
         return View(vm);
     }
 
@@ -507,7 +529,7 @@ public class LinkshellController : Controller
         var roles = await EnsureDefaultRolesAsync(target.Id, HttpContext.RequestAborted);
         var membership = await GetMembershipAsync(user.Id, target.Id);
         var vm = BuildCustomizeViewModel(
-            target, manageableLinkshells, CanRole(roles, membership?.Rank, role => role.CanManageRoles));
+            target, manageableLinkshells, await CanRoleAsync(roles, membership, role => role.CanManageRoles));
         return View(vm);
     }
 
@@ -545,8 +567,9 @@ public class LinkshellController : Controller
         var roles = await EnsureDefaultRolesAsync(target.Id, HttpContext.RequestAborted);
         var membership = await GetMembershipAsync(user.Id, target.Id);
         var vm = BuildCustomizeViewModel(
-            target, manageableLinkshells, CanRole(roles, membership?.Rank, role => role.CanManageRoles));
+            target, manageableLinkshells, await CanRoleAsync(roles, membership, role => role.CanManageRoles));
         vm.AddonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(HttpContext.RequestAborted);
+        vm.ClaimShieldGloballyDisabled = await _globalSettings.IsClaimShieldGloballyDisabledAsync(HttpContext.RequestAborted);
         return View(vm);
     }
 
@@ -561,7 +584,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, model.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -599,11 +622,10 @@ public class LinkshellController : Controller
             model.ManageableLinkshells = manageable;
             model.LinkshellName = linkshell.LinkshellName;
             var roles = await EnsureDefaultRolesAsync(linkshell.Id, HttpContext.RequestAborted);
-            model.CanManageRoles = CanRole(roles, membership?.Rank, role => role.CanManageRoles);
+            model.CanManageRoles = await CanRoleAsync(roles, membership, role => role.CanManageRoles);
             return View(model);
         }
 
-        linkshell.LinkshellType = LinkshellTypes.Normalize(model.LinkshellType);
         linkshell.LootStructure = model.LootStructure!;
         linkshell.DkpRoundingIncrement = model.DkpRoundingIncrement!;
         // Resolve normalises to a known theme key (or the default), so an unknown
@@ -620,19 +642,14 @@ public class LinkshellController : Controller
         linkshell.EnableRevenue  = model.EnableRevenue;
         linkshell.EnableActivityTracking = model.EnableActivityTracking;
         linkshell.OutsidePartySignupEnabled = model.OutsidePartySignupEnabled;
-        linkshell.FillAlliancesInOrder = model.FillAlliancesInOrder;
-        linkshell.HnmOutsideSignupEnabled = model.HnmOutsideSignupEnabled;
         linkshell.UseComponentsV2Boards = model.UseComponentsV2Boards;
         // Clamp to >= 1 so the streak rule can't be configured into a no-op.
         linkshell.InactiveAfterAbsences   = Math.Max(1, model.InactiveAfterAbsences);
         linkshell.ActiveAfterAttendances  = Math.Max(1, model.ActiveAfterAttendances);
-        // Pipe-separated, trimmed, de-duped — same storage format the Discord
-        // Activity writes and TodController reads when filtering the tracker.
-        linkshell.HiddenTodMonsters = string.Join('|',
-            (model.HiddenTodMonsters ?? new List<string>())
-                .Select(name => name?.Trim())
-                .Where(name => !string.IsNullOrEmpty(name))
-                .Distinct(StringComparer.OrdinalIgnoreCase));
+        // HiddenTodMonsters is deliberately NOT touched here: the web Customize page no longer
+        // offers those switches, so this form posts nothing for them and a blind assign would
+        // wipe whatever the Discord Activity stored. That column is still read by the ToD
+        // tracker and the ToD board publisher.
         await _context.SaveChangesAsync();
 
         // Enabling tracking or changing the thresholds can change who's Inactive →
@@ -686,7 +703,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -745,7 +762,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -794,7 +811,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -856,7 +873,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -905,7 +922,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -962,7 +979,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -992,7 +1009,7 @@ public class LinkshellController : Controller
         if (user is null) return Challenge();
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership)) return Forbid();
+        if (!await CanManageLinkshellAsync(membership)) return Forbid();
 
         var linkshell = await _context.Linkshells.FindAsync(linkshellId);
         if (linkshell is null) return NotFound();
@@ -1024,7 +1041,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -1151,7 +1168,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -1167,22 +1184,15 @@ public class LinkshellController : Controller
             ? null
             : await _discordBot.ListTextChannelsAsync(guildForChannels, HttpContext.RequestAborted);
 
-        // The web route form has no per-monster HNM picker (that narrowing is managed in
-        // the Discord Activity), so preserve any existing monster filter on edited routes
-        // rather than clearing it on a web save.
-        var existingMonsterFilters = await _context.LinkshellChannelRoutes
-            .Where(route => route.LinkshellId == linkshellId)
-            .Select(route => new { route.Id, route.HnmMonsterFilter })
-            .ToDictionaryAsync(x => x.Id, x => x.HnmMonsterFilter, HttpContext.RequestAborted);
-
+        // The web form now carries the same per-monster HNM picker as the Activity, so the
+        // posted filter is authoritative (empty = every HNM goes to this route).
+        // ChannelRouteEditor canonicalises the names against the linkshell's catalog.
         var edits = (channelRoutes ?? new List<ChannelRouteInput>())
             .Select(r => new Services.ChannelRouteEdit(
                 r.Id == 0 ? null : r.Id, r.Name, r.ChannelId,
                 r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard, r.PostDkpSheet,
                 r.EventTypeFilter,
-                r.Id != 0 && existingMonsterFilters.TryGetValue(r.Id, out var mf) && !string.IsNullOrWhiteSpace(mf)
-                    ? mf.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
-                    : r.HnmMonsterFilter))
+                r.HnmMonsterFilter))
             .ToList();
 
         var error = await _channelRoutes.SaveAsync(linkshellId, edits, available, HttpContext.RequestAborted);
@@ -1212,7 +1222,7 @@ public class LinkshellController : Controller
         }
 
         var membership = await GetMembershipAsync(user.Id, linkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -1256,13 +1266,54 @@ public class LinkshellController : Controller
         return RedirectToAction(nameof(Customize), new { id = linkshellId });
     }
 
+    // The web half of the Monster Setups card. Converges on the SAME MonsterTimingEditor the
+    // Activity endpoint uses, so there is exactly one implementation of "save the monster setups"
+    // and the two surfaces cannot validate differently.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveMonsterTimings(
+        int linkshellId,
+        [FromForm] List<MonsterTimingInput>? monsterTimings)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        var membership = await GetMembershipAsync(user.Id, linkshellId);
+        if (!await CanManageLinkshellAsync(membership))
+        {
+            return Forbid();
+        }
+
+        var edits = (monsterTimings ?? new List<MonsterTimingInput>())
+            .Select(row => new Services.MonsterTimingEdit(
+                row.Id == 0 ? null : row.Id,
+                row.MonsterName,
+                row.Windows,
+                row.CadenceValue,
+                row.CadenceUnit,
+                row.CooldownValue,
+                row.CooldownUnit,
+                row.Category,
+                // The web form posts a real checkbox for every row, so a bound false here means
+                // "unticked" rather than "not sent" — pass it through as an explicit value.
+                row.ClaimShieldEnabled))
+            .ToList();
+
+        var error = await _monsterTimingEditor.SaveAsync(linkshellId, edits, HttpContext.RequestAborted);
+        TempData[error is null ? "CustomizeSaved" : "CustomizeError"] =
+            error ?? "Monster setups updated.";
+        return RedirectToAction(nameof(Customize), new { id = linkshellId });
+    }
+
     private static LinkshellCustomizeViewModel BuildCustomizeViewModel(
         Linkshell target, IReadOnlyList<Linkshell> manageableLinkshells, bool canManageRoles) =>
         new()
         {
             LinkshellId           = target.Id,
             LinkshellName         = target.LinkshellName,
-            LinkshellType         = LinkshellTypes.Normalize(target.LinkshellType),
             LootStructure         = target.LootStructure,
             DkpRoundingIncrement  = target.DkpRoundingIncrement,
             EventBoardTheme       = EventBoardThemes.Resolve(target.EventBoardTheme),
@@ -1277,8 +1328,6 @@ public class LinkshellController : Controller
             EnableRevenue         = target.EnableRevenue,
             EnableActivityTracking = target.EnableActivityTracking,
             OutsidePartySignupEnabled = target.OutsidePartySignupEnabled,
-            FillAlliancesInOrder = target.FillAlliancesInOrder,
-            HnmOutsideSignupEnabled = target.HnmOutsideSignupEnabled,
             UseComponentsV2Boards = target.UseComponentsV2Boards,
             InactiveAfterAbsences  = target.InactiveAfterAbsences,
             ActiveAfterAttendances = target.ActiveAfterAttendances,
@@ -1319,11 +1368,21 @@ public class LinkshellController : Controller
             .ToList();
     }
 
-    private static bool CanRole(
+    // The named-permission check against a preloaded set of role rows. The membership
+    // is what scopes it — a null membership never resolves, so the admin override
+    // below cannot reach a linkshell the user has not joined.
+    private async Task<bool> CanRoleAsync(
         IReadOnlyList<LinkshellRole> roles,
-        string? rank,
+        AppUserLinkshell? membership,
         Func<LinkshellRole, bool> selector)
     {
+        if (membership is null) return false;
+        if (await _adminOverride.IsActiveForAsync(membership.AppUserId, HttpContext.RequestAborted))
+        {
+            return true;
+        }
+
+        var rank = membership.Rank;
         var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
         var role = roles.FirstOrDefault(role => role.Name.Equals(rankName, StringComparison.OrdinalIgnoreCase))
             ?? roles.FirstOrDefault(role => role.Name.Equals("Member", StringComparison.OrdinalIgnoreCase));
@@ -1338,13 +1397,21 @@ public class LinkshellController : Controller
             .FirstOrDefaultAsync(link => link.AppUserId == appUserId && link.LinkshellId == linkshellId);
     }
 
-    private static bool CanManageLinkshell(AppUserLinkshell? membership)
+    // Both gates below reject a null membership first, then fall through to the
+    // app-wide admin override. See AdminOverrideService for why that order matters.
+    private async Task<bool> CanManageLinkshellAsync(AppUserLinkshell? membership)
     {
-        return LinkshellRanks.IsLeaderOrOfficer(membership?.Rank);
+        if (membership is null) return false;
+        return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
+               || await _adminOverride.IsActiveForAsync(membership.AppUserId, HttpContext.RequestAborted);
     }
 
-    private static bool IsLeader(AppUserLinkshell? membership)
-        => membership?.Rank?.Equals("Leader", StringComparison.OrdinalIgnoreCase) == true;
+    private async Task<bool> IsLeaderAsync(AppUserLinkshell? membership)
+    {
+        if (membership is null) return false;
+        return membership.Rank?.Equals("Leader", StringComparison.OrdinalIgnoreCase) == true
+               || await _adminOverride.IsActiveForAsync(membership.AppUserId, HttpContext.RequestAborted);
+    }
 
     private static string? GetDeleteBlockedReason(int memberCount, int activeEventCount)
     {

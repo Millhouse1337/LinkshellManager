@@ -46,12 +46,26 @@ public sealed class AttendanceSectionsBuilder
             .Include(e => e.MemberDkpOverrides)
             .ToListAsync(cancellationToken);
 
+        // How many there really are, so the section can say when it is hiding some. Every
+        // /lsm now capture lands here now — filing is entirely manual — so the cap is reachable in
+        // a way it was not when ingest auto-filed most posts.
+        var unlinkedTotal = await _db.AttendanceSnapshots
+            .AsNoTracking()
+            .CountAsync(
+                s => s.LinkshellId == linkshellId
+                     && s.WindowEventId == null
+                     && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored,
+                cancellationToken);
+
+        // Newest first, then by alliance, so several alliances posting the same moment list as
+        // 1, 2, 3 instead of in whatever order they reached the server.
         var unlinked = await _db.AttendanceSnapshots
             .AsNoTracking()
             .Where(s => s.LinkshellId == linkshellId
                         && s.WindowEventId == null
                         && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
             .OrderByDescending(s => s.CapturedAtUtc)
+            .ThenBy(s => s.AllianceNumber)
             .Take(MaxUnlinkedSnapshots)
             .Include(s => s.Entries)
             .ToListAsync(cancellationToken);
@@ -78,8 +92,34 @@ public sealed class AttendanceSectionsBuilder
             OpenEvents = openEvents.Select(e => MapWindowEvent(e, userZone)).ToList(),
             ClosedEvents = new(),
             UnlinkedSnapshots = unlinked.Select(s => MapSnapshot(s, userZone)).ToList(),
+            UnlinkedTotalCount = unlinkedTotal,
+            UnlinkedDisplayCap = MaxUnlinkedSnapshots,
             RosterCharacterNames = rosterNames,
         };
+    }
+
+    // The archive's search, as a composable filter over closed Window Events. Extracted so the
+    // Event System page and the Discord Activity's own window-events endpoint run the SAME match
+    // rules: both surfaces list the same cards, so a query that hits on one has to hit on the other.
+    //
+    // Blank/null means "no filter" and the source comes back untouched.
+    public static IQueryable<WindowEvent> ApplyClosedSearch(IQueryable<WindowEvent> source, string? query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return source;
+
+        var pattern = $"%{query.Trim()}%";
+        return source.Where(e =>
+            (e.Name != null && EF.Functions.ILike(e.Name, pattern))
+            || (e.CreatedByCharacterName != null && EF.Functions.ILike(e.CreatedByCharacterName, pattern))
+            // Poster match spans EVERY snapshot, matching the in-memory filter this replaced.
+            || e.Snapshots.Any(s =>
+                s.CapturedByCharacterName != null && EF.Functions.ILike(s.CapturedByCharacterName, pattern))
+            // Member match runs over the COMBINED roster, and BuildCombinedMembers builds that
+            // from ACTIVE snapshots only — hence the status filter, so a search here can't match
+            // a name the card doesn't list.
+            || e.Snapshots.Any(s =>
+                s.SnapshotStatus == AttendanceSnapshotStatuses.Active
+                && s.Entries.Any(entry => EF.Functions.ILike(entry.CharacterName, pattern))));
     }
 
     // The CLOSED half: paged and searched. Same query, mapping and match rules the standalone
@@ -108,22 +148,7 @@ public sealed class AttendanceSectionsBuilder
             .AsNoTracking()
             .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Closed);
 
-        if (trimmedQuery is not null)
-        {
-            var pattern = $"%{trimmedQuery}%";
-            baseQuery = baseQuery.Where(e =>
-                (e.Name != null && EF.Functions.ILike(e.Name, pattern))
-                || (e.CreatedByCharacterName != null && EF.Functions.ILike(e.CreatedByCharacterName, pattern))
-                // Poster match spans EVERY snapshot, matching the in-memory filter this replaced.
-                || e.Snapshots.Any(s =>
-                    s.CapturedByCharacterName != null && EF.Functions.ILike(s.CapturedByCharacterName, pattern))
-                // Member match runs over the COMBINED roster, and BuildCombinedMembers builds that
-                // from ACTIVE snapshots only — hence the status filter, so a search here can't match
-                // a name the card doesn't list.
-                || e.Snapshots.Any(s =>
-                    s.SnapshotStatus == AttendanceSnapshotStatuses.Active
-                    && s.Entries.Any(entry => EF.Functions.ILike(entry.CharacterName, pattern))));
-        }
+        baseQuery = ApplyClosedSearch(baseQuery, trimmedQuery);
 
         var totalCount = await baseQuery.CountAsync(cancellationToken);
         var pageNumber = Math.Clamp(
@@ -158,13 +183,14 @@ public sealed class AttendanceSectionsBuilder
         // (to name the window of a capture taken before window numbering existed).
         var snapshots = item.Snapshots
             .OrderByDescending(s => s.CapturedAtUtc)
+            .ThenBy(s => s.AllianceNumber)
             .Select(s => MapSnapshot(s, userZone, item))
             .ToList();
         var overrides = item.MemberDkpOverrides
             .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
             .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
-        var combined = BuildCombinedMembers(item.Snapshots, overrides, item.DkpAmount);
+        var combined = BuildCombinedMembers(item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount);
 
         return new WindowEventRow
         {
@@ -178,10 +204,17 @@ public sealed class AttendanceSectionsBuilder
             CreatedByCharacterName = item.CreatedByCharacterName,
             SnapshotCount = snapshots.Count,
             ActiveSnapshotCount = snapshots.Count(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active),
-            DuplicateSnapshotCount = snapshots.Count(s =>
-                s.SnapshotStatus == AttendanceSnapshotStatuses.PossibleDuplicate ||
-                s.SnapshotStatus == AttendanceSnapshotStatuses.Duplicate),
             IgnoredSnapshotCount = snapshots.Count(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Ignored),
+            PendingSnapshotCount = snapshots.Count(s => s.IsPending),
+            // From ACTIVE snapshots only, matching BuildCombinedMembers: the header count has to
+            // describe the roster below it, and a pending alliance is not in that roster yet.
+            AllianceNumbers = item.Snapshots
+                .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active
+                            && s.AllianceNumber.HasValue)
+                .Select(s => s.AllianceNumber!.Value)
+                .Distinct()
+                .OrderBy(n => n)
+                .ToList(),
             CombinedMemberCount = combined.Count,
             DkpAmount = item.DkpAmount,
             EntryType = item.EntryType,
@@ -190,6 +223,13 @@ public sealed class AttendanceSectionsBuilder
                 ? FormatPretty(item.PostedToSheetAt.Value, userZone)
                 : null,
             Snapshots = snapshots,
+            // Split once, here, so the two surfaces cannot disagree about what counts as Misc.
+            WindowSnapshots = snapshots.Where(s => !s.IsMisc).ToList(),
+            MiscSnapshots = snapshots.Where(s => s.IsMisc).ToList(),
+            MiscSnapshotCount = snapshots.Count(s => s.IsMisc),
+            MiscDkpAmount = item.MiscDkpAmount,
+            WindowCount = WindowEventWindowGrid.WindowCount(item),
+            HasWindowGrid = WindowEventWindowGrid.Minutes(item) > 0,
             CombinedMembers = combined,
         };
     }
@@ -220,18 +260,28 @@ public sealed class AttendanceSectionsBuilder
             })
             .ToList();
 
-        var cadence = windowEvent is null ? null : HnmConfig.DefaultWindowCadence(windowEvent.Name);
+        // The camp's OWN grid (stamped at creation, HnmConfig as the fallback), not the monster's
+        // built-in one — otherwise a linkshell that configured a different window count would see
+        // its snapshots labelled "of 25" against a camp that ran 8.
+        var gridWindows = windowEvent is null ? (int?)null : WindowEventWindowGrid.WindowCount(windowEvent);
+        var hasGrid = windowEvent is not null && WindowEventWindowGrid.Minutes(windowEvent) > 0;
 
         // The STORED number wins: it was pinned when the capture was taken, against the grid as it
         // stood then. Snapshots posted before window numbering existed have none, so theirs is
         // derived here from the event's anchor — the same math, just applied late. Deriving is a
         // read-time fallback rather than a data backfill because the cadence table lives in
         // HnmConfig, and a SQL backfill would have to duplicate it and then drift from it.
-        var resolvedWindow = snapshot.WindowNumber
-            ?? (windowEvent is not null
-                ? HnmConfig.SnapshotWindowNumber(
-                    windowEvent.Name, windowEvent.WindowGridAnchorUtc, snapshot.CapturedAtUtc)
-                : null);
+        // A Misc capture has NO window, and the fallback below must not invent one for it.
+        // Misc stores a null WindowNumber, which is exactly the shape that triggers the derivation
+        // — so without this test a misc post on a gridded camp would render "Window 4 of 25"
+        // sitting next to its own Misc chip.
+        var isMisc = AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind);
+        var resolvedWindow = isMisc
+            ? null
+            : snapshot.WindowNumber
+              ?? (windowEvent is not null
+                  ? WindowEventWindowGrid.SnapshotWindowNumber(windowEvent, snapshot.CapturedAtUtc)
+                  : null);
 
         return new WindowSnapshotRow
         {
@@ -239,15 +289,27 @@ public sealed class AttendanceSectionsBuilder
             WindowEventId = snapshot.WindowEventId,
             Name = snapshot.Name,
             SnapshotStatus = snapshot.SnapshotStatus,
-            DuplicateOfSnapshotId = snapshot.DuplicateOfSnapshotId,
             CapturedAtUtc = snapshot.CapturedAtUtc,
             CapturedAtDisplay = FormatPretty(snapshot.CapturedAtUtc, userZone),
             CapturedByCharacterName = snapshot.CapturedByCharacterName,
             EntryCount = snapshot.EntryCount,
+            AllianceNumber = snapshot.AllianceNumber,
+            AllianceLabel = AttendanceSnapshotAlliances.Label(snapshot.AllianceNumber, snapshot.AllianceKey, snapshot.AllianceLeaderName),
+            IsPending = snapshot.SnapshotStatus == AttendanceSnapshotStatuses.Pending,
+            VerifiedAtDisplay = snapshot.VerifiedAtUtc.HasValue
+                ? FormatPretty(snapshot.VerifiedAtUtc.Value, userZone)
+                : null,
             WindowNumber = resolvedWindow,
             WindowLabel = resolvedWindow is { } window
-                ? (cadence is { } c ? $"Window {window} of {c.Windows}" : $"Window {window}")
+                ? (hasGrid && gridWindows is { } total ? $"Window {window} of {total}" : $"Window {window}")
                 : null,
+            SlotKind = AttendanceSnapshotSlotKinds.Resolve(snapshot.SlotKind),
+            IsMisc = isMisc,
+            SlotLabel = isMisc
+                ? "Misc"
+                : resolvedWindow is { } slotWindow
+                    ? (hasGrid && gridWindows is { } slotTotal ? $"Window {slotWindow} of {slotTotal}" : $"Window {slotWindow}")
+                    : null,
             PrimaryZone = entries
                 .Where(e => !string.IsNullOrWhiteSpace(e.Zone))
                 .GroupBy(e => e.Zone!, StringComparer.OrdinalIgnoreCase)
@@ -262,7 +324,10 @@ public sealed class AttendanceSectionsBuilder
     public static List<WindowCombinedMemberRow> BuildCombinedMembers(
         IEnumerable<AttendanceSnapshot> snapshots,
         IDictionary<string, double>? memberDkpOverrides = null,
-        double? defaultDkpAmount = null)
+        double? defaultDkpAmount = null,
+        // Null means "misc pays what a window pays". Optional so the existing one-argument callers
+        // (and their tests) keep compiling and keep their old behaviour exactly.
+        double? miscDkpAmount = null)
     {
         return snapshots
             .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
@@ -277,6 +342,18 @@ public sealed class AttendanceSectionsBuilder
                 {
                     overrideAmount = found;
                 }
+
+                // A member seen in ANY window capture is an ordinary attendee, even if they also
+                // turn up in a misc post. The misc rate is for the people who were ONLY ever there
+                // off-window — the ones who stayed at a camp the shell never claimed.
+                var sawWindow = g.Any(x => !AttendanceSnapshotSlotKinds.IsMisc(x.Snapshot.SlotKind));
+                var sawMisc = g.Any(x => AttendanceSnapshotSlotKinds.IsMisc(x.Snapshot.SlotKind));
+                var creditSource = sawWindow && sawMisc
+                    ? "Both"
+                    : sawMisc ? AttendanceSnapshotSlotKinds.Misc : AttendanceSnapshotSlotKinds.Window;
+                var baseAmount = sawMisc && !sawWindow
+                    ? miscDkpAmount ?? defaultDkpAmount
+                    : defaultDkpAmount;
                 return new WindowCombinedMemberRow
                 {
                     CharacterName = g.Key,
@@ -286,8 +363,15 @@ public sealed class AttendanceSectionsBuilder
                     SubJobLevel = latest.SubJobLevel,
                     Zone = latest.Zone,
                     SnapshotCount = g.Select(x => x.Snapshot.Id).Distinct().Count(),
+                    AllianceNumbers = g
+                        .Where(x => x.Snapshot.AllianceNumber.HasValue)
+                        .Select(x => x.Snapshot.AllianceNumber!.Value)
+                        .Distinct()
+                        .OrderBy(n => n)
+                        .ToList(),
                     DkpAmountOverride = overrideAmount,
-                    EffectiveDkpAmount = overrideAmount ?? defaultDkpAmount,
+                    EffectiveDkpAmount = overrideAmount ?? baseAmount,
+                    CreditSource = creditSource,
                 };
             })
             .ToList();

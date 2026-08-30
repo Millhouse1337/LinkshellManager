@@ -12,15 +12,11 @@ import {
   toDateTimeLocalValue
 } from '../activity-home.helpers';
 import {
-  combinedMonsterOptions,
-  defaultTodMonsterTiming,
+  hasHqVariant,
   hasSpawnWindowCadence,
-  HNM_COMBINED_FROM_DAY,
-  HNM_MERGE_PAIRS,
-  TOD_COOLDOWN_OPTIONS,
-  TOD_INTERVAL_OPTIONS,
-  TOD_MONSTER_OPTIONS
+  HNM_COMBINED_FROM_DAY
 } from '../activity-home.types';
+import type { ActivityMonsterSetup } from '../../discord/discord-activity.types';
 
 // Standalone, reusable "Log ToD" form rendered in a native <dialog>. Extracted from
 // TodsTabComponent so it can ALSO be opened from the Events tab's "Post ToD" button on
@@ -44,18 +40,18 @@ export class TodFormComponent {
   // viewChild resolves immediately.
   private readonly logTodDialog = viewChild<ElementRef<HTMLDialogElement>>('logTodDialog');
 
-  protected readonly todCooldownOptions = [...TOD_COOLDOWN_OPTIONS];
-  protected readonly todIntervalOptions = [...TOD_INTERVAL_OPTIONS];
+  // Cooldown and interval are entered as a number plus a unit rather than picked from a fixed
+  // list: each monster carries its own configured value now, and a preset list can only express
+  // the handful of durations that happened to be curated.
+  protected readonly todDurationUnits = ['hours', 'mins'] as const;
   protected readonly todDraft: ActivityCreateTodInput = {
     linkshellId: 0,
-    monsterName: TOD_MONSTER_OPTIONS[0],
+    monsterName: '',
     dayNumber: null,
     hq: false,
     additionalSeconds: 0,
     claim: true,
     timeLocal: '',
-    cooldown: '22 Hour',
-    interval: '10 Min',
     noLoot: true,
     lootDetails: [{ itemName: '', itemWinner: '', winningDkpSpent: null }]
   };
@@ -67,7 +63,11 @@ export class TodFormComponent {
   protected todCustomMonsterName = '';
   protected todClaimChoice: 'Yes' | 'No' | 'NotSpecified' = 'Yes';
   protected todDayNumberNotSpecified = false;
-  protected todCustomCooldownHours: number | null = null;
+  protected todCooldownValue: number | null = 22;
+  protected todCooldownUnit = 'hours';
+  // null = "Not specified" — the interval is optional on a ToD.
+  protected todIntervalValue: number | null = null;
+  protected todIntervalUnit = 'mins';
   protected todImagePath: string | null = null;
   protected isUploadingTodImage = false;
   protected editingTodId: number | null = null;
@@ -159,13 +159,14 @@ export class TodFormComponent {
   // Open the board form pre-filled with the board's existing ToD (the card's "Edit ToD"
   // button). Submitting re-posts to the same board endpoint, which updates both the ToD and
   // the event's StartTime.
-  public openEditForBoard(tod: any, eventId: number, monster: string, dayNumber: number | null = null): void {
+  public openEditForBoard(tod: any, eventId: number, monster: string, dayNumber: number | null = null,
+    repeatOnTod = false, repeatLeadHours: number | null = null): void {
     this.boardMode = true;
     this.boardEventId = eventId;
     this.boardDayNumber = dayNumber;
     this.boardEndCamp = false;
-    this.boardRepost = false;
-    this.boardRepostLeadHours = null;
+    this.boardRepost = repeatOnTod;
+    this.boardRepostLeadHours = repeatLeadHours;
     this.boardMonsterDisplay = (monster ?? '').trim();
     this.beginEditTod(tod);
     // Days 1–3 have no HQ variant, so never carry a stale HQ=true into the form.
@@ -196,8 +197,8 @@ export class TodFormComponent {
     return !(this.boardDayNumber != null && this.boardDayNumber < HNM_COMBINED_FROM_DAY);
   }
 
-  // "Popped on window N" only means something when the monster HAS windows: the wyrms' 25 and
-  // the short band's 7. The Sky NMs, Shikigami Weapon, Bloodsucker, Xolotl, King Vinegarroon and
+  // "Popped on window N" only means something when the monster HAS windows: the long band's 25
+  // and the short band's 7. The Sky NMs, Shikigami Weapon, Bloodsucker, Xolotl, King Vinegarroon and
   // the other untimed NMs pop off a plain repop timer with no grid to number, so the field is
   // hidden for them rather than collecting a figure nothing can interpret.
   //
@@ -221,9 +222,7 @@ export class TodFormComponent {
   // may be the combined "Base/Stronger" the event stores); the ToDs tab reads the picked monster.
   private monsterHasHqVariant(): boolean {
     const raw = (this.boardMode ? this.boardMonsterDisplay : this.todDraft.monsterName) ?? '';
-    const halves = raw.split('/').map(part => part.trim().toLowerCase()).filter(Boolean);
-    return HNM_MERGE_PAIRS.some(pair =>
-      halves.includes(pair.base.toLowerCase()) || halves.includes(pair.stronger.toLowerCase()));
+    return hasHqVariant(raw);
   }
 
   // ----- Dialog open/close -----
@@ -309,14 +308,6 @@ export class TodFormComponent {
     return this.linkshellSettingsFor(linkshellId)?.lootStructure ?? 'Dkp';
   }
 
-  protected lootInputPlaceholder(linkshellId: number): string {
-    return this.lootStructureFor(linkshellId) === 'Hybrid' ? 'Deduction %' : 'DKP spent';
-  }
-
-  protected lootInputMax(linkshellId: number): number | null {
-    return this.lootStructureFor(linkshellId) === 'Hybrid' ? 100 : null;
-  }
-
   protected linkshellName(): string | null {
     return this.activity.overview()?.linkshells?.find(l => l.id === this.todDraft.linkshellId)?.name ?? null;
   }
@@ -336,85 +327,127 @@ export class TodFormComponent {
     this.todDraft.monsterName = monsterName;
     if (monsterName !== 'Other') {
       this.todCustomMonsterName = '';
-      // Match a configured timing on EITHER half of a combined "Base/Stronger" pick. The ToD
-      // Cooldowns picker still configures per half ("Adamantoise"), so an exact compare
-      // against the combined label would miss a timing the linkshell had deliberately set and
-      // silently seed the built-in default instead.
-      const halves = monsterName.split('/').map(half => half.trim()).filter(Boolean);
-      const configured = this.linkshellSettingsFor(this.todDraft.linkshellId)?.todMonsterTimings
-        ?.find(timing => halves.some(half =>
-          timing.monsterName.localeCompare(half, undefined, { sensitivity: 'accent' }) === 0));
+      // The linkshell's rows are stored under the MERGED label, which is exactly what the picker
+      // offers, so this is a straight lookup — no per-half matching, and no built-in fallback
+      // table on the client: the server sends a complete catalog with every overview.
+      const configured = this.monsterSetupFor(monsterName);
       if (configured) {
-        this.setTodCooldownHours(configured.cooldownHours);
-        this.todDraft.interval = this.formatTodInterval(configured.intervalHours, configured.intervalMinutes);
-      } else {
-        // No per-linkshell timing configured for this monster — fall back to the same
-        // built-in defaults the ToD Cooldowns picker seeds itself from (so Bloodsucker
-        // still lands on its 71-hour cycle, the wyrms on 84, and so on).
-        const fallback = defaultTodMonsterTiming(monsterName);
-        this.todDraft.cooldown = fallback.cooldown;
-        this.todDraft.interval = fallback.interval;
+        this.applyCooldownMinutes(configured.cooldownMinutes);
+        this.applyIntervalMinutes(configured.cadenceMinutes);
       }
     }
     this.updateTodRepopTime();
   }
 
-  protected isCustomTodInterval(): boolean {
-    return !(TOD_INTERVAL_OPTIONS as readonly string[]).includes(this.todDraft.interval ?? 'Not specified');
+  private monsterSetupFor(monsterName: string): ActivityMonsterSetup | null {
+    const wanted = (monsterName ?? '').trim();
+    if (!wanted) return null;
+    return this.linkshellSettingsFor(this.todDraft.linkshellId)?.monsterSetups
+      ?.find(setup => setup.monsterName.localeCompare(wanted, undefined, { sensitivity: 'accent' }) === 0)
+      ?? null;
   }
 
-  private setTodCooldownHours(hours: number): void {
-    const normalized = Math.max(0.01, Number(hours) || 22);
-    if (normalized === 84) {
-      this.todDraft.cooldown = '84 Hour';
-    } else if (normalized === 72) {
-      this.todDraft.cooldown = '72 Hour';
-    } else if (normalized === 71) {
-      this.todDraft.cooldown = '71 Hour';
-    } else if (normalized === 2) {
-      this.todDraft.cooldown = '2 Hour';
-    } else if (normalized === 5 / 60) {
-      this.todDraft.cooldown = '5 Min';
-    } else if (normalized === 22) {
-      this.todDraft.cooldown = '22 Hour';
+  // Mirrors the server's TodDurationFormat.Split, so a configured "22 Hour" shows as 22 hours and
+  // never as 1320 mins.
+  private applyCooldownMinutes(minutes: number): void {
+    const safe = Math.max(1, Math.round(Number(minutes) || 0));
+    const whole = safe % 60 === 0;
+    this.todCooldownValue = whole ? safe / 60 : safe;
+    this.todCooldownUnit = whole ? 'hours' : 'mins';
+  }
+
+  private applyIntervalMinutes(minutes: number | null): void {
+    if (minutes === null || !(Number(minutes) > 0)) {
+      this.todIntervalValue = null;
+      this.todIntervalUnit = 'mins';
+      return;
+    }
+    const safe = Math.round(Number(minutes));
+    const whole = safe % 60 === 0;
+    this.todIntervalValue = whole ? safe / 60 : safe;
+    this.todIntervalUnit = whole ? 'hours' : 'mins';
+  }
+
+  // The label form the server stores and every ToD surface prints. Matches
+  // TodDurationFormat.Format so the two clients can't write the same duration two ways.
+  private formatDurationLabel(value: number | null, unit: string): string | null {
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    return unit === 'hours' ? `${amount} Hour` : `${amount} Min`;
+  }
+
+  protected todCooldownLabel(): string | null {
+    return this.formatDurationLabel(this.todCooldownValue, this.todCooldownUnit);
+  }
+
+  protected todIntervalLabel(): string | null {
+    return this.formatDurationLabel(this.todIntervalValue, this.todIntervalUnit);
+  }
+
+  protected onTodCooldownChange(): void {
+    this.updateTodRepopTime();
+  }
+
+  // Reads a stored "22 Hour" / "45 Min" / "1 Hour 30 Min" label back into the number + unit the
+  // form binds to. A bare number means hours for a cooldown and minutes for an interval, matching
+  // the server's TodDurationFormat.
+  private applyDurationLabel(label: string | null, field: 'cooldown' | 'interval'): void {
+    const minutes = this.parseDurationMinutes(label, field === 'cooldown' ? 'hours' : 'mins');
+    if (field === 'cooldown') {
+      this.applyCooldownMinutes(minutes ?? 22 * 60);
     } else {
-      this.todDraft.cooldown = 'Other';
-      this.todCustomCooldownHours = normalized;
+      this.applyIntervalMinutes(minutes);
     }
   }
 
-  private formatTodInterval(hours: number, minutes: number): string {
-    const normalizedHours = Math.max(0, Math.floor(Number(hours) || 0));
-    const normalizedMinutes = Math.min(59, Math.max(0, Math.floor(Number(minutes) || 0)));
-    if (normalizedHours > 0 && normalizedMinutes > 0) return `${normalizedHours} Hour ${normalizedMinutes} Min`;
-    if (normalizedHours > 0) return `${normalizedHours} Hour`;
-    return `${Math.max(1, normalizedMinutes)} Min`;
+  private parseDurationMinutes(label: string | null, bareUnit: string): number | null {
+    const text = (label ?? '').trim();
+    if (!text) return null;
+
+    const bare = /^\s*(\d+(?:\.\d+)?)\s*$/.exec(text);
+    if (bare) {
+      const amount = parseFloat(bare[1]);
+      return amount > 0 ? Math.round(bareUnit === 'hours' ? amount * 60 : amount) : null;
+    }
+
+    const pair = /^\s*(?:(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b)?\s*(?:(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)\b)?\s*$/i.exec(text);
+    if (!pair || (!pair[1] && !pair[2])) return null;
+    const total = (pair[1] ? parseFloat(pair[1]) * 60 : 0) + (pair[2] ? parseFloat(pair[2]) : 0);
+    return total > 0 ? Math.round(total) : null;
   }
 
+  // "Other" is EXEMPT from the search filter and always sits last. The whole point of it is the
+  // monster that isn't in the list, so the moment someone types a name the catalog doesn't have —
+  // a Sky NM, a ground NM the linkshell never configured — the filter would otherwise empty the
+  // menu and leave no way to log it at all.
   protected filteredTodMonsterOptions(): string[] {
     const search = this.todMonsterSearch.trim().toLocaleLowerCase();
-    return this.todMonsterOptions().filter(monster =>
-      monster.toLocaleLowerCase().includes(search));
+    return [
+      ...this.todConfiguredMonsters().filter(monster => monster.toLocaleLowerCase().includes(search)),
+      'Other',
+    ];
   }
 
-  // The three merge pairs are offered as ONE combined "Base/Stronger" entry, not as six
-  // separate halves — the same list the create-event monster dropdown shows, and the same
-  // form the sign-up board stores. Which half actually popped is the HQ toggle's question,
-  // which is exactly why that toggle sits beside this picker.
-  private todMonsterOptions(): string[] {
-    const configured = this.linkshellSettingsFor(this.todDraft.linkshellId)?.todMonsterTimings ?? [];
-    return combinedMonsterOptions(
-      [...new Set([...TOD_MONSTER_OPTIONS, ...configured.map(timing => timing.monsterName.trim()).filter(Boolean)])]);
+  // The linkshell's configured monsters, in editor order. The three merge pairs are offered as ONE
+  // combined "Base/Stronger" entry, not as six separate halves — the same list the create-event
+  // monster dropdown shows, and the same form the sign-up board stores. Which half actually popped
+  // is the HQ toggle's question, which is exactly why that toggle sits beside this picker.
+  private todConfiguredMonsters(): string[] {
+    const configured = this.linkshellSettingsFor(this.todDraft.linkshellId)?.monsterSetups ?? [];
+    return configured.map(setup => setup.monsterName.trim()).filter(Boolean);
   }
 
   // The option that COVERS a stored monster name, i.e. the one whose name it is or whose
   // combined label contains it. A ToD saved before the pairs were combined holds a bare half
   // ("Aspidochelone"); without this it would no longer match any option and editing it would
   // drop into the free-text "Other" branch, quietly turning a curated monster into a custom one.
+  //
+  // Searches the CONFIGURED monsters only — matching the "Other" sentinel here would answer
+  // "yes, that's a real monster" for the one entry that means the opposite.
   private todMonsterOptionFor(monsterName: string): string | null {
     const wanted = (monsterName ?? '').trim();
     if (!wanted) { return null; }
-    return this.todMonsterOptions().find(option =>
+    return this.todConfiguredMonsters().find(option =>
       option.localeCompare(wanted, undefined, { sensitivity: 'accent' }) === 0
       || option.split('/').some(half =>
         half.trim().localeCompare(wanted, undefined, { sensitivity: 'accent' }) === 0)) ?? null;
@@ -507,44 +540,15 @@ export class TodFormComponent {
     this.todPopWindow = Number.isFinite(window) && window > 0 ? Math.floor(window) : null;
   }
 
-  protected isTodCooldownOther(): boolean {
-    return this.todDraft.cooldown === 'Other';
-  }
-
-  protected onTodCustomCooldownChange(hours: number | null): void {
-    this.todCustomCooldownHours = hours;
-    this.updateTodRepopTime();
-  }
-
   private resolveCooldownHours(): number {
-    if (this.todDraft.cooldown === '84 Hour') {
-      return 84;
-    }
-    if (this.todDraft.cooldown === '72 Hour') {
-      return 72;
-    }
-    if (this.todDraft.cooldown === '2 Hour') {
-      return 2;
-    }
-    if (this.todDraft.cooldown === '5 Min') {
-      return 5 / 60;
-    }
-    if (this.todDraft.cooldown === 'Other') {
-      return Math.max(0, this.todCustomCooldownHours ?? 0);
-    }
-    return 22;
+    const amount = Number(this.todCooldownValue);
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+    return this.todCooldownUnit === 'hours' ? amount : amount / 60;
   }
 
   protected onTodTimeLocalChange(value: string): void {
     this.todTimeLocalValue = value;
     this.updateTodRepopTime();
-  }
-
-  protected onTodNoLootChange(noLoot: boolean): void {
-    this.todDraft.noLoot = noLoot;
-    if (noLoot) {
-      this.todDraft.lootDetails = [createEmptyTodLootRow()];
-    }
   }
 
   protected updateTodRepopTime(): void {
@@ -588,19 +592,6 @@ export class TodFormComponent {
     return this.activity.formatDateTimeWithSeconds(this.todRepopLocalValue) ?? this.todRepopLocalValue;
   }
 
-  protected addTodLootRow(): void {
-    this.todDraft.lootDetails = [...this.todDraft.lootDetails, createEmptyTodLootRow()];
-  }
-
-  protected removeTodLootRow(index: number): void {
-    if (this.todDraft.lootDetails.length === 1) {
-      this.todDraft.lootDetails = [createEmptyTodLootRow()];
-      return;
-    }
-
-    this.todDraft.lootDetails = this.todDraft.lootDetails.filter((_, lootIndex) => lootIndex !== index);
-  }
-
   // Board-mode submit: posts the ToD to the HNM board endpoint, which also moves the event
   // StartTime to the repop, wipes signups, marks the board defeated, and updates Discord.
   private async submitBoardTod(): Promise<void> {
@@ -618,18 +609,14 @@ export class TodFormComponent {
       this.activity.actionMessage.set(null);
       return;
     }
-    let cooldown = this.todDraft.cooldown;
-    if (cooldown === 'Other') {
-      const hours = this.todCustomCooldownHours;
-      if (!hours || hours <= 0) {
-        this.activity.actionError.set('Enter a positive cooldown in hours.');
-        this.activity.actionMessage.set(null);
-        return;
-      }
-      cooldown = `${hours} Hour`;
+    const cooldown = this.todCooldownLabel();
+    if (!cooldown) {
+      this.activity.actionError.set('Enter a positive cooldown.');
+      this.activity.actionMessage.set(null);
+      return;
     }
     const dayNumber = this.todDayNumberNotSpecified ? null : this.todDraft.dayNumber;
-    const interval = this.todDraft.interval === 'Not specified' ? null : this.todDraft.interval;
+    const interval = this.todIntervalLabel();
 
     try {
       await this.activity.postBoardTod(eventId, {
@@ -644,9 +631,11 @@ export class TodFormComponent {
         // End Camp only: cap credit at the pop window + record whether it was killed.
         popWindow: this.boardEndCamp ? this.todPopWindow : null,
         killed: this.boardEndCamp ? (this.boardKilledChoice === 'Yes') : null,
-        // End Camp only: whether to re-post the sign-up board before the next pop, and the lead.
-        repost: this.boardEndCamp ? this.boardRepost : null,
-        repostLeadHours: this.boardEndCamp && this.boardRepost ? this.boardRepostLeadHours : null,
+        // Every board form asks this (End Camp, Post ToD, Edit ToD), so every board form answers
+        // it. Null only for a non-board ToD, where there is no board to re-post and null means
+        // "leave the monster's standing template alone".
+        repost: this.boardMode ? this.boardRepost : null,
+        repostLeadHours: this.boardMode && this.boardRepost ? this.boardRepostLeadHours : null,
         // End Camp only: the optional kill screenshot (the plain board Post/Edit ToD has no
         // upload field, so it never sends one and the ToD's existing image is left alone).
         imagePath: this.boardEndCamp ? this.todImagePath : null
@@ -687,38 +676,21 @@ export class TodFormComponent {
       monsterName = custom;
     }
 
-    let cooldown = this.todDraft.cooldown;
-    if (cooldown === 'Other') {
-      const hours = this.todCustomCooldownHours;
-      if (!hours || hours <= 0) {
-        this.activity.actionError.set('Enter a positive cooldown in hours.');
-        this.activity.actionMessage.set(null);
-        return;
-      }
-      cooldown = `${hours} Hour`;
+    const cooldown = this.todCooldownLabel();
+    if (!cooldown) {
+      this.activity.actionError.set('Enter a positive cooldown.');
+      this.activity.actionMessage.set(null);
+      return;
     }
 
     const dayNumber = this.todDayNumberNotSpecified ? null : this.todDraft.dayNumber;
-    const interval = this.todDraft.interval === 'Not specified' ? null : this.todDraft.interval;
+    const interval = this.todIntervalLabel();
     const lootStructure = this.lootStructureFor(linkshellId);
-    const shouldIncludeLoot = this.todDraft.claim && !this.todDraft.noLoot && lootStructure !== 'LootCouncil';
-    const lootDetails = shouldIncludeLoot
-      ? this.todDraft.lootDetails.map(detail => ({
-          itemName: detail.itemName?.trim() || null,
-          itemWinner: detail.itemWinner?.trim() || null,
-          winningDkpSpent: detail.winningDkpSpent ?? null
-        }))
-      : [];
-    if (shouldIncludeLoot && lootStructure === 'Hybrid') {
-      for (const detail of lootDetails) {
-        const pct = Number(detail.winningDkpSpent ?? 0);
-        if (detail.itemName && (!Number.isFinite(pct) || pct < 0 || pct > 100)) {
-          this.activity.actionError.set('Deduction % must be between 0 and 100 on every loot row.');
-          this.activity.actionMessage.set(null);
-          return;
-        }
-      }
-    }
+    // Loot is NEVER posted from a ToD any more. It is recorded in the Loot tab and filed against a
+    // live or past event -- which is what stopped every ToD-recorded drop landing in the history as
+    // source "ToD" with no event behind it. Sent empty rather than dropped from the payload so an
+    // older server still parses the request.
+    const lootDetails: { itemName: string | null; itemWinner: string | null; winningDkpSpent: number | null }[] = [];
 
     try {
       if (this.editingTodId !== null) {
@@ -785,18 +757,8 @@ export class TodFormComponent {
     this.todMonsterSearch = this.todDraft.monsterName;
     this.todMonsterPickerOpen = false;
 
-    const cooldown: string = tod.cooldown ?? '22 Hour';
-    const cooldownPresets = TOD_COOLDOWN_OPTIONS as readonly string[];
-    if (cooldownPresets.includes(cooldown)) {
-      this.todDraft.cooldown = cooldown;
-      this.todCustomCooldownHours = null;
-    } else {
-      const match = /^\s*(\d+(?:\.\d+)?)\s*(?:hours?|hr|h)?\s*$/i.exec(cooldown);
-      this.todDraft.cooldown = 'Other';
-      this.todCustomCooldownHours = match ? parseFloat(match[1]) : null;
-    }
-
-    this.todDraft.interval = tod.interval || 'Not specified';
+    this.applyDurationLabel(tod.cooldown ?? '22 Hour', 'cooldown');
+    this.applyDurationLabel(tod.interval ?? null, 'interval');
     this.todDraft.noLoot = !(tod.lootDetails && tod.lootDetails.length > 0);
     this.todDraft.lootDetails = (tod.lootDetails && tod.lootDetails.length > 0
       ? tod.lootDetails.map((loot: any) => ({
@@ -831,15 +793,17 @@ export class TodFormComponent {
 
   private resetTodDraft(linkshellId: number = this.todDraft.linkshellId): void {
     this.todDraft.linkshellId = linkshellId;
-    this.todDraft.monsterName = TOD_MONSTER_OPTIONS[0];
+    this.todDraft.monsterName = '';
     this.todDraft.dayNumber = null;
     this.todPopWindow = null;
     this.todDraft.hq = false;
     this.todDraft.additionalSeconds = 0;
     this.todDraft.claim = true;
     this.todDraft.timeLocal = '';
-    this.todDraft.cooldown = '22 Hour';
-    this.todDraft.interval = '10 Min';
+    this.todCooldownValue = 22;
+    this.todCooldownUnit = 'hours';
+    this.todIntervalValue = 10;
+    this.todIntervalUnit = 'mins';
     this.todDraft.noLoot = true;
     this.todDraft.lootDetails = [createEmptyTodLootRow()];
     this.todTimeLocalValue = '';
@@ -850,7 +814,6 @@ export class TodFormComponent {
     this.todCustomMonsterName = '';
     this.todClaimChoice = 'Yes';
     this.todDayNumberNotSpecified = false;
-    this.todCustomCooldownHours = null;
     this.todImagePath = null;
     this.isUploadingTodImage = false;
   }

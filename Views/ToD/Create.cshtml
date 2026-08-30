@@ -10,6 +10,19 @@
     var pageHeading = isEditMode ? "Edit ToD" : "Add ToD";
     var formHeader = isEditMode ? "Update ToD" : "Submit ToD";
     var formAction = isEditMode ? "Edit" : "Create";
+    // Tod.Cooldown / Tod.Interval are stored as labels ("22 Hour", "45 Min"); the form edits them
+    // as a number + a unit. Split them here with the same rule TodDurationFormat.Split uses, so a
+    // value never echoes back in a different unit than it was saved in.
+    var cooldownMinutes = LinkshellManagerDiscordApp.Utils.TodDurationFormat.TryParseMinutes(
+        Model.Tod?.Cooldown, LinkshellManagerDiscordApp.Utils.TodDurationFormat.HoursUnit, out var parsedCooldown)
+        ? parsedCooldown
+        : 22 * 60;
+    var (cooldownValue, cooldownUnit) = LinkshellManagerDiscordApp.Utils.TodDurationFormat.Split(cooldownMinutes);
+    var hasInterval = LinkshellManagerDiscordApp.Utils.TodDurationFormat.TryParseMinutes(
+        Model.Tod?.Interval, LinkshellManagerDiscordApp.Utils.TodDurationFormat.MinutesUnit, out var parsedInterval);
+    var (intervalValue, intervalUnit) = hasInterval
+        ? LinkshellManagerDiscordApp.Utils.TodDurationFormat.Split(parsedInterval)
+        : (0, LinkshellManagerDiscordApp.Utils.TodDurationFormat.MinutesUnit);
     ViewData["Title"] = pageHeading;
     ViewData["BodyClass"] = "lsm-page";
     var selectedLinkshellName = Model.Linkshells.FirstOrDefault(item => item.Id == Model.LinkshellId)?.LinkshellName ?? "Selected Linkshell";
@@ -54,6 +67,7 @@ else
           method="post" id="tod-form" novalidate
           enctype="multipart/form-data"
           data-character-names="@JsonSerializer.Serialize(Model.CharacterNames)"
+          data-monster-timings="@JsonSerializer.Serialize(Model.MonsterTimings)"
           class="create-form fade d2">
         @Html.AntiForgeryToken()
         <input asp-for="Tod.LinkshellId" type="hidden" />
@@ -68,7 +82,7 @@ else
         <div class="create-form__header">
             <div>
                 <strong>@formHeader</strong>
-                <p>Log a kill, calculate the next repop window, and record any loot.</p>
+                <p>Log a kill and calculate the next repop window. Loot is recorded in the Loot section.</p>
             </div>
             <span class="tag accent">@selectedLinkshellName</span>
         </div>
@@ -131,29 +145,29 @@ else
 
             <label>
                 <span>Cooldown</span>
-                <select asp-for="Tod.Cooldown" id="cooldown-select">
-                    @foreach (var cooldown in Model.CooldownOptions)
-                    {
-                        <option value="@cooldown"
-                                selected="@(string.Equals(cooldown, Model.Tod.Cooldown, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
-                            @cooldown
-                        </option>
-                    }
-                </select>
+                <span class="create-form__duration">
+                    <input asp-for="CooldownValue" id="cooldown-value" type="number" min="1" step="1"
+                           value="@cooldownValue" required
+                           title="Pre-filled from this monster's configured cooldown. Change it for this ToD only." />
+                    <select asp-for="CooldownUnit" id="cooldown-unit">
+                        <option value="hours" selected="@(cooldownUnit == "hours" ? "selected" : null)">hours</option>
+                        <option value="mins" selected="@(cooldownUnit == "mins" ? "selected" : null)">mins</option>
+                    </select>
+                </span>
                 <span asp-validation-for="Tod.Cooldown" class="create-form__error"></span>
             </label>
 
             <label>
                 <span>Interval</span>
-                <select asp-for="Tod.Interval" id="interval-select">
-                    @foreach (var interval in Model.IntervalOptions)
-                    {
-                        <option value="@interval"
-                                selected="@(string.Equals(interval, Model.Tod.Interval, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
-                            @interval
-                        </option>
-                    }
-                </select>
+                <span class="create-form__duration">
+                    <input asp-for="IntervalValue" id="interval-value" type="number" min="1" step="1"
+                           value="@intervalValue" placeholder="Not specified"
+                           title="Pre-filled from this monster's configured cadence. Leave blank to record no interval." />
+                    <select asp-for="IntervalUnit" id="interval-unit">
+                        <option value="hours" selected="@(intervalUnit == "hours" ? "selected" : null)">hours</option>
+                        <option value="mins" selected="@(intervalUnit == "mins" ? "selected" : null)">mins</option>
+                    </select>
+                </span>
                 <span asp-validation-for="Tod.Interval" class="create-form__error"></span>
             </label>
 

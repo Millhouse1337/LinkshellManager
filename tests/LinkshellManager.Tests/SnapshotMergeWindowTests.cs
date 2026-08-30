@@ -4,7 +4,7 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 // How close two attendance posts have to be to count as one capture of the same roster. Replaces
-// the old duplicate DETECTION, which flagged the later post "PossibleDuplicate" and thereby dropped
+// the duplicate DETECTION that has since been deleted, which flagged the later post and so dropped
 // its members from the combined roster entirely.
 public class SnapshotMergeWindowTests
 {

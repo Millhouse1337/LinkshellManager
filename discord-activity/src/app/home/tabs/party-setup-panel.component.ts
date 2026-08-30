@@ -10,8 +10,7 @@ import type {
   ActivityAlsoAttending,
   ActivityPartySetupAlliance,
   ActivityPartySetupParty,
-  ActivityPartySetupSlot,
-  PartySignupNudge
+  ActivityPartySetupSlot
 } from '../../discord/discord-activity.types';
 
 interface SlotSignupDraft {
@@ -233,15 +232,6 @@ export class PartySetupPanelComponent {
     await this.partySetup.makeAllianceLead(this.eventId());
   }
 
-  // "Fill earlier alliances first" prompt: the slot the member chose + the server's
-  // suggested earlier slot. Null when no prompt is showing.
-  protected readonly signupNudge = signal<{
-    nudge: PartySignupNudge;
-    slot: ActivityPartySetupSlot;
-    asLeader: boolean;
-    characterName: string | null;
-  } | null>(null);
-
   protected async signUp(slot: ActivityPartySetupSlot): Promise<void> {
     const draft = this.draftFor(slot.slotId);
     const picks = {
@@ -252,12 +242,7 @@ export class PartySetupPanelComponent {
     if (this.eventId() > 0) {
       const result = await this.partySetup.signUpEvent(
         this.eventId(), slot.slotId, { ...picks, asLeader: draft.asLeader, characterName: this.signupCharacter() || null });
-      if (result && typeof result === 'object') {
-        // Server suggests an open earlier-alliance slot — show the prompt; nothing committed.
-        this.signupNudge.set({ nudge: result, slot, asLeader: draft.asLeader, characterName: this.signupCharacter() || null });
-        return;
-      }
-      if (result === true) {
+      if (result) {
         this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
       }
       return;
@@ -266,38 +251,6 @@ export class PartySetupPanelComponent {
     if (ok) {
       this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
     }
-  }
-
-  // Take the suggested earlier slot (uses the member's resolved role/job from the nudge).
-  protected async takeSuggestedSlot(): Promise<void> {
-    const n = this.signupNudge();
-    if (!n) { return; }
-    const ok = await this.partySetup.signUpEvent(this.eventId(), n.nudge.suggestedSlotId, {
-      role: n.nudge.role ?? null, mainJob: n.nudge.mainJob ?? null, subJob: n.nudge.subJob ?? null,
-      asLeader: n.asLeader, characterName: n.characterName, force: true
-    });
-    if (ok === true) {
-      this.setDraft(n.slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
-    }
-    this.signupNudge.set(null);
-  }
-
-  // Sign up for the slot they originally chose, bypassing the nudge.
-  protected async signUpAnyway(): Promise<void> {
-    const n = this.signupNudge();
-    if (!n) { return; }
-    const ok = await this.partySetup.signUpEvent(this.eventId(), n.slot.slotId, {
-      role: n.nudge.role ?? null, mainJob: n.nudge.mainJob ?? null, subJob: n.nudge.subJob ?? null,
-      asLeader: n.asLeader, characterName: n.characterName, force: true
-    });
-    if (ok === true) {
-      this.setDraft(n.slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
-    }
-    this.signupNudge.set(null);
-  }
-
-  protected dismissNudge(): void {
-    this.signupNudge.set(null);
   }
 
   protected async withdraw(slot: ActivityPartySetupSlot): Promise<void> {

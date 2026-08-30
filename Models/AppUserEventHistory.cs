@@ -44,4 +44,13 @@ public class AppUserEventHistory
     // (e.g. attended one window, skipped the rest). A credited row = an attendance
     // in the member's activity streak; uncredited (or absent) = an absence.
     public bool ActiveCredit { get; set; } = true;
+
+    // How many of the camp's attendance windows this member was scanned in, on a WINDOWED event
+    // (HNM Style / Claim-Kill). Null on a timed event, where presence is measured in Duration
+    // instead — the two are alternatives, not companions.
+    //
+    // Computed at close by both end-event paths and, until the archive existed, immediately
+    // discarded: it is the numerator of the DKP those events pay (windows x DkpPerWindow), so
+    // without it a closed camp's payout could not be explained from its own history row.
+    public int? WindowsAttended { get; set; }
 }

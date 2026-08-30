@@ -127,9 +127,10 @@ public sealed class DkpImportService
                 case DkpImportRowKind.Create:
                     rows.Add(new DkpImportPreviewRow(
                         row.Name, row.Alt1, row.Alt2, DkpImportRowKind.Create, null, null,
-                        0, row.Current.HasValue ? DkpRounding.Round(row.Current.Value, step) : 0,
+                        0, row.Current.HasValue ? ClampCurrent(row.Current.Value, step) : 0,
                         DkpRounding.Round(row.Total ?? 0, step), DkpRounding.Round(row.Spent ?? 0, step),
-                        "New member — will be created and can be claimed on first launch."));
+                        Join(ClampNote(row.Current, step),
+                            "New member — will be created and can be claimed on first launch.")));
                     break;
 
                 case DkpImportRowKind.Update when member is not null:
@@ -139,15 +140,15 @@ public sealed class DkpImportService
                         : null;
                     rows.Add(new DkpImportPreviewRow(
                         row.Name, row.Alt1, row.Alt2, DkpImportRowKind.Update, member.Id, ResolveName(member),
-                        oldCurrent, row.Current.HasValue ? DkpRounding.Round(row.Current.Value, step) : oldCurrent,
+                        oldCurrent, row.Current.HasValue ? ClampCurrent(row.Current.Value, step) : oldCurrent,
                         DkpRounding.Round(row.Total ?? 0, step), DkpRounding.Round(row.Spent ?? 0, step),
-                        note));
+                        Join(ClampNote(row.Current, step), note)));
                     break;
 
                 default: // Ambiguous
                     rows.Add(new DkpImportPreviewRow(
                         row.Name, row.Alt1, row.Alt2, DkpImportRowKind.Ambiguous, null, null,
-                        0, DkpRounding.Round(row.Current ?? 0, step),
+                        0, ClampCurrent(row.Current ?? 0, step),
                         DkpRounding.Round(row.Total ?? 0, step), DkpRounding.Round(row.Spent ?? 0, step),
                         "Matches more than one member — skipped. Rename in the sheet to disambiguate."));
                     break;
@@ -159,7 +160,10 @@ public sealed class DkpImportService
             rows.Count(r => r.Kind == DkpImportRowKind.Create),
             rows.Count(r => r.Kind == DkpImportRowKind.Update),
             rows.Count(r => r.Kind == DkpImportRowKind.Ambiguous),
-            rows);
+            rows,
+            // Skips Ambiguous rows: those import nothing at all, so a negative cell on one is moot.
+            parsed.Count(r => r.Current is double c && DkpRounding.Round(c, step) < 0
+                && Classify(r, index).Kind != DkpImportRowKind.Ambiguous));
     }
 
     // ---- commit -------------------------------------------------------------
@@ -247,7 +251,12 @@ public sealed class DkpImportService
     {
         if (row.Current.HasValue)
         {
-            var newCurrent = DkpRounding.Round(row.Current.Value, step);
+            // Clamped at zero. An import is an absolute SET, not a delta, so a negative sheet cell
+            // (a typo, a formula that resolved to a debt, a column exported from an already-broken
+            // system) would write a negative balance straight past every affordability guard —
+            // this is the one DKP path that doesn't debit through DkpLedgerWriter, so INV-3 can't
+            // catch it. BuildPreviewAsync clamps identically, so preview and commit agree.
+            var newCurrent = ClampCurrent(row.Current.Value, step);
             var oldCurrent = member.LinkshellDkp ?? 0;
             if (Math.Abs(oldCurrent - newCurrent) >= 0.0001)
             {
@@ -280,6 +289,17 @@ public sealed class DkpImportService
         if (row.Spent.HasValue) { member.SeededDkpSpent = DkpRounding.Round(row.Spent.Value, step); }
         member.DkpSeedLedgerId = watermark;
     }
+
+    // The imported "Current DKP", rounded to the linkshell's increment and floored at 0.
+    private static double ClampCurrent(double sheetCurrent, double step)
+        => Math.Max(0, DkpRounding.Round(sheetCurrent, step));
+
+    // Preview note for a row whose sheet cell is negative, so the officer sees the clamp BEFORE
+    // committing instead of wondering later why the sheet said -40 and the app says 0.
+    private static string? ClampNote(double? sheetCurrent, double step)
+        => sheetCurrent is double value && DkpRounding.Round(value, step) < 0
+            ? $"Sheet says {DkpRounding.Round(value, step):0.##} DKP — will import as 0 (balances can't be negative)."
+            : null;
 
     // 0 matches -> Create, exactly 1 -> Update, >1 (name collision) -> Ambiguous.
     private static (DkpImportRowKind Kind, AppUserLinkshell? Member) Classify(
@@ -344,6 +364,13 @@ public sealed class DkpImportService
         return withActivity;
     }
 
+    // Combine preview notes, dropping the blanks.
+    private static string? Join(params string?[] notes)
+    {
+        var present = notes.Where(n => !string.IsNullOrWhiteSpace(n)).ToArray();
+        return present.Length == 0 ? null : string.Join(" ", present);
+    }
+
     private static string ResolveName(AppUserLinkshell m)
         => m.CharacterName ?? m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown";
 
@@ -389,7 +416,9 @@ public sealed record DkpImportPreview(
     int CreateCount,
     int UpdateCount,
     int AmbiguousCount,
-    IReadOnlyList<DkpImportPreviewRow> Rows);
+    IReadOnlyList<DkpImportPreviewRow> Rows,
+    // Rows whose sheet "Current DKP" is negative and will be imported as 0.
+    int ClampedCount = 0);
 
 public sealed record DkpImportResult(
     string SourceLabel,

@@ -56,6 +56,14 @@ export class ChartHoldingsSectionComponent {
   @Input() canManage = false;
 
   /**
+   * Whether this board tracks drops as well as pop items.
+   *
+   * Softens the section's heading from "Pop Item Holdings" to "Holdings" - the pill on each drop row
+   * says which kind it is, and a heading naming one of them would be wrong half the time.
+   */
+  @Input() tracksDrops = false;
+
+  /**
    * Editing opens the add/edit form at the top of the board, which the parent owns — so Edit is an
    * event, while Remove is done here.
    */

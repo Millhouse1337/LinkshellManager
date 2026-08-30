@@ -14,6 +14,7 @@ public class DkpAdjustmentController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
     private readonly DkpLedgerWriter _dkpLedger;
     private readonly DkpPoolResolver _dkpPools;
@@ -21,12 +22,14 @@ public class DkpAdjustmentController : Controller
     public DkpAdjustmentController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         WindowEventDkpLedgerService windowEventDkpLedger,
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools)
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _windowEventDkpLedger = windowEventDkpLedger;
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
@@ -63,7 +66,6 @@ public class DkpAdjustmentController : Controller
 
         viewModel.SelectedLinkshellId = selectedLinkshellId;
         viewModel.SelectedLinkshellName = viewModel.Linkshells.First(l => l.Id == selectedLinkshellId).Name;
-        viewModel.SelectedLinkshellType = manageableLinkshells.First(l => l.Id == selectedLinkshellId).LinkshellType;
 
         await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(selectedLinkshellId, HttpContext.RequestAborted);
 
@@ -129,7 +131,9 @@ public class DkpAdjustmentController : Controller
             new DkpEntryContext(
                 CharacterName: membership.CharacterName,
                 Details: input.Reason.Trim()),
-            HttpContext.RequestAborted);
+            HttpContext.RequestAborted,
+            // Officer intent — same reasoning as the Activity audit endpoint.
+            DkpOverdraft.Allow);
 
         await _context.SaveChangesAsync();
         TempData["DkpAdjustmentSuccess"] = $"Adjusted {membership.CharacterName}'s DKP by {input.Amount:+0.##;-0.##;0}.";
@@ -140,7 +144,9 @@ public class DkpAdjustmentController : Controller
     {
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == appUserId && ul.LinkshellId == linkshellId);
-        return membership is not null && LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+        if (membership is null) return false;
+        return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
+               || await _adminOverride.IsActiveForAsync(appUserId, HttpContext.RequestAborted);
     }
 
     private async Task<List<Linkshell>> GetManageableLinkshellsAsync(string appUserId)

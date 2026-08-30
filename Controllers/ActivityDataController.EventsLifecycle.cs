@@ -41,21 +41,12 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        // HNM is a manual outside-signup board: a no-DKP board posted to Discord so
-        // unsynced server members can sign up, repeated off ToD captures. It has its
-        // own gate (HNM Outside Sign Up), independent of Outside Party Signup, and
-        // requires a monster.
+        // HNM is an ordinary event type — any linkshell can create a camp. It just needs a
+        // monster, which is what drives the window cycle and the board's routing.
         var isHnm = string.Equals((request.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
         string? monsterName = null;
         if (isHnm)
         {
-            if (membership?.Linkshell?.HnmOutsideSignupEnabled != true)
-            {
-                return BadRequest(new
-                {
-                    error = "HNM signup boards require HNM Outside Sign Up to be enabled for this linkshell."
-                });
-            }
             monsterName = request.MonsterName?.Trim();
             if (string.IsNullOrWhiteSpace(monsterName))
             {
@@ -129,13 +120,16 @@ public sealed partial class ActivityDataController
         // Repeat-on-ToD: persist/refresh the recurring-board template so the board
         // re-posts before the next predicted pop. Works for a custom monster too —
         // recurrence keys on the (case-insensitive) AssignedMonsterName the ToD records.
-        // Lead is null on purpose: this form only toggles recurrence, and UpsertAsync keeps
-        // whatever lead the End Camp / Post ToD form last set.
-        if (isHnm && request.RepeatOnTod)
+        // Null RepeatOnTod = the caller didn't ask (what the Activity's create form sends), so
+        // the monster's standing board is left exactly as it is. That's what keeps the re-post
+        // working off the End Camp form's ToD + lead: creating a camp must never switch it off.
+        if (isHnm && request.RepeatOnTod == true)
         {
-            await HnmRecurringBoardService.UpsertAsync(_dbContext, eventEntity, null, appUser.Id, cancellationToken);
+            await HnmRecurringBoardService.UpsertAsync(
+                _dbContext, eventEntity, request.RepostLeadHours, appUser.Id,
+                stampLatestTod: true, cancellationToken);
         }
-        else if (isHnm && !request.RepeatOnTod)
+        else if (isHnm && request.RepeatOnTod == false)
         {
             await HnmRecurringBoardService.DisableAsync(_dbContext, request.LinkshellId, monsterName, cancellationToken);
         }
@@ -220,7 +214,7 @@ public sealed partial class ActivityDataController
         // (OwnerEventId != null), which PartySetupBelongsToLinkshellAsync intentionally
         // rejects; without this guard, editing any other field on a snapshot-board event
         // (e.g. toggling repeat-on-ToD) would fail with "does not belong to this linkshell".
-        // The snapshot is preserved further down (see currentIsSnapshot).
+        // A snapshot the caller posts back unchanged is therefore preserved further down.
         if (request.PartySetupId.HasValue &&
             request.PartySetupId != eventEntity.PartySetupId &&
             !await PartySetupBelongsToLinkshellAsync(request.PartySetupId.Value, request.LinkshellId, cancellationToken))
@@ -237,24 +231,21 @@ public sealed partial class ActivityDataController
         eventEntity.Duration = request.Duration;
         eventEntity.DkpPerHour = request.DkpPerHour;
         eventEntity.Details = request.Details?.Trim();
-        // If the board was customized into a per-event snapshot (which the template
-        // picker can't represent), keep it — its slots are managed from the board editor,
-        // not this form — so editing event details never wipes the customized board.
-        var currentIsSnapshot = eventEntity.PartySetupId is { } curSetupId
-            && await _dbContext.PartySetups.AnyAsync(
-                ps => ps.Id == curSetupId && ps.OwnerEventId == eventEntity.Id, cancellationToken);
-        if (!currentIsSnapshot)
+        // Changing (or removing) the linked party setup WIPES the sign-up board: the event's
+        // slot signups are keyed to the OLD setup's slot ids, which don't exist on the new
+        // board, so they're cleared and members claim again. Participation (AppUserEvents) is
+        // untouched by that wipe — on a live camp everyone keeps their timer, their DKP and
+        // their attendance credit; only the seating goes. The Activity warns first.
+        //
+        // A board customized on the live editor is a per-event SNAPSHOT (OwnerEventId == this
+        // event), which the template picker can't offer as one of its own rows — the Activity
+        // shows it as a "current board" entry instead, so an unchanged save posts the same id,
+        // skips this branch entirely, and the customized board survives. An officer who picks a
+        // different setup (or None) still gets the swap, and the wipe with it.
+        if (eventEntity.PartySetupId != request.PartySetupId)
         {
-            // Changing (or removing) the linked party setup orphans the event's slot
-            // signups — they're keyed to the OLD setup's slot ids. Rather than drop
-            // those members, move them to the event's "no slot" attendance so they
-            // still show on the new board (under "Also attending — no slot"). The
-            // Activity warns the user first.
-            if (eventEntity.PartySetupId != request.PartySetupId)
-            {
-                await EventPartySignupService.MoveSlotSignupsToNoSlotAsync(
-                    _dbContext, eventEntity.Id, eventEntity.CommencementStartTime, cancellationToken);
-            }
+            await EventPartySignupService.ClearSlotSignupsAsync(
+                _dbContext, eventEntity.Id, cancellationToken);
             eventEntity.PartySetupId = request.PartySetupId;
         }
         eventEntity.AutoStart = request.AutoStart;
@@ -272,6 +263,7 @@ public sealed partial class ActivityDataController
             {
                 eventEntity.AssignedMonsterName = monsterName;
                 eventEntity.WindowCountOverride = HnmConfig.EffectiveWindowCount(monsterName);
+                await HnmEventSeeder.StampSpawnGridAsync(_dbContext, eventEntity, monsterName, cancellationToken);
                 if (string.IsNullOrWhiteSpace(eventEntity.EventLocation))
                 {
                     eventEntity.EventLocation = HnmConfig.ZoneFor(monsterName);
@@ -300,14 +292,24 @@ public sealed partial class ActivityDataController
         var recurrenceMonster = eventEntity.AssignedMonsterName?.Trim();
         if (isHnm && !string.IsNullOrWhiteSpace(recurrenceMonster))
         {
-            if (request.RepeatOnTod)
-            {
-                await HnmRecurringBoardService.UpsertAsync(_dbContext, eventEntity, null, appUser.Id, cancellationToken);
-            }
-            else
+            // Null RepeatOnTod = the form didn't ask (the Activity's case), so recurrence is
+            // left alone; a lead on its own still applies, which is how the edit form's "Hours
+            // before repop" box works. stampLatestTod: false so editing a board that's awaiting
+            // its re-post doesn't mark the pop handled and cancel it.
+            if (request.RepeatOnTod == false)
             {
                 await HnmRecurringBoardService.DisableAsync(_dbContext, eventEntity.LinkshellId, recurrenceMonster, cancellationToken);
             }
+            else if (request.RepeatOnTod == true || request.RepostLeadHours.HasValue)
+            {
+                await HnmRecurringBoardService.UpsertAsync(
+                    _dbContext, eventEntity, request.RepostLeadHours, appUser.Id,
+                    stampLatestTod: false, cancellationToken);
+            }
+
+            // A board already waiting on its re-post advertises the old time until this runs.
+            await HnmRecurringBoardService.RefreshRepostAtAsync(
+                _dbContext, eventEntity, recurrenceMonster, cancellationToken);
         }
 
         return Ok(new { success = true });
@@ -462,6 +464,11 @@ public sealed partial class ActivityDataController
             EventName = eventEntity.EventName,
             EventType = eventEntity.EventType,
             EventLocation = eventEntity.EventLocation,
+            // Resolved to a TEMPLATE before the Event row (and any per-event snapshot hanging off
+            // it) is deleted below. This is the only record of the camp's board that outlives it,
+            // and it is what lets the next pop come back with the same setup attached.
+            PartySetupId = await PartySetupInheritance.ResolveTemplateIdAsync(
+                _dbContext, eventEntity, cancellationToken),
             StartDate = eventEntity.StartTime?.Date,
             StartTime = eventEntity.StartTime,
             EndTime = endTimeUtc,
@@ -548,11 +555,17 @@ public sealed partial class ActivityDataController
             // onto the history row below for display, but it must not reach the payout, or break
             // state (which CalculateAccumulatedDurationHours honours) would move windowed DKP.
             // Matches EventController.EndEventCoreAsync exactly.
+            // Hoisted out of the Compute call below so it can also be stamped on the history row:
+            // null on a timed event (where it would read as a misleading 0), the window tally on
+            // a windowed one. Mirrors EventController.EndEventCoreAsync.
+            int? windowsAttended = isWindowed
+                ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
+                : (int?)null;
             var eventDkp = isLootCouncil
                 ? 0
                 : EventAttendanceDkpCalculator.Compute(
                     isWindowed,
-                    windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0),
+                    windowsAttended ?? 0,
                     durationHours,
                     eventEntity.DkpPerHour ?? 0,
                     roundingStep);
@@ -573,7 +586,8 @@ public sealed partial class ActivityDataController
                 IsQuickJoin = participation.IsQuickJoin,
                 IsVerified = participation.IsVerified,
                 Proctor = participation.Proctor,
-                ActiveCredit = eventEntity.CountsTowardActive
+                ActiveCredit = eventEntity.CountsTowardActive,
+                WindowsAttended = windowsAttended
             });
 
             if (!isLootCouncil
@@ -605,6 +619,14 @@ public sealed partial class ActivityDataController
             {
                 var rawValue = lootDetail.WinningDkpSpent.GetValueOrDefault();
                 if (rawValue <= 0)
+                {
+                    continue;
+                }
+
+                // Loot added by hand from the Loot System is charged when it is entered, and it
+                // can be attached to a LIVE event -- so without this the close would take the same
+                // DKP off the same winner twice. Null on everything added through the event flow.
+                if (lootDetail.DkpDebitedAt is not null)
                 {
                     continue;
                 }
@@ -662,7 +684,11 @@ public sealed partial class ActivityDataController
                         // The web close has always stamped this; this one never did, which left
                         // Loot History unable to find the ledger row it had to reverse.
                         SourceEventLootDetailId: lootDetail.Id),
-                    cancellationToken);
+                    cancellationToken,
+                    // Affordability was enforced when the loot was AWARDED (LootDkpGuard). Event
+                    // close settles the whole roster in one batch — blocking here would leave the
+                    // event un-closable over a single member.
+                    DkpOverdraft.Allow);
             }
         }
         // Preserve the loot rows post-close: re-parent each to the new EventHistory (and
@@ -675,6 +701,19 @@ public sealed partial class ActivityDataController
             lootDetail.EventHistory = history;
             lootDetail.Event = null;
             lootDetail.EventId = null;
+        }
+        // And the camp's posted attendance windows, which the Event delete below would otherwise
+        // cascade away along with every AppUserEventWindow roster row hanging off them. Clearing
+        // EventId unhooks them from the doomed Event before it goes. Byte-identical to the web
+        // EndEventCoreAsync — the two close paths must not drift here either.
+        var archivedWindows = await _dbContext.EventAttendanceWindows
+            .Where(window => window.EventId == eventEntity.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var window in archivedWindows)
+        {
+            window.EventHistory = history;
+            window.Event = null;
+            window.EventId = null;
         }
         // Participations materialized earlier in THIS close (late board signups) are still in
         // the Added state with TEMPORARY keys — EF can't transition those to Deleted

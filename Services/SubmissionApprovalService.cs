@@ -164,22 +164,41 @@ public sealed class SubmissionApprovalService
             TotalClaims = pending.Claim == true ? 1 : 0,
             ImagePath = pending.ImagePath,
         };
-        _db.Tods.Add(tod);
-        await _db.SaveChangesAsync(cancellationToken);
-
+        // TodId is stamped after the Tod is saved below; the affordability pre-check doesn't need
+        // it, so the rows are built first in order to run that check before anything is persisted.
         var lootDetails = pending.LootRows
             .Where(r => !string.IsNullOrWhiteSpace(r.ItemName) || !string.IsNullOrWhiteSpace(r.ItemWinner) || r.WinningDkpSpent.HasValue)
             .Select(r => new TodLootDetail
             {
-                TodId = tod.Id,
                 ItemName = r.ItemName,
                 ItemWinner = r.ItemWinner,
                 WinningDkpSpent = r.WinningDkpSpent,
             })
             .ToList();
 
+        // Reject BEFORE materializing anything. Approving into an overdraft would either mint
+        // negative DKP or strand a half-approved ToD with the submission still queued; leaving the
+        // submission untouched lets the officer fix the DKP (or edit the loot down) and retry.
         if (lootDetails.Count > 0)
         {
+            var insufficient = await ActivityDataController.AdjustTodLootDkpAsync(
+                _db, _dkpLedger, _dkpPools, tod, lootDetails, occurredAt, isRefund: false, cancellationToken,
+                checkOnly: true);
+            if (insufficient is not null)
+            {
+                return ApprovalResult.InsufficientDkp;
+            }
+        }
+
+        _db.Tods.Add(tod);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        if (lootDetails.Count > 0)
+        {
+            foreach (var lootDetail in lootDetails)
+            {
+                lootDetail.TodId = tod.Id;
+            }
             await _db.TodLootDetails.AddRangeAsync(lootDetails, cancellationToken);
             await ActivityDataController.AdjustTodLootDkpAsync(
                 _db, _dkpLedger, _dkpPools, tod, lootDetails, occurredAt, isRefund: false, cancellationToken);
@@ -317,6 +336,10 @@ public sealed class SubmissionApprovalService
                 CharacterName = participation.CharacterName ?? membership.CharacterName,
                 VerifiedAt = nowUtc,
                 VerifiedBy = "approval",
+                // Alliance is deliberately left NULL. PendingAttendanceWindowSubmission does not
+                // carry one, and inventing alliance 1 here would put a whole approved roster into a
+                // group nobody reported. The addon renders a null alliance as "unknown", which is
+                // the honest answer.
             });
 
             _db.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
@@ -412,15 +435,14 @@ public sealed class SubmissionApprovalService
 
     // ---------- Helpers ----------
 
-    private static double ResolveCooldownHours(string? cooldown)
-    {
-        return string.Equals(cooldown, ViewModels.TodManagerViewModel.SeventyTwoHourCooldown, StringComparison.OrdinalIgnoreCase)
-            ? 72d
-            : 22d;
-    }
+    // Same fix as TodController.ResolveCooldownHours: this compared against "72 Hour" alone, so
+    // approving a member-submitted 84/71/2 Hour or 5 Min ToD recomputed its repop at 22 hours.
+    private static double ResolveCooldownHours(string? cooldown) =>
+        Controllers.ActivityDataController.ResolveTodCooldownHours(cooldown);
 }
 
-public enum ApprovalResult { Approved, Rejected, NotFound }
+// InsufficientDkp: the submission is intact and still queued — a loot winner can't afford it.
+public enum ApprovalResult { Approved, Rejected, NotFound, InsufficientDkp }
 
 public sealed record TodSubmissionInput(
     string? MonsterName,

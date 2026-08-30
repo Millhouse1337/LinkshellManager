@@ -35,7 +35,8 @@ public class AppUser : IdentityUser
     public int[]? Alt2StrongJobs { get; set; }
 
     // Per-job free-text merit notes for the two alt characters, catalog-aligned
-    // (index 0 = WAR … 14 = SMN), parallel to the alts' Strong flags. Null when the
+    // (index 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP), parallel to the alts' Strong
+    // flags. Null when the
     // alt has no name / no merits set.
     [Column(TypeName = "jsonb")]
     public string[]? Alt1MeritJobs { get; set; }

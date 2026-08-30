@@ -35,3 +35,10 @@ public static class JournalEntryKinds
     public static bool IsReversal(string? kind) =>
         string.Equals(kind, Reversal, StringComparison.OrdinalIgnoreCase);
 }
+
+// One later entry that cancels an earlier one, projected as (which entry, why). Both treasury
+// surfaces read the same two facts off it: that something cancelled the original at all, and
+// whether that something was a FIX — a Correction carrying the right numbers — rather than an
+// outright reversal. The list shows "Fixed" or "Reversed" accordingly, and the chips filter on the
+// same distinction, so a corrected typo stops burying the entries someone genuinely called off.
+public sealed record CancelledEntryRow(int OriginalId, string Kind);

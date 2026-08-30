@@ -11,8 +11,7 @@ import type {
   BoardAddSlotInput,
   BoardMoveMemberInput,
   BoardRenameInput,
-  BoardSlotRequirementInput,
-  PartySignupNudge
+  BoardSlotRequirementInput
 } from './discord-activity.types';
 
 // Discord Activity client for the raid-composition planner (Party Setup).
@@ -119,18 +118,14 @@ export class PartySetupService {
     }
   }
 
-  // Returns true on signup, false on error, or a PartySignupNudge when the server
-  // suggests an open slot in an earlier alliance (nothing committed yet).
-  async signUpEvent(eventId: number, slotId: number, input: ActivityPartySetupSignUpInput): Promise<boolean | PartySignupNudge> {
+  // Returns true on signup, false on error.
+  async signUpEvent(eventId: number, slotId: number, input: ActivityPartySetupSignUpInput): Promise<boolean> {
     this.busy.set(true);
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
     try {
-      const res = await this.http.postActivityJson<{ success?: boolean; nudge?: PartySignupNudge }>(
+      await this.http.postActivityJson<{ success?: boolean }>(
         `/api/activity/events/${eventId}/party-slots/${slotId}/signup`, input);
-      if (res?.nudge) {
-        return res.nudge;
-      }
       await this.loadEventBoard(eventId);
       this.auth.setActionMessage('Signed up.');
       return true;

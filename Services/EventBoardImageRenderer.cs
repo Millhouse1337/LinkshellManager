@@ -14,12 +14,21 @@ namespace LinkshellManagerDiscordApp.Services;
 // next call retries (e.g. after the installer finishes downloading Chromium).
 public sealed class EventBoardImageRenderer : IAsyncDisposable
 {
-    // Internal card widths (px) for the rendered board. The renderer screenshots at 2×
-    // density, and Discord refuses to preview images over 4096px on a side, so the wide
-    // canvas is capped at 2048px (2048 × 2 = 4096). Wider columns mean less name wrapping
-    // and more of the board readable at once — used for Components V2 boards.
+    // Internal card width (px) for boards that don't size themselves: the auction board and
+    // the DKP sheet, whose HTML is authored against this number.
+    //
+    // The EVENT board no longer uses it — it sizes its canvas to its own content
+    // (EventBoardHtmlBuilder.CardWidthFor), because canvas width is really a ZOOM control.
+    // Discord scales a board image down to fit the message column, which is a fixed width no
+    // bot can exceed: a 2000px canvas shown in a ~600px column renders at 30%, so its 17px
+    // names arrive about 5px tall. Authoring the same board on a ~1040px canvas doubles the
+    // on-screen type for free. Bigger canvas = smaller board, which is the exact opposite of
+    // what "wide" sounds like.
     public const int DefaultCardWidth = 1600;
-    public const int WideCardWidth = 2000;
+
+    // Hard ceiling: the renderer screenshots at 2x density and Discord refuses to preview an
+    // image over 4096px on a side.
+    public const int MaxCardWidth = 2048;
 
     private readonly ILogger<EventBoardImageRenderer> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -31,9 +40,11 @@ public sealed class EventBoardImageRenderer : IAsyncDisposable
         _logger = logger;
     }
 
-    // Returns the PNG bytes, or null if rendering isn't available (caller falls
-    // back to the text board). `wide` renders the wider Components V2 canvas.
-    public async Task<byte[]?> RenderAsync(string html, CancellationToken cancellationToken, bool wide = false)
+    // Returns the PNG bytes, or null if rendering isn't available (caller falls back to the
+    // text board). `cardWidth` must match the width the HTML authors its `.embed` at, so the
+    // layout isn't squeezed before the element screenshot is taken.
+    public async Task<byte[]?> RenderAsync(
+        string html, CancellationToken cancellationToken, int cardWidth = DefaultCardWidth)
     {
         await _gate.WaitAsync(cancellationToken);
         try
@@ -44,15 +55,15 @@ public sealed class EventBoardImageRenderer : IAsyncDisposable
                 return null;
             }
 
-            var cardWidth = wide ? WideCardWidth : DefaultCardWidth;
+            var viewportWidth = Math.Clamp(cardWidth, 320, MaxCardWidth);
             await using var page = await browser.NewPageAsync(new BrowserNewPageOptions
             {
                 // Viewport matches the card width so the layout isn't squeezed before the
                 // element screenshot is taken.
-                ViewportSize = new ViewportSize { Width = cardWidth, Height = 1400 },
-                // 2× density (e.g. 1600px card → 3200px PNG, 2000px → 4000px). Discord
-                // refuses to preview images over 4096px on a side, so the wide card stays
-                // ≤2048px to keep 2× under that ceiling for retina crispness.
+                ViewportSize = new ViewportSize { Width = viewportWidth, Height = 1400 },
+                // 2× density (e.g. a 1040px card → 2080px PNG). This is retina crispness for
+                // anyone who opens the image full size; it does NOT affect how large the board
+                // reads in the channel, which is set entirely by the CSS canvas width above.
                 DeviceScaleFactor = 2,
             });
             await page.SetContentAsync(html, new PageSetContentOptions

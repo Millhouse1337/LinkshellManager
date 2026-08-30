@@ -73,6 +73,13 @@ public sealed partial class ActivityDataController
             return alts.Where(n => !string.Equals(n, displayName, StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
+        // How many attendance windows each closed event archived. Counts only — the windows
+        // themselves (and their rosters) load lazily per card from GetEventHistoryWindowsAsync
+        // below, because a page of 25-window wyrm camps carries more roster rows than the entire
+        // rest of this payload.
+        var archivedWindowCounts = await EventHistoryWindowsReader.CountsByHistoryAsync(
+            _dbContext, histories.Select(h => h.Id).ToList(), cancellationToken);
+
         var result = histories.Select(h =>
         {
             var attendeeIds = h.AppUserEventHistories
@@ -90,6 +97,10 @@ public sealed partial class ActivityDataController
                 duration = h.Duration,
                 dkpPerHour = h.DkpPerHour,
                 eventDkp = h.EventDkp,
+                // > 0 marks this as a windowed (HNM-style) camp with a surviving window record,
+                // which is what the card branches on to offer its Attendance Windows section.
+                // Always 0 for events closed before the archive existed.
+                archivedWindowCount = archivedWindowCounts.GetValueOrDefault(h.Id, 0),
                 participants = h.AppUserEventHistories
                     .OrderBy(p => p.CharacterName)
                     .Select(p => new
@@ -102,7 +113,10 @@ public sealed partial class ActivityDataController
                         subJobName = p.SubJobName,
                         duration = p.Duration,
                         eventDkp = p.EventDkp,
-                        activeCredit = p.ActiveCredit
+                        activeCredit = p.ActiveCredit,
+                        // Null on a timed event; the window tally on a windowed one, which is what
+                        // that member's DKP was actually computed from.
+                        windowsAttended = p.WindowsAttended
                     }),
                 absentees = roster
                     .Where(m => !attendeeIds.Contains(m.AppUserId))
@@ -112,6 +126,59 @@ public sealed partial class ActivityDataController
         });
 
         return Ok(new { canManage, histories = result });
+    }
+
+    // The archived attendance windows for one closed camp, loaded on demand when a card expands.
+    // Read-only and membership-gated (not officer-gated) — a member should be able to see which
+    // windows they were scanned in, the same as they can see the attendee list.
+    [HttpGet("event-history/{id:int}/windows")]
+    public async Task<IActionResult> GetEventHistoryWindowsAsync(int id, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to view event history." });
+        }
+
+        var history = await _dbContext.EventHistories
+            .AsNoTracking()
+            .FirstOrDefaultAsync(h => h.Id == id, cancellationToken);
+        if (history is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, history.LinkshellId, cancellationToken);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        var archive = await EventHistoryWindowsReader.LoadAsync(_dbContext, history, cancellationToken);
+
+        return Ok(new
+        {
+            windowCount = archive.WindowCount,
+            distinctAttendeeCount = archive.DistinctAttendeeCount,
+            windows = archive.Windows.Select(window => new
+            {
+                id = window.Id,
+                sequenceNumber = window.SequenceNumber,
+                label = window.Label,
+                postedAt = window.PostedAt,
+                postedBySource = window.PostedBySource,
+                dkpAmount = window.DkpAmount,
+                isClosingWindow = window.IsClosingWindow,
+                isKillWindow = window.IsKillWindow,
+                attendees = window.Attendees.Select(attendee => new
+                {
+                    characterName = attendee.CharacterName,
+                    mainCharacterName = attendee.MainCharacterName,
+                    zone = attendee.Zone,
+                    verifiedAt = attendee.VerifiedAt
+                })
+            })
+        });
     }
 
     [HttpPost("event-history/{id:int}/edit")]

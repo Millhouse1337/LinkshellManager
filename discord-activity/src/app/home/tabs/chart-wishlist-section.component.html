@@ -1,0 +1,161 @@
+<div class="section-head">
+  <div>
+    <div class="section-label">Charts</div>
+    <div class="section-title">Item Requests</div>
+  </div>
+
+  <div class="section-head-right">
+    @if (pendingCount()) {
+      <span class="tag accent">{{ pendingCount() }} outstanding</span>
+    }
+    <!-- Membership, not canManage: anybody in the linkshell can ask for something. -->
+    <button type="button" class="btn sm primary" (click)="toggleForm()">
+      {{ formOpen() ? 'Close' : 'Submit item request' }}
+    </button>
+  </div>
+</div>
+
+@if (formOpen()) {
+  <div class="card chart-form-card">
+    <div class="card-head">
+      <div class="card-title">Submit item request</div>
+    </div>
+    <div class="card-body">
+      <form class="chart-form" (ngSubmit)="submitForm()">
+        <div class="chart-form__field">
+          <label for="wish-boss">Zone</label>
+          <!-- Opens on "anywhere" because both readings are real: somebody wants a specific drop out
+               of one zone, somebody else just wants the item wherever it turns up. -->
+          <select id="wish-boss" name="boss"
+                  [ngModel]="formBoss()" (ngModelChange)="formBoss.set($event)">
+            <option value="">Anywhere on this board</option>
+            @for (boss of bosses(); track boss.boss) {
+              <option [value]="boss.boss">{{ boss.boss }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="chart-form__field">
+          <label for="wish-item">Item</label>
+          <input id="wish-item" name="itemName" type="text" required
+                 [ngModel]="formItemName()" (ngModelChange)="formItemName.set($event)"
+                 placeholder="What are you after?" />
+        </div>
+
+        <div class="chart-form__field">
+          <label for="wish-qty">Qty</label>
+          <input id="wish-qty" name="quantity" type="number" min="1" [(ngModel)]="formQuantity" />
+        </div>
+
+        <div class="chart-form__field">
+          <label for="wish-notes">Notes</label>
+          <input id="wish-notes" name="notes" type="text" [(ngModel)]="formNotes" placeholder="Optional" />
+        </div>
+
+        <div class="chart-form__actions">
+          <button type="button" class="btn sm ghost" (click)="toggleForm()">Cancel</button>
+          <button type="submit" class="btn sm primary"
+                  [disabled]="charts.busySave() || !formItemName().trim()">
+            Submit request
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<div class="card chart-wishlist">
+  <div class="card-head">
+    <div class="card-title">Requests</div>
+  </div>
+
+  @if (requests().length === 0) {
+    <div class="chart-card__empty">Nobody has asked for anything on this board yet.</div>
+  } @else {
+    <div class="table-wrap">
+      <table class="chart-holdings">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Requested By</th>
+            <th>Zone</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (request of requests(); track request.id) {
+            <tr [class.is-settled]="request.status === 'Fulfilled'"
+                [class.is-busy]="charts.busyRequestId() === request.id">
+              <td>
+                <span class="chart-wishlist__item">
+                  <span class="chart-holdings__name">{{ request.itemName }}</span>
+                  @if (request.quantity > 1) {
+                    <span class="chart-item__qty">x{{ request.quantity }}</span>
+                  }
+                </span>
+                @if (request.notes) {
+                  <span class="chart-holdings__note">{{ request.notes }}</span>
+                }
+              </td>
+
+              <td><strong class="chart-holdings__holder">{{ request.requestedByCharacterName }}</strong></td>
+
+              <td>
+                @if (request.boss) {
+                  <span class="chart-holdings__boss" [ngClass]="themeKeyFor(request.boss)">{{ request.boss }}</span>
+                } @else {
+                  <!-- Badges no card above, which is exactly what leaving the zone blank said. -->
+                  <span class="chart-item__muted">Anywhere</span>
+                }
+              </td>
+
+              <td>
+                @if (request.status === 'Fulfilled') {
+                  <span class="pill is-success">Fulfilled</span>
+                  @if (request.fulfilledByCharacterName) {
+                    <span class="chart-holdings__note">by {{ request.fulfilledByCharacterName }}</span>
+                  }
+                } @else {
+                  <span class="pill is-muted">Pending</span>
+                }
+              </td>
+
+              <td class="chart-wishlist__actions">
+                <!-- Priority, one place at a time, and only within the pending queue. -->
+                @if (canManageBoard() && request.status === 'Pending' && pending().length > 1) {
+                  <button type="button" class="btn sm ghost" title="Move up"
+                          [disabled]="charts.busySave() || !canMove(request, -1)"
+                          (click)="move(request, -1)">▲</button>
+                  <button type="button" class="btn sm ghost" title="Move down"
+                          [disabled]="charts.busySave() || !canMove(request, 1)"
+                          (click)="move(request, 1)">▼</button>
+                }
+
+                <!-- Officers only: marking a request fulfilled is a claim about what the linkshell
+                     did, not about what somebody wants. -->
+                @if (canManageBoard()) {
+                  <button type="button" class="btn sm ghost" [disabled]="charts.busySave()"
+                          (click)="toggleFulfilled(request)">
+                    {{ request.status === 'Fulfilled' ? 'Reopen' : 'Mark fulfilled' }}
+                  </button>
+                }
+
+                <!-- The SERVER's per-viewer answer: your own, or anybody's if you can manage. -->
+                @if (request.canWithdraw) {
+                  <button type="button" class="btn sm danger-outline" [disabled]="charts.busySave()"
+                          (click)="withdraw(request)">Withdraw</button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <p class="chart-holdings__footer">
+    Anyone in the linkshell can ask for something here. Officers tick a request off once it has been
+    handed over.
+  </p>
+</div>

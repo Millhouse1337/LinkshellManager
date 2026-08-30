@@ -200,7 +200,12 @@
                 }
               }
             </div>
-            <div class="ac-roster-rank">{{ rankIcon(member.rank) }} {{ member.rank || 'Member' }}</div>
+            <div class="ac-roster-rank">
+              {{ rankIcon(member.rank) }} {{ member.rank || 'Member' }}
+              @if (member.isAdmin) {
+                <span class="tag accent" title="App-wide admin override: full permissions in every linkshell they belong to.">{{ ADMIN_BADGE }}</span>
+              }
+            </div>
             <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
             <div>
               <span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span>

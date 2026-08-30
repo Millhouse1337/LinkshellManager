@@ -7,7 +7,6 @@
     var errorMessage = TempData["CustomizeError"] as string;
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
 }
-
 <div class="page-head fade d1">
     <div>
         <h1 class="page-title">Customize Linkshell</h1>
@@ -26,7 +25,6 @@
         <a class="btn ghost" asp-controller="Linkshell" asp-action="Index">Back to linkshells</a>
     </div>
 </div>
-
 @if (Model.ManageableLinkshells.Count == 0)
 {
     <div class="card fade d2">
@@ -38,17 +36,14 @@
     </div>
     return;
 }
-
 @if (!string.IsNullOrEmpty(savedMessage))
 {
     <div class="alert alert-success fade d2" style="margin-bottom:16px">@savedMessage</div>
 }
-
 @if (!string.IsNullOrEmpty(errorMessage))
 {
     <div class="alert alert-danger fade d2" style="margin-bottom:16px">@errorMessage</div>
 }
-
 <!-- Dashboard banner: officer-uploaded image shown atop the dashboard on both
      the web app and the Discord Activity. Kept as the first section here (and on
      the Activity Configurations tab). Stored in the LinkshellBanner table; served
@@ -57,7 +52,8 @@
     <div class="card-head">
         <div class="card-title">🖼 Dashboard Banner</div>
     </div>
-    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto;width:100%">
+    @* Full-width so the preview is the same 1200x200 strip the dashboard draws. *@
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;width:100%">
         <div style="font-size:12px;color:var(--fg-3)">
             Shown at the top of the dashboard (web and Discord Activity). Recommended size
             <strong>1200 × 200</strong> px — it displays full-width at 200&nbsp;px tall and is cropped to fit.
@@ -102,44 +98,9 @@
         }
     })();
 </script>
-
 <form asp-action="Customize" method="post" class="fade d2" id="customizeForm">
     @Html.AntiForgeryToken()
     <input type="hidden" asp-for="LinkshellId" />
-
-    <div class="card" style="margin-bottom:16px">
-        <div class="card-head">
-            <div class="card-title">Linkshell Type</div>
-        </div>
-        <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:10px">
-            <div style="font-size:12px;color:var(--fg-3)">Tells the addon and website which content this linkshell runs.</div>
-            <label style="display:flex;gap:10px;align-items:flex-start">
-                <input type="radio" asp-for="LinkshellType" value="SkySeaDynamis" />
-                <span>
-                    <strong>Timed Events Only</strong>
-                    <div style="color:var(--fg-3);font-size:12px">Timed-event experience only.</div>
-                </span>
-            </label>
-            <label style="display:flex;gap:10px;align-items:flex-start">
-                <input type="radio" asp-for="LinkshellType" value="HnmOnly" />
-                <span>
-                    <strong>Snapshot Only</strong> <span style="color:var(--fg-3);font-size:12px">(requires addon)</span>
-                    <div style="color:var(--fg-3);font-size:12px">Snapshot sessions only</div>
-                </span>
-            </label>
-            <label style="display:flex;gap:10px;align-items:flex-start">
-                <input type="radio" asp-for="LinkshellType" value="Both" />
-                <span>
-                    <strong>Both</strong>
-                    <div style="color:var(--fg-3);font-size:12px">timed events and snapshots. Default.</div>
-                </span>
-            </label>
-            <div style="display:flex;justify-content:flex-end;margin-top:8px">
-                <button class="btn primary" type="submit">Save changes</button>
-            </div>
-        </div>
-    </div>
-
     <div class="card" style="margin-bottom:16px">
         <div class="card-head">
             <div class="card-title">Loot Structure</div>
@@ -169,7 +130,6 @@
                             <div style="color:var(--fg-3);font-size:12px">DKP earned as usual; loot deducts a percentage of the winner's balance.</div>
                         </span>
                     </label>
-
                     <div id="dkp-rounding-row" style="display:flex;flex-direction:column;gap:4px;max-width:320px;margin-top:8px">
                         <label asp-for="DkpRoundingIncrement">DKP rounding increment</label>
                         <select class="form-select" asp-for="DkpRoundingIncrement">
@@ -178,7 +138,6 @@
                         </select>
                     </div>
                 </div>
-
                 <div style="flex:1 1 360px;display:flex;flex-direction:column;gap:8px;border-left:1px solid var(--border);padding-left:32px">
                     <div class="card-title" style="font-size:14px">Feature Toggles</div>
                     <div style="font-size:12px;color:var(--fg-3)">Hide sections your linkshell doesn't use.</div>
@@ -195,7 +154,6 @@
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableItems" /> Items</label>
                         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="switch" asp-for="EnableRevenue" /> Revenue</label>
                     </div>
-
                     <div class="card-title" style="font-size:14px;margin-top:14px">Member Activity Tracking</div>
                     <div style="font-size:12px;color:var(--fg-3)">
                         Show an Active/Inactive badge per member based on event attendance. A member goes
@@ -213,63 +171,39 @@
                             <input type="number" min="1" max="50" class="form-control" asp-for="ActiveAfterAttendances" />
                         </label>
                     </div>
-
                     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:14px">
                         <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
                             <div class="card-title" style="font-size:14px">Outside Party Signup</div>
                             <div style="font-size:12px;color:var(--fg-3)">
-                                Let Discord-server members who have <strong>never launched the app</strong> sign up for
-                                events straight from the party board, identified by their Discord account. Their first signup
-                                adds them to your roster as a placeholder member, so they <strong>earn DKP and count toward
-                                attendance</strong> like anyone else (and aren't re-asked for their name next time).
+                                Let Discord-server members who have <strong>never launched the app</strong> sign up —
+                                or <strong>Check In</strong> on an HNM camp — straight from the board, identified by their
+                                Discord account. Their first click adds them to your roster as a placeholder member, so they
+                                <strong>earn DKP and count toward attendance</strong> like anyone else (and aren't re-asked
+                                for their name next time). Covers <strong>every event type</strong>, HNM included.
                             </div>
                             <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="OutsidePartySignupEnabled" /> Allow outside (non-account) Discord signups</label>
                         </div>
 
                         <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
-                            <div class="card-title" style="font-size:14px">Fill alliances in order</div>
+                            <div class="card-title" style="font-size:14px">Full-width event boards <span style="font-size:11px;color:var(--fg-3)">(experimental)</span></div>
                             <div style="font-size:12px;color:var(--fg-3)">
-                                When someone signs up for a later alliance while an open slot their job can fill is
-                                still free in an earlier alliance, they're warned and offered that earlier slot first.
-                                Soft nudge (they can still sign up where they chose) and only fires when an earlier slot
-                                actually fits their job. No effect on single-alliance events.
+                                Post sign-up boards as a <strong>full-width text grid</strong>: parties in three columns
+                                with role, leader and readiness icons, spanning the whole message column. No rendered
+                                image &mdash; the grid already shows every slot, so boards post faster too. Off, a rendered
+                                picture <em>is</em> the board and Discord caps it at roughly a third of that width. Same
+                                buttons and signup flow. Discord won't let a board switch modes once posted, so this only
+                                affects boards posted <strong>after</strong> you turn it on.
                             </div>
-                            <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="FillAlliancesInOrder" /> Nudge members to fill earlier alliances first</label>
-                        </div>
-
-                        <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
-                            <div class="card-title" style="font-size:14px">HNM Outside Sign Up</div>
-                            <div style="font-size:12px;color:var(--fg-3)">
-                                A separate switch for <strong>HNM signup boards</strong> (managed in the Discord Activity).
-                                When on, the HNM event type becomes available and outside Discord members can sign up to HNM
-                                boards. HNM is <strong>roster memory only</strong> — players are remembered so they don't retype
-                                their name, but HNM signups earn <strong>no DKP and no attendance credit</strong>. Works
-                                independently of Outside Party Signup above.
-                            </div>
-                            <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="HnmOutsideSignupEnabled" /> Allow HNM outside sign-ups (roster only — no DKP)</label>
-                        </div>
-
-                        <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
-                            <div class="card-title" style="font-size:14px">Components V2 boards <span style="font-size:11px;color:var(--fg-3)">(experimental)</span></div>
-                            <div style="font-size:12px;color:var(--fg-3)">
-                                Post Discord event sign-up boards as Discord <strong>Components V2</strong> messages: the
-                                rendered board sits in a <strong>full-width media gallery</strong> (no embed frame) and is
-                                drawn on a <strong>wider canvas</strong>, so it reads larger. Same buttons and signup flow.
-                                Discord won't let a board switch modes once posted, so this only affects boards posted
-                                <strong>after</strong> you turn it on.
-                            </div>
-                            <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="UseComponentsV2Boards" /> Use Components V2 event boards</label>
+                            <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="UseComponentsV2Boards" /> Full-width text boards</label>
                         </div>
                     </div>
                 </div>
             </div>
-
             <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--border);padding-top:14px">
                 <button class="btn primary" type="submit">Save changes</button>
             </div>
         </div>
     </div>
-
     <div class="card" style="margin-bottom:16px">
         <div class="card-head">
             <div class="card-title">Event Board Theme</div>
@@ -297,39 +231,300 @@
             </div>
         </div>
     </div>
+    @* (A "Hide ToD Mobs" card sat here — per-monster switches that kept a monster out of the
+       Tracked Windows panel. The feature is no longer used, so the web config doesn't offer it;
+       the stored value is left alone by the save below rather than wiped.) *@
+</form>
 
+<!-- Monster setups. Its OWN form, outside the settings form above, because it saves through its
+     own action (SaveMonsterTimings -> the same MonsterTimingEditor the Activity endpoint uses).
+     Nesting it would make one Save persist both, and an Enter keypress in a cell would submit
+     the whole linkshell settings payload. -->
+@* (A "Claim Shield is switched off server-wide" banner sat here. While the switch is off the whole
+   Claim Shield COLUMN is hidden below, so the banner explained an absence — nothing on this card
+   mentions Claim Shield at all any more. The Settings page owns that state and already shows it.) *@
+<form method="post" asp-action="SaveMonsterTimings" class="lsm-confirm-form"
+      data-confirm="Save the monster setups for @Model.LinkshellName?">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="linkshellId" value="@Model.LinkshellId" />
     <div class="card" style="margin-bottom:16px">
         <div class="card-head">
-            <div class="card-title">Hide ToD Mobs</div>
+            <div class="card-title">Monster Setups</div>
         </div>
-        <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
-            <div style="font-size:12px;color:var(--fg-3)">Toggle a monster on to hide it from the Tracked Windows panel on the Dashboard and ToDs tab.</div>
+        <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
+            <div style="font-size:12px;color:var(--fg-3)">
+                What each monster's camp runs on: how many spawn <strong>windows</strong> it sits
+                through, how far apart those windows open (<strong>cadence</strong>), and how long
+                after a kill it repops (<strong>cooldown</strong>). These drive the monster list on
+                the event and ToD forms, and a camp captures them when it is created — editing here
+                never changes a camp that is already running.
+            </div>
+            <div style="font-size:12px;color:var(--fg-3)">
+                Leave <strong>windows</strong> blank for a monster with no spawn-window cycle; its
+                cadence is then just how often the ToD form suggests re-checking.
+            </div>
+
             @{
-                var hiddenSet = new HashSet<string>(Model.HiddenTodMonsters ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+                // Rendered as one GROUP PER CATEGORY, each with its own "+ Add monster", because a
+                // category can now be empty: the built-in catalog is the twelve HNMs, so "Other NMs"
+                // starts with no rows at all and a linkshell fills it itself. The old flat list drew
+                // a heading only when a row changed category, which left an empty group invisible —
+                // and its add button used to clone the LAST row, so an NM added from the bottom of
+                // the page would have landed under HNMs.
+                //
+                // Still posts as ONE indexed collection (monsterTimings[i].Field), so this counter
+                // runs across every group: the binder drops everything after the first gap.
+                var monsterIndex = 0;
+                var categories = Model.MonsterTimingCategories.Count > 0
+                    ? Model.MonsterTimingCategories
+                    : new List<string> { "Other NMs" };
             }
-            @foreach (var group in LinkshellManagerDiscordApp.ViewModels.LinkshellCustomizeViewModel.TodMonsterGroups)
-            {
-                <details style="border:1px solid var(--border);border-radius:8px;background:var(--surface)">
-                    <summary style="cursor:pointer;padding:8px 12px;font-weight:600;font-size:13px">@group.Label</summary>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 16px;padding:8px 12px 12px">
-                        @foreach (var name in group.Names)
+            <div class="monster-setup-rows">
+                @for (var g = 0; g < categories.Count; g++)
+                {
+                    var category = categories[g];
+                    var isLastCategory = g == categories.Count - 1;
+                    // A row carrying an unknown or retired category folds into the LAST group rather
+                    // than vanishing, so it stays visible and therefore deletable. Mirrors the
+                    // Activity's monsterTimingGroups().
+                    var groupRows = Model.MonsterTimings
+                        .Where(candidate => categories.Any(known =>
+                                string.Equals(known, candidate.Category, StringComparison.OrdinalIgnoreCase))
+                            ? string.Equals(category, candidate.Category, StringComparison.OrdinalIgnoreCase)
+                            : isLastCategory)
+                        .ToList();
+                    <section class="monster-setup-group" data-category="@category">
+                        <div class="monster-setup-heading">
+                            <span>@category</span>
+                            <span class="monster-setup-heading-line"></span>
+                            <button class="btn ghost sm monster-setup-add" type="button"
+                                    data-category="@category">+ Add monster</button>
+                        </div>
+                        @* Column labels only when there is something to label — "Other NMs" is empty
+                           until a linkshell adds its own. Rendered-but-hidden rather than omitted so
+                           the script can reveal it the moment a row is added. *@
+                        <div class="monster-setup-row monster-setup-row--head" hidden="@(groupRows.Count == 0)">
+                            <div class="monster-setup-name">Monster</div>
+                            <div class="monster-setup-windows">Windows</div>
+                            <div class="monster-setup-duration">Cadence</div>
+                            <div class="monster-setup-duration">Cooldown</div>
+                            @if (!Model.ClaimShieldGloballyDisabled)
+                            {
+                                <div class="monster-setup-claim" title="Record who tagged this monster during a claim-shield lottery. Off for monsters you don't contest.">Claim Shield</div>
+                            }
+                            <div class="monster-setup-actions"></div>
+                        </div>
+                        <div class="monster-setup-group-rows">
+                        @foreach (var row in groupRows)
                         {
-                            <label style="display:flex;gap:8px;align-items:center">
-                                <input type="checkbox" class="switch" name="HiddenTodMonsters" value="@name" checked="@hiddenSet.Contains(name)" />
-                                @name
-                            </label>
+                            var i = monsterIndex++;
+                            <div class="monster-setup-row">
+                                <input type="hidden" name="monsterTimings[@i].Id" value="@row.Id" />
+                                <input type="hidden" name="monsterTimings[@i].Category" value="@row.Category" />
+                                <div class="monster-setup-name">
+                                    @if (row.IsCustom)
+                                    {
+                                        <input type="text" name="monsterTimings[@i].MonsterName" value="@row.MonsterName"
+                                               maxlength="128" placeholder="Monster name" />
+                                    }
+                                    else
+                                    {
+                                        <input type="hidden" name="monsterTimings[@i].MonsterName" value="@row.MonsterName" />
+                                        <span>@row.MonsterName</span>
+                                    }
+                                </div>
+                                <div class="monster-setup-windows">
+                                    <input type="number" name="monsterTimings[@i].Windows" value="@row.Windows"
+                                           min="1" max="@Model.MonsterTimingMaxWindows" step="1" placeholder="none"
+                                           title="How many spawn windows this camp sits through. Blank = no window cycle." />
+                                </div>
+                                <div class="monster-setup-duration">
+                                    @* Placeholder 0, not an em dash: a blank cadence means this monster has
+                                       no interval at all, which is a real answer for most NMs. *@
+                                    <input type="number" name="monsterTimings[@i].CadenceValue" value="@row.CadenceValue"
+                                           min="0" step="1" placeholder="0" />
+                                    <select name="monsterTimings[@i].CadenceUnit">
+                                        <option value="hours" selected="@(row.CadenceUnit == "hours")">hours</option>
+                                        <option value="mins" selected="@(row.CadenceUnit != "hours")">mins</option>
+                                    </select>
+                                </div>
+                                <div class="monster-setup-duration">
+                                    @* min 0, because an added row starts blank: typing nothing says "I don't
+                                       know the repop yet". MonsterTimingEditor.NormalizeCooldown fills the
+                                       built-in band for that monster rather than storing a zero cooldown,
+                                       which would repop it the instant it died. *@
+                                    <input type="number" name="monsterTimings[@i].CooldownValue" value="@row.CooldownValue"
+                                           min="0" step="1" placeholder="0" />
+                                    <select name="monsterTimings[@i].CooldownUnit">
+                                        <option value="hours" selected="@(row.CooldownUnit == "hours")">hours</option>
+                                        <option value="mins" selected="@(row.CooldownUnit != "hours")">mins</option>
+                                    </select>
+                                </div>
+                                @if (Model.ClaimShieldGloballyDisabled)
+                                {
+                                    @* Column hidden entirely while an admin has Claim Shield off server-wide —
+                                       there is nothing useful to set, so it isn't shown.
+        
+                                       The HIDDEN FIELD still ships, and has to: this form is a full replace, so
+                                       a row that posts no value at all binds false and would silently wipe the
+                                       linkshell's per-monster choices the moment anyone saved the page. It
+                                       carries the STORED value verbatim, so everything comes back exactly as it
+                                       was when Claim Shield is re-enabled. *@
+                                    <input type="hidden" name="monsterTimings[@i].ClaimShieldEnabled"
+                                           value="@(row.ClaimShieldEnabled ? "true" : "false")" />
+                                }
+                                else
+                                {
+                                    <div class="monster-setup-claim">
+                                        <label>
+                                            @* Checkbox FIRST, hidden partner second — the order ASP.NET Core's
+                                               own checkbox tag helper emits. The bool binder takes the FIRST
+                                               posted value, so reversing them makes a ticked box bind false. *@
+                                            <input type="checkbox" name="monsterTimings[@i].ClaimShieldEnabled" value="true"
+                                                   checked="@row.ClaimShieldEnabled" />
+                                            <input type="hidden" name="monsterTimings[@i].ClaimShieldEnabled" value="false" />
+                                            <span>@(row.ClaimShieldEnabled ? "On" : "Off")</span>
+                                        </label>
+                                    </div>
+                                }
+                                <div class="monster-setup-actions">
+                                    @if (row.IsCustom)
+                                    {
+                                        <button type="button" class="btn ghost sm monster-setup-remove"
+                                                title="Remove this monster">Remove</button>
+                                    }
+                                </div>
+                            </div>
                         }
+                        </div>
+                        <div class="monster-setup-empty" hidden="@(groupRows.Count > 0)">
+                            No monsters in this group yet.
+                        </div>
+                    </section>
+                }
+            </div>
+
+            @* The blueprint "+ Add monster" clones. A <template> is inert — nothing inside it posts —
+               so the new-row shape lives here beside the real rows instead of being copied off
+               whichever row happened to be last, which is how an added NM used to inherit the wrong
+               group. The [0] indices and the Category are rewritten by the script below. *@
+            <template id="monster-setup-template">
+                <div class="monster-setup-row">
+                    <input type="hidden" name="monsterTimings[0].Id" value="0" />
+                    <input type="hidden" name="monsterTimings[0].Category" value="" />
+                    <div class="monster-setup-name">
+                        <input type="text" name="monsterTimings[0].MonsterName"
+                               maxlength="128" placeholder="Monster name" />
                     </div>
-                </details>
-            }
-            <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--border);padding-top:14px">
+                    <div class="monster-setup-windows">
+                        <input type="number" name="monsterTimings[0].Windows"
+                               min="1" max="@Model.MonsterTimingMaxWindows" step="1" placeholder="none"
+                               title="How many spawn windows this camp sits through. Blank = no window cycle." />
+                    </div>
+                    <div class="monster-setup-duration">
+                        <input type="number" name="monsterTimings[0].CadenceValue" min="0" step="1" placeholder="0" />
+                        <select name="monsterTimings[0].CadenceUnit">
+                            <option value="hours">hours</option>
+                            <option value="mins" selected>mins</option>
+                        </select>
+                    </div>
+                    <div class="monster-setup-duration">
+                        <input type="number" name="monsterTimings[0].CooldownValue" min="0" step="1" placeholder="0" />
+                        <select name="monsterTimings[0].CooldownUnit">
+                            <option value="hours" selected>hours</option>
+                            <option value="mins">mins</option>
+                        </select>
+                    </div>
+                    @if (Model.ClaimShieldGloballyDisabled)
+                    {
+                        @* Same contract as a rendered row: the field still ships while the column is
+                           hidden, so a full-replace save can't silently switch Claim Shield off. A
+                           monster someone is adding is one they camp, so it starts on. *@
+                        <input type="hidden" name="monsterTimings[0].ClaimShieldEnabled" value="true" />
+                    }
+                    else
+                    {
+                        <div class="monster-setup-claim">
+                            <label>
+                                <input type="checkbox" name="monsterTimings[0].ClaimShieldEnabled" value="true" checked />
+                                <input type="hidden" name="monsterTimings[0].ClaimShieldEnabled" value="false" />
+                                <span>On</span>
+                            </label>
+                        </div>
+                    }
+                    <div class="monster-setup-actions">
+                        <button type="button" class="btn ghost sm monster-setup-remove"
+                                title="Remove this monster">Remove</button>
+                    </div>
+                </div>
+            </template>
+
+            <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border);padding-top:14px">
                 <button class="btn primary" type="submit">Save changes</button>
             </div>
         </div>
     </div>
-
-
 </form>
+
+<script nonce="@Html.CspNonce()">
+    (function () {
+        var rows = document.querySelector('.monster-setup-rows');
+        var template = document.getElementById('monster-setup-template');
+        if (!rows || !template) { return; }
+
+        // Field names carry the POST index, so any add/remove has to renumber EVERY row — across all
+        // groups, in document order — or the model binder silently drops everything after the first
+        // gap. The index is the only thing tying a row's fields together; the group it sits in is
+        // carried by its own hidden Category field.
+        function reindex() {
+            var list = rows.querySelectorAll('.monster-setup-row:not(.monster-setup-row--head)');
+            for (var i = 0; i < list.length; i++) {
+                list[i].querySelectorAll('[name]').forEach(function (el) {
+                    el.setAttribute(
+                        'name',
+                        el.getAttribute('name').replace(/^monsterTimings\[\d+\]/, 'monsterTimings[' + i + ']'));
+                });
+            }
+        }
+
+        // Whether a group still has rows decides both its column labels and its "nothing here yet"
+        // line. A group can legitimately be empty — "Other NMs" starts that way on every linkshell.
+        function syncEmptyState(group) {
+            var populated = !!group.querySelector('.monster-setup-row:not(.monster-setup-row--head)');
+            var note = group.querySelector('.monster-setup-empty');
+            var head = group.querySelector('.monster-setup-row--head');
+            if (note) { note.hidden = populated; }
+            if (head) { head.hidden = !populated; }
+        }
+
+        rows.addEventListener('click', function (evt) {
+            var addBtn = evt.target.closest('.monster-setup-add');
+            if (addBtn) {
+                var group = addBtn.closest('.monster-setup-group');
+                var body = group.querySelector('.monster-setup-group-rows');
+                var row = template.content.firstElementChild.cloneNode(true);
+
+                // The row lands in the group whose button was clicked, and says so in the field the
+                // server reads — the DOM position is only how it looks.
+                row.querySelector('[name$=".Category"]').value = group.dataset.category || '';
+
+                body.appendChild(row);
+                syncEmptyState(group);
+                reindex();
+                row.querySelector('[name$=".MonsterName"]').focus();
+                return;
+            }
+
+            var removeBtn = evt.target.closest('.monster-setup-remove');
+            if (!removeBtn) { return; }
+            var doomed = removeBtn.closest('.monster-setup-row');
+            var owner = doomed.closest('.monster-setup-group');
+            doomed.remove();
+            if (owner) { syncEmptyState(owner); }
+            reindex();
+        });
+    })();
+</script>
 
 <!-- Import DKP: a migrating linkshell uploads an Excel/CSV (fit to the export
      template) to bring its existing DKP in. Matched members are updated; unknown
@@ -405,7 +600,6 @@
         });
     })();
 </script>
-
 <!-- Discord Server: associate the linkshell with a server (roster/invites/
      channels) and, separately, optionally lock viewing access to it. Standalone
      card with its own POST forms, not tied to the main customize save. -->
@@ -413,9 +607,11 @@
     <div class="card-head">
         <div class="card-title">Discord Server</div>
     </div>
-    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto;width:100%">
+    @* Three side-by-side steps: add the bot, pick the server, then (optionally) lock to it.
+       auto-fit means they stack again on a narrow window instead of squeezing. *@
+    <div style="padding:8px 16px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;align-items:start;width:100%">
         <!-- Set up the bot -->
-        <div style="display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border);padding-bottom:14px">
+        <div style="display:flex;flex-direction:column;gap:8px">
             <div style="font-weight:500;color:var(--fg)">Set up the bot</div>
             <div style="font-size:12px;color:var(--fg-3)">
                 The LSM bot allows linkshell info to be posted in your Discord server's channels.
@@ -428,12 +624,12 @@
                 <a class="btn primary" href="https://discord.com/oauth2/authorize?client_id=1320463503848636568" target="_blank" rel="noopener noreferrer">Add the LSM bot to Discord ↗</a>
             </div>
         </div>
-
+        <!-- Server -->
+        <div style="display:flex;flex-direction:column;gap:10px">
         <div style="font-weight:500;color:var(--fg)">Server</div>
-        <div style="font-size:12px;color:var(--fg-3);margin-top:-8px">
+        <div style="font-size:12px;color:var(--fg-3);margin-top:-4px">
             Set your server here, then run <strong>/lsm</strong> in Discord to drop a "Join" button for members to launch the app.
         </div>
-
         @if (!string.IsNullOrWhiteSpace(Model.DiscordGuildId))
         {
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -455,7 +651,6 @@
                 <span style="font-size:13px;color:var(--fg-3)">Not associated with a Discord server.</span>
             </div>
         }
-
         <form method="post" asp-action="SetGuild" class="lsm-confirm-form"
               style="display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);padding-top:12px">
             @Html.AntiForgeryToken()
@@ -492,8 +687,10 @@
                 </button>
             </div>
         </form>
+        </div>
 
-        <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:6px">
+        <!-- Lock access -->
+        <div style="display:flex;flex-direction:column;gap:6px">
             <div style="font-weight:500;color:var(--fg)">Lock access to this server</div>
             <div style="font-size:12px;color:var(--fg-3)">
                 Optional. When ON, members can only open this linkshell from the set Discord server.
@@ -501,7 +698,7 @@
             </div>
             @if (string.IsNullOrWhiteSpace(Model.DiscordGuildId))
             {
-                <span class="tag" style="margin-top:4px;width:fit-content">Set a server above to enable the lock.</span>
+                <span class="tag" style="margin-top:4px;width:fit-content">Set a server first to enable the lock.</span>
             }
             else
             {
@@ -524,7 +721,6 @@
         </div>
     </div>
 </div>
-
 <!-- Post-event discussion mirror: the bot reposts each new event-history comment
      to this channel so the discussion shows up in Discord too. -->
 <div class="card" style="margin-bottom:16px">
@@ -557,88 +753,145 @@
         </form>
     </div>
 </div>
-
 <!-- Discord channel routes: the bot posts each kind of content to the channel(s)
      you assign here. Combine several post types into one channel or split them. -->
 @{
     var availableChannels = Model.AvailableChannels;
     var eventTypes = LinkshellManagerDiscordApp.Models.EventTypeVocabulary.All;
+    // The linkshell's own monster catalog (built-ins + custom), same list the Activity's
+    // per-route HNM narrowing offers.
+    var routeMonsters = Model.MonsterTimings
+        .Select(timing => timing.MonsterName)
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .Select(name => name!)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
 
     async Task RouteRow(int i, LinkshellManagerDiscordApp.ViewModels.ChannelRouteInput r, bool isTemplate)
     {
+        // A route that is already persisted opens collapsed to its channel name, exactly as
+        // it does on the Activity's Configurations tab; a freshly added one starts open.
+        var saved = !isTemplate && r.Id != 0;
         var showEvents = !isTemplate && r.PostEvents;
-        <div class="route-row@(showEvents ? "" : " is-compact")">
+        var showMonsters = showEvents && r.EventTypeFilter.Contains("HNM");
+        var channelName = availableChannels.FirstOrDefault(c => c.Id == r.ChannelId)?.Name;
+        var channelLabel = !string.IsNullOrWhiteSpace(channelName) ? "#" + channelName
+            : !string.IsNullOrWhiteSpace(r.ChannelId) ? r.ChannelId
+            : "New route";
+        <div class="route-row@(saved ? " is-saved is-collapsed" : "")">
             <input type="hidden" data-field="Id" name="channelRoutes[@i].Id" value="@r.Id" />
             <input type="hidden" data-field="Name" name="channelRoutes[@i].Name" value="@r.Name" />
 
-            <div class="route-main">
-                <div class="route-top">
-                    <label class="field route-channel">
-                        <span>Channel</span>
-                        @if (availableChannels.Count > 0)
-                        {
-                            <select class="form-select" data-field="ChannelId" name="channelRoutes[@i].ChannelId">
-                                <option value="">— pick a channel —</option>
-                                @foreach (var channel in availableChannels)
-                                {
-                                    <option value="@channel.Id" selected="@(!isTemplate && channel.Id == r.ChannelId)">#@channel.Name</option>
-                                }
-                            </select>
-                        }
-                        else
-                        {
-                            <input class="input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="20"
-                                   placeholder="Channel ID" autocomplete="off"
-                                   data-field="ChannelId" name="channelRoutes[@i].ChannelId" value="@r.ChannelId" />
-                        }
-                    </label>
-                    <button type="button" class="btn ghost sm route-remove">Remove</button>
-                </div>
-
-                <div class="route-group">
-                    <h4>Choose What to Post</h4>
-                    <div class="chip-grid post-types">
-                        @foreach (var (prop, label, on) in new[]
-                        {
-                            ("PostEvents", "Events", r.PostEvents),
-                            ("PostLoot", "Loot", r.PostLoot),
-                            ("PostAuctions", "Auctions", r.PostAuctions),
-                            ("PostAttendance", "Attendance", r.PostAttendance),
-                            ("PostTodBoard", "ToD", r.PostTodBoard),
-                            ("PostDkpSheet", "DKP", r.PostDkpSheet),
-                        })
-                        {
-                            <label class="chip">
-                                <input type="checkbox" value="true" data-field="@prop" name="channelRoutes[@i].@prop"
-                                       checked="@(!isTemplate && on)"
-                                       @(prop == "PostEvents" ? "data-events-toggle" : "") />
-                                <input type="hidden" data-field="@prop" name="channelRoutes[@i].@prop" value="false" />
-                                <span>@label</span>
-                            </label>
-                        }
-                    </div>
-                </div>
+            @* Collapsed summary row: saved pill + channel + Expand. *@
+            <div class="route-collapsed">
+                <span class="tag success route-pill-saved">✓ Saved</span>
+                <span class="tag route-pill-dirty">Unsaved</span>
+                <span class="route-collapsed-name" data-route-label>@channelLabel</span>
+                <button type="button" class="btn ghost sm route-expand">Expand</button>
             </div>
 
-            <div class="route-event-types route-group" style="@(showEvents ? "" : "display:none")">
-                <h4>Choose what Event Type</h4>
-                <div class="chip-grid event-grid">
-                    @foreach (var et in eventTypes)
-                    {
-                        <label class="chip">
-                            <input type="checkbox" value="@et" data-field="EventTypeFilter" name="channelRoutes[@i].EventTypeFilter"
-                                   checked="@(!isTemplate && r.EventTypeFilter.Contains(et))" />
-                            <span>@et</span>
+            <div class="route-expanded">
+                <span class="tag success route-status route-pill-saved">✓ Saved</span>
+                <span class="tag route-status route-pill-dirty">Unsaved</span>
+                @if (saved)
+                {
+                    <button type="button" class="btn ghost sm route-collapse-top">Collapse</button>
+                }
+
+                <div class="route-main">
+                    <div class="route-top">
+                        <label class="field route-channel">
+                            <span>Channel</span>
+                            @if (availableChannels.Count > 0)
+                            {
+                                <select class="form-select" data-field="ChannelId" name="channelRoutes[@i].ChannelId">
+                                    <option value="">— pick a channel —</option>
+                                    @foreach (var channel in availableChannels)
+                                    {
+                                        <option value="@channel.Id" selected="@(!isTemplate && channel.Id == r.ChannelId)">#@channel.Name</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <input class="input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="20"
+                                       placeholder="Channel ID" autocomplete="off"
+                                       data-field="ChannelId" name="channelRoutes[@i].ChannelId" value="@r.ChannelId" />
+                            }
                         </label>
+                    </div>
+                    <div class="route-group">
+                        <h4>Choose What to Post</h4>
+                        <div class="chip-grid post-types">
+                            @foreach (var (prop, label, on) in new[]
+                            {
+                                ("PostEvents", "Events", r.PostEvents),
+                                ("PostLoot", "Loot", r.PostLoot),
+                                ("PostAuctions", "Auctions", r.PostAuctions),
+                                ("PostAttendance", "Attendance", r.PostAttendance),
+                                ("PostTodBoard", "ToD", r.PostTodBoard),
+                                ("PostDkpSheet", "DKP", r.PostDkpSheet),
+                            })
+                            {
+                                <label class="chip">
+                                    <input type="checkbox" value="true" data-field="@prop" name="channelRoutes[@i].@prop"
+                                           checked="@(!isTemplate && on)"
+                                           @(prop == "PostEvents" ? "data-events-toggle" : "") />
+                                    <input type="hidden" data-field="@prop" name="channelRoutes[@i].@prop" value="false" />
+                                    <span>@label</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="route-side" style="@(showEvents ? "" : "display:none")">
+                    <div class="route-event-types route-group">
+                        <h4>Choose what Event Type</h4>
+                        <div class="chip-grid event-grid">
+                            @foreach (var et in eventTypes)
+                            {
+                                <label class="chip">
+                                    <input type="checkbox" value="@et" data-field="EventTypeFilter" name="channelRoutes[@i].EventTypeFilter"
+                                           checked="@(!isTemplate && r.EventTypeFilter.Contains(et))"
+                                           @(et == "HNM" ? "data-hnm-toggle" : "") />
+                                    <span>@et</span>
+                                </label>
+                            }
+                        </div>
+                    </div>
+
+                    @* Per-monster narrowing, only while this route catches HNM. Nothing ticked =
+                       every HNM goes here; tick monsters to route ONLY those to this channel. *@
+                    @if (routeMonsters.Count > 0)
+                    {
+                        <div class="route-monsters route-group" style="@(showMonsters ? "" : "display:none")">
+                            <h4>Choose what HNM Monsters</h4>
+                            <div class="chip-grid event-grid--wide">
+                                @foreach (var monster in routeMonsters)
+                                {
+                                    <label class="chip">
+                                        <input type="checkbox" value="@monster" data-field="HnmMonsterFilter"
+                                               name="channelRoutes[@i].HnmMonsterFilter"
+                                               checked="@(!isTemplate && r.HnmMonsterFilter.Contains(monster))" />
+                                        <span>@monster</span>
+                                    </label>
+                                }
+                            </div>
+                        </div>
                     }
+                </div>
+
+                <div class="route-remove-row">
+                    <button type="button" class="btn ghost sm route-remove">Remove</button>
                 </div>
             </div>
         </div>
     }
 }
-
-<!-- Chip-style route cards (mirrors the Discord Activity Configurations tab):
-     two-column layout, bordered toggle chips, divider between columns. -->
+<!-- Chip-style route cards, matching the Discord Activity's Configurations tab: one centered
+     column of bordered toggle chips, a saved route collapsed to "✓ Saved · #channel · Expand",
+     and a green tint while what's on screen is what's stored. -->
 <style>
     /* A single centered column: Channel → Choose What to Post → Event types → HNM monsters. */
     #discordChannelsCard .route-row {
@@ -647,25 +900,60 @@
         flex-direction: column;
         align-items: center;
         text-align: center;
-        gap: 18px;
+        gap: 20px;
+        background: var(--surface-2);
         border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 16px;
+        border-radius: 14px;
+        padding: 18px;
     }
-    #discordChannelsCard .route-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; width: 100%; align-items: center; }
-    #discordChannelsCard .route-top { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; justify-content: center; }
-    #discordChannelsCard .route-channel { flex: 1 1 280px; min-width: 0; max-width: 360px; }
-    #discordChannelsCard .route-remove { margin-bottom: 2px; white-space: nowrap; }
-    #discordChannelsCard .route-event-types {
+    /* A persisted, unedited route gets a slight green tint so it's obvious what's saved. */
+    #discordChannelsCard .route-row.is-saved {
+        border-color: rgba(74, 222, 128, 0.35);
+        background: rgba(74, 222, 128, 0.045);
+    }
+    #discordChannelsCard .route-row.is-dirty {
+        border-color: var(--border);
+        background: var(--surface-2);
+    }
+    /* Saved routes sit collapsed: just the channel name + Expand. */
+    #discordChannelsCard .route-row.is-collapsed { padding: 12px 16px; gap: 0; }
+    #discordChannelsCard .route-collapsed { display: none; width: 100%; align-items: center; gap: 12px; text-align: left; }
+    #discordChannelsCard .route-row.is-collapsed .route-collapsed { display: flex; }
+    #discordChannelsCard .route-row.is-collapsed .route-expanded { display: none; }
+    #discordChannelsCard .route-collapsed-name { font-weight: 600; color: var(--fg-1); }
+    #discordChannelsCard .route-collapsed .route-expand { margin-left: auto; }
+    #discordChannelsCard .route-expanded {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 12px;
+        gap: 20px;
+        width: 100%;
+    }
+    /* Status pill top-left, Collapse top-right — mirrors the Activity's route card. */
+    #discordChannelsCard .route-status { position: absolute; top: 0; left: 0; z-index: 1; white-space: nowrap; }
+    #discordChannelsCard .route-collapse-top { position: absolute; top: -2px; right: 0; z-index: 1; white-space: nowrap; }
+    #discordChannelsCard .route-pill-dirty { display: none; }
+    #discordChannelsCard .route-row.is-dirty .route-pill-saved { display: none; }
+    #discordChannelsCard .route-row.is-dirty .route-pill-dirty { display: inline-flex; }
+    /* An unsaved (new) route has no status pill at all. */
+    #discordChannelsCard .route-row:not(.is-saved):not(.is-dirty) .route-status { display: none; }
+    #discordChannelsCard .route-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; width: 100%; align-items: center; }
+    #discordChannelsCard .route-top { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; justify-content: center; }
+    #discordChannelsCard .route-channel { flex: 1 1 280px; min-width: 0; max-width: 360px; }
+    #discordChannelsCard .route-remove-row { width: 100%; display: flex; justify-content: flex-end; gap: 8px; }
+    #discordChannelsCard .route-remove { white-space: nowrap; }
+    #discordChannelsCard .route-side {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
         min-width: 0;
         width: 100%;
         border-top: 1px solid var(--border);
-        padding-top: 16px;
+        padding-top: 18px;
     }
+    #discordChannelsCard .event-grid--wide { max-width: 760px; }
     #discordChannelsCard .route-group { display: flex; flex-direction: column; align-items: center; width: 100%; }
     #discordChannelsCard .route-group h4 {
         margin: 0 0 10px;
@@ -732,7 +1020,6 @@
         <div style="font-size:12px;color:var(--fg-3)">
             Select a channel for the bot to post to.
         </div>
-
         @if (string.IsNullOrWhiteSpace(Model.DiscordChannelGuildId))
         {
             <div style="font-size:12px;color:var(--fg-3)">
@@ -747,7 +1034,6 @@
                 IDs manually — in Discord, with Developer Mode on, right-click a channel &rarr; Copy Channel ID.
             </div>
         }
-
         <form method="post" asp-action="SaveDiscordChannels" class="lsm-confirm-form"
               style="display:flex;flex-direction:column;gap:10px">
             @Html.AntiForgeryToken()
@@ -765,7 +1051,6 @@
         </form>
     </div>
 </div>
-
 @{
     // Group-colour name → theme token (web --*-main). Keys mirror DkpPoolAccents.All; the JS
     // map in the script below must stay in sync. Unknown / legacy keys fall back to blue.
@@ -780,7 +1065,6 @@
         "gray" => "var(--fg-3)",
         _ => "var(--blue-main)",
     };
-
     async Task PoolRow(int index, LinkshellManagerDiscordApp.ViewModels.DkpPoolInput pool)
     {
         <div class="dkp-pool-row@(pool.IsDefault ? " is-default" : "")"
@@ -835,7 +1119,6 @@
             Create a DKP Group. Customize what event categories are grouped together so that DKP
             earned and DKP spent can be separated based on event type.
         </div>
-
         <form method="post" asp-action="SaveDkpPools" class="lsm-confirm-form"
               style="display:flex;flex-direction:column;gap:14px">
             @Html.AntiForgeryToken()
@@ -843,12 +1126,10 @@
             @* The default group is the first row and can't be moved or removed, so its index is
                fixed. Post it explicitly rather than leaning on the controller's parameter default. *@
             <input type="hidden" name="dkpPoolDefaultIndex" value="@Math.Max(0, Model.DkpPools.FindIndex(p => p.IsDefault))" />
-
             <div style="font-size:12px;color:var(--fg-3)">
                 Every event type starts in the <em>Default</em> group, so all event DKP is pooled
                 together until you create another group and move event types into it.
             </div>
-
             <div style="font-size:12px;font-weight:600;color:var(--fg-2);margin-top:4px">Groups</div>
             @* Column headers for the group rows below — aligned to the row's flex columns. *@
             <div style="display:flex;align-items:center;gap:10px;padding:0 10px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-4)">
@@ -865,7 +1146,6 @@
             <div style="display:flex;gap:10px;align-items:center;justify-content:flex-end">
                 <button type="button" class="btn ghost sm" id="dkpPoolAdd">+ Add New Group</button>
             </div>
-
             <div style="font-size:12px;font-weight:600;color:var(--fg-2);margin-top:4px">Event types</div>
             <div style="font-size:12px;color:var(--fg-3)">
                 Anything left on <em>Default</em> earns into the Default group. That includes event
@@ -905,18 +1185,15 @@
                     </div>
                 }
             </div>
-
             <div style="display:flex;gap:10px;align-items:center;justify-content:flex-end">
                 <button class="btn primary" type="submit">Save DKP grouping</button>
             </div>
         </form>
     </div>
 </div>
-
 <template id="dkpPoolRowTemplate">
     @{ await PoolRow(0, new LinkshellManagerDiscordApp.ViewModels.DkpPoolInput { Accent = LinkshellManagerDiscordApp.Models.DkpPoolAccents.Default }); }
 </template>
-
 <script nonce="@Html.CspNonce()">
     (function () {
         var rows = document.getElementById('dkpPoolRows');
@@ -924,7 +1201,6 @@
         var tpl = document.getElementById('dkpPoolRowTemplate');
         var card = document.getElementById('dkpPoolsCard');
         if (!rows || !addBtn || !tpl || !card) { return; }
-
         // Renumber every row's field names to its live DOM position. The default group is always
         // the first row and never moves (it can't be removed and new rows append after it), so its
         // index — and the dkpPoolDefaultIndex the controller reads — stays 0.
@@ -938,7 +1214,6 @@
             syncPoolOptions();
             syncSwatches();
         }
-
         // Colour name → theme token. Must mirror SwatchColor() in the Razor helper above.
         var SWATCH = {
             green: 'var(--green-main)', red: 'var(--red-main)', orange: 'var(--orange-main)',
@@ -954,7 +1229,6 @@
                 }
             });
         }
-
         // Rebuild every event type's <select> from the live pool rows, preserving the current
         // choice by index. A <select> per event type is what makes double-assignment impossible.
         // The default group is represented by the "Default" (-1) option, so it's skipped here
@@ -985,42 +1259,34 @@
                 select.value = stillExists ? previous : '-1';
             });
         }
-
         addBtn.addEventListener('click', function () {
             rows.appendChild(tpl.content.firstElementChild.cloneNode(true));
             reindex();
         });
-
         rows.addEventListener('click', function (evt) {
             if (!evt.target.closest('.dkp-pool-remove')) { return; }
             if (rows.querySelectorAll('.dkp-pool-row').length <= 1) { return; }
             evt.target.closest('.dkp-pool-row').remove();
             reindex();
         });
-
         rows.addEventListener('input', function (evt) {
             if (evt.target.getAttribute('data-field') === 'Name') { syncPoolOptions(); }
         });
-
         rows.addEventListener('change', function (evt) {
             if (evt.target.getAttribute('data-field') === 'Accent') { syncSwatches(); }
         });
-
         reindex();
     })();
 </script>
-
 <template id="routeRowTemplate">
     @{ await RouteRow(0, new LinkshellManagerDiscordApp.ViewModels.ChannelRouteInput(), true); }
 </template>
-
 <script nonce="@Html.CspNonce()">
     (function () {
         var rows = document.getElementById('routeRows');
         var addBtn = document.getElementById('routeAdd');
         var tpl = document.getElementById('routeRowTemplate');
         if (!rows || !addBtn || !tpl) { return; }
-
         // Renumber every bound field so the model binder sees a contiguous
         // channelRoutes[0..n] collection after add/remove.
         function reindex() {
@@ -1031,32 +1297,62 @@
                 });
             }
         }
-
-        // Show/hide a row's event-type picker with its "Event posts" checkbox, and
-        // collapse the card to a single column when the picker is hidden.
-        function bindEventsToggle(row) {
-            var toggle = row.querySelector('[data-events-toggle]');
-            var picker = row.querySelector('.route-event-types');
-            if (!toggle || !picker) { return; }
+        // Show/hide a row's event-type picker with its "Events" chip, and the per-monster
+        // HNM picker with the HNM chip inside it — same nesting the Activity uses.
+        function bindRow(row) {
+            var eventsToggle = row.querySelector('[data-events-toggle]');
+            var side = row.querySelector('.route-side');
+            var hnmToggle = row.querySelector('[data-hnm-toggle]');
+            var monsters = row.querySelector('.route-monsters');
             var sync = function () {
-                var on = toggle.checked;
-                picker.style.display = on ? 'flex' : 'none';
-                row.classList.toggle('is-compact', !on);
+                var events = !!(eventsToggle && eventsToggle.checked);
+                if (side) { side.style.display = events ? 'flex' : 'none'; }
+                if (monsters) {
+                    monsters.style.display = events && hnmToggle && hnmToggle.checked ? 'flex' : 'none';
+                }
             };
-            toggle.addEventListener('change', sync);
+            if (eventsToggle) { eventsToggle.addEventListener('change', sync); }
+            if (hnmToggle) { hnmToggle.addEventListener('change', sync); }
             sync();
+
+            // Keep the collapsed summary showing the channel this route posts to.
+            var label = row.querySelector('[data-route-label]');
+            var channel = row.querySelector('[data-field="ChannelId"]');
+            if (label && channel) {
+                channel.addEventListener('change', function () {
+                    var text = channel.tagName === 'SELECT'
+                        ? (channel.selectedOptions[0] ? channel.selectedOptions[0].textContent.trim() : '')
+                        : channel.value.trim();
+                    label.textContent = text && text.indexOf('—') !== 0 ? text : 'New route';
+                });
+            }
+
+            // Any edit drops the green "saved" state, so the pill never claims a change is stored.
+            row.addEventListener('change', function () {
+                if (row.classList.contains('is-saved')) {
+                    row.classList.remove('is-saved');
+                    row.classList.add('is-dirty');
+                }
+            });
         }
-
-        rows.querySelectorAll('.route-row').forEach(bindEventsToggle);
-
+        rows.querySelectorAll('.route-row').forEach(bindRow);
         addBtn.addEventListener('click', function () {
             var clone = tpl.content.firstElementChild.cloneNode(true);
             rows.appendChild(clone);
             reindex();
-            bindEventsToggle(clone);
+            bindRow(clone);
         });
-
         rows.addEventListener('click', function (evt) {
+            var expand = evt.target.closest('.route-expand');
+            if (expand) {
+                expand.closest('.route-row').classList.remove('is-collapsed');
+                return;
+            }
+            var collapse = evt.target.closest('.route-collapse-top');
+            if (collapse) {
+                collapse.closest('.route-row').classList.add('is-collapsed');
+                return;
+            }
             var btn = evt.target.closest('.route-remove');
             if (!btn) { return; }
             btn.closest('.route-row').remove();
@@ -1064,9 +1360,6 @@
         });
     })();
 </script>
-
-
-
 <!-- Confirm modal: reused by every save action on this page. -->
 <div class="mt-modal" id="customizeConfirmModal" role="dialog" aria-modal="true">
     <div class="mt-modal__backdrop"></div>
@@ -1088,7 +1381,6 @@
         </div>
     </div>
 </div>
-
 @section Scripts {
     <script nonce="@Html.CspNonce()">
         // Entry "which linkshell" modal + a promise-based confirm gate reused by
@@ -1097,7 +1389,6 @@
         (function () {
             function openModal(id) { var el = document.getElementById(id); if (el) el.classList.add('mt-modal--open'); }
             function closeModal(id) { var el = document.getElementById(id); if (el) el.classList.remove('mt-modal--open'); }
-
             var pendingResolve = null;
             window.lsmConfirmChange = function () {
                 return new Promise(function (resolve) {
@@ -1114,7 +1405,6 @@
             var no = document.getElementById('customizeConfirmNo');
             if (yes) yes.addEventListener('click', function () { settle(true); });
             if (no) no.addEventListener('click', function () { settle(false); });
-
             // Drop the one-shot ?switched flag (set by the inline linkshell switcher)
             // so a later manual reload behaves normally and the URL stays clean.
             if (window.history && window.history.replaceState) {
@@ -1126,7 +1416,6 @@
                     }
                 } catch (e) { /* no-op */ }
             }
-
             // Gate the main customize form (loot structure, linkshell type,
             // feature toggles, hide ToD mobs, Discord webhooks) behind confirm.
             var form = document.getElementById('customizeForm');
@@ -1140,7 +1429,6 @@
                     });
                 });
             }
-
             // Gate the standalone server-lock / unlock forms (and any future
             // .lsm-confirm-form) through the same "Are you sure?" modal.
             document.querySelectorAll('form.lsm-confirm-form').forEach(function (cf) {
@@ -1155,7 +1443,6 @@
             });
         })();
     </script>
-
     <script nonce="@Html.CspNonce()">
         (function () {
             // Hide the DKP rounding row when the loot structure is Loot Council,
@@ -1171,6 +1458,4 @@
             update();
         })();
     </script>
-
-
 }

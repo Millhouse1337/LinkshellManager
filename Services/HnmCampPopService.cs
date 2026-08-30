@@ -21,13 +21,18 @@ public sealed class HnmCampPopService
 {
     private readonly ApplicationDbContext _db;
     private readonly HnmCampReviewHandoffService _handoff;
+    private readonly MonsterTimingResolver _monsterTimings;
     private readonly ILogger<HnmCampPopService> _logger;
 
     public HnmCampPopService(
-        ApplicationDbContext db, HnmCampReviewHandoffService handoff, ILogger<HnmCampPopService> logger)
+        ApplicationDbContext db,
+        HnmCampReviewHandoffService handoff,
+        MonsterTimingResolver monsterTimings,
+        ILogger<HnmCampPopService> logger)
     {
         _db = db;
         _handoff = handoff;
+        _monsterTimings = monsterTimings;
         _logger = logger;
     }
 
@@ -81,8 +86,12 @@ public sealed class HnmCampPopService
         // surface renders that as "Not entered". Only an actual observation writes a timestamp.
         var todTimeUtc = request.TodTimeUtc;
         var additionalSeconds = Math.Max(0, request.AdditionalSeconds);
+        // The LINKSHELL'S configured cooldown for this monster, not a global default. The Discord
+        // "Pop / End Camp" button lands here, and before per-monster setups were server-resident it
+        // ignored the configuration outright.
         var cooldown = string.IsNullOrWhiteSpace(request.Cooldown)
-            ? ActivityDataController.GetDefaultTodCooldown(monster)
+            ? await ActivityDataController.GetDefaultTodCooldownAsync(
+                _monsterTimings, ev.LinkshellId, monster, cancellationToken)
             : request.Cooldown.Trim();
         var repopUtc = todTimeUtc
             ?.AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown))

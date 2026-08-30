@@ -3,19 +3,58 @@
      what every scoped `.we-*` rule below hangs off, so that one stays. -->
 <div class="we-tab">
   @if (data(); as model) {
-    @if (section() === 'archive' && model.unlinkedSnapshots.length > 0) {
-      <section class="card">
-        <div class="card-head">
-          <div class="card-title">
-            Unlinked Snapshots
-            <span class="tag">{{ model.unlinkedSnapshots.length }}</span>
-          </div>
+    <!-- Heading for the archive block, mirroring the web's Attendance Archive on /Event.
+         Rendered unconditionally (not gated on the list having rows) so the searchable history
+         below is reachable even when this page of it is empty — a search with no hits is exactly
+         when the section must still be on screen. -->
+    @if (section() === 'archive') {
+      <div class="section-head we-archive-head">
+        <div>
+          <div class="section-label">Archive</div>
+          <div class="section-title">Attendance Archive</div>
+          <div class="section-sub">Closed attendance events</div>
         </div>
-        <section class="we-snapshots we-snapshots--unlinked">
-          @for (snapshot of model.unlinkedSnapshots; track snapshot.id) {
-            <ng-container *ngTemplateOutlet="snapshotDetails; context: { snapshot: snapshot, event: null, closed: false, model: model, unlinked: true }" />
+      </div>
+    }
+
+    <!-- Unlinked Snapshots: its own slice, not part of the archive. Rendered even when empty, so
+         the empty state can say what lands here — the section is where officers are told to look
+         for captures a member posted that nothing has claimed yet. -->
+    @if (section() === 'unlinked') {
+      <div class="section-head we-archive-head">
+        <div>
+          <div class="section-label">Triage</div>
+          <div class="section-title">Unlinked Snapshots</div>
+          <div class="section-sub">In-game captures waiting to be filed against an attendance event</div>
+        </div>
+        <div class="we-unlinked-head-tags">
+          <span class="tag">{{ model.unlinkedSnapshots.length }}</span>
+          @if (model.unlinkedTotalCount > model.unlinkedSnapshots.length) {
+            <!-- Every /lsm now capture lands here now, so this list can genuinely be hiding some.
+                 Saying so beats letting the oldest quietly fall off the end unnoticed. -->
+            <span class="tag danger"
+                  title="Older captures are not shown. File or ignore some to see them.">
+              showing {{ model.unlinkedSnapshots.length }} of {{ model.unlinkedTotalCount }} — resolve these
+            </span>
           }
-        </section>
+          @if (pendingUnlinkedCount(model) > 0) {
+            <span class="tag warning">{{ pendingUnlinkedCount(model) }} awaiting verification</span>
+          }
+        </div>
+      </div>
+      <section class="card">
+        @if (model.unlinkedSnapshots.length === 0) {
+          <div class="we-empty">
+            Captures posted from in-game that aren't attached to an attendance event land here.
+            Name one and link it to an event, or create an event from it.
+          </div>
+        } @else {
+          <section class="we-snapshots we-snapshots--unlinked">
+            @for (snapshot of model.unlinkedSnapshots; track snapshot.id) {
+              <ng-container *ngTemplateOutlet="snapshotDetails; context: { snapshot: snapshot, event: null, closed: false, model: model, unlinked: true }" />
+            }
+          </section>
+        }
       </section>
     }
 
@@ -41,16 +80,68 @@
       </section>
     }
 
-    @if (section() === 'archive' && model.closedEvents.length > 0) {
+    <!-- Attendance History: one PAGE of closed events, searched and paged by the server. The count
+         on the title is the whole archive's total, not this page's length. -->
+    @if (section() === 'archive') {
       <section class="card we-closed-block">
         <div class="card-head">
-          <div class="card-title">Attendance History</div>
+          <div class="card-title">
+            Attendance History
+            <span class="tag">{{ model.closedTotalCount }}</span>
+          </div>
         </div>
-        <div class="we-closed-list">
-          @for (event of model.closedEvents; track event.id) {
-            <ng-container *ngTemplateOutlet="eventCard; context: { event: event, closed: true, model: model }" />
+
+        <div class="we-archive-search">
+          <!-- Explicit Search rather than search-as-you-type: every keystroke would refetch a
+               payload carrying each listed event's whole snapshot/entry tree. Enter submits too,
+               with no <form> — the camp cards this markup sits beside already own forms. -->
+          <input type="search" class="we-archive-search__input"
+                 [ngModel]="archiveSearchText()" (ngModelChange)="setArchiveSearchText($event)"
+                 (keydown.enter)="submitArchiveSearch()"
+                 placeholder="Search by event name, poster, or member…"
+                 aria-label="Search closed attendance events" />
+          <button type="button" class="btn primary sm" [disabled]="windows.busy()"
+                  (click)="submitArchiveSearch()">Search</button>
+          @if (appliedArchiveQuery()) {
+            <button type="button" class="btn ghost sm" [disabled]="windows.busy()"
+                    (click)="clearArchiveSearch()">Clear</button>
           }
+          <span class="we-archive-tally">
+            @if (model.closedTotalCount === 0) {
+              No results
+            } @else {
+              Showing {{ archiveRangeStart() }}–{{ archiveRangeEnd() }} of {{ model.closedTotalCount }}
+            }
+          </span>
         </div>
+
+        @if (model.closedEvents.length === 0) {
+          <div class="we-empty">
+            @if (appliedArchiveQuery(); as query) {
+              No closed events match “{{ query }}”.
+            } @else {
+              Closed events will appear here once an Attendance Event is closed.
+            }
+          </div>
+        } @else {
+          <div class="we-closed-list">
+            @for (event of model.closedEvents; track event.id) {
+              <ng-container *ngTemplateOutlet="eventCard; context: { event: event, closed: true, model: model }" />
+            }
+          </div>
+
+          @if (archiveTotalPages() > 1) {
+            <div class="we-archive-pager">
+              <button type="button" class="btn ghost sm"
+                      [disabled]="model.closedPage === 1 || windows.busy()"
+                      (click)="goToArchivePage(model.closedPage - 1)">← Prev</button>
+              <span class="we-archive-pager__at">Page {{ model.closedPage }} of {{ archiveTotalPages() }}</span>
+              <button type="button" class="btn ghost sm"
+                      [disabled]="model.closedPage === archiveTotalPages() || windows.busy()"
+                      (click)="goToArchivePage(model.closedPage + 1)">Next →</button>
+            </div>
+          }
+        }
       </section>
     }
   } @else if (section() === 'live') {
@@ -83,8 +174,13 @@
         @if (event.sourceEventId) {
           <span class="tag accent" title="Created by ending an HNM camp — each member's DKP is already filled in from the camp's scoring. Review it, then Post to pay.">Camp</span>
         }
-        @if (event.duplicateSnapshotCount > 0) {
-          <span class="tag warning">{{ event.duplicateSnapshotCount }} duplicate review</span>
+        @if (event.allianceNumbers.length > 1) {
+          <!-- More than one is the healthy shape for a big camp: every alliance fielded its own
+               poster. One alliance on a 36-person turnout means half the raid isn't counted. -->
+          <span class="tag we-alliance-chip">{{ event.allianceNumbers.length }} alliances</span>
+        }
+        @if (event.pendingSnapshotCount > 0) {
+          <span class="tag warning">{{ event.pendingSnapshotCount }} pending</span>
         }
         @if (closed) {
           <span class="tag">Closed</span>
@@ -180,7 +276,11 @@
             <tr>
               <th>Character</th>
               <th>Jobs</th>
+              <th>Alliance</th>
               <th>Zone</th>
+              <!-- Window / Misc / Both. It is what tells an officer why one person on this roster
+                   is priced differently from the person above them. -->
+              <th>Source</th>
               <th class="num">Snapshots</th>
               <th class="num">Combined DKP</th>
             </tr>
@@ -193,7 +293,24 @@
                   <ng-container *ngTemplateOutlet="jobPills; context: { row: member }" />
                 </td>
                 <td>
+                  <!-- Usually one chip. Two means they moved between alliances mid-camp, which is
+                       worth seeing rather than flattening to whichever came last. -->
+                  @if (member.allianceNumbers.length > 0) {
+                    @for (alliance of member.allianceNumbers; track alliance) {
+                      <span class="tag we-alliance-chip">{{ alliance }}</span>
+                    }
+                  } @else {
+                    <span class="we-muted">-</span>
+                  }
+                </td>
+                <td>
                   <ng-container *ngTemplateOutlet="zoneCell; context: { zone: member.zone }" />
+                </td>
+                <td>
+                  <span class="tag we-credit-chip"
+                        [class.we-credit-chip--window]="member.creditSource === slotWindow"
+                        [class.we-credit-chip--misc]="member.creditSource === slotMisc"
+                        [class.we-credit-chip--both]="member.creditSource === 'Both'">{{ member.creditSource }}</span>
                 </td>
                 <td class="num">{{ member.snapshotCount }}</td>
                 <td class="num">
@@ -222,8 +339,20 @@
               Update on DKP sheet
             </button>
           } @else {
+            @if (event.pendingSnapshotCount > 0) {
+              <!-- Publishing is one-way and a pending capture is NOT in the roster above, so
+                   posting now would quietly short those people. The server refuses this too —
+                   the disabled button is just the honest version of that answer. -->
+              <span class="we-posted-meta">
+                {{ event.pendingSnapshotCount }}
+                {{ event.pendingSnapshotCount === 1 ? 'snapshot' : 'snapshots' }}
+                awaiting verification — confirm or reject before posting.
+              </span>
+            }
             <button type="button" class="btn sm ghost" (click)="saveDkp(event)" [disabled]="dkpActionsDisabled(event)">Save</button>
-            <button type="button" class="btn sm primary" (click)="postToSheet(event)" [disabled]="dkpActionsDisabled(event)">
+            <button type="button" class="btn sm primary" (click)="postToSheet(event)"
+              [disabled]="dkpActionsDisabled(event) || event.pendingSnapshotCount > 0"
+              [title]="event.pendingSnapshotCount > 0 ? 'Confirm or reject the pending snapshots first; their members are not in the roster above.' : ''">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                 <path d="M12 19V5"/>
                 <polyline points="5 12 12 5 19 12"/>
@@ -235,10 +364,42 @@
       }
     </section>
 
+    <!-- Windows and Miscellaneous render as two labelled groups. Unlike the web card there is no
+         form index to keep monotonic here (per-member DKP drafts are keyed by character name), so
+         two plain loops are safe. -->
     @if (event.snapshots.length > 0) {
       <section class="we-snapshots">
-        @for (snapshot of event.snapshots; track snapshot.id) {
-          <ng-container *ngTemplateOutlet="snapshotDetails; context: { snapshot: snapshot, event: event, closed: closed, model: model, unlinked: false }" />
+        @if (windowSnapshots(event).length > 0) {
+          <div class="we-snapshots__group-head">
+            <span class="we-snapshots__group-title">{{ windowGroupTitle(event) }}</span>
+            <span class="we-snapshots__group-count">{{ windowSnapshots(event).length }}</span>
+          </div>
+          @for (snapshot of windowSnapshots(event); track snapshot.id) {
+            <ng-container *ngTemplateOutlet="snapshotDetails; context: { snapshot: snapshot, event: event, closed: closed, model: model, unlinked: false }" />
+          }
+        }
+        @if (miscSnapshots(event).length > 0) {
+          <div class="we-snapshots__group-head we-snapshots__group-head--misc">
+            <span class="we-snapshots__group-title">Miscellaneous Posts</span>
+            <span class="we-snapshots__group-count">{{ miscSnapshots(event).length }}</span>
+            <span class="we-snapshots__group-help">At the camp, outside any window.</span>
+            @if (model.canManage && !closed) {
+              <!-- Blank means misc-only members are paid exactly what a window attendee is, which
+                   is the default. Carried by Save / Post / Update like every other value. -->
+              <label class="we-misc-dkp">
+                <span>Misc DKP</span>
+                <input class="input we-dkp-input" type="number" step="0.25" min="0"
+                       [ngModel]="dkpDraft(event).misc"
+                       (ngModelChange)="setMiscDkp(event, $event)"
+                       [ngModelOptions]="{ standalone: true }"
+                       [placeholder]="formatDkp(dkpDraft(event).amount)"
+                       title="DKP for members credited only by Misc posts. Blank pays them the same as a window attendee." />
+              </label>
+            }
+          </div>
+          @for (snapshot of miscSnapshots(event); track snapshot.id) {
+            <ng-container *ngTemplateOutlet="snapshotDetails; context: { snapshot: snapshot, event: event, closed: closed, model: model, unlinked: false }" />
+          }
         }
       </section>
     }
@@ -272,13 +433,18 @@
 
 <!-- ===== Snapshot details (used by event snapshots AND unlinked snapshots) ===== -->
 <ng-template #snapshotDetails let-snapshot="snapshot" let-event="event" let-closed="closed" let-model="model" let-unlinked="unlinked">
-  <details class="we-snapshot">
+  <details class="we-snapshot" [class.we-snapshot--pending]="snapshot.isPending">
     <summary class="we-snapshot__head">
       <span class="we-snapshot__caret" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
       </span>
       <span class="we-snapshot__title">
-        @if (snapshot.windowLabel) {
+        <!-- Alliance first: on a multi-alliance camp it is what tells two same-minute captures
+             apart, so it has to lead the line. -->
+        <span class="tag we-alliance-chip">{{ snapshot.allianceLabel }}</span>
+        @if (snapshot.isMisc) {
+          <span class="tag we-snapshot__misc">Misc</span>
+        } @else if (snapshot.windowLabel) {
           <span class="tag we-snapshot__window">{{ snapshot.windowLabel }}</span>
         }
         <strong>{{ formatDate(snapshot.capturedAtUtc) }}</strong>
@@ -292,6 +458,32 @@
       </span>
       @if (model.canManage) {
         <span class="we-snapshot__actions" (click)="$event.stopPropagation()">
+          <!-- Re-file in place. Filing is entirely manual now, so mis-filing is routine rather
+               than exceptional; the server refuses this on a posted event, where it would move
+               members between the window and misc rates after the DKP was already paid. -->
+          @if (event && !closed && !isPosted(event)) {
+            <span class="we-slot-picker">
+              <select class="form-select we-slot-picker__kind" [ngModel]="snapshot.slotKind"
+                      [ngModelOptions]="{ standalone: true }"
+                      (ngModelChange)="setSnapshotSlot(snapshot, $event, snapshot.windowNumber ?? null)"
+                      aria-label="Slot kind">
+                <option [value]="slotWindow">{{ windowGroupTitle(event) }}</option>
+                <option [value]="slotMisc">Misc</option>
+              </select>
+              @if (event.hasWindowGrid && !snapshot.isMisc) {
+                <select class="form-select we-slot-picker__window" [ngModel]="snapshot.windowNumber"
+                        [ngModelOptions]="{ standalone: true }"
+                        (ngModelChange)="setSnapshotSlot(snapshot, slotWindow, $event)"
+                        aria-label="Window number">
+                  @for (n of windowNumbers(event); track n) {
+                    <!-- ngValue, not value: value stringifies, so the select would never match the
+                         numeric windowNumber it is bound to and would post "3" to an int? field. -->
+                    <option [ngValue]="n">Window {{ n }}</option>
+                  }
+                </select>
+              }
+            </span>
+          }
           @if (confirmDeleteSnapshotId() === snapshot.id) {
             <button type="button" class="btn sm danger-outline"
               (click)="deleteSnapshot(snapshot)" [disabled]="windows.busy()">Confirm delete</button>
@@ -306,6 +498,27 @@
     </summary>
 
     @if (model.canManage) {
+      <!-- The blocking decision, above the filing controls: an unconfirmed capture earns nothing
+           no matter which event it ends up filed under. -->
+      @if (snapshot.isPending) {
+        <div class="we-unlinked-review">
+          <span class="we-unlinked-review__note">
+            Posted by a member without moderation rights. Its people are not in any roster and
+            earn nothing until you confirm it.
+          </span>
+          <button type="button" class="btn sm primary" [disabled]="windows.busy()"
+            (click)="verifySnapshot(snapshot, true)">Confirm</button>
+          @if (confirmRejectSnapshotId() === snapshot.id) {
+            <button type="button" class="btn sm danger-outline" [disabled]="windows.busy()"
+              (click)="verifySnapshot(snapshot, false)">Confirm reject</button>
+            <button type="button" class="btn sm ghost"
+              (click)="confirmRejectSnapshotId.set(null)">Cancel</button>
+          } @else {
+            <button type="button" class="btn sm danger-outline"
+              (click)="confirmRejectSnapshotId.set(snapshot.id)">Reject</button>
+          }
+        </div>
+      }
       <div class="we-snapshot-actions-row">
         @if (unlinked) {
           <!-- Pick an existing target first: attaching to the camp that is already
@@ -334,24 +547,62 @@
                 </optgroup>
               }
             </select>
+            <!-- The slot is the whole filing decision now: ingest classifies nothing, so this is
+                 where a capture becomes a window post or a misc post. A free number rather than a
+                 per-event list — the window count differs per target and the server clamps. -->
+            <select class="form-select we-unlinked-slot"
+                    [ngModel]="attachSlot(snapshot).kind"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="setAttachSlotKind(snapshot.id, $event)"
+                    aria-label="Slot">
+              <option [value]="slotWindow">Window</option>
+              <option [value]="slotMisc">Misc</option>
+            </select>
+            @if (attachSlot(snapshot).kind === slotWindow) {
+              <input class="input we-unlinked-window" type="number" min="1" placeholder="auto"
+                     [ngModel]="attachSlot(snapshot).window"
+                     [ngModelOptions]="{ standalone: true }"
+                     (ngModelChange)="setAttachSlotWindow(snapshot.id, $event)"
+                     aria-label="Window number"
+                     title="Leave blank to place it by capture time." />
+            }
             <button type="button" class="btn sm"
               [disabled]="!attachTarget.value || windows.busy()"
               (click)="attachToSelection(snapshot, attachTarget.value)">Attach</button>
             <span class="we-unlinked-sep" aria-hidden="true"></span>
           }
+          <!-- Names the CAPTURE. Save name persists it on the snapshot; Make a New Event uses that
+               same name for the event it mints. They were one control, which meant an officer
+               labelling a snapshot for their own sake conjured a camp. -->
           <input type="text" class="input we-unlinked-name"
             [ngModel]="attachName(snapshot)"
             (ngModelChange)="setAttachName(snapshot.id, $event)"
-            placeholder="New event name" />
+            placeholder="Snapshot name" />
           <button type="button" class="btn sm"
+            [disabled]="windows.busy()"
+            (click)="renameSnapshot(snapshot)">Save name</button>
+          <button type="button" class="btn sm primary"
             [disabled]="!attachName(snapshot).trim() || windows.busy()"
-            (click)="createNewEvent(snapshot)">Create New Event</button>
+            (click)="createNewEvent(snapshot)">Make a New Event from this Snapshot</button>
+          <span class="we-unlinked-sep" aria-hidden="true"></span>
+          <!-- The alliance is the one field the game cannot supply, so it is the one most likely
+               to arrive wrong. Correctable here rather than only by asking for a re-capture. -->
+          <label class="we-unlinked-label" [attr.for]="'snapshot-alliance-' + snapshot.id">Alliance</label>
+          <select class="form-select we-unlinked-alliance" [id]="'snapshot-alliance-' + snapshot.id"
+            [ngModel]="snapshot.allianceNumber ?? 1"
+            (ngModelChange)="setSnapshotAlliance(snapshot, $event)">
+            @for (n of allianceOptions; track n) {
+              <option [ngValue]="n">Alliance {{ n }}</option>
+            }
+          </select>
           <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Ignored')">Ignore</button>
         } @else {
           <button type="button" class="btn sm"
             (click)="setSnapshotStatus(snapshot, 'Active')"
             [disabled]="snapshot.snapshotStatus === 'Active'">Use</button>
-          <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Duplicate')">Mark duplicate</button>
+          <!-- "Mark duplicate" lived here. Two captures of one alliance now UNION into a single
+               snapshot on the way in, and two alliances stay separate by construction, so there
+               is no duplicate left for an officer to declare. -->
           <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Ignored')">Ignore</button>
         }
       </div>

@@ -1,6 +1,6 @@
 # LinkshellManager — In-Game Addon Guide (`lsm`)
 
-> A Lua addon for **Ashita v3**. Captures attendance from `/sea` results, watches chat for ToDs, and (when paired) syncs everything to LSManager in real time.
+> A Lua addon for **Ashita v3**. Captures your alliance's attendance from party memory, watches chat for ToDs, and (when paired) syncs everything to LSManager in real time.
 
 This guide covers the **in-game addon**. Its companions have their own guides:
 - **[Web App Guide](LSManager-WebApp-Guide.md)** — the full management surface in a browser.
@@ -73,18 +73,40 @@ This opens the launcher with: action bar, attendance roster, queued events from 
 /lsm <alias> h                Write to HNM log
 /lsm <alias> e                Write to Event log
 ```
-The addon issues `/sea <area> linkshell`, waits for the result list, builds attendance, then opens the attendance window. If paired, the result also posts to the web event.
+The addon reads your alliance out of party memory, builds attendance, then opens the attendance window. If paired, the result also posts to the web event.
 
-**Take attendance for the current zone**
+**Take attendance where you are**
 ```
-/lsm                          Use current zone, no /sea scan
+/lsm                          Your current alliance
 /lsm here                     Resolve event by current zone and run it
 ```
 
-**Take attendance everywhere**
+## One poster per alliance
+
+A capture is **one alliance** — up to 18 people, read from party memory. The FFXI client gives an
+addon no way to see players outside your own alliance, so:
+
+> **Every alliance at an event needs at least one member with the addon paired.**
+> An alliance with no poster is not counted.
+
+Tell the addon which alliance you are in so the web can keep the rosters apart:
 ```
-/lsm all                      /sea all linkshell — global scan
+/lsm alliance 1               You are posting for Alliance 1
+/lsm alliance 2               ...Alliance 2, and so on (1-6)
+/lsm status                   Shows your current alliance along with pairings
 ```
+It is also a dropdown in the launcher's attendance panel. Officers can correct it afterwards on
+the web if someone picks wrong.
+
+**Anyone can post.** If you don't have live-event moderation rights your capture arrives
+**Pending**: it shows up on the event straight away, but its members stay out of the roster and
+earn nothing until an officer presses Confirm. Captures that don't match an open camp land in
+**Unlinked Snapshots** on the Event System page, where an officer can name them, link them to an
+event, or create an event from them.
+
+The zone-wide scan (`/lsm all` and the old `/sea`-based Zone scope) has been removed. It relied on
+the FFXI search window and a render-range entity sweep, neither of which could see a zone reliably
+— and neither could tell one alliance from another.
 
 **Show composition vs. roster**
 ```
@@ -118,7 +140,7 @@ Once paired, the addon listens to chat for "X was defeated by ..." lines from kn
 1. **Officer creates an event** — on web, Discord, or in-game (the launcher's *Create Event* panel).
 2. **Members sign up** — from any of the three surfaces.
 3. **Event starts** — once it's in commencement, attendance windows open.
-4. **In-game**, anyone with the addon can run `/lsm <alias>` or `/lsm here` during each window. The addon scans, builds the roster, and posts attendance to the web.
+4. **In-game**, anyone with the addon can run `/lsm <alias>` or `/lsm here` during each window. The addon reads your alliance, builds the roster, and posts attendance to the web. One poster per alliance — set yours with `/lsm alliance <n>`.
 5. **Breaks** — members can flag themselves as on-break from the launcher; officers can verify or moderate.
 6. **Loot** — winners and DKP spent are recorded against the event and against the ToD if the kill was tied to one.
 7. **Event ends** — it moves to **Event History** with the full attendance ledger and loot list.
@@ -139,6 +161,7 @@ Once paired, the addon listens to chat for "X was defeated by ..." lines from kn
 ## Quick reference
 - **Pair:** `/addon load att` → `/lsm server <url>` → generate a code on web/Discord → `/lsm link <code> [1|2]`.
 - **Open the launcher:** `/attend`.
+- **Set your alliance:** `/lsm alliance <1-6>` — one poster per alliance, every time.
 - **Take attendance:** `/lsm <event>` or `/lsm here`.
 - **Check pairings:** `/lsm status`.
 - **Companion guides:** [Web App](LSManager-WebApp-Guide.md) · [Discord Activity](LSManager-DiscordActivity-Guide.md)

@@ -8,7 +8,6 @@ public class LootHistoryIndexViewModel
 
     public int? SelectedLinkshellId { get; set; }
     public string? SelectedLinkshellName { get; set; }
-    public string SourceFilter { get; set; } = "all";
 
     // Single free-text filter matched (case-insensitive, substring) against
     // BOTH the winner character name and the item name. Replaces the former
@@ -42,25 +41,33 @@ public class LootHistoryEntryViewModel
     public string? EditedByCharacterName { get; set; }
 }
 
-// Backs the standalone "Add Loot" form. A submission creates a lightweight
-// backing ToD (one per submission) + a TodLootDetail so it flows through the
-// existing ToD-loot DKP deduction + ManualPoints per-day pipeline and shows
-// in Loot History (Source = ToD) with full edit support.
+// Backs the standalone "Add Loot" form.
+//
+// A submission now writes an EventLootDetail filed against a LIVE event, a PAST event, or nothing
+// at all. It used to mint a throwaway ToD per submission and hang a TodLootDetail off it, which is
+// why every hand-entered drop showed up in history as source "ToD" and why the ToD Tracker had to
+// be defended against those rows hijacking a monster card.
 public class LootAddViewModel
 {
     public int LinkshellId { get; set; }
     public string? LinkshellName { get; set; }
 
-    // Source/monster shown as the loot's "Context" in history. Normally one
-    // of the curated monster names; "Other" in the picker means the real
-    // label is typed into CustomContext and folded in server-side.
-    [MaxLength(256)]
-    public string? Context { get; set; }
+    // Which KIND of event this loot came from: "none", "live" or "past". A live event and a past
+    // one are different tables (Event vs EventHistory), so the kind picks which id below is read.
+    public string SourceKind { get; set; } = "none";
 
-    // Free-text source used when "Other" is picked in the Source/monster
-    // dropdown. Resolved into Context before the loot is saved.
-    [MaxLength(256)]
-    public string? CustomContext { get; set; }
+    public int? EventId { get; set; }
+    public int? EventHistoryId { get; set; }
+
+    // Options for the two pickers. Past events are the recent ones plus whatever a search turns
+    // up — a linkshell accumulates hundreds, so the full list is never rendered.
+    public List<LootEventOption> LiveEvents { get; set; } = new();
+    public List<LootEventOption> PastEvents { get; set; } = new();
+
+    // What the officer typed into the past-event search. Echoed back so the box keeps its text
+    // across the round trip that widens the list.
+    [MaxLength(128)]
+    public string? EventQuery { get; set; }
 
     [Required(ErrorMessage = "Item name is required.")]
     [MaxLength(256)]
@@ -75,10 +82,6 @@ public class LootAddViewModel
     public int? WinningDkpSpent { get; set; }
 
     public string? LinkshellLootStructure { get; set; }
-    // SkySeaDynamis / HnmOnly / Both (LinkshellTypes). Drives whether the Event
-    // field is a curated dropdown (Sky/Sea/Dynamis...) or the free-text monster
-    // filter.
-    public string? LinkshellType { get; set; }
     public List<string> RosterCharacterNames { get; set; } = new();
 
     // Which DKP pool this loot is paid from. Manual/ToD loot has a monster, not an event type, so
@@ -87,6 +90,15 @@ public class LootAddViewModel
     public int? DkpPoolId { get; set; }
     public List<LootDkpPoolOption> DkpPools { get; set; } = new();
     public bool HasMultiplePools => DkpPools.Count > 1;
+}
+
+// One selectable event on the Add loot form.
+public class LootEventOption
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    // "Sky - Aug 25" style suffix, so two runs of the same event are tellable apart.
+    public string? Detail { get; set; }
 }
 
 public class LootDkpPoolOption

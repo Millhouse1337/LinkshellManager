@@ -149,6 +149,12 @@ public class HnmWindowCadenceTests
     [InlineData("Tiamat", 25, 60)]
     [InlineData("Jormungand", 25, 60)]
     [InlineData("Vrtra", 25, 60)]
+    // The ToAU three cover the wyrms' same 24-hour band in five six-hour windows. They are ALSO
+    // members of LongWindowHnms, so this pins the one thing that keeps them off 25 x 60: every
+    // resolver testing ToauHnms first.
+    [InlineData("Cerberus", 5, 360)]
+    [InlineData("Hydra", 5, 360)]
+    [InlineData("Khimaira", 5, 360)]
     [InlineData("Adamantoise", 7, 10)]
     [InlineData("Fafnir", 7, 10)]
     [InlineData("King Behemoth", 7, 10)]
@@ -178,15 +184,15 @@ public class HnmWindowCadenceTests
         Assert.Equal(0, HnmConfig.WindowAdvanceMinutes(monster));
     }
 
-    // The read-only list the Activity HNM Settings card renders. Covers exactly the monsters on a
-    // timed cadence — the three wyrms, the six kings/dragons and the four timed NMs that share the
-    // short band — no Testing presets, longest band first so the wyrms lead.
+    // The canonical enumeration of the built-in bands. Covers exactly the monsters on a timed
+    // cadence — the three wyrms, the ToAU three on their own long band, the six kings/dragons and
+    // the four timed NMs that share the short band — no Testing presets, most windows first.
     [Fact]
     public void WindowedHnmSetups_CoversEveryTimedHnm_LongestBandFirst()
     {
         var setups = HnmConfig.WindowedHnmSetups();
 
-        Assert.Equal(13, setups.Count);
+        Assert.Equal(16, setups.Count);
         Assert.Equal(
             new[] { "Jormungand", "Tiamat", "Vrtra" },
             setups.Where(s => s.Windows == 25).Select(s => s.Monster).ToArray());
@@ -197,8 +203,13 @@ public class HnmWindowCadenceTests
                 "Fafnir", "King Behemoth", "Nidhogg", "Roc",
             },
             setups.Where(s => s.Windows == 7).Select(s => s.Monster).ToArray());
+        // Sorted by window COUNT, not by how long the band runs: the ToAU three cover a full 24
+        // hours — as long as the wyrms — and still come last on five windows.
+        Assert.Equal(
+            new[] { "Cerberus", "Hydra", "Khimaira" },
+            setups.Where(s => s.Windows == 5).Select(s => s.Monster).ToArray());
 
-        // The 25-window band sorts ahead of the 7-window band.
+        // Most windows first.
         Assert.Equal(setups.OrderByDescending(s => s.Windows).Select(s => s.Monster), setups.Select(s => s.Monster));
         // Every entry carries the cadence its monster actually advances on.
         Assert.All(setups, s => Assert.Equal(HnmConfig.WindowAdvanceMinutes(s.Monster), s.Minutes));
@@ -277,11 +288,17 @@ public class FocusWindowTests
 
     // The heading's condition and the advancer's clear condition are one method, so they cannot
     // drift into disagreeing about which boards wipe.
+    //
+    // The MONSTER decides it, not the attendance mode: a Manual Check In wyrm re-forms its camp
+    // every hour like any other wyrm, so it wipes too (its check-in ledger survives the wipe —
+    // see HnmWindowRosterSnapshotTests).
     [Theory]
     [InlineData("Tiamat", null, true)]
     [InlineData("Vrtra", null, true)]
-    [InlineData("Tiamat", HnmAttendanceModes.Wd, false)] // Manual Check In: members X-in per window
-    [InlineData("Fafnir", null, false)]                  // one continuous camp at 10-min steps
+    [InlineData("Tiamat", HnmAttendanceModes.Wd, true)]
+    [InlineData("Jormungand", HnmAttendanceModes.Wd, true)]
+    [InlineData("Fafnir", null, false)]                       // one continuous camp at 10-min steps
+    [InlineData("Fafnir", HnmAttendanceModes.Wd, false)]
     [InlineData("King Behemoth", null, false)]
     public void ClearsRosterOnWindowAdvance_MatchesTheAdvancersGate(string monster, string? mode, bool wipes) =>
         Assert.Equal(wipes, DiscordEventMessageBuilder.ClearsRosterOnWindowAdvance(Camp(monster, 2, mode)));

@@ -229,6 +229,22 @@ public sealed class LootEditService
             eventStartTime = detail.Event.StartTime;
             eventEndTime = detail.Event.EndTime;
         }
+        else if (detail.LinkshellId is int ownerLinkshellId)
+        {
+            // A "No event" row: hand-entered loot the officer chose not to file under anything.
+            // It carries its own linkshell precisely so it is editable like any other row, and it
+            // has no event metadata to denormalize onto the compensating ledger entries.
+            linkshellId = ownerLinkshellId;
+            lootStructure = await _db.Linkshells
+                .Where(item => item.Id == ownerLinkshellId)
+                .Select(item => item.LootStructure)
+                .FirstOrDefaultAsync(cancellationToken);
+            eventName = null;
+            eventType = null;
+            eventLocation = null;
+            eventStartTime = null;
+            eventEndTime = null;
+        }
         else
         {
             return new LootEditResult(false, "Loot record is orphaned (no parent event).");
@@ -258,7 +274,13 @@ public sealed class LootEditService
             isHybrid: isHybrid,
             // Event loot FOLLOWS its event type, so a remap moves the original debit and these
             // compensating rows together — the refund can never be stranded in the old pool.
-            poolRef: DkpPoolRef.Derived(eventType),
+            //
+            // Hand-entered loot is the exception: it pins a pool at entry (a "No event" row has no
+            // event type to follow at all), so the refund has to go back to the wallet the debit
+            // actually came out of rather than to whatever the default resolves to today.
+            poolRef: detail.DkpPoolId is int pinnedPool
+                ? DkpPoolRef.Pinned(pinnedPool)
+                : DkpPoolRef.Derived(eventType),
             sourceTodLootDetailId: null,
             sourceEventLootDetailId: detail.Id,
             eventName: eventName,
@@ -742,7 +764,11 @@ public sealed class LootEditService
                         CharacterName = newMembership.CharacterName,
                         Details = $"Edit spend: new loot record applied. Reason: {Truncate(reason, 800)}",
                     },
-                    cancellationToken);
+                    cancellationToken,
+                    // Officer intent: correcting an already-awarded item's price. Refusing the
+                    // correction because the member has since spent down would leave the ledger
+                    // wrong instead of merely overdrawn.
+                    DkpOverdraft.Allow);
             }
         }
 

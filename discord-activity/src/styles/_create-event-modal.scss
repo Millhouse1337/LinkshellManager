@@ -217,6 +217,15 @@
   color: var(--cem-fg-3);
 }
 
+/* A hint that carries a chip-sized action (e.g. the predicted-repop "Use this time"), so the
+   button sits on the text's line instead of on its baseline. */
+.cem__hint--inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* ===== Controls ===== */
 .cem__input,
 .cem__select {

@@ -41,6 +41,10 @@
         {
             <span><strong style="color:var(--orange-main)">@Model.Preview.AmbiguousCount</strong> ambiguous (skipped)</span>
         }
+        @if (Model.Preview.ClampedCount > 0)
+        {
+            <span><strong style="color:var(--orange-main)">@Model.Preview.ClampedCount</strong> negative balance(s) will import as 0</span>
+        }
     </div>
 </div>
 

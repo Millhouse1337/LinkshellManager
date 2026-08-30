@@ -15,19 +15,25 @@ public class ManageTeamController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly Services.InviteCandidateService _inviteCandidates;
     private readonly Services.MemberActivityService _memberActivity;
+    private readonly Services.JobsRosterService _jobsRoster;
 
     public ManageTeamController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         Services.InviteCandidateService inviteCandidates,
-        Services.MemberActivityService memberActivity)
+        Services.MemberActivityService memberActivity,
+        Services.JobsRosterService jobsRoster)
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _inviteCandidates = inviteCandidates;
         _memberActivity = memberActivity;
+        _jobsRoster = jobsRoster;
     }
 
     public async Task<IActionResult> Index(int? selectedLinkshellId, string? search, int page = 1, bool appSync = true)
@@ -152,77 +158,9 @@ public class ManageTeamController : Controller
             ?? (userLinkshells.Any(l => l.Id == user.PrimaryLinkshellId) ? user.PrimaryLinkshellId : null)
             ?? userLinkshells[0].Id;
 
-        // Only app-linked members carry profile job data; sheet-only placeholders
-        // (no AppUserId) have nothing to show, so leave them out.
-        var members = await _context.AppUserLinkshells
-            .Include(ul => ul.AppUser)
-            .Where(ul => ul.LinkshellId == targetId && ul.AppUserId != null)
-            .OrderBy(ul => ul.CharacterName)
-            .ToListAsync();
-
-        // Relic flags/names from every member's OWN job ratings (self rows with
-        // HasRelic), keyed by (AppUserId, CharacterSlot) — mirrors the Activity.
-        var jobCount = EventJobCatalog.MainJobOptions.Length;
-        var relicRows = await _context.JobRatings.AsNoTracking()
-            .Where(r => r.LinkshellId == targetId
-                && r.RaterAppUserId == r.TargetAppUserId
-                && r.HasRelic
-                && r.JobIndex >= 0)
-            .Select(r => new { r.TargetAppUserId, r.CharacterSlot, r.JobIndex, r.RelicNames })
-            .ToListAsync();
-        var relicLookup = relicRows
-            .GroupBy(r => (r.TargetAppUserId, r.CharacterSlot))
-            .ToDictionary(g => g.Key, g => g.Select(x => x.JobIndex).ToHashSet());
-        var relicNameLookup = relicRows
-            .GroupBy(r => (r.TargetAppUserId, r.CharacterSlot))
-            .ToDictionary(
-                g => g.Key,
-                g => g.GroupBy(x => x.JobIndex).ToDictionary(
-                    j => j.Key,
-                    j => string.Join(", ", j.First().RelicNames ?? Array.Empty<string>())));
-
-        bool[] RelicFlags(string? appUserId, int slot)
-        {
-            var flags = new bool[jobCount];
-            if (appUserId != null && relicLookup.TryGetValue((appUserId, slot), out var set))
-            {
-                for (var i = 0; i < jobCount; i++) { flags[i] = set.Contains(i); }
-            }
-            return flags;
-        }
-        string[] RelicNames(string? appUserId, int slot)
-        {
-            var names = new string[jobCount];
-            for (var i = 0; i < jobCount; i++) { names[i] = string.Empty; }
-            if (appUserId != null && relicNameLookup.TryGetValue((appUserId, slot), out var map))
-            {
-                foreach (var kv in map) { if (kv.Key >= 0 && kv.Key < jobCount) { names[kv.Key] = kv.Value; } }
-            }
-            return names;
-        }
-
-        var entries = members.Select(m => new JobsRosterEntry
-        {
-            CharacterName = m.CharacterName ?? m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown",
-            Rank = m.Rank,
-            JobLevels = ProfileJobLevels.ToCatalogLevels(m.JobLevels),
-            Alt1Name = string.IsNullOrWhiteSpace(m.AppUser?.AltCharacterName1) ? null : m.AppUser!.AltCharacterName1,
-            Alt1JobLevels = ProfileJobLevels.ToCatalogLevels(m.AppUser?.Alt1JobLevels),
-            Alt2Name = string.IsNullOrWhiteSpace(m.AppUser?.AltCharacterName2) ? null : m.AppUser!.AltCharacterName2,
-            Alt2JobLevels = ProfileJobLevels.ToCatalogLevels(m.AppUser?.Alt2JobLevels),
-            StrongJobs = ProfileJobLevels.ToCatalogFlags(m.StrongJobs),
-            Alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(m.AppUser?.Alt1StrongJobs),
-            Alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(m.AppUser?.Alt2StrongJobs),
-            RelicFlags = RelicFlags(m.AppUserId, 0),
-            Alt1RelicFlags = RelicFlags(m.AppUserId, 1),
-            Alt2RelicFlags = RelicFlags(m.AppUserId, 2),
-            RelicNames = RelicNames(m.AppUserId, 0),
-            Alt1RelicNames = RelicNames(m.AppUserId, 1),
-            Alt2RelicNames = RelicNames(m.AppUserId, 2),
-            MeritJobs = ProfileJobLevels.NormalizeMerits(m.MeritJobs),
-            Alt1MeritJobs = ProfileJobLevels.NormalizeMerits(m.AppUser?.Alt1MeritJobs),
-            Alt2MeritJobs = ProfileJobLevels.NormalizeMerits(m.AppUser?.Alt2MeritJobs)
-        }).ToList();
+        // Levels/relics/merits are built by the shared JobsRosterService, so this
+        // page and the Dashboard roster's "Show Jobs" toggle render the same pills.
+        var entries = await _jobsRoster.BuildAsync(targetId, HttpContext.RequestAborted);
 
         return View(new JobsRosterViewModel
         {
@@ -705,7 +643,9 @@ public class ManageTeamController : Controller
         if (!linkshellId.HasValue) return false;
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(ul => ul.AppUserId == appUserId && ul.LinkshellId == linkshellId.Value);
-        return membership is not null && LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+        if (membership is null) return false;
+        return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
+               || await _adminOverride.IsActiveForAsync(appUserId, HttpContext.RequestAborted);
     }
 
     private async Task<List<Linkshell>> GetManageableLinkshellsAsync(string appUserId)

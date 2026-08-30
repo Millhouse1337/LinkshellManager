@@ -38,45 +38,71 @@
         <div asp-validation-summary="ModelOnly" class="text-danger" style="margin-bottom:12px"></div>
 
         <div class="form-grid">
+            @* The Event field. Loot used to carry a free-text "context" string, which is why every
+               hand-entered drop landed in history as a made-up ToD. It now points at a real event:
+               a LIVE one (Event) or a PAST one (EventHistory), or at nothing. *@
             <div class="field">
-                <label asp-for="Context">Event</label>
-                @if (string.Equals(Model.LinkshellType, LinkshellManagerDiscordApp.Models.LinkshellTypes.SkySeaDynamis, StringComparison.OrdinalIgnoreCase))
+                <label asp-for="SourceKind">Event</label>
+                <select asp-for="SourceKind" class="form-control" id="loot-source-kind">
+                    <option value="none">No event</option>
+                    <option value="live">From a live event</option>
+                    <option value="past">From a past event</option>
+                </select>
+                <span class="muted" style="font-size:11px">What this drop came from. "No event" records the loot without filing it under one.</span>
+            </div>
+
+            <div class="field" data-loot-source-pane="live">
+                <label asp-for="EventId">Live event</label>
+                @if (Model.LiveEvents.Any())
                 {
-                    @* Sky/Sea/Dynamis linkshell: curated event dropdown. Picking
-                       "Other" reveals a free-text box (CustomContext) that the
-                       controller folds into Context on save. *@
-                    var eventOptions = new[] { "Sky", "Sea", "Dynamis", "Limbus", "HENM", "KSNM", "BCNM", "Other" };
-                    var isKnownEvent = eventOptions.Any(o => string.Equals(o, Model.Context, StringComparison.OrdinalIgnoreCase));
-                    var pickValue = string.IsNullOrEmpty(Model.Context) ? string.Empty : (isKnownEvent ? Model.Context! : "Other");
-                    var customValue = (!isKnownEvent && !string.IsNullOrEmpty(Model.Context)) ? Model.Context : Model.CustomContext;
-                    <select name="Context" id="Context" class="form-select">
-                        <option value="">Select event…</option>
-                        @foreach (var opt in eventOptions)
+                    <select asp-for="EventId" class="form-control">
+                        <option value="">— choose a live event —</option>
+                        @foreach (var evt in Model.LiveEvents)
                         {
-                            <option value="@opt" selected="@(string.Equals(opt, pickValue, StringComparison.OrdinalIgnoreCase))">@opt</option>
+                            <option value="@evt.Id" selected="@(Model.EventId == evt.Id)">
+                                @evt.Name@(string.IsNullOrWhiteSpace(evt.Detail) ? "" : $" · {evt.Detail}")
+                            </option>
                         }
                     </select>
-                    <input name="CustomContext" id="loot-event-custom" class="form-control" maxlength="256"
-                           value="@customValue" autocomplete="off" placeholder="Name the source (e.g. Limbus)"
-                           style="margin-top:6px;@(pickValue == "Other" ? string.Empty : "display:none")" />
-                    <span asp-validation-for="Context" class="text-danger"></span>
-                    <span class="muted" style="font-size:11px">Pick the event, or choose "Other" to name a custom source.</span>
                 }
                 else
                 {
-                    @* HNM / Both: free-text filter over the known monster list. *@
-                    <input asp-for="Context" class="form-control"
-                           list="loot-source-options" autocomplete="off" maxlength="256"
-                           placeholder="Type to filter known monsters, or enter your own…" />
-                    <datalist id="loot-source-options">
-                        @foreach (var monster in TodManagerViewModel.SupportedMonsters)
-                        {
-                            <option value="@monster"></option>
-                        }
-                    </datalist>
-                    <span asp-validation-for="Context" class="text-danger"></span>
-                    <span class="muted" style="font-size:11px">Start typing to filter, or enter a custom source (e.g. "Sky"). Shown as the loot's Context in history.</span>
+                    <select class="form-control" disabled>
+                        <option>No live events</option>
+                    </select>
+                    <span class="muted" style="font-size:11px">Nothing is running right now — pick a past event instead.</span>
                 }
+                <span asp-validation-for="EventId" class="text-danger"></span>
+            </div>
+
+            <div class="field" data-loot-source-pane="past">
+                <label asp-for="EventHistoryId">Past event</label>
+                @* The 25 most recent, widened by a search. A linkshell accumulates hundreds of
+                   closed events, so a flat list would put the older half out of reach entirely. *@
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+                    <input asp-for="EventQuery" class="form-control" style="flex:1;min-width:0"
+                           maxlength="128" placeholder="Search past events by name or type…" />
+                    <button type="submit" class="btn sm ghost" formmethod="get" formnovalidate>Search</button>
+                </div>
+                @if (Model.PastEvents.Any())
+                {
+                    <select asp-for="EventHistoryId" class="form-control">
+                        <option value="">— choose a past event —</option>
+                        @foreach (var past in Model.PastEvents)
+                        {
+                            <option value="@past.Id" selected="@(Model.EventHistoryId == past.Id)">
+                                @past.Name@(string.IsNullOrWhiteSpace(past.Detail) ? "" : $" · {past.Detail}")
+                            </option>
+                        }
+                    </select>
+                }
+                else
+                {
+                    <select class="form-control" disabled>
+                        <option>@(string.IsNullOrWhiteSpace(Model.EventQuery) ? "No past events" : "No past events match that search")</option>
+                    </select>
+                }
+                <span asp-validation-for="EventHistoryId" class="text-danger"></span>
             </div>
 
             <div class="field">
@@ -146,15 +172,6 @@
 
 <script nonce="@Html.CspNonce()">
     (function () {
-        // Sky/Sea/Dynamis dropdown: reveal the custom-name box only on "Other".
-        var sel = document.getElementById('Context');
-        var custom = document.getElementById('loot-event-custom');
-        if (sel && custom && sel.tagName === 'SELECT') {
-            var syncOther = function () { custom.style.display = (sel.value === 'Other') ? '' : 'none'; };
-            sel.addEventListener('change', syncOther);
-            syncOther();
-        }
-
         // "No DKP": zero + lock the DKP spent field so the loot records 0 cost.
         var noDkp = document.getElementById('loot-no-dkp');
         var dkp = document.getElementById('WinningDkpSpent');
@@ -170,8 +187,22 @@
                     if (dkp.value === '0') dkp.value = '';
                 }
             };
-            noDkp.addEventListener('change', applyNoDkp);
+            noDkp.addEventListener("change", applyNoDkp);
             applyNoDkp();
+        }
+
+        // Only the picker that matches the chosen kind is shown. Both panes stay in the DOM so a
+        // failed post redisplays with the officer selection intact.
+        var kind = document.getElementById("loot-source-kind");
+        var panes = document.querySelectorAll("[data-loot-source-pane]");
+        if (kind && panes.length) {
+            var applyKind = function () {
+                panes.forEach(function (pane) {
+                    pane.style.display = pane.getAttribute("data-loot-source-pane") === kind.value ? "" : "none";
+                });
+            };
+            kind.addEventListener("change", applyKind);
+            applyKind();
         }
     })();
 </script>

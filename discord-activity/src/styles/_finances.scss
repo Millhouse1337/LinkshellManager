@@ -14,22 +14,57 @@
   align-items: center;
 }
 
-.panel-tab .fin-chips {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
+/* The "Uncategorized N" chip is a real button (it filters the transaction list). Undo the browser's
+   button styling so it stays identical to the static tags beside it, then add what a tag has no need
+   for: a pointer, a hover, and an on-state for when the list below is showing that filter. */
+.panel-tab .fin-chip-btn {
+  appearance: none;
+  margin: 0;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.panel-tab .fin-chip-btn:hover { background: var(--surface-3); color: var(--fg); }
+.panel-tab .fin-chip-btn.is-on {
+  background: var(--accent-weak);
+  color: var(--accent);
+  border-color: transparent;
 }
 
 /* --- Card 1: the balance sheet. What we have, what we owe, what that leaves. ---
-   Reads top to bottom with a subtotal under each section, because the whole point is that one
-   subtracts from the other. A row of figures side by side cannot show that. */
-.panel-tab .fin-sheet {
-  padding: 12px 14px 4px;
+   The card IS the sheet: this block re-dresses .card rather than nesting a second panel inside one,
+   so there is a single border and a single background. What we have on the left, what we owe on the
+   right, the period's flow across the top, and what all of that leaves underneath both. Each side
+   totals itself, so the bottom line visibly comes from subtracting one from the other.
+
+   Twin of the .balance-sheet block in the web's lsm-theme.css. Same layout, this app's tokens —
+   which is also why the class names differ: STYLE.md is explicit that neither app's classes get
+   pasted into the other.
+
+   --fin-bal-* is the only place this block names a colour, and every value is mixed from a token.
+   A sheet leans on gold edges, coloured glows and half-lit inks that the flat tokens do not carry;
+   deriving them once here keeps the whole card following the theme from a single line each. */
+.panel-tab .fin-balance-card {
+  --fin-bal-edge: color-mix(in srgb, var(--gold) 30%, transparent);
+  --fin-bal-rule: color-mix(in srgb, var(--gold) 20%, transparent);
+  --fin-bal-heading: color-mix(in srgb, var(--accent) 40%, var(--fg));
+  --fin-bal-figure: color-mix(in srgb, var(--accent) 55%, var(--fg));
+  --fin-bal-well: color-mix(in srgb, var(--bg) 55%, transparent);
+
+  padding: 20px;
+  border-color: var(--fin-bal-edge);
+  background:
+    radial-gradient(680px 380px at 6% -10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 62%),
+    linear-gradient(180deg, var(--bg-elev), var(--bg));
 }
 
-/* The balance sheet's working, behind a disclosure. The summary is the whole two-row header — the
-   title strip AND the flow chips — so everything a collapsed card shows is also its hit target. */
+/* Figures line up column-wise wherever two of them sit above one another. */
+.panel-tab .fin-balance-card .num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The sheet's working, behind a disclosure. The summary is the whole header — the title strip, the
+   status chips AND the flow cards — so everything a collapsed card shows is also its hit target. */
 .panel-tab .fin-balance__summary {
   display: block;
   cursor: pointer;
@@ -42,22 +77,75 @@
   display: none;
 }
 
-/* What moved, in and out, USED to be a second header row of its own. It is three chips; it now sits
-   in the header beside the others, and the card is a row shorter in both states. */
-
-/* flex:1 rather than absolute centring: the chevron takes the whole gap between the title and the
-   chips and centres inside it, so it can never overlap either of them on a narrow iframe. */
-.panel-tab .fin-balance__chev {
-  flex: 1;
+.panel-tab .fin-bal-header {
   display: flex;
-  justify-content: center;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: 16px;
+}
+
+/* The rule under the header only appears once there is something below it to divide from. */
+.panel-tab .fin-balance[open] .fin-bal-header {
+  border-bottom: 1px solid var(--fin-bal-rule);
+}
+
+.panel-tab .fin-bal-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.panel-tab .fin-bal-title h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg);
+}
+
+.panel-tab .fin-bal-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.panel-tab .fin-gil-emblem {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--gold) 55%, var(--bg)),
+    color-mix(in srgb, var(--gold) 12%, var(--bg)));
+  box-shadow:
+    0 0 16px color-mix(in srgb, var(--gold) 32%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--gold) 22%, transparent);
+  color: var(--gold-2);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.panel-tab .fin-balance__chev {
+  display: flex;
+  align-items: center;
   color: var(--fg-3);
 }
 
 .panel-tab .fin-balance__chev svg {
   width: 18px;
   height: 18px;
-  transition: transform 0.12s ease;
+  transition: transform .12s ease;
 }
 
 .panel-tab .fin-balance[open] .fin-balance__chev svg {
@@ -65,102 +153,613 @@
 }
 
 .panel-tab .fin-balance__summary:hover .fin-balance__chev {
-  color: var(--fg-1);
+  color: var(--fg);
 }
 
-/* Have on the left, owe on the right. auto-fit so the Discord iframe folds it back to one column
-   instead of squeezing two 120px columns of numbers. */
-.panel-tab .fin-sheet__cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 4px 28px;
-  padding: 12px 14px 4px;
+/* --- What moved, in and out ---
+   Cards rather than chips: these are the figures a collapsed card exists to show, and a chip-sized
+   number reads as a label. Each wears the colour of its direction. */
+.panel-tab .fin-summary-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.panel-tab .fin-sheet__col {
-  min-width: 0;
+.panel-tab .fin-summary-card {
+  flex: 1 1 130px;
+  min-width: 120px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--fin-bal-well);
 }
 
-/* The answer, outside the disclosure. Its own padding because the sheet above it is now a sibling
-   that disappears. */
-.panel-tab .fin-sheet--answer {
-  padding-top: 0;
-}
-
-.panel-tab .fin-sheet__section {
-  margin-top: 12px;
-  margin-bottom: 4px;
-  font-size: 11px;
+.panel-tab .fin-summary-label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+}
+
+.panel-tab .fin-summary-card strong {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.panel-tab .fin-summary-card.is-in {
+  border-color: color-mix(in srgb, var(--success) 38%, transparent);
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--success) 8%, transparent);
+}
+
+.panel-tab .fin-summary-card.is-in .fin-summary-label,
+.panel-tab .fin-summary-card.is-in strong {
+  color: var(--success);
+}
+
+.panel-tab .fin-summary-card.is-out {
+  border-color: color-mix(in srgb, var(--orange) 38%, transparent);
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--orange) 8%, transparent);
+}
+
+.panel-tab .fin-summary-card.is-out .fin-summary-label,
+.panel-tab .fin-summary-card.is-out strong {
+  color: var(--orange);
+}
+
+.panel-tab .fin-summary-card.is-change {
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.panel-tab .fin-summary-card.is-change .fin-summary-label,
+.panel-tab .fin-summary-card.is-change strong {
+  color: var(--fin-bal-figure);
+}
+
+/* --- The two sides ---
+   auto-fit so the Discord iframe folds them back to one column instead of squeezing two columns of
+   numbers together. */
+.panel-tab .fin-bal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.panel-tab .fin-bal-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--surface), var(--bg-elev));
+  box-shadow: var(--shadow-pop);
+}
+
+.panel-tab .fin-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-tab .fin-panel-heading h3 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fin-bal-heading);
+}
+
+.panel-tab .fin-panel-icon {
+  font-size: 16px;
+  line-height: 1;
   color: var(--fg-3);
 }
 
-.panel-tab .fin-sheet__section:first-child {
-  margin-top: 0;
+/* --- The gil-on-hand medallion ---
+   Only the bottom line wears one now. The two panels above it are lists of NAMES — fin-money-row and
+   its shield variant went with the boxed lines that used to sit there, because a panel whose every
+   row is a person does not need a per-row icon to say so. */
+.panel-tab .fin-row-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.panel-tab .fin-sheet__row {
+.panel-tab .fin-row-icon.is-gold {
+  border: 1px solid color-mix(in srgb, var(--gold) 60%, transparent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--gold) 30%, var(--bg)), var(--bg));
+  color: var(--gold-2);
+}
+
+.panel-tab .fin-owe-summary strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+
+/* The panel's figure, with the names it is made of underneath. Its own rule rather than a boxed
+   line: the table below belongs to it, so it reads as that table's caption. Both panels use it —
+   "Owed to us" on one side, "Owed to members" on the other. */
+.panel-tab .fin-owe-summary {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 16px;
-  padding: 3px 0;
+  gap: 12px;
+  padding: 14px 4px 10px;
   font-size: 13px;
-  color: var(--fg-2);
-}
-
-.panel-tab .fin-sheet__row .num {
   color: var(--fg);
 }
 
-/* Section subtotal: a rule above it, the way it would be written on paper. */
-.panel-tab .fin-sheet__row--total {
-  margin-top: 4px;
-  padding-top: 6px;
+/* Section total: a rule above it and the sheet's own colour, the way it would be written on paper.
+   margin-top:auto pins it to the foot of the panel, so both sides' totals sit on one line however
+   many members the right-hand side is listing. */
+.panel-tab .fin-panel-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  color: var(--fin-bal-figure);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.panel-tab .fin-panel-total > span {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 11px;
+}
+
+.panel-tab .fin-panel-total strong {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* --- Who we owe, and paying them off ---
+   The same names read as a two-column table, with a tick in front of each for an officer who can
+   settle. The tick reuses .fin-payout__tick so selecting a member looks identical wherever it
+   happens. Twin of .member-table / .lsm-settle on the web. Ticking only selects; the gil moves when
+   the button below is pressed, so the rows stay legible as a report for an officer who only reads. */
+.panel-tab .fin-member-table {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--fin-bal-well);
+}
+
+.panel-tab .fin-member-table__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.panel-tab .fin-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.panel-tab .fin-member-row + .fin-member-row {
   border-top: 1px solid var(--border);
 }
 
-/* The bottom line, marked off by a heavier rule so it reads as the answer rather than one more row. */
-.panel-tab .fin-sheet__row--worth {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 2px solid var(--border-2);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.panel-tab .fin-sheet__row--worth .num {
-  font-size: 20px;
+.panel-tab .fin-member-row strong {
   font-weight: 700;
 }
 
-/* Who the "owed to members" figure is owed to. Collapsed, because the total is the number most
-   people came for, and the names only matter when someone is about to settle up. */
-.panel-tab .fin-sheet__who {
-  margin: 2px 0 0 12px;
+.panel-tab .fin-member-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
 }
 
-.panel-tab .fin-sheet__members {
-  margin-top: 4px;
-  padding: 6px 10px;
+/* A row with nothing to pay: no tick, so its name is padded into line with the ticked ones above
+   and below it. Only when there ARE ticks — in the read-only table no row has one, and every name
+   would be indented past nothing. */
+.panel-tab .fin-member-row.is-fixed .fin-member-info {
+  padding-left: 25px;
+}
+
+/* Undo the browser's button chrome: these rows are buttons only so a click target can carry
+   role="checkbox", and they have to look identical to the read-only rows beside them. */
+.panel-tab button.fin-member-row {
+  border: 0;
+  border-top: 1px solid transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s ease;
+}
+
+.panel-tab button.fin-member-row + .fin-member-row,
+.panel-tab .fin-member-row + button.fin-member-row {
+  border-top-color: var(--border);
+}
+
+.panel-tab button.fin-member-row:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.panel-tab .fin-member-row.is-picked {
+  background: var(--accent-weak);
+}
+
+.panel-tab .fin-member-row.is-picked .fin-payout__tick {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.panel-tab .fin-member-row.is-picked .fin-payout__tick::before {
+  content: '✓';
+}
+
+.panel-tab button.fin-member-row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.panel-tab .fin-settle__name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.panel-tab .fin-payment-area {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.panel-tab .fin-settle__hint {
+  font-size: 11px;
+  color: var(--fg-3);
+}
+
+/* Ticked past what the linkshell holds. Said, never blocked — the form does not refuse this either. */
+.panel-tab .fin-settle__hint.is-short {
+  color: var(--warning);
+}
+
+.panel-tab .fin-settle__actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* --- The bottom line --- */
+.panel-tab .fin-worth {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 14px 18px;
+  border: 1px solid var(--fin-bal-edge);
+  border-radius: var(--r-lg);
+  background: linear-gradient(90deg, var(--surface), var(--bg-elev));
+  box-shadow: inset 0 0 30px color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.panel-tab .fin-worth__info {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+}
+
+.panel-tab .fin-worth__info h3 {
+  margin: 0 0 3px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fin-bal-heading);
+}
+
+.panel-tab .fin-worth__icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 22%, var(--bg)), var(--bg));
+  color: var(--fg);
+  font-size: 19px;
+  line-height: 1;
+}
+
+/* --- The two figures on the bottom line ---
+   Gil on hand and net worth, styled as one thing because they ARE one thing: the two figures the
+   bottom line is made of, read together. The answer used to be a wide glowing slab three times the
+   size of everything else, which made the sheet above it look like preamble; matching them makes the
+   band read as a row of figures. Only the medallion tells them apart. */
+.panel-tab .fin-worth__cash,
+.panel-tab .fin-worth__value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 12px;
   border-radius: var(--r-md);
-  background: var(--surface-2);
+  background: var(--fin-bal-well);
 }
 
-.panel-tab .fin-sheet__members .fin-sheet__row {
+.panel-tab .fin-worth__cash { border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent); }
+.panel-tab .fin-worth__value { border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent); }
+
+.panel-tab .fin-worth__cash-label,
+.panel-tab .fin-worth__value-label {
+  font-size: 12px;
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+
+.panel-tab .fin-worth__cash strong,
+.panel-tab .fin-worth__value strong {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+/* The heading takes the slack, so the two figures sit together at the end of the row rather than
+   being scattered across it by the band's space-between. */
+.panel-tab .fin-worth__info { margin-right: auto; }
+
+/* Gil on hand is the only figure on the sheet that opens, so it is the only one that is a button —
+   and it has to keep reading as the twin of the net-worth chip beside it, because the two are the
+   figures the bottom line is made of. Everything here therefore un-does the browser's button
+   styling and adds back only the affordance: a chevron, a hint, and a hover the sibling does not
+   have. */
+.panel-tab .fin-worth__cash--open {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.panel-tab .fin-worth__cash--open:hover,
+.panel-tab .fin-worth__cash--open:focus-visible {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 8%, var(--fin-bal-well));
+}
+
+.panel-tab .fin-worth__chev {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--gold);
+  transition: transform 0.15s ease;
+}
+
+.panel-tab .fin-worth__cash--open.is-open .fin-worth__chev { transform: rotate(180deg); }
+
+/* The hint under the chip. It is what makes the figure look clickable at all — a number that is also
+   a button looks exactly like a number that is not, and nobody clicks a balance sheet on spec. */
+.panel-tab .fin-worth__hint {
+  flex-basis: 100%;
+  margin: -8px 0 0;
+  /* Under the chip it points at, not under the heading on the far side of the band. */
+  text-align: right;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+
+/* The list itself spans the whole band rather than dropping out of the chip: it is names against
+   figures and has to line up in a column, and a popover hanging off a chip would be narrower than
+   its shortest row. */
+.panel-tab .fin-holders {
+  flex-basis: 100%;
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--fin-bal-edge);
+  border-radius: var(--r-md);
+  background: var(--fin-bal-well);
+}
+
+.panel-tab .fin-holders__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
   font-size: 12px;
   color: var(--fg-3);
 }
 
-/* The basis note, and the running commentary under the gil-count form. Disclosed rather than
-   assumed, and served from the server so both front-ends say the same thing. */
-.panel-tab .fin-basis {
-  padding: 0 14px 12px;
-  font-size: 11px;
+/* The total repeated at the top of the list, because the whole claim of this panel is that the rows
+   add up to it — and the figure it adds up to has just been scrolled past. */
+.panel-tab .fin-holders__total {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.panel-tab .fin-holders__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+/* Name, bar, figure. The bar is a middle column that eats the slack rather than a background fill,
+   so the names stay left-aligned and the figures stay right-aligned however long a name runs. */
+.panel-tab .fin-holders__row {
+  display: grid;
+  grid-template-columns: minmax(80px, max-content) 1fr minmax(0, max-content);
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.panel-tab .fin-holders__name {
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Gil nobody was asked about. Muted and italic: it IS recorded, it just has nobody attached, and it
+   must not read as a member called "Nobody named". */
+.panel-tab .fin-holders__row.is-unnamed .fin-holders__name {
   color: var(--fg-4);
+  font-style: italic;
+}
+
+.panel-tab .fin-holders__bar {
+  height: 5px;
+  min-width: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg-4) 22%, transparent);
+  overflow: hidden;
+}
+
+.panel-tab .fin-holders__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--gold) 55%, transparent), var(--gold));
+}
+
+.panel-tab .fin-holders__row.is-unnamed .fin-holders__fill {
+  background: color-mix(in srgb, var(--fg-4) 45%, transparent);
+}
+
+.panel-tab .fin-holders__amount {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.panel-tab .fin-holders .fin-basis { margin-top: 10px; }
+
+/* The mule box on the settle panels. Sized to a name and no wider: it shares a row with the count,
+   the Cancel and the Record button, and a full-width input there would push the action off the end. */
+.panel-tab .fin-settle__holder {
+  width: 150px;
+  max-width: 40vw;
+}
+
+/* The blue twin of .fin-row-icon.is-gold. The crystal keeps a glow the gil coin does not, because it
+   is the answer — but at medallion size now, not as a 26px character. */
+.panel-tab .fin-row-icon.is-crystal {
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 26%, var(--bg)), var(--bg));
+  color: var(--cyan);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--cyan) 60%, transparent);
+}
+
+/* The basis note, beside the figure it qualifies — and the "fixing entry N" banner above the record
+   form, which speaks in the same small muted voice. It used to carry the balance card's own padding,
+   which only ever made sense in one of the two places; the gap the form needs is stated where the
+   form needs it. */
+.panel-tab .fin-basis {
+  margin: 0;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+
+.panel-tab .inline-form .fin-basis {
+  margin-bottom: 8px;
+}
+
+/* The record form is its own card, sitting above the transactions list rather than inside it. The
+   shared .inline-form draws a top border because everywhere else it is a band appended to a list;
+   here the card head above it already draws that line, and two of them read as a seam. */
+.panel-tab .fin-form-card .inline-form {
+  border-top: 0;
+}
+
+/* The Discord iframe is narrow before it is anything else, so the header stacks early and the big
+   figure stops being a fixed-width slab. */
+@media (max-width: 720px) {
+  .panel-tab .fin-bal-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .panel-tab .fin-summary-cards {
+    width: 100%;
+  }
+
+  .panel-tab .fin-worth {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Stacked, each label and figure wants the full width between them rather than sitting shoulder
+     to shoulder in the middle of an empty row. */
+  .panel-tab .fin-worth__cash,
+  .panel-tab .fin-worth__value {
+    justify-content: space-between;
+  }
+
+  .panel-tab .fin-worth__cash-label,
+  .panel-tab .fin-worth__value-label {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .panel-tab .fin-balance-card {
+    padding: 14px;
+  }
+
+  .panel-tab .fin-payment-area {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* The "what happened" action row. Layout only — the buttons are the ordinary .btn sm primary/ghost
+   pair used by the filter chips, so there is no second button style to keep in step. Mirrors
+   .lsm-actionrow on the web. */
+.panel-tab .fin-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
 }
 
 /* --- The form --- */
@@ -510,4 +1109,36 @@
 .panel-tab .fin-pager__label {
   font-size: 12px;
   color: var(--fg-3);
+}
+
+/* --- Reversing an entry, asked for inline ---
+   window.prompt() draws nothing inside Discord's sandboxed iframe, so the question has to be part
+   of the page. Sits under the entry's own action row, indented to the same left edge, so it reads
+   as belonging to that entry rather than to the list. */
+.panel-tab .fin-reverse {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-2);
+  border-left: 2px solid var(--warning);
+  border-radius: 6px;
+  background: var(--surface-2);
+  display: grid;
+  gap: 6px;
+}
+
+.panel-tab .fin-reverse__what {
+  font-size: 11px;
+  color: var(--fg-3);
+}
+
+.panel-tab .fin-reverse__row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.panel-tab .fin-reverse__row input {
+  flex: 1 1 200px;
+  min-width: 160px;
 }

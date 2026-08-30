@@ -29,31 +29,45 @@ public class ManageFinancesController : Controller
 
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly TimeZoneConversionService _timeZones;
     private readonly TreasuryBalanceService _treasury;
     private readonly TreasuryJournalWriter _journal;
+    private readonly TreasurySettlementService _settlements;
     private readonly LedgerAccountProvisioner _accounts;
     private readonly LedgerPeriodGuard _periods;
 
     public ManageFinancesController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         TimeZoneConversionService timeZones,
         TreasuryBalanceService treasury,
         TreasuryJournalWriter journal,
+        TreasurySettlementService settlements,
         LedgerAccountProvisioner accounts,
         LedgerPeriodGuard periods)
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _timeZones = timeZones;
         _treasury = treasury;
         _journal = journal;
+        _settlements = settlements;
         _accounts = accounts;
         _periods = periods;
     }
 
-    public async Task<IActionResult> Index(int page = 0, string? search = null, string? filter = null)
+    // THE Treasury page: gil and items on one screen, in the order the Discord Activity's Treasury
+    // tab puts them — the balance sheet, then the stash, then the transactions list. Items sit in
+    // the middle on purpose: selling one is what moves the figures above it, and the transactions
+    // list runs long enough to bury anything placed under it.
+    //
+    // `items` is the stockpile/sold toggle for that middle section. It rides along on this action
+    // rather than on a page of its own, because there is no longer a page of its own.
+    public async Task<IActionResult> Index(
+        int page = 0, string? search = null, string? filter = null, string? items = null)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null) return Challenge();
@@ -64,6 +78,7 @@ public class ManageFinancesController : Controller
             LinkshellName = user.PrimaryLinkshellName,
             Search = search,
             Filter = filter,
+            ItemView = items,
         };
         if (!linkshellId.HasValue)
         {
@@ -76,8 +91,8 @@ public class ManageFinancesController : Controller
         model.CanLock = await IsLeaderAsync(user.Id, linkshellId.Value);
         await _accounts.EnsureAccountsAsync(linkshellId.Value, cancellationToken);
 
-        var (snapshot, owedToMembers) =
-            await _treasury.GetBalanceSheetAsync(linkshellId.Value, null, null, cancellationToken);
+        var sheet = await _treasury.GetBalanceSheetAsync(linkshellId.Value, null, null, cancellationToken);
+        var snapshot = sheet.Snapshot;
         model.CashOnHand = snapshot.CashOnHand;
         model.MoneyIn = snapshot.MoneyIn;
         model.MoneyOut = snapshot.MoneyOut;
@@ -85,15 +100,17 @@ public class ManageFinancesController : Controller
         model.OwedToUs = snapshot.OwedToUs;
         model.WeOwe = snapshot.WeOwe;
         model.NetWorth = snapshot.NetWorth;
-        model.OwedToMembers = owedToMembers
-            .Select(owed => new TreasuryMemberObligationViewModel
-            {
-                CharacterName = owed.CharacterName ?? TreasuryLabels.UnnamedMember,
-                Amount = owed.Amount,
-            })
-            .ToList();
+        // Both halves of the sheet, mapped the same way — they are the same kind of list and the
+        // same kind of tick.
+        model.OwedToMembers = MapObligations(sheet.OwedToMembers);
+        model.OwedToUsBy = MapObligations(sheet.OwedToUsBy);
+        // And the third figure's names. Projected from the same read as the two above, so all three
+        // lists add up to the figures they sit under.
+        model.GilHolders = MapHolders(sheet.GilHolders);
+        model.HolderOptions = model.CanManage
+            ? (await LoadRosterAsync(linkshellId.Value)).Select(option => option.CharacterName).ToList()
+            : Array.Empty<string>();
         model.Balances = snapshot.Balances;
-        model.UncategorizedCount = await _treasury.GetUncategorizedCountAsync(linkshellId.Value, cancellationToken);
         model.LockedThrough = await _periods.GetLockedThroughAsync(linkshellId.Value, cancellationToken);
 
         var query = _context.JournalEntries
@@ -104,7 +121,7 @@ public class ManageFinancesController : Controller
         {
             query = query.Where(entry => entry.Status == JournalEntryStatuses.Confirmed);
         }
-        query = ApplyFilter(query, filter);
+        query = TreasuryEntryFilters.Apply(query, filter);
 
         var term = search?.Trim();
         if (!string.IsNullOrWhiteSpace(term))
@@ -117,7 +134,11 @@ public class ManageFinancesController : Controller
                 || entry.Lines.Any(line =>
                     EF.Functions.ILike(line.AccountName, pattern)
                     || (line.CounterpartyCharacterName != null
-                        && EF.Functions.ILike(line.CounterpartyCharacterName, pattern))));
+                        && EF.Functions.ILike(line.CounterpartyCharacterName, pattern))
+                    // The mule too, so "Edicius" finds what he is carrying and not only what he was
+                    // paid — which is the question the who's-holding-it list makes people ask.
+                    || (line.HolderCharacterName != null
+                        && EF.Functions.ILike(line.HolderCharacterName, pattern))));
         }
 
         model.TotalEntries = await query.CountAsync(cancellationToken);
@@ -132,17 +153,23 @@ public class ManageFinancesController : Controller
             .ToListAsync(cancellationToken);
 
         var ids = entries.Select(entry => entry.Id).ToList();
-        var reversedIds = ids.Count == 0
-            ? new List<int>()
+        // Which of these entries something later cancelled — and, of those, which were FIXED rather
+        // than simply called off. A fix points a Correction at the original; an outright reversal
+        // points a Reversal at it. Both are the same EXISTS over the same rows, so it is one query.
+        var cancels = ids.Count == 0
+            ? new List<CancelledEntryRow>()
             : await _context.JournalEntries
                 .AsNoTracking()
                 .Where(entry => entry.ReversesJournalEntryId != null && ids.Contains(entry.ReversesJournalEntryId.Value))
-                .Select(entry => entry.ReversesJournalEntryId!.Value)
-                .Distinct()
+                .Select(entry => new CancelledEntryRow(entry.ReversesJournalEntryId!.Value, entry.Kind))
                 .ToListAsync(cancellationToken);
-        var reversed = reversedIds.ToHashSet();
+        var reversed = cancels.Select(row => row.OriginalId).ToHashSet();
+        var corrected = cancels
+            .Where(row => string.Equals(row.Kind, JournalEntryKinds.Correction, StringComparison.OrdinalIgnoreCase))
+            .Select(row => row.OriginalId)
+            .ToHashSet();
 
-        model.Entries = entries.Select(entry => MapRow(entry, reversed, user.TimeZone)).ToList();
+        model.Entries = entries.Select(entry => MapRow(entry, reversed, corrected, user.TimeZone)).ToList();
         return View(model);
     }
 
@@ -159,7 +186,7 @@ public class ManageFinancesController : Controller
             return Forbid();
         }
 
-        return View(new RecordTreasuryEntryViewModel
+        var model = new RecordTreasuryEntryViewModel
         {
             LinkshellId = linkshellId.Value,
             LinkshellName = user.PrimaryLinkshellName,
@@ -167,7 +194,8 @@ public class ManageFinancesController : Controller
             Roster = await LoadRosterAsync(linkshellId.Value),
             // The picker posts naive wall-clock, so default it to the viewer's local now.
             TransactionDate = _timeZones.ToUserTime(DateTime.UtcNow, user.TimeZone) ?? DateTime.UtcNow,
-        });
+        };
+        return View(model);
     }
 
     [HttpPost]
@@ -188,10 +216,7 @@ public class ManageFinancesController : Controller
         model.LinkshellName = user.PrimaryLinkshellName;
         model.Options = TreasuryTransactionKinds.Pickable().ToList();
         model.Roster = await LoadRosterAsync(linkshellId.Value);
-        if (TreasuryTransactionKinds.Find(model.TransactionKind) is null)
-        {
-            ModelState.AddModelError(nameof(model.TransactionKind), "Pick what happened from the list.");
-        }
+        ValidateKind(model, allowRetired: false);
 
         var recipients = await ResolveRecipientsAsync(model, linkshellId.Value);
         if (!ModelState.IsValid)
@@ -240,13 +265,19 @@ public class ManageFinancesController : Controller
             Id = entry.Id,
             LinkshellId = entry.LinkshellId,
             LinkshellName = entry.LinkshellName,
-            TransactionKind = entry.TransactionKind ?? TreasuryTransactionKinds.SoldAnItem,
+            // OtherMoneyIn, matching Fix: a row with no kind at all is converted history, and
+            // "something else" is the only honest thing to say about it. Defaulting to an item sale
+            // — as this did — states a fact nobody recorded.
+            TransactionKind = entry.TransactionKind ?? TreasuryTransactionKinds.OtherMoneyIn,
             Amount = AmountOf(entry),
             TransactionDate = _timeZones.ToUserTime(entry.TransactionDate, user?.TimeZone) ?? entry.TransactionDate,
             Memo = entry.Memo,
             Member = MemberOf(entry),
+            // Comes back so a rebuild does not silently move the gil onto nobody's mule: the
+            // draft is rewritten from this form, not from its existing lines.
+            Holder = HolderOf(entry),
             Confirm = false,
-            Options = TreasuryTransactionKinds.Pickable().ToList(),
+            Options = TreasuryTransactionKinds.PickableWith(entry.TransactionKind).ToList(),
             Roster = roster,
         };
         LoadRecipientsInto(model, entry, roster);
@@ -263,12 +294,12 @@ public class ManageFinancesController : Controller
         var user = await _userManager.GetUserAsync(User);
         model.Id = id;
         model.LinkshellId = entry!.LinkshellId;
-        model.Options = TreasuryTransactionKinds.Pickable().ToList();
+        // PickableWith, not Pickable: on a re-render after a validation failure the draft's own kind
+        // has to survive in the list, or the officer's second submit silently posts a different one
+        // than their first.
+        model.Options = TreasuryTransactionKinds.PickableWith(entry.TransactionKind).ToList();
         model.Roster = await LoadRosterAsync(entry.LinkshellId);
-        if (TreasuryTransactionKinds.Find(model.TransactionKind) is null)
-        {
-            ModelState.AddModelError(nameof(model.TransactionKind), "Pick what happened from the list.");
-        }
+        ValidateKind(model, allowRetired: false);
 
         var recipients = await ResolveRecipientsAsync(model, entry.LinkshellId);
         if (!ModelState.IsValid)
@@ -361,7 +392,11 @@ public class ManageFinancesController : Controller
             TransactionDate = _timeZones.ToUserTime(entry.TransactionDate, user?.TimeZone) ?? entry.TransactionDate,
             Memo = entry.Memo,
             Member = MemberOf(entry),
-            Options = TreasuryTransactionKinds.Pickable().ToList(),
+            // Same reason: a fix is built from THIS form, not from the original's lines.
+            Holder = HolderOf(entry),
+            // The entry's own kind is always offered, even when nothing can be recorded under it
+            // any more. A fix has to be able to reproduce the movement it is correcting.
+            Options = TreasuryTransactionKinds.PickableWith(entry.TransactionKind).ToList(),
             Roster = roster,
         };
         // A fix rebuilds the entry from this form, so a split has to come back in full.
@@ -380,12 +415,11 @@ public class ManageFinancesController : Controller
         model.Id = id;
         model.EntryNumber = entry!.EntryNumber;
         model.LinkshellId = entry.LinkshellId;
-        model.Options = TreasuryTransactionKinds.Pickable().ToList();
+        model.Options = TreasuryTransactionKinds.PickableWith(entry.TransactionKind).ToList();
         model.Roster = await LoadRosterAsync(entry.LinkshellId);
-        if (TreasuryTransactionKinds.Find(model.TransactionKind) is null)
-        {
-            ModelState.AddModelError(nameof(model.TransactionKind), "Pick what happened from the list.");
-        }
+        // Fix is the ONE place a retired kind is allowed: refusing it here would leave every entry
+        // recorded under one permanently un-correctable.
+        ValidateKind(model, allowRetired: true);
 
         var recipients = await ResolveRecipientsAsync(model, entry.LinkshellId);
         if (!ModelState.IsValid)
@@ -445,24 +479,129 @@ public class ManageFinancesController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    // Pay the ticked members straight off the balance sheet's "who we owe" list, in full.
+    //
+    // Records one ordinary "We paid a member what we owed" transaction each, in a single save, so a
+    // payout run either lands whole or not at all. Nothing here is a new kind of movement — this is
+    // the Record form's settle option, reached without typing each name and figure back in.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> SettleOwed(List<SettleOwedPickViewModel> picks, string? holder) =>
+        SettleAsync(picks, holder, TreasurySettlementDirection.WePaidThem, "Tick who was paid first.");
+
+    // The mirror on the other half of the sheet: tick whoever has now paid the LINKSHELL.
+    //
+    // Same panel, same rules, opposite direction — so it is the same endpoint body with the
+    // direction flipped rather than a second copy that could drift from it. Clearing an owed-to-us
+    // debt has no other route: there is no pickable option for it on the Record form, because
+    // ticking a name off a derived list is strictly better than typing a name and a figure that the
+    // list already knows.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> SettleOwedToUs(List<SettleOwedPickViewModel> picks, string? holder) =>
+        SettleAsync(picks, holder, TreasurySettlementDirection.TheyPaidUs, "Tick who paid first.");
+
+    private async Task<IActionResult> SettleAsync(
+        List<SettleOwedPickViewModel> picks,
+        // Whose mule the gil leaves from, or arrives on. One for the whole run: a payout is one
+        // person sitting at one mule, so asking per ticked name would ask the same thing eight times.
+        string? holder,
+        TreasurySettlementDirection direction,
+        string nothingTickedMessage)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        var linkshellId = user.PrimaryLinkshellId;
+        if (!linkshellId.HasValue
+            || !await CanManageAsync(user.Id, linkshellId.Value, HttpContext.RequestAborted))
+        {
+            return Forbid();
+        }
+
+        var chosen = picks
+            .Where(pick => pick.Selected && !string.IsNullOrWhiteSpace(pick.CharacterName))
+            .Select(pick => new TreasurySettlementPick(pick.CharacterName, pick.ExpectedAmount))
+            .ToList();
+        if (chosen.Count == 0)
+        {
+            TempData["TreasuryError"] = nothingTickedMessage;
+            return RedirectToAction(nameof(Index));
+        }
+        // Ticking a name here moves real gil, so it answers the same question the Record form asks.
+        // Without it a whole payout run files itself under "nobody named" on the who-has-what list.
+        var holderName = holder?.Trim();
+        if (string.IsNullOrWhiteSpace(holderName))
+        {
+            TempData["TreasuryError"] = direction == TreasurySettlementDirection.TheyPaidUs
+                ? "Say who is holding this gil."
+                : "Say whose gil this is coming out of.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var membership = await _context.AppUserLinkshells
+            .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId.Value);
+        var actor = new TreasuryActor(user.Id, membership?.CharacterName ?? user.CharacterName);
+
+        try
+        {
+            var result = await _settlements.SettleAsync(
+                linkshellId.Value, chosen, direction, new TreasuryHolder(null, holderName),
+                actor, HttpContext.RequestAborted);
+            await _context.SaveChangesAsync(HttpContext.RequestAborted);
+            // Nothing recorded is not a success, however ordinary the reason: say so in the banner
+            // an officer already reads for problems rather than the one they read for confirmations.
+            TempData[result.DidNothing ? "TreasuryError" : "TreasuryMessage"] = result.Message;
+        }
+        catch (TreasuryPeriodLockedException locked)
+        {
+            TempData["TreasuryError"] = LockedMessage(locked, user.TimeZone);
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
     // ---- helpers ----------------------------------------------------------------
 
-    private static IQueryable<JournalEntry> ApplyFilter(IQueryable<JournalEntry> query, string? filter) =>
-        filter?.Trim().ToLowerInvariant() switch
-        {
-            // Direction comes from whether gil on hand moved up or down, never from matching a string.
-            "in" => query.Where(entry => entry.Lines.Any(line =>
-                line.AccountNumber == TreasuryAccounts.GilOnHand && line.Amount > 0)),
-            "out" => query.Where(entry => entry.Lines.Any(line =>
-                line.AccountNumber == TreasuryAccounts.GilOnHand && line.Amount < 0)),
-            "drafts" => query.Where(entry => entry.Status == JournalEntryStatuses.Draft),
-            "reversed" => query.Where(entry =>
-                entry.Kind == JournalEntryKinds.Reversal
-                || query.Any(other => other.ReversesJournalEntryId == entry.Id)),
-            _ => query,
-        };
+    private static List<TreasuryMemberObligationViewModel> MapObligations(
+        IReadOnlyList<MemberObligation> obligations) =>
+        obligations
+            .Select(owed => new TreasuryMemberObligationViewModel
+            {
+                CharacterName = owed.CharacterName ?? TreasuryLabels.UnnamedMember,
+                Amount = owed.Amount,
+                // Decided from the obligation, not from the displayed name: a member could in
+                // principle be called whatever UnnamedMember says, and a negative row reads as a
+                // name too.
+                CanSettle = owed.CharacterName is not null && owed.Amount > 0,
+            })
+            .ToList();
 
-    private TreasuryEntryRowViewModel MapRow(JournalEntry entry, HashSet<int> reversedIds, string? timeZone)
+    // Whose mules the gil on hand is sitting on. Same shape as the two obligation lists above, minus
+    // the tick: gil leaves a mule by being SPENT, so there is nothing here to settle.
+    //
+    // SharePercent is against the largest row rather than the total, so a treasury split evenly
+    // between four people shows four full bars instead of four quarter-stubs nobody can compare.
+    // Magnitudes, because an overspent mule reads as a negative and a bar of negative width is
+    // nothing at all.
+    private static List<TreasuryGilHolderViewModel> MapHolders(IReadOnlyList<GilHolding> holders)
+    {
+        var largest = holders.Count == 0 ? 0L : holders.Max(holder => Math.Abs(holder.Amount));
+        return holders
+            .Select(holder => new TreasuryGilHolderViewModel
+            {
+                CharacterName = holder.CharacterName ?? TreasuryLabels.UnnamedHolder,
+                Amount = holder.Amount,
+                IsUnnamed = holder.CharacterName is null,
+                SharePercent = largest == 0
+                    ? 0
+                    : (int)Math.Round(Math.Abs(holder.Amount) * 100d / largest),
+            })
+            .ToList();
+    }
+
+    private TreasuryEntryRowViewModel MapRow(
+        JournalEntry entry, HashSet<int> reversedIds, HashSet<int> correctedIds, string? timeZone)
     {
         var lines = entry.Lines.OrderBy(line => line.LineNumber).ToList();
         return new TreasuryEntryRowViewModel
@@ -482,9 +621,11 @@ public class ManageFinancesController : Controller
             TransactionDate = _timeZones.ToUserTime(entry.TransactionDate, timeZone) ?? entry.TransactionDate,
             Memo = entry.Memo,
             Member = MemberOf(entry),
+            Holder = HolderOf(entry),
             Recipients = RecipientsOf(entry),
             EnteredBy = entry.ConfirmedByCharacterName ?? entry.CreatedByCharacterName,
             IsReversed = reversedIds.Contains(entry.Id),
+            IsFixed = correctedIds.Contains(entry.Id),
             CorrectionReason = entry.CorrectionReason,
             Halves = lines.Select(line => new TreasuryEntryHalfViewModel
             {
@@ -512,6 +653,10 @@ public class ManageFinancesController : Controller
             // A split names its members on their own lines; a lone counterparty would be a second,
             // conflicting answer to "who was this for".
             CounterpartyCharacterName: recipients.Count > 0 ? null : model.Member,
+            // The holder is NOT suppressed for a split, unlike the counterparty above: a split that
+            // moves gil on hand moves it off ONE mule however many people share the proceeds.
+            HolderAppUserId: null,
+            HolderCharacterName: model.Holder,
             Recipients: recipients.Count > 0 ? recipients : null);
 
     // The roster, annotated with what each member is still owed. Anyone owed gil who has since LEFT
@@ -528,9 +673,9 @@ public class ManageFinancesController : Controller
             .Select(member => new { member.Id, Name = member.CharacterName! , member.Rank })
             .ToListAsync(HttpContext.RequestAborted);
 
-        var (_, owedToMembers) =
-            await _treasury.GetBalanceSheetAsync(linkshellId, null, null, HttpContext.RequestAborted);
-        var owedByName = owedToMembers
+        var sheet = await _treasury.GetBalanceSheetAsync(
+            linkshellId, null, null, HttpContext.RequestAborted);
+        var owedByName = sheet.OwedToMembers
             .Where(owed => owed.CharacterName is not null)
             .ToDictionary(owed => owed.CharacterName!, owed => owed.Amount, StringComparer.OrdinalIgnoreCase);
 
@@ -579,7 +724,7 @@ public class ManageFinancesController : Controller
         if (wanted.Count == 0)
         {
             ModelState.AddModelError(
-                nameof(model.RecipientMembershipIds), "Pick at least one member to share the gil with.");
+                nameof(model.RecipientMembershipIds), "Pick who this is for — one member, or several to split it.");
             return new List<TreasuryRecipient>();
         }
 
@@ -647,12 +792,56 @@ public class ManageFinancesController : Controller
         .Select(line => line.CounterpartyCharacterName)
         .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));
 
-    private static List<string> RecipientsOf(JournalEntry entry) => entry.Lines
+    // Whose mule the entry's gil is on. Only the gil-on-hand line can carry one, so this reads the
+    // entry's holder without having to say which line it came from.
+    private static string? HolderOf(JournalEntry entry) => entry.Lines
+        .Select(line => line.HolderCharacterName)
+        .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));
+
+    // Who an entry names, each person once.
+    //
+    // The dedupe is not defensive tidying. A member's name is written onto every half that is not
+    // gil on hand, so an entry where NEITHER half is gil on hand — "someone owes us for work", or
+    // gil owed to one member — carries the same name on both lines and used to render as
+    // "Bob, Bob", which then tipped the row into its who-got-what layout as though it were a split.
+    // A real split cannot collide here: its recipients are distinct membership rows.
+    internal static List<string> RecipientsOf(JournalEntry entry) => entry.Lines
         .OrderBy(line => line.LineNumber)
         .Select(line => line.CounterpartyCharacterName)
         .Where(name => !string.IsNullOrWhiteSpace(name))
         .Select(name => name!)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToList();
+
+    // The posted kind must exist, and — everywhere except Fix — must not be one that has been
+    // superseded. Fix is the exception because an entry recorded under a retired kind still has to
+    // be correctable; refusing it there would strand the entry forever.
+    private void ValidateKind(RecordTreasuryEntryViewModel model, bool allowRetired)
+    {
+        var kind = TreasuryTransactionKinds.Find(model.TransactionKind);
+        if (kind is null)
+        {
+            ModelState.AddModelError(nameof(model.TransactionKind), "Pick what happened from the list.");
+            return;
+        }
+        if (kind.IsRetired && !allowRetired)
+        {
+            ModelState.AddModelError(
+                nameof(model.TransactionKind),
+                "That option is no longer available. Pick what happened from the list.");
+        }
+        // Gil that moves with no mule named cannot be found again — a linkshell has no bank, and
+        // "gil on hand" is only the sum of what sits on people's characters. Enforced here rather
+        // than with a [Required] attribute because whether it applies depends on the option picked.
+        if (kind.RequiresHolder && string.IsNullOrWhiteSpace(model.Holder))
+        {
+            ModelState.AddModelError(
+                nameof(model.Holder),
+                kind.BringsCashIn
+                    ? "Say who is holding this gil."
+                    : "Say whose gil this is coming out of.");
+        }
+    }
 
     private string LockedMessage(TreasuryPeriodLockedException locked, string? timeZone)
     {
@@ -694,6 +883,10 @@ public class ManageFinancesController : Controller
         {
             return false;
         }
+        if (await _adminOverride.IsActiveForAsync(appUserId, cancellationToken))
+        {
+            return true;
+        }
         if (LinkshellRanks.IsLeader(membership.Rank))
         {
             return true;
@@ -705,10 +898,14 @@ public class ManageFinancesController : Controller
         return role?.CanManageTreasury == true;
     }
 
+    // Leader tier: the stored Leader rank, OR the app-wide admin override. As
+    // everywhere else, the override only applies to an existing membership.
     private async Task<bool> IsLeaderAsync(string appUserId, int linkshellId)
     {
         var membership = await _context.AppUserLinkshells
             .FirstOrDefaultAsync(link => link.AppUserId == appUserId && link.LinkshellId == linkshellId);
-        return LinkshellRanks.IsLeader(membership?.Rank);
+        if (membership is null) return false;
+        return LinkshellRanks.IsLeader(membership.Rank)
+               || await _adminOverride.IsActiveForAsync(appUserId, HttpContext.RequestAborted);
     }
 }

@@ -110,8 +110,8 @@
             </select>
           </label>
         </div>
-        <!-- Time of death, Cooldown (+ custom hours when "Other") -->
-        <div class="tod-form__row tod-form__row--pair" [class.tod-form__row--split]="isTodCooldownOther()">
+        <!-- Time of death, Cooldown (auto-filled from the monster's configured setup) -->
+        <div class="tod-form__row tod-form__row--pair">
           <!-- Optional on End Camp: leaving it blank records "Not entered" (no time, no repop)
                for a camp where nobody saw the mob die, instead of stamping the closing moment. -->
           <label class="field">
@@ -123,27 +123,30 @@
           </label>
           <label class="field">
             <span class="form-label">Cooldown</span>
-            <select class="form-select" [(ngModel)]="todDraft.cooldown" (ngModelChange)="updateTodRepopTime()" name="todCooldown">
-              @for (cooldown of todCooldownOptions; track cooldown) { <option [value]="cooldown">{{ cooldown }}</option> }
-            </select>
+            <div class="tod-form__duration">
+              <input class="form-input" [(ngModel)]="todCooldownValue"
+                (ngModelChange)="onTodCooldownChange()" name="todCooldownValue"
+                type="number" min="1" step="1" required
+                title="Pre-filled from this monster's configured cooldown. Change it for this ToD only." />
+              <select class="form-select" [(ngModel)]="todCooldownUnit"
+                (ngModelChange)="onTodCooldownChange()" name="todCooldownUnit">
+                @for (unit of todDurationUnits; track unit) { <option [value]="unit">{{ unit }}</option> }
+              </select>
+            </div>
           </label>
-          @if (isTodCooldownOther()) {
-            <label class="field">
-              <span class="form-label">Cooldown hours</span>
-              <input class="form-input" [ngModel]="todCustomCooldownHours"
-                (ngModelChange)="onTodCustomCooldownChange($event)" name="todCustomCooldownHours"
-                type="number" min="1" placeholder="Cooldown hours" required />
-            </label>
-          }
         </div>
         <!-- Interval, Additional seconds -->
         <div class="tod-form__row tod-form__row--pair">
           <label class="field">
             <span class="form-label">Interval</span>
-            <select class="form-select" [(ngModel)]="todDraft.interval" name="todInterval">
-              @if (isCustomTodInterval()) { <option [value]="todDraft.interval">{{ todDraft.interval }}</option> }
-              @for (interval of todIntervalOptions; track interval) { <option [value]="interval">{{ interval }}</option> }
-            </select>
+            <div class="tod-form__duration">
+              <input class="form-input" [(ngModel)]="todIntervalValue" name="todIntervalValue"
+                type="number" min="1" step="1" placeholder="Not specified"
+                title="Pre-filled from this monster's configured cadence. Leave blank to record no interval." />
+              <select class="form-select" [(ngModel)]="todIntervalUnit" name="todIntervalUnit">
+                @for (unit of todDurationUnits; track unit) { <option [value]="unit">{{ unit }}</option> }
+              </select>
+            </div>
           </label>
           <label class="field">
             <span class="form-label">Additional seconds</span>
@@ -151,23 +154,6 @@
               (ngModelChange)="onTodAdditionalSecondsChange($event)" name="todAdditionalSeconds"
               type="number" min="0" step="1" placeholder="0" title="Extra seconds added on top of the cooldown when calculating the repop time" />
           </label>
-        </div>
-        <!-- Re-post the sign-up board before the next pop (End Camp only) -->
-        <div class="form-row">
-          <label class="field">
-            <span class="form-label">Re-post board before next pop?</span>
-            <label class="tod-toggle">
-              <input type="checkbox" [(ngModel)]="boardRepost" name="boardRepost" />
-              <span>Re-post the sign-up board</span>
-            </label>
-          </label>
-          @if (boardRepost) {
-            <label class="field">
-              <span class="form-label">Hours before repop</span>
-              <input class="form-input" type="number" min="0" step="0.25" [(ngModel)]="boardRepostLeadHours" name="boardRepostLeadHours"
-                placeholder="e.g. 2" title="How many hours before the predicted next pop the board auto-re-posts" />
-            </label>
-          }
         </div>
         <!-- Calculated repop summary, with the read-only repop time filling the space on the right -->
         <div class="tod-repop-card tod-repop-card--with-time">
@@ -204,8 +190,8 @@
             </select>
           </label>
         </div>
-        <!-- Time of death, Cooldown (+ custom hours when "Other") -->
-        <div class="tod-form__row tod-form__row--pair" [class.tod-form__row--split]="isTodCooldownOther()">
+        <!-- Time of death, Cooldown (auto-filled from the monster's configured setup) -->
+        <div class="tod-form__row tod-form__row--pair">
           <label class="field">
             <span class="form-label">Time of death</span>
             <input class="form-input" [ngModel]="todTimeLocalValue"
@@ -214,27 +200,30 @@
           </label>
           <label class="field">
             <span class="form-label">Cooldown</span>
-            <select class="form-select" [(ngModel)]="todDraft.cooldown" (ngModelChange)="updateTodRepopTime()" name="todCooldown">
-              @for (cooldown of todCooldownOptions; track cooldown) { <option [value]="cooldown">{{ cooldown }}</option> }
-            </select>
+            <div class="tod-form__duration">
+              <input class="form-input" [(ngModel)]="todCooldownValue"
+                (ngModelChange)="onTodCooldownChange()" name="todCooldownValue"
+                type="number" min="1" step="1" required
+                title="Pre-filled from this monster's configured cooldown. Change it for this ToD only." />
+              <select class="form-select" [(ngModel)]="todCooldownUnit"
+                (ngModelChange)="onTodCooldownChange()" name="todCooldownUnit">
+                @for (unit of todDurationUnits; track unit) { <option [value]="unit">{{ unit }}</option> }
+              </select>
+            </div>
           </label>
-          @if (isTodCooldownOther()) {
-            <label class="field">
-              <span class="form-label">Cooldown hours</span>
-              <input class="form-input" [ngModel]="todCustomCooldownHours"
-                (ngModelChange)="onTodCustomCooldownChange($event)" name="todCustomCooldownHours"
-                type="number" min="1" placeholder="Cooldown hours" required />
-            </label>
-          }
         </div>
         <!-- Interval, Additional seconds -->
         <div class="tod-form__row tod-form__row--pair">
           <label class="field">
             <span class="form-label">Interval</span>
-            <select class="form-select" [(ngModel)]="todDraft.interval" name="todInterval">
-              @if (isCustomTodInterval()) { <option [value]="todDraft.interval">{{ todDraft.interval }}</option> }
-              @for (interval of todIntervalOptions; track interval) { <option [value]="interval">{{ interval }}</option> }
-            </select>
+            <div class="tod-form__duration">
+              <input class="form-input" [(ngModel)]="todIntervalValue" name="todIntervalValue"
+                type="number" min="1" step="1" placeholder="Not specified"
+                title="Pre-filled from this monster's configured cadence. Leave blank to record no interval." />
+              <select class="form-select" [(ngModel)]="todIntervalUnit" name="todIntervalUnit">
+                @for (unit of todDurationUnits; track unit) { <option [value]="unit">{{ unit }}</option> }
+              </select>
+            </div>
           </label>
           <label class="field">
             <span class="form-label">Additional seconds</span>
@@ -256,8 +245,34 @@
           </label>
         </div>
       }
+      <!-- Re-post the sign-up board before the next pop. Offered on EVERY board form — End Camp,
+           Post ToD and Edit ToD alike — because all three land on the same endpoint and all three
+           are moments when the officer knows the next pop. It used to be End Camp only, which left
+           the Activity's Post ToD as the one board surface with no say over the re-post while the
+           web's equivalent modal has always had it.
+
+           Pre-filled from the monster's standing board (the same value the create-event form set),
+           so what shows here is what is actually configured rather than a fresh, empty choice. -->
+      @if (boardMode) {
+        <div class="form-row">
+          <label class="field">
+            <span class="form-label">Re-post board before next pop?</span>
+            <label class="tod-toggle">
+              <input type="checkbox" [(ngModel)]="boardRepost" name="boardRepost" />
+              <span>Re-post the sign-up board</span>
+            </label>
+          </label>
+          @if (boardRepost) {
+            <label class="field">
+              <span class="form-label">Hours before repop</span>
+              <input class="form-input" type="number" min="0" step="0.25" [(ngModel)]="boardRepostLeadHours" name="boardRepostLeadHours"
+                placeholder="e.g. 2" title="How many hours before the predicted next pop the board auto-re-posts" />
+            </label>
+          }
+        </div>
+      }
       <!-- Screenshot is offered on the ToDs-tab form and on End Camp (proof of the kill). A plain
-           board Post/Edit ToD stays lean — the board only needs the time. Loot stays ToDs-tab only. -->
+           board Post/Edit ToD stays lean — the board only needs the time. -->
       @if (!boardMode || boardEndCamp) {
       <div class="tod-form-bottom">
         <div class="tod-form-bottom__main">
@@ -281,41 +296,11 @@
             }
           </div>
         </div>
-        @if (!boardMode && todDraft.claim && lootStructureFor(todDraft.linkshellId) !== 'LootCouncil') {
-          <div class="tod-form-bottom__aside">
-            <label class="tod-toggle">
-              <input type="checkbox" [ngModel]="!todDraft.noLoot"
-                (ngModelChange)="onTodNoLootChange(!$event)" name="todAddLoot" />
-              <span>Add loot</span>
-            </label>
-          </div>
-        }
       </div>
       }
-      @if (!boardMode && todDraft.claim && lootStructureFor(todDraft.linkshellId) !== 'LootCouncil' && !todDraft.noLoot) {
-        <div class="loot-rows">
-          <div class="panel__header">
-            <h4>Loot</h4>
-            <button type="button" class="btn sm" (click)="addTodLootRow()">Add row</button>
-          </div>
-          @for (loot of todDraft.lootDetails; track $index) {
-            <div class="loot-row-editor">
-              <input class="form-input" [(ngModel)]="loot.itemName" [name]="'todLootItem' + $index" placeholder="Item name" />
-              <select class="form-select" [(ngModel)]="loot.itemWinner" [name]="'todLootWinner' + $index">
-                <option value="">Winner</option>
-                @for (characterName of todCharacterNames(); track characterName) {
-                  <option [value]="characterName">{{ characterName }}</option>
-                }
-              </select>
-              <input class="form-input" [(ngModel)]="loot.winningDkpSpent" [name]="'todLootDkp' + $index"
-                type="number" min="0"
-                [attr.max]="lootInputMax(todDraft.linkshellId)"
-                [placeholder]="lootInputPlaceholder(todDraft.linkshellId)" />
-              <button type="button" class="btn sm danger-outline" (click)="removeTodLootRow($index)">Remove</button>
-            </div>
-          }
-        </div>
-      }
+      <!-- Loot used to be entered here, which is why every drop recorded from a ToD showed up in
+           the Loot History as source "ToD" rather than against the event it actually came from.
+           It is recorded in the Loot tab now, where it can be filed against a live or past event. -->
       <div class="form-actions">
         <button type="submit" class="btn primary" [disabled]="activity.busyTodSave() || isUploadingTodImage">
           {{ activity.busyTodSave() ? 'Saving...' : (editingTodId !== null ? 'Save changes' : 'Log ToD') }}

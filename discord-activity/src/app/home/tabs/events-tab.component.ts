@@ -33,8 +33,8 @@ import {
   EVENT_SUB_JOB_OPTIONS
 } from '../event-job-options';
 import {
-  attendanceApplies,
   breakSessionInfo,
+  canManageLinkshellIn,
   formatBreakDuration,
   formatDkp,
   formatElapsed,
@@ -131,7 +131,7 @@ export class EventsTabComponent {
     // dedupes against AutoRefreshService's own tick.
     effect(() => {
       const linkshellId = this.primaryLinkshellId();
-      if (!linkshellId || !this.attendanceVisible()) return;
+      if (!linkshellId) return;
       queueMicrotask(() => void this.windows.ensureLoaded(linkshellId));
     });
   }
@@ -143,10 +143,6 @@ export class EventsTabComponent {
     return overview?.primaryLinkshell?.id ?? overview?.appUser?.primaryLinkshellId ?? 0;
   }
 
-  protected attendanceVisible(): boolean {
-    return attendanceApplies(this.activity.overview());
-  }
-
   // Every OPEN attendance event is an unposted payout awaiting an officer, so all of them belong in
   // Current Field Activity — not just the ones traceable to a camp. Filtering on a camp link would
   // in fact show almost nothing: a camp-handoff row is only written at End Camp, by which point the
@@ -154,7 +150,6 @@ export class EventsTabComponent {
   // carry no event link at all. Newest capture first, so a card still collecting snapshots sits
   // above one from three days ago.
   protected liveAttendanceEvents(): ActivityWindowEvent[] {
-    if (!this.attendanceVisible()) return [];
     return [...(this.windows.data()?.openEvents ?? [])].sort(
       (a, b) => new Date(b.lastCapturedAtUtc).getTime() - new Date(a.lastCapturedAtUtc).getTime()
     );
@@ -165,7 +160,7 @@ export class EventsTabComponent {
   // clears busy(), so the empty state does eventually appear rather than hanging on a spinner.
   protected showNoLiveActivity(): boolean {
     if (this.liveEvents().length > 0) return false;
-    if (this.attendanceVisible() && this.windows.data() === null && this.windows.busy()) return false;
+    if (this.windows.data() === null && this.windows.busy()) return false;
     return this.liveAttendanceEvents().length === 0;
   }
 
@@ -210,9 +205,7 @@ export class EventsTabComponent {
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {
-    const membership = (this.activity.overview()?.linkshells ?? []).find(link => link.id === linkshellId);
-    const rank = (membership?.rank ?? '').toLowerCase();
-    return rank === 'leader' || rank === 'officer';
+    return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }
 
   // ----- Event lists -----
@@ -667,6 +660,17 @@ export class EventsTabComponent {
     return event.attendanceWindows ?? [];
   }
 
+  // How many of the CAMP's windows have been posted — the number the card's "N of M" counts
+  // against the post count. Kill rosters are excluded: they are not one of the camp's roster reads
+  // and counting them made a king camp read "3 of 2" the moment Post Kill was pressed.
+  protected postedWindowCount(event: ActivityEvent): number {
+    return this.attendanceWindowsFor(event).filter(window => !window.isKillWindow).length;
+  }
+
+  protected hasKillWindow(event: ActivityEvent): boolean {
+    return this.attendanceWindowsFor(event).some(window => window.isKillWindow);
+  }
+
   protected attendanceWindowLabel(window: ActivityAttendanceWindow): string {
     return window.label && window.label.trim().length > 0 ? window.label : `Window ${window.sequenceNumber}`;
   }
@@ -726,15 +730,18 @@ export class EventsTabComponent {
   // End Camp, so folding them in would show a number that changes for a reason nothing on screen
   // explains. The footer under the table says so.
 
-  // The window a Standard camp closes out on, resolved against what has been posted SO FAR.
+  // The window a Standard camp closes out on: the one an officer TICKED.
   //
-  // HnmStandardCampFinalizer.ResolveCloseWindow takes the pop window when a snapshot exists for
-  // it and the latest posted window otherwise — and since the addon only ever posts windows that
-  // have already opened, both branches land on the highest posted sequence. So this is the close
-  // the finalizer would pick if the camp ended right now, and it walks forward on its own as
-  // later windows are posted.
+  // MIRROR of HnmStandardCampFinalizer.ResolveCloseWindow, fallback included. It used to be
+  // "the highest sequence posted", which is what made every window in turn look like the close
+  // while it was the newest one — and since the addon writes the server's quote back as the
+  // window's explicit price, that moving guess got frozen into every window on the camp. Camps
+  // where nobody ticked the box still fall back to the old derivation so they keep paying a close;
+  // kill rosters are excluded from it, being filed after the close by design.
   private closeWindowSequence(event: ActivityEvent): number {
-    const windows = this.attendanceWindowsFor(event);
+    const windows = this.attendanceWindowsFor(event).filter(window => !window.isKillWindow);
+    const marked = windows.find(window => window.isClosingWindow);
+    if (marked) return marked.sequenceNumber;
     return windows.length === 0 ? 0 : Math.max(...windows.map(window => window.sequenceNumber));
   }
 
@@ -748,12 +755,20 @@ export class EventsTabComponent {
   // The two must move together.
   private windowValue(event: ActivityEvent, window: ActivityAttendanceWindow): number {
     if (window.dkpAmount != null) return Math.max(0, window.dkpAmount);
+    // A kill roster is worth 0 as a window — being in it earns the kill bonus instead, which is
+    // decided at End Camp and so is excluded here like every other outcome bonus.
+    if (window.isKillWindow) return 0;
+    // One amount per window, no exception. A window that is both the open and the close pays the
+    // OPEN — the camp that opened and closed in one roster read is the officer's to settle by hand,
+    // because the close falls back to "the latest window posted" and so the opening post of EVERY
+    // camp is briefly both ends of it. Open is tested first for that reason: sequence 1 is the open
+    // by definition. Same precedence as HnmStandardCampFinalizer.WindowValue.
     const closeWindow = this.closeWindowSequence(event);
-    // The regular-window rate is the BASE every window pays; open and close add to it rather than
-    // replacing it. Same order as HnmStandardCampFinalizer.WindowValue.
-    return this.standardBonus(event, 'window')
-      + (window.sequenceNumber === 1 ? this.standardBonus(event, 'open') : 0)
-      + (closeWindow > 0 && window.sequenceNumber === closeWindow ? this.standardBonus(event, 'close') : 0);
+    const isOpen = window.sequenceNumber === 1;
+    const isClose = closeWindow > 0 && window.sequenceNumber === closeWindow;
+    if (isOpen) return this.standardBonus(event, 'open');
+    if (isClose) return this.standardBonus(event, 'close');
+    return this.standardBonus(event, 'window');
   }
 
   // Per-camp override first, else the linkshell default — the precedence both finalizers apply.
@@ -799,9 +814,12 @@ export class EventsTabComponent {
     // pricing a window means, and it's the one case where a middle window is worth something.
     if (window.dkpAmount != null) return this.windowValue(event, window);
 
-    // Standard: window 1 pays the open bonus, the close window pays the close bonus, and a camp
-    // with a single posted window is both at once — so they add rather than branch. A regular
-    // window pays the camp's per-window rate on top of whichever of those apply.
+    // A kill roster pays nothing AS A WINDOW — the kill bonus is what pays it, and that isn't
+    // decided until End Camp. Dash rather than 0, same as any other window that carries no credit.
+    if (window.isKillWindow) return null;
+
+    // Standard: window 1 pays the open bonus, the ticked closing window pays the close bonus, and
+    // everything else pays the camp's regular window rate. One amount per window — they don't add.
     //
     // A middle window on a camp with NO per-window rate still returns null so it renders as an em
     // dash rather than a 0 — "this window pays nobody" and "this window is priced at zero" read
@@ -852,25 +870,40 @@ export class EventsTabComponent {
       return `${rate} DKP per window, credited from Check In to Check Out`;
     }
 
-    const parts: string[] = [];
-    // The regular-window rate leads, because it is what EVERY window pays; the open and close are
-    // named after it as the extras they are.
-    const windowRate = this.standardBonus(event, 'window');
-    if (windowRate > 0) {
-      parts.push(`${EventsTabComponent.trimDkp(windowRate)} window`);
+    if (window.isKillWindow) {
+      return 'Post Kill roster — pays no window credit; being on it earns the kill bonus at End Camp';
     }
-    if (window.sequenceNumber === 1) {
-      parts.push(`${EventsTabComponent.trimDkp(this.standardBonus(event, 'open'))} open`);
-    }
+
+    // Named for what makes it that amount. Never a sum: one window pays one amount, so there is no
+    // "+" to print. A window that both opened and closed the camp is named as the OPEN, and the
+    // close on it is left to the officer — see windowValue.
     const closeWindow = this.closeWindowSequence(event);
-    if (closeWindow > 0 && window.sequenceNumber === closeWindow) {
-      // Said out loud because it MOVES: the close is the latest window posted so far, so this
-      // line stops being true about this tab the moment the next snapshot lands.
-      parts.push(`${EventsTabComponent.trimDkp(this.standardBonus(event, 'close'))} close (latest window posted)`);
+    const isOpen = window.sequenceNumber === 1;
+    const isClose = closeWindow > 0 && window.sequenceNumber === closeWindow;
+    // Said out loud when it applies, because it MOVES: nobody ticked a closing window, so the close
+    // falls back to "the latest window posted" and stops being true the moment the next one lands.
+    const closeNote = this.attendanceWindowsFor(event).some(w => w.isClosingWindow)
+      ? 'closing window'
+      : 'no closing window marked — falling back to the latest window posted';
+
+    // Said plainly when the camp opened and closed in one window, because the close bonus is
+    // visibly configured and visibly not being paid here. It is the officer's to award by hand.
+    if (isOpen && isClose) {
+      return `${EventsTabComponent.trimDkp(this.standardBonus(event, 'open'))} DKP per attendee `
+        + `(open) — this window is also the close, and a window only ever pays one amount; `
+        + `award the close by hand if the camp earned it`;
     }
-    return parts.length === 0
-      ? 'Middle windows carry no bonus — only the open and the close pay'
-      : `${parts.join(' + ')} DKP per attendee`;
+    if (isOpen) {
+      return `${EventsTabComponent.trimDkp(this.standardBonus(event, 'open'))} DKP per attendee (open)`;
+    }
+    if (isClose) {
+      return `${EventsTabComponent.trimDkp(this.standardBonus(event, 'close'))} DKP per attendee `
+        + `(${closeNote})`;
+    }
+    const windowRate = this.standardBonus(event, 'window');
+    return windowRate > 0
+      ? `${EventsTabComponent.trimDkp(windowRate)} DKP per attendee (regular window)`
+      : 'Middle windows carry no bonus — only the open and the close pay';
   }
 
   // ----- Manual Check In: late arrivals -----
@@ -1016,19 +1049,45 @@ export class EventsTabComponent {
 
   // ----- Pricing one window by hand -----
   //
-  // Explicit Apply, unlike the addon's Apply-less box: there the next Post carries the value, so
-  // typing IS committing. Here there is no subsequent action to piggyback on, and a control that
-  // saved on every keystroke would write "1", "12", "125" on the way to 1.25.
+  // No Apply button and no Use default button: whatever is in the box IS this window's DKP. There
+  // is nothing to "confirm" because nothing here is final — the amounts stay editable through
+  // review, and the event being ended and posted to the sheet is what settles them.
   //
-  // Keyed by window id, and only for windows the officer has actually started editing — an absent
-  // entry means "show what the server holds", so a refresh elsewhere isn't fought by a stale draft.
+  // Commits on CHANGE, not on input. `change` on a number field fires on blur or Enter, which is
+  // the difference between one write of 1.25 and three writes of 1, 12 and 125 on the way there.
+  //
+  // An empty box is the instruction the removed "Use default" button used to carry: no price of
+  // its own, fall back to the camp's open / close / regular-window value.
+  //
+  // Drafts are keyed by window id and only exist for windows the officer has actually typed in —
+  // an absent entry means "show what the server holds", so a refresh elsewhere isn't fought by a
+  // stale draft.
   private readonly windowDkpDrafts = signal<Record<number, string>>({});
   protected readonly windowDkpSaving = signal(false);
 
-  protected windowDkpDraft(window: ActivityAttendanceWindow): string {
+  // The box is never blank. An empty field used to be how "this window has no price of its own"
+  // showed, leaning on a `default` placeholder to say it — which left the one control on the card
+  // that names a DKP amount as the only thing on the card not showing one, on exactly the windows
+  // an officer opens it to read. So it always holds what this window actually pays: the officer's
+  // explicit price when they set one, else what the camp's model pays for this sequence. It goes
+  // through the same windowValue as the DKP column and the note beneath it, so the three cannot
+  // disagree about what the window is worth.
+  //
+  // Showing the default does NOT write it — see commitWindowDkp. A window nobody priced stays
+  // unpriced, so it keeps following the camp's open / close / window bonus when that changes.
+  protected windowDkpDraft(event: ActivityEvent, window: ActivityAttendanceWindow): string {
     const draft = this.windowDkpDrafts()[window.id];
     if (draft !== undefined) return draft;
-    return window.dkpAmount == null ? '' : EventsTabComponent.trimDkp(window.dkpAmount);
+    return EventsTabComponent.trimDkp(this.windowValue(event, window));
+  }
+
+  // Hand-set and inherited now look identical, both being a number in the same box, so the tooltip
+  // is what tells them apart — and it names the way back to the default, which an empty box used
+  // to be the visible sign of.
+  protected windowDkpHint(window: ActivityAttendanceWindow): string {
+    return window.dkpAmount == null
+      ? 'Camp default for this window — type an amount to price it by hand.'
+      : 'Priced by hand — clear the box to go back to the camp default.';
   }
 
   protected setWindowDkpDraft(window: ActivityAttendanceWindow, event: Event): void {
@@ -1036,17 +1095,46 @@ export class EventsTabComponent {
     this.windowDkpDrafts.update(map => ({ ...map, [window.id]: value }));
   }
 
-  protected async saveWindowDkp(window: ActivityAttendanceWindow): Promise<void> {
-    const raw = this.windowDkpDraft(window).trim();
-    // Blank means "no price of its own", which is the same instruction as Use default — so Apply
-    // on an emptied box clears rather than erroring at the officer about a missing number.
+  protected async commitWindowDkp(event: ActivityEvent, window: ActivityAttendanceWindow): Promise<void> {
+    const raw = this.windowDkpDraft(event, window).trim();
     const amount = raw === '' ? null : Number(raw);
-    if (amount !== null && (!Number.isFinite(amount) || amount < 0)) return;
+
+    // Garbage in the box drops the draft rather than writing it, so the field snaps back to what
+    // the server holds instead of sitting there looking saved. With no Apply button there is no
+    // other moment at which a bad value would be rejected.
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
+      this.dropWindowDkpDraft(window);
+      return;
+    }
+
+    // Nothing actually changed — re-blurring an untouched field must not fire a write.
+    const current = window.dkpAmount ?? null;
+    if (amount === null ? current === null : current !== null && Math.abs(current - amount) < 0.0001) {
+      this.dropWindowDkpDraft(window);
+      return;
+    }
+
+    // The box shows the camp's own number on a window nobody has priced, so tabbing through the
+    // field now arrives here as "write that number down explicitly". Don't: an explicit amount
+    // FREEZES the window at it, and a later change to the camp's open / close / window bonus would
+    // then stop reaching a window the officer never actually priced. Typing the number the default
+    // already shows means the same thing as leaving it alone, so it is treated the same way.
+    if (current === null && amount !== null
+        && Math.abs(this.windowValue(event, window) - amount) < 0.0001) {
+      this.dropWindowDkpDraft(window);
+      return;
+    }
+
     await this.writeWindowDkp(window, amount);
   }
 
-  protected async clearWindowDkp(window: ActivityAttendanceWindow): Promise<void> {
-    await this.writeWindowDkp(window, null);
+  // Puts the field back on the server's value by forgetting what was typed.
+  private dropWindowDkpDraft(window: ActivityAttendanceWindow): void {
+    this.windowDkpDrafts.update(map => {
+      const next = { ...map };
+      delete next[window.id];
+      return next;
+    });
   }
 
   private async writeWindowDkp(window: ActivityAttendanceWindow, amount: number | null): Promise<void> {
@@ -1057,16 +1145,82 @@ export class EventsTabComponent {
       if (ok) {
         // Drop the draft so the field re-reads the server's value — which may differ from what was
         // typed, since the server snaps to the linkshell's rounding grid on write.
-        this.windowDkpDrafts.update(map => {
-          const next = { ...map };
-          delete next[window.id];
-          return next;
-        });
+        this.dropWindowDkpDraft(window);
         await this.activity.refreshOverview();
       }
     } finally {
       this.windowDkpSaving.set(false);
     }
+  }
+
+  // ----- Marking the closing window -----
+  //
+  // Shares windowDkpSaving with the price control on purpose: the two write the same row, and the
+  // server clears DkpAmount when the box is ticked, so letting them fly concurrently would leave
+  // the price field showing a value the server has just dropped.
+
+  // A kill roster is filed after the close and pays through the kill bonus, so it can never BE the
+  // close — the server refuses it too, and this hides the box rather than offering a click that
+  // comes back as an error.
+  protected canMarkClosingWindow(event: ActivityEvent, window: ActivityAttendanceWindow): boolean {
+    return !this.isWdCamp(event) && !window.isKillWindow;
+  }
+
+  protected async toggleClosingWindow(window: ActivityAttendanceWindow): Promise<void> {
+    if (this.windowDkpSaving()) return;
+    this.windowDkpSaving.set(true);
+    try {
+      const ok = await this.activity.setAttendanceWindowClosing(window.id, !window.isClosingWindow);
+      if (ok) {
+        // Drop any draft price for this row: ticking the box clears the server's DkpAmount, and a
+        // surviving draft would re-show the number the officer just superseded.
+        this.windowDkpDrafts.update(map => {
+          const next = { ...map };
+          delete next[window.id];
+          return next;
+        });
+        // Full refresh rather than a local flag flip — marking one window UNMARKS another, and the
+        // whole DKP column repaints when the close moves.
+        await this.activity.refreshOverview();
+      }
+    } finally {
+      this.windowDkpSaving.set(false);
+    }
+  }
+
+  // ----- Claim Shield: who the claim bonus goes to -----
+  //
+  // The tag list PAYS now. HnmStandardCampFinalizer and WdCampFinalizer both read
+  // ClaimShieldCaptureMembers to decide who earns the claim bonus, replacing the old rule of
+  // "everyone scanned in the close window". So this stopped being an audit curiosity and became
+  // part of the payout, which is what the wording under the list says.
+
+  // Everyone this camp will pay a claim bonus to, de-duplicated across captures. A contested pop
+  // produces several lotteries and a member can tag in more than one; the bonus is paid ONCE, so a
+  // count that added them up per capture would overstate what the camp owes.
+  //
+  // Matched only — an unmatched name resolved to no membership, so there is no balance to credit.
+  // Those rows stay VISIBLE in the list (see the template) because an unmatched name is usually a
+  // roster problem an officer can fix, and hiding it would hide the fix.
+  protected claimShieldPaidNames(event: ActivityEvent): string[] {
+    const seen = new Set<string>();
+    for (const capture of this.claimShieldsFor(event)) {
+      for (const member of capture.members ?? []) {
+        if (!member.matched) continue;
+        const name = (member.characterName ?? '').trim();
+        if (name) seen.add(name);
+      }
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }
+
+  // What one tagger earns, resolved the same way every other bonus on this card is: the camp's own
+  // override first, else the linkshell default for the camp's mode.
+  protected claimBonusAmount(event: ActivityEvent): number {
+    const settings = this.linkshellSettingsFor(event.linkshellId);
+    const value = event.hnmClaimBonusOverride
+      ?? (this.isWdCamp(event) ? settings?.wdClaimBonus : settings?.hnmStandardClaimBonus);
+    return Math.max(0, value ?? 0);
   }
 
   // ----- Live participant timers / progress -----

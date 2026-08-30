@@ -4,6 +4,44 @@ namespace LinkshellManagerDiscordApp.Services;
 
 public static class LinkshellRoleDefaults
 {
+    // An in-memory, NEVER-persisted role with every permission granted. The admin
+    // override hands this to callers that are shaped around a LinkshellRole (the
+    // per-controller GetEffectiveRoleAsync helpers, the sidebar's ViewData
+    // permissions, the Activity permissions mapper) so the override flows through
+    // the existing plumbing instead of special-casing each one.
+    // Do NOT add this to the DbContext — Id stays 0 and it has no matching row.
+    public static LinkshellRole BuildFullAccessRole(int linkshellId) => new()
+    {
+        LinkshellId = linkshellId,
+        Name = AdminRoleName,
+        IsSystem = true,
+        SortOrder = -1,
+        CanManageRoles = true,
+        CanManageMembers = true,
+        CanManageEvents = true,
+        CanModerateLiveEvent = true,
+        CanAddLoot = true,
+        CanManageInventory = true,
+        CanManageCharts = true,
+        CanManageTreasury = true,
+        CanManageRules = true,
+        CanManageAnnouncements = true,
+        CanManageTods = true,
+        CanAuditDkp = true,
+        CanManageAuctions = true,
+        CanLockAuctions = true,
+        CanCustomizeLinkshell = true,
+        CanSubmitTodForApproval = true,
+        CanSubmitAttendanceForApproval = true,
+        CanManageParties = true,
+        CanManageInvites = true,
+        CanBid = true
+    };
+
+    // Label for the synthetic full-access role above. Not a rank anyone can be
+    // assigned — AppUserLinkshell.Rank is never set to this.
+    public const string AdminRoleName = "Admin";
+
     public static IEnumerable<LinkshellRole> BuildDefaultRoles(int linkshellId)
     {
         yield return new LinkshellRole

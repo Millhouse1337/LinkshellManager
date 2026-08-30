@@ -8,7 +8,6 @@ import { DkpSheetService } from './dkp-sheet.service';
 import { PartySetupService } from './party-setup.service';
 import { TreasuryService } from './treasury.service';
 import { WindowEventService } from './window-event.service';
-import { attendanceApplies } from '../home/activity-home.helpers';
 import type { TabName } from '../home/activity-home.types';
 
 // Centralized visibility-aware polling that keeps every tab "feeling live"
@@ -191,10 +190,8 @@ export class AutoRefreshService {
     switch (tab) {
       case 'timed-events':
         // Camps ride the overview refresh above, but the attendance sections embedded in this tab
-        // have their own endpoint. Skipped for Sky/Sea/Dynamis, where those sections never render.
-        if (attendanceApplies(this.activity.overview())) {
-          await this.windows.loadIfStale(linkshellId);
-        }
+        // have their own endpoint.
+        await this.windows.loadIfStale(linkshellId);
         break;
       case 'party-setup':
         await this.partySetup.loadList(linkshellId);

@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityCreateTodInput,
+  ActivityUpcomingRepop,
   ActivityUpdateTodInput
 } from './discord-activity.types';
 
@@ -36,11 +37,16 @@ export class TodService {
         cooldown: input.cooldown || null,
         interval: input.interval || null,
         noLoot: input.noLoot,
-        lootDetails: input.lootDetails.map(detail => ({
-          itemName: detail.itemName || null,
-          itemWinner: detail.itemWinner || null,
-          winningDkpSpent: detail.winningDkpSpent ?? null
-        })),
+        // NULL, not an empty array. Loot can no longer be entered from a ToD, and on update the
+        // server reads null as "leave the loot alone" -- an empty array means "replace with
+        // nothing", which would refund and delete the loot on any legacy ToD an officer edited.
+        lootDetails: input.lootDetails.length > 0
+          ? input.lootDetails.map(detail => ({
+              itemName: detail.itemName || null,
+              itemWinner: detail.itemWinner || null,
+              winningDkpSpent: detail.winningDkpSpent ?? null
+            }))
+          : null,
         imagePath: input.imagePath ?? null
       });
       await this.auth.refreshOverview();
@@ -52,6 +58,24 @@ export class TodService {
       throw error;
     } finally {
       this.busyTodSave.set(false);
+    }
+  }
+
+  // The pops this linkshell is still waiting on, newest ToD per spawn. Read when the
+  // create-event form opens so picking an HNM can pre-fill Start with its predicted repop.
+  // Failures are swallowed to an empty list: this only feeds a convenience pre-fill, and a
+  // red banner over a form the officer can still fill in by hand would be noise.
+  async loadUpcomingRepops(linkshellId: number): Promise<ActivityUpcomingRepop[]> {
+    if (!linkshellId) {
+      return [];
+    }
+
+    try {
+      const payload = await this.http.fetchActivityJson<{ entries?: ActivityUpcomingRepop[] }>(
+        `/api/activity/linkshells/${linkshellId}/upcoming-repops`);
+      return payload?.entries ?? [];
+    } catch {
+      return [];
     }
   }
 
@@ -72,11 +96,16 @@ export class TodService {
         cooldown: input.cooldown || null,
         interval: input.interval || null,
         noLoot: input.noLoot,
-        lootDetails: input.lootDetails.map(detail => ({
-          itemName: detail.itemName || null,
-          itemWinner: detail.itemWinner || null,
-          winningDkpSpent: detail.winningDkpSpent ?? null
-        })),
+        // NULL, not an empty array. Loot can no longer be entered from a ToD, and on update the
+        // server reads null as "leave the loot alone" -- an empty array means "replace with
+        // nothing", which would refund and delete the loot on any legacy ToD an officer edited.
+        lootDetails: input.lootDetails.length > 0
+          ? input.lootDetails.map(detail => ({
+              itemName: detail.itemName || null,
+              itemWinner: detail.itemWinner || null,
+              winningDkpSpent: detail.winningDkpSpent ?? null
+            }))
+          : null,
         imagePath: input.imagePath ?? null
       });
       await this.auth.refreshOverview();

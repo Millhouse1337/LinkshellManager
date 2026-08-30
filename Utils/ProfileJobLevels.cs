@@ -1,9 +1,9 @@
 namespace LinkshellManagerDiscordApp.Utils;
 
-// Maps between the profile editor's per-job level inputs (the 15 classic jobs in
+// Maps between the profile editor's per-job level inputs (the jobs in
 // EventJobCatalog.MainJobOptions order) and the stored AppUserLinkshell.JobLevels
-// array, which is indexed by FFXI job id (index 0 = None, 1 = WAR ... 15 = SMN) —
-// the same contract the game addon writes via AddonPostJobLevelsRequest
+// array, which is indexed by FFXI job id (index 0 = None, 1 = WAR … 15 = SMN,
+// 16 = BLU, 17 = COR, 18 = PUP) — the same contract the game addon writes via AddonPostJobLevelsRequest
 // ("Index = FFXI job id (0..21), value = level"). Centralized here so the single
 // assumption (the job-id index base) lives in one place; if the addon's base ever
 // turns out to differ, only FirstJobId changes.
@@ -21,7 +21,7 @@ public static class ProfileJobLevels
     // with the Discord Activity TS const SUB_JOB_MIN_LEVEL in linkshell-tab.component.ts.
     public const int SubJobMinLevel = 37;
 
-    public static int JobCount => EventJobCatalog.MainJobOptions.Length; // 15
+    public static int JobCount => EventJobCatalog.MainJobOptions.Length; // 18
 
     // Reads the stored FFXI-job-id array into a catalog-aligned list of levels
     // (index i = level of MainJobOptions[i]); missing/short entries become 0.
@@ -106,7 +106,7 @@ public static class ProfileJobLevels
     // Free-text, catalog-aligned (index i = MainJobOptions[i]) — NOT FFXI-job-id
     // indexed like the level/flag arrays. Stored as-is (no remap needed).
 
-    // Normalizes a merit-note array to the catalog length (15), trimming + capping
+    // Normalizes a merit-note array to the catalog length, trimming + capping
     // each entry. Missing/short entries become empty strings.
     public static string[] NormalizeMerits(string[]? source)
     {

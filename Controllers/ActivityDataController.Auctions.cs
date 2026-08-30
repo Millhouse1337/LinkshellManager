@@ -698,7 +698,10 @@ public sealed partial class ActivityDataController
                     // Link to the new history row so ManualPoints batches this close into one sheet
                     // column (mirrors the web close path).
                     SourceAuctionHistory: history),
-                cancellationToken);
+                cancellationToken,
+                // Affordability was enforced at bid time (AuctionBidService). Re-blocking at close
+                // would strand a whole auction over one winner whose balance moved since.
+                DkpOverdraft.Allow);
 
             // Gil auctions pay out of the treasury. The amount is POSITIVE and the direction lives in
             // which categories the two halves name — the old row stored a negative value and an

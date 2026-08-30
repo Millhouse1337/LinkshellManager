@@ -50,6 +50,23 @@ export class ItemsSectionComponent {
 
   protected readonly stockpile = computed(() => this.items().filter(item => !item.isSold));
 
+  /**
+   * Names to suggest for "who sold it", read off the same overview payload the items come from.
+   *
+   * A datalist rather than a select: the seller is usually on the roster but not always — gil lands
+   * on mules, and a mule is not a member — so the list is a shortcut, never a gate.
+   */
+  protected readonly roster = computed(() => {
+    const primary = this.activity.overview()?.primaryLinkshell;
+    if (!primary || primary.id !== this.selectedLinkshellId()) {
+      return [] as string[];
+    }
+    return (primary.members ?? [])
+      .map(member => member.characterName)
+      .filter((name): name is string => !!name && name.trim().length > 0)
+      .sort((a, b) => a.localeCompare(b));
+  });
+
   /** Most recently sold first: the archive only grows, and the newest sale is the interesting one. */
   protected readonly soldItems = computed(() =>
     this.items()
@@ -175,22 +192,53 @@ export class ItemsSectionComponent {
   protected readonly sellingItemId = signal<number | null>(null);
   protected sellPrice: number | null = null;
 
+  /**
+   * Who sold it — NOT whoever is clicking. An officer records sales other members made all the time,
+   * and the app used to file the clicker as the seller.
+   *
+   * It is also the answer to where the gil went: whoever sold it is holding it until they hand it
+   * on, so this one box fills both the item's seller and the treasury entry's holder, and the
+   * Treasury tab's who's-holding-the-gil list gets a name instead of another anonymous arrival.
+   */
+  protected soldBy = '';
+
   protected beginSell(itemId: number): void {
     this.sellPrice = null;
+    this.soldBy = '';
     this.sellingItemId.set(itemId);
+  }
+
+  /**
+   * Blank is not zero. An empty box is someone who has not said a price yet, and recording that as a
+   * 0-gil sale writes a transaction into the list claiming the item went for nothing. Typing an
+   * explicit 0 still works — an item can genuinely be given away.
+   */
+  protected get sellPriceMissing(): boolean {
+    return this.sellPrice === null || this.sellPrice === undefined || String(this.sellPrice).trim() === '';
+  }
+
+  /** Both boxes have to be answered before a sale can be recorded — see sellPriceMissing. */
+  protected get sellerMissing(): boolean {
+    return this.soldBy.trim().length === 0;
   }
 
   protected cancelSell(): void {
     this.sellingItemId.set(null);
     this.sellPrice = null;
+    this.soldBy = '';
   }
 
   protected async confirmSell(itemId: number): Promise<void> {
     const price = Math.max(0, Math.floor(Number(this.sellPrice) || 0));
+    const seller = this.soldBy.trim();
+    if (seller.length === 0) {
+      return;
+    }
     try {
-      await this.activity.markItemSold(itemId, price);
+      await this.activity.markItemSold(itemId, price, seller);
       this.sellingItemId.set(null);
       this.sellPrice = null;
+      this.soldBy = '';
     } catch {
       // surfaced
     }

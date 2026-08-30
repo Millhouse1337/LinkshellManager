@@ -7,7 +7,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class ActivityDataController
 {
-    // GET /api/activity/loot-history?source=all|tod|event&page=1&pageSize=20
+    // GET /api/activity/loot-history?page=1&pageSize=20
     //
     // Unified list of loot rows across TodLootDetail (joined to Tod) and
     // EventLootDetail (joined to Event for active events or EventHistory for
@@ -16,7 +16,6 @@ public sealed partial class ActivityDataController
     // the activity client can show/hide the Edit button per row.
     [HttpGet("loot-history")]
     public async Task<IActionResult> GetLootHistoryAsync(
-        [FromQuery] string? source = "all",
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -42,14 +41,15 @@ public sealed partial class ActivityDataController
         var canEdit = await CanAsync(membership, role => role.CanAddLoot, cancellationToken);
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var normalizedSource = (source ?? "all").Trim().ToLowerInvariant();
 
         // Two materialised lists (ToD + Event), unioned and sorted by
         // occurred-at desc in memory. The dataset for a single linkshell is
         // small enough that this is simpler than crafting a UNION query
         // across two different shapes.
-        var todRows = normalizedSource is "all" or "tod"
-            ? await _dbContext.TodLootDetails
+        // Loot is no longer split by where it came from -- every new row is an EventLootDetail
+        // filed against a live event, a past event, or nothing -- so the source filter went with
+        // it. ToD rows are still READ: the addon and the old Log ToD form wrote real ones.
+        var todRows = await _dbContext.TodLootDetails
                 .AsNoTracking()
                 .Where(detail => detail.Tod != null && detail.Tod.LinkshellId == linkshellId)
                 .Select(detail => new
@@ -66,15 +66,16 @@ public sealed partial class ActivityDataController
                     detail.EditedByCharacterName,
                     detail.LastEditReason
                 })
-                .ToListAsync(cancellationToken)
-            : new();
+                .ToListAsync(cancellationToken);
 
-        var eventRows = normalizedSource is "all" or "event"
-            ? await _dbContext.EventLootDetails
+        var eventRows = await _dbContext.EventLootDetails
                 .AsNoTracking()
+                // LinkshellId leads: a "No event" row has neither parent to reach a linkshell
+                // through. The parent tests stay for rows written before that column existed.
                 .Where(detail =>
-                    (detail.Event != null && detail.Event.LinkshellId == linkshellId) ||
-                    (detail.EventHistory != null && detail.EventHistory.LinkshellId == linkshellId))
+                    detail.LinkshellId == linkshellId
+                    || (detail.Event != null && detail.Event.LinkshellId == linkshellId)
+                    || (detail.EventHistory != null && detail.EventHistory.LinkshellId == linkshellId))
                 .Select(detail => new
                 {
                     detail.Id,
@@ -87,7 +88,7 @@ public sealed partial class ActivityDataController
                     // not at its scheduled StartTime (which can be far in the past/future).
                     OccurredAt = detail.EventHistory != null
                         ? (DateTime?)detail.EventHistory.EndTime
-                        : (detail.Event != null ? (DateTime?)(detail.Event.EndTime ?? detail.Event.CommencementStartTime ?? detail.Event.StartTime) : null),
+                        : (detail.Event != null ? (DateTime?)(detail.Event.EndTime ?? detail.Event.CommencementStartTime ?? detail.Event.StartTime) : detail.DkpDebitedAt),
                     detail.ItemName,
                     detail.ItemWinner,
                     detail.WinningDkpSpent,
@@ -96,8 +97,7 @@ public sealed partial class ActivityDataController
                     detail.EditedByCharacterName,
                     detail.LastEditReason
                 })
-                .ToListAsync(cancellationToken)
-            : new();
+                .ToListAsync(cancellationToken);
 
         var unified = todRows
             .Select(row => new ActivityLootHistoryItemDto(
@@ -146,12 +146,15 @@ public sealed partial class ActivityDataController
     // POST /api/activity/loot-history
     //
     // Manual loot entry for the caller's primary linkshell. Mirrors the web
-    // LootHistoryController.Add flow exactly: a lightweight backing ToD carries
-    // the loot through the shared ToD-loot DKP deduction + ManualPoints sheet
-    // pipeline, so it shows in history (Source = ToD) with full edit support.
+    // LootHistoryController.Add flow exactly: the loot is filed against a LIVE event, a PAST
+    // event, or nothing at all.
+    //
+    // It used to mint a throwaway ToD per submission and hang a TodLootDetail off it, which is why
+    // every hand-entered drop showed up in history as source "ToD".
     [HttpPost("loot-history")]
     public async Task<IActionResult> AddLootHistoryAsync(
         [FromBody] ActivityLootAddRequest request,
+        [FromServices] ManualLootService manualLoot,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
@@ -176,62 +179,86 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        var itemName = request.ItemName?.Trim();
-        var itemWinner = request.ItemWinner?.Trim();
-        if (string.IsNullOrWhiteSpace(itemName))
-        {
-            return BadRequest(new { error = "Item name is required." });
-        }
-        if (string.IsNullOrWhiteSpace(itemWinner))
-        {
-            return BadRequest(new { error = "A winner is required." });
-        }
+        // Everything below — roster match, affordability, the debit, and the DkpDebitedAt stamp
+        // that stops a live event's close charging this a second time — is ManualLootService's,
+        // shared with the web form so the two surfaces cannot drift on DKP.
+        var result = await manualLoot.AddAsync(
+            linkshellId,
+            ManualLootTarget.Parse(request.SourceKind, request.EventId, request.EventHistoryId),
+            request.ItemName,
+            request.ItemWinner,
+            request.WinningDkpSpent.GetValueOrDefault(),
+            request.DkpPoolId,
+            cancellationToken);
 
-        var dkpSpent = request.WinningDkpSpent.GetValueOrDefault();
-        if (dkpSpent < 0)
+        if (!result.Success)
         {
-            return BadRequest(new { error = "DKP spent can't be negative." });
-        }
-
-        // Winner must be a current roster member (mirrors the web add-loot guard).
-        var roster = await _dbContext.AppUserLinkshells
-            .AsNoTracking()
-            .Where(link => link.LinkshellId == linkshellId
-                           && link.CharacterName != null && link.CharacterName != "")
-            .Select(link => link.CharacterName!)
-            .ToListAsync(cancellationToken);
-        if (!roster.Any(name => string.Equals(name, itemWinner, StringComparison.OrdinalIgnoreCase)))
-        {
-            return BadRequest(new { error = "Winner must be a current linkshell member." });
+            return BadRequest(new { error = result.Error ?? "Adding loot failed." });
         }
 
-        var context = string.IsNullOrWhiteSpace(request.Context) ? null : request.Context!.Trim();
-        var nowUtc = DateTime.UtcNow;
-
-        // Time stays null — see LootHistoryController: this row carries loot, not an observed ToD,
-        // and stamping "now" let it hijack the monster's ToD Tracker card. TimeStamp records the write.
-        var tod = new Tod
-        {
-            LinkshellId = linkshellId,
-            MonsterName = context ?? "Manual Loot",
-            Claim = true,
-            TimeStamp = nowUtc,
-            TotalClaims = 1
-        };
-        var detail = new TodLootDetail
-        {
-            Tod = tod,
-            ItemName = itemName,
-            ItemWinner = itemWinner,
-            WinningDkpSpent = dkpSpent
-        };
-        _dbContext.Tods.Add(tod);
-        _dbContext.TodLootDetails.Add(detail);
-        await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return Ok(new { success = true, lootDetailId = detail.Id });
+        return Ok(new { success = true, lootDetailId = result.Detail!.Id });
     }
+
+    // GET /api/activity/loot-history/event-options?q=…
+    //
+    // Live events plus the most recent past ones for the Add loot pickers. Past events are capped
+    // and searchable rather than listed whole: a linkshell accumulates hundreds, and a flat list
+    // would put the older half out of reach.
+    [HttpGet("loot-history/event-options")]
+    public async Task<IActionResult> GetLootEventOptionsAsync(
+        [FromQuery] string? q = null,
+        CancellationToken cancellationToken = default)
+    {
+        const int RecentPastEventCount = 25;
+
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to add loot." });
+        }
+        if (!appUser.PrimaryLinkshellId.HasValue || appUser.PrimaryLinkshellId.Value == 0)
+        {
+            return Ok(new ActivityLootEventOptionsDto(
+                Array.Empty<ActivityLootEventOptionDto>(), Array.Empty<ActivityLootEventOptionDto>(), q));
+        }
+
+        var linkshellId = appUser.PrimaryLinkshellId.Value;
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        var live = await _dbContext.Events
+            .AsNoTracking()
+            .Where(evt => evt.LinkshellId == linkshellId)
+            .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
+            .Select(evt => new ActivityLootEventOptionDto(evt.Id, evt.EventName ?? "Event", evt.EventType))
+            .ToListAsync(cancellationToken);
+
+        var pastQuery = _dbContext.EventHistories
+            .AsNoTracking()
+            .Where(history => history.LinkshellId == linkshellId);
+
+        var search = q?.Trim();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = $"%{search}%";
+            pastQuery = pastQuery.Where(history =>
+                (history.EventName != null && EF.Functions.ILike(history.EventName, pattern))
+                || (history.EventType != null && EF.Functions.ILike(history.EventType, pattern)));
+        }
+
+        var past = await pastQuery
+            .OrderByDescending(history => history.StartTime ?? history.TimeStamp)
+            .Take(RecentPastEventCount)
+            .Select(history => new ActivityLootEventOptionDto(
+                history.Id, history.EventName ?? "Event", history.EventType))
+            .ToListAsync(cancellationToken);
+
+        return Ok(new ActivityLootEventOptionsDto(live, past, search));
+    }
+
 
     [HttpPost("loot-history/tod/{lootDetailId:int}/edit")]
     public async Task<IActionResult> EditTodLootHistoryAsync(

@@ -13,6 +13,54 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public partial class EventController
 {
+    // Every window the camp has SAT THROUGH, not only the ones someone was around to post.
+    //
+    // The Attendance Windows card used to render the posted rows and nothing else, so a camp where
+    // only windows 5-7 landed showed three tabs and read as a camp that had run three windows.
+    // Windows 1-4 happened; nobody recorded them. That gap is the thing an officer needs to see —
+    // it's what tells them to go back and file one — and hiding it made a half-covered camp look
+    // complete.
+    //
+    // The bound is HnmWindowNumber (the server's OPENED counter, clamped to the post count), not
+    // the post high-water mark. These monsters show within seconds of a boundary, so a window that
+    // has been reached is a window whose chance is already spent — every one is a past window with
+    // a definite answer, which is exactly what makes it worth a tab.
+    //
+    // Numbered camps only. A 2-post king/dragon names its windows Open / Close while its counter
+    // walks the seven SPAWN windows underneath, so synthesizing 1..opened there would invent five
+    // windows that camp can never have — the same phantom-tab trap the addon's strip avoids.
+    //
+    // MIRROR of the Activity's attendanceWindowTabs() (discord-activity/src/app/home/tabs/
+    // events-tab.component.ts). The two must move together, or the same camp reads one way on the
+    // website and another in the Activity.
+    public static List<AttendanceWindowTabViewModel> BuildAttendanceWindowTabs(
+        List<EventAttendanceWindowViewModel> posted, int postCount, int hnmWindowNumber)
+    {
+        var bySequence = new Dictionary<int, EventAttendanceWindowViewModel>();
+        foreach (var window in posted)
+        {
+            bySequence[window.SequenceNumber] = window;
+        }
+
+        var sequences = new SortedSet<int>(bySequence.Keys);
+        if (postCount > 2)
+        {
+            var reached = Math.Min(Math.Max(1, hnmWindowNumber), Math.Max(1, postCount));
+            for (var sequence = 1; sequence <= reached; sequence++)
+            {
+                sequences.Add(sequence);
+            }
+        }
+
+        return sequences
+            .Select(sequence => new AttendanceWindowTabViewModel
+            {
+                SequenceNumber = sequence,
+                Window = bySequence.TryGetValue(sequence, out var window) ? window : null
+            })
+            .ToList();
+    }
+
     public async Task<IActionResult> Start(int eventId)
     {
         var user = await RequireCurrentUserAsync();
@@ -49,8 +97,7 @@ public partial class EventController
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == eventToStart.LinkshellId);
         var startCloseWindow = LinkshellManagerDiscordApp.Services.HnmStandardCampFinalizer.ResolveCloseWindow(
-            eventToStart.AttendanceWindows.Select(w => w.SequenceNumber).Distinct().ToList(),
-            eventToStart.HnmWindowNumber);
+            eventToStart.AttendanceWindows, eventToStart.HnmWindowNumber);
 
         var model = new EventViewModel
         {
@@ -139,13 +186,28 @@ public partial class EventController
                             LinkshellManagerDiscordApp.Services.DiscordEventMessageBuilder.AttendancePostCount(eventToStart)),
                     PostedAt = ConvertUtcToUserTimeZone(window.PostedAt, user.TimeZone) ?? window.PostedAt,
                     DkpAmount = LinkshellManagerDiscordApp.Services.HnmCampPricing.WindowValueFor(
-                        eventToStart, startLinkshell, window.SequenceNumber, startCloseWindow, window.DkpAmount),
+                        eventToStart, startLinkshell, window.SequenceNumber, startCloseWindow,
+                        window.DkpAmount, window.IsKillWindow),
+                    IsClosingWindow = window.IsClosingWindow,
+                    IsKillWindow = window.IsKillWindow,
                     Attendees = window.Attendees
-                        .OrderBy(att => att.AppUserEvent != null ? att.AppUserEvent.CharacterName : string.Empty)
+                        // Sorted on the same fallback the row renders — see below.
+                        .OrderBy(att => att.CharacterName ?? att.AppUserEvent?.CharacterName ?? string.Empty)
                         .Select(att => new AttendanceWindowAttendeeViewModel
                         {
                             Id = att.Id,
-                            CharacterName = att.AppUserEvent?.CharacterName,
+                            // The DENORMALIZED name on the snapshot row WINS, falling back to the
+                            // participation only for rows written before it was stamped. A roster
+                            // clear DELETES the participation (the 25-window wyrm camps wipe theirs
+                            // every window) while the snapshot survives via SetNull, so reading the
+                            // name only through the navigation turned every attendee into a blank
+                            // the moment the window advanced — and the snapshot row is also the one
+                            // that knows which CHARACTER was scanned, which for a player on an alt
+                            // is not the name on their participation. Jobs have no such fallback
+                            // and stay null. Mirrors the Activity DTO and the addon's
+                            // GET /events/{id}.
+                            CharacterName = att.CharacterName ?? att.AppUserEvent?.CharacterName,
+                            MainCharacterName = att.MainCharacterName,
                             JobName = att.AppUserEvent?.JobName,
                             SubJobName = att.AppUserEvent?.SubJobName,
                             Zone = att.Zone,
@@ -156,6 +218,44 @@ public partial class EventController
                 })
                 .ToList()
         };
+
+        model.AttendanceWindowTabs = BuildAttendanceWindowTabs(
+            model.AttendanceWindows, model.WindowCount, eventToStart.HnmWindowNumber);
+
+        // Same permission the management endpoint enforces, so this page can't render a checkbox
+        // the server would refuse.
+        model.CanMarkClosingWindow = await CanManageLinkshellAsync(membership)
+            && LinkshellManagerDiscordApp.Services.HnmCampPricing.HonoursWindowAmount(eventToStart);
+
+        // The camp's Claim Shield lotteries. Newest first — on a contested pop there are several
+        // and the last one is what an officer is looking for. Loaded separately rather than
+        // Include'd on the event above: it is its own aggregate (a capture survives its event via
+        // SetNull) and only this page's bottom section reads it.
+        model.ClaimShieldCaptures = (await _context.ClaimShieldCaptures
+                .AsNoTracking()
+                .Include(capture => capture.Members)
+                .Where(capture => capture.EventId == eventId)
+                .OrderByDescending(capture => capture.CapturedAtUtc)
+                .ToListAsync(HttpContext.RequestAborted))
+            .Select(capture => new ClaimShieldCaptureViewModel
+            {
+                Id = capture.Id,
+                MonsterName = capture.MonsterName,
+                Won = capture.Won,
+                TotalPlayers = capture.TotalPlayers,
+                CapturedAtUtc = ConvertUtcToUserTimeZone(capture.CapturedAtUtc, user.TimeZone)
+                    ?? capture.CapturedAtUtc,
+                Members = capture.Members
+                    .OrderBy(member => member.CharacterName)
+                    .Select(member => new ClaimShieldCaptureMemberViewModel
+                    {
+                        CharacterName = member.CharacterName,
+                        ActionMessage = member.ActionMessage,
+                        Matched = member.Matched
+                    })
+                    .ToList()
+            })
+            .ToList();
 
         // Overlay the per-event party board so the live view can show it interactively
         // (open slots are claimable as a late join into a slot).
@@ -169,7 +269,7 @@ public partial class EventController
         }
 
         ViewBag.CurrentAppUserId = user.Id;
-        ViewBag.CanManageParties = CanManageLinkshell(membership);
+        ViewBag.CanManageParties = await CanManageLinkshellAsync(membership);
         // Characters this member can sign up as (main + alts) for the picker.
         ViewBag.SignupCharacters = SignupCharacters.ForMember(user, membership);
         ViewBag.SignUpRoleOptions = LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions.ToList();
@@ -304,7 +404,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventToConfirm.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -546,7 +646,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(currentUser.Id, eventEntity.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -587,7 +687,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(currentUser.Id, eventEntity.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -623,7 +723,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(currentUser.Id, eventEntity.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -667,7 +767,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(currentUser.Id, eventEntity.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -730,7 +830,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(currentUser.Id, eventEntity.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -806,7 +906,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(currentUser.Id, eventEntity.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }

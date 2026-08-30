@@ -14,31 +14,37 @@ public partial class EventController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly TimeZoneConversionService _timeZones;
     private readonly DkpLedgerWriter _dkpLedger;
     private readonly DkpPoolResolver _dkpPools;
     private readonly DkpPoolBalanceService _dkpPoolBalances;
     private readonly HnmCampReviewHandoffService _campReviewHandoff;
     private readonly AttendanceSectionsBuilder _attendanceSections;
+    private readonly MonsterTimingResolver _monsterTimings;
 
     public EventController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         TimeZoneConversionService timeZones,
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools,
         DkpPoolBalanceService dkpPoolBalances,
         HnmCampReviewHandoffService campReviewHandoff,
-        AttendanceSectionsBuilder attendanceSections)
+        AttendanceSectionsBuilder attendanceSections,
+        MonsterTimingResolver monsterTimings)
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _timeZones = timeZones;
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
         _dkpPoolBalances = dkpPoolBalances;
         _campReviewHandoff = campReviewHandoff;
         _attendanceSections = attendanceSections;
+        _monsterTimings = monsterTimings;
     }
     private async Task<EventViewModel> BuildEventViewModelAsync(AppUser user, EventViewModel? source = null)
     {
@@ -59,10 +65,35 @@ public partial class EventController : Controller
             selectedLinkshellId = linkshells.FirstOrDefault()?.Id ?? 0;
         }
 
+        // The linkshell's own monster catalog, already merged and including anything it added
+        // itself. Falls back to the built-in merged list when no linkshell is resolved yet.
+        var monsterTimings = await _monsterTimings.GetMapAsync(selectedLinkshellId, HttpContext.RequestAborted);
+
         var eventDraft = source?.Event ?? new Event();
         if (!isExistingEvent)
         {
             eventDraft.LinkshellId = selectedLinkshellId;
+        }
+
+        // The linkshell's standing Repeat-on-ToD boards, flattened to every spelling of each spawn
+        // so the form's monster picker can pre-fill the recurrence toggle + lead for whatever is
+        // chosen. Only ENABLED boards are carried: a disabled row's lead is stale bookkeeping, and
+        // offering it would re-apply it the moment the toggle was flipped back on.
+        var monsterRepeatLeads = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        if (selectedLinkshellId > 0)
+        {
+            var enabledBoards = await _context.HnmRecurringBoards
+                .AsNoTracking()
+                .Where(board => board.LinkshellId == selectedLinkshellId && board.Enabled)
+                .Select(board => new { board.MonsterName, board.LeadHours })
+                .ToListAsync(HttpContext.RequestAborted);
+            foreach (var board in enabledBoards)
+            {
+                foreach (var name in HnmConfig.MonsterMatchNames(board.MonsterName))
+                {
+                    monsterRepeatLeads.TryAdd(name, board.LeadHours);
+                }
+            }
         }
 
         var availablePartySetups = selectedLinkshellId > 0
@@ -81,6 +112,30 @@ public partial class EventController : Controller
             : new List<PartySetupOption>();
 
         var selectedLinkshell = linkshells.FirstOrDefault(linkshell => linkshell.Id == selectedLinkshellId);
+        // Fail-closed to Standard, matching the server-side payout (Linkshell.HnmAttendanceMode).
+        var isWdMode = string.Equals(
+            selectedLinkshell?.HnmAttendanceMode, HnmAttendanceModes.Wd, StringComparison.OrdinalIgnoreCase);
+
+        // Predicted repops the linkshell is still waiting on, flattened into a name → Start-input
+        // value map for the form's monster picker. Each entry's match names are disjoint from
+        // every other entry's (UpcomingRepopLookup keeps one row per spawn), so no key collides.
+        var upcomingRepops = await UpcomingRepopLookup.ForLinkshellAsync(
+            _context, selectedLinkshellId, DateTime.UtcNow, HttpContext.RequestAborted);
+        var upcomingRepopStarts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var repop in upcomingRepops)
+        {
+            var localStart = ConvertUtcToUserTimeZone(repop.RepopTimeUtc, user.TimeZone);
+            if (!localStart.HasValue)
+            {
+                continue;
+            }
+
+            var value = localStart.Value.ToString("yyyy-MM-ddTHH:mm:ss");
+            foreach (var name in repop.MatchNames)
+            {
+                upcomingRepopStarts.TryAdd(name, value);
+            }
+        }
 
         return new EventViewModel
         {
@@ -88,26 +143,41 @@ public partial class EventController : Controller
             PartySetupId = source?.PartySetupId ?? eventDraft.PartySetupId,
             AvailablePartySetups = availablePartySetups,
             // Seed for the inline "Create New Party Setup" modal on the event form.
-            // Only the linkshell scope + content type are event-specific; the editor's
-            // option lists (roles/jobs/monsters/event types) default on the view model.
+            // Only the linkshell scope is event-specific; the editor's option lists
+            // (roles/jobs/monsters/event types) default on the view model.
             PartySetupEditor = selectedLinkshellId > 0
                 ? new PartySetupEditorViewModel
                 {
                     LinkshellId = selectedLinkshellId,
                     LinkshellName = selectedLinkshell?.LinkshellName,
-                    LinkshellType = LinkshellTypes.Normalize(selectedLinkshell?.LinkshellType),
                     Slots = new()
                 }
                 : null,
             Linkshells = linkshells,
             LinkshellId = selectedLinkshellId,
-            // HNM signup-board controls: monster picker + the outside-signup gate. Each merge
-            // pair is shown as ONE combined "Base/Stronger" entry (the stronger half is folded
-            // in); the DAY input only changes what the sign-up board prints, not this list.
-            MonsterOptions = HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters),
-            OutsidePartySignupEnabled = selectedLinkshell?.OutsidePartySignupEnabled ?? false,
-            HnmOutsideSignupEnabled = selectedLinkshell?.HnmOutsideSignupEnabled ?? false,
-            RepeatOnTod = source?.RepeatOnTod ?? false
+            // HNM camp monster picker, from the linkshell's own monster setups. Each merge pair is
+            // stored as ONE combined "Base/Stronger" row, so the list arrives merged; the DAY input
+            // only changes what the sign-up board prints, not this list.
+            MonsterOptions = monsterTimings.EventMonsterOptions.ToList(),
+            UpcomingRepopStarts = upcomingRepopStarts,
+            RepeatOnTod = source?.RepeatOnTod ?? false,
+            RepostLeadHours = source?.RepostLeadHours,
+            MonsterRepeatLeads = monsterRepeatLeads,
+            // What a camp pays by default, for the form's "03 — Camp DKP" section. Every amount
+            // comes from the pair belonging to the ACTIVE attendance mode: the linkshell stores
+            // its Standard and Manual Check In amounts separately even though the per-camp
+            // override columns are shared, so which default an override falls back to is decided
+            // by the camp's mode and nothing else — the same rule HnmCampPricing applies at
+            // payout, and the same one the Activity's hnmLinkshellBonus() reads.
+            HnmAttendanceMode = selectedLinkshell?.HnmAttendanceMode ?? HnmAttendanceModes.Standard,
+            HnmDefaultWindowBonus = isWdMode
+                ? selectedLinkshell?.WdDkpPerWindow ?? 0.25d
+                : selectedLinkshell?.HnmStandardWindowBonus ?? 0d,
+            HnmDefaultOpenBonus = (isWdMode ? selectedLinkshell?.WdOpenBonus : selectedLinkshell?.HnmStandardOpenBonus) ?? 0d,
+            HnmDefaultCloseBonus = (isWdMode ? selectedLinkshell?.WdCloseBonus : selectedLinkshell?.HnmStandardCloseBonus) ?? 0d,
+            HnmDefaultClaimBonus = (isWdMode ? selectedLinkshell?.WdClaimBonus : selectedLinkshell?.HnmStandardClaimBonus) ?? 0d,
+            HnmDefaultKillBonus = (isWdMode ? selectedLinkshell?.WdKillBonus : selectedLinkshell?.HnmStandardKillBonus) ?? 0d,
+            IsDkpLootStructure = !string.Equals(selectedLinkshell?.LootStructure, "LootCouncil", StringComparison.OrdinalIgnoreCase)
         };
     }
 
@@ -138,9 +208,14 @@ public partial class EventController : Controller
         return linkshellIds.FirstOrDefault();
     }
 
-    private static bool CanManageLinkshell(AppUserLinkshell? membership)
+    // Leader/Officer by rank, OR the app-wide admin override. A null membership is
+    // rejected first, so the override can only elevate inside a linkshell the user
+    // has actually joined. See AdminOverrideService.
+    private async Task<bool> CanManageLinkshellAsync(AppUserLinkshell? membership)
     {
-        return LinkshellRanks.IsLeaderOrOfficer(membership?.Rank);
+        if (membership is null) return false;
+        return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
+               || await _adminOverride.IsActiveForAsync(membership.AppUserId, HttpContext.RequestAborted);
     }
 
     internal static double CalculateAccumulatedDurationHours(AppUserEvent participation, DateTime referenceUtc, DateTime? eventStartUtc)

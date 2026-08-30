@@ -8,20 +8,6 @@
       @if (canAddLoot()) {
         <button type="button" class="action-button" (click)="openAdd()">+ Add loot</button>
       }
-      <div class="view-tabs" role="tablist" aria-label="Loot source">
-        <button type="button" class="view-tab" role="tab"
-                [class.active]="sourceFilter() === 'all'"
-                [attr.aria-selected]="sourceFilter() === 'all'"
-                (click)="setSource('all')">All</button>
-        <button type="button" class="view-tab" role="tab"
-                [class.active]="sourceFilter() === 'tod'"
-                [attr.aria-selected]="sourceFilter() === 'tod'"
-                (click)="setSource('tod')">ToDs</button>
-        <button type="button" class="view-tab" role="tab"
-                [class.active]="sourceFilter() === 'event'"
-                [attr.aria-selected]="sourceFilter() === 'event'"
-                (click)="setSource('event')">Events</button>
-      </div>
     </div>
   </div>
 
@@ -192,21 +178,50 @@
           </div>
 
           <div class="loot-edit-form__body">
+            <!-- Loot points at a REAL event now. It used to carry a free-text label that the server
+                 turned into a throwaway ToD, which is why every hand-entered drop read as source
+                 "ToD" with nothing behind it. -->
             <label>
-              <span>Event / source <span class="muted">(optional)</span></span>
-              <select class="form-select" [(ngModel)]="addEventChoice" name="addEventChoice">
-                <option value="">— None —</option>
-                @for (name of eventOptions(); track name) {
-                  <option [value]="name">{{ name }}</option>
-                }
-                <option [value]="OTHER_EVENT">Other…</option>
+              <span>Event</span>
+              <select class="form-select" [(ngModel)]="addSourceKind" name="addSourceKind">
+                <option value="none">No event</option>
+                <option value="live">From a live event</option>
+                <option value="past">From a past event</option>
               </select>
             </label>
-            @if (addEventChoice === OTHER_EVENT) {
+
+            @if (addSourceKind === 'live') {
               <label>
-                <span>Event name</span>
-                <input class="bid-input" [(ngModel)]="addCustomEvent" name="addCustomEvent" maxlength="256"
-                       placeholder="e.g. Sky, Fafnir, Dynamis-Beaucedine" />
+                <span>Live event</span>
+                <select class="form-select" [(ngModel)]="addEventId" name="addEventId">
+                  <option [ngValue]="null">— choose a live event —</option>
+                  @for (option of liveEventOptions(); track option.id) {
+                    <option [ngValue]="option.id">{{ option.name }}@if (option.detail) { · {{ option.detail }} }</option>
+                  }
+                </select>
+                @if (liveEventOptions().length === 0) {
+                  <span class="muted">Nothing is running right now — pick a past event instead.</span>
+                }
+              </label>
+            }
+
+            @if (addSourceKind === 'past') {
+              <label>
+                <span>Past event</span>
+                <!-- The 25 most recent, widened by a search: a linkshell accumulates hundreds of
+                     closed events and a flat list would strand the older half. -->
+                <input class="bid-input" [ngModel]="pastEventQuery()" name="pastEventQuery"
+                       (ngModelChange)="onPastEventQueryChange($event)" maxlength="128"
+                       placeholder="Search past events by name or type…" />
+                <select class="form-select" [(ngModel)]="addEventHistoryId" name="addEventHistoryId">
+                  <option [ngValue]="null">— choose a past event —</option>
+                  @for (option of pastEventOptions(); track option.id) {
+                    <option [ngValue]="option.id">{{ option.name }}@if (option.detail) { · {{ option.detail }} }</option>
+                  }
+                </select>
+                @if (pastEventOptions().length === 0) {
+                  <span class="muted">No past events match.</span>
+                }
               </label>
             }
 

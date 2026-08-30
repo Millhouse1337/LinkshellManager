@@ -7,9 +7,11 @@ namespace LinkshellManagerDiscordApp.Services;
 // Seeds a freshly-created HNM event: its window count and — when the linkshell runs Manual Check In mode and
 // the monster is a tracked HNM — its AttendanceMode = "Wd" stamp.
 //
-// Window counts and auto-advance cadence are built in per monster (HnmConfig.EffectiveWindowCount /
-// WindowAdvanceMinutes) and are NOT configurable per linkshell: the wyrms run 25 windows at 60 min,
-// the kings/dragons 7 windows at 10 min, everything else advances manually.
+// Window counts and auto-advance cadence are configurable per linkshell (LinkshellMonsterTiming),
+// defaulting to the built-ins: the wyrms run 25 windows at 60 min, the kings/dragons 7 at 10 min,
+// everything else advances manually. StampSpawnGridAsync below CAPTURES the linkshell's grid onto
+// the event at creation, and the runtime reads that stamp — a camp keeps the grid it started on,
+// so editing the setup never reshapes a board that is already running.
 //
 // Static + ApplicationDbContext-arg by design, matching the existing
 // EventPartySignupService.MaterializeSignupsAsParticipantsAsync(dbContext, ...) convention, so
@@ -62,10 +64,11 @@ public static class HnmEventSeeder
     //
     //   * CommencementStartTime / WindowAnchorAt / NextWindowAt — without these the recycled board
     //     reads as "Started" and carries the PREVIOUS pop's window countdown.
-    //   * HnmClearedWindow — it MUST move with HnmWindowNumber. It is the "settled up to here" high
-    //     water mark, so a row recycled after reaching window 9 last cycle reads as "windows 1-9
-    //     already cleared" against a counter back at 1, and HnmWindowAdvanceBackgroundService
-    //     silently skips the roster wipe for the new cycle's windows 2 through 9.
+    //   * HnmClearedWindow — it MUST be reset alongside HnmWindowNumber. It is the "settled up to
+    //     here" high water mark (on the printed-window scale — see Event.HnmClearedWindow), so a
+    //     row recycled after reaching window 9 last cycle reads as "windows 1-9 already cleared"
+    //     against a counter back at 1, and HnmWindowAdvanceBackgroundService silently skips the
+    //     roster wipe for the new cycle's windows 2 through 9. Null is the reset on either scale.
     //   * ClearWdCampState — without it the board reads as "already processed" forever and Manual
     //     Check In silently disappears from both Discord and the addon.
     //   * AttendanceMode — re-derived because between camps is the one safe moment to pick up a
@@ -110,12 +113,31 @@ public static class HnmEventSeeder
                 .Select(l => l.HnmAttendanceMode)
                 .FirstOrDefaultAsync(ct),
             nextMonster);
+
+        // A recycled board changes its monster (an HQ cycle rolls Fafnir -> Nidhogg and back), so
+        // the grid has to be re-resolved here or the next pop runs the PREVIOUS monster's windows.
+        await StampSpawnGridAsync(db, ev, nextMonster, ct);
+    }
+
+    // Captures the SPAWN GRID this camp runs on, from the linkshell's monster setup. Stamped at
+    // creation and re-stamped when an edit changes the monster, never read live — see the comment
+    // on Event.SpawnWindowCount for why a camp has to keep the grid it started on.
+    //
+    // Null when the monster has no grid, which leaves every downstream reader on the HnmConfig
+    // fallback it always used.
+    public static async Task StampSpawnGridAsync(
+        ApplicationDbContext db, Event ev, string? monster, CancellationToken ct = default)
+    {
+        var timing = await new MonsterTimingResolver(db).ResolveAsync(ev.LinkshellId, monster, ct);
+        ev.SpawnWindowCount = timing.WindowCount;
+        ev.SpawnWindowMinutes = timing.WindowCadenceMinutes;
     }
 
     public static async Task SeedHnmEventAsync(
         ApplicationDbContext db, Event ev, Linkshell? linkshell, string? monster, CancellationToken ct = default)
     {
         ev.WindowCountOverride = HnmConfig.EffectiveWindowCount(monster);
+        await StampSpawnGridAsync(db, ev, monster, ct);
 
         var mode = linkshell is not null
             ? linkshell.HnmAttendanceMode

@@ -131,6 +131,9 @@
   width: fit-content;
   max-width: 100%;
   flex-wrap: wrap;
+  /* Right-aligned: the strip is a switch, not a heading, so it sits opposite the
+     "DKP History" title/description block that starts the panel below it. */
+  margin-left: auto;
 }
 
 .dkp-view-tab {

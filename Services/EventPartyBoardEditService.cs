@@ -86,6 +86,13 @@ public static class EventPartyBoardEditService
             CreatedAt = setup.CreatedAt,
             UpdatedAt = DateTime.UtcNow,
             OwnerEventId = eventId,
+            // Remember where this came from. The snapshot dies with its event, so without this
+            // the first drag-drop on a live board permanently severs the camp's link to the
+            // shared template — and the next pop has nothing to inherit. A template cloning
+            // from another template can't happen (only live boards clone), so this is only ever
+            // set on snapshots. Chains are not followed: a snapshot's origin is a template by
+            // construction, since setup here is what the event pointed at.
+            ClonedFromPartySetupId = setup.OwnerEventId == null ? setup.Id : setup.ClonedFromPartySetupId,
         };
 
         // old template id -> new clone entity, to remap signups + translate the request.
@@ -198,7 +205,6 @@ public static class EventPartyBoardEditService
         slot.MainJob = newMain;
         slot.SubJob = newSub;
         await db.SaveChangesAsync(cancellationToken);
-        await EventPartySignupService.ResolvePartyLeadershipAsync(db, eventId, slot.PartySetupPartyId, cancellationToken);
         return new EditResult(true, null);
     }
 
@@ -254,8 +260,6 @@ public static class EventPartyBoardEditService
         for (var i = 0; i < sourceSlots.Count; i++) { sourceSlots[i].SortOrder = i; }
 
         await db.SaveChangesAsync(cancellationToken);
-        await EventPartySignupService.ResolvePartyLeadershipAsync(db, eventId, sourcePartyId, cancellationToken);
-        await EventPartySignupService.ResolvePartyLeadershipAsync(db, eventId, targetPartyId, cancellationToken);
         return new EditResult(true, null);
     }
 
@@ -281,9 +285,8 @@ public static class EventPartyBoardEditService
             var src = await db.EventPartySlotSignups
                 .FirstOrDefaultAsync(s => s.EventId == eventId && s.PartySetupSlotId == fromId, cancellationToken);
             if (src is null) { return new EditResult(false, "That slot is no longer occupied."); }
-            var partyId = await EventPartySignupService.MoveSlotSignupToNoSlotAsync(db, eventId, src, startTime, cancellationToken);
+            await EventPartySignupService.MoveSlotSignupToNoSlotAsync(db, eventId, src, startTime, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
-            await EventPartySignupService.ResolvePartyLeadershipAsync(db, eventId, partyId, cancellationToken);
             return new EditResult(true, null);
         }
 
@@ -296,15 +299,12 @@ public static class EventPartyBoardEditService
         // Resolve the moving member's identity + job from their source slot signup, or
         // (if dragged from Also Attending) from their no-slot participation row.
         string? mAppUser = appUserId, mDiscord = discordUserId, mName = null, mRole = null, mMain = null, mSub = null;
-        int? sourcePartyId = null;
         if (fromSlotId is { } fid)
         {
             var src = await db.EventPartySlotSignups
                 .FirstOrDefaultAsync(s => s.EventId == eventId && s.PartySetupSlotId == fid, cancellationToken);
             if (src is null) { return new EditResult(false, "That slot is no longer occupied."); }
             (mAppUser, mDiscord, mName, mRole, mMain, mSub) = (src.AppUserId, src.DiscordUserId, src.CharacterName, src.Role, src.MainJob, src.SubJob);
-            sourcePartyId = await db.PartySetupSlots
-                .Where(s => s.Id == fid).Select(s => (int?)s.PartySetupPartyId).FirstOrDefaultAsync(cancellationToken);
         }
         else
         {
@@ -326,11 +326,6 @@ public static class EventPartyBoardEditService
         await EventPartySignupService.SyncParticipationAfterClaimAsync(db, ev, mAppUser, cancellationToken, mDiscord);
         await db.SaveChangesAsync(cancellationToken);
 
-        await EventPartySignupService.ResolvePartyLeadershipAsync(db, eventId, target.PartySetupPartyId, cancellationToken);
-        if (sourcePartyId is { } sp && sp != target.PartySetupPartyId)
-        {
-            await EventPartySignupService.ResolvePartyLeadershipAsync(db, eventId, sp, cancellationToken);
-        }
         return new EditResult(true, null);
     }
 
@@ -393,7 +388,6 @@ public static class EventPartyBoardEditService
             .Where(s => s.PartySetupPartyId == partyId).OrderBy(s => s.SortOrder).ToListAsync(cancellationToken);
         for (var i = 0; i < remaining.Count; i++) { remaining[i].SortOrder = i; }
         await db.SaveChangesAsync(cancellationToken);
-        await EventPartySignupService.ResolvePartyLeadershipAsync(db, eventId, partyId, cancellationToken);
         return new EditResult(true, null);
     }
 

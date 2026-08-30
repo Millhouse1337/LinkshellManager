@@ -15,9 +15,12 @@ import type {
   ActivityChartBoss,
   ActivityChartCreditInput,
   ActivityChartPopItem,
-  ActivityChartPopItemOption
+  ActivityChartPopItemOption,
+  ChartItemKind
 } from '../../discord/discord-activity.types';
 import { ChartHoldingsSectionComponent } from './chart-holdings-section.component';
+import { ChartKeyItemSectionComponent } from './chart-key-item-section.component';
+import { ChartWishlistSectionComponent } from './chart-wishlist-section.component';
 
 /** One heading and the cards under it. Local, like ChartsSectionOption in charts-tab.component.ts. */
 interface ChartBossGroup {
@@ -45,7 +48,13 @@ interface ChartConsolidatedItem {
  */
 @Component({
   selector: 'app-chart-board-section',
-  imports: [CommonModule, FormsModule, ChartHoldingsSectionComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ChartHoldingsSectionComponent,
+    ChartWishlistSectionComponent,
+    ChartKeyItemSectionComponent
+  ],
   templateUrl: './chart-board-section.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -211,8 +220,21 @@ export class ChartBoardSectionComponent {
 
   // ---- add / edit form ----
 
+  protected readonly features = computed(() => this.chart()?.features ?? {
+    popItems: true, dropItems: false, wishlist: false, keyItems: false
+  });
+
   protected readonly showForm = signal(false);
   protected readonly editingItemId = signal<number | null>(null);
+  /**
+   * Which kind the open form is adding. Sky and Sea offer two buttons that each open THIS form
+   * pre-set, rather than two always-open cards the way the website does it: two stacked forms inside
+   * a Discord iframe would push the boards off the bottom of the panel.
+   *
+   * On an edit it is the row's own kind, and the server ignores it there anyway - a row moves
+   * between bosses, never between kinds.
+   */
+  protected readonly formKind = signal<ChartItemKind>('Pop');
   // Signals rather than plain fields, unlike the three below them: the pop item picker is derived
   // from which boss is selected and from what is already in the box, so both have to be readable by
   // a computed. Bound one-way with an explicit (ngModelChange) so the write is visible.
@@ -236,8 +258,15 @@ export class ChartBoardSectionComponent {
    */
   protected readonly popItemOptions = computed<ActivityChartPopItemOption[]>(() => {
     const selected = this.formBoss();
-    return this.bosses().find(boss => boss.boss === selected)?.popItemOptions ?? [];
+    const card = this.bosses().find(boss => boss.boss === selected);
+    // Which list depends on what the form is adding: what is traded TO a boss and what falls OFF it
+    // are different questions with different answers, and they were sharing one box.
+    return (this.formKind() === 'Drop' ? card?.dropItemOptions : card?.popItemOptions) ?? [];
   });
+
+  /** "Pop item" or "Drop item" - the form's own label, so the template holds no branch. */
+  protected readonly itemLabel = computed(() =>
+    this.formKind() === 'Drop' ? 'Drop item' : 'Pop item');
 
   protected readonly picksPopItem = computed(() => this.popItemOptions().length > 0);
 
@@ -403,14 +432,24 @@ export class ChartBoardSectionComponent {
 
   // No boss argument any more: the per-card "Add one" buttons that used to preselect one are gone,
   // and the form opens on the board's first card like any other fresh add.
-  protected toggleForm(): void {
-    const opening = !this.showForm() || this.editingItemId() !== null;
+  /**
+   * Opens the form for one kind, or closes it if that kind's button is pressed again.
+   *
+   * Switching from the pop button to the drop button while the form is open RE-OPENS rather than
+   * closing: pressing "Add drop item" should always leave a drop form on screen.
+   */
+  protected toggleForm(kind: ChartItemKind = 'Pop'): void {
+    const opening = !this.showForm() || this.editingItemId() !== null || this.formKind() !== kind;
     this.resetForm();
+    this.formKind.set(kind);
     this.showForm.set(opening);
   }
 
   protected beginEdit(item: ActivityChartPopItem): void {
     this.editingItemId.set(item.id);
+    // The ROW's kind, so the picker offers the list it was created from. Set before formBoss, which
+    // popItemOptions reads through.
+    this.formKind.set(item.kind ?? 'Pop');
     this.formBoss.set(item.boss);
     this.formItemName.set(item.itemName);
     this.formHolder.set(item.heldByCharacterName ?? '');
@@ -425,6 +464,7 @@ export class ChartBoardSectionComponent {
 
   protected resetForm(): void {
     this.editingItemId.set(null);
+    this.formKind.set('Pop');
     this.formBoss.set(this.defaultBoss());
     this.formItemName.set('');
     this.formHolder.set('');
@@ -458,7 +498,9 @@ export class ChartBoardSectionComponent {
       // Membership ids rather than names, like the row editor: the server re-reads the name off the
       // roster, so a rename cannot orphan the credit. Always sent, including empty — on an edit this
       // list is the row's own credits preloaded, so sending it is what makes unticking one stick.
-      credits: this.formCreditInputs()
+      credits: this.formCreditInputs(),
+      // Honoured on add; ignored on update, where the row's own kind wins server-side.
+      kind: this.formKind()
     };
 
     const editingId = this.editingItemId();
@@ -492,8 +534,19 @@ export class ChartBoardSectionComponent {
     this.rewardsOpenBoss.update(open => (open === boss ? null : boss));
   }
 
+  /**
+   * The "who still needs this key item" drawer. A separate signal from rewardsOpenBoss so a finale
+   * card that has both can open one without closing the other.
+   */
+  protected readonly keyItemOpenBoss = signal<string | null>(null);
+
+  protected toggleKeyItem(boss: string): void {
+    this.keyItemOpenBoss.update(open => (open === boss ? null : boss));
+  }
+
   private closeAll(): void {
     this.cancelForm();
     this.rewardsOpenBoss.set(null);
+    this.keyItemOpenBoss.set(null);
   }
 }

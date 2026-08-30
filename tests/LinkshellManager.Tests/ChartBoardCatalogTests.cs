@@ -172,25 +172,28 @@ public class ChartBoardCatalogTests
     }
 
     /// <summary>
-    /// LinkshellCustomizeViewModel.TodMonsterGroups keeps its OWN copy of the eight farm NM names for
-    /// the "Hide ToD Mobs" picker — a UI catalog rather than a timing rule, which is why it is a copy
-    /// at all. A copy that DRIFTS hides a monster nothing tracks and leaves the real one visible.
+    /// The "Hide ToD Mobs" picker used to keep its OWN copy of the eight farm NM names, and this
+    /// test pinned that copy to HnmConfig so the two could not drift.
     ///
-    /// Compared as SETS on purpose: the picker is alphabetical for the UI and the chart is in path
-    /// order, and neither should be forced into the other's order.
+    /// The Sky NMs are out of the ToD tracker entirely now — off the seeded monster catalog, off the
+    /// ToD and create-event pickers — so there is nothing left to hide, and the group is gone. What
+    /// is worth pinning is the ABSENCE: re-adding a Sky name to the picker would offer a hide toggle
+    /// for a monster the tracker no longer lists, which reads as a bug in the tracker.
     ///
-    /// Only the two C# copies are reachable from here. The Activity's TWO_HOUR_TOD_MONSTERS and its
-    /// ToD picker group (discord-activity/src/app/home/activity-home.types.ts, twice) and the addon's
-    /// constants.lua hold the same eight names, guarded by nothing but a comment.
+    /// The chart is unaffected either way. Sky farm NMs are still cards on the Charts → Sky board;
+    /// only their ToD-side catalog entry went away.
     /// </summary>
     [Fact]
-    public void TheTodPickersSkyGroup_IsTheHnmConfigFarmNmSet()
+    public void TheTodPicker_NoLongerOffersTheSkyFarmNms()
     {
-        var picker = LinkshellCustomizeViewModel.TodMonsterGroups.Single(group => group.Label == "Sky NMs");
+        var offered = LinkshellCustomizeViewModel.TodMonsterGroups
+            .SelectMany(group => group.Names)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        Assert.Equal(
-            HnmConfig.SkyFarmNmOrder.OrderBy(name => name, StringComparer.Ordinal),
-            picker.Names.OrderBy(name => name, StringComparer.Ordinal));
+        foreach (var nm in HnmConfig.SkyFarmNmOrder)
+        {
+            Assert.DoesNotContain(nm, offered);
+        }
     }
 
     /// <summary>
@@ -490,10 +493,13 @@ public class ChartBoardCatalogTests
         }
 
         Assert.True(ChartBoardCatalog.Find(ChartBoardCatalog.Sky)!.HasPopItemOptions);
-        // Dynamis and Limbus track whatever a linkshell decides to track, so both forms stay free
-        // text and neither surface ships a picker for them.
+        // Dynamis and Limbus declare no pop items AND no longer offer the add form at all - members
+        // submit requests on those boards instead. The two facts are separate, which is exactly why
+        // AllowsPopItems is declared rather than inferred from this property.
         Assert.False(ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!.HasPopItemOptions);
         Assert.False(ChartBoardCatalog.Find(ChartBoardCatalog.Limbus)!.HasPopItemOptions);
+        Assert.False(ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!.AllowsPopItems);
+        Assert.False(ChartBoardCatalog.Find(ChartBoardCatalog.Limbus)!.AllowsPopItems);
     }
 
     [Theory]
@@ -917,6 +923,205 @@ public class ChartBoardCatalogTests
             Assert.True(actions.Contains(board.Key), $"ChartsController has no {board.Key}() action.");
         }
     }
+
+    // ---- features, drop items and key items -------------------------------------
+
+    /// <summary>
+    /// The whole per-board requirement in one assertion. Every one of these is a product decision
+    /// rather than a consequence of the data - Dynamis declares no pop items AND takes no pop items,
+    /// but HENM declares none and still offers the form - so nothing here is derivable and all of it
+    /// is worth pinning.
+    /// </summary>
+    [Fact]
+    public void EveryBoardDeclaresItsFeatures()
+    {
+        Assert.Equal(
+            ChartBoardFeatures.PopItems | ChartBoardFeatures.DropItems,
+            ChartBoardCatalog.Find(ChartBoardCatalog.Sky)!.Features);
+        Assert.Equal(
+            ChartBoardFeatures.PopItems | ChartBoardFeatures.DropItems,
+            ChartBoardCatalog.Find(ChartBoardCatalog.Sea)!.Features);
+        Assert.Equal(
+            ChartBoardFeatures.Wishlist | ChartBoardFeatures.KeyItems,
+            ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!.Features);
+        Assert.Equal(
+            ChartBoardFeatures.Wishlist,
+            ChartBoardCatalog.Find(ChartBoardCatalog.Limbus)!.Features);
+        Assert.Equal(
+            ChartBoardFeatures.PopItems | ChartBoardFeatures.Wishlist,
+            ChartBoardCatalog.Find(ChartBoardCatalog.Henm)!.Features);
+    }
+
+    // Data with no flag renders NOTHING, silently: the surfaces branch on the flag, never on whether
+    // the list happens to be populated. These two are the only way that mistake is ever loud.
+    [Fact]
+    public void OnlyBoardsThatAllowDropItemsDeclareAny()
+    {
+        foreach (var board in ChartBoardCatalog.Boards)
+        {
+            if (board.AllowsDropItems) continue;
+            Assert.False(
+                board.HasDropItemOptions,
+                $"{board.Key} declares drop items but does not offer the drop form.");
+        }
+    }
+
+    [Fact]
+    public void OnlyBoardsThatAllowKeyItemsDeclareAny()
+    {
+        foreach (var board in ChartBoardCatalog.Boards)
+        {
+            if (board.AllowsKeyItems) continue;
+            Assert.Empty(board.KeyItems);
+        }
+    }
+
+    [Fact]
+    public void EveryDropItemBelongsToACardOnItsBoard()
+    {
+        foreach (var board in ChartBoardCatalog.Boards)
+        {
+            foreach (var boss in board.Bosses)
+            {
+                foreach (var option in boss.DropItems ?? Array.Empty<ChartPopItemOption>())
+                {
+                    Assert.False(string.IsNullOrWhiteSpace(option.Name));
+                    Assert.Contains(
+                        board.DropItemsFor(boss.Name),
+                        listed => string.Equals(listed.Name, option.Name, StringComparison.Ordinal));
+                    Assert.Same(option, board.ItemOptionsFor(boss.Name, ChartItemKinds.Drop)
+                        .First(listed => listed.Name == option.Name));
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// A name in BOTH lists on one boss makes NormalizeItemName kind-dependent for the same string,
+    /// so the spelling a row is stored under would depend on which form an officer happened to use.
+    /// That is a coin flip at edit time, and it is not worth the convenience of listing it twice.
+    /// </summary>
+    [Fact]
+    public void NoBoardListsAnItemAsBothAPopAndADrop()
+    {
+        foreach (var board in ChartBoardCatalog.Boards)
+        {
+            foreach (var boss in board.Bosses)
+            {
+                var pops = (boss.PopItems ?? Array.Empty<ChartPopItemOption>())
+                    .Select(option => option.Name);
+                var drops = (boss.DropItems ?? Array.Empty<ChartPopItemOption>())
+                    .Select(option => option.Name);
+
+                Assert.Empty(pops.Intersect(drops, StringComparer.OrdinalIgnoreCase));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The eleven permanent Dynamis key items, in the order the grid draws its columns.
+    ///
+    /// Order is pinned as well as membership: the grid reads left to right as progression, and a
+    /// list reordered by a later edit would still pass a set comparison while making the page lie
+    /// about what comes first.
+    /// </summary>
+    [Fact]
+    public void DynamisKeyItems_AreTheElevenNamed_InProgressionOrder()
+    {
+        var dynamis = ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!;
+
+        Assert.Equal(
+            new[]
+            {
+                "Vial of Shrouded Sand",
+                "Hydra Corps Command Scepter",
+                "Hydra Corps Eyeglass",
+                "Hydra Corps Lantern",
+                "Hydra Corps Tactical Map",
+                "Hydra Corps Insignia",
+                "Hydra Corps Battle Standard",
+                "Dynamis - Valkurm Sliver",
+                "Dynamis - Buburimu Sliver",
+                "Dynamis - Qufim Sliver",
+                "Dynamis - Tavnazia Sliver",
+            },
+            dynamis.KeyItems.Select(item => item.Name).ToArray());
+    }
+
+    /// <summary>
+    /// Key item names are STORED on ChartMemberKeyItem.KeyItemName and compared, so an en dash that
+    /// survives a copy-paste into one file and not another produces a grid column nothing matches -
+    /// which reads as data loss, with no error anywhere. The Sliver names are the ones at risk.
+    /// </summary>
+    [Fact]
+    public void KeyItemNamesAreAsciiOnly()
+    {
+        foreach (var board in ChartBoardCatalog.Boards)
+        {
+            foreach (var item in board.KeyItems)
+            {
+                Assert.All(item.Name, character => Assert.True(
+                    character < 128,
+                    $"'{item.Name}' carries a non-ASCII character (U+{(int)character:X4})."));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every zone key item names a real card, and AT MOST ONE per board names none. The board-level
+    /// entry is a deliberate exception - Vial of Shrouded Sand is earned outside the zones - but a
+    /// second one is far more likely to be a typo in a Boss than a second prerequisite.
+    /// </summary>
+    [Fact]
+    public void EveryZoneKeyItemNamesACardOnItsBoard_AndAtMostOneIsBoardLevel()
+    {
+        foreach (var board in ChartBoardCatalog.Boards)
+        {
+            var boardLevel = 0;
+            foreach (var item in board.KeyItems)
+            {
+                if (item.Boss is null)
+                {
+                    boardLevel++;
+                    continue;
+                }
+
+                Assert.True(
+                    board.Find(item.Boss) is not null,
+                    $"{board.Key} key item '{item.Name}' names '{item.Boss}', which is not a card on it.");
+                Assert.Same(item, board.KeyItemFor(item.Boss));
+            }
+
+            Assert.True(boardLevel <= 1, $"{board.Key} declares {boardLevel} board-level key items.");
+        }
+
+        // The exception, stated: a column in the grid, and no card badge anywhere.
+        var dynamis = ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!;
+        Assert.Null(dynamis.KeyItems[0].Boss);
+        Assert.Equal("Hydra Corps Command Scepter", dynamis.KeyItemFor("San d'Oria")!.Name);
+    }
+
+    // Unlike NormalizeItemName beside it, this one REJECTS: the grid draws one column per catalog
+    // entry, so a name the catalog does not have writes a row that appears in no column at all.
+    [Theory]
+    [InlineData("  hydra corps lantern ", "Hydra Corps Lantern")]
+    [InlineData("DYNAMIS - QUFIM SLIVER", "Dynamis - Qufim Sliver")]
+    [InlineData("Vial of Shrouded Sand", "Vial of Shrouded Sand")]
+    public void NormalizeKeyItemName_CanonicalisesWhatItKnows(string typed, string expected) =>
+        Assert.Equal(expected, ChartBoardCatalog.NormalizeKeyItemName(ChartBoardCatalog.Dynamis, typed));
+
+    [Theory]
+    [InlineData("Hydra Corps Monocle")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void NormalizeKeyItemName_RejectsUnknownNames(string? typed) =>
+        Assert.Null(ChartBoardCatalog.NormalizeKeyItemName(ChartBoardCatalog.Dynamis, typed));
+
+    // A board that tracks none has nothing to canonicalise against, so every name is unknown there.
+    [Fact]
+    public void NormalizeKeyItemName_IsNullOnABoardThatTracksNone() =>
+        Assert.Null(ChartBoardCatalog.NormalizeKeyItemName(
+            ChartBoardCatalog.Limbus, "Hydra Corps Lantern"));
 
     /// <summary>Walks up from the test binary to the repo root, which holds the app's csproj.</summary>
     private static string FindRepoPath(string relative)

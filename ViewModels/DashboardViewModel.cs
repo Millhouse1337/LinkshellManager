@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Utils;
 
 namespace LinkshellManagerDiscordApp.ViewModels;
 
@@ -10,6 +11,15 @@ public class DashboardViewModel
     // Cache-busted banner image URL for the selected linkshell, or null when none.
     public string? BannerUrl { get; set; }
     public List<AppUserLinkshell> Members { get; set; } = new();
+    // AppUserIds that have actually opened/synced the app (a DiscordActivityUser row
+    // points at them) - drives the roster's "App" tag, the same one the Discord
+    // Activity roster shows. An AppUserId alone only means an account exists.
+    public HashSet<string> SyncedAppUserIds { get; set; } = new(StringComparer.Ordinal);
+    // Leveled jobs per roster row (keyed by AppUserLinkshell id) behind the roster's
+    // "Show Jobs" toggle. Missing for members who never linked an app account.
+    public Dictionary<int, JobsRosterEntry> MemberJobs { get; set; } = new();
+    // Catalog job names in display order; every entry's arrays align to it.
+    public IReadOnlyList<string> JobCatalog { get; } = EventJobCatalog.MainJobOptions;
     public List<Event> Events { get; set; } = new();
     public int TotalMembers { get; set; }
     public int UpcomingEvents { get; set; }
@@ -22,10 +32,6 @@ public class DashboardViewModel
     public bool EnableRevenue { get; set; } = true;
     public bool EnableToDs { get; set; } = true;
     public bool EnableHnmSection { get; set; } = true;
-
-    // SkySeaDynamis | HnmOnly | Both — drives HNM-content visibility (the HNM
-    // Claims card is hidden for SkySeaDynamis, which runs no HNM).
-    public string? LinkshellType { get; set; }
 
     public List<TodTrackerEntry> TodTracker { get; set; } = new();
     public List<HnmClaimEntry> HnmClaims { get; set; } = new();
@@ -45,6 +51,7 @@ public class AnnouncementSummary
 {
     public string Title { get; init; } = string.Empty;
     public string? Details { get; init; }
+    public string? Category { get; init; }
     public string RelativeTime { get; init; } = string.Empty;
     public string? Author { get; init; }
 }
@@ -53,6 +60,7 @@ public class RuleSummary
 {
     public string Title { get; init; } = string.Empty;
     public string? Details { get; init; }
+    public string? Category { get; init; }
     public string RelativeTime { get; init; } = string.Empty;
     public string? Author { get; init; }
 }

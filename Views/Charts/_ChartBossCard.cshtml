@@ -9,6 +9,9 @@
     // Theme keys are unique across the WHOLE catalog, so this is a stable per-card element id even
     // on a board with two finales. Using the boss name would break on spaces and apostrophes.
     var rewardsId = $"chart-rewards-{boss.ThemeKey}";
+    // Same reasoning, same guarantee: "San d'Oria" would not survive as an element id.
+    var keyItemId = $"chart-keyitem-{boss.ThemeKey}";
+    var tracksKeyItem = !string.IsNullOrWhiteSpace(boss.KeyItemName);
 }
 
 @* Every kind is a grid card of the same width; kind picks the chrome only — the tag (stock vs item
@@ -34,6 +37,12 @@
                 {
                     <div class="chart-card__subtitle">@boss.Subtitle</div>
                 }
+                @* The key item this card grants. A card that grants none renders nothing - the one
+                   board-level key item belongs to no card at all, so it lives only in the grid. *@
+                @if (tracksKeyItem)
+                {
+                    <div class="chart-card__subtitle chart-card__keyitem">@boss.KeyItemName</div>
+                }
             </div>
         </div>
         @* A Mini NM is farmed rather than popped, so stock is the headline, not item count. *@
@@ -41,11 +50,26 @@
         {
             <span class="tag chart-count">@boss.TotalQuantity held</span>
         }
+        else if (!Model.Board.AllowsPopItems && !Model.Board.AllowsDropItems)
+        {
+            @* A board that tracks no items has nothing to count here. Dynamis and Limbus headline
+               outstanding requests instead, which is what those cards are about now. *@
+            <span class="tag chart-count">@boss.PendingRequestCount requested</span>
+        }
         else
         {
             <span class="tag chart-count">@boss.TotalItems @(boss.TotalItems == 1 ? "Item" : "Items")</span>
         }
     </div>
+
+    @* Requests tied to THIS card. Board-level ones ("anywhere") count toward none, which is exactly
+       what leaving the zone blank said. Suppressed on a board whose header already shows the count. *@
+    @if (boss.PendingRequestCount > 0 && (Model.Board.AllowsPopItems || Model.Board.AllowsDropItems))
+    {
+        <div class="chart-card__requests">
+            <span class="tag accent">@boss.PendingRequestCount requested</span>
+        </div>
+    }
 
     <partial name="_ChartBossTable" model="Model" />
 
@@ -86,5 +110,39 @@
             <span>Total Items: <strong>@boss.TotalItems</strong></span>
             <span>Total Qty: <strong>@boss.TotalQuantity</strong></span>
         </div>
+    }
+
+    @* ---- Key item progress, on the card that grants it.
+         A count plus a drawer naming exactly who is still short, because "3 of 14" answers how far
+         along the linkshell is and the list answers who to chase - and only the second one is
+         actionable. The drawer reuses the page's generic .chart-toggle / .chart-drawer script, so a
+         card is only ever as tall as its neighbours when it is closed.
+
+         The stored fact is "has it"; this list is its inverse against the live roster, which is why
+         somebody who joins tomorrow appears here with no backfill. ---- *@
+    @if (tracksKeyItem)
+    {
+        <div class="chart-card__footer chart-rewards__bar">
+            <button type="button" class="chart-rewards__toggle chart-toggle" data-target="@keyItemId">
+                <span class="chart-rewards__chevron">›</span> Key item
+            </button>
+            <strong>@boss.KeyItemHaveCount of @boss.KeyItemTotalMembers have it</strong>
+        </div>
+        <aside id="@keyItemId" class="chart-rewards chart-drawer" hidden>
+            @if (boss.KeyItemMissing.Count == 0)
+            {
+                <div class="chart-rewards__note">Everybody on the roster has @boss.KeyItemName.</div>
+            }
+            else
+            {
+                <div class="chart-rewards__note">Still needed by @boss.KeyItemMissing.Count:</div>
+                <ul>
+                    @foreach (var name in boss.KeyItemMissing)
+                    {
+                        <li><span>◈</span> @name</li>
+                    }
+                </ul>
+            }
+        </aside>
     }
 </article>

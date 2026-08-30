@@ -12,7 +12,7 @@ import {
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
 import { TAB_NAMES, type TabName } from './activity-home.types';
-import { primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
+import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { ChartsTabComponent } from './tabs/charts-tab.component';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
@@ -280,6 +280,7 @@ export class ActivityHomeComponent {
   }
 
   protected readonly rankIcon = rankIcon;
+  protected readonly ADMIN_BADGE = ADMIN_BADGE;
 
   protected appUserRoleLabel(): string {
     const linkshells = this.activity.overview()?.linkshells ?? [];
@@ -379,10 +380,6 @@ export class ActivityHomeComponent {
   protected isDkpModeEnabled(): boolean {
     return this.primaryLootStructure() !== 'LootCouncil';
   }
-
-  // Linkshell-type gating used to live here as isHnmOnly()/isSkySeaDynamis(), one per tab. Both
-  // tabs are now one, so the surviving check (attendanceApplies) sits in activity-home.helpers.ts
-  // where the Event System tab and the refresh timer can share it.
 
   // ----- Tab badges -----
 

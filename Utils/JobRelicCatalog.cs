@@ -1,8 +1,10 @@
 namespace LinkshellManagerDiscordApp.Utils;
 
-// The relic weapons each classic-15 job can equip, catalog-aligned with
-// EventJobCatalog.MainJobOptions (index 0 = WAR … 14 = SMN). Mirrors the Angular
-// JOB_RELIC_OPTIONS in discord-activity's event-job-options.ts — keep in sync.
+// The relic weapons each job can equip, catalog-aligned with
+// EventJobCatalog.MainJobOptions (index 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP).
+// The ToAU jobs have no relic weapon, so their entries are empty and the profile
+// hides the relic block for them. Mirrors the Angular JOB_RELIC_OPTIONS in
+// discord-activity's event-job-options.ts — keep in sync.
 // Used by the web profile's relic "add multiple" picker.
 public static class JobRelicCatalog
 {
@@ -23,5 +25,8 @@ public static class JobRelicCatalog
         new[] { "Kikoku" },                         // NIN
         new[] { "Gungnir" },                        // DRG
         new[] { "Claustrum" },                      // SMN
+        Array.Empty<string>(),                      // BLU — no relic
+        Array.Empty<string>(),                      // COR — no relic
+        Array.Empty<string>(),                      // PUP — no relic
     };
 }

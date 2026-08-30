@@ -15,6 +15,16 @@ public sealed class GlobalSettingsService
     // Key stored in the AppSettings table for the addon kill-switch.
     public const string AddonDisabledKey = "addon.disabled";
 
+    // Key stored in the AppSettings table for the server-wide Claim Shield switch. Separate from
+    // the addon kill-switch above: this turns off ONE addon feature everywhere without taking the
+    // whole addon down with it.
+    public const string ClaimShieldDisabledKey = "claimshield.disabled";
+
+    // Key stored in the AppSettings table for the super-admin permission override.
+    // When "true", a super admin gets every permission in every linkshell they are
+    // a member of. See AdminOverrideService.
+    public const string AdminOverrideKey = "admin.override";
+
     private const string CachePrefix = "globalsetting:";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
 
@@ -29,9 +39,32 @@ public sealed class GlobalSettingsService
 
     // True when a super admin has globally disabled the addon. Cached briefly
     // because this is checked on every addon API request.
-    public async Task<bool> IsAddonGloballyDisabledAsync(CancellationToken cancellationToken = default)
+    public Task<bool> IsAddonGloballyDisabledAsync(CancellationToken cancellationToken = default)
+        => GetBoolAsync(AddonDisabledKey, cancellationToken);
+
+    public Task SetAddonGloballyDisabledAsync(bool disabled, CancellationToken cancellationToken = default)
+        => SetBoolAsync(AddonDisabledKey, disabled, cancellationToken);
+
+    // True when a super admin has globally switched Claim Shield off. Read on the addon's /me
+    // sweep, so it is cached on the same short TTL as the rest.
+    public Task<bool> IsClaimShieldGloballyDisabledAsync(CancellationToken cancellationToken = default)
+        => GetBoolAsync(ClaimShieldDisabledKey, cancellationToken);
+
+    public Task SetClaimShieldGloballyDisabledAsync(bool disabled, CancellationToken cancellationToken = default)
+        => SetBoolAsync(ClaimShieldDisabledKey, disabled, cancellationToken);
+
+    // True when the super-admin permission override is switched on. Cached briefly
+    // because this is checked on every linkshell permission check.
+    public Task<bool> IsAdminOverrideEnabledAsync(CancellationToken cancellationToken = default)
+        => GetBoolAsync(AdminOverrideKey, cancellationToken);
+
+    public Task SetAdminOverrideEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
+        => SetBoolAsync(AdminOverrideKey, enabled, cancellationToken);
+
+    // A missing row reads as false, so a setting that has never been toggled is off.
+    private async Task<bool> GetBoolAsync(string key, CancellationToken cancellationToken)
     {
-        var cacheKey = CachePrefix + AddonDisabledKey;
+        var cacheKey = CachePrefix + key;
         if (_cache.TryGetValue(cacheKey, out bool cached))
         {
             return cached;
@@ -39,29 +72,29 @@ public sealed class GlobalSettingsService
 
         var raw = await _dbContext.AppSettings
             .AsNoTracking()
-            .Where(s => s.Key == AddonDisabledKey)
+            .Where(s => s.Key == key)
             .Select(s => s.Value)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var disabled = string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
-        _cache.Set(cacheKey, disabled, CacheTtl);
-        return disabled;
+        var value = string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+        _cache.Set(cacheKey, value, CacheTtl);
+        return value;
     }
 
-    public async Task SetAddonGloballyDisabledAsync(bool disabled, CancellationToken cancellationToken = default)
+    private async Task SetBoolAsync(string key, bool value, CancellationToken cancellationToken)
     {
         var setting = await _dbContext.AppSettings
-            .FirstOrDefaultAsync(s => s.Key == AddonDisabledKey, cancellationToken);
+            .FirstOrDefaultAsync(s => s.Key == key, cancellationToken);
         if (setting is null)
         {
-            setting = new AppSetting { Key = AddonDisabledKey };
+            setting = new AppSetting { Key = key };
             _dbContext.AppSettings.Add(setting);
         }
 
-        setting.Value = disabled ? "true" : "false";
+        setting.Value = value ? "true" : "false";
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Invalidate so the new state is visible immediately on this instance.
-        _cache.Remove(CachePrefix + AddonDisabledKey);
+        _cache.Remove(CachePrefix + key);
     }
 }

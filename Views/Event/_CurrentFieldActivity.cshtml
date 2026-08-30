@@ -56,6 +56,5 @@
    rather than behind its own page. *@
 @if (Model.Attendance is not null)
 {
-    @await Html.PartialAsync("../WindowEvents/_AttendanceSections", Model.Attendance,
-        new ViewDataDictionary(ViewData) { ["AttendanceSection"] = "live" })
+    @await Html.PartialAsync("../WindowEvents/_AttendanceSections", Model.Attendance)
 }

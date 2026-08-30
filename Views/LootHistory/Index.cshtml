@@ -8,7 +8,7 @@
     <div>
         <h1 class="page-title">Loot History</h1>
         <div class="page-sub">
-            <span>All recorded loot · ToDs and Events</span>
+            <span>All recorded loot</span>
             @if (!string.IsNullOrWhiteSpace(Model.SelectedLinkshellName))
             {
                 <span>·</span>
@@ -42,7 +42,6 @@
                            placeholder="Filter by winner or item name…" />
                     <div class="muted" style="font-size:11px;margin-top:6px">
                         Matches a winner's name or an item name as you type — no button needed.
-                        Use the Source dropdown by the list to limit to ToDs or Events.
                     </div>
                 </div>
             </div>
@@ -53,13 +52,6 @@
         <div class="card">
             <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
                 <div class="card-title">Loot entries <span class="tag">@Model.TotalCount</span></div>
-                <div class="field" style="margin:0;min-width:150px">
-                    <select class="form-select" id="source" aria-label="Filter by source">
-                        @if (Model.SourceFilter == "all") { <option value="all" selected>All sources</option> } else { <option value="all">All sources</option> }
-                        @if (Model.SourceFilter == "tod") { <option value="tod" selected>ToDs</option> } else { <option value="tod">ToDs</option> }
-                        @if (Model.SourceFilter == "event") { <option value="event" selected>Events</option> } else { <option value="event">Events</option> }
-                    </select>
-                </div>
             </div>
             @if (Model.SelectedLinkshellId is null || Model.SelectedLinkshellId == 0)
             {
@@ -155,17 +147,13 @@
                     <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--border)">
                         @if (Model.PageNumber > 1)
                         {
-                            <a class="btn sm" asp-action="Index"
-                               asp-route-source="@Model.SourceFilter"
-                               asp-route-q="@Model.QueryFilter"
+                            <a class="btn sm" asp-action="Index"                               asp-route-q="@Model.QueryFilter"
                                asp-route-page="@(Model.PageNumber - 1)">Prev</a>
                         }
                         <span class="muted" style="font-size:12px">Page @Model.PageNumber of @Model.TotalPages</span>
                         @if (Model.PageNumber < Model.TotalPages)
                         {
-                            <a class="btn sm" asp-action="Index"
-                               asp-route-source="@Model.SourceFilter"
-                               asp-route-q="@Model.QueryFilter"
+                            <a class="btn sm" asp-action="Index"                               asp-route-q="@Model.QueryFilter"
                                asp-route-page="@(Model.PageNumber + 1)">Next</a>
                         }
                     </div>
@@ -178,7 +166,6 @@
 <script nonce="@Html.CspNonce()">
     (function () {
         var q = document.getElementById('q');
-        var source = document.getElementById('source');
 
         // Live filtering without an "Apply" button: rebuild the query string
         // and navigate. A normal GET keeps server-side paging correct, and
@@ -186,8 +173,6 @@
         // (No <form> wrapper — the per-row delete forms can't be nested.)
         function applyFilters() {
             var params = new URLSearchParams();
-            var sv = source ? source.value : 'all';
-            if (sv && sv !== 'all') { params.set('source', sv); }
             var qv = q ? q.value.trim() : '';
             if (qv) { params.set('q', qv); }
             var qs = params.toString();
@@ -214,10 +199,6 @@
                 var v = q.value; q.value = ''; q.value = v;
             }
         }
-        if (source) {
-            source.addEventListener('change', applyFilters);
-        }
-
         // CSP is nonce-only (no inline handlers), so the delete confirmation
         // is wired here rather than via an onsubmit attribute. Capture phase
         // so it runs before the form's default submit.

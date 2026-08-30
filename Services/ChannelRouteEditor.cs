@@ -31,12 +31,18 @@ public sealed class ChannelRouteEditor
     private readonly ApplicationDbContext _db;
     private readonly DiscordTodBoardQueue _todBoardQueue;
     private readonly DkpSheetPostQueue _dkpSheetQueue;
+    private readonly MonsterTimingResolver _monsterTimings;
 
-    public ChannelRouteEditor(ApplicationDbContext db, DiscordTodBoardQueue todBoardQueue, DkpSheetPostQueue dkpSheetQueue)
+    public ChannelRouteEditor(
+        ApplicationDbContext db,
+        DiscordTodBoardQueue todBoardQueue,
+        DkpSheetPostQueue dkpSheetQueue,
+        MonsterTimingResolver monsterTimings)
     {
         _db = db;
         _todBoardQueue = todBoardQueue;
         _dkpSheetQueue = dkpSheetQueue;
+        _monsterTimings = monsterTimings;
     }
 
     // Persists the desired routes for a linkshell. Returns null on success, or a
@@ -52,6 +58,11 @@ public sealed class ChannelRouteEditor
         var valid = edits
             .Where(e => IsSnowflake(e.ChannelId))
             .ToList();
+
+        // This linkshell's monster catalog (built-ins + its own custom monsters), used to
+        // canonicalise the per-route HNM narrowing below. Loaded once for the whole save.
+        var allowedMonsters = (await _monsterTimings.GetMapAsync(linkshellId, cancellationToken))
+            .EventMonsterOptions;
 
         // One route per non-event post type (events may span several routes via
         // their type filter, so they're exempt).
@@ -109,7 +120,7 @@ public sealed class ChannelRouteEditor
             route.PostTodBoard = edit.PostTodBoard;
             route.PostDkpSheet = edit.PostDkpSheet;
             route.EventTypeFilter = filter;
-            route.HnmMonsterFilter = BuildHnmMonsterFilter(edit);
+            route.HnmMonsterFilter = BuildHnmMonsterFilter(edit, allowedMonsters);
         }
 
         // Anything not in the desired set is removed.
@@ -157,7 +168,7 @@ public sealed class ChannelRouteEditor
     // Pipe-delimited monster names, validated against the supported list, de-duped. Null
     // unless this route posts events AND includes HNM (the filter only narrows HNM routing,
     // so it's ignored — and cleared — when the route doesn't catch HNM).
-    private static string? BuildHnmMonsterFilter(ChannelRouteEdit edit)
+    private static string? BuildHnmMonsterFilter(ChannelRouteEdit edit, IReadOnlyList<string> allowedMonsters)
     {
         var catchesHnm = edit.PostEvents
             && edit.EventTypeFilter is not null
@@ -166,11 +177,23 @@ public sealed class ChannelRouteEditor
         {
             return null;
         }
-        var known = new HashSet<string>(TodManagerViewModel.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
+        // Canonicalised against the LINKSHELL's catalog, and anything it doesn't recognise is kept
+        // as typed rather than dropped.
+        //
+        // This used to filter against the compile-time list and silently discard the rest, which
+        // meant a route narrowed to a monster the linkshell had added itself lost its filter on the
+        // next save — and, worse, a filter that loses every entry returns null, which reads as
+        // "no narrowing" and quietly widens the route to every HNM. Whatever an officer picked is
+        // what a route should route on; the picker is what decides which names are offerable.
+        var canonical = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var option in allowedMonsters)
+        {
+            if (!string.IsNullOrWhiteSpace(option)) canonical[option.Trim()] = option.Trim();
+        }
         var picked = edit.HnmMonsterFilter
             .Select(m => m?.Trim())
-            .Where(m => !string.IsNullOrEmpty(m) && known.Contains(m!))
-            .Select(m => TodManagerViewModel.SupportedMonsters.First(v => string.Equals(v, m, StringComparison.OrdinalIgnoreCase)))
+            .Where(m => !string.IsNullOrEmpty(m))
+            .Select(m => canonical.TryGetValue(m!, out var match) ? match : m!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         return picked.Count == 0 ? null : string.Join('|', picked);

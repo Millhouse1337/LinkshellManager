@@ -130,6 +130,10 @@ public sealed partial class ActivityDataController
                 .ToListAsync(cancellationToken))
                 .ToHashSet(StringComparer.Ordinal);
 
+        // Whether to badge super-admin rows with ADMIN. One cached bool for the whole
+        // roster — AppUser is already Included, so this costs no extra query.
+        var adminOverrideEnabled = await _adminOverride.IsEnabledAsync(cancellationToken);
+
         // Member Status is now the single source of truth (the attendance rule
         // auto-drives Active/Inactive at close — see MemberActivityService), so the
         // roster just surfaces Status; no separate computed activity flag.
@@ -154,7 +158,8 @@ public sealed partial class ActivityDataController
                     link.AppUserId != null ? streaks.GetValueOrDefault(link.AppUserId).Credit : 0,
                     link.AppUserId != null ? streaks.GetValueOrDefault(link.AppUserId).Absent : 0,
                     IsPlaceholder: link.AppUser?.IsPlaceholder ?? false,
-                    HasSyncedActivity: link.AppUserId != null && syncedAppUserIds.Contains(link.AppUserId)))
+                    HasSyncedActivity: link.AppUserId != null && syncedAppUserIds.Contains(link.AppUserId),
+                    IsAdmin: adminOverrideEnabled && (link.AppUser?.IsSuperAdmin ?? false)))
                 .ToList()));
     }
 
@@ -246,15 +251,6 @@ public sealed partial class ActivityDataController
             linkshell.LootStructure = NormalizeLootStructure(requestedStructure);
         }
 
-        if (!string.IsNullOrWhiteSpace(request.LinkshellType))
-        {
-            if (!LinkshellTypes.IsValid(request.LinkshellType.Trim()))
-            {
-                return BadRequest(new { error = "Linkshell Type must be SkySeaDynamis, HnmOnly, or Both." });
-            }
-            linkshell.LinkshellType = LinkshellTypes.Normalize(request.LinkshellType);
-        }
-
         if (request.EnableHnmSection.HasValue) linkshell.EnableHnmSection = request.EnableHnmSection.Value;
         if (request.EnableMissions.HasValue) linkshell.EnableMissions = request.EnableMissions.Value;
         if (request.EnableAuctions.HasValue) linkshell.EnableAuctions = request.EnableAuctions.Value;
@@ -281,10 +277,9 @@ public sealed partial class ActivityDataController
         {
             linkshell.HiddenTodMonsters = SerializeHiddenTodMonsters(request.HiddenTodMonsters);
         }
-        if (request.TodMonsterTimings is not null)
-        {
-            linkshell.TodMonsterTimings = SerializeTodMonsterTimings(request.TodMonsterTimings);
-        }
+        // (TodMonsterTimings was written here. Per-monster setups live in the LinkshellMonsterTimings
+        // table now and save through their own endpoint; the column is kept, unwritten, only so
+        // LinkshellMonsterTimingProvisioner can import a linkshell's old values on first seed.)
         // Member activity tracking (null = leave unchanged). Thresholds clamp to >= 1
         // to match the web Customize page and MemberActivityService's own guard.
         if (request.EnableActivityTracking.HasValue)
@@ -294,14 +289,6 @@ public sealed partial class ActivityDataController
         if (request.OutsidePartySignupEnabled.HasValue)
         {
             linkshell.OutsidePartySignupEnabled = request.OutsidePartySignupEnabled.Value;
-        }
-        if (request.FillAlliancesInOrder.HasValue)
-        {
-            linkshell.FillAlliancesInOrder = request.FillAlliancesInOrder.Value;
-        }
-        if (request.HnmOutsideSignupEnabled.HasValue)
-        {
-            linkshell.HnmOutsideSignupEnabled = request.HnmOutsideSignupEnabled.Value;
         }
         if (request.UseComponentsV2Boards.HasValue)
         {
@@ -721,7 +708,7 @@ public sealed partial class ActivityDataController
             eventTypes = EventTypeVocabulary.All,
             // HNM monster picklist for the per-monster route narrowing (shown when a route
             // includes HNM). Same canonical list the create-event monster dropdown uses.
-            monsterOptions = TodManagerViewModel.SupportedMonsters,
+            monsterOptions = (await _monsterTimings.GetMapAsync(linkshellId, cancellationToken)).EventMonsterOptions,
             routes = routes.Select(route => new
             {
                 id = route.Id,
@@ -803,7 +790,8 @@ public sealed partial class ActivityDataController
         }
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!IsLeader(membership))
+        if (membership is null ||
+            !(IsLeader(membership) || await _adminOverride.IsActiveForAsync(appUser, cancellationToken)))
         {
             return Forbid();
         }

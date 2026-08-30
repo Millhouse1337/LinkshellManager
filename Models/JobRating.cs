@@ -9,7 +9,7 @@ namespace LinkshellManagerDiscordApp.Models;
 // rater gets at most one row per (linkshell, target, job) — re-rating upserts it.
 //
 // JobIndex is the FFXI job's position in EventJobCatalog.MainJobOptions /
-// PROFILE_JOB_OPTIONS (0 = WAR … 14 = SMN) — the same catalog the profile job
+// PROFILE_JOB_OPTIONS (0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP) — the same catalog the profile job
 // grid uses. CharacterSlot selects which of the target's characters the rating is
 // for (0 = main, 1 = alt 1, 2 = alt 2). A JobIndex of PlayerCommentJobIndex (-1)
 // is the sentinel "player-level" row carrying the rater's free-text comment about

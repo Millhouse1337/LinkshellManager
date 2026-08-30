@@ -47,8 +47,12 @@ public sealed partial class ActivityDataController
         // Only a Leader may remove another Leader. Officers (with CanManageMembers)
         // must not be able to oust the Leader, otherwise they could leave the
         // linkshell leaderless and escalate themselves into the role.
+        // An active super-admin override counts as Leader for this rail. The
+        // last-Leader check below still applies — a leaderless linkshell is
+        // unrecoverable, so that one is data integrity rather than permission.
         var targetIsLeader = string.Equals(targetMembership.Rank, "Leader", StringComparison.OrdinalIgnoreCase);
-        var actorIsLeader = string.Equals(currentMembership!.Rank, "Leader", StringComparison.OrdinalIgnoreCase);
+        var actorIsLeader = string.Equals(currentMembership!.Rank, "Leader", StringComparison.OrdinalIgnoreCase)
+            || await _adminOverride.IsActiveForAsync(appUser, cancellationToken);
         if (targetIsLeader && !actorIsLeader)
         {
             return Forbid();

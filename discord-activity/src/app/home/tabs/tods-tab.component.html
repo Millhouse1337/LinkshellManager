@@ -30,8 +30,14 @@
                   @if (group.latest.hq) {
                     <span class="tag accent">HQ</span>
                   }
-                  @if (group.history.length > 0) {
-                    <span class="tag default num">{{ group.history.length + 1 }}</span>
+                  <!-- Which spawn window it popped on. This slot used to hold a bare ToD COUNT
+                       (history + 1), which sat between Claimed and HQ reading like it belonged to
+                       them and duplicated the "History (n)" button below. The window is the thing
+                       worth seeing here, and End Camp now records it on every windowed camp.
+                       Absent on monsters with no window grid (Sky gods, farm NMs) and on ToDs
+                       logged before it was captured — no badge rather than a guessed "Window 1". -->
+                  @if (group.latest.popWindow) {
+                    <span class="tag default num">Window {{ group.latest.popWindow }}</span>
                   }
                 </div>
                 <div class="tod-countdown num" [class.open]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>

@@ -60,7 +60,9 @@ public sealed class EventAutoStartBackgroundService : BackgroundService
         }
     }
 
-    private async Task StartDueEventsAsync(CancellationToken cancellationToken)
+    // internal so HnmWindowClearLifecycleTests can walk a camp through the same go-live transition
+    // production takes, rather than hand-stamping the fields this sets.
+    internal async Task StartDueEventsAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -104,7 +106,7 @@ public sealed class EventAutoStartBackgroundService : BackgroundService
             // there. Null when the monster has no timed cadence or it's already the only window.
             if (isHnm && evt.StartTime is { } startUtc)
             {
-                var minutes = HnmConfig.WindowAdvanceMinutes(evt.AssignedMonsterName);
+                var minutes = DiscordEventMessageBuilder.EffectiveWindowMinutes(evt);
                 var count = DiscordEventMessageBuilder.EffectiveWindowCount(evt);
                 evt.NextWindowAt = minutes > 0 && evt.HnmWindowNumber < count
                     ? startUtc.AddMinutes(minutes)

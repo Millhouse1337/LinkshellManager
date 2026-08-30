@@ -42,7 +42,8 @@ public sealed partial class ActivityDataController
         }
 
         var canManage = await CanAsync(membership, role => role.CanManageCharts, cancellationToken);
-        return Ok(await BuildChartBoardAsync(linkshellId, catalog, canManage, cancellationToken));
+        return Ok(await BuildChartBoardAsync(
+            linkshellId, catalog, canManage, appUser.Id, membership.Id, cancellationToken));
     }
 
     /// <summary>The boards the sub-nav offers, so the client does not keep a second copy of the list.</summary>
@@ -69,10 +70,22 @@ public sealed partial class ActivityDataController
         // URL did not name.
         var draft = ChartBoardService.NormalizeDraft(
             board, request.Boss, request.ItemName, request.HeldByCharacterName,
-            request.HeldByMembershipId, request.Quantity, request.Notes);
+            request.HeldByMembershipId, request.Quantity, request.Notes, request.Kind);
         if (draft is null)
         {
             return BadRequest(new { error = "Pick a boss on this board and give the item a name." });
+        }
+
+        // Checked HERE rather than inside NormalizeDraft, which is also on the update path: Dynamis
+        // and Limbus still hold rows entered before they stopped taking adds, and refusing there
+        // would make every one of them permanently uneditable. Checked against the ROUTE's board for
+        // the reason above - the body has no say in which board it lands on, so it has none in
+        // whether that board allows the kind either. And it is checked server-side because "the
+        // client does not render the form" is not a gate.
+        var catalog = ChartBoardCatalog.Find(board)!;
+        if (!(draft.Kind == ChartItemKinds.Drop ? catalog.AllowsDropItems : catalog.AllowsPopItems))
+        {
+            return BadRequest(new { error = $"The {catalog.Label} board does not take items of that kind." });
         }
 
         var holder = await ResolveChartHolderAsync(linkshellId, draft, cancellationToken);
@@ -100,6 +113,7 @@ public sealed partial class ActivityDataController
             HeldByMembershipId = holder.MembershipId,
             Quantity = draft.Quantity,
             Notes = draft.Notes,
+            Kind = draft.Kind,
             SortOrder = await _chartBoards.NextSortOrderAsync(
                 linkshellId, draft.Board, draft.Boss, cancellationToken),
             CreatedByAppUserId = gate.Actor.AppUserId,
@@ -129,11 +143,13 @@ public sealed partial class ActivityDataController
         }
 
         var item = found.Item!;
-        // The row's own board is authoritative: an item never moves between boards, only between
-        // bosses on the one it already belongs to.
+        // The row's own board AND its own kind are authoritative: an item moves between bosses,
+        // never between boards and never between kinds. Taking either from the request would let an
+        // edit relabel somebody's pop item as a drop, and would need the feature check that must not
+        // be on this path at all.
         var draft = ChartBoardService.NormalizeDraft(
             item.Board, request.Boss, request.ItemName, request.HeldByCharacterName,
-            request.HeldByMembershipId, request.Quantity, request.Notes);
+            request.HeldByMembershipId, request.Quantity, request.Notes, item.Kind);
         if (draft is null)
         {
             return BadRequest(new { error = "Pick a boss on this board and give the item a name." });
@@ -229,11 +245,34 @@ public sealed partial class ActivityDataController
     /// controller, so the two surfaces cannot present a different board.
     /// </summary>
     private async Task<ActivityChartBoardDto> BuildChartBoardAsync(
-        int linkshellId, ChartBoard board, bool canManage, CancellationToken cancellationToken)
+        int linkshellId,
+        ChartBoard board,
+        bool canManage,
+        string? viewerAppUserId,
+        int? viewerMembershipId,
+        CancellationToken cancellationToken)
     {
         var items = await _chartBoards.LoadItemsAsync(linkshellId, board.Key, cancellationToken);
         var roster = await _chartBoards.LoadRosterAsync(linkshellId, cancellationToken);
         var ledger = ChartBoardService.BuildLedger(board, items, roster);
+
+        // Shipped in the SAME payload as the cards, for the reason the ledger already is: a card's
+        // badge and the list below it are two views of one set of rows, and fetching them apart is
+        // what lets a badge saying 3 sit above a list showing 2.
+        var wishlist = ChartWishlistService.BuildWishlist(
+            board,
+            await _chartWishlist.LoadAsync(linkshellId, board.Key, cancellationToken),
+            viewerAppUserId,
+            canManage);
+
+        var keyItems = ChartKeyItemService.BuildGrid(
+            board,
+            await _chartKeyItems.LoadAsync(linkshellId, board.Key, cancellationToken),
+            roster);
+
+        var keyItemsByBoss = keyItems.Columns
+            .Where(column => column.Boss is not null)
+            .ToDictionary(column => column.Boss!, StringComparer.OrdinalIgnoreCase);
 
         var bosses = board.Bosses
             .Select(boss =>
@@ -262,7 +301,17 @@ public sealed partial class ActivityDataController
                     bossItems.Sum(item => item.Quantity),
                     leadsTo?.Name,
                     leadsTo?.ThemeKey,
-                    boss.EndsRow);
+                    boss.EndsRow,
+                    (boss.DropItems ?? Array.Empty<ChartPopItemOption>())
+                        .Select(option => new ActivityChartPopItemOptionDto(
+                            option.Name, option.Source, option.Label))
+                        .ToList(),
+                    // Counted off the list built above, never queried per card.
+                    wishlist.PendingCountsByBoss.TryGetValue(boss.Name, out var requested) ? requested : 0,
+                    keyItemsByBoss.TryGetValue(boss.Name, out var keyItem) ? keyItem.Name : null,
+                    keyItem?.HaveCount ?? 0,
+                    keyItem?.TotalMembers ?? 0,
+                    keyItem?.MissingCharacterNames ?? Array.Empty<string>());
             })
             .ToList();
 
@@ -298,7 +347,49 @@ public sealed partial class ActivityDataController
                     .ToList()
                 : new List<ActivityChartRosterMemberDto>(),
             await _chartBoards.GetLastUpdatedAsync(linkshellId, board.Key, cancellationToken),
-            canManage);
+            canManage,
+            new ActivityChartBoardFeaturesDto(
+                board.AllowsPopItems, board.AllowsDropItems, board.AllowsWishlist, board.AllowsKeyItems),
+            new ActivityChartWishlistDto(
+                wishlist.Requests
+                    .Select(request => new ActivityChartWishlistRequestDto(
+                        request.Id,
+                        request.Board,
+                        request.Boss,
+                        request.ItemName,
+                        request.Quantity,
+                        request.Notes,
+                        request.Status,
+                        request.Priority,
+                        request.RequestedByMembershipId,
+                        request.RequestedByCharacterName,
+                        request.CanWithdraw,
+                        request.RequestedAt,
+                        request.FulfilledAt,
+                        request.FulfilledByCharacterName))
+                    .ToList(),
+                wishlist.PendingCount),
+            new ActivityChartKeyItemGridDto(
+                keyItems.Columns
+                    .Select(column => new ActivityChartKeyItemColumnDto(
+                        column.Name,
+                        column.Boss,
+                        column.Caption,
+                        column.HaveCount,
+                        column.TotalMembers,
+                        column.MissingCharacterNames))
+                    .ToList(),
+                keyItems.Rows
+                    .Select(row => new ActivityChartKeyItemRowDto(
+                        row.MembershipId,
+                        row.CharacterName,
+                        row.Rank,
+                        row.Has,
+                        row.HaveCount,
+                        row.TotalColumns,
+                        row.HavePercent))
+                    .ToList()),
+            viewerMembershipId);
     }
 
     private static ActivityChartPopItemDto MapChartPopItem(ChartPopItem item) =>
@@ -317,7 +408,8 @@ public sealed partial class ActivityDataController
                     credit.MembershipId, credit.CharacterName, credit.Detail))
                 .ToList(),
             item.Credits.Count,
-            item.UpdatedAt);
+            item.UpdatedAt,
+            item.Kind);
 
     /// <summary>
     /// Turns a request's credit list into trusted rows, or into the 400 that refuses the whole
@@ -364,6 +456,43 @@ public sealed partial class ActivityDataController
         }
 
         return (null, name, membershipId);
+    }
+
+    /// <summary>
+    /// MEMBERSHIP, and nothing more - the gate for the wishlist and for key items, which are the
+    /// first Charts writes a plain member may make.
+    ///
+    /// Returns CanManage alongside, so an action branches ONCE rather than asking twice and risking
+    /// two different answers within one request.
+    ///
+    /// Twin of ChartsController.AuthorizeMemberAsync, and the two MUST be changed together. A coarse
+    /// check on one front-end and a named permission on the other is a privilege escalation
+    /// available by picking a front-end - the bug GrantTreasuryToOfficersWhoUsedIt documents, and
+    /// the reason the comment at the head of this file insists on CanManageCharts over a rank.
+    /// </summary>
+    private async Task<(IActionResult? Failure, ChartBoardActor Actor, int? MembershipId, bool CanManage)>
+        AuthorizeChartsMemberAsync(int linkshellId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return (Unauthorized(new { error = "Sign in to use the chart." }), default, null, false);
+        }
+
+        // Through GetMembershipAsync, which carries the per-linkshell Discord guild lock. Comparing
+        // linkshell ids by hand looks equivalent and silently bypasses it.
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (membership is null)
+        {
+            return (Forbid(), default, null, false);
+        }
+
+        var canManage = await CanAsync(membership, role => role.CanManageCharts, cancellationToken);
+        return (
+            null,
+            new ChartBoardActor(appUser.Id, membership.CharacterName ?? appUser.CharacterName),
+            membership.Id,
+            canManage);
     }
 
     private async Task<(IActionResult? Failure, ChartBoardActor Actor)> AuthorizeChartsWriteAsync(

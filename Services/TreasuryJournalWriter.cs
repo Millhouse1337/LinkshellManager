@@ -26,6 +26,15 @@ public sealed record TreasuryEntryRequest(
     string? Memo = null,
     string? CounterpartyAppUserId = null,
     string? CounterpartyCharacterName = null,
+    // Whose mule the gil lands on or leaves. Recorded against the gil-on-hand half ONLY, so summing
+    // by holder always adds back up to gil on hand — see JournalEntryLine.HolderCharacterName.
+    //
+    // Optional here rather than required, because two callers genuinely have no answer: a gil
+    // auction close pays a winner without anyone saying which mule it came off, and a reversal
+    // copies whatever the original said. Everything an officer types goes through a form that
+    // refuses to submit without one.
+    string? HolderAppUserId = null,
+    string? HolderCharacterName = null,
     string Source = JournalEntrySources.Manual,
     int? SourceItemId = null,
     int? SourceAuctionItemId = null,
@@ -270,9 +279,11 @@ public sealed class TreasuryJournalWriter
         if (recipients is null || kind.SplitAccount is not int splitAccount)
         {
             AddHalf(entry, accounts, kind.AddTo, amount, 1,
-                request.CounterpartyAppUserId, request.CounterpartyCharacterName);
+                request.CounterpartyAppUserId, request.CounterpartyCharacterName,
+                request.HolderAppUserId, request.HolderCharacterName);
             AddHalf(entry, accounts, kind.TakeFrom, -amount, 2,
-                request.CounterpartyAppUserId, request.CounterpartyCharacterName);
+                request.CounterpartyAppUserId, request.CounterpartyCharacterName,
+                request.HolderAppUserId, request.HolderCharacterName);
             return;
         }
 
@@ -280,14 +291,16 @@ public sealed class TreasuryJournalWriter
         var wholeSign = wholeAccount == kind.AddTo ? 1 : -1;
 
         // No member on the whole half: a lump sum belongs to everyone in the split, not to whoever
-        // happens to sort first.
-        AddHalf(entry, accounts, wholeAccount, wholeSign * amount, 1, null, null);
+        // happens to sort first. The HOLDER still goes on it, and only on it — a split that moves
+        // gil on hand does so as one lump off one mule, however many people the shares name.
+        AddHalf(entry, accounts, wholeAccount, wholeSign * amount, 1, null, null,
+            request.HolderAppUserId, request.HolderCharacterName);
 
         var lineNumber = 2;
         foreach (var (recipient, share) in TreasurySplit.Allocate(amount, recipients))
         {
             AddHalf(entry, accounts, splitAccount, -wholeSign * share, lineNumber++,
-                recipient.AppUserId, recipient.CharacterName);
+                recipient.AppUserId, recipient.CharacterName, null, null);
         }
     }
 
@@ -298,7 +311,9 @@ public sealed class TreasuryJournalWriter
         long amount,
         int lineNumber,
         string? counterpartyAppUserId,
-        string? counterpartyCharacterName)
+        string? counterpartyCharacterName,
+        string? holderAppUserId,
+        string? holderCharacterName)
     {
         var account = accounts[accountNumber];
         entry.Lines.Add(new JournalEntryLine
@@ -321,6 +336,15 @@ public sealed class TreasuryJournalWriter
             CounterpartyCharacterName = accountNumber == TreasuryAccounts.GilOnHand
                 ? null
                 : Trim(counterpartyCharacterName, 256),
+            // And the exact complement: the holder goes on gil on hand and NOWHERE else. Anywhere
+            // else it would be double-counted the moment anything sums by holder, because both
+            // halves of an entry carry the same magnitude.
+            HolderAppUserId = accountNumber == TreasuryAccounts.GilOnHand
+                ? holderAppUserId
+                : null,
+            HolderCharacterName = accountNumber == TreasuryAccounts.GilOnHand
+                ? Trim(holderCharacterName, 256)
+                : null,
         });
     }
 
@@ -392,6 +416,11 @@ public sealed class TreasuryJournalWriter
                 LineMemo = line.LineMemo,
                 CounterpartyAppUserId = line.CounterpartyAppUserId,
                 CounterpartyCharacterName = line.CounterpartyCharacterName,
+                // Copied, not cleared. A reversal has to take the gil back off the SAME mule it was
+                // put on, or undoing a sale would leave the seller holding gil the treasury no
+                // longer counts and push the difference into the unattributed bucket.
+                HolderAppUserId = line.HolderAppUserId,
+                HolderCharacterName = line.HolderCharacterName,
             });
         }
 

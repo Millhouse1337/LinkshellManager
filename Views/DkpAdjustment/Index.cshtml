@@ -1,9 +1,12 @@
 @model LinkshellManagerDiscordApp.ViewModels.DkpAdjustmentViewModel
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@inject LinkshellManagerDiscordApp.Services.AdminOverrideService AdminOverride
 @{
     ViewData["Title"] = "DKP Adjustments";
     ViewData["BodyClass"] = "lsm-page";
     var antiforgeryTokens = Antiforgery.GetAndStoreTokens(Context);
+    // AppUserIds carrying the app-wide admin override (empty when it is switched off).
+    var adminAppUserIds = await AdminOverride.GetActiveAdminAppUserIdsAsync(Context.RequestAborted);
 }
 
 <div class="page-head fade d1">
@@ -70,7 +73,13 @@ else
                     {
                         <tr>
                             <td style="font-weight:500">@member.CharacterName</td>
-                            <td><span class="tag">@(member.Rank ?? "Member")</span></td>
+                            <td>
+                                <span class="tag">@(member.Rank ?? "Member")</span>
+                                @if (adminAppUserIds.Contains(member.AppUserId ?? string.Empty))
+                                {
+                                    <span class="tag accent" title="App-wide admin override: full permissions in every linkshell they belong to.">🔧 ADMIN</span>
+                                }
+                            </td>
                             <td class="num" style="text-align:right">@member.CurrentBalance.ToString("0.##")</td>
                             <td style="text-align:right">
                                 @if (!string.IsNullOrWhiteSpace(member.AppUserId))
@@ -102,25 +111,17 @@ else
                     <button type="button" class="mt-modal__close" data-mt-close="1" aria-label="Close">&times;</button>
                 </div>
                 <div class="mt-modal__body">
-                    @{
-                        // Snapshot-credit ("Add to a previous entry") is HNM-only —
-                        // hide it for Sky/Sea/Dynamis linkshells (which have no snapshots).
-                        var showSnapshotCredit = Model.SelectedLinkshellType != "SkySeaDynamis";
-                    }
-                    <div style="display:grid;grid-template-columns:@(showSnapshotCredit ? "1fr 1fr 1fr" : "1fr 1fr");gap:12px;margin-bottom:14px">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
                         <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
                             <input type="radio" name="auditMode" value="Adjust" checked />
                             <strong style="margin-left:6px">Correct a previous entry</strong>
                             <div style="color:var(--fg-3);font-size:12px;margin-top:2px">Fix DKP awarded/charged on a past event or auction.</div>
                         </label>
-                        @if (showSnapshotCredit)
-                        {
-                            <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
-                                <input type="radio" name="auditMode" value="Add" />
-                                <strong style="margin-left:6px">Add to a previous entry</strong>
-                                <div style="color:var(--fg-3);font-size:12px;margin-top:2px">Credit a member who was missed by a snapshot.</div>
-                            </label>
-                        }
+                        <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
+                            <input type="radio" name="auditMode" value="Add" />
+                            <strong style="margin-left:6px">Add to a previous entry</strong>
+                            <div style="color:var(--fg-3);font-size:12px;margin-top:2px">Credit a member who was missed by a snapshot.</div>
+                        </label>
                         <label style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer">
                             <input type="radio" name="auditMode" value="Misc" />
                             <strong style="margin-left:6px">Miscellaneous adjustment</strong>

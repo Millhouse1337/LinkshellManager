@@ -58,7 +58,9 @@
                     <span>@item.Event.EventLocation</span>
                     <span class="dot"> · </span>
                 }
-                <span>@(item.Event.StartTime?.ToString("ddd MMM d, HH:mm") ?? "Start TBD")</span>
+                @* Seconds, matching the Activity queue card: an HNM board's start time IS the
+                   predicted repop, and that is ToD math down to the second. *@
+                <span>@(item.Event.StartTime?.ToString("ddd MMM d, HH:mm:ss") ?? "Start TBD")</span>
                 <span class="dot"> · </span>
                 <span>@RelativeTime(item.Event.StartTime)</span>
                 <span class="dot"> · </span>
@@ -86,6 +88,10 @@
                         data-tod-time="@prefill?.TimeLocal"
                         data-cooldown="@prefill?.Cooldown"
                         data-interval="@prefill?.Interval"
+                        @* What a FRESH Post ToD opens on: this linkshell's configured setup for the
+                           monster, resolved server-side (the client can't know a per-linkshell value). *@
+                        data-default-cooldown="@item.BoardTodDefaultCooldown"
+                        data-default-interval="@item.BoardTodDefaultInterval"
                         data-day="@(item.Event.DayNumber?.ToString())"
                         data-hq="@(prefill?.Hq == true ? "true" : "false")"
                         data-claim="@claimAttr"

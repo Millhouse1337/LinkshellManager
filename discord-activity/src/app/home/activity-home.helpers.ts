@@ -26,13 +26,6 @@ export function primaryLinkshellSettings(
   return overview?.linkshells?.find(l => l.id === primaryId)?.settings ?? null;
 }
 
-// Sky/Sea/Dynamis linkshells run timed events only — they never post HNM snapshots — so the
-// attendance sections are irrelevant to them and are hidden entirely. Unknown/absent settings
-// fail open to "show", matching the server's LinkshellTypes.Normalize.
-export function attendanceApplies(overview: ActivityOverview | null | undefined): boolean {
-  return primaryLinkshellSettings(overview)?.linkshellType !== 'SkySeaDynamis';
-}
-
 export function breakSessionInfo(
   participant: ActivityEventParticipant,
   breakReturnId: number
@@ -171,6 +164,10 @@ export function formatAlts(alt1?: string | null, alt2?: string | null): string {
 
 // Rank tier icon for the linkshell rank system, shown next to the rank label
 // across rosters/headers. Falls back to the Member badge for custom roles.
+//
+// Deliberately NOT extended with an "admin" case: the app-wide admin override is
+// additive, not a rank. It renders as a SEPARATE `🔧 ADMIN` chip beside whatever
+// rank the linkshell actually gave the member.
 export function rankIcon(rank?: string | null): string {
   switch ((rank ?? '').toLowerCase()) {
     case 'leader': return '👑';
@@ -178,6 +175,45 @@ export function rankIcon(rank?: string | null): string {
     case 'trial': return '🌱';
     default: return '🛡️';
   }
+}
+
+// The app-wide admin override's own mark, shown IN ADDITION to the rank icon.
+export const ADMIN_BADGE = '🔧 ADMIN';
+
+// The coarse "can manage this linkshell" bar, in ONE place. Mirrors the server's
+// Leader/Officer rank gate, plus the app-wide admin override.
+//
+// The membership lookup comes FIRST and returns false when absent — that is what
+// scopes the override to linkshells the user actually belongs to, exactly as the
+// server does. Never reorder these two checks, and never read
+// `overview.adminOverrideActive` directly at a call site.
+export function canManageLinkshellIn(
+  overview: ActivityOverview | null | undefined,
+  linkshellId: number | null | undefined,
+  memberships?: readonly { id: number; rank?: string | null }[]
+): boolean {
+  if (linkshellId == null) return false;
+  const list = memberships ?? overview?.linkshells ?? [];
+  const membership = list.find(link => link.id === linkshellId);
+  if (!membership) return false;
+  if (overview?.adminOverrideActive === true) return true;
+  const rank = (membership.rank ?? '').toLowerCase();
+  return rank === 'leader' || rank === 'officer';
+}
+
+// Leader-tier gates (rank editing, removing members, transferring ownership).
+// Same membership-first rule as above.
+export function isLeaderTierIn(
+  overview: ActivityOverview | null | undefined,
+  linkshellId: number | null | undefined,
+  memberships?: readonly { id: number; rank?: string | null }[]
+): boolean {
+  if (linkshellId == null) return false;
+  const list = memberships ?? overview?.linkshells ?? [];
+  const membership = list.find(link => link.id === linkshellId);
+  if (!membership) return false;
+  if (overview?.adminOverrideActive === true) return true;
+  return (membership.rank ?? '').toLowerCase() === 'leader';
 }
 
 // Two-letter avatar initials from a character name (e.g. "Millhouse" -> "MI").

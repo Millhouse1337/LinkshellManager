@@ -1,0 +1,835 @@
+/* ===== Create / Edit event form (.cem) =====
+   A straight port of the Discord Activity's create/edit-event modal
+   (discord-activity/src/styles/_create-event-modal.scss, plus the notes
+   editor's markdown-textarea.component.scss) so the two front-ends render the
+   same form.
+
+   Like the Activity's copy, this owns a self-contained palette rather than the
+   lsm-theme tokens: the form runs a deeper contrast ladder than the pages
+   around it, and the two copies have to stay identical, so the values here are
+   the Activity's values. Everything is namespaced under .cem / .mdta, so none
+   of it leaks into the rest of the site. Keep the two files in step. */
+
+.cem {
+    --cem-bg: #0e141c;
+    --cem-bg-sunken: #0c121a;
+    --cem-field: #0a0f16;
+    --cem-summary: #0b1119;
+    --cem-line: #1a2532;
+    --cem-field-line: #22303f;
+    --cem-fg: #eaf1f8;
+    --cem-fg-2: #8697ab;
+    --cem-fg-3: #63768a;
+    --cem-muted: #4e5d6e;
+    --cem-sel-bg: #1b2c4c;
+    --cem-sel-line: #3e6bd6;
+    --cem-sel-fg: #cfe0ff;
+    --cem-go: #5ee39b;
+    --cem-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    display: flex;
+    flex-direction: column;
+    background: var(--cem-bg);
+    border: 1px solid #1d2836;
+    border-radius: 18px;
+    box-shadow: 0 40px 120px rgba(0, 0, 0, 0.65);
+    overflow: hidden;
+    color: var(--cem-fg);
+}
+
+/* The Activity renders this inside a <dialog> that caps its height and scrolls
+   the body. On the web it IS the page, so it grows and the page scrolls
+   instead. Same width cap, so the layout inside is identical. */
+.cem--page {
+    width: min(1100px, 100%);
+    margin: 0 auto;
+}
+
+/* ===== Header ===== */
+.cem__header {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    padding: 22px 26px;
+    border-bottom: 1px solid var(--cem-line);
+    background: linear-gradient(180deg, #121a24 0%, var(--cem-bg) 100%);
+}
+
+.cem__heading {
+    flex: 1;
+    min-width: 0;
+}
+
+.cem__title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cem__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cem-go);
+    box-shadow: 0 0 12px rgba(94, 227, 155, 0.7);
+}
+
+.cem__title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--cem-fg);
+}
+
+.cem__subtitle {
+    margin: 6px 0 0 18px;
+    font-size: 13.5px;
+    color: #7b8ca0;
+}
+
+/* Linkshell is never editable here (it follows the active linkshell), so it
+   reads as a header chip instead of a disabled field in the details grid. */
+.cem__linkshell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px 7px 10px;
+    background: #152238;
+    border: 1px solid #24385c;
+    border-radius: 10px;
+}
+
+.cem__linkshell-label {
+    font-family: var(--cem-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    color: #6f93e0;
+    text-transform: uppercase;
+}
+
+.cem__linkshell-sep {
+    width: 1px;
+    height: 14px;
+    background: #2a3f66;
+}
+
+.cem__linkshell-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #dce7f7;
+}
+
+/* Web-only: the Activity's linkshell is fixed, but an event here can be moved
+   between the linkshells you manage, so the edit form puts the picker inside
+   the same chip rather than adding a field the Activity does not have. */
+.cem__linkshell-select {
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 0 18px 0 0;
+    background: transparent;
+    border: 0;
+    color: #dce7f7;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    outline: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%236f93e0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right center;
+    background-size: 10px 7px;
+}
+.cem__linkshell-select option {
+    background: #101722;
+    color: var(--cem-fg);
+}
+
+.cem__close {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid #253242;
+    border-radius: 9px;
+    background: #141c26;
+    color: #8a9baf;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.cem__close svg {
+    width: 16px;
+    height: 16px;
+}
+.cem__close:hover {
+    background: #1c2734;
+    border-color: #33445a;
+    color: var(--cem-fg);
+}
+
+/* ===== Body ===== */
+.cem__body {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+    padding: 26px 26px 30px;
+}
+
+.cem__section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.cem__section-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cem__section-title {
+    font-family: var(--cem-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    color: #61748a;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.cem__rule {
+    flex: 1;
+    height: 1px;
+    background: var(--cem-line);
+}
+
+.cem__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.cem__field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+}
+
+.cem__label {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--cem-fg-2);
+    text-transform: uppercase;
+}
+.cem__label em {
+    font-style: normal;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--cem-muted);
+}
+
+.cem__error {
+    font-size: 12px;
+    color: #ff8a80;
+}
+
+.cem__hint {
+    font-size: 12.5px;
+    color: var(--cem-fg-3);
+}
+
+/* A hint carrying a chip-sized action (the predicted-repop "Use this time"), so
+   the button sits on the text's line rather than on its baseline. */
+.cem__hint--inline {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* ===== Controls ===== */
+.cem__input,
+.cem__select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 44px;
+    padding: 0 14px;
+    background: var(--cem-field);
+    border: 1px solid var(--cem-field-line);
+    border-radius: 10px;
+    color: var(--cem-fg);
+    font-family: inherit;
+    font-size: 14.5px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.cem__input--mono {
+    font-family: var(--cem-mono);
+    font-size: 14px;
+}
+
+.cem__select {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 32px;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%238697ab' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5L6 6.5L11 1.5'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 8px;
+}
+.cem__select option {
+    background: #101722;
+    color: var(--cem-fg);
+}
+
+.cem__input:focus,
+.cem__select:focus {
+    border-color: var(--cem-sel-line);
+    box-shadow: 0 0 0 3px rgba(62, 107, 214, 0.18);
+}
+
+.cem__input:disabled,
+.cem__select:disabled {
+    color: var(--cem-muted);
+    background: #0b0f14;
+    cursor: not-allowed;
+}
+
+.cem__input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.6);
+    cursor: pointer;
+}
+
+/* ===== HNM camp DKP (section 03) =====
+   Collapsed: the bonus amounts read out as chips next to "Change DKP".
+   Expanded: the same amounts as number inputs. */
+.cem__bonus-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.cem__bonus {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--cem-summary);
+    border: 1px solid var(--cem-field-line);
+    border-radius: 10px;
+}
+
+/* Reads value-first — "0.5 per window" — so the amount is the emphasis and the
+   suffix trails it as plain words. */
+.cem__bonus-val {
+    font-family: var(--cem-mono);
+    font-size: 15px;
+    color: var(--cem-fg);
+}
+
+.cem__bonus-key {
+    font-size: 12.5px;
+    color: var(--cem-fg-2);
+}
+
+.cem__bonus-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+/* Chips replace a <select> for event type: the option list is short enough to
+   show at once, which is one tap instead of open-scroll-pick. */
+.cem__chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
+.cem__chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 14px;
+    background: var(--cem-field);
+    border: 1px solid var(--cem-field-line);
+    border-radius: 9px;
+    color: #8a9cb0;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.cem__chip:hover {
+    border-color: #33455c;
+    color: #b9cadd;
+}
+.cem__chip.is-active {
+    background: var(--cem-sel-bg);
+    border-color: var(--cem-sel-line);
+    color: var(--cem-sel-fg);
+    box-shadow: 0 0 0 3px rgba(62, 107, 214, 0.14);
+}
+.cem__chip--sm {
+    height: 30px;
+    font-size: 12.5px;
+}
+
+/* Read-only Start->End span, plus the open-ended switch that clears the end. */
+.cem__summary {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    background: var(--cem-summary);
+    border: 1px solid #1b2634;
+    border-radius: 10px;
+}
+
+.cem__summary-key {
+    font-size: 12.5px;
+    color: #7b8ca0;
+}
+
+.cem__summary-val {
+    font-family: var(--cem-mono);
+    font-size: 13.5px;
+    color: #cfe0f2;
+}
+
+.cem__spacer {
+    flex: 1;
+}
+
+.cem__automation {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.cem__stepper {
+    display: flex;
+    align-items: center;
+    height: 44px;
+    background: var(--cem-field);
+    border: 1px solid var(--cem-field-line);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cem__stepper:focus-within {
+    border-color: var(--cem-sel-line);
+    box-shadow: 0 0 0 3px rgba(62, 107, 214, 0.18);
+}
+
+.cem__stepper button {
+    width: 42px;
+    height: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--cem-fg-2);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.cem__stepper button:hover {
+    background: #141d28;
+    color: var(--cem-fg);
+}
+
+/* The middle stays a real number input so a big value can be typed rather than
+   clicked up one at a time. Spinners are hidden — the buttons are the
+   affordance. */
+.cem__stepper input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--cem-fg);
+    font-family: var(--cem-mono);
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    outline: none;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+.cem__stepper input:focus {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
+}
+.cem__stepper input::-webkit-outer-spin-button,
+.cem__stepper input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+}
+
+.cem__switches {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cem__switch {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    background: var(--cem-field);
+    border: 1px solid #1e2a38;
+    border-radius: 10px;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.cem__switch.is-on {
+    background: #101b2c;
+    border-color: #2c4372;
+}
+.cem__switch:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.cem__track {
+    flex: none;
+    display: flex;
+    justify-content: flex-start;
+    width: 38px;
+    height: 22px;
+    padding: 3px;
+    border-radius: 11px;
+    background: #28353f;
+    transition: background 0.18s, justify-content 0.18s;
+}
+.cem__switch.is-on .cem__track {
+    justify-content: flex-end;
+    background: var(--cem-sel-line);
+}
+
+.cem__knob {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.cem__switch-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.cem__switch-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #dce7f7;
+}
+
+.cem__switch-hint {
+    font-size: 12px;
+    color: #6e8093;
+}
+
+.cem__party-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+/* Segmented Linked/None pair — one control instead of a heading + Yes/No pair. */
+.cem__segment {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    background: var(--cem-field);
+    border: 1px solid var(--cem-field-line);
+    border-radius: 10px;
+}
+
+.cem__segment button {
+    height: 36px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #8a9cb0;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.cem__segment button.is-active {
+    background: var(--cem-sel-bg);
+    color: var(--cem-sel-fg);
+}
+
+.cem__party-select {
+    flex: 1 1 260px;
+    min-width: 0;
+    max-width: 420px;
+}
+
+.cem__btn {
+    height: 42px;
+    padding: 0 18px;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+/* Cancel is an <a> on the web (it leaves the page) and a <button> in the
+   Activity (it closes the dialog), so this one carries the link resets the
+   Activity's copy does not need. */
+.cem__btn--ghost {
+    display: inline-flex;
+    align-items: center;
+    background: transparent;
+    border: 1px solid #253242;
+    color: #9fb1c6;
+    text-decoration: none;
+}
+.cem__btn--ghost:hover {
+    background: #141c26;
+    color: #e7eef6;
+    text-decoration: none;
+}
+
+.cem__btn--dashed {
+    height: 44px;
+    padding: 0 16px;
+    background: transparent;
+    border: 1px dashed #2e3e52;
+    color: #8fa6c0;
+    font-size: 13.5px;
+}
+.cem__btn--dashed:hover {
+    background: #101827;
+    border-color: var(--cem-sel-line);
+    color: #bbd0ee;
+}
+
+.cem__btn--go {
+    border: 0;
+    background: var(--cem-go);
+    color: #07130c;
+    font-weight: 700;
+    box-shadow: 0 6px 20px rgba(94, 227, 155, 0.22);
+}
+.cem__btn--go:disabled {
+    background: #1a2331;
+    color: #5a6b7e;
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+/* ===== Footer ===== */
+.cem__footer {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 26px;
+    border-top: 1px solid var(--cem-line);
+    background: var(--cem-bg-sunken);
+}
+
+.cem__footer-note {
+    font-size: 12.5px;
+    color: var(--cem-fg-3);
+}
+
+/* Server-side validation summary. The Activity has no equivalent (it validates
+   inline before posting), so this is web-only chrome, kept in the modal's
+   palette rather than Bootstrap's. */
+.cem__alert {
+    padding: 12px 14px;
+    background: rgba(255, 138, 128, 0.08);
+    border: 1px solid rgba(255, 138, 128, 0.35);
+    border-radius: 10px;
+    color: #ffb3ac;
+    font-size: 13px;
+}
+.cem__alert ul {
+    margin: 0;
+    padding-left: 18px;
+}
+.cem__alert:empty,
+.cem__alert.validation-summary-valid {
+    display: none;
+}
+
+/* The party-setup preview (rendered by the form's JS from /PartySetup/Preview)
+   is built from the site's own .card/.table markup, so it keeps the site theme
+   inside this darker panel rather than being restyled here. */
+
+@media (max-width: 720px) {
+    .cem__grid,
+    .cem__automation {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .cem__header {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+}
+
+/* ===== Notes editor (.mdta) =====
+   Port of discord-activity/src/app/home/tabs/markdown-textarea.component.scss.
+   Toolbar + textarea rendered as one joined control; the palette is inherited
+   from the surrounding .cem, with fallbacks so it reads correctly anywhere
+   else. Driven by wwwroot/js/markdown-toolbar.js. */
+
+.mdta {
+    --mdta-field: var(--cem-field, #0a0f16);
+    --mdta-line: var(--cem-field-line, #22303f);
+    --mdta-bar: var(--cem-summary, #0b1119);
+    --mdta-fg: var(--cem-fg, #eaf1f8);
+    --mdta-fg-2: var(--cem-fg-2, #8697ab);
+    --mdta-muted: var(--cem-muted, #4e5d6e);
+    --mdta-accent: var(--cem-sel-line, #3e6bd6);
+
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--mdta-field);
+    border: 1px solid var(--mdta-line);
+    border-radius: 10px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.mdta:focus-within {
+    border-color: var(--mdta-accent);
+    box-shadow: 0 0 0 3px rgba(62, 107, 214, 0.18);
+}
+
+.mdta__toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 5px 6px;
+    background: var(--mdta-bar);
+    border-bottom: 1px solid var(--mdta-line);
+    border-radius: 9px 9px 0 0;
+}
+
+.mdta__divider {
+    width: 1px;
+    height: 18px;
+    margin: 0 5px;
+    background: var(--mdta-line);
+}
+
+.mdta__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--mdta-fg-2);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.mdta__btn:hover {
+    background: rgba(62, 107, 214, 0.14);
+    border-color: var(--mdta-line);
+    color: var(--mdta-fg);
+}
+
+.mdta__btn:active {
+    background: rgba(62, 107, 214, 0.24);
+}
+
+.mdta__btn:focus-visible {
+    outline: 2px solid var(--mdta-accent);
+    outline-offset: 1px;
+}
+
+.mdta__glyph {
+    font-size: 13.5px;
+    line-height: 1;
+    font-family: inherit;
+}
+
+.mdta__glyph--bold { font-weight: 800; }
+.mdta__glyph--italic { font-style: italic; font-family: Georgia, "Times New Roman", serif; }
+.mdta__glyph--underline { text-decoration: underline; text-underline-offset: 2px; }
+.mdta__glyph--strike { text-decoration: line-through; }
+.mdta__glyph--tight { font-size: 11.5px; letter-spacing: -0.02em; }
+
+.mdta__count {
+    margin-left: auto;
+    padding-right: 4px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--mdta-muted);
+    white-space: nowrap;
+}
+
+.mdta__count--over {
+    color: #ff8a80;
+}
+
+.mdta__area {
+    width: 100%;
+    min-width: 0;
+    min-height: 96px;
+    padding: 12px 14px;
+    background: transparent;
+    border: none;
+    border-radius: 0 0 9px 9px;
+    color: var(--mdta-fg);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.55;
+    outline: none;
+    resize: vertical;
+}
+
+/* site.css / lsm-theme.css theme every textarea globally; the toolbar and the
+   textarea are one control here, so the frame belongs to .mdta and the textarea
+   itself stays transparent in both states. */
+.mdta__area:focus {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    outline: none;
+}
+
+.mdta__area::placeholder {
+    color: var(--mdta-muted);
+}

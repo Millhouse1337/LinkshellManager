@@ -117,7 +117,7 @@ public partial class EventController
             EventId = eventId,
             LinkshellId = ev.LinkshellId,
             Board = board,
-            CanManageParties = CanManageLinkshell(membership),
+            CanManageParties = await CanManageLinkshellAsync(membership),
             CurrentUserId = user.Id,
             IsLive = ev.CommencementStartTime is not null,
             SignupCharacters = SignupCharacters.ForMember(user, membership),
@@ -140,7 +140,7 @@ public partial class EventController
         if (ev is null) return Json(new { success = false, error = "Event not found." });
 
         var membership = await GetMembershipAsync(user.Id, ev.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Json(new { success = false, error = "Only leaders or officers can edit the board." });
         }

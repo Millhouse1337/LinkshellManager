@@ -90,6 +90,18 @@ public sealed partial class AddonApiController
 
         var canModerate = await TokenIssuerCanModerateAsync(token, token.LinkshellId, cancellationToken);
 
+        var claimShieldGloballyDisabled = await _globalSettings.IsClaimShieldGloballyDisabledAsync(cancellationToken);
+        var claimShieldDisabled = claimShieldGloballyDisabled
+            ? Array.Empty<string>()
+            : (await _dbContext.LinkshellMonsterTimings
+                    .AsNoTracking()
+                    .Where(row => row.LinkshellId == token.LinkshellId && !row.ClaimShieldEnabled)
+                    .Select(row => row.MonsterName)
+                    .ToListAsync(cancellationToken))
+                .SelectMany(name => HnmConfig.MonsterMatchNames(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
         return Ok(new
         {
             linkshellId = token.LinkshellId,
@@ -98,10 +110,6 @@ public sealed partial class AddonApiController
             issuedToAppUserId = token.IssuedToAppUserId,
             canModerateLiveEvent = canModerate,
             label = token.Label,
-            // Drives addon section visibility (Create Event / presets /
-            // Queued / Active / HNM type). Normalized so the addon never
-            // has to handle null. The addon fail-opens to "Both" anyway.
-            linkshellType = LinkshellTypes.Normalize(linkshell?.LinkshellType),
             // Manual Check In HNM attendance mode (Standard | Wd). In Manual Check In mode, HNM attendance
             // is Discord-button-driven (self-serve x-in), so the addon can hide its
             // leader-driven "post window" UI. Normalized; fail-closed to Standard.
@@ -115,7 +123,32 @@ public sealed partial class AddonApiController
             // the addon's /me sweep is gated on pairing rather than launcher-open — which is what
             // lets an armed camp keep posting with the launcher closed.
             hnmAutoSnapshotEnabled = linkshell?.HnmAutoSnapshotEnabled == true,
-            hnmAutoSnapshotDelaySeconds = Math.Clamp(linkshell?.HnmAutoSnapshotDelaySeconds ?? 20, 5, 300)
+            hnmAutoSnapshotDelaySeconds = Math.Clamp(linkshell?.HnmAutoSnapshotDelaySeconds ?? 20, 5, 300),
+            // How wide a capture is allowed to be. "alliance" means party memory only — the server
+            // rejects anything over 18 entries, so an addon still offering a zone scan would post
+            // captures that bounce. Sent as a string rather than a bool so a future scope can be
+            // added without every addon build having to understand it: an unrecognized value should
+            // be treated as the most restrictive one the addon knows.
+            snapshotScope = "alliance",
+            // The most alliances a poster may claim to be in. Drives the addon's selector range so
+            // it cannot offer a number the server will clamp away.
+            maxAllianceNumber = AttendanceSnapshotAlliances.MaxAllianceNumber,
+            // Claim Shield. The master switch is the super-admin's; the per-monster switches are
+            // the linkshell's, and only apply while the master is on.
+            //
+            // Fails OPEN, unlike the auto-snapshot flag above, and deliberately: capture is a
+            // read-only audit record with no DKP consequence, and the failure this whole feature
+            // has repeatedly produced is a silent NON-capture. A linkshell whose rows haven't
+            // loaded should record too much, not nothing.
+            claimShieldEnabled = !claimShieldGloballyDisabled,
+            // Monsters this linkshell has switched OFF. Sent as the exclusion list because the
+            // default is on, so it is empty until someone opts out.
+            //
+            // EXPANDED to every alias here rather than in the addon: rows are stored merged
+            // ("Fafnir/Nidhogg") but the lottery line names one half ("Fafnir"), so an addon doing
+            // a plain string compare would never match a disabled merge pair. The server already
+            // owns that expansion (HnmConfig.MonsterMatchNames); the addon stays a lookup.
+            claimShieldDisabledMonsters = claimShieldDisabled
         });
     }
 }

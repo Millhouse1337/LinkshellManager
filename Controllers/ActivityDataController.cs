@@ -15,7 +15,9 @@ public sealed partial class ActivityDataController : ControllerBase
 {
     private const string PendingInviteStatus = "PendingInvite";
     private const string PendingJoinRequestStatus = "PendingJoinRequest";
-    private static readonly HashSet<string> SupportedTodMonsters = new(TodManagerViewModel.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
+    // (SupportedTodMonsters lived here. Which monsters a linkshell may assign is a per-linkshell
+    // question now — its built-ins plus the ones it added itself — answered by
+    // MonsterTimingMap.Allows off the request's MonsterTimingResolver.)
     private static readonly HashSet<string> SupportedTodCooldowns = new(TodManagerViewModel.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> SupportedTodIntervals = new(TodManagerViewModel.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
 
@@ -29,9 +31,11 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _webHostEnvironment;
     private readonly TimeZoneConversionService _timeZones;
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
+    private readonly WindowEventLinkService _windowEventLinks;
     private readonly DkpSheetService _dkpSheet;
     private readonly ILogger<ActivityDataController> _logger;
     private readonly GlobalSettingsService _globalSettings;
+    private readonly AdminOverrideService _adminOverride;
     private readonly MemberActivityService _memberActivity;
     private readonly ChannelRouteEditor _channelRoutes;
     private readonly DkpLedgerWriter _dkpLedger;
@@ -41,10 +45,16 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly DkpPoolEventTypeCatalog _dkpPoolEventTypes;
     private readonly TreasuryBalanceService _treasury;
     private readonly TreasuryJournalWriter _treasuryJournal;
+    private readonly TreasurySettlementService _treasurySettlements;
     private readonly LedgerAccountProvisioner _ledgerAccounts;
     private readonly LedgerPeriodGuard _ledgerPeriods;
     private readonly ItemSaleRecorder _itemSales;
     private readonly ChartBoardService _chartBoards;
+    private readonly ChartWishlistService _chartWishlist;
+    private readonly ChartKeyItemService _chartKeyItems;
+    private readonly MonsterTimingResolver _monsterTimings;
+    private readonly MonsterTimingEditor _monsterTimingEditor;
+    private readonly LinkshellMonsterTimingProvisioner _monsterTimingProvisioner;
 
     public ActivityDataController(
         ApplicationDbContext dbContext,
@@ -57,9 +67,11 @@ public sealed partial class ActivityDataController : ControllerBase
         Microsoft.AspNetCore.Hosting.IWebHostEnvironment webHostEnvironment,
         TimeZoneConversionService timeZones,
         WindowEventDkpLedgerService windowEventDkpLedger,
+        WindowEventLinkService windowEventLinks,
         DkpSheetService dkpSheet,
         ILogger<ActivityDataController> logger,
         GlobalSettingsService globalSettings,
+        AdminOverrideService adminOverride,
         MemberActivityService memberActivity,
         ChannelRouteEditor channelRoutes,
         DkpLedgerWriter dkpLedger,
@@ -69,10 +81,16 @@ public sealed partial class ActivityDataController : ControllerBase
         DkpPoolEventTypeCatalog dkpPoolEventTypes,
         TreasuryBalanceService treasury,
         TreasuryJournalWriter treasuryJournal,
+        TreasurySettlementService treasurySettlements,
         LedgerAccountProvisioner ledgerAccounts,
         LedgerPeriodGuard ledgerPeriods,
         ItemSaleRecorder itemSales,
-        ChartBoardService chartBoards)
+        ChartBoardService chartBoards,
+        ChartWishlistService chartWishlist,
+        ChartKeyItemService chartKeyItems,
+        MonsterTimingResolver monsterTimings,
+        MonsterTimingEditor monsterTimingEditor,
+        LinkshellMonsterTimingProvisioner monsterTimingProvisioner)
     {
         _dbContext = dbContext;
         _discordIdentityService = discordIdentityService;
@@ -84,9 +102,11 @@ public sealed partial class ActivityDataController : ControllerBase
         _webHostEnvironment = webHostEnvironment;
         _timeZones = timeZones;
         _windowEventDkpLedger = windowEventDkpLedger;
+        _windowEventLinks = windowEventLinks;
         _dkpSheet = dkpSheet;
         _logger = logger;
         _globalSettings = globalSettings;
+        _adminOverride = adminOverride;
         _memberActivity = memberActivity;
         _channelRoutes = channelRoutes;
         _dkpLedger = dkpLedger;
@@ -96,10 +116,16 @@ public sealed partial class ActivityDataController : ControllerBase
         _dkpPoolEventTypes = dkpPoolEventTypes;
         _treasury = treasury;
         _treasuryJournal = treasuryJournal;
+        _treasurySettlements = treasurySettlements;
         _ledgerAccounts = ledgerAccounts;
         _ledgerPeriods = ledgerPeriods;
         _itemSales = itemSales;
         _chartBoards = chartBoards;
+        _chartWishlist = chartWishlist;
+        _chartKeyItems = chartKeyItems;
+        _monsterTimings = monsterTimings;
+        _monsterTimingEditor = monsterTimingEditor;
+        _monsterTimingProvisioner = monsterTimingProvisioner;
     }
 
     [HttpGet("antiforgery")]

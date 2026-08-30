@@ -148,6 +148,12 @@ public sealed class HnmAutoEventService
             // ("no monster assigned"). It's what makes the day cycle above mean anything.
             AssignedMonsterName = monster,
             DayNumber = nextDay,
+            // Inherit the board from the camp this replaces, the same way DkpPerHour above is
+            // inherited. Ending a camp DELETES its Event row, so without this a camp ended from
+            // the addon and re-created from its own ToD came back with no board attached and an
+            // officer had to re-pick it every pop.
+            PartySetupId = await PartySetupInheritance.ResolveForNewPopAsync(
+                _db, tod.LinkshellId, monster, eventName, cancellationToken),
             TimeStamp = DateTime.UtcNow,
         };
         // Seed the built-in per-monster window count + Manual Check In stamp.

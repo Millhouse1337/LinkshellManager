@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
 
 namespace LinkshellManagerDiscordApp.ViewModels;
 
@@ -21,9 +23,6 @@ public class LinkshellCustomizeViewModel
     public string? LinkshellName { get; set; }
     // Cache-busted banner image URL for the current linkshell, or null when none.
     public string? BannerUrl { get; set; }
-
-    [Required, MaxLength(16)]
-    public string? LinkshellType { get; set; } = LinkshellTypes.Both;
 
     [Required, MaxLength(32)]
     public string? LootStructure { get; set; } = "Dkp";
@@ -54,16 +53,10 @@ public class LinkshellCustomizeViewModel
     public int InactiveAfterAbsences   { get; set; } = 3;
     public int ActiveAfterAttendances  { get; set; } = 2;
 
-    // Allow Discord-server members with no LSM account to sign up for NON-HNM events
-    // from the party board. Backed by a placeholder member, so they DO earn DKP + tracked.
+    // Allow Discord-server members with no LSM account to sign up (or Check In) from a
+    // board, for EVERY event type including HNM. Backed by a placeholder member, so they
+    // DO earn DKP + tracked.
     public bool OutsidePartySignupEnabled { get; set; } = false;
-
-    // "Fill earlier alliances first" signup nudge (default on; no-op on single-alliance boards).
-    public bool FillAlliancesInOrder { get; set; } = true;
-
-    // HNM Outside Sign Up: independent gate for HNM boards (event type + account-less
-    // HNM-board signups). Roster memory only — HNM signups earn no DKP and no tracking.
-    public bool HnmOutsideSignupEnabled { get; set; } = false;
 
     // Experimental: post Discord event boards as Components V2 (wide media-gallery card)
     // instead of the classic image-in-embed. Off by default; only affects boards posted
@@ -75,6 +68,10 @@ public class LinkshellCustomizeViewModel
     // True when a super admin has globally disabled the addon. The Game Addon
     // pairing card is hidden when set.
     public bool AddonGloballyDisabled { get; set; }
+
+    // Server-wide Claim Shield switch. The per-monster switches on this page are inert while it is
+    // on, so the card greys them out and says why instead of showing ticks nothing honours.
+    public bool ClaimShieldGloballyDisabled { get; set; }
 
     // The Discord server this linkshell is associated with (powers roster,
     // invites, channel posting). Set from EligibleGuilds (servers where the
@@ -114,6 +111,12 @@ public class LinkshellCustomizeViewModel
     // same way the Discord Activity does).
     public List<string> HiddenTodMonsters { get; set; } = new();
 
+    // The linkshell's per-monster setups for the Monster Setups card. Populated by
+    // LinkshellController.LoadMonsterTimingInputsAsync, which also seeds the catalog on first view.
+    public List<MonsterTimingInput> MonsterTimings { get; set; } = new();
+    public List<string> MonsterTimingCategories { get; set; } = new();
+    public int MonsterTimingMaxWindows { get; set; } = 25;
+
     // Built-in monster catalog for the Hide ToD Mobs picker. Mirrors the
     // Discord Activity's TOD_BUILT_IN_MONSTER_GROUPS so both clients list the
     // same names. Timed open-world spawns only — the pop-only mobs (Sky Gods,
@@ -121,8 +124,9 @@ public class LinkshellCustomizeViewModel
     // so there is nothing about them to hide from the Tracked Windows panel.
     public static readonly IReadOnlyList<TodMonsterGroup> TodMonsterGroups = new[]
     {
-        new TodMonsterGroup("HNMs", new[] { "Adamantoise", "Aspidochelone", "Behemoth", "Fafnir", "Jormungand", "King Behemoth", "Nidhogg", "Tiamat", "Vrtra" }),
-        new TodMonsterGroup("Sky NMs", new[] { "Brigandish Blade", "Despot", "Faust", "Mother Globe", "Olla Grande", "Steam Cleaner", "Ullikummi", "Zipacna" }),
+        new TodMonsterGroup("HNMs", new[] { "Adamantoise", "Aspidochelone", "Behemoth", "Cerberus", "Fafnir", "Hydra", "Jormungand", "Khimaira", "King Behemoth", "Nidhogg", "Tiamat", "Vrtra" }),
+        // (A "Sky NMs" group listed the eight farm NMs here. They are no longer part of the seeded
+        // monster catalog or the ToD picker, so there is nothing left to hide from the tracker.)
         new TodMonsterGroup("Other NMs", new[] { "Bloodsucker", "Boroka", "Bune", "Capricious Cassie", "King Arthro", "King Vinegarroon", "Roc", "Serket", "Shikigami Weapon", "Simurgh", "Xolotl" }),
     };
 }
@@ -202,4 +206,57 @@ public sealed class DkpPoolAssignmentInput
     // Display-only, repopulated server-side on every render.
     public double EarnedTotal { get; set; }
     public bool IsCustom { get; set; }
+}
+
+// One monster's setup row on the web Customize page's Monster Setups card. Id is 0 for a row the
+// officer just added. Durations post as the number + the unit they typed; MonsterTimingEditor
+// normalizes to canonical minutes, the same as the Activity's input DTO.
+public class MonsterTimingInput
+{
+    public int Id { get; set; }
+
+    [MaxLength(128)]
+    public string? MonsterName { get; set; }
+
+    // Blank = this monster runs no spawn-window cycle, which is a real answer and not the same as 1.
+    public int? Windows { get; set; }
+
+    public double? CadenceValue { get; set; }
+    public string? CadenceUnit { get; set; }
+
+    public double? CooldownValue { get; set; }
+    public string? CooldownUnit { get; set; }
+
+    [MaxLength(32)]
+    public string? Category { get; set; }
+
+    // Built-ins are RESET rather than removed, so the view only offers a delete on a custom row.
+    public bool IsCustom { get; set; }
+
+    // Whether the addon records claim-shield lotteries for this monster. Posts as a checkbox, so
+    // an unchecked box sends nothing and the model binder leaves this false — which is exactly the
+    // semantics wanted here, unlike the Activity's nullable input.
+    public bool ClaimShieldEnabled { get; set; }
+
+    public static MonsterTimingInput From(LinkshellMonsterTiming row)
+    {
+        var (cooldownValue, cooldownUnit) = TodDurationFormat.Split(row.CooldownMinutes);
+        var cadence = row.WindowCadenceMinutes is > 0
+            ? TodDurationFormat.Split(row.WindowCadenceMinutes.Value)
+            : ((int Value, string Unit)?)null;
+
+        return new MonsterTimingInput
+        {
+            Id = row.Id,
+            MonsterName = row.MonsterName,
+            Windows = row.WindowCount,
+            CadenceValue = cadence?.Value,
+            CadenceUnit = cadence?.Unit ?? TodDurationFormat.MinutesUnit,
+            CooldownValue = cooldownValue,
+            CooldownUnit = cooldownUnit,
+            Category = MonsterTimingDefaults.NormalizeCategory(row.Category),
+            IsCustom = row.IsCustom,
+            ClaimShieldEnabled = row.ClaimShieldEnabled,
+        };
+    }
 }

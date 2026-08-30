@@ -208,9 +208,18 @@ builder.Services.AddScoped<AltCharacterValidator>();
 builder.Services.AddScoped<AppUserProfileService>();
 builder.Services.AddScoped<AddonApiAuthService>();
 builder.Services.AddScoped<GlobalSettingsService>();
+builder.Services.AddScoped<AdminOverrideService>();
+builder.Services.AddScoped<JobsRosterService>();
+builder.Services.AddScoped<HnmClaimStatsService>();
 builder.Services.AddSingleton<IDateTimeZoneProvider>(DateTimeZoneProviders.Tzdb);
 builder.Services.AddSingleton<TimeZoneConversionService>();
 builder.Services.AddScoped<LootEditService>();
+// Hand-entered loot from the Loot System. Separate from the event-close debit path because it
+// charges the winner immediately -- see ManualLootService for why that needs its own stamp.
+builder.Services.AddScoped<ManualLootService>();
+// Turns the addon-reported alliance leader into the alliance NUMBERS the rest of the app speaks.
+// See AllianceIdentityService for why the number stopped being typed by hand.
+builder.Services.AddScoped<AllianceIdentityService>();
 builder.Services.AddScoped<EventHistoryEditService>();
 builder.Services.AddScoped<EventCommentService>();
 builder.Services.AddSingleton<AiCommentSummaryService>();
@@ -243,6 +252,8 @@ builder.Services.AddScoped<DkpSheetService>();
 // mutation goes through so the balance and the ledger can never disagree.
 builder.Services.AddScoped<DkpPoolProvisioner>();
 builder.Services.AddScoped<DkpPoolResolver>();
+builder.Services.AddScoped<LinkshellMonsterTimingProvisioner>();
+builder.Services.AddScoped<MonsterTimingResolver>();
 builder.Services.AddScoped<DkpPoolBalanceService>();
 builder.Services.AddScoped<DkpLedgerWriter>();
 // Gil treasury: the one place "how much gil does this linkshell have" is answered. Same
@@ -253,14 +264,20 @@ builder.Services.AddScoped<LedgerAccountProvisioner>();
 builder.Services.AddScoped<LedgerPeriodGuard>();
 builder.Services.AddScoped<TreasuryBalanceService>();
 builder.Services.AddScoped<TreasuryJournalWriter>();
+// Paying members off the balance sheet's "who we owe" list. Shared so tick-and-pay behaves
+// identically on the website and in the Activity.
+builder.Services.AddScoped<TreasurySettlementService>();
 builder.Services.AddScoped<ItemSaleRecorder>();
 // Charts (Sky, Sea, …). Shared by the Activity API and the website's ChartsController so the two
 // surfaces cannot derive a different Farming Credit Ledger from the same rows.
 builder.Services.AddScoped<ChartBoardService>();
+builder.Services.AddScoped<ChartWishlistService>();
+builder.Services.AddScoped<ChartKeyItemService>();
 // Shared save logic for the pools config (Activity + web), and the catalog of event types an
 // officer can assign — including the free-text ones their own events actually used.
 builder.Services.AddScoped<DkpPoolEventTypeCatalog>();
 builder.Services.AddScoped<DkpPoolEditor>();
+builder.Services.AddScoped<MonsterTimingEditor>();
 // DKP import (Excel/CSV → update existing members + create placeholders) and the
 // first-launch "claim your DKP" merge that links an imported placeholder to a
 // real account.
@@ -281,6 +298,7 @@ builder.Services.AddHealthChecks()
 builder.Services.AddScoped<WindowEventDkpLedgerService>();
 // Builds the attendance-snapshot sections shared by the Event System page and Attendance History.
 builder.Services.AddScoped<AttendanceSectionsBuilder>();
+builder.Services.AddScoped<WindowEventLinkService>();
 builder.Services.AddScoped<MemberActivityService>();
 builder.Services.AddScoped<HnmAutoEventService>();
 // The two HNM earn formulas — "what did this camp owe?", per attendance mode. Neither pays any
@@ -610,12 +628,15 @@ app.Use(async (ctx, next) =>
             $"frame-ancestors 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devTunnelHostFragment}{devLocalhostFrame};",
             $"connect-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devTunnelHostFragment}{devLocalhost};",
             "img-src 'self' data: blob: https://cdn.discordapp.com https://media.discordapp.net https://*.discordsays.com;",
-            "font-src 'self' data:;",
+            // Google Fonts is the one external asset host: the home page's masthead
+            // (Views/Home/Index.cshtml) loads Cinzel from it. The stylesheet comes from
+            // fonts.googleapis.com and the font files it points at from fonts.gstatic.com.
+            "font-src 'self' data: https://fonts.gstatic.com;",
             // 'unsafe-inline' on style-src is retained because the existing
             // Razor views use inline style attributes throughout; migrating
             // those to stylesheets is tracked as follow-up cleanup. The
             // script-src is locked to nonce-only (no 'unsafe-inline', no blob:).
-            "style-src 'self' 'unsafe-inline';",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
             $"script-src 'self' 'nonce-{nonce}';",
             "object-src 'none';",
             $"frame-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com https://docs.google.com https://accounts.google.com{devTunnelHostFragment};"

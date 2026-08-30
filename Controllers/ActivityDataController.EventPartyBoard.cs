@@ -124,47 +124,6 @@ public sealed partial class ActivityDataController
         var membership = await GetMembershipAsync(appUser.Id, ev.LinkshellId, cancellationToken);
         if (membership is null) return Forbid();
 
-        // "Fill earlier alliances first" nudge: if enabled and an open slot this member's
-        // job can fill is still free in an EARLIER alliance, return the suggestion instead
-        // of committing. The client offers it; "Sign up here anyway" re-posts with force.
-        if (!request.Force)
-        {
-            var fillInOrder = await _dbContext.Linkshells
-                .Where(l => l.Id == ev.LinkshellId)
-                .Select(l => l.FillAlliancesInOrder)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (fillInOrder)
-            {
-                var jobs = PartySetupSignupService.ResolveSignupJobs(slot, request.Role, request.MainJob, request.SubJob);
-                if (jobs.Success)
-                {
-                    var setup = await _dbContext.PartySetups
-                        .Include(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
-                        .FirstOrDefaultAsync(ps => ps.Id == ev.PartySetupId.Value, cancellationToken);
-                    if (setup is not null)
-                    {
-                        var signups = await EventPartySignupService.GetSignupsForEventAsync(_dbContext, eventId, cancellationToken);
-                        var suggestion = PartyFillSuggestion.SuggestEarlierSlot(setup, signups, slot, jobs.Role, jobs.MainJob);
-                        if (suggestion is not null && suggestion.Id != slot.Id)
-                        {
-                            return Ok(new
-                            {
-                                nudge = new
-                                {
-                                    suggestedSlotId = suggestion.Id,
-                                    location = PartyFillSuggestion.DescribeSlot(setup, suggestion),
-                                    requirement = PartyFillSuggestion.RequirementLabel(suggestion),
-                                    role = jobs.Role,
-                                    mainJob = jobs.MainJob,
-                                    subJob = jobs.SubJob,
-                                },
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
         // Sign up as the member's main OR a chosen alt (validated against their
         // real characters; falls back to main if the requested name isn't theirs).
         var characterName = SignupCharacters.Resolve(appUser, membership, request.CharacterName);
@@ -189,10 +148,6 @@ public sealed partial class ActivityDataController
         await EventPartySignupService.SyncParticipationAfterClaimAsync(_dbContext, ev, appUser.Id, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        // Auto-promote the earliest signup to leader if the party just filled
-        // without anyone claiming leadership.
-        await EventPartySignupService.ResolvePartyLeadershipAsync(
-            _dbContext, eventId, slot.PartySetupPartyId, cancellationToken);
         EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
     }
@@ -245,7 +200,6 @@ public sealed partial class ActivityDataController
             }
 
             await _dbContext.SaveChangesAsync(cancellationToken);
-            await EventPartySignupService.ResolvePartyLeadershipAsync(_dbContext, eventId, affectedPartyId, cancellationToken);
             EnqueueEventBoardRefresh(eventId);
         }
 

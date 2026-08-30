@@ -1,0 +1,263 @@
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.TreasuryItemsViewModel
+@*
+    Treasury > Items, as a section of the one Treasury page.
+
+    It sits between the balance sheet and the transactions list, and that position is the point:
+    selling an item is what moves the figures above it, and the transactions list runs long enough to
+    bury anything placed under it. Same order the Discord Activity's Treasury tab uses.
+
+    Everything an item's buttons post to still lives on ManageItemController — this only moved where
+    the list is rendered, not what any of it does.
+*@
+@{
+    // The gil card's own query lives on this same URL now, so the stockpile/sold toggle has to carry
+    // it: switching to the Sold archive must not silently reset a search or a filter someone set on
+    // the transactions list below. Read off the request rather than passed in, so the toggle keeps
+    // whatever the page was showing without this component having to know what that is.
+    string? Carried(string key) =>
+        string.IsNullOrEmpty(Context.Request.Query[key]) ? null : Context.Request.Query[key].ToString();
+    var gilSearch = Carried("search");
+    var gilFilter = Carried("filter");
+}
+
+<div class="page-head lsm-section-head fade d3">
+    <div>
+        <div class="page-eyebrow">@TreasuryLabels.Section</div>
+        <h2 class="page-title">@TreasuryLabels.ItemsTitle</h2>
+        <div class="page-sub">
+            <span><span class="num">@Model.Stockpile.Count</span> item@(Model.Stockpile.Count == 1 ? "" : "s") in the stash</span>
+            @if (Model.Sold.Count > 0)
+            {
+                <span class="dot"> · </span>
+                <span><span class="num">@Model.Sold.Count</span> sold</span>
+            }
+        </div>
+    </div>
+    @if (Model.CanManage)
+    {
+        <div class="page-actions">
+            <a class="btn primary" asp-controller="ManageItem" asp-action="AddItem">+ Add item</a>
+        </div>
+    }
+</div>
+
+@if (Model.Items.Count == 0)
+{
+    <div class="card fade d3">
+        <div class="empty">
+            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No items yet</div>
+            <div style="margin-bottom:12px">
+                @if (Model.CanManage)
+                {
+                    <span>Track gear, consumables, or gil reserves for your linkshell.</span>
+                }
+                else
+                {
+                    <span>No items have been added for your linkshell.</span>
+                }
+            </div>
+            @if (Model.CanManage)
+            {
+                <a class="btn primary" asp-controller="ManageItem" asp-action="AddItem">Add item</a>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="card fade d3">
+        <div class="card-head">
+            @* #items so the toggle scrolls back to this card rather than to the top of a page that
+               now starts with the balance sheet. *@
+            <div style="display:flex;gap:6px;align-items:center">
+                <a class="btn sm @(Model.ShowingSold ? "ghost" : "primary")"
+                   asp-controller="ManageFinances" asp-action="Index" asp-fragment="items"
+                   asp-route-search="@gilSearch" asp-route-filter="@gilFilter">Stockpile</a>
+                <a class="btn sm @(Model.ShowingSold ? "primary" : "ghost")"
+                   asp-controller="ManageFinances" asp-action="Index" asp-fragment="items"
+                   asp-route-items="sold" asp-route-search="@gilSearch" asp-route-filter="@gilFilter">Sold</a>
+            </div>
+            <span class="tag">
+                @if (Model.ShowingSold)
+                {
+                    @($"{Model.Sold.Count} sold · {Model.SoldTotal:N0} gil")
+                }
+                else
+                {
+                    @($"{Model.Stockpile.Count} items · {Model.Stockpile.Sum(item => item.Quantity)} qty")
+                }
+            </span>
+        </div>
+
+        @if (Model.Shown.Count == 0)
+        {
+            <div class="empty" style="padding:24px 16px">
+                @if (Model.ShowingSold)
+                {
+                    <span>Nothing sold yet. Items move here once they are marked sold, with what they went for.</span>
+                }
+                else
+                {
+                    <span>Everything in the stash has been sold. The Sold tab has the @Model.Sold.Count of them.</span>
+                }
+            </div>
+        }
+        else
+        {
+            <table class="table themed">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Type</th>
+                        <th style="text-align:right">Quantity</th>
+                        <th>Notes</th>
+                        <th>Added by</th>
+                        @if (Model.CanManage)
+                        {
+                            <th style="text-align:right">Actions</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model.Shown)
+                    {
+                        <tr>
+                            <td style="font-weight:500">
+                                @item.ItemName
+                                @if (item.IsSold)
+                                {
+                                    <span class="tag success" style="margin-left:6px">Sold @((item.SoldPrice ?? 0).ToString("N0")) gil</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(item.ItemType))
+                                {
+                                    <span class="tag">@item.ItemType</span>
+                                }
+                                else
+                                {
+                                    <span style="color:var(--fg-4)">—</span>
+                                }
+                            </td>
+                            <td class="num" style="text-align:right">@item.Quantity</td>
+                            <td style="color:var(--fg-3)">@(item.Notes ?? "")</td>
+                            <td style="font-size:12px;color:var(--fg-3)">
+                                @if (!string.IsNullOrWhiteSpace(item.CreatedByCharacterName))
+                                {
+                                    <div>@item.CreatedByCharacterName</div>
+                                }
+                                <div>@item.CreatedAt.ToString("MMM d, yyyy")</div>
+                            </td>
+                            @if (Model.CanManage)
+                            {
+                                <td style="text-align:right">
+                                    <div style="display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                                        @if (!item.IsSold)
+                                        {
+                                            <button type="button" class="btn primary sm js-sell"
+                                                    data-item-id="@item.Id" data-item-name="@item.ItemName">Sell</button>
+                                            <a class="btn ghost sm" asp-controller="ManageItem" asp-action="Edit" asp-route-id="@item.Id">Edit</a>
+                                        }
+                                        else
+                                        {
+                                            <form asp-controller="ManageItem" asp-action="Unsell" asp-route-id="@item.Id" method="post" style="display:inline"
+                                                  data-confirm="Undo this sale? An opposite entry cancels the gil out in the Treasury — the original stays in the list, so nothing disappears.">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn ghost sm">Unsell</button>
+                                            </form>
+                                        }
+                                        <form asp-controller="ManageItem" asp-action="Delete" asp-route-id="@item.Id" method="post" style="display:inline"
+                                              data-confirm="Delete this item?">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn ghost sm" style="color:var(--danger)">Delete</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@if (Model.CanManage)
+{
+    @* Sell modal: a single shared dialog; the per-row "Sell" button fills in the item id/name. Posts
+       to MarkSold, which records the income in the gil card above. *@
+    <div id="sellModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:16px">
+        <div class="card" style="max-width:420px;width:100%">
+            <div class="card-head">
+                <div class="card-title">Sell item</div>
+            </div>
+            <form asp-controller="ManageItem" asp-action="MarkSold" method="post" style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" id="sellItemId" />
+                <div style="font-size:13px;color:var(--fg-3)">
+                    Mark <strong id="sellItemName" style="color:var(--fg)"></strong> as sold. The amount is added to
+                    your linkshell's gil as income.
+                </div>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--fg-3)">
+                    Sale price (gil)
+                    <input type="number" name="salePrice" id="sellPrice" min="0" step="1" required
+                           inputmode="numeric" placeholder="e.g. 500000" />
+                </label>
+                @* Who sold it — NOT whoever is clicking. Officers record other people's sales all the
+                   time, and this used to file the clicker as the seller. It is also the answer to
+                   where the gil went: whoever sold it is holding it until they hand it on, so one
+                   box fills both the item's seller and the treasury entry's holder, and the gil card
+                   above gets a name instead of another anonymous arrival. *@
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--fg-3)">
+                    Who sold it
+                    <input type="text" name="soldBy" id="sellSoldBy" maxlength="256" required
+                           autocomplete="off" list="sellSellers" placeholder="Search members…" />
+                    <datalist id="sellSellers">
+                        @foreach (var name in Model.Roster)
+                        {
+                            <option value="@name"></option>
+                        }
+                    </datalist>
+                    <span style="color:var(--fg-4)">
+                        They are holding the gil until they hand it on — the gil card lists who has what.
+                    </span>
+                </label>
+                <div style="display:flex;gap:8px;justify-content:flex-end">
+                    <button type="button" class="btn ghost sm" id="sellCancel">Cancel</button>
+                    <button type="submit" class="btn primary sm">Confirm sale</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* The confirm prompts are data-confirm attributes handled by the page's own script, not inline
+       onsubmit: the treasury page runs under a CSP nonce and already binds every form[data-confirm]. *@
+    <script nonce="@Html.CspNonce()">
+        (function () {
+            var modal = document.getElementById('sellModal');
+            if (!modal) { return; }
+            var idInput = document.getElementById('sellItemId');
+            var nameEl = document.getElementById('sellItemName');
+            var priceInput = document.getElementById('sellPrice');
+            var soldByInput = document.getElementById('sellSoldBy');
+            function open(id, name) {
+                idInput.value = id;
+                nameEl.textContent = name;
+                priceInput.value = '';
+                if (soldByInput) { soldByInput.value = ''; }
+                modal.style.display = 'flex';
+                priceInput.focus();
+            }
+            function close() { modal.style.display = 'none'; }
+            document.querySelectorAll('.js-sell').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    open(btn.getAttribute('data-item-id'), btn.getAttribute('data-item-name'));
+                });
+            });
+            var cancel = document.getElementById('sellCancel');
+            if (cancel) { cancel.addEventListener('click', close); }
+            modal.addEventListener('click', function (e) { if (e.target === modal) { close(); } });
+        })();
+    </script>
+}

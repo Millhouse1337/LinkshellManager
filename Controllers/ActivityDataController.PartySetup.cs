@@ -98,7 +98,7 @@ public sealed partial class ActivityDataController
         string? SubJob,
         string? AppUserId = null);
 
-    public sealed record ActivityPartySetupSignUpRequest(string? Role, string? MainJob, string? SubJob, bool AsLeader = false, string? CharacterName = null, bool Force = false);
+    public sealed record ActivityPartySetupSignUpRequest(string? Role, string? MainJob, string? SubJob, bool AsLeader = false, string? CharacterName = null);
 
     [HttpGet("party-setups")]
     public async Task<IActionResult> GetPartySetupsAsync([FromQuery] int linkshellId, CancellationToken cancellationToken)
@@ -133,7 +133,7 @@ public sealed partial class ActivityDataController
             membership.Linkshell?.LinkshellName,
             canManage,
             items,
-            TodManagerViewModel.SupportedMonsters.ToList(),
+            (await _monsterTimings.GetMapAsync(linkshellId, cancellationToken)).EventMonsterOptions.ToList(),
             EventJobCatalog.JobTypeOptions.ToList(),
             EventJobCatalog.MainJobOptions.ToList(),
             EventJobCatalog.SubJobOptions.ToList()));
@@ -307,16 +307,14 @@ public sealed partial class ActivityDataController
         var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
         if (!await CanAsync(membership, r => r.CanManageParties, cancellationToken)) return Forbid();
 
-        var linkshellType = await _dbContext.Linkshells
-            .Where(ls => ls.Id == request.LinkshellId)
-            .Select(ls => ls.LinkshellType)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (linkshellType is null) return NotFound(new { error = "Linkshell not found." });
+        var linkshellExists = await _dbContext.Linkshells
+            .AnyAsync(ls => ls.Id == request.LinkshellId, cancellationToken);
+        if (!linkshellExists) return NotFound(new { error = "Linkshell not found." });
 
-        var normalizedLinkshellType = LinkshellTypes.Normalize(linkshellType);
-        var normalizedEventType = NormalizePartySetupEventType(request.EventType, normalizedLinkshellType);
+        var normalizedEventType = NormalizePartySetupEventType(request.EventType);
 
-        var validationError = ValidatePartySetupEditor(request, normalizedLinkshellType, normalizedEventType);
+        var allowedMonsters = await _monsterTimings.GetMapAsync(request.LinkshellId, cancellationToken);
+        var validationError = ValidatePartySetupEditor(request, normalizedEventType, allowedMonsters);
         if (validationError is not null) return BadRequest(new { error = validationError });
 
         var now = DateTime.UtcNow;
@@ -357,16 +355,14 @@ public sealed partial class ActivityDataController
         var membership = await GetMembershipAsync(appUser.Id, partySetup.LinkshellId, cancellationToken);
         if (!await CanAsync(membership, r => r.CanManageParties, cancellationToken)) return Forbid();
 
-        var linkshellType = await _dbContext.Linkshells
-            .Where(ls => ls.Id == partySetup.LinkshellId)
-            .Select(ls => ls.LinkshellType)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (linkshellType is null) return NotFound(new { error = "Linkshell not found." });
+        var linkshellExists = await _dbContext.Linkshells
+            .AnyAsync(ls => ls.Id == partySetup.LinkshellId, cancellationToken);
+        if (!linkshellExists) return NotFound(new { error = "Linkshell not found." });
 
-        var normalizedLinkshellType = LinkshellTypes.Normalize(linkshellType);
-        var normalizedEventType = NormalizePartySetupEventType(request.EventType, normalizedLinkshellType);
+        var normalizedEventType = NormalizePartySetupEventType(request.EventType);
 
-        var validationError = ValidatePartySetupEditor(request, normalizedLinkshellType, normalizedEventType);
+        var allowedMonsters = await _monsterTimings.GetMapAsync(partySetup.LinkshellId, cancellationToken);
+        var validationError = ValidatePartySetupEditor(request, normalizedEventType, allowedMonsters);
         if (validationError is not null) return BadRequest(new { error = validationError });
 
         // Replace the whole tree (mirrors PartySetupController.Edit). Cascade
@@ -421,9 +417,12 @@ public sealed partial class ActivityDataController
         {
             return BadRequest(new { error = "Monster assignment only applies to HNM party setups." });
         }
-        if (!string.IsNullOrEmpty(trimmed) && !SupportedTodMonsters.Contains(trimmed))
+        // Against the LINKSHELL's catalog, not the compile-time list: a monster this linkshell
+        // added itself is assignable here exactly like a built-in one.
+        var catalog = await _monsterTimings.GetMapAsync(partySetup.LinkshellId, cancellationToken);
+        if (!catalog.Allows(trimmed))
         {
-            return BadRequest(new { error = "That monster is not a supported ToD monster." });
+            return BadRequest(new { error = "That monster is not in this linkshell's monster list. Add it under Configurations -> Monster setups first." });
         }
 
         partySetup.AssignedMonsterName = string.IsNullOrEmpty(trimmed) ? null : trimmed;
@@ -438,13 +437,8 @@ public sealed partial class ActivityDataController
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
-    private static string? NormalizePartySetupEventType(string? eventType, string linkshellType)
+    private static string? NormalizePartySetupEventType(string? eventType)
     {
-        if (LinkshellTypes.Normalize(linkshellType) == LinkshellTypes.HnmOnly)
-        {
-            return "HNM";
-        }
-
         var trimmed = eventType?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
@@ -456,10 +450,12 @@ public sealed partial class ActivityDataController
     // (null = valid). The editor sends a RequirementType already derived from
     // the picks (Job > Role > Any), so this validates the same way the web form
     // does. FFXI caps: <=3 parties per alliance, <=6 slots per party.
+    // allowedMonsters is the LINKSHELL's catalog (built-ins + its own custom monsters), passed in
+    // rather than read from a static field so a monster an officer added is assignable here.
     private static string? ValidatePartySetupEditor(
         ActivityPartySetupEditorRequest request,
-        string linkshellType,
-        string? normalizedEventType)
+        string? normalizedEventType,
+        MonsterTimingMap allowedMonsters)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
@@ -471,17 +467,12 @@ public sealed partial class ActivityDataController
             return "Select an event type.";
         }
 
-        if (LinkshellTypes.Normalize(linkshellType) == LinkshellTypes.SkySeaDynamis && IsHnmPartySetupType(normalizedEventType))
-        {
-            return "HNM is not available for Sky/Sea/Dynamis linkshells.";
-        }
-
         var monster = request.AssignedMonsterName?.Trim();
         if (IsHnmPartySetupType(normalizedEventType) &&
             !string.IsNullOrEmpty(monster) &&
-            !SupportedTodMonsters.Contains(monster))
+            !allowedMonsters.Allows(monster))
         {
-            return "Select a supported ToD monster, or leave it unassigned.";
+            return "That monster is not in this linkshell's monster list. Add it under Configurations -> Monster setups first, or leave it unassigned.";
         }
 
         var slots = request.Slots ?? new List<ActivityPartySetupSlotInput>();

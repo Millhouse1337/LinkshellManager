@@ -22,7 +22,11 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
 
     // Don't post a board for a pop that's already long past (dormant template, or the
     // app was down across the window). Past this we skip but still advance the stamp.
-    private static readonly TimeSpan PostGrace = TimeSpan.FromHours(6);
+    // Public because HnmRecurringBoardService.SyncParkedBoardsForTodAsync has to answer the
+    // same "is this pop still worth posting for?" question when a corrected ToD un-sticks a
+    // cycle this loop gave up on — the two must agree or a ToD could be revived here and
+    // abandoned again on the next tick.
+    public static readonly TimeSpan PostGrace = TimeSpan.FromHours(6);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<HnmRecurringBoardBackgroundService> _logger;

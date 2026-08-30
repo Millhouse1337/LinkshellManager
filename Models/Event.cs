@@ -131,11 +131,17 @@ public class Event
     // The highest window whose turnover has been settled, so a wyrm's roster is cleared exactly
     // once per window even though the advancer polls every few seconds.
     //
+    // On the PRINTED window scale (DiscordEventMessageBuilder.FocusWindow — the window the board
+    // names and everyone is signing up for), NOT the HnmWindowNumber counter. The two differ by
+    // one for the whole live camp, and keying this to the printed number is what makes "the board
+    // changed its number" and "the roster was wiped" the same event — including at commencement,
+    // where the board steps to window 2 while the counter is still on 1.
+    //
     // Only wyrm boards clear a roster at all (HnmConfig.WindowAdvanceWipesRoster); on the
     // kings/dragons settling is bookkeeping only, since their windows are one continuous camp.
     //
-    // Null reads as 1: window 1 is the camp's opening roster and is never cleared, so a fresh
-    // board falls straight through rather than wiping everyone who just signed up.
+    // Null reads as 1: a board that has not gone live yet is still collecting window 1's signups,
+    // so a fresh board falls straight through rather than wiping everyone who just signed up.
     public int? HnmClearedWindow { get; set; }
 
     // Optional "Day N" label for an HNM signup board — set on the create-event form and
@@ -172,6 +178,22 @@ public class Event
     // name.
     public DateTime? NextWindowAt { get; set; }
 
+    // This camp's SPAWN GRID, captured from the linkshell's monster setup when the camp was
+    // created. Null on every camp that predates per-linkshell setups, and on any monster with no
+    // grid — the runtime then falls back to HnmConfig exactly as it always did.
+    //
+    // Stamped rather than looked up live, and that is the whole point: a live board reading the
+    // config each tick would jump from "Window 4 of 25" to "of 7" the moment an officer edited
+    // the table, and every attendance snapshot already labelled against the old grid would be
+    // measured against a different one. A camp keeps the grid it started on.
+    //
+    // Deliberately NOT WindowCountOverride: that column already means the POST count on an
+    // addon-made camp and the SPAWN count on an app-made one, and the comment on
+    // DiscordEventMessageBuilder.EffectiveWindowCount is the story of what one column doing two
+    // jobs cost.
+    public int? SpawnWindowCount { get; set; }
+    public int? SpawnWindowMinutes { get; set; }
+
     // The UTC instant window 1 opened for a timed HNM camp — the anchor the window schedule counts
     // from (window N opens at WindowAnchorAt + (N-1) × WindowMinutes). Always the camp's StartTime:
     // seeded from it at auto-start and re-pinned to it on every manual Prev/Next, so the window grid
@@ -196,6 +218,18 @@ public class Event
 
     [MaxLength(20)]
     public string? DiscordMessageId { get; set; }
+
+    // The board's CONTINUATION messages, comma-separated, in display order — everything after
+    // DiscordMessageId, which stays the first.
+    //
+    // A wide text board is one Discord message per ALLIANCE, because a message caps at 2000
+    // characters and a 54-slot roster with names, jobs and icons does not fit in one. Splitting
+    // gives each alliance its own 2000 (it uses about a third), which is what lets the board
+    // keep full names, wide columns and the readiness icons at the same time.
+    //
+    // Null/empty for every other board shape — the picture board and ad-hoc events are a single
+    // message and only ever set DiscordMessageId.
+    public string? DiscordExtraMessageIds { get; set; }
 
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();
 

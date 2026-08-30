@@ -43,6 +43,17 @@ public class AppUserEvent
 
     public bool IsQuickJoin { get; set; }
 
+    // Self-declared readiness tags for the DISCORD board, set by the member after they're
+    // on it ("🎖️ My Readiness"). The no-slot ("Also Attending") half of the same three
+    // flags EventPartySlotSignup carries — a member who holds a slot AND has an attendance
+    // row gets both written, so the tags survive an officer benching them. Declarations
+    // only: nothing validates them and they grant nothing. See EventReadiness.
+    public bool EnfeebReady { get; set; }
+
+    public bool ResistReady { get; set; }
+
+    public bool RelicWeapon { get; set; }
+
     // Manual Check In attendance: the window this member first CHECKED IN for. Credit at finalize
     // = windows from arrival through their departure (or the camp's pop/last window), inclusive.
     // Re-tapping "Check In" at a later window overwrites this (the "late arrival" correction).

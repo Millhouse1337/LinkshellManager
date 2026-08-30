@@ -1,6 +1,7 @@
 ﻿using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -164,6 +165,12 @@ public partial class EventController
             return null;
         }
 
+        // This linkshell's configured monster setups, resolved ONCE for the whole page, so the ToD
+        // modal opens on the cooldown and interval the linkshell actually runs rather than on a
+        // table the view kept for itself. Same source the Activity's board ToD form reads.
+        var monsterTimings = await _monsterTimings.GetMapAsync(
+            selectedLinkshellId.Value, HttpContext.RequestAborted);
+
         var viewModels = events.Select(evt =>
         {
             PartySetupBoardViewModel? board = null;
@@ -178,10 +185,20 @@ public partial class EventController
             }
 
             var repostLead = RepostLeadFor(evt.AssignedMonsterName);
+            // Only an HNM card carries a Post ToD button, so only it needs the defaults.
+            var boardTiming = string.Equals((evt.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase)
+                ? monsterTimings.For(evt.AssignedMonsterName)
+                : (MonsterTiming?)null;
             return new EventViewModel
             {
                 BoardRepostEnabled = repostLead is not null,
                 BoardRepostLeadHours = repostLead,
+                BoardTodDefaultCooldown = boardTiming is { } cooldownTiming
+                    ? TodDurationFormat.Format(cooldownTiming.CooldownMinutes)
+                    : null,
+                BoardTodDefaultInterval = boardTiming is { } intervalTiming
+                    ? TodDurationFormat.Format(intervalTiming.TodIntervalMinutes)
+                    : null,
                 Event = new Event
                 {
                     Id = evt.Id,
@@ -333,7 +350,7 @@ public partial class EventController
     // Attendance snapshots used to live behind their own "Attendance System" nav group. They only
     // ever come from HNM activity, so the open ones now render on this page — an officer reviews the
     // roster a camp produced without leaving the camp. Null (section omitted) when there's no active
-    // linkshell, or when it's a Sky/Sea/Dynamis linkshell, which never posts snapshots.
+    // linkshell.
     private async Task<WindowEventsViewModel?> BuildAttendanceSectionsAsync(AppUser user, int? linkshellId)
     {
         if (!linkshellId.HasValue) return null;
@@ -341,10 +358,9 @@ public partial class EventController
         var linkshell = await _context.Linkshells
             .AsNoTracking()
             .Where(l => l.Id == linkshellId.Value)
-            .Select(l => new { l.LinkshellName, l.LinkshellType })
+            .Select(l => new { l.LinkshellName })
             .FirstOrDefaultAsync();
         if (linkshell is null) return null;
-        if (LinkshellTypes.Normalize(linkshell.LinkshellType) == LinkshellTypes.SkySeaDynamis) return null;
 
         var membership = await _context.AppUserLinkshells
             .AsNoTracking()
@@ -353,8 +369,9 @@ public partial class EventController
 
         // Deliberately the SAME rank check WindowEventsController uses (IsLeaderOrOfficer), not the
         // permission-flag check the Discord Activity applies. Moving the sections to this page must
-        // not quietly change who can post DKP to the sheet.
-        var canManage = LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+        // not quietly change who can post DKP to the sheet. Both sides now also honour the app-wide
+        // admin override — keep them in lockstep.
+        var canManage = await CanManageLinkshellAsync(membership);
 
         return await _attendanceSections.BuildAsync(
             linkshellId.Value,
@@ -396,23 +413,17 @@ public partial class EventController
         ModelState.Remove(nameof(EventViewModel.LinkshellId));
 
         var createMembership = await GetMembershipAsync(user.Id, eventViewModel.Event.LinkshellId);
-        if (!CanManageLinkshell(createMembership))
+        if (!await CanManageLinkshellAsync(createMembership))
         {
             ModelState.AddModelError(string.Empty, "Leader or officer access is required to create events for this linkshell.");
         }
 
-        // HNM signup boards are created/managed in the Discord Activity now (gated by HNM
-        // Outside Sign Up), so HNM isn't offered in the web create dropdown. This branch is
-        // only reachable by a crafted POST; keep it correct by gating on the HNM toggle.
+        // HNM is an ordinary event type now — every linkshell can create one. The monster is
+        // the only thing it needs beyond the common fields.
         var isHnm = string.Equals((eventViewModel.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
         string? monsterName = null;
         if (isHnm)
         {
-            var outsideEnabled = createMembership?.Linkshell?.HnmOutsideSignupEnabled == true;
-            if (!outsideEnabled)
-            {
-                ModelState.AddModelError("Event.EventType", "HNM signup boards require HNM Outside Sign Up to be enabled for this linkshell.");
-            }
             monsterName = eventViewModel.Event.AssignedMonsterName?.Trim();
             if (string.IsNullOrWhiteSpace(monsterName))
             {
@@ -469,6 +480,15 @@ public partial class EventController
             newEvent.DkpPerHour = 0;
             newEvent.AutoStart = false;
             newEvent.CountsTowardActive = false;
+            // Per-camp bonus overrides are HNM-only, so they're stamped here rather than in the
+            // initializer above — a non-HNM event can't carry them even if the form posts them.
+            // Null (an empty box) means "use the linkshell's amount", which is what leaves the
+            // camp on the defaults. Mirrors the Activity's CreateEvent path.
+            newEvent.HnmOpenBonusOverride = NormalizeBonusOverride(eventViewModel.Event.HnmOpenBonusOverride);
+            newEvent.HnmCloseBonusOverride = NormalizeBonusOverride(eventViewModel.Event.HnmCloseBonusOverride);
+            newEvent.HnmClaimBonusOverride = NormalizeBonusOverride(eventViewModel.Event.HnmClaimBonusOverride);
+            newEvent.HnmKillBonusOverride = NormalizeBonusOverride(eventViewModel.Event.HnmKillBonusOverride);
+            newEvent.HnmPerWindowOverride = NormalizeBonusOverride(eventViewModel.Event.HnmPerWindowOverride);
         }
 
         _context.Events.Add(newEvent);
@@ -477,11 +497,22 @@ public partial class EventController
         // Repeat-on-ToD: persist/refresh (or disable) the recurring-board template.
         // Works for a custom monster too — recurrence keys on the (case-insensitive)
         // AssignedMonsterName the ToD records; UpsertAsync self-guards null/whitespace.
-        // Lead is null on purpose: the form only toggles recurrence, and UpsertAsync keeps
-        // whatever lead the End Camp / Post ToD form last set.
+        //
+        // The lead comes off the form now. The create form used to only TOGGLE recurrence and
+        // leave the lead to End Camp, which meant a brand-new board silently took the 1-hour
+        // default and the officer had no way to say otherwise until the camp was already over.
+        // An empty box still posts null, which UpsertAsync reads as "keep whatever lead this
+        // board already has" — so re-creating a camp for a monster whose lead was last set at
+        // End Camp still can't reset it by accident.
+        //
+        // Stamping the latest ToD is right HERE and only here — it marks this pop as already
+        // handled so the poller doesn't immediately re-post a board for the very pop this new
+        // event was created for.
         if (isHnm && eventViewModel.RepeatOnTod)
         {
-            await HnmRecurringBoardService.UpsertAsync(_context, newEvent, null, user.Id, HttpContext.RequestAborted);
+            await HnmRecurringBoardService.UpsertAsync(
+                _context, newEvent, eventViewModel.RepostLeadHours, user.Id,
+                stampLatestTod: true, HttpContext.RequestAborted);
         }
         else if (isHnm && !eventViewModel.RepeatOnTod)
         {
@@ -489,6 +520,19 @@ public partial class EventController
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    // A per-camp DKP override off the form. Null (an empty box) stays null — "use the
+    // linkshell's amount" — and a negative or non-finite number is floored at zero rather than
+    // stored, since a camp can't pay less than nothing. Mirrors the Activity endpoint's
+    // NormalizeBonusOverride so both clients write the same values.
+    private static double? NormalizeBonusOverride(double? value)
+    {
+        if (value is null || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+        {
+            return null;
+        }
+        return Math.Max(0d, value.Value);
     }
 
     private async Task<bool> PartySetupBelongsToLinkshellAsync(int partySetupId, int linkshellId)
@@ -502,7 +546,7 @@ public partial class EventController
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SignUpPartySlot(
-        int eventId, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl, bool asLeader = false, string? selectedCharacter = null, bool force = false)
+        int eventId, int slotId, string? role, string? mainJob, string? subJob, string? returnUrl, bool asLeader = false, string? selectedCharacter = null)
     {
         var user = await RequireCurrentUserAsync();
         if (user is null)
@@ -533,41 +577,6 @@ public partial class EventController
 
         var characterName = SignupCharacters.Resolve(user, membership, selectedCharacter);
 
-        // "Fill earlier alliances first" nudge: if the linkshell wants it and there's still
-        // an open slot this member's job can fill in an EARLIER alliance, stash a prompt and
-        // bounce back to the board (no commit). "Sign up here anyway" re-posts with force.
-        if (!force)
-        {
-            var fillInOrder = await _context.Linkshells
-                .Where(l => l.Id == eventEntity.LinkshellId)
-                .Select(l => l.FillAlliancesInOrder)
-                .FirstOrDefaultAsync();
-            if (fillInOrder)
-            {
-                var jobs = PartySetupSignupService.ResolveSignupJobs(slot, role, mainJob, subJob);
-                if (jobs.Success)
-                {
-                    var setup = await _context.PartySetups
-                        .Include(ps => ps.Alliances).ThenInclude(a => a.Parties).ThenInclude(p => p.Slots)
-                        .FirstOrDefaultAsync(ps => ps.Id == eventEntity.PartySetupId.Value);
-                    if (setup is not null)
-                    {
-                        var signups = await EventPartySignupService.GetSignupsForEventAsync(_context, eventId, HttpContext.RequestAborted);
-                        var suggestion = PartyFillSuggestion.SuggestEarlierSlot(setup, signups, slot, jobs.Role, jobs.MainJob);
-                        if (suggestion is not null && suggestion.Id != slot.Id)
-                        {
-                            TempData["SignupNudge"] = System.Text.Json.JsonSerializer.Serialize(new SignupNudgePayload(
-                                eventId, slotId, suggestion.Id,
-                                PartyFillSuggestion.DescribeSlot(setup, suggestion),
-                                PartyFillSuggestion.RequirementLabel(suggestion),
-                                jobs.Role, jobs.MainJob, jobs.SubJob, asLeader, selectedCharacter, returnUrl));
-                            return SafeLocalRedirect(returnUrl);
-                        }
-                    }
-                }
-            }
-        }
-
         var result = await EventPartySignupService.ClaimSlotAsync(
             _context, eventId, slot, user.Id, characterName, role, mainJob, subJob, HttpContext.RequestAborted, asLeader);
         if (!result.Success)
@@ -591,8 +600,6 @@ public partial class EventController
         // participation so a late joiner lands in the running event immediately.
         await EventPartySignupService.SyncParticipationAfterClaimAsync(_context, eventEntity, user.Id, HttpContext.RequestAborted);
         await _context.SaveChangesAsync();
-        // Auto-promote earliest signup if the party just filled with no leader.
-        await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, slot.PartySetupPartyId, HttpContext.RequestAborted);
         EnqueueEventBoardRefresh(eventId);
 
         return SafeLocalRedirect(returnUrl);
@@ -701,7 +708,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
-        var isOfficer = CanManageLinkshell(membership);
+        var isOfficer = await CanManageLinkshellAsync(membership);
 
         var signup = slotId is { } sid
             ? await _context.EventPartySlotSignups.Include(s => s.PartySetupSlot)
@@ -737,7 +744,6 @@ public partial class EventController
             _context.EventPartySlotSignups.Remove(signup);
         }
         await _context.SaveChangesAsync();
-        await EventPartySignupService.ResolvePartyLeadershipAsync(_context, eventId, affectedPartyId, HttpContext.RequestAborted);
         EnqueueEventBoardRefresh(eventId);
 
         return SafeLocalRedirect(returnUrl);
@@ -765,7 +771,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventToEdit.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -792,14 +798,18 @@ public partial class EventController
         model.PartySetupId = eventToEdit.PartySetupId;
         model.LinkshellId = eventToEdit.LinkshellId;
 
-        // Pre-fill the "Repeat post when ToD is updated" toggle from the linkshell's
-        // recurring-board template for this monster (parity with the Activity edit form).
+        // Pre-fill the "Repeat post when ToD is updated" toggle and its lead from the
+        // linkshell's recurring-board template for this monster (parity with the Activity
+        // edit form). The lead is only shown for an ENABLED board: a disabled row's lead is
+        // stale bookkeeping, and showing it would re-apply it the moment the toggle is
+        // flipped back on.
         var editMonster = eventToEdit.AssignedMonsterName?.Trim();
         if (!string.IsNullOrWhiteSpace(editMonster))
         {
             var board = await HnmRecurringBoardService.FindAsync(
                 _context, eventToEdit.LinkshellId, editMonster, HttpContext.RequestAborted);
             model.RepeatOnTod = board?.Enabled == true;
+            model.RepostLeadHours = board?.Enabled == true ? board.LeadHours : null;
         }
 
         return View(model);
@@ -831,22 +841,9 @@ public partial class EventController
 
         var currentMembership = await GetMembershipAsync(user.Id, eventToUpdate.LinkshellId);
         var targetMembership = await GetMembershipAsync(user.Id, eventViewModel.Event.LinkshellId);
-        if (!CanManageLinkshell(currentMembership) || !CanManageLinkshell(targetMembership))
+        if (!await CanManageLinkshellAsync(currentMembership) || !await CanManageLinkshellAsync(targetMembership))
         {
             return Forbid();
-        }
-
-        // Converting an event TO an HNM signup board is gated by HNM Outside Sign Up the
-        // same way Create is — the web form only offers HNM for already-HNM events, so a
-        // non-HNM→HNM conversion can only arrive via a crafted POST. Gate on the TARGET
-        // linkshell (where the event ends up). Editing an existing HNM event is unaffected.
-        var becomingHnm = string.Equals((eventViewModel.Event.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
-        var wasHnm = string.Equals((eventToUpdate.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
-        if (becomingHnm && !wasHnm && targetMembership?.Linkshell?.HnmOutsideSignupEnabled != true)
-        {
-            ModelState.AddModelError("Event.EventType", "HNM signup boards require HNM Outside Sign Up to be enabled for this linkshell.");
-            var retryModel = await BuildEventViewModelAsync(user, eventViewModel);
-            return View(retryModel);
         }
 
         // If this event's board was customized into a per-event snapshot (which the
@@ -879,6 +876,7 @@ public partial class EventController
             {
                 eventToUpdate.AssignedMonsterName = monsterName;
                 eventToUpdate.WindowCountOverride = HnmConfig.EffectiveWindowCount(monsterName);
+                await HnmEventSeeder.StampSpawnGridAsync(_context, eventToUpdate, monsterName);
                 if (string.IsNullOrWhiteSpace(eventToUpdate.EventLocation))
                 {
                     eventToUpdate.EventLocation = HnmConfig.ZoneFor(monsterName);
@@ -890,6 +888,14 @@ public partial class EventController
             eventToUpdate.DkpPerHour = 0;
             eventToUpdate.AutoStart = false;
             eventToUpdate.CountsTowardActive = false;
+            // Per-camp bonus overrides (form section "03 — Camp DKP"). An emptied box posts
+            // nothing, which lands as null = "use the linkshell's amount", so clearing them all
+            // is how a camp goes back to the defaults.
+            eventToUpdate.HnmOpenBonusOverride = NormalizeBonusOverride(eventViewModel.Event.HnmOpenBonusOverride);
+            eventToUpdate.HnmCloseBonusOverride = NormalizeBonusOverride(eventViewModel.Event.HnmCloseBonusOverride);
+            eventToUpdate.HnmClaimBonusOverride = NormalizeBonusOverride(eventViewModel.Event.HnmClaimBonusOverride);
+            eventToUpdate.HnmKillBonusOverride = NormalizeBonusOverride(eventViewModel.Event.HnmKillBonusOverride);
+            eventToUpdate.HnmPerWindowOverride = NormalizeBonusOverride(eventViewModel.Event.HnmPerWindowOverride);
         }
 
         if (!currentIsSnapshot)
@@ -921,12 +927,21 @@ public partial class EventController
             if (eventViewModel.RepeatOnTod
                 && !string.IsNullOrWhiteSpace(monsterName))
             {
-                await HnmRecurringBoardService.UpsertAsync(_context, eventToUpdate, null, user.Id, HttpContext.RequestAborted);
+                // Null lead = the box was left empty; UpsertAsync then keeps the board's
+                // existing lead rather than resetting it. stampLatestTod: false so editing a
+                // board that's awaiting its re-post doesn't mark the pop handled and cancel it.
+                await HnmRecurringBoardService.UpsertAsync(
+                    _context, eventToUpdate, eventViewModel.RepostLeadHours, user.Id,
+                    stampLatestTod: false, HttpContext.RequestAborted);
             }
             else if (!eventViewModel.RepeatOnTod)
             {
                 await HnmRecurringBoardService.DisableAsync(_context, eventToUpdate.LinkshellId, monsterName, HttpContext.RequestAborted);
             }
+
+            // A board already waiting on its re-post advertises the old time until this runs.
+            await HnmRecurringBoardService.RefreshRepostAtAsync(
+                _context, eventToUpdate, monsterName, HttpContext.RequestAborted);
         }
 
         return RedirectToAction(nameof(Index));
@@ -947,7 +962,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventToDelete.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -993,7 +1008,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventToDelete.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -1030,7 +1045,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventToStart.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -1068,7 +1083,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -1164,7 +1179,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             return Forbid();
         }
@@ -1270,6 +1285,11 @@ public partial class EventController
             EventName = eventEntity.EventName,
             EventType = eventEntity.EventType,
             EventLocation = eventEntity.EventLocation,
+            // Resolved to a TEMPLATE before the Event row (and any per-event snapshot hanging off
+            // it) is deleted below. This is the only record of the camp's board that outlives it,
+            // and it is what lets the next pop come back with the same setup attached.
+            PartySetupId = await PartySetupInheritance.ResolveTemplateIdAsync(
+                dbContext, eventEntity, CancellationToken.None),
             StartDate = eventEntity.StartTime?.Date,
             StartTime = eventEntity.StartTime,
             EndTime = endTimeUtc,
@@ -1346,7 +1366,10 @@ public partial class EventController
                 IsQuickJoin = participation.IsQuickJoin,
                 IsVerified = participation.IsVerified,
                 Proctor = participation.Proctor,
-                ActiveCredit = eventEntity.CountsTowardActive
+                ActiveCredit = eventEntity.CountsTowardActive,
+                // Null on a timed event. On a windowed one this is the numerator of the DKP row
+                // above, so the closed event can explain its own payout.
+                WindowsAttended = windowsAttended
             });
 
             if (!string.IsNullOrWhiteSpace(participation.AppUserId) &&
@@ -1376,6 +1399,15 @@ public partial class EventController
         foreach (var lootDetail in eventEntity.EventLootDetails.OrderBy(detail => detail.Id))
         {
             if (lootDetail.WinningDkpSpent.GetValueOrDefault() <= 0)
+            {
+                continue;
+            }
+
+            // Loot added by hand from the Loot System is charged the moment it is entered, and it
+            // can be attached to a LIVE event -- so without this the close would take the same DKP
+            // off the same winner a second time. Null on everything added through the event flow,
+            // which is still owed its debit here.
+            if (lootDetail.DkpDebitedAt is not null)
             {
                 continue;
             }
@@ -1415,7 +1447,11 @@ public partial class EventController
                     Details: $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.",
                     EventHistory: history,
                     SourceEventLootDetailId: lootDetail.Id),
-                CancellationToken.None);
+                CancellationToken.None,
+                // Affordability was enforced when the loot was AWARDED (LootDkpGuard). Event close
+                // settles the whole roster in one batch — blocking here would leave the event
+                // un-closable over a single member.
+                DkpOverdraft.Allow);
             hasLootDeductions = true;
         }
 
@@ -1429,6 +1465,25 @@ public partial class EventController
             lootDetail.EventHistory = history;
             lootDetail.Event = null;
             lootDetail.EventId = null;
+        }
+        // Same move for the camp's posted attendance windows, and for the same reason: the Event
+        // FK is Cascade, so the delete below would take every window — and through them every
+        // AppUserEventWindow roster row — with it. Clearing EventId first unhooks them from the
+        // doomed Event; EventHistory then owns them.
+        //
+        // This is the ONLY surviving record of which windows a camp posted and who was scanned in
+        // each. Nothing re-derives it: the live rows are gone the moment this method returns.
+        // Deliberately unconditional rather than gated on isWindowed — if a row exists, an officer
+        // posted it, and the window-count heuristics that decide isWindowed are not a good enough
+        // reason to throw one away.
+        var archivedWindows = await dbContext.EventAttendanceWindows
+            .Where(window => window.EventId == eventEntity.Id)
+            .ToListAsync();
+        foreach (var window in archivedWindows)
+        {
+            window.EventHistory = history;
+            window.Event = null;
+            window.EventId = null;
         }
         // Participations materialized earlier in THIS close (late board signups) are still in
         // the Added state with TEMPORARY keys — EF can't transition those to Deleted. Detach

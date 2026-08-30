@@ -42,6 +42,17 @@ public class WindowEvent
     // those, so their snapshots still get sensible numbers.
     public DateTime? WindowAnchorAtUtc { get; set; }
 
+    // The grid this camp's snapshots are numbered against, captured at creation from the
+    // linkshell's monster setup. Same set-once-never-moved contract as WindowAnchorAtUtc above, and
+    // for the same reason: AttendanceSectionsBuilder DERIVES a missing window number at read time,
+    // so a camp that re-read the live config would silently renumber history the first time someone
+    // edited the monster's cadence.
+    //
+    // Null on rows created before this column existed, and on any monster with no grid — the
+    // HnmConfig fallback then answers, exactly as it always did.
+    public int? WindowCount { get; set; }
+    public int? WindowMinutes { get; set; }
+
     // The anchor to actually measure windows from. A camp handed off from a Discord board uses its
     // real pop time (CampStartedAtUtc) — that's the grid the board's own window counter ran on, so
     // the two agree. A `/lsm now` camp has no pop time, and its first capture IS the start.
@@ -59,6 +70,14 @@ public class WindowEvent
     // on the card (DKP is set per snapshot); saves run it through WindowEventDkp.Resolve, which
     // never lets it go back to null. See that helper for why null is dangerous.
     public double? DkpAmount { get; set; }
+
+    // DKP for members credited ONLY from Misc posts — people at the camp but outside any window.
+    //
+    // NULL is MEANINGFUL here, unlike DkpAmount: it means "pay them exactly what a window attendee
+    // gets", which is the default. WindowEventDkp.Resolve deliberately never yields null for
+    // DkpAmount because the ledger silently credits nobody without it; this column has no such
+    // hazard, because null simply falls through to DkpAmount.
+    public double? MiscDkpAmount { get; set; }
 
     // Entry Type tag the sheet's downstream formulas pivot on. Must be one of the
     // WindowEventEntryTypes constants below; auto-tagged from the monster at creation and
@@ -147,6 +166,15 @@ public static class WindowEventDkp
         => supplied is { } s && s >= 0 ? s
             : stored is { } t && t >= 0 ? t
             : Default;
+
+    // The Misc rate to apply for a save that doesn't carry one. Same precedence shape as Resolve,
+    // but the floor is the event's own resolved default rather than the constant: "misc pays the
+    // same as a window" is the documented default, so an event that never sets a misc rate must
+    // price misc-only members identically to everyone else.
+    public static double ResolveMisc(double? supplied, double? stored, double resolvedDefault)
+        => supplied is { } s && s >= 0 ? s
+            : stored is { } t && t >= 0 ? t
+            : resolvedDefault;
 }
 
 public static class WindowEventEntryTypes
@@ -215,7 +243,82 @@ public static class WindowEventEntryTypes
 public static class AttendanceSnapshotStatuses
 {
     public const string Active = "Active";
-    public const string PossibleDuplicate = "PossibleDuplicate";
-    public const string Duplicate = "Duplicate";
     public const string Ignored = "Ignored";
+
+    // (PossibleDuplicate / Duplicate lived here, along with a whole flagging pass that compared
+    // rosters and marked a >=75%-overlapping capture for officer review.
+    //
+    // The alliance number retired it. A duplicate was only ever ambiguous because the server had
+    // no way to tell "the same alliance captured twice" from "two alliances captured at once" --
+    // it had to guess from name overlap, and it guessed wrong in both directions. Now the two
+    // cases are distinguishable outright: same alliance inside the merge window UNIONS into one
+    // snapshot (adding people the earlier post missed, never removing any), and different
+    // alliances stay separate rows by construction. There is nothing left for an officer to
+    // adjudicate, and a flagged snapshot was silently EXCLUDED from the combined roster -- so the
+    // feature's failure mode was under-paying people who were genuinely there.)
+
+    // Posted by someone without live-event moderation rights. Anyone paired to the linkshell may
+    // post a capture now, so a roster can arrive before anyone has vouched for it — Pending holds
+    // it visible but inert until an officer Confirms.
+    //
+    // Almost nothing had to learn about this status to make it safe: BuildCombinedMembers, the DKP
+    // ledger and the merge-target search all read ACTIVE snapshots only, so a Pending row is
+    // excluded from the combined roster and from the payout for free. Reject reuses Ignored, which
+    // those same queries already filter out.
+    public const string Pending = "Pending";
+}
+
+public static class AttendanceSnapshotAlliances
+{
+    // Upper bound on AttendanceSnapshot.AllianceNumber. An FFXI alliance is 18 people, so six of
+    // them is 108 — past any turnout this app has to render, and low enough that a malformed
+    // client cannot invent alliance 40,000.
+    public const int MaxAllianceNumber = 6;
+
+    // The number to store for a post that carries none: an explicit choice wins (clamped),
+    // otherwise alliance 1. Defaulting rather than storing null matters because null already means
+    // something else on this column — "captured before per-alliance posting existed".
+    public static int Resolve(int? supplied)
+        => supplied is { } value ? Math.Clamp(value, 1, MaxAllianceNumber) : 1;
+
+    // Null is rendered rather than hidden: a legacy snapshot sitting beside labelled ones should
+    // say why it has no alliance, not look like alliance 1.
+    public static string Label(int? allianceNumber)
+        => allianceNumber is { } value ? $"Alliance {value}" : "Unassigned";
+
+    // The human label for an alliance, preferring WHO it is over WHICH NUMBER it got.
+    //
+    // A number is an ordinal an officer has to decode ("which one was 2 again?"); a name is the
+    // answer they actually wanted. The leader wins when the game confirmed one, then whoever the
+    // addon recognised the alliance by, and the bare number is the fallback for legacy rows.
+    public static string Label(int? allianceNumber, string? allianceKey, string? leaderName = null)
+    {
+        var named = !string.IsNullOrWhiteSpace(leaderName) ? leaderName!.Trim()
+            : !string.IsNullOrWhiteSpace(allianceKey) ? allianceKey!.Trim()
+            : null;
+        return named is null ? Label(allianceNumber) : $"{named}'s alliance";
+    }
+}
+
+// Whether a snapshot was filed against a numbered window or as a miscellaneous post.
+//
+// Lives beside AttendanceSnapshotStatuses/Alliances because it is the third axis an officer sorts
+// a capture on, and all three are read together by every mapper.
+public static class AttendanceSnapshotSlotKinds
+{
+    // Filed against a numbered window — or against an ungridded camp, where there is no number to
+    // give but the capture is still an ordinary one.
+    public const string Window = "Window";
+
+    // At the camp, outside any window. Always carries a null WindowNumber.
+    public const string Misc = "Misc";
+
+    public static readonly IReadOnlyList<string> All = new[] { Window, Misc };
+
+    public static bool IsMisc(string? value) => string.Equals(value, Misc, StringComparison.Ordinal);
+
+    // Fails CLOSED to Window on anything unrecognised. Window is the safe default in every sense:
+    // it is what every pre-existing row means, and it prices a member at the ordinary rate rather
+    // than at a misc rate an officer never chose.
+    public static string Resolve(string? value) => IsMisc(value) ? Misc : Window;
 }

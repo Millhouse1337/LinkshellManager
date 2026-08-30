@@ -45,6 +45,30 @@ public class HnmMonsterMergeTests
         Assert.Empty(HnmConfig.MonsterMatchNames(null));
     }
 
+    // Counting a kill has to collapse every spelling of a merge pair onto ONE bucket, or a
+    // monster's claims split across two slices of the dashboard donut — one for the manual
+    // "Behemoth" ToDs and one for the "Behemoth/King Behemoth" an HNM board writes.
+    [Theory]
+    [InlineData("Behemoth", "Behemoth/King Behemoth")]
+    [InlineData("King Behemoth", "Behemoth/King Behemoth")]
+    [InlineData("Behemoth/King Behemoth", "Behemoth/King Behemoth")]
+    [InlineData("king behemoth", "Behemoth/King Behemoth")]
+    [InlineData("Nidhogg", "Fafnir/Nidhogg")]
+    [InlineData("Aspidochelone", "Adamantoise/Aspidochelone")]
+    [InlineData("Tiamat", "Tiamat")]
+    [InlineData(" Vrtra ", "Vrtra")]
+    public void ClaimGroupName_CollapsesMergePairsOntoTheCombinedLabel(string stored, string expected)
+    {
+        Assert.Equal(expected, HnmConfig.ClaimGroupName(stored));
+    }
+
+    [Fact]
+    public void ClaimGroupName_IsEmptyForNoName()
+    {
+        Assert.Equal(string.Empty, HnmConfig.ClaimGroupName(null));
+        Assert.Equal(string.Empty, HnmConfig.ClaimGroupName("  "));
+    }
+
     [Fact]
     public void MonsterMatchNames_DoesNotBleedAcrossPairs()
     {
@@ -160,18 +184,24 @@ public class HnmMonsterMergeTests
         Assert.DoesNotContain("Aspidochelone", options); // stronger folded in
         Assert.DoesNotContain("King Behemoth", options);
         Assert.DoesNotContain("Nidhogg", options);
-        // Unrelated monsters are untouched and keep their order.
+        // Unrelated monsters are untouched and keep their order. (Xolotl used to stand in here, then
+        // King Vinegarroon after it; both left the built-in catalog — see RemoveRetiredNmMonsterTimings
+        // and RetireGroundNmMonsterTimings — so an unpaired HNM makes the point now.)
         Assert.Contains("Tiamat", options);
-        Assert.Contains("Xolotl", options);
+        Assert.Contains("Cerberus", options);
     }
 
-    // The create-event form's HNM / NM buttons cut the dropdown in two. HNM is the three
-    // long-window wyrms plus the three NQ/HQ families -- six entries, exactly what the addon's
-    // preset panel calls "HNMS (6)"; NM is everything else.
+    // The create-event form's HNM / NM buttons cut the dropdown in two. HNM is the six
+    // long-window monsters plus the three NQ/HQ families -- nine entries, exactly what the addon's
+    // preset panel calls "HNMS (9)"; NM is everything else.
     [Theory]
     [InlineData("Tiamat", true)]
     [InlineData("Jormungand", true)]
     [InlineData("Vrtra", true)]
+    // The ToAU three ride the wyrms' long band, so they are HNM tier for the same reason.
+    [InlineData("Cerberus", true)]
+    [InlineData("Hydra", true)]
+    [InlineData("Khimaira", true)]
     [InlineData("Adamantoise/Aspidochelone", true)]
     [InlineData("Behemoth/King Behemoth", true)]
     [InlineData("Fafnir/Nidhogg", true)]
@@ -193,7 +223,7 @@ public class HnmMonsterMergeTests
         Assert.Equal(isHnmTier, HnmConfig.IsHnmTierMonster(monster));
 
     // Every option the form offers lands on exactly one side of the split, and the HNM side is
-    // the six the addon lists. A monster added to SupportedMonsters without a thought about
+    // the nine the addon lists. A monster added to SupportedMonsters without a thought about
     // tier shows up here as a change in one of these two counts.
     [Fact]
     public void TheTwoTiers_PartitionTheWholeDropdown()
@@ -206,11 +236,16 @@ public class HnmMonsterMergeTests
         Assert.Equal(
             new[]
             {
-                "Adamantoise/Aspidochelone", "Behemoth/King Behemoth", "Fafnir/Nidhogg",
-                "Jormungand", "Tiamat", "Vrtra",
+                "Adamantoise/Aspidochelone", "Behemoth/King Behemoth", "Cerberus", "Fafnir/Nidhogg",
+                "Hydra", "Jormungand", "Khimaira", "Tiamat", "Vrtra",
             },
             hnmTier.OrderBy(m => m, StringComparer.Ordinal).ToArray());
-        Assert.Equal(11, nmTier.Length);
+        // EMPTY, and deliberately so: every NM is a custom monster now (RetireGroundNmMonsterTimings
+        // took the last three built-in ones), and a custom monster never reaches this compile-time
+        // list — it reaches the picker through the linkshell's own rows, via
+        // MonsterTimingMap.EventMonsterOptions. The create-event form's NM button therefore offers
+        // exactly what that linkshell added, which is the point.
+        Assert.Empty(nmTier);
     }
 
     // The board display collapses a combined pair to its base below the day threshold, and

@@ -14,16 +14,22 @@ public sealed class LinkshellPendingSubmissionsController : Controller
 {
     private readonly ApplicationDbContext _db;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly SubmissionApprovalService _approvals;
+    private readonly MonsterTimingResolver _monsterTimings;
 
     public LinkshellPendingSubmissionsController(
         ApplicationDbContext db,
         UserManager<AppUser> userManager,
-        SubmissionApprovalService approvals)
+        AdminOverrideService adminOverride,
+        SubmissionApprovalService approvals,
+        MonsterTimingResolver monsterTimings)
     {
         _db = db;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _approvals = approvals;
+        _monsterTimings = monsterTimings;
     }
 
     [HttpGet("/linkshells/{linkshellId:int}/pending-submissions")]
@@ -157,7 +163,7 @@ public sealed class LinkshellPendingSubmissionsController : Controller
                 .OrderBy(r => r.Id)
                 .Select(r => new EditPendingTodLootRow { ItemName = r.ItemName, ItemWinner = r.ItemWinner, WinningDkpSpent = r.WinningDkpSpent })
                 .ToList(),
-            MonsterOptions = TodManagerViewModel.SupportedMonsters,
+            MonsterOptions = (await _monsterTimings.GetMapAsync(linkshellId, HttpContext.RequestAborted)).EventMonsterOptions,
             CooldownOptions = TodManagerViewModel.SupportedCooldowns,
             IntervalOptions = TodManagerViewModel.SupportedIntervals,
             LinkshellMembers = members,
@@ -208,6 +214,13 @@ public sealed class LinkshellPendingSubmissionsController : Controller
 
         var result = await _approvals.ApproveTodAsync(submissionId, cancellationToken);
         if (result == ApprovalResult.NotFound) return NotFound();
+        if (result == ApprovalResult.InsufficientDkp)
+        {
+            TempData["PendingApprovalMessage"] =
+                "Approval blocked: a loot winner doesn't have enough DKP for their item. "
+                + "Adjust their DKP or edit the submission's loot, then approve again.";
+            return RedirectToAction(nameof(Index), new { linkshellId });
+        }
         TempData["PendingApprovalMessage"] = "ToD submission approved.";
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
@@ -417,10 +430,20 @@ public sealed class LinkshellPendingSubmissionsController : Controller
 
     private async Task<LinkshellRole?> GetEffectiveRoleAsync(string appUserId, int linkshellId)
     {
-        var rank = await _db.AppUserLinkshells
-            .Where(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId)
-            .Select(m => m.Rank)
-            .FirstOrDefaultAsync();
+        // The membership ROW, not just the rank string: a null rank and a missing
+        // membership are otherwise indistinguishable, and the override below must
+        // only ever fire for an actual member.
+        var membership = await _db.AppUserLinkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId);
+        if (membership is null) return null;
+
+        if (await _adminOverride.IsActiveForAsync(appUserId, HttpContext.RequestAborted))
+        {
+            return LinkshellRoleDefaults.BuildFullAccessRole(linkshellId);
+        }
+
+        var rank = membership.Rank;
         if (rank is null) return null;
         var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
         return await _db.LinkshellRoles

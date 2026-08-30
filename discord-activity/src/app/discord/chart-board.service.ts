@@ -6,7 +6,10 @@ import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityChartBoard,
   ActivityChartCreditInput,
-  ActivityChartPopItemInput
+  ActivityChartKeyItemInput,
+  ActivityChartPopItemInput,
+  ActivityChartWishlistInput,
+  ChartWishlistStatus
 } from './discord-activity.types';
 
 /**
@@ -33,6 +36,13 @@ export class ChartBoardService {
   readonly busyLoad = signal(false);
   readonly busySave = signal(false);
   readonly busyItemId = signal<number | null>(null);
+
+  /**
+   * Separate from busyItemId, deliberately. A wishlist request and a pop item are rows in different
+   * tables and can share a numeric id, so reusing one signal would grey out an unrelated holdings
+   * row every time somebody withdrew a request.
+   */
+  readonly busyRequestId = signal<number | null>(null);
 
   /** What the last load was for, so any action can reload the same board. */
   private lastQuery: { linkshellId: number; board: string } | null = null;
@@ -67,11 +77,12 @@ export class ChartBoardService {
   }
 
   async addItem(linkshellId: number, board: string, input: ActivityChartPopItemInput): Promise<void> {
+    const drop = input.kind === 'Drop';
     await this.write(
       () => this.http.postActivityAction(
         `/api/activity/linkshells/${linkshellId}/charts/${board}/items`, input),
-      'Pop item added.',
-      'Adding the pop item failed.'
+      drop ? 'Drop item added.' : 'Pop item added.',
+      drop ? 'Adding the drop item failed.' : 'Adding the pop item failed.'
     );
   }
 
@@ -106,6 +117,70 @@ export class ChartBoardService {
     );
   }
 
+  // ---- the wishlist ---------------------------------------------------------
+  //
+  // The one part of Charts a member without CanManageCharts may write. Nothing here decides who may
+  // do what: the server stamps canWithdraw on every request row, and these just call.
+
+  async addWishlistRequest(
+    linkshellId: number, board: string, input: ActivityChartWishlistInput): Promise<void> {
+    await this.write(
+      () => this.http.postActivityAction(
+        `/api/activity/linkshells/${linkshellId}/charts/${board}/wishlist`, input),
+      'Item request submitted.',
+      'Submitting the item request failed.'
+    );
+  }
+
+  /** Withdrawing DELETES the request. An officer removing somebody else's is the same call. */
+  async withdrawWishlistRequest(requestId: number): Promise<void> {
+    await this.write(
+      () => this.http.postActivityAction(`/api/activity/charts/wishlist/${requestId}/withdraw`),
+      'Item request removed.',
+      'Removing the item request failed.',
+      undefined,
+      requestId
+    );
+  }
+
+  async setWishlistStatus(requestId: number, status: ChartWishlistStatus): Promise<void> {
+    await this.write(
+      () => this.http.postActivityAction(
+        `/api/activity/charts/wishlist/${requestId}/status`, { status }),
+      status === 'Fulfilled' ? 'Marked fulfilled.' : 'Put back on the list.',
+      'Saving the request failed.',
+      undefined,
+      requestId
+    );
+  }
+
+  /**
+   * Set-wise: the COMPLETE ordered id list for the board. An id from elsewhere refuses the whole
+   * thing rather than reordering the rest, so two officers reordering at once cannot interleave into
+   * an order neither of them chose.
+   */
+  async reorderWishlist(linkshellId: number, board: string, orderedIds: number[]): Promise<void> {
+    await this.write(
+      () => this.http.postActivityAction(
+        `/api/activity/linkshells/${linkshellId}/charts/${board}/wishlist/order`, { orderedIds }),
+      'Request order saved.',
+      'Saving the request order failed.'
+    );
+  }
+
+  // ---- key items ------------------------------------------------------------
+
+  /** `has: false` deletes the row - presence is the fact. Idempotent either way. */
+  async setKeyItem(
+    linkshellId: number, board: string, input: ActivityChartKeyItemInput): Promise<void> {
+    await this.write(
+      () => this.http.postActivityAction(
+        `/api/activity/linkshells/${linkshellId}/charts/${board}/keyitems`, input),
+      input.has ? 'Key item ticked off.' : 'Key item cleared.',
+      'Saving the key item failed.'
+    );
+  }
+
   // Every write shares the same shape: flag busy, clear the banners, act, reload, report.
   //
   // Reloading rather than patching in place keeps every derived number honest — the per-boss totals,
@@ -118,11 +193,15 @@ export class ChartBoardService {
     action: () => Promise<void>,
     success: string,
     failure: string,
-    itemId?: number
+    itemId?: number,
+    requestId?: number
   ): Promise<void> {
     this.busySave.set(true);
     if (itemId !== undefined) {
       this.busyItemId.set(itemId);
+    }
+    if (requestId !== undefined) {
+      this.busyRequestId.set(requestId);
     }
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
@@ -137,6 +216,7 @@ export class ChartBoardService {
     } finally {
       this.busySave.set(false);
       this.busyItemId.set(null);
+      this.busyRequestId.set(null);
     }
   }
 }

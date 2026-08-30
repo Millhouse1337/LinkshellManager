@@ -13,6 +13,10 @@ public sealed record ActivityOverviewDto(
     IReadOnlyList<ActivityInviteDto> OutgoingJoinRequests,
     IReadOnlyList<ActivityHistoryDto> RecentHistory,
     IReadOnlyList<ActivityTodDto> RecentTods,
+    // The dashboard's HNM Claims donut, aggregated server-side over ALL of the linkshell's
+    // claimed ToDs. RecentTods is a 25-row tail of every monster, so the client cannot count
+    // this itself — it charted only the claims that happened to survive in that tail.
+    ActivityHnmClaimsDto HnmClaims,
     ActivityOverviewStatsDto Stats,
     // True when the user has at least one non-revoked AddonApiToken.
     // Drives the onboarding "Set up the addon" checklist item.
@@ -20,13 +24,18 @@ public sealed record ActivityOverviewDto(
     // True when a super admin has globally disabled the addon. Hides the
     // Game Addon pairing card in the Configurations tab.
     bool AddonGloballyDisabled,
-    // Read-only built-in HNM window setups (monster → windows × cadence), projected from
-    // HnmConfig. Global, not per-linkshell — these are not configurable.
-    IReadOnlyList<HnmWindowSetupDto> HnmWindowSetups);
-
-// One monster's built-in spawn-window setup: how many windows the camp runs and how many
-// minutes apart they open.
-public sealed record HnmWindowSetupDto(string Monster, int Windows, int Minutes);
+    // (HnmWindowSetups lived here: a global, read-only monster → windows × cadence list. Window
+    // setups are per-linkshell now and ride on each linkshell's settings.monsterSetups, so a
+    // second global copy would only be something for them to disagree with.)
+    // True when the app-wide admin override is switched ON and this account carries it
+    // (AppUser.IsSuperAdmin). Grants every permission in every linkshell the user is a
+    // MEMBER of — `linkshells[].permissions` already arrives all-true, so this exists
+    // for the coarse rank-string checks and the ADMIN badge. See AdminOverrideService.
+    bool AdminOverrideActive = false,
+    // True when a super admin has globally switched Claim Shield off. The per-monster switches in
+    // Monster setups are inert while it is, so the editor has to grey them out and say why —
+    // otherwise every checkbox claims a state the addon is ignoring.
+    bool ClaimShieldGloballyDisabled = false);
 
 public sealed record ActivityAppUserDto(
     string Id,
@@ -37,8 +46,8 @@ public sealed record ActivityAppUserDto(
     string? TimeZone,
     int? PrimaryLinkshellId,
     string? PrimaryLinkshellName,
-    // Per-job levels for the 15 classic jobs in EventJobCatalog.MainJobOptions
-    // order (index 0 = WAR ... 14 = SMN). Pre-fills the profile "My Jobs" editor.
+    // Per-job levels for the selectable jobs in EventJobCatalog.MainJobOptions
+    // order (index 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP). Pre-fills the profile "My Jobs" editor.
     IReadOnlyList<int> JobLevels,
     // Same catalog-aligned per-job levels for the two alt characters; pre-fill the
     // per-alt job tabs.
@@ -55,7 +64,7 @@ public sealed record ActivityAppUserDto(
     IReadOnlyList<int> CraftLevels,
     IReadOnlyList<int> Alt1CraftLevels,
     IReadOnlyList<int> Alt2CraftLevels,
-    // Per-job free-text merit notes (main + alts), catalog-aligned (WAR … SMN).
+    // Per-job free-text merit notes (main + alts), catalog-aligned (WAR … PUP).
     // Pre-fill the "Merited" modal for each job.
     IReadOnlyList<string> MeritJobs,
     IReadOnlyList<string> Alt1MeritJobs,
@@ -76,12 +85,84 @@ public sealed record ActivityLinkshellDto(
     bool AuctionsLocked = false,
     string? BannerUrl = null);
 
+// LEGACY. The per-linkshell ToD cooldown blob (Linkshell.TodMonsterTimings) this described was
+// replaced by the LinkshellMonsterTimings table. Nothing writes it any more; it survives only so
+// LinkshellMonsterTimingProvisioner can import a linkshell's old values on first seed, and goes
+// with the column in a later deploy.
 public sealed record ActivityTodMonsterTimingDto(
     string MonsterName,
     double CooldownHours,
     int IntervalHours,
     int IntervalMinutes,
     string? Category = null);
+
+// One monster's setup in the Monster Setups editor.
+//
+// Durations travel as the value + unit the officer typed ("22" + "hours") rather than as raw
+// minutes, so the field echoes back the way they entered it. MonsterTimingEditor normalizes to
+// minutes on the way in; the Default* fields are the built-in values, which the row shows as
+// placeholders and the Reset link restores.
+public sealed record ActivityMonsterTimingDto(
+    int Id,
+    string MonsterName,
+    int? Windows,
+    int? CadenceValue,
+    string? CadenceUnit,
+    int CooldownValue,
+    string CooldownUnit,
+    string Category,
+    bool IsCustom,
+    int? DefaultWindows,
+    int? DefaultCadenceMinutes,
+    int DefaultCooldownMinutes,
+    // Whether the addon captures claim-shield lotteries for this monster. Defaults on; off is for
+    // monsters the linkshell doesn't contest, whose rolls would otherwise be noise.
+    bool ClaimShieldEnabled);
+
+// The COMPACT form carried on the polled overview: only what the ToD form and the create-event
+// picker need (the option list, plus the values they auto-fill from). The editor's own GET returns
+// the fuller ActivityMonsterTimingDto with ids, defaults and the custom flag.
+//
+// Always populated, even for a linkshell that has never opened the editor — the server projects
+// the built-in defaults in that case, so the client needs no catalog constants of its own.
+public sealed record ActivityMonsterSetupDto(
+    string MonsterName,
+    int? Windows,
+    int? CadenceMinutes,
+    int CooldownMinutes,
+    string Category,
+    // This monster's standing Repeat-on-ToD lead, in fractional hours, or null when it has no
+    // ENABLED HnmRecurringBoard. It rides on the monster catalog rather than on a list of its own
+    // because that is the shape the consumer wants: the create-event form asks "will this camp
+    // repeat, and how long before the pop?" the moment a monster is picked, and this is the answer
+    // for the one that was picked.
+    //
+    // Null therefore means BOTH "recurrence is off" and "no lead set", which are the same state:
+    // a DISABLED board's stored lead is stale bookkeeping, and surfacing it would re-apply it the
+    // moment the toggle was flipped back on. Appended last (with a default) so the overview's
+    // other constructions of this record need no edit.
+    double? RepeatLeadHours = null);
+
+public sealed record ActivityMonsterTimingsDto(
+    IReadOnlyList<ActivityMonsterTimingDto> Rows,
+    IReadOnlyList<string> Categories,
+    int MaxWindows);
+
+public sealed record ActivityMonsterTimingInput(
+    int? Id,
+    string? MonsterName,
+    int? Windows,
+    double? CadenceValue,
+    string? CadenceUnit,
+    double? CooldownValue,
+    string? CooldownUnit,
+    string? Category,
+    // Nullable so a client that predates the column leaves the stored value alone rather than
+    // silently switching every monster off on its next save.
+    bool? ClaimShieldEnabled);
+
+public sealed record ActivitySaveMonsterTimingsRequest(
+    IReadOnlyList<ActivityMonsterTimingInput>? Rows);
 
 public sealed record ActivityLinkshellSettingsDto(
     string LootStructure,
@@ -99,8 +180,6 @@ public sealed record ActivityLinkshellSettingsDto(
     // Stored on the server as a single pipe-separated string; the wire DTO
     // surfaces them as a list to keep the client side ergonomic.
     IReadOnlyList<string> HiddenTodMonsters,
-    // SkySeaDynamis | HnmOnly | Both — which content this linkshell runs.
-    string LinkshellType,
     // The single Discord server (guild) this linkshell is associated with, or
     // null when not tied to any server. Setting it scopes member search / roster
     // to that server's members and powers channel posting. It does NOT, by
@@ -121,15 +200,10 @@ public sealed record ActivityLinkshellSettingsDto(
     // Palette key for this linkshell's rendered event-board image (one of the
     // EventBoardThemes keys: Crystal, Abyss, Ember, Verdant, Royal, Tome).
     string EventBoardTheme,
-    // Allow Discord members with no LSM account to sign up for NON-HNM events from
-    // the party board. Backed by a placeholder member, so they DO earn DKP + are tracked.
+    // Allow Discord members with no LSM account to sign up (or Check In) from a board, for
+    // EVERY event type including HNM. Backed by a placeholder member, so they DO earn DKP
+    // + are tracked.
     bool OutsidePartySignupEnabled,
-    // "Fill earlier alliances first" signup nudge (default on; no-op on single-alliance boards).
-    bool FillAlliancesInOrder,
-    // HNM Outside Sign Up: gates the HNM event type in the create dropdown + account-less
-    // Discord signups onto HNM boards. Independent of OutsidePartySignupEnabled.
-    // Roster memory only — HNM signups earn no DKP and no active/absent credit.
-    bool HnmOutsideSignupEnabled,
     // Experimental: post event boards as Components V2 (wide media-gallery card) instead
     // of the classic image-in-embed. Only affects boards posted after it's turned on.
     bool UseComponentsV2Boards,
@@ -152,7 +226,10 @@ public sealed record ActivityLinkshellSettingsDto(
     double HnmStandardCloseBonus = 0,
     double HnmStandardClaimBonus = 0,
     double HnmStandardKillBonus = 0,
-    IReadOnlyList<ActivityTodMonsterTimingDto>? TodMonsterTimings = null,
+    // Every monster this linkshell can log a ToD for, with its configured windows / cadence /
+    // cooldown. Replaced TodMonsterTimings, which carried only the cooldown half and only for
+    // monsters the linkshell had explicitly overridden.
+    IReadOnlyList<ActivityMonsterSetupDto>? MonsterSetups = null,
     // Automatic per-window attendance snapshots (both modes). When enabled, an officer running
     // the LSM addon can ARM a live camp and the addon posts their ALLIANCE as that window's
     // snapshot ~DelaySeconds after each window opens. Appended LAST deliberately: the
@@ -197,6 +274,32 @@ public sealed record ActivityPermissionsDto(
     bool CanManageParties,
     bool CanManageInvites,
     bool CanBid);
+
+public static class ActivityPermissions
+{
+    // Every permission granted. Used by the app-wide admin override so the SPA
+    // unlocks the same surfaces the server already allows. Add a `true` here when
+    // you add a permission above — the compiler enforces it.
+    public static readonly ActivityPermissionsDto All = new(
+        CanManageRoles: true,
+        CanManageMembers: true,
+        CanManageEvents: true,
+        CanModerateLiveEvent: true,
+        CanAddLoot: true,
+        CanManageInventory: true,
+        CanManageCharts: true,
+        CanManageTreasury: true,
+        CanManageRules: true,
+        CanManageAnnouncements: true,
+        CanManageTods: true,
+        CanAuditDkp: true,
+        CanManageAuctions: true,
+        CanLockAuctions: true,
+        CanCustomizeLinkshell: true,
+        CanManageParties: true,
+        CanManageInvites: true,
+        CanBid: true);
+}
 
 public sealed record ActivityPrimaryLinkshellDto(
     int Id,
@@ -311,11 +414,18 @@ public sealed record ActivityTreasuryEntryDto(
     // Whether something later cancels this one out. Read as an EXISTS rather than stored, because
     // storing it would mean updating a confirmed entry.
     bool IsReversed,
+    // Cancelled by a FIX rather than an outright reversal: something recorded the right numbers in
+    // its place. Both are true of a corrected entry, so the row shows the more specific word.
+    bool IsFixed,
     string? CorrectionReason,
     // Everyone who got a share, when this was split. Empty for an ordinary entry, and one name for an
     // entry that names a single member — CounterpartyCharacterName above stays the quick read.
     IReadOnlyList<ActivityTreasuryRecipientDto> Recipients,
-    IReadOnlyList<ActivityTreasuryLineDto> Lines);
+    IReadOnlyList<ActivityTreasuryLineDto> Lines,
+    // Whose mule this entry's gil landed on or came off. Null for an entry that moved no gil, and
+    // for everything recorded before the question was asked. Shown on the row so an officer can
+    // answer "where did that 8M go" without opening the bookkeeping details.
+    string? HolderCharacterName = null);
 
 public sealed record ActivityTreasuryCategoryDto(
     int Id,
@@ -328,22 +438,95 @@ public sealed record ActivityTreasuryCategoryDto(
     bool IsActive,
     int SortOrder);
 
-// One option in the "What happened?" picker.
+// One of the four things that can happen to gil. The picker asks for this first.
+public sealed record ActivityTreasuryActionDto(string Key, string Label);
+
+// One reason under an action.
+//
+// EVERY kind is sent, not just the pickable ones. The client resolves the selected kind out of this
+// list, and everything about the form hangs off that — whether to show the split picker, whether to
+// name a member, the preview sentence, and whether Submit does anything at all. Send only the
+// pickable ones and a Fix on an app-recorded entry does not merely lose its option: the whole form
+// silently degrades and the button stops responding.
 public sealed record ActivityTreasuryKindDto(
     string Key,
+    // What the transactions list calls it.
     string Label,
+    // What the picker calls it, under its action. Short, and only unique within that action.
+    string ReasonLabel,
     string Help,
-    string Group,
+    string Action,
     bool ShowsMember,
+    // A member is REQUIRED, not merely offered: the entry creates or settles gil owed to one, and
+    // an obligation with nobody attached can never appear on the who-we-owe list. The server
+    // refuses it, so the form disables its own submit rather than letting that come back as a
+    // failed save with nothing on screen pointing at the empty box.
+    bool RequiresMember,
     // Whether this option shares one amount between several members instead of naming one.
     bool IsSplittable,
     // Whether picking a member should fill in what they are still owed, rather than asking.
     bool SettlesMemberDebt,
-    string PreviewTemplate);
+    // Offered in the picker. False for the ones the app records for you, and for retired ones.
+    bool IsPickable,
+    // Superseded — reachable only from Fix, and refused on any other write.
+    bool IsRetired,
+    string PreviewTemplate,
+    // What the single name box is CALLED for this option. "Member" for most; the owed-to-us pair
+    // asks for a typed name instead, because whoever owes a linkshell gil is usually not in it.
+    string CounterpartyLabel,
+    // Whether this option needs a mule named — true exactly when it moves gil on hand. Sent rather
+    // than re-derived client-side, for the same reason RequiresMember is: the account pair that
+    // decides it never crosses the wire.
+    bool RequiresHolder,
+    // And what that box is called, which flips with the direction: naming who ends up with the gil
+    // is a different question from naming whose stack it came out of.
+    string HolderLabel,
+    // Which way the gil is going. Sent because the two labels above do not compose into a sentence
+    // the same way — "Say who's holding this gil" reads, "Say whose gil is this coming out of" does
+    // not — so the front-end picks its own wording off the direction rather than off the label.
+    bool BringsCashIn);
 
 // One member the linkshell still owes. Projected from the same lines as the snapshot, so these
 // always add up to its WeOwe figure.
-public sealed record ActivityTreasuryMemberObligationDto(string CharacterName, long Amount);
+// One person and the slice of the linkshell's gil sitting on their mule. Projected from the same
+// lines as the snapshot, so these always add up to its CashOnHand figure — including the
+// nobody-named bucket, which is why CharacterName is nullable here and the front-ends label it
+// rather than dropping it.
+public sealed record ActivityTreasuryGilHolderDto(string? CharacterName, long Amount);
+
+public sealed record ActivityTreasuryMemberObligationDto(
+    string CharacterName,
+    long Amount,
+    // Whether this row can be ticked and paid off. False for the "no member named" bucket — a
+    // payment has to name who it went to — and for a row overpaid into a negative, where paying
+    // "in full" has nothing to mean.
+    bool CanSettle);
+
+// One member an officer ticked, and the figure the screen was showing beside them. The server pays
+// what the books say and refuses the row if the two disagree, so a page left open while someone else
+// records more gil owed cannot hand over the newer figure.
+public sealed record ActivityTreasurySettlePickDto(string CharacterName, long ExpectedAmount);
+
+// HolderCharacterName is whose mule the gil leaves from, or arrives on. Required for the same reason
+// it is on the record form: ticking a name here writes a real gil movement, and one that names no
+// mule lands in the nobody-named bucket the who's-holding-it list exists to keep empty.
+//
+// ONE holder for the whole batch, not one per tick: a payout run is somebody sitting at a mule
+// handing gil out, and asking again for every name on the list would be asking the same question
+// eight times.
+public sealed record ActivitySettleOwedRequest(
+    IReadOnlyList<ActivityTreasurySettlePickDto>? Picks,
+    string? HolderCharacterName = null,
+    string? HolderAppUserId = null);
+
+// What a payout run did. The message is built server-side so the website and the Activity report
+// the same outcome in the same words.
+public sealed record ActivitySettleOwedResultDto(
+    bool Success,
+    string Message,
+    long TotalPaid,
+    IReadOnlyList<string> Settled,
+    IReadOnlyList<string> Skipped);
 
 public sealed record ActivityTreasurySnapshotDto(
     long CashOnHand,
@@ -356,13 +539,19 @@ public sealed record ActivityTreasurySnapshotDto(
     long StartingBalance,
     // Whether what we hold minus what we owe still matches what we started with plus the net movement.
     bool Balances,
-    int UncategorizedCount,
     DateTime? LockedThroughUtc,
     // Disclosed as data, not baked into either front-end, so both render the same sentence.
     string BasisNote,
     // Who the WeOwe figure above is owed to. Sent to every reader, not just officers — the treasury
     // is member-visible and these names already appear in the transactions list.
-    IReadOnlyList<ActivityTreasuryMemberObligationDto> OwedToMembers);
+    IReadOnlyList<ActivityTreasuryMemberObligationDto> OwedToMembers,
+    // And who owes the LINKSHELL, behind the OwedToUs figure. The mirror list, ticked the same way:
+    // both halves of the sheet are settled by ticking a name rather than typing one back in.
+    IReadOnlyList<ActivityTreasuryMemberObligationDto> OwedToUsBy,
+    // Whose mules the CashOnHand figure is spread across. The third figure on the sheet to get names
+    // behind it, and unlike the other two it is not settled by ticking — gil moves off a mule by
+    // being spent, so this list is read, not acted on.
+    IReadOnlyList<ActivityTreasuryGilHolderDto> GilHolders);
 
 public sealed record ActivityTreasuryPageDto(
     ActivityTreasurySnapshotDto Summary,
@@ -372,6 +561,10 @@ public sealed record ActivityTreasuryPageDto(
     int PageSize,
     IReadOnlyList<ActivityTreasuryCategoryDto> Categories,
     IReadOnlyList<ActivityTreasuryKindDto> Kinds,
+    // The picker's top level, in display order. Server-supplied so the action names live in
+    // TreasuryLabels with every other word this feature shows — the group headings they replace
+    // were hardcoded separately in three front-end files and could drift.
+    IReadOnlyList<ActivityTreasuryActionDto> Actions,
     // Who a split can be shared with. Empty unless CanManage — a reader has nothing to pick.
     IReadOnlyList<ActivityTreasuryMemberDto> Members,
     bool CanManage);
@@ -387,7 +580,13 @@ public sealed record ActivityRecordTreasuryEntryRequest(
     bool Confirm,
     // Membership rows, not names: a name is not unique, not stable, and not something the server can
     // check against a roster. The server resolves each one and records the name it finds.
-    IReadOnlyList<int>? RecipientMembershipIds = null);
+    IReadOnlyList<int>? RecipientMembershipIds = null,
+    // Whose mule the gil lands on or comes off. A NAME rather than a membership row, unlike the
+    // split recipients above: gil regularly sits on a mule that is not on the roster, and refusing
+    // to record that would push it into the nobody-named bucket — the one thing this field exists to
+    // empty. Optional on the wire, required by the kind — see TreasuryTransactionKind.RequiresHolder.
+    string? HolderAppUserId = null,
+    string? HolderCharacterName = null);
 
 public sealed record ActivityFixTreasuryEntryRequest(
     string TransactionKind,
@@ -397,17 +596,23 @@ public sealed record ActivityFixTreasuryEntryRequest(
     string? CounterpartyAppUserId,
     string? CounterpartyCharacterName,
     string Reason,
-    IReadOnlyList<int>? RecipientMembershipIds = null);
+    IReadOnlyList<int>? RecipientMembershipIds = null,
+    string? HolderAppUserId = null,
+    string? HolderCharacterName = null);
 
 public sealed record ActivityReverseTreasuryEntryRequest(string Reason);
 
 // The gil actually sitting on the mule, counted by hand. The app works out which way the difference
 // goes; the officer never picks.
-public sealed record ActivityCheckGilRequest(long CountedAmount, DateTime? TransactionDate, string? Memo);
 
 public sealed record ActivityLockTreasuryRequest(DateTime? LockedThrough, string? Reason);
 
-public sealed record ActivityMarkItemSoldRequest(long SalePrice);
+// SoldByCharacterName is who actually sold the thing, which is NOT the same as who is clicking the
+// button — an officer records sales somebody else made all the time, and the old code recorded the
+// clicker. It is also the answer to where the gil went, so it becomes the holder on the treasury
+// entry: whoever sold it is holding the gil until they hand it on.
+public sealed record ActivityMarkItemSoldRequest(
+    long SalePrice, string? SoldByCharacterName = null, string? SoldByAppUserId = null);
 
 public sealed record ActivityRuleDto(
     int Id,
@@ -471,11 +676,14 @@ public sealed record ActivityMemberDto(
     // app users from members who only ever interacted via the outside sign-up board
     // (who get an AppUserId without ever opening the Activity). Drives the roster's
     // "App Sync" badge + filter.
-    bool HasSyncedActivity = false);
+    bool HasSyncedActivity = false,
+    // True when this member carries the app-wide admin override AND it is switched on.
+    // Rendered as an "ADMIN" tag BESIDE — never instead of — their stored Rank.
+    bool IsAdmin = false);
 
 // "Jobs Roster" — every member's leveled jobs (the levels they entered on their
 // Profile), for the linkshell's main + alt characters. JobCatalog is the job
-// name order (WAR..SMN); each member's level arrays are aligned to it.
+// name order (WAR..PUP); each member's level arrays are aligned to it.
 public sealed record ActivityJobsRosterDto(
     IReadOnlyList<string> JobCatalog,
     IReadOnlyList<ActivityJobsRosterMemberDto> Members);
@@ -611,7 +819,15 @@ public sealed record ActivityAttendanceWindowDto(
     // open / close bonuses apply. An explicit amount REPLACES those bonuses rather than adding to
     // them — HnmStandardCampFinalizer.WindowValue is the rule, and EventsTabComponent.windowValue
     // mirrors it. Only ever non-null on a Standard HNM camp; see HnmCampPricing.HonoursWindowAmount.
-    double? DkpAmount = null);
+    double? DkpAmount = null,
+    // The officer's "this window closes the camp out" tick. Drives the close bonus, and drives it
+    // ALONE — the close used to be derived as "the newest window posted", which is what put a close
+    // bonus on every window of every camp. At most one window per event carries it.
+    bool IsClosingWindow = false,
+    // The addon's Post Kill roster: who was there when the mob died. Its own row because that list
+    // differs from who sat the window. Worth 0 as a window; being in it is what earns the kill
+    // bonus, and it can never be the closing window.
+    bool IsKillWindow = false);
 
 // An attendance snapshot an officer attached to this camp (AttendanceSnapshot.LinkedEventId).
 // Shown on the camp's own card so a roster reviewed over in the Event System doesn't have to be
@@ -673,7 +889,11 @@ public sealed record ActivityClaimShieldMemberDto(
 
 public sealed record ActivityAttendanceWindowAttendeeDto(
     int Id,
+    // The character the roster read actually SAW — the alt, when the player was on one.
     string? CharacterName,
+    // Their roster main, non-null ONLY when CharacterName above is an alt of it. Drives the
+    // "(alt of Edicius)" note next to the name; null is the ordinary case and shows nothing.
+    string? MainCharacterName,
     string? JobName,
     string? SubJobName,
     string? Zone,
@@ -1053,6 +1273,20 @@ public sealed record ActivityTodLootDto(
     string? ItemWinner,
     int? WinningDkpSpent);
 
+// One slice of the HNM Claims donut. Percent is already relative to its own window's total,
+// and ColorClass is the palette letter the donut/legend paint with.
+public sealed record ActivityHnmClaimSliceDto(
+    string MonsterName,
+    int Count,
+    double Percent,
+    string ColorClass);
+
+// The donut's three windows, so the 7d / 30d / All toggle is instant and never re-queries.
+public sealed record ActivityHnmClaimsDto(
+    IReadOnlyList<ActivityHnmClaimSliceDto> Last7Days,
+    IReadOnlyList<ActivityHnmClaimSliceDto> Last30Days,
+    IReadOnlyList<ActivityHnmClaimSliceDto> AllTime);
+
 public sealed record ActivityOverviewStatsDto(
     int LinkshellCount,
     int ActiveEventCount,
@@ -1099,13 +1333,22 @@ public sealed record ActivityCreateEventRequest(
     // When true, attendees earn active-member credit (reconciled at close).
     // Default true, matching the web event form.
     bool CountsTowardActive = true,
-    // HNM signup board only: the canonical monster the board is for, and whether the
-    // board re-posts before the next predicted pop when a new ToD for that monster is
-    // recorded. Ignored for non-HNM events. There is deliberately no lead time here —
-    // how far ahead it re-posts is entered on the End Camp / Post ToD form, so creating
-    // or editing an event can't overwrite the lead set there.
+    // HNM signup board only: the canonical monster the board is for, plus the monster's
+    // standing "re-post before the next predicted pop" settings. Ignored for non-HNM events.
+    //
+    // RepeatOnTod is NULLABLE because the Activity's event form deliberately doesn't ask:
+    // recurrence is switched on and off from the End Camp / Post ToD form, which is where an
+    // officer knows the next pop. Null = "this form has no opinion, leave the standing board
+    // exactly as it is". It used to be a plain bool, which meant the Activity silently posted
+    // false on every create and switched the monster's recurring board OFF. Only an explicit
+    // true/false (the web form's checkbox) enables or disables it.
+    //
+    // RepostLeadHours is fractional (1.5 = 1h30m) and likewise null when not entered, meaning
+    // "keep the board's current lead" — so editing an event can't overwrite a lead set at End
+    // Camp. The Activity only sends it from the EDIT form.
     string? MonsterName = null,
-    bool RepeatOnTod = false,
+    bool? RepeatOnTod = null,
+    double? RepostLeadHours = null,
     // HNM signup board only: optional "Day N" label shown on the board.
     int? DayNumber = null,
     // HNM only: per-camp overrides for the linkshell's payout amounts. Null = use the
@@ -1136,8 +1379,6 @@ public sealed record ActivityUpdateLinkshellRequest(
     string? DkpRoundingIncrement,
     // null = leave unchanged, [] = clear, [...names] = replace.
     IReadOnlyList<string>? HiddenTodMonsters,
-    // null/blank = leave unchanged. SkySeaDynamis | HnmOnly | Both.
-    string? LinkshellType,
     // null = leave unchanged, "" = unlock, digits = lock to that Discord server.
     string? DiscordGuildId,
     // Member activity tracking (null = leave unchanged). Thresholds are clamped to
@@ -1148,12 +1389,8 @@ public sealed record ActivityUpdateLinkshellRequest(
     // null/blank = leave unchanged. One of the EventBoardThemes keys; an unknown
     // value is normalised to the default server-side.
     string? EventBoardTheme = null,
-    // null = leave unchanged. Allow account-less Discord party-board signups (non-HNM).
+    // null = leave unchanged. Allow account-less Discord board signups (every event type).
     bool? OutsidePartySignupEnabled = null,
-    // null = leave unchanged. "Fill earlier alliances first" signup nudge.
-    bool? FillAlliancesInOrder = null,
-    // null = leave unchanged. Gate HNM (event type + account-less HNM-board signups).
-    bool? HnmOutsideSignupEnabled = null,
     // null = leave unchanged. Post event boards as Components V2 (wide media-gallery card).
     bool? UseComponentsV2Boards = null,
     // Manual Check In HNM attendance (all null = leave unchanged). Mode is normalized (Standard | Wd)
@@ -1167,7 +1404,9 @@ public sealed record ActivityUpdateLinkshellRequest(
     double? HnmStandardCloseBonus = null,
     double? HnmStandardClaimBonus = null,
     double? HnmStandardKillBonus = null,
-    IReadOnlyList<ActivityTodMonsterTimingDto>? TodMonsterTimings = null,
+    // (TodMonsterTimings was here. Per-monster setups POST to their own monster-timings endpoint
+    // now — precisely so this whole-payload update, which re-sends every setting on any save,
+    // cannot wipe them.)
     // Automatic per-window snapshots (null = leave unchanged). Delay clamped to [5, 300].
     bool? HnmAutoSnapshotEnabled = null,
     int? HnmAutoSnapshotDelaySeconds = null,
@@ -1318,8 +1557,8 @@ public sealed record ActivityUpdateProfileRequest(
     string? TimeZone,
     string? AltCharacterName1 = null,
     string? AltCharacterName2 = null,
-    // Per-job levels for the 15 classic jobs in EventJobCatalog.MainJobOptions
-    // order (index 0 = WAR ... 14 = SMN). Persisted to the user's memberships.
+    // Per-job levels for the selectable jobs in EventJobCatalog.MainJobOptions
+    // order (index 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP). Persisted to the user's memberships.
     int[]? JobLevels = null,
     // Catalog-aligned job levels for the two alt characters; persisted on the
     // AppUser (not per-membership).
@@ -1335,7 +1574,7 @@ public sealed record ActivityUpdateProfileRequest(
     int[]? CraftLevels = null,
     int[]? Alt1CraftLevels = null,
     int[]? Alt2CraftLevels = null,
-    // Per-job free-text merit notes (main + alts), catalog-aligned (WAR … SMN).
+    // Per-job free-text merit notes (main + alts), catalog-aligned (WAR … PUP).
     // Null leaves the existing notes unchanged.
     string[]? MeritJobs = null,
     string[]? Alt1MeritJobs = null,
@@ -1418,11 +1657,26 @@ public sealed record ActivityLootEditRequest(
     int? WinningDkpSpent,
     string? Reason);
 
+// Hand-entered loot. SourceKind picks which id below is read: "live" an Event, "past" an
+// EventHistory, "none" neither. Context is gone -- loot points at a real event now, not at a
+// free-text label that used to become a throwaway ToD.
 public sealed record ActivityLootAddRequest(
-    string? Context,
+    string? SourceKind,
+    int? EventId,
+    int? EventHistoryId,
     string? ItemName,
     string? ItemWinner,
-    int? WinningDkpSpent);
+    int? WinningDkpSpent,
+    int? DkpPoolId);
+
+// One selectable event on the Add loot form.
+public sealed record ActivityLootEventOptionDto(int Id, string Name, string? Detail);
+
+// Live events plus the recent past ones (widened by a search), for the Add loot pickers.
+public sealed record ActivityLootEventOptionsDto(
+    IReadOnlyList<ActivityLootEventOptionDto> LiveEvents,
+    IReadOnlyList<ActivityLootEventOptionDto> PastEvents,
+    string? Query);
 
 // ---- Charts (Sky, Sea, …) ----------------------------------------------------------------------
 //
@@ -1450,7 +1704,30 @@ public sealed record ActivityChartBoardDto(
     // Who a credit can be attributed to. Empty unless CanManage — a reader has nothing to pick.
     IReadOnlyList<ActivityChartRosterMemberDto> Roster,
     DateTime? LastUpdatedUtc,
-    bool CanManage);
+    bool CanManage,
+    /// <summary>Which affordances this board offers. The client branches on these, never on whether
+    /// a list happens to be populated.</summary>
+    ActivityChartBoardFeaturesDto Features,
+    /// <summary>The board's item requests. Folded into THIS payload rather than fetched separately,
+    /// for the same reason the ledger is: a card's badge and the list below it are two views of the
+    /// same rows, and fetching them apart lets one screen contradict itself.</summary>
+    ActivityChartWishlistDto Wishlist,
+    /// <summary>Per-member key item progress. Empty columns on a board that tracks none.</summary>
+    ActivityChartKeyItemGridDto KeyItems,
+    /// <summary>The VIEWER's own membership, so the client knows which key item row is theirs to
+    /// tick. Null for somebody with no membership row. The server re-checks on every write.</summary>
+    int? ViewerMembershipId);
+
+/// <summary>
+/// What a board offers, straight off ChartBoardCatalog. Sent rather than inferred client-side: a
+/// board can declare no pop items and still take them (HENM), and can declare none and no longer
+/// offer the form at all (Dynamis, Limbus). Those are different facts.
+/// </summary>
+public sealed record ActivityChartBoardFeaturesDto(
+    bool PopItems,
+    bool DropItems,
+    bool Wishlist,
+    bool KeyItems);
 
 /// <summary>The boards the Charts sub-nav offers, so the client does not keep its own list.</summary>
 public sealed record ActivityChartBoardSummaryDto(string Board, string Label);
@@ -1485,7 +1762,20 @@ public sealed record ActivityChartBossDto(
     string? LeadsToThemeKey,
     /// <summary>Start a new row after this card. A board that sets it anywhere is drawn as centred
     /// rows of fixed-width cards rather than as a stretch-to-fit grid.</summary>
-    bool EndsRow);
+    bool EndsRow,
+    /// <summary>What falls OFF this boss, as distinct from what is traded TO it. Non-empty turns
+    /// the client's drop-item box into a picker, exactly as PopItemOptions does for the pop one.
+    /// Appended LAST, like every addition to this record: a new optional member earlier would
+    /// silently capture the value meant for the one after it.</summary>
+    IReadOnlyList<ActivityChartPopItemOptionDto> DropItemOptions,
+    /// <summary>Pending item requests tied to THIS card. Board-level requests count toward none.</summary>
+    int PendingRequestCount,
+    /// <summary>The key item earned here, or null for a card that grants none.</summary>
+    string? KeyItemName,
+    int KeyItemHaveCount,
+    int KeyItemTotalMembers,
+    /// <summary>Exactly who still needs it, in roster order — what the card's drawer lists.</summary>
+    IReadOnlyList<string> KeyItemMissing);
 
 /// <summary>
 /// <c>Name</c> is what gets stored; <c>Source</c> is the mob that drops it; <c>Label</c> is the two
@@ -1506,7 +1796,10 @@ public sealed record ActivityChartPopItemDto(
     IReadOnlyList<ActivityChartCreditDto> Credits,
     /// <summary>How many farmers are credited — what the card's "Farmers Credited" column shows.</summary>
     int CreditCount,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    /// <summary>ChartItemKinds.Pop or Drop. Picks the pill beside the name and which option list the
+    /// edit form offers; nothing else about the row differs.</summary>
+    string Kind);
 
 public sealed record ActivityChartCreditDto(int? MembershipId, string CharacterName, string? Detail);
 
@@ -1560,9 +1853,97 @@ public sealed record ActivityChartPopItemRequest(
     /// NULL is not an empty list: it means "leave the credits alone", which is what a caller that
     /// does not know about them sends. An empty list clears them.
     /// </summary>
-    IReadOnlyList<ActivityChartCreditInput>? Credits = null);
+    IReadOnlyList<ActivityChartCreditInput>? Credits = null,
+    /// <summary>
+    /// ChartItemKinds.Pop or Drop; null reads as Pop, so a caller written before drops existed
+    /// keeps working unchanged.
+    ///
+    /// Honoured on ADD only. On update the row's OWN kind wins, exactly as its board does: an item
+    /// moves between bosses, never between kinds.
+    /// </summary>
+    string? Kind = null);
 
 public sealed record ActivityChartCreditInput(int? MembershipId, string? CharacterName, string? Detail);
 
 /// <summary>The COMPLETE farmer list for one row. Credits are written set-wise, so an omitted name is a removal.</summary>
 public sealed record ActivitySetChartCreditsRequest(IReadOnlyList<ActivityChartCreditInput>? Credits);
+
+// ---- Charts: the wishlist ---------------------------------------------------------
+//
+// The one part of Charts a member without CanManageCharts may write. CanWithdraw is decided
+// server-side PER VIEWER and shipped on the row, so no client works out for itself whether to show
+// the button - a second copy of the ownership rule is exactly how one front-end ends up more
+// permissive than the other.
+
+public sealed record ActivityChartWishlistDto(
+    IReadOnlyList<ActivityChartWishlistRequestDto> Requests,
+    /// <summary>How many pending requests are outstanding across the whole board.</summary>
+    int PendingCount);
+
+public sealed record ActivityChartWishlistRequestDto(
+    int Id,
+    string Board,
+    /// <summary>The card it is tied to, or null for "anywhere on this board".</summary>
+    string? Boss,
+    string ItemName,
+    int Quantity,
+    string? Notes,
+    /// <summary>ChartWishlistStatuses.Pending or Fulfilled. There is no Withdrawn - withdrawing
+    /// deletes the row.</summary>
+    string Status,
+    int Priority,
+    int? RequestedByMembershipId,
+    string RequestedByCharacterName,
+    /// <summary>Whether THIS viewer may withdraw it: their own, or anybody's if they can manage.</summary>
+    bool CanWithdraw,
+    DateTime RequestedAt,
+    DateTime? FulfilledAt,
+    string? FulfilledByCharacterName);
+
+/// <summary>A member submitting a request. Board comes from the route, never from the body.</summary>
+public sealed record ActivityChartWishlistRequestInput(
+    /// <summary>Blank or null means "anywhere on this board", which is what the form opens on.</summary>
+    string? Boss,
+    string? ItemName,
+    int Quantity,
+    string? Notes);
+
+public sealed record ActivityChartWishlistStatusRequest(string? Status);
+
+/// <summary>The COMPLETE ordered id list for a board. An id from elsewhere refuses the whole thing.</summary>
+public sealed record ActivityChartWishlistOrderRequest(IReadOnlyList<int>? OrderedIds);
+
+// ---- Charts: key items ------------------------------------------------------------
+//
+// Columns come from the CATALOG in catalog order, never from the data, so a key item nobody holds
+// still gets a column reading "0 of 14 have it".
+
+public sealed record ActivityChartKeyItemGridDto(
+    IReadOnlyList<ActivityChartKeyItemColumnDto> Columns,
+    IReadOnlyList<ActivityChartKeyItemRowDto> Rows);
+
+public sealed record ActivityChartKeyItemColumnDto(
+    string Name,
+    /// <summary>The card it is earned on, or null for a board-level prerequisite.</summary>
+    string? Boss,
+    /// <summary>Progression note under the column header. Reference text only.</summary>
+    string? Caption,
+    int HaveCount,
+    int TotalMembers,
+    IReadOnlyList<string> MissingCharacterNames);
+
+/// <summary><c>Has</c> is aligned to the column order above, so no client matches by name.</summary>
+public sealed record ActivityChartKeyItemRowDto(
+    int MembershipId,
+    string CharacterName,
+    string? Rank,
+    IReadOnlyList<bool> Has,
+    int HaveCount,
+    int TotalColumns,
+    int HavePercent);
+
+/// <summary>One cell toggled. <c>Has</c> false DELETES the row - presence is the fact.</summary>
+public sealed record ActivityChartKeyItemRequest(
+    string? KeyItemName,
+    int MembershipId,
+    bool Has);

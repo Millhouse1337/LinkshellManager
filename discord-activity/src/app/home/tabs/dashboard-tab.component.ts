@@ -1,10 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivityTodEntry, DiscordActivityService } from '../../discord/discord-activity.service';
-import type { ActivityEvent } from '../../discord/discord-activity.types';
+import type { ActivityEvent, ActivityHnmClaimSlice } from '../../discord/discord-activity.types';
 import {
+  ADMIN_BADGE,
   TOD_NOT_ENTERED,
+  canManageLinkshellIn,
   formatAlts,
   isTodReady,
   memberAvatarClass,
@@ -14,9 +16,13 @@ import {
   todCountdownLabel,
   todSortKey
 } from '../activity-home.helpers';
-import { isHnmMonsterName, type TabName } from '../activity-home.types';
+import { type TabName } from '../activity-home.types';
 import { JobsRosterStore } from '../jobs-roster.store';
 import { RULE_CATEGORY_OPTIONS, categoryBadge, parseRuleDetails } from '../rule-content.helpers';
+
+// Circumference of the HNM Claims donut ring: 2πr for the r=40 circle the template draws.
+// Segment lengths are stroke-dasharray values along it.
+const DONUT_CIRCUMFERENCE = 251.2;
 
 @Component({
   selector: 'app-dashboard-tab',
@@ -36,6 +42,7 @@ export class DashboardTabComponent {
   protected readonly initials = memberInitials;
   protected readonly memberAvatarClass = memberAvatarClass;
   protected readonly memberStatusClass = memberStatusClass;
+  protected readonly ADMIN_BADGE = ADMIN_BADGE;
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
 
@@ -86,9 +93,7 @@ export class DashboardTabComponent {
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {
-    const membership = (this.activity.overview()?.linkshells ?? []).find(link => link.id === linkshellId);
-    const rank = (membership?.rank ?? '').toLowerCase();
-    return rank === 'leader' || rank === 'officer';
+    return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }
 
   protected selectedDashboardLinkshellId(): number {
@@ -408,69 +413,43 @@ export class DashboardTabComponent {
 
   // ----- HNM donut -----
 
-  protected dashboardHnmWindow: '7d' | '30d' | 'all' = '30d';
+  protected readonly dashboardHnmWindow = signal<'7d' | '30d' | 'all'>('30d');
 
-  protected dashboardHnmClaims(): { monsterName: string; count: number; percent: number; colorClass: string }[] {
-    // Restrict the donut to true HNMs (Fafnir / Nidhogg / Behemoth / Tiamat
-    // / Bahamut / etc.) — Sky farm pops, ground NMs, HENMs, and Sea NMs are
-    // tracked elsewhere and would otherwise dominate the chart. isHnmMonsterName
-    // matches either half of a combined "Base/Stronger" label, which is how HNM
-    // boards record the name.
-    const tods = (this.activity.overview()?.recentTods ?? [])
-      .filter(tod => tod.linkshellId === this.selectedDashboardLinkshellId()
-                  && tod.claim
-                  && isHnmMonsterName(tod.monsterName));
-
-    const cutoffMs = this.dashboardHnmWindow === 'all'
-      ? 0
-      : this.dashboardHnmWindow === '7d' ? 7 * 86400000 : 30 * 86400000;
-
-    const nowMs = this.now();
-    const filtered = cutoffMs === 0 ? tods : tods.filter(tod => {
-      const timeMs = parseDate(tod.time) ?? 0;
-      return timeMs > 0 && (nowMs - timeMs) <= cutoffMs;
-    });
-
-    const counts = new Map<string, number>();
-    for (const tod of filtered) {
-      const name = (tod.monsterName ?? 'Unknown').trim();
-      counts.set(name, (counts.get(name) ?? 0) + 1);
+  // Straight off the server, which aggregates every claimed ToD the linkshell has.
+  //
+  // This used to be counted here from `overview.recentTods` — the 25 most recent ToDs of ANY
+  // monster, claimed or not. A quiet week of Sky pops pushed the HNM claims clean out of that
+  // tail, so the donut showed two or three monsters out of a season's camps and the "All"
+  // toggle charted the same 25 rows as the others. The client can't aggregate rows it was
+  // never sent, so the counting moved to HnmClaimStatsService (shared with the web dashboard).
+  protected readonly dashboardHnmClaims = computed<ActivityHnmClaimSlice[]>(() => {
+    const claims = this.activity.overview()?.hnmClaims;
+    if (!claims) return [];
+    switch (this.dashboardHnmWindow()) {
+      case '7d': return claims.last7Days ?? [];
+      case 'all': return claims.allTime ?? [];
+      default: return claims.last30Days ?? [];
     }
+  });
 
-    const total = filtered.length;
-    const palette = ['a', 'b', 'c', 'd', 'e', 'f'];
-    return Array.from(counts.entries())
-      .sort((left, right) => right[1] - left[1])
-      .slice(0, 6)
-      .map((entry, index) => ({
-        monsterName: entry[0],
-        count: entry[1],
-        percent: total === 0 ? 0 : (entry[1] / total) * 100,
-        colorClass: palette[index % palette.length]
-      }));
-  }
-
-  protected dashboardHnmClaimsTotal(): number {
-    return this.dashboardHnmClaims().reduce((sum, entry) => sum + entry.count, 0);
-  }
+  protected readonly dashboardHnmClaimsTotal = computed(() =>
+    this.dashboardHnmClaims().reduce((sum, entry) => sum + entry.count, 0));
 
   protected donutOffset(index: number): number {
-    const circumference = 251.2;
     const claims = this.dashboardHnmClaims();
-    const total = claims.reduce((sum, entry) => sum + entry.count, 0);
+    const total = this.dashboardHnmClaimsTotal();
     if (total === 0) return 0;
     let offset = 0;
     for (let i = 0; i < index; i += 1) {
-      offset += (claims[i].count / total) * circumference;
+      offset += (claims[i].count / total) * DONUT_CIRCUMFERENCE;
     }
     return -offset;
   }
 
   protected donutSegmentLength(count: number): number {
-    const circumference = 251.2;
-    const total = this.dashboardHnmClaims().reduce((sum, entry) => sum + entry.count, 0);
+    const total = this.dashboardHnmClaimsTotal();
     if (total === 0) return 0;
-    return (count / total) * circumference;
+    return (count / total) * DONUT_CIRCUMFERENCE;
   }
 
   // ----- News & recent activity -----

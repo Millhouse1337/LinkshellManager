@@ -4,6 +4,7 @@ import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type { ActivityItemInput, ActivityRevenueInput } from './discord-activity.types';
+import { TreasuryService } from './treasury.service';
 
 /**
  * Small CRUD groups that all hang off a linkshell:
@@ -19,6 +20,10 @@ import type { ActivityItemInput, ActivityRevenueInput } from './discord-activity
 export class LinkshellContentService {
   private readonly auth = inject(AuthService);
   private readonly http = inject(ActivityHttpClient);
+  // Selling an item is BOTH halves of the Treasury tab at once — the server records the item and the
+  // gil in ONE database transaction, so the screen has to refresh both or the two disagree until the
+  // next background tick. TreasuryService depends on nothing in here, so the arrow only points one way.
+  private readonly treasury = inject(TreasuryService);
 
   readonly busyRuleSave = signal(false);
   readonly busyRuleId = signal<number | null>(null);
@@ -216,15 +221,25 @@ export class LinkshellContentService {
   }
 
   // Mark an item sold for a price → records the income in Finances (server-side).
-  async markItemSold(itemId: number, salePrice: number): Promise<void> {
+  //
+  // soldByCharacterName is WHO SOLD IT, which is regularly not whoever is clicking: an officer
+  // records sales other members made. They are also the one left holding the gil, so the same answer
+  // becomes the treasury entry's holder and the item's seller. The server refuses the sale without it.
+  async markItemSold(itemId: number, salePrice: number, soldByCharacterName: string): Promise<void> {
     this.busyItemId.set(itemId);
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/items/${itemId}/mark-sold`, { salePrice });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Item sold — added to Finances.');
+      await this.http.postActivityAction(
+        `/api/activity/items/${itemId}/mark-sold`, { salePrice, soldByCharacterName });
+      // The overview carries the item; the gil lives on the treasury's own paged endpoint. Refresh
+      // both, or the stash reads "sold" while the transactions list right below it shows nothing —
+      // for up to a full background tick, which is exactly long enough to look broken.
+      // The gil reload is best-effort: a hiccup loading the transactions list must never report a
+      // sale that DID happen as a failure.
+      await Promise.all([this.auth.refreshOverview(), this.treasury.reload().catch(() => undefined)]);
+      this.auth.setActionMessage('Item sold — recorded in the transactions below.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Selling the item failed.'));
       throw error;
@@ -240,8 +255,12 @@ export class LinkshellContentService {
 
     try {
       await this.http.postActivityAction(`/api/activity/items/${itemId}/unsell`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Sale undone.');
+      // Same pair as the sale: undoing it reverses the gil entry, and that reversal is a row in the
+      // transactions list too.
+      // The gil reload is best-effort: a hiccup loading the transactions list must never report a
+      // sale that DID happen as a failure.
+      await Promise.all([this.auth.refreshOverview(), this.treasury.reload().catch(() => undefined)]);
+      this.auth.setActionMessage('Sale undone — the gil entry was reversed.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Undoing the sale failed.'));
       throw error;

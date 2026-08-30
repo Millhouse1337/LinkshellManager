@@ -1032,6 +1032,38 @@ a { color: inherit; text-decoration: none; }
   text-align: right;
 }
 
+/* "App" tag beside a roster name: the member has actually opened/synced the
+   app at least once. Mirrors the Discord Activity's .ac-roster-synced. */
+.roster-synced {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: middle;
+  color: var(--accent);
+  background: var(--accent-weak);
+  border: 1px solid var(--border);
+}
+
+/* "Show Jobs": Rank/DKP/Status give way to the member's leveled job pills —
+   the same swap the Discord Activity's dashboard roster does. Both column sets
+   are always rendered; the toggle just adds .roster--jobs to the list. */
+.roster-jobs { display: none; flex-direction: column; gap: 6px; min-width: 0; }
+.roster-col-jobs { display: none; }
+.roster--jobs .roster-head,
+.roster--jobs .roster-row {
+  grid-template-columns: 40px minmax(120px, 200px) minmax(0, 1fr);
+  align-items: start;
+}
+.roster--jobs .roster-jobs { display: flex; }
+.roster--jobs .roster-col-jobs { display: block; }
+.roster--jobs .roster-col-rank,
+.roster--jobs .roster-col-dkp,
+.roster--jobs .roster-col-status { display: none; }
+
 /* ---------- Form controls (theme overrides) ---------- */
 .form-control,
 .form-select,
@@ -1603,6 +1635,11 @@ table.themed .num {
 .donut-seg-d { stroke: #ef4444; }
 .donut-seg-e { stroke: #06b6d4; }
 .donut-seg-f { stroke: #a855f7; }
+/* g-i extend the run to nine so the donut can give each chartable HNM its own colour
+   rather than truncating to the first six. Same family, shifted around the wheel. */
+.donut-seg-g { stroke: #ec4899; }
+.donut-seg-h { stroke: #14b8a6; }
+.donut-seg-i { stroke: #f97316; }
 .donut-legend { display: flex; flex-direction: column; gap: 6px; }
 .donut-legend-row {
   display: grid;
@@ -1622,6 +1659,9 @@ table.themed .num {
 .donut-swatch.donut-seg-d { background: #ef4444; }
 .donut-swatch.donut-seg-e { background: #06b6d4; }
 .donut-swatch.donut-seg-f { background: #a855f7; }
+.donut-swatch.donut-seg-g { background: #ec4899; }
+.donut-swatch.donut-seg-h { background: #14b8a6; }
+.donut-swatch.donut-seg-i { background: #f97316; }
 .donut-legend-name { color: var(--fg); font-weight: 500; }
 .donut-legend-stats { color: var(--fg-3); font-family: var(--font-sans); }
 
@@ -1830,6 +1870,150 @@ table.themed .num {
 .create-form__grid > label > textarea:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-weak);
+}
+
+/* Monster Setups card on the Customize page. A flex grid rather than a <table> so each row can
+   hold real form controls and still collapse cleanly on a narrow viewport. Mirrors the Activity
+   .monster-setups__* rules so the two surfaces read the same. */
+/* One category = one group, headed by its own "+ Add monster". Categories can be empty — the
+   built-in catalog is the twelve HNMs, so "Other NMs" starts with nothing in it — which is why the
+   button lives in the heading rather than once at the foot of the card. */
+.monster-setup-rows {
+  display: grid;
+  gap: 14px;
+}
+
+.monster-setup-group {
+  display: grid;
+  gap: 8px;
+}
+
+.monster-setup-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 6px;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Rule between the heading and its button, fading out the way the Activity's does. */
+.monster-setup-heading-line {
+  flex: 1;
+  min-width: 24px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border-hot), transparent);
+}
+
+.monster-setup-empty {
+  color: var(--fg-3);
+  font-size: 12px;
+}
+
+.monster-setup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* A row is display:flex, which beats the UA's [hidden] rule — an empty group's header would show
+   anyway without this. */
+.monster-setup-row[hidden] { display: none; }
+
+.monster-setup-row--head {
+  border-bottom: 0;
+  padding-bottom: 0;
+  color: var(--fg-3);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.monster-setup-name {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monster-setup-name > input { width: 100%; min-width: 0; }
+
+.monster-setup-windows { flex: 0 0 92px; }
+.monster-setup-windows > input { width: 100%; min-width: 0; }
+
+/* Number + unit ride together so the pair reads as one field. */
+.monster-setup-duration {
+  flex: 0 0 168px;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.monster-setup-duration > input { flex: 0 0 68px; min-width: 0; }
+.monster-setup-duration > select { flex: 1 1 auto; min-width: 0; }
+
+/* Claim Shield on/off. Labelled, so a row still reads once the header scrolls away. */
+.monster-setup-claim {
+  flex: 0 0 104px;
+  display: flex;
+  align-items: center;
+}
+
+.monster-setup-claim label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.monster-setup-claim label > span {
+  color: var(--fg-3);
+  font-size: 12px;
+}
+
+.monster-setup-actions {
+  flex: 0 0 92px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.monster-setup-row input,
+.monster-setup-row select { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 760px) {
+  .monster-setup-row--head { display: none; }
+  .monster-setup-row { flex-wrap: wrap; gap: 8px; padding: 10px 2px; }
+  .monster-setup-name { flex: 1 1 100%; }
+}
+
+/* A duration field: the number and its unit ride together so the pair reads as one control.
+   Used by the ToD form's Cooldown and Interval, which are free-form now that each monster carries
+   its own configured value. */
+.create-form__duration {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.create-form__duration > input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.create-form__duration > select {
+  flex: 0 0 96px;
+  min-width: 0;
 }
 
 .create-form__error {
@@ -2278,6 +2462,111 @@ table.themed .num {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* Misc capture: at the camp, outside any window. Amber rather than the window chip's blue so the
+   two read as different KINDS of thing at a glance, not as two states of one thing. */
+.we-snapshot__misc {
+  background: var(--warning-weak);
+  border-color: var(--warning);
+  color: var(--warning);
+  white-space: nowrap;
+}
+.we-snapshot--misc > .we-snapshot__head {
+  border-left: 2px solid var(--warning-weak);
+}
+
+/* Group headings inside a card's snapshot list ("Windows" / "Miscellaneous Posts"). */
+.we-snapshots__group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px 6px;
+  border-top: 1px solid var(--border);
+}
+.we-snapshots__group-head:first-child {
+  border-top: 0;
+}
+.we-snapshots__group-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+.we-snapshots__group-count {
+  font-size: 11px;
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+.we-snapshots__group-help {
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.we-snapshots__group-head--misc .we-snapshots__group-title {
+  color: var(--warning);
+}
+
+/* The Misc rate. Rides the card's existing DKP form, so it saves with everything else. */
+.we-misc-dkp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--fg-2);
+}
+.we-misc-dkp .we-dkp-input {
+  width: 74px;
+}
+
+/* Re-file control on a filed capture. */
+.we-slot-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.we-slot-picker__kind {
+  min-width: 96px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.we-slot-picker__window {
+  width: 60px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Slot picker on an unlinked capture's Link form. */
+.we-unlinked-slot {
+  min-width: 96px;
+}
+.we-unlinked-window {
+  width: 76px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Why a member on the combined roster is priced the way they are. */
+.we-credit-chip {
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.we-credit-chip--window {
+  background: var(--accent-weak);
+  border-color: transparent;
+  color: var(--accent);
+}
+.we-credit-chip--misc {
+  background: var(--warning-weak);
+  border-color: transparent;
+  color: var(--warning);
+}
+.we-credit-chip--both {
+  background: var(--success-weak);
+  border-color: transparent;
+  color: var(--success);
+}
 .we-snapshot__actions {
   display: inline-flex;
   align-items: center;
@@ -2316,3 +2605,67 @@ table.themed .num {
 .we-unlinked-name { width: 200px; }
 .we-unlinked-select { width: 220px; }
 
+
+/* --- Per-alliance attendance ------------------------------------------------
+   A snapshot is one alliance, so the alliance is what tells two same-minute
+   captures apart. It reads as a chip on the snapshot header, on the camp header
+   ("2 alliances") and once per member in the combined roster's Alliance column.
+   Deliberately quieter than .tag.warning: this is an identity, not an alert. */
+.we-alliance-chip {
+  border-color: var(--accent-weak);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* An unverified capture. The stripe runs the height of the row so a Pending
+   snapshot is findable while scrolling a camp with a dozen of them, without
+   tinting the roster text underneath. */
+.we-snapshot--pending {
+  border-left: 3px solid var(--warning);
+}
+
+.we-unlinked-head-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The Confirm / Reject bar. Sits ABOVE the filing controls because it is the
+   blocking decision: an unconfirmed capture earns nothing no matter which event
+   it is filed under. */
+.we-unlinked-review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 18px 0 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.we-unlinked-review__note {
+  flex: 1 1 260px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+/* Each control is a labelled unit on its own line-wrapping row, so "Snapshot
+   name", "Link to Event" and "Alliance" stay attached to their inputs when the
+   row wraps. Without the label the three selects were indistinguishable. */
+.we-unlinked-label {
+  font-size: 12px;
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+.we-unlinked-alliance { width: 130px; }
+.we-unlinked-hint {
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.we-unlinked-form--end {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}

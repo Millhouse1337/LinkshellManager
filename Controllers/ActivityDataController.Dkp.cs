@@ -356,8 +356,11 @@ public sealed partial class ActivityDataController
                 Details: $"Audit by {officerName}: {reason}");
         }
 
+        // Officer intent: an audit exists precisely to restate a balance, including downward past
+        // zero. A floor here would block the tool you'd use to FIX an overdrawn member.
         await _dkpLedger.AppendAsync(
-            targetMembership, entryType, deltaAmount, occurredAtUtc, poolRef, entryContext, cancellationToken);
+            targetMembership, entryType, deltaAmount, occurredAtUtc, poolRef, entryContext, cancellationToken,
+            DkpOverdraft.Allow);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });

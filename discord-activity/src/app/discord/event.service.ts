@@ -10,6 +10,7 @@ import type {
   ActivityEventAddMemberCandidate,
   ActivityEventCommentsResponse,
   ActivityEventHistoryResponse,
+  ActivityEventHistoryWindowsResponse,
   ActivityLootInput,
   ActivityQuickJoinInput
 } from './discord-activity.types';
@@ -123,7 +124,8 @@ export class EventService {
         autoStart: input.autoStart ?? false,
         countsTowardActive: input.countsTowardActive ?? true,
         monsterName: input.monsterName ?? null,
-        repeatOnTod: input.repeatOnTod ?? false,
+        repeatOnTod: input.repeatOnTod ?? null,
+        repostLeadHours: input.repostLeadHours ?? null,
         dayNumber: input.dayNumber ?? null,
         hnmOpenBonusOverride: input.hnmOpenBonusOverride ?? null,
         hnmCloseBonusOverride: input.hnmCloseBonusOverride ?? null,
@@ -159,7 +161,8 @@ export class EventService {
         autoStart: input.autoStart ?? false,
         countsTowardActive: input.countsTowardActive ?? true,
         monsterName: input.monsterName ?? null,
-        repeatOnTod: input.repeatOnTod ?? false,
+        repeatOnTod: input.repeatOnTod ?? null,
+        repostLeadHours: input.repostLeadHours ?? null,
         dayNumber: input.dayNumber ?? null,
         hnmOpenBonusOverride: input.hnmOpenBonusOverride ?? null,
         hnmCloseBonusOverride: input.hnmCloseBonusOverride ?? null,
@@ -453,6 +456,20 @@ export class EventService {
     }
   }
 
+  // The archived attendance windows for one closed camp. Loaded on demand rather than with the
+  // history list: a page of 25-window wyrm camps carries more roster rows than the whole list.
+  async loadEventHistoryWindows(id: number): Promise<ActivityEventHistoryWindowsResponse | null> {
+    this.auth.setActionError(null);
+    try {
+      return await this.http.fetchActivityJson<ActivityEventHistoryWindowsResponse>(
+        `/api/activity/event-history/${id}/windows`
+      );
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading the attendance windows failed.'));
+      return null;
+    }
+  }
+
   async editEventHistory(id: number, input: ActivityEditEventHistoryInput): Promise<boolean> {
     this.auth.setActionError(null);
     this.auth.setActionMessage(null);
@@ -674,6 +691,41 @@ export class EventService {
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, "Setting this window's DKP failed."));
+      return false;
+    }
+  }
+
+  // Marks (or unmarks) ONE posted window as the camp's close — the only thing that decides the
+  // close bonus now that it is no longer derived from "the newest window posted".
+  //
+  // The server enforces the one-close-per-camp rule and CLEARS the window's explicit price on the
+  // way, so the close bonus can come through: an explicit amount replaces the computed value, and
+  // the addon stamps one on every window it posts. That is why this cannot be a client-side flag
+  // flip — see AddonApiController.SetClosingWindowAsync.
+  async setAttendanceWindowClosing(windowId: number, isClosingWindow: boolean): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      const accessToken = this.auth.currentAccessToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      const response = await fetch(`/api/addon/management/attendance-windows/${windowId}/closing`, {
+        method: 'PATCH',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ isClosingWindow })
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        try {
+          const payload = JSON.parse(text || '{}') as { error?: string };
+          throw new Error(payload.error || `Update failed (HTTP ${response.status}).`);
+        } catch {
+          throw new Error(text || `Update failed (HTTP ${response.status}).`);
+        }
+      }
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Marking the closing window failed.'));
       return false;
     }
   }

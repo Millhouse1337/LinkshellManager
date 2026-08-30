@@ -16,6 +16,10 @@ import type {
 // Baseline DKP per member when neither a saved override nor an event default
 // exists yet. Mirrors the web view (`memberDkpDefault = Model.DkpAmount ?? 1.5`).
 const FALLBACK_DKP = 1.5;
+// Mirrors AttendanceSnapshotSlotKinds on the server. Window is the fail-closed default: it is what
+// every capture means until an officer says otherwise.
+const SLOT_WINDOW = "Window";
+const SLOT_MISC = "Misc";
 
 interface MemberDkpDraft {
   value: number | null;
@@ -40,13 +44,22 @@ interface MemberDkpDraft {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AttendanceSectionsComponent {
-  // 'live' renders the open event cards only; 'archive' renders the instructions, the unlinked
-  // snapshots and the closed events.
-  readonly section = input.required<'live' | 'archive'>();
+  // Which slice of the attendance data to render. The component is mounted three times on the
+  // Events tab, once per value:
+  //   'live'     — the open attendance event cards, beside the camps that produced them
+  //   'unlinked' — captures with no event yet, the triage queue (its own section, not the archive)
+  //   'archive'  — the searchable closed-event history
+  //
+  // Required on purpose: an unset key would render nothing, which reads exactly like "this
+  // linkshell has no attendance data".
+  readonly section = input.required<'live' | 'unlinked' | 'archive'>();
 
   protected readonly activity = inject(DiscordActivityService);
   protected readonly windows = inject(WindowEventService);
   protected readonly attachNames: Record<number, string> = {};
+  // Snapshot id -> the slot an officer picked while filing it. Ingest classifies nothing now, so
+  // this choice is the whole filing decision.
+  protected readonly attachSlots: Record<number, { kind: string; window: number | null }> = {};
   // Per-event, per-character DKP draft. Reset whenever the underlying combined
   // roster changes (handled lazily on read so newly-added/removed people
   // pick up sane defaults).
@@ -58,6 +71,12 @@ export class AttendanceSectionsComponent {
   protected readonly confirmDeleteEventId = signal<number | null>(null);
   protected readonly confirmDeleteSnapshotId = signal<number | null>(null);
   protected readonly confirmRemoveEntryId = signal<number | null>(null);
+  protected readonly confirmRejectSnapshotId = signal<number | null>(null);
+
+  // Alliance numbers an officer can reassign a capture to. Mirrors
+  // AttendanceSnapshotAlliances.MaxAllianceNumber on the server, which clamps anything higher —
+  // six alliances is 108 people, past any turnout this has to render.
+  protected readonly allianceOptions = [1, 2, 3, 4, 5, 6];
 
   // No load effect here: EventsTabComponent owns the fetch, so mounting this component twice
   // doesn't fire two requests.
@@ -71,6 +90,80 @@ export class AttendanceSectionsComponent {
 
   protected rosterNames(): string[] {
     return this.data()?.rosterCharacterNames ?? [];
+  }
+
+  // Unlinked captures still waiting on an officer. Drives the section header's warning tag, which
+  // is the only place the count is visible without expanding each snapshot in turn.
+  protected pendingUnlinkedCount(model: { unlinkedSnapshots: ActivityWindowSnapshot[] }): number {
+    return model.unlinkedSnapshots.filter(snapshot => snapshot.isPending).length;
+  }
+
+  // ----- Attendance Archive search + paging -----
+  //
+  // The applied query and page live on WindowEventService because the server does the searching
+  // (see the note there). What's local is the DRAFT the officer is typing: nothing refetches until
+  // they hit Search, since this payload carries every listed event's whole snapshot tree and the
+  // tab polls it.
+  //
+  // Re-seeded whenever the applied query changes underneath the draft — a Clear, or a linkshell
+  // switch resetting the archive — so the box can never disagree with the cards below it. Same
+  // lazy-sync idiom as attachName() below.
+  private archiveSearchSyncedFrom: string | null = null;
+  private archiveSearchDraft = '';
+
+  protected archiveSearchText(): string {
+    const applied = this.windows.closedQuery();
+    if (this.archiveSearchSyncedFrom !== applied) {
+      this.archiveSearchSyncedFrom = applied;
+      this.archiveSearchDraft = applied;
+    }
+    return this.archiveSearchDraft;
+  }
+
+  protected setArchiveSearchText(value: string): void {
+    this.archiveSearchDraft = value ?? '';
+  }
+
+  // The query the CURRENT page was actually built from, straight off the payload — not the draft.
+  // "No closed events match X" has to name what was searched, not what has since been typed.
+  protected appliedArchiveQuery(): string {
+    return this.data()?.closedQuery ?? '';
+  }
+
+  protected async submitArchiveSearch(): Promise<void> {
+    const id = this.primaryLinkshellId();
+    if (id) await this.windows.searchClosed(id, this.archiveSearchDraft);
+  }
+
+  protected async clearArchiveSearch(): Promise<void> {
+    this.archiveSearchDraft = '';
+    const id = this.primaryLinkshellId();
+    if (id) await this.windows.searchClosed(id, '');
+  }
+
+  protected async goToArchivePage(page: number): Promise<void> {
+    const id = this.primaryLinkshellId();
+    if (id) await this.windows.goToClosedPage(id, page);
+  }
+
+  protected archiveTotalPages(): number {
+    const model = this.data();
+    if (!model) return 1;
+    return Math.max(1, Math.ceil(model.closedTotalCount / Math.max(1, model.closedPageSize)));
+  }
+
+  // Bounds of the "Showing 1-10 of 34" tally. Zero when the archive is empty, so the template
+  // shows "No results" instead of a 0-0 range.
+  protected archiveRangeStart(): number {
+    const model = this.data();
+    if (!model || model.closedTotalCount === 0) return 0;
+    return ((model.closedPage - 1) * model.closedPageSize) + 1;
+  }
+
+  protected archiveRangeEnd(): number {
+    const model = this.data();
+    if (!model) return 0;
+    return Math.min(model.closedPage * model.closedPageSize, model.closedTotalCount);
   }
 
   protected formatDate(value?: string | null): string {
@@ -134,6 +227,58 @@ export class AttendanceSectionsComponent {
     this.attachNames[snapshotId] = value;
   }
 
+  protected attachSlot(snapshot: ActivityWindowSnapshot): { kind: string; window: number | null } {
+    this.attachSlots[snapshot.id] ??= { kind: SLOT_WINDOW, window: null };
+    return this.attachSlots[snapshot.id];
+  }
+
+  protected setAttachSlotKind(snapshotId: number, kind: string): void {
+    const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_WINDOW, window: null });
+    slot.kind = kind;
+  }
+
+  protected setAttachSlotWindow(snapshotId: number, value: number | null): void {
+    const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_WINDOW, window: null });
+    slot.window = value;
+  }
+
+  protected readonly slotWindow = SLOT_WINDOW;
+  protected readonly slotMisc = SLOT_MISC;
+
+  // The two groups a card renders its captures in. Split server-side and mirrored here so the
+  // Activity and the web cannot disagree about what counts as Misc.
+  protected windowSnapshots(event: ActivityWindowEvent): ActivityWindowSnapshot[] {
+    return event.snapshots.filter(s => !s.isMisc);
+  }
+
+  protected miscSnapshots(event: ActivityWindowEvent): ActivityWindowSnapshot[] {
+    return event.snapshots.filter(s => s.isMisc);
+  }
+
+  // 1..N for the window picker. Built from the camp own grid rather than HnmConfig.MaxWindow so a
+  // linkshell that configured a shorter cadence cannot be offered a window it never runs.
+  protected windowNumbers(event: ActivityWindowEvent): number[] {
+    const count = Math.max(1, event.windowCount || 1);
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }
+
+  // An ungridded camp (Sky gods, farm NMs) has no window numbers to show, so calling its captures
+  // "Windows" would promise a distinction it does not have.
+  protected windowGroupTitle(event: ActivityWindowEvent): string {
+    return event.hasWindowGrid ? 'Windows' : 'Captures';
+  }
+
+  // Moves an already-filed capture between a numbered window and Misc, in place. The server
+  // refuses it on a posted event: that would move members between the window and misc rates
+  // after the DKP was already paid.
+  protected async setSnapshotSlot(
+    snapshot: ActivityWindowSnapshot, kind: string, windowNumber: number | null,
+  ): Promise<void> {
+    const id = this.primaryLinkshellId();
+    if (!id) return;
+    await this.windows.setSnapshotSlot(snapshot.id, id, kind, windowNumber);
+  }
+
   protected async close(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     if (id) await this.windows.close(event.id, id);
@@ -161,13 +306,42 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const name = this.attachName(snapshot).trim();
     if (!id || !name) return;
-    await this.windows.attachSnapshot(snapshot.id, id, { name, createNew: true });
+    // A brand-new event starts as an ordinary window capture; an officer who meant Misc moves it
+    // with the slot control on the card.
+    await this.windows.attachSnapshot(snapshot.id, id, { name, createNew: true, slotKind: SLOT_WINDOW });
   }
 
   protected async attachExisting(snapshot: ActivityWindowSnapshot, windowEventId: number): Promise<void> {
     const id = this.primaryLinkshellId();
     if (!id || !windowEventId) return;
-    await this.windows.attachSnapshot(snapshot.id, id, { windowEventId });
+    const slot = this.attachSlot(snapshot);
+    await this.windows.attachSnapshot(
+      snapshot.id, id, { windowEventId, slotKind: slot.kind, windowNumber: slot.window });
+  }
+
+  // Persists the typed name onto the SNAPSHOT without creating or attaching anything. Blank is
+  // allowed and clears it — an officer who mislabelled a capture should be able to undo that
+  // without inventing a placeholder name.
+  protected async renameSnapshot(snapshot: ActivityWindowSnapshot): Promise<void> {
+    const id = this.primaryLinkshellId();
+    if (!id) return;
+    const name = this.attachName(snapshot).trim();
+    await this.windows.renameSnapshot(snapshot.id, id, name.length > 0 ? name : null);
+  }
+
+  protected async setSnapshotAlliance(snapshot: ActivityWindowSnapshot, allianceNumber: number): Promise<void> {
+    const id = this.primaryLinkshellId();
+    if (!id || !allianceNumber || allianceNumber === snapshot.allianceNumber) return;
+    await this.windows.setSnapshotAlliance(snapshot.id, id, allianceNumber);
+  }
+
+  // Confirm (true) puts the capture's members into the combined roster and therefore into the
+  // payout; Reject (false) takes it out of every roster for good.
+  protected async verifySnapshot(snapshot: ActivityWindowSnapshot, verified: boolean): Promise<void> {
+    const id = this.primaryLinkshellId();
+    if (!id) return;
+    await this.windows.verifySnapshot(snapshot.id, id, verified);
+    this.confirmRejectSnapshotId.set(null);
   }
 
   // Live HNM camps, offered as attach targets alongside the open attendance
@@ -208,7 +382,9 @@ export class AttendanceSectionsComponent {
     if (selection.startsWith('we:')) {
       const windowEventId = Number(selection.slice(3));
       if (!windowEventId) return;
-      await this.windows.attachSnapshot(snapshot.id, linkshellId, { windowEventId });
+      const slot = this.attachSlot(snapshot);
+      await this.windows.attachSnapshot(
+        snapshot.id, linkshellId, { windowEventId, slotKind: slot.kind, windowNumber: slot.window });
       return;
     }
 
@@ -219,7 +395,9 @@ export class AttendanceSectionsComponent {
       if (!name) return;
       // Both at once: the name files it for payroll the way the addon's own posts
       // for this camp are filed, and linkedEventId makes it show on the camp's card.
-      await this.windows.attachSnapshot(snapshot.id, linkshellId, { name, linkedEventId: campId });
+      const slot = this.attachSlot(snapshot);
+      await this.windows.attachSnapshot(snapshot.id, linkshellId,
+        { name, linkedEventId: campId, slotKind: slot.kind, windowNumber: slot.window });
       // The camp card reads from the overview, not the window-events payload, so it
       // needs its own refresh or the snapshot won't appear until the next poll.
       await this.activity.refreshOverview();
@@ -305,18 +483,25 @@ export class AttendanceSectionsComponent {
   // entryType is no longer an input — it's auto-tagged from the monster when the event is
   // created. It stays on the draft only so the stored tag is echoed back on save; the server
   // resolves it (and heals a legacy null) either way. See WindowEventEntryTypes.Resolve.
-  protected readonly dkpDrafts: Record<number, { amount: number | null; entryType: string }> = {};
+  protected readonly dkpDrafts: Record<number, { amount: number | null; entryType: string; misc: number | null }> = {};
 
   protected isPosted(event: ActivityWindowEvent): boolean {
     return !!event.postedToSheetUtc;
   }
 
-  protected dkpDraft(event: ActivityWindowEvent): { amount: number | null; entryType: string } {
+  protected dkpDraft(event: ActivityWindowEvent): { amount: number | null; entryType: string; misc: number | null } {
     this.dkpDrafts[event.id] ??= {
       amount: event.dkpAmount ?? null,
-      entryType: event.entryType ?? ''
+      entryType: event.entryType ?? '',
+      // Null is MEANINGFUL here, unlike amount: it means "misc pays what a window pays", which is
+      // the default. Blanking the input is how an officer goes back to that.
+      misc: event.miscDkpAmount ?? null
     };
     return this.dkpDrafts[event.id];
+  }
+
+  protected setMiscDkp(event: ActivityWindowEvent, value: number | null): void {
+    this.dkpDraft(event).misc = value;
   }
 
   private currentDefault(event: ActivityWindowEvent): number {
@@ -378,7 +563,7 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.saveDkp(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event));
+    await this.windows.saveDkp(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc);
   }
 
   // No native confirm — the explicit "Post to sheet" / "Update sheet" button
@@ -388,13 +573,13 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.postToSheet(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event));
+    await this.windows.postToSheet(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc);
   }
 
   protected async editPosted(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.editPosted(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event));
+    await this.windows.editPosted(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc);
   }
 }

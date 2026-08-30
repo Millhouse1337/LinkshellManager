@@ -186,11 +186,6 @@ public sealed partial class ActivityDataController
         return allowed;
     }
 
-    private static bool CanManageLinkshell(AppUserLinkshell? membership)
-    {
-        return LinkshellRanks.IsLeaderOrOfficer(membership?.Rank);
-    }
-
     private async Task<bool> CanAsync(
         AppUserLinkshell? membership,
         Func<LinkshellRole, bool> selector,
@@ -199,6 +194,14 @@ public sealed partial class ActivityDataController
         if (membership is null)
         {
             return false;
+        }
+
+        // Super-admin override, when switched on globally. Deliberately placed AFTER the
+        // membership null-check so it can only ever elevate inside a linkshell the user
+        // has actually joined. See AdminOverrideService.
+        if (await _adminOverride.IsActiveForAsync(membership.AppUserId, cancellationToken))
+        {
+            return true;
         }
 
         // The Leader (linkshell owner) always has every permission — a stale role row

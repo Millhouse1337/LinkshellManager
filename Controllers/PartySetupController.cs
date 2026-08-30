@@ -15,8 +15,9 @@ namespace LinkshellManagerDiscordApp.Controllers;
 [Authorize]
 public class PartySetupController : Controller
 {
-    private static readonly HashSet<string> SupportedMonsters =
-        new(TodManagerViewModel.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
+    // No compile-time monster set here any more: which monsters a linkshell may assign is a
+    // per-linkshell question now (built-ins plus the ones it added itself), answered by
+    // MonsterTimingMap.Allows. See Services/MonsterTimingResolver.
     private static readonly HashSet<string> ValidRoles =
         new(EventJobCatalog.JobTypeOptions, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> ValidMainJobs =
@@ -28,11 +29,19 @@ public class PartySetupController : Controller
 
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly Services.AdminOverrideService _adminOverride;
+    private readonly Services.MonsterTimingResolver _monsterTimings;
 
-    public PartySetupController(ApplicationDbContext context, UserManager<AppUser> userManager)
+    public PartySetupController(
+        ApplicationDbContext context,
+        UserManager<AppUser> userManager,
+        Services.AdminOverrideService adminOverride,
+        Services.MonsterTimingResolver monsterTimings)
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
+        _monsterTimings = monsterTimings;
     }
 
     [HttpGet]
@@ -434,7 +443,11 @@ public class PartySetupController : Controller
                 .Where(ls => ls.Id == linkshellId)
                 .Select(ls => ls.LinkshellName)
                 .FirstOrDefaultAsync(),
-            LinkshellType = await ResolveLinkshellTypeAsync(linkshellId),
+            // The linkshell's own catalog, so a custom monster is pickable here too. Without this
+            // the view model's compile-time default wins and the web dropdown silently offers only
+            // the built-ins, while the Activity offers both.
+            MonsterOptions = (await _monsterTimings.GetMapAsync(linkshellId, HttpContext.RequestAborted))
+                .EventMonsterOptions.ToList(),
             Slots = SeedSlots()
         };
         return View(model);
@@ -451,11 +464,11 @@ public class PartySetupController : Controller
         if (linkshellId <= 0 || !await ResolveCanManagePartiesAsync(user.Id, linkshellId)) return Forbid();
 
         var allowCustomMonster = ResolveAssignedMonster(model);
-        NormalizeAndValidate(model, allowCustomMonster);
+        NormalizeAndValidate(model, allowCustomMonster,
+            await _monsterTimings.GetMapAsync(linkshellId, HttpContext.RequestAborted));
         if (!ModelState.IsValid)
         {
             model.LinkshellId = linkshellId;
-            model.LinkshellType = await ResolveLinkshellTypeAsync(linkshellId);
             return View(model);
         }
 
@@ -507,7 +520,8 @@ public class PartySetupController : Controller
         }
 
         var allowCustomMonster = ResolveAssignedMonster(model);
-        NormalizeAndValidate(model, allowCustomMonster);
+        NormalizeAndValidate(model, allowCustomMonster,
+            await _monsterTimings.GetMapAsync(linkshellId, HttpContext.RequestAborted));
         if (!ModelState.IsValid)
         {
             var errors = ModelState.Values
@@ -580,9 +594,10 @@ public class PartySetupController : Controller
                 .Where(ls => ls.Id == partySetup.LinkshellId)
                 .Select(ls => ls.LinkshellName)
                 .FirstOrDefaultAsync(),
-            LinkshellType = await ResolveLinkshellTypeAsync(partySetup.LinkshellId),
             Name = partySetup.Name,
             AssignedMonsterName = partySetup.AssignedMonsterName,
+            MonsterOptions = (await _monsterTimings.GetMapAsync(partySetup.LinkshellId, HttpContext.RequestAborted))
+                .EventMonsterOptions.ToList(),
             Notes = partySetup.Notes,
             EventType = string.IsNullOrWhiteSpace(partySetup.EventType) ? "Any" : partySetup.EventType,
             Slots = FlattenTree(partySetup)
@@ -605,12 +620,12 @@ public class PartySetupController : Controller
         if (!await ResolveCanManagePartiesAsync(user.Id, partySetup.LinkshellId)) return Forbid();
 
         var allowCustomMonster = ResolveAssignedMonster(model);
-        NormalizeAndValidate(model, allowCustomMonster);
+        NormalizeAndValidate(model, allowCustomMonster,
+            await _monsterTimings.GetMapAsync(partySetup.LinkshellId, HttpContext.RequestAborted));
         if (!ModelState.IsValid)
         {
             model.Id = partySetup.Id;
             model.LinkshellId = partySetup.LinkshellId;
-            model.LinkshellType = await ResolveLinkshellTypeAsync(partySetup.LinkshellId);
             return View(nameof(Create), model);
         }
 
@@ -663,9 +678,10 @@ public class PartySetupController : Controller
         if (!await ResolveCanManagePartiesAsync(user.Id, partySetup.LinkshellId)) return Forbid();
 
         var trimmed = monsterName?.Trim();
-        if (!string.IsNullOrEmpty(trimmed) && !SupportedMonsters.Contains(trimmed))
+        var catalog = await _monsterTimings.GetMapAsync(partySetup.LinkshellId, HttpContext.RequestAborted);
+        if (!catalog.Allows(trimmed))
         {
-            TempData["PartySetupMessage"] = "That monster is not a supported ToD monster.";
+            TempData["PartySetupMessage"] = "That monster is not in this linkshell's monster list. Add it under Monster setups first.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -851,7 +867,10 @@ public class PartySetupController : Controller
         return slot;
     }
 
-    private void NormalizeAndValidate(PartySetupEditorViewModel model, bool allowCustomMonster = false)
+    // `catalog` is the linkshell's own monster list; null skips the check entirely, which is what
+    // the "Other" free-text branch already did via allowCustomMonster.
+    private void NormalizeAndValidate(
+        PartySetupEditorViewModel model, bool allowCustomMonster = false, Services.MonsterTimingMap? catalog = null)
     {
         if (string.IsNullOrWhiteSpace(model.Name))
         {
@@ -861,9 +880,10 @@ public class PartySetupController : Controller
         // HNM linkshells can name a custom pop via the "Other" option, so a
         // free-text monster skips the supported-list check.
         var monster = model.AssignedMonsterName?.Trim();
-        if (!allowCustomMonster && !string.IsNullOrEmpty(monster) && !SupportedMonsters.Contains(monster))
+        if (!allowCustomMonster && catalog is not null && !catalog.Allows(monster))
         {
-            ModelState.AddModelError(nameof(model.AssignedMonsterName), "Select a supported ToD monster, or leave it unassigned.");
+            ModelState.AddModelError(nameof(model.AssignedMonsterName),
+                "That monster is not in this linkshell's monster list. Add it under Monster setups first, or leave it unassigned.");
         }
 
         model.Slots ??= new List<PartySetupSlotInput>();
@@ -932,15 +952,6 @@ public class PartySetupController : Controller
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
-    private async Task<string> ResolveLinkshellTypeAsync(int linkshellId)
-    {
-        var raw = await _context.Linkshells.AsNoTracking()
-            .Where(ls => ls.Id == linkshellId)
-            .Select(ls => ls.LinkshellType)
-            .FirstOrDefaultAsync();
-        return LinkshellTypes.Normalize(raw);
-    }
-
     // Folds the "Other" Assigned Monster pick into a free-text custom name and
     // reports whether the value should bypass the supported-monster check
     // (HNM linkshells can name a custom pop). Mutates model.AssignedMonsterName.
@@ -984,10 +995,20 @@ public class PartySetupController : Controller
 
     private async Task<LinkshellRole?> GetEffectiveRoleAsync(string appUserId, int linkshellId)
     {
-        var rank = await _context.AppUserLinkshells
-            .Where(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId)
-            .Select(m => m.Rank)
-            .FirstOrDefaultAsync();
+        // The membership ROW, not just the rank string: a null rank and a missing
+        // membership are otherwise indistinguishable, and the override below must
+        // only ever fire for an actual member.
+        var membership = await _context.AppUserLinkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId);
+        if (membership is null) return null;
+
+        if (await _adminOverride.IsActiveForAsync(appUserId, HttpContext.RequestAborted))
+        {
+            return Services.LinkshellRoleDefaults.BuildFullAccessRole(linkshellId);
+        }
+
+        var rank = membership.Rank;
         if (rank is null) return null;
         var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
         return await _context.LinkshellRoles

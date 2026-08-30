@@ -8,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Services;
 //     dkp = round( WdDkpPerWindow * (lastWindow - arrival + 1)
 //                  + (arrival == 1        ? WdOpenBonus  : 0)
 //                  + (creditLast == last  ? WdCloseBonus : 0)
-//                  + (claimed ? WdClaimBonus : 0)
+//                  + (claimed AND tagged the mob on the Claim Shield ? WdClaimBonus : 0)
 //                  + (killed  ? WdKillBonus  : 0) )
 //
 // Open and close are the Wd counterparts of the Standard bonuses of the same name, and they gate
@@ -101,6 +101,21 @@ public sealed class WdCampFinalizer
             HnmCampPricing.WdAmounts(ev, linkshell, claimed, killed);
         var step = DkpRounding.StepFor(linkshell.DkpRoundingIncrement);
 
+        // The claim bonus is no longer paid to everyone who checked in. It goes to the people whose
+        // names are on this camp's Claim Shield — the ones the addon watched land an action on the
+        // mob (claim_shield.lua) — for the same reason it does on a Standard camp: checking in is
+        // presence, and the claim bonus pays for the tag. Accounts only; an unmatched capture name
+        // has no balance to credit.
+        //
+        // Whether the bonus applies at all is still the officer's End Camp call — `claimBonus` is
+        // already 0 here when the camp wasn't claimed. The Claim Shield decides WHO, not IF.
+        var taggedAppUserIds = (await _db.ClaimShieldCaptureMembers
+                .Where(m => m.Capture!.EventId == ev.Id && m.AppUserId != null)
+                .Select(m => m.AppUserId!)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var participations = await _db.AppUserEvents
             .Where(p => p.EventId == ev.Id)
             .ToListAsync(cancellationToken);
@@ -146,7 +161,11 @@ public sealed class WdCampFinalizer
                 SubJobName: participation.SubJobName,
                 Dkp: ComputeDkp(
                     rate, arrival, creditLast, lastWindow,
-                    openBonus, closeBonus, claimBonus, killBonus, step)));
+                    openBonus, closeBonus,
+                    participation.AppUserId is { } tagId && taggedAppUserIds.Contains(tagId)
+                        ? claimBonus
+                        : 0d,
+                    killBonus, step)));
         }
 
         _logger.LogInformation(

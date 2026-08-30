@@ -17,28 +17,37 @@ public class TodManagerViewModel
     // monster that isn't in the curated list.
     public const string OtherMonster = "Other";
 
+    // The BUILT-IN monster catalog: the twelve HNMs, and nothing else.
+    //
+    // Every non-HNM is a CUSTOM monster now. This list used to carry eleven ground NMs too -- eight
+    // (Boroka, Bune, Capricious Cassie, Roc, Serket, Shikigami Weapon, Simurgh, Xolotl) left first
+    // because nobody camped them, then Bloodsucker, King Arthro and King Vinegarroon followed:
+    // WHICH NMs a linkshell camps is that linkshell's business, and a hardcoded three was a guess
+    // every other linkshell had to delete around. So the editor's "Other NMs" heading starts EMPTY
+    // and is filled with "+ Add monster", which produces a first-class campable monster rather than
+    // a timings-only row (MonsterTimingMap.EventMonsterOptions / .Allows).
+    //
+    // Keeping the twelve HNMs built in is the deliberate other half of that. Their spawn grids are
+    // what the board, the window auto-advance and the addon all reason about, and those cadences
+    // are game facts rather than a linkshell's preference.
+    //
+    // Read this directly only where "the built-ins" is genuinely what you mean -- seeding, and the
+    // defaults lookup. Everything user-facing goes through the linkshell's own catalog
+    // (MonsterTimingMap), which is this list plus that linkshell's custom monsters.
     public static IReadOnlyList<string> SupportedMonsters { get; } = new[]
     {
         "Adamantoise",
         "Aspidochelone",
         "Behemoth",
+        "Cerberus",
         "Fafnir",
+        "Hydra",
         "Jormungand",
+        "Khimaira",
         "King Behemoth",
         "Nidhogg",
         "Tiamat",
-        "Vrtra",
-        "Bloodsucker",
-        "Boroka",
-        "Bune",
-        "Capricious Cassie",
-        "King Arthro",
-        "King Vinegarroon",
-        "Roc",
-        "Serket",
-        "Shikigami Weapon",
-        "Simurgh",
-        "Xolotl"
+        "Vrtra"
     };
 
     public static IReadOnlyList<string> SupportedCooldowns { get; } = new[]
@@ -77,9 +86,19 @@ public class TodManagerViewModel
 
     public List<string> MonsterOptions { get; set; } = SupportedMonsters.ToList();
 
-    public List<string> CooldownOptions { get; set; } = SupportedCooldowns.ToList();
+    // Per-monster cooldown / cadence for the selected linkshell, keyed by the exact MonsterOptions
+    // text. Serialized onto the form as a data- attribute so picking a monster pre-fills its
+    // durations without a round trip — the same job the Activity does from the overview payload.
+    public Dictionary<string, TodMonsterTimingHint> MonsterTimings { get; set; }
+        = new(StringComparer.OrdinalIgnoreCase);
 
-    public List<string> IntervalOptions { get; set; } = SupportedIntervals.ToList();
+    // Cooldown and Interval are entered as a number + a unit now rather than picked from a fixed
+    // list, because each monster carries its own configured value. Composed into Tod.Cooldown /
+    // Tod.Interval server-side before validation runs.
+    public double? CooldownValue { get; set; }
+    public string? CooldownUnit { get; set; }
+    public double? IntervalValue { get; set; }
+    public string? IntervalUnit { get; set; }
 
     public List<string> CharacterNames { get; set; } = new();
 
@@ -169,3 +188,6 @@ public class TodTableRowViewModel
 
     public string? ImagePath { get; init; }
 }
+// One monster's configured durations, in canonical minutes, for the ToD form's pre-fill. Cadence is
+// null when the monster has no spawn grid and no configured check interval.
+public sealed record TodMonsterTimingHint(int CooldownMinutes, int? CadenceMinutes);

@@ -1,6 +1,7 @@
+@using LinkshellManagerDiscordApp.Services
 @model LinkshellManagerDiscordApp.ViewModels.ChartPopItemFieldContext
 @*
-    The "Pop item" control, shared by the add form and every row's edit drawer.
+    The item control, shared by both add forms and every row's edit drawer.
 
     BOTH controls are rendered and one is hidden AND disabled, because the right control depends on
     which boss is selected and that can change after the page is served: Sea's second-stage Jailers
@@ -19,6 +20,11 @@
 
     // Which control is live on arrival: the picker when this boss has a list, the text box when not.
     var picking = options.Count > 0;
+
+    // The form's own wording. Server-rendered here AND rebuilt by the swap script at the foot of
+    // Board.cshtml when the boss changes, so the two have to agree - they both read the kind rather
+    // than hardcoding "pop".
+    var noun = Model.Kind == ChartItemKinds.Drop ? "drop item" : "pop item";
 }
 
 @* The id rides on whichever control is live, so the field's <label for> always points at something
@@ -26,7 +32,7 @@
 <select name="itemName" id="@(picking ? Model.FieldId : null)" class="chart-item-picker"
         data-chart-item-picker data-chart-item-id="@Model.FieldId"
         hidden="@(!picking)" disabled="@(!picking)" required>
-    <option value="">Pick a pop item…</option>
+    <option value="">Pick a @noun…</option>
     @if (hasCurrent && !known)
     {
         @* The name this row is ALREADY saved under, when the board does not list it — a row typed

@@ -1,6 +1,5 @@
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
-using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,12 +7,13 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public partial class EventController
 {
-    private static readonly HashSet<string> BoardTodCooldowns =
-        new(TodManagerViewModel.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> BoardTodIntervals =
-        new(TodManagerViewModel.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> BoardLongWindowMonsters =
-        new(StringComparer.OrdinalIgnoreCase) { "Tiamat", "Jormungand", "Vrtra" };
+    // (BoardTodCooldowns / BoardTodIntervals / BoardLongWindowMonsters lived here: a preset-only
+    // allow-list and a hardcoded monster→cooldown table private to this one form. Both had already
+    // drifted — the table answered 72h for the ToAU three long after MonsterTimingDefaults settled
+    // on 48h, and the interval list offered nothing but "1 Hour" and "10 Min", so a linkshell that
+    // had configured any other cadence could not log a ToD from its own board with it. Cooldown and
+    // interval are per-linkshell and free-form everywhere else (see ActivityDataController's
+    // PostBoardTodAsync, which this mirrors); this form now reads the same two sources.)
 
     // Logs (or edits) the monster's Time of Death from an HNM signup board's "Post ToD" /
     // "Edit ToD" button — the web mirror of ActivityDataController.PostBoardTodAsync. It
@@ -57,7 +57,7 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
-        if (!CanManageLinkshell(membership))
+        if (!await CanManageLinkshellAsync(membership))
         {
             TempData["PartySetupMessage"] = "Leader or officer access is required to log a Time of Death.";
             return SafeLocalRedirect(returnUrl);
@@ -90,12 +90,15 @@ public partial class EventController
             }
         }
 
+        // Blank falls back to what THIS LINKSHELL has configured for the monster, not to a table
+        // this form keeps to itself.
         var resolvedCooldown = string.IsNullOrWhiteSpace(cooldown)
-            ? GetDefaultBoardCooldown(monsterName)
+            ? await ActivityDataController.GetDefaultTodCooldownAsync(
+                _monsterTimings, eventEntity.LinkshellId, monsterName, HttpContext.RequestAborted)
             : cooldown.Trim();
-        if (!BoardTodCooldowns.Contains(resolvedCooldown))
+        if (!ActivityDataController.IsAcceptableTodCooldown(resolvedCooldown))
         {
-            TempData["PartySetupMessage"] = "Select a valid cooldown.";
+            TempData["PartySetupMessage"] = "Enter a valid cooldown (a positive number of hours or minutes).";
             return SafeLocalRedirect(returnUrl);
         }
 
@@ -104,14 +107,18 @@ public partial class EventController
         {
             resolvedInterval = null;
         }
-        else if (!BoardTodIntervals.Contains(resolvedInterval))
+        else if (!ActivityDataController.IsAcceptableTodInterval(resolvedInterval))
         {
-            TempData["PartySetupMessage"] = "Select a valid interval.";
+            TempData["PartySetupMessage"] = "Enter a valid interval (a positive number of hours or minutes).";
             return SafeLocalRedirect(returnUrl);
         }
 
         var nowUtc = DateTime.UtcNow;
-        var repopUtc = todTimeUtc?.AddHours(ResolveBoardCooldownHours(resolvedCooldown));
+        // The shared reader, not a switch. The private switch it replaces knew "5 Min", "2 Hour"
+        // and "72 Hour" and quietly answered 22 hours for everything else — so an 84-hour wyrm ToD
+        // logged from this form predicted its repop three days early, and a linkshell's own
+        // configured cooldown could not be honoured at all.
+        var repopUtc = todTimeUtc?.AddHours(ActivityDataController.ResolveTodCooldownHours(resolvedCooldown));
 
         // Edit the existing ToD if we're already in the defeated/awaiting state (the card's
         // "Edit ToD" button); otherwise log a fresh ToD for this pop ("Post ToD").
@@ -238,18 +245,4 @@ public partial class EventController
         return SafeLocalRedirect(returnUrl);
     }
 
-    // Window-cycle HNMs (Tiamat/Jormungand/Vrtra) default to the long 72-hour window; the
-    // rest default to the standard 22-hour cooldown. Mirrors the ToDs tab default logic.
-    private static string GetDefaultBoardCooldown(string? monsterName) =>
-        !string.IsNullOrWhiteSpace(monsterName) && BoardLongWindowMonsters.Contains(monsterName.Trim())
-            ? TodManagerViewModel.SeventyTwoHourCooldown
-            : TodManagerViewModel.TwentyTwoHourCooldown;
-
-    private static double ResolveBoardCooldownHours(string cooldown) => cooldown.Trim() switch
-    {
-        TodManagerViewModel.FiveMinuteCooldown => 5d / 60d,
-        TodManagerViewModel.TwoHourCooldown => 2d,
-        TodManagerViewModel.SeventyTwoHourCooldown => 72d,
-        _ => 22d
-    };
 }

@@ -1,5 +1,9 @@
 @model LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel
+@inject LinkshellManagerDiscordApp.Services.AdminOverrideService AdminOverride
 @{
+    // AppUserIds carrying the app-wide admin override (empty when it is switched off).
+    // One cached lookup for the whole roster — see AdminOverrideService.
+    var adminAppUserIds = await AdminOverride.GetActiveAdminAppUserIdsAsync(Context.RequestAborted);
     ViewData["Title"] = "Manage Team";
     ViewData["BodyClass"] = "lsm-page";
     var message = ViewBag.Message as string;
@@ -162,7 +166,13 @@ else
                                     <div style="font-size:11px;color:var(--fg-3)">Alts: @string.Join(", ", altNames)</div>
                                 }
                             </td>
-                            <td><span class="tag">@RankIcon(member.Rank) @(member.Rank ?? "—")</span></td>
+                            <td>
+                                <span class="tag">@RankIcon(member.Rank) @(member.Rank ?? "—")</span>
+                                @if (adminAppUserIds.Contains(member.AppUserId ?? string.Empty))
+                                {
+                                    <span class="tag accent" title="App-wide admin override: full permissions in every linkshell they belong to.">🔧 ADMIN</span>
+                                }
+                            </td>
                             <td><span class="tag @StatusClass(member.Status)">@(member.Status ?? "Active")</span></td>
                             @{ var streaks = memberStreaks.GetValueOrDefault(member.AppUserId ?? string.Empty); }
                             <td style="text-align:right">

@@ -45,25 +45,28 @@ export const HNM_MERGE_PAIRS: ReadonlyArray<{ base: string; stronger: string }> 
 // server-side — this is documented here for parity, not used client-side.
 export const HNM_COMBINED_FROM_DAY = 4;
 
-// Build the create-event monster dropdown options: each merge pair as ONE combined
-// "Base/Stronger" entry (always), the stronger half dropped, other monsters intact.
-// Mirrors HnmConfig.CombinedMonsterOptions.
-export function combinedMonsterOptions(raw: readonly string[]): string[] {
-  const strongers = new Set(HNM_MERGE_PAIRS.map(p => p.stronger.toLowerCase()));
-  const byBase = new Map(HNM_MERGE_PAIRS.map(p => [p.base.toLowerCase(), p]));
-  const out: string[] = [];
-  for (const m of raw) {
-    if (strongers.has(m.toLowerCase())) continue; // folded into the base entry
-    const pair = byBase.get(m.toLowerCase());
-    out.push(pair ? `${pair.base}/${pair.stronger}` : m);
-  }
-  return out;
+// Whether a monster is one of the three NQ/HQ families -- either half on its own, or the
+// combined "Base/Stronger" label a board stores. Mirrors HnmConfig.HasHqVariant, and is the
+// predicate behind every question only a merge pair can answer: the ToD form's HQ toggle, and
+// the Day box on both the ToD form and the create-event form. Day counts a POP CYCLE, and only
+// these three have one (HnmConfig.HnmDayCycles) -- asking Tiamat for a day invites a number
+// nothing can interpret, which the board would then print.
+export function hasHqVariant(name: string | null | undefined): boolean {
+  if (!name) { return false; }
+  const halves = name.split('/').map(part => part.trim().toLowerCase()).filter(Boolean);
+  return HNM_MERGE_PAIRS.some(pair =>
+    halves.includes(pair.base.toLowerCase()) || halves.includes(pair.stronger.toLowerCase()));
 }
 
-// Which TIER a monster belongs to on the create-event form: the HNMs -- the three
-// long-window wyrms plus the three NQ/HQ families -- against everything else, the NMs.
+// (combinedMonsterOptions lived here: it folded a raw per-half monster list into the merged
+// "Base/Stronger" dropdown entries. The pickers read the linkshell's monster setups now, and those
+// rows are STORED merged, so there is nothing left to fold client-side. The server still merges
+// when it seeds a catalog — HnmConfig.CombinedMonsterOptions.)
+
+// Which TIER a monster belongs to on the create-event form: the HNMs -- the six long-window
+// monsters plus the three NQ/HQ families -- against everything else, the NMs.
 // Mirrors HnmConfig.IsHnmTierMonster, and is the same cut the in-game addon's preset list
-// draws between "HNMS (6)" and "NMS (11)".
+// draws between "HNMS" and "NMS".
 //
 // NOT the same question as which monsters run a timed spawn cadence: the timed NMs
 // (Capricious Cassie, Bune, Boroka, Roc) share the kings' 7 x 10-min band and are still NMs.
@@ -71,6 +74,7 @@ export function isHnmTierMonster(name: string | null | undefined): boolean {
   if (!name) { return false; }
   const hnmTier = new Set<string>([
     'tiamat', 'jormungand', 'vrtra',
+    'cerberus', 'hydra', 'khimaira',
     ...HNM_MERGE_PAIRS.flatMap(p => [p.base.toLowerCase(), p.stronger.toLowerCase()]),
   ]);
   return name.split('/')
@@ -79,7 +83,7 @@ export function isHnmTierMonster(name: string | null | undefined): boolean {
     .some(segment => hnmTier.has(segment));
 }
 
-// Monsters that pop on a BUILT-IN SPAWN WINDOW GRID: the three long-window wyrms (25 windows
+// Monsters that pop on a BUILT-IN SPAWN WINDOW GRID: the six long-window monsters (25 windows
 // at 60 min) and everything on the short band (7 windows at 10 min) -- the kings/dragons and
 // the timed NMs that share it. Mirrors HnmConfig.DefaultWindowCadence's membership.
 //
@@ -88,6 +92,7 @@ export function isHnmTierMonster(name: string | null | undefined): boolean {
 // has no window to have popped on, so asking invites a number that means nothing.
 const SPAWN_WINDOW_CADENCE_MONSTERS: ReadonlySet<string> = new Set([
   'tiamat', 'jormungand', 'vrtra',
+  'cerberus', 'hydra', 'khimaira',
   'fafnir', 'nidhogg', 'behemoth', 'king behemoth', 'adamantoise', 'aspidochelone',
   'capricious cassie', 'bune', 'boroka', 'roc',
 ]);
@@ -101,33 +106,23 @@ export function hasSpawnWindowCadence(name: string | null | undefined): boolean 
     .some(segment => SPAWN_WINDOW_CADENCE_MONSTERS.has(segment));
 }
 
-export const TOD_COOLDOWN_OPTIONS = ['5 Min', '2 Hour', '22 Hour', '71 Hour', '72 Hour', '84 Hour', 'Other'] as const;
-export type TodCooldownOption = typeof TOD_COOLDOWN_OPTIONS[number];
+// (TOD_COOLDOWN_OPTIONS / TOD_INTERVAL_OPTIONS lived here: fixed preset lists for the ToD form's
+// two duration dropdowns. Both fields take a number + a unit now, because each monster carries its
+// own configured cooldown and cadence and a curated list can only express the handful of durations
+// someone happened to think of.)
+//
+// (LONG_WINDOW_TOD_MONSTERS / TWO_HOUR_TOD_MONSTERS / FIVE_MINUTE_TOD_MONSTERS /
+// defaultTodMonsterTiming lived here too: hand-copied mirrors of the server's default cooldown
+// table. The overview payload now carries every linkshell's complete monster catalog — including
+// the built-in defaults for a linkshell that has never configured anything — so there is nothing
+// left for a client-side copy to answer, and one more place for the numbers to drift is exactly
+// what this change set out to remove.)
 
-export const TOD_INTERVAL_OPTIONS = ['10 Min', '1 Hour', 'Not specified'] as const;
-export type TodIntervalOption = typeof TOD_INTERVAL_OPTIONS[number];
-
-export const LONG_WINDOW_TOD_MONSTERS: ReadonlySet<string> = new Set([
-  'Tiamat',
-  'Jormungand',
-  'Vrtra'
-]);
-
-// The eight Sky farm NMs. KEEP IN SYNC with HnmConfig.SkyFarmNmOrder — the C# side is the ordered
-// source of truth (the Charts → Sky "Farm NMs" run is projected from it), and nothing can check this
-// copy against it across the language boundary.
-const TWO_HOUR_TOD_MONSTERS: ReadonlySet<string> = new Set([
-  'Brigandish Blade',
-  'Despot',
-  'Faust',
-  'Mother Globe',
-  'Olla Grande',
-  'Steam Cleaner',
-  'Ullikummi',
-  'Zipacna'
-]);
-
-const FIVE_MINUTE_TOD_MONSTERS: ReadonlySet<string> = new Set([
+// Pop-only NMs: the four Sky Gods + Kirin, the Sea NMs, and the HENMs. Every one spawns from a pop
+// item instead of a repop timer, so a configurable cooldown is meaningless for them — they are
+// deliberately absent from the seeded monster catalog and cannot be added back as a custom monster.
+// The server rejects one too (MonsterTimingEditor); this copy just makes the error immediate.
+export const POP_ONLY_TOD_MONSTERS: ReadonlySet<string> = new Set([
   'Byakko',
   'Genbu',
   'Kirin',
@@ -143,18 +138,7 @@ const FIVE_MINUTE_TOD_MONSTERS: ReadonlySet<string> = new Set([
   'Jailer of Justice',
   'Jailer of Love',
   'Jailer of Prudence',
-  'Jailer of Temperance'
-]);
-
-// Pop-only NMs: the four Sky Gods + Kirin and the Sea NMs (both already listed in
-// FIVE_MINUTE_TOD_MONSTERS above), plus the HENMs. Every one of these spawns from a pop
-// item instead of a repop timer, so a configurable cooldown/interval is meaningless for
-// them — they're deliberately absent from TOD_BUILT_IN_MONSTER_GROUPS and can't be added
-// back through "+ New Monster". The server strips any timing stored under one of these
-// names out of the settings payload (ActivityDataController's ParseTodMonsterTimings), so
-// rows saved before they were dropped don't come back as "custom" monsters in the picker.
-export const POP_ONLY_TOD_MONSTERS: ReadonlySet<string> = new Set([
-  ...FIVE_MINUTE_TOD_MONSTERS,
+  'Jailer of Temperance',
   'Mammet-9999',
   'Overlord Arthro',
   'Ruinous Rocs',
@@ -163,67 +147,11 @@ export const POP_ONLY_TOD_MONSTERS: ReadonlySet<string> = new Set([
   'Ultimega'
 ]);
 
-export interface TodMonsterTiming {
-  cooldown: string;
-  interval: string;
-}
-
-// Mirrors ActivityDataController.GetDefaultTodCooldown/GetDefaultTodInterval.
-// This is display-only metadata for the configuration picker; posting a ToD
-// still resolves its cooldown on the server.
-export function defaultTodMonsterTiming(monsterName: string): TodMonsterTiming {
-  const name = monsterName.trim();
-  if (name === 'Tiamat' || name === 'Jormungand' || name === 'Vrtra') return { cooldown: '84 Hour', interval: '1 Hour' };
-  if (LONG_WINDOW_TOD_MONSTERS.has(name)) return { cooldown: '72 Hour', interval: '1 Hour' };
-  // Bloodsucker runs a 71-hour cycle, unlike the other ground NMs (22-hour default below).
-  if (name === 'Bloodsucker') return { cooldown: '71 Hour', interval: '10 Min' };
-  if (FIVE_MINUTE_TOD_MONSTERS.has(name)) return { cooldown: '5 Min', interval: '10 Min' };
-  if (TWO_HOUR_TOD_MONSTERS.has(name)) return { cooldown: '2 Hour', interval: '10 Min' };
-  return { cooldown: '22 Hour', interval: '10 Min' };
-}
-
-// True HNMs only (not Sky farm pops, ground NMs, HENMs, or Sea NMs).
-// Used by the dashboard "HNM Claims" donut so the chart isn't dominated by
-// unrelated kills like Genbu / Mother Globe / etc.
-// Mirrors Services/HnmConfig.cs (LongWindow + Short Window + Testing) so the
-// activity tabs filter the same monsters out of the generic ToD / Event
-// views that the server pushes into the dedicated HNM section.
-export const HNM_NAMES: ReadonlySet<string> = new Set([
-  'Fafnir',
-  'Nidhogg',
-  'Behemoth',
-  'King Behemoth',
-  'Adamantoise',
-  'Aspidochelone',
-  'Tiamat',
-  'Jormungand',
-  'Vrtra',
-  'Bahamut',
-  // Timed NMs on the kings/dragons' 7 x 10-min band -- mirror the same names in
-  // HnmConfig.ShortWindowHnms. They run a windowed camp like an HNM does, so the donut and the
-  // HNM-vs-generic split have to see them the way the server does.
-  'Capricious Cassie',
-  'Bune',
-  'Boroka',
-  'Roc',
-  // Testing presets -- mirror HnmConfig.TestingHnms.
-  'Goblin Furrier',
-  'Goblin Shaman'
-]);
-
-// A stored monster name may be a COMBINED "Base/Stronger" label — an HNM board logs its
-// ToD under the board's AssignedMonsterName verbatim, which from day 4 reads
-// "Fafnir/Nidhogg" / "Behemoth/King Behemoth" / "Adamantoise/Aspidochelone". A raw
-// HNM_NAMES.has() on that never matched, so the dashboard donut counted zero claims even
-// with claimed HNM ToDs on the board. Match on either half, mirroring
-// HnmConfig.MonsterSegments in Services/HnmConfig.cs.
-export function isHnmMonsterName(name: string | null | undefined): boolean {
-  if (!name) { return false; }
-  return name.split('/')
-    .map(segment => segment.trim())
-    .filter(Boolean)
-    .some(segment => HNM_NAMES.has(segment));
-}
+// (HNM_NAMES / isHnmMonsterName lived here: a hand-kept mirror of HnmConfig's true-HNM name
+// sets, used only by the dashboard "HNM Claims" donut to pick claims out of the overview's ToD
+// tail. The donut is aggregated server-side now — HnmClaimStatsService counts every claimed ToD
+// and ships the finished slices — so the client no longer needs a second copy of the list to
+// drift against.)
 
 // The monsters that get a configurable ToD cooldown, grouped by category for display.
 // Timed open-world spawns only: the HNMs (constants.lua's HNM_WINDOW_COUNTS), the Sky farm
@@ -231,67 +159,7 @@ export function isHnmMonsterName(name: string | null | undefined): boolean {
 // NMs (GROUND_NMS). Pop-only mobs — Sky Gods, Sea NMs, HENMs — are excluded on purpose; see
 // POP_ONLY_TOD_MONSTERS. The addon still captures their kills; they just have no repop
 // timer to configure.
-export interface TodMonsterGroup {
-  label: string;
-  names: readonly string[];
-}
-
-export const TOD_BUILT_IN_MONSTER_GROUPS: readonly TodMonsterGroup[] = [
-  {
-    label: 'HNMs',
-    names: [
-      'Adamantoise',
-      'Aspidochelone',
-      'Behemoth',
-      'Fafnir',
-      'Jormungand',
-      'King Behemoth',
-      'Nidhogg',
-      'Tiamat',
-      'Vrtra',
-    ]
-  },
-  {
-    // KEEP IN SYNC with HnmConfig.SkyFarmNmOrder. Its C# twin
-    // (LinkshellCustomizeViewModel.TodMonsterGroups) IS guarded, by
-    // ChartBoardCatalogTests.TheTodPickersSkyGroup_IsTheHnmConfigFarmNmSet; this copy is not.
-    label: 'Sky NMs',
-    names: [
-      'Brigandish Blade',
-      'Despot',
-      'Faust',
-      'Mother Globe',
-      'Olla Grande',
-      'Steam Cleaner',
-      'Ullikummi',
-      'Zipacna',
-    ]
-  },
-  // "Other NMs" stays last so the timed categories (HNMs / Sky) sit together
-  // at the top and the catch-all group settles at the bottom of the picker.
-  {
-    label: 'Other NMs',
-    names: [
-      'Bloodsucker',
-      'Boroka',
-      'Bune',
-      'Capricious Cassie',
-      'King Arthro',
-      'King Vinegarroon',
-      'Roc',
-      'Serket',
-      'Shikigami Weapon',
-      'Simurgh',
-      'Xolotl',
-    ]
-  },
-];
-
-// The Log ToD picker draws from the exact monster catalog shown in ToD
-// Cooldowns. Keep Other as the final free-text sentinel.
-export const TOD_MONSTER_OPTIONS = [
-  ...TOD_BUILT_IN_MONSTER_GROUPS.flatMap(group => group.names),
-  'Other'
-] as const;
-
-export type TodMonsterOption = typeof TOD_MONSTER_OPTIONS[number];
+// (TodMonsterGroup / TOD_BUILT_IN_MONSTER_GROUPS / TOD_MONSTER_OPTIONS lived here: the client's
+// copy of the monster catalog and its HNMs / Sky NMs / Other NMs grouping. Both the Monster Setups
+// editor and the ToD picker read the linkshell's own rows off the overview now, so the copy would
+// only be a second answer to a question the server already answers.)

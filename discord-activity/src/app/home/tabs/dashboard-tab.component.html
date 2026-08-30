@@ -279,11 +279,15 @@
                         @if (characters.length === 0) {
                           <div class="jobs-roster-member__empty">No jobs entered</div>
                         }
-                        @for (ch of characters; track ch.label) {
+                        @for (ch of characters; track ch.label; let i = $index) {
                           <div class="jobs-roster-member__character">
-                            @if (ch.isAlt) {
-                              <div class="jobs-roster-member__alt">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
-                            }
+                            <!-- characters() always yields [main, alt1?, alt2?], so the loop
+                                 index doubles as the alt's number. -->
+                            <span class="jobs-roster-member__who">
+                              <span class="jobs-roster-member__name">{{ ch.label }}</span>
+                              <span class="jobs-roster-member__dot">·</span>
+                              <span class="jobs-roster-member__tag" [class.jobs-roster-member__tag--main]="!ch.isAlt">{{ ch.isAlt ? 'Alt ' + i : 'Main' }}</span>
+                            </span>
                             @if (leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName); as jobs) {
                               @if (jobs.length === 0) {
                                 <div class="jobs-roster-member__empty">No jobs entered</div>
@@ -303,7 +307,12 @@
                       }
                     </div>
                   } @else {
-                    <div class="ac-roster-rank">{{ member.rank || 'Member' }}</div>
+                    <div class="ac-roster-rank">
+                      {{ member.rank || 'Member' }}
+                      @if (member.isAdmin) {
+                        <span class="tag accent" title="App-wide admin override: full permissions in every linkshell they belong to.">{{ ADMIN_BADGE }}</span>
+                      }
+                    </div>
                     <div class="ac-roster-dkp">{{ member.linkshellDkp ?? 0 }}</div>
                     <div><span class="tag {{ memberStatusClass(member.status) }}">{{ member.status || 'Active' }}</span></div>
                   }
@@ -407,7 +416,7 @@
            when at least one is enabled. -->
       @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
         @if (dashboardLinkshell.settings; as settings) {
-        @if (settings.enableToDs || (settings.enableHnmSection && settings.linkshellType !== 'SkySeaDynamis')) {
+        @if (settings.enableToDs || settings.enableHnmSection) {
         <div class="dash-row dash-row--equal">
         @if (settings.enableToDs) {
         <div class="card card--tod-fixed">
@@ -427,8 +436,10 @@
                   <div class="tod-head-left">
                     <div class="tod-mob-name">{{ group.latest.monsterName }}</div>
                     <span class="tag" [class.success]="group.latest.claim === true" [class.default]="group.latest.claim !== true">{{ group.latest.claim === true ? 'Claimed' : (group.latest.claim === false ? 'Unclaimed' : 'Not Specified') }}</span>
-                    @if (group.history.length > 0) {
-                      <span class="tag default num">{{ group.history.length + 1 }}</span>
+                    <!-- The window it popped on, matching the ToDs tab's card. Was a bare ToD
+                         count, which read as belonging to the Claimed tag beside it. -->
+                    @if (group.latest.popWindow) {
+                      <span class="tag default num">Window {{ group.latest.popWindow }}</span>
                     }
                   </div>
                   <div class="tod-countdown num" [class.open]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
@@ -526,15 +537,15 @@
         </div>
         }
 
-        <!-- HNM Claims donut (hidden for Sky/Sea/Dynamis linkshells — no HNM). -->
-        @if (settings.enableHnmSection && settings.linkshellType !== 'SkySeaDynamis') {
+        <!-- HNM Claims donut (hidden when the HNM feature toggle is off). -->
+        @if (settings.enableHnmSection) {
         <div class="card">
           <div class="card-head">
-            <div class="card-title">HNM Claims (last {{ dashboardHnmWindow === 'all' ? 'all' : dashboardHnmWindow }})</div>
+            <div class="card-title">HNM Claims ({{ dashboardHnmWindow() === 'all' ? 'all time' : 'last ' + dashboardHnmWindow() }})</div>
             <div class="card-head-right">
-              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow === '7d'" (click)="dashboardHnmWindow = '7d'">7d</button>
-              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow === '30d'" (click)="dashboardHnmWindow = '30d'">30d</button>
-              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow === 'all'" (click)="dashboardHnmWindow = 'all'">All</button>
+              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '7d'" (click)="dashboardHnmWindow.set('7d')">7d</button>
+              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '30d'" (click)="dashboardHnmWindow.set('30d')">30d</button>
+              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === 'all'" (click)="dashboardHnmWindow.set('all')">All</button>
             </div>
           </div>
           @if (dashboardHnmClaimsTotal() > 0) {
@@ -566,7 +577,7 @@
             </div>
           } @else {
             <div class="empty-state empty-state--compact">
-              <div class="empty-state-desc">No HNM Claims in this window yet.</div>
+              <div class="empty-state-desc">{{ dashboardHnmWindow() === 'all' ? 'No HNM claims recorded yet.' : 'No HNM claims in this window yet.' }}</div>
             </div>
           }
         </div>

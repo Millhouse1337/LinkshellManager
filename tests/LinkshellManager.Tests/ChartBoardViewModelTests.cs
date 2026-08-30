@@ -20,6 +20,7 @@ public class ChartBoardViewModelTests
                 Boss = boss.Name,
                 ThemeKey = boss.ThemeKey,
                 PopItemOptions = boss.PopItems ?? Array.Empty<ChartPopItemOption>(),
+                DropItemOptions = boss.DropItems ?? Array.Empty<ChartPopItemOption>(),
             })
             .ToList(),
     };
@@ -99,5 +100,58 @@ public class ChartBoardViewModelTests
         // TotalItems counts the LINES a card shows; TotalQuantity still counts every copy held.
         Assert.Equal(2, card.TotalItems);
         Assert.Equal(6, card.TotalQuantity);
+    }
+
+    /// <summary>
+    /// HasDropItemOptions is the twin of HasPopItemOptions and gates the SAME script block, which is
+    /// now emitted when EITHER is true. Pinned against the catalog for the same reason: a board where
+    /// the two answers disagree ships no data and the swap script bails on its first line.
+    /// </summary>
+    [Fact]
+    public void HasDropItemOptions_MatchesTheCatalogForEveryBoard()
+    {
+        foreach (var board in ChartBoardCatalog.Boards)
+        {
+            Assert.Equal(board.HasDropItemOptions, ModelFor(board).HasDropItemOptions);
+        }
+    }
+
+    /// <summary>
+    /// The JSON island the picker-swap script reads, keyed by KIND then by boss.
+    ///
+    /// The page can carry two add forms, and the script picks a list with
+    /// byKind[form.dataset.chartKind][bossSelect.value] - so this exact nesting is a contract
+    /// between a C# property and a string literal in an inline script, with nothing else to catch a
+    /// change to either. Camel-cased like every other payload this app hands the browser.
+    /// </summary>
+    [Fact]
+    public void ItemOptionsJson_IsKeyedByKindThenByBoss()
+    {
+        var model = new ChartBoardViewModel
+        {
+            Bosses = new()
+            {
+                new ChartBossCardViewModel
+                {
+                    Boss = "Byakko",
+                    PopItemOptions = new[] { new ChartPopItemOption("Seal of Byakko") },
+                    DropItemOptions = new[] { new ChartPopItemOption("Byakko's Haidate") },
+                },
+            },
+        };
+
+        using var parsed = System.Text.Json.JsonDocument.Parse(model.ItemOptionsJson);
+        var root = parsed.RootElement;
+
+        Assert.Equal(
+            "Seal of Byakko",
+            root.GetProperty(ChartItemKinds.Pop).GetProperty("Byakko")[0].GetProperty("name").GetString());
+        Assert.Equal(
+            "Byakko's Haidate",
+            root.GetProperty(ChartItemKinds.Drop).GetProperty("Byakko")[0].GetProperty("label").GetString());
+
+        // Both kinds are ALWAYS present, even empty: the script indexes byKind[kind] before the boss,
+        // and a missing key would throw rather than fall back to free text.
+        Assert.Equal(2, root.EnumerateObject().Count());
     }
 }

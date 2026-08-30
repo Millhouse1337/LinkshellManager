@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, Input, effect, inject, signal } fro
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../discord/discord-activity.service';
 import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../discord/discord-activity.types';
-import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from './event-job-options';
+import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from './event-job-options';import { ADMIN_BADGE, canManageLinkshellIn } from './activity-home.helpers';
 import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.helpers';
 import { AuctionsPanelComponent } from './sidebar-panels/auctions-panel.component';
 import { InvitesPanelComponent } from './sidebar-panels/invites-panel.component';
@@ -162,32 +162,32 @@ export class ActivitySidebarPanelComponent {
     timeZone: '',
     altCharacterName1: '',
     altCharacterName2: '',
-    // Catalog-aligned per-job levels (index 0 = WAR ... 14 = SMN); seeded from
-    // the overview's appUser.jobLevels and bound to the "My Jobs" inputs. Starts
-    // as 15 zeros (the classic job count) so the inputs always have a value even
-    // before the overview seeds it.
-    jobLevels: Array.from({ length: 15 }, () => 0) as number[],
+    // Catalog-aligned per-job levels (index 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP);
+    // seeded from the overview's appUser.jobLevels and bound to the "My Jobs"
+    // inputs. Starts as one zero per catalog job so the inputs always have a value
+    // even before the overview seeds it.
+    jobLevels: Array.from({ length: PROFILE_JOB_OPTIONS.length }, () => 0) as number[],
     // Same per-job arrays for the two alt characters (bound to the alt tabs).
-    alt1JobLevels: Array.from({ length: 15 }, () => 0) as number[],
-    alt2JobLevels: Array.from({ length: 15 }, () => 0) as number[],
+    alt1JobLevels: Array.from({ length: PROFILE_JOB_OPTIONS.length }, () => 0) as number[],
+    alt2JobLevels: Array.from({ length: PROFILE_JOB_OPTIONS.length }, () => 0) as number[],
     // Parallel "strong" flags (well-geared/merited), toggled per job under each
     // slot. Same index layout as the level arrays above.
-    strongJobs: Array.from({ length: 15 }, () => false) as boolean[],
-    alt1StrongJobs: Array.from({ length: 15 }, () => false) as boolean[],
-    alt2StrongJobs: Array.from({ length: 15 }, () => false) as boolean[],
+    strongJobs: Array.from({ length: PROFILE_JOB_OPTIONS.length }, () => false) as boolean[],
+    alt1StrongJobs: Array.from({ length: PROFILE_JOB_OPTIONS.length }, () => false) as boolean[],
+    alt2StrongJobs: Array.from({ length: PROFILE_JOB_OPTIONS.length }, () => false) as boolean[],
     // Per-craft levels (index 0 = Alchemy ... 8 = Fishing) for the main + two
     // alts. Account-level (sent regardless of linkshell membership).
     craftLevels: Array.from({ length: 9 }, () => 0) as number[],
     alt1CraftLevels: Array.from({ length: 9 }, () => 0) as number[],
     alt2CraftLevels: Array.from({ length: 9 }, () => 0) as number[],
-    // Per-job free-text merit notes (index 0 = WAR … 14 = SMN) for main + alts,
+    // Per-job free-text merit notes (index 0 = WAR … 17 = PUP) for main + alts,
     // set via the "Merited" modal. Parallel to the strong-flag arrays.
-    meritJobs: Array.from({ length: 15 }, () => '') as string[],
-    alt1MeritJobs: Array.from({ length: 15 }, () => '') as string[],
-    alt2MeritJobs: Array.from({ length: 15 }, () => '') as string[]
+    meritJobs: Array.from({ length: PROFILE_JOB_OPTIONS.length }, () => '') as string[],
+    alt1MeritJobs: Array.from({ length: PROFILE_JOB_OPTIONS.length }, () => '') as string[],
+    alt2MeritJobs: Array.from({ length: PROFILE_JOB_OPTIONS.length }, () => '') as string[]
   };
 
-  // The 15 classic jobs, in the exact order the API's catalog-aligned jobLevels
+  // The selectable jobs, in the exact order the API's catalog-aligned jobLevels
   // array uses, so profileModel.jobLevels[i] is the level of profileJobOptions[i].
   protected readonly profileJobOptions = [...PROFILE_JOB_OPTIONS];
   protected readonly profileJobMaxLevel = 75;
@@ -666,9 +666,7 @@ export class ActivitySidebarPanelComponent {
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {
-    const membership = this.linkshellMemberships().find(link => link.id === linkshellId);
-    const rank = (membership?.rank ?? '').toLowerCase();
-    return rank === 'leader' || rank === 'officer';
+    return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }
 
   protected needsProfileSetup(): boolean {
@@ -965,14 +963,6 @@ export class ActivitySidebarPanelComponent {
 
   protected canAuditSelectedLinkshell(): boolean {
     return !!this.selectedLinkshellId && this.canManageLinkshell(this.selectedLinkshellId);
-  }
-
-  // "Add to a previous entry" credits a member missed by a snapshot — a concept
-  // that only exists for HNM-style attendance (snapshots / window events). Hide
-  // it for Sky/Sea/Dynamis linkshells, which never produce snapshots.
-  protected canCreditSnapshot(): boolean {
-    const ls = (this.activity.overview()?.linkshells ?? []).find(l => l.id === this.selectedLinkshellId);
-    return (ls?.settings?.linkshellType ?? 'Both') !== 'SkySeaDynamis';
   }
 
   protected openDkpAudit(): void {

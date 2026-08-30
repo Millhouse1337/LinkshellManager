@@ -1,0 +1,110 @@
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.ChartBoardViewModel
+@*
+    Who holds which key item.
+
+    Presence is the fact - a ticked box is a stored row and an empty one is no row - so "still needs
+    it" is the INVERSE of what is stored, which is why every count here reads as a fraction of the
+    live roster rather than as a total.
+
+    Columns come from the CATALOG, in progression order, so a key item nobody holds still gets a
+    column reading 0 of N. Deriving them from the data would hide exactly the ones that matter.
+
+    Reuses the .chart-ledger* classes the Farming Credit Ledger left behind, so this matches the rest
+    of the page without a second set of table theming.
+*@
+@{
+    var grid = Model.KeyItems;
+    // Both rules, resolved once per row rather than per cell: a member may tick their own, an
+    // officer anybody's. The server re-checks every post - this only decides what is drawn enabled.
+    bool CanSet(int membershipId) =>
+        ChartKeyItemService.CanSetKeyItemFor(membershipId, Model.ViewerMembershipId, Model.CanManage);
+}
+
+<div class="card fade d3">
+    <div class="card-head">
+        <div class="card-title">Key Item Progress</div>
+        <span class="tag">@grid.Rows.Count(row => row.HaveCount == row.TotalColumns) of @grid.Rows.Count complete</span>
+    </div>
+
+    @if (grid.Columns.Count == 0 || grid.Rows.Count == 0)
+    {
+        <div class="empty">Nobody on the roster yet, so there is nothing to track.</div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table chart-ledger chart-keyitems">
+                <thead>
+                    <tr>
+                        <th>Member</th>
+                        @foreach (var column in grid.Columns)
+                        {
+                            <th class="chart-keyitems__head" title="@column.Caption">
+                                <span class="chart-keyitems__name">@column.Name</span>
+                                <span class="chart-keyitems__count">@column.HaveCount / @column.TotalMembers</span>
+                            </th>
+                        }
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in grid.Rows)
+                    {
+                        var editable = CanSet(row.MembershipId);
+                        <tr class="@(row.MembershipId == Model.ViewerMembershipId ? "is-you" : null)">
+                            @* .chart-ledger's own td:first-child rule already makes this the sticky,
+                               left-aligned column, so this cell needs no class of its own. *@
+                            <td>
+                                <strong class="chart-holdings__holder">@row.CharacterName</strong>
+                                @if (!string.IsNullOrWhiteSpace(row.Rank))
+                                {
+                                    <span class="chart-holdings__note">@row.Rank</span>
+                                }
+                            </td>
+
+                            @for (var index = 0; index < grid.Columns.Count; index++)
+                            {
+                                var column = grid.Columns[index];
+                                var has = row.Has[index];
+                                <td class="chart-keyitems__cell @(has ? "is-has" : "is-needs")">
+                                    @if (editable)
+                                    {
+                                        @* One cell, one post. A checkbox that submits its own form
+                                           rather than a Save button per row: the fact is per cell,
+                                           and batching them would need a diff nobody asked for. *@
+                                        <form asp-action="SetKeyItem" method="post" class="chart-inline-form">
+                                            <input type="hidden" name="board" value="@Model.BoardKey" />
+                                            <input type="hidden" name="keyItemName" value="@column.Name" />
+                                            <input type="hidden" name="membershipId" value="@row.MembershipId" />
+                                            <input type="hidden" name="has" value="@((!has).ToString().ToLowerInvariant())" />
+                                            <button type="submit" class="chart-keyitems__toggle"
+                                                    title="@(has ? $"Clear {column.Name}" : $"Tick off {column.Name}")">
+                                                @(has ? "✓" : "—")
+                                            </button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <span class="chart-keyitems__static">@(has ? "✓" : "—")</span>
+                                    }
+                                </td>
+                            }
+
+                            <td>
+                                <span class="chart-ledger__total @(row.HaveCount == 0 ? "is-zero" : null)">
+                                    @row.HaveCount / @row.TotalColumns <small>@row.HavePercent%</small>
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <p class="chart-holdings__footer">
+        Tick your own key items off as you earn them. Officers can tick anybody's, and every change
+        records who made it.
+    </p>
+</div>

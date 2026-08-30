@@ -1,107 +1,23 @@
 @model LinkshellManagerDiscordApp.ViewModels.WindowEventsViewModel
-@using LinkshellManagerDiscordApp.Models
-@{
-    string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
 
-    // 'live' | 'archive'. Mirrors AttendanceSectionsComponent's
-    // `readonly section = input.required<'live' | 'archive'>()`
-    // (discord-activity/src/app/home/tabs/attendance-sections.component.ts).
-    //
-    // Required on purpose: an unset key would silently render an empty block, which reads exactly
-    // like "this linkshell has no attendance data".
-    var section = ViewData["AttendanceSection"] as string
-        ?? throw new InvalidOperationException(
-            "_AttendanceSections requires ViewData[\"AttendanceSection\"] = \"live\" or \"archive\".");
-    var isLive = string.Equals(section, "live", StringComparison.Ordinal);
-}
+@* The OPEN attendance-event cards, rendered inside Current Field Activity on the Event System
+   page beside the camps that produced them.
 
-@* Attendance snapshots, rendered on the Event System page in TWO slices, exactly as the Discord
-   Activity mounts its component twice: 'live' puts the open event cards in Current Field Activity
-   beside the camps that produced them, and 'archive' puts the unlinked-snapshot triage list below
-   Pending Events. Both slices get the SAME view model — the archive's "Attach existing" control
-   reads Model.OpenEvents for its targets.
+   This partial used to render TWICE — a 'live' slice here and an 'archive' slice carrying the
+   unlinked-snapshot list — switched by a required ViewData["AttendanceSection"] key. The unlinked
+   list moved to its own top-level section (Views/Event/_UnlinkedSnapshots.cshtml), because it is
+   live triage rather than archive leftovers and is now the only landing place for an unverified
+   capture. With one mount left the switch, and the double-render hazards it existed to manage
+   (TempData consumed by whichever slice ran first, a duplicated datalist id), are gone.
 
-   Extracted from the old standalone Views/WindowEvents/Index.cshtml: snapshots only ever come from
-   HNM activity, so an officer shouldn't have to leave the camp to review the roster it produced.
-   The bespoke `.attendance-page` re-theme that page carried did NOT come along — it was written for
-   a view that opted out of the lsm theme (ViewData["BodyClass"] = ""), and Event/Index is a themed
-   lsm-page. The base .we-* rules in site.css style these cards, exactly as they already do on
-   Attendance History.
+   The WindowEvent TempData alerts are still surfaced once by Event/Index.cshtml above every
+   section rather than here — several sections can raise them now, not just this one.
 
-   The WindowEvent TempData alerts are NOT rendered here. With two renders on one page, reading
-   `TempData["x"] is string` in this file would let whichever slice ran first consume the message;
-   Event/Index.cshtml surfaces them once, above every section. *@
+   The bespoke `.attendance-page` re-theme the old standalone page carried did NOT come along: it
+   was written for a view that opted out of the lsm theme (ViewData["BodyClass"] = ""), and
+   Event/Index is a themed lsm-page. The base .we-* rules in site.css style these cards. *@
 
-@if (!isLive && Model.UnlinkedSnapshots.Count > 0)
-{
-    <div class="card fade d3" style="margin-bottom:14px">
-        <div class="card-head">
-            <div class="card-title">Unlinked Snapshots <span class="tag">@Model.UnlinkedSnapshots.Count</span></div>
-        </div>
-        <section class="we-snapshots">
-            @foreach (var snapshot in Model.UnlinkedSnapshots)
-            {
-                <details class="we-snapshot">
-                    <summary class="we-snapshot__head">
-                        <span class="we-snapshot__caret" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
-                        </span>
-                        <span class="we-snapshot__title">
-                            @if (snapshot.WindowLabel is not null)
-                            {
-                                <span class="tag we-snapshot__window">@snapshot.WindowLabel</span>
-                            }
-                            <strong>@snapshot.CapturedAtDisplay</strong>
-                            <span class="we-snapshot__meta">· posted by <strong>@Dash(snapshot.CapturedByCharacterName)</strong> · @snapshot.EntryCount member@(snapshot.EntryCount == 1 ? "" : "s")</span>
-                        </span>
-                    </summary>
-                    @if (Model.CanManage)
-                    {
-                        <div class="we-unlinked-actions">
-                            <form asp-controller="WindowEvents" asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" class="we-unlinked-form">
-                                @Html.AntiForgeryToken()
-                                <input class="input we-unlinked-name" type="text" name="name" value="@snapshot.Name" placeholder="Monster name" maxlength="128" required />
-                                <button type="submit" class="btn sm">Create / attach</button>
-                            </form>
-                            @if (Model.OpenEvents.Count > 0)
-                            {
-                                <form asp-controller="WindowEvents" asp-action="AttachSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post" class="we-unlinked-form">
-                                    @Html.AntiForgeryToken()
-                                    <select class="form-select we-unlinked-select" name="windowEventId">
-                                        @foreach (var ev in Model.OpenEvents)
-                                        {
-                                            <option value="@ev.Id">@Dash(ev.Name) (@ev.CombinedMemberCount members)</option>
-                                        }
-                                    </select>
-                                    <button type="submit" class="btn sm">Attach existing</button>
-                                </form>
-                            }
-                            <form asp-controller="WindowEvents" asp-action="SetSnapshotStatus" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post">
-                                @Html.AntiForgeryToken()
-                                <input type="hidden" name="status" value="@AttendanceSnapshotStatuses.Ignored" />
-                                <button type="submit" class="btn sm ghost">Ignore</button>
-                            </form>
-                            <form asp-controller="WindowEvents" asp-action="DeleteSnapshot" asp-route-linkshellId="@Model.LinkshellId" asp-route-snapshotId="@snapshot.Id" method="post"
-                                  onsubmit="return confirm('Permanently delete this snapshot posted by @Dash(snapshot.CapturedByCharacterName)? This cannot be undone.');">
-                                @Html.AntiForgeryToken()
-                                <button type="submit" class="btn sm danger-outline">Delete</button>
-                            </form>
-                        </div>
-                    }
-                    @await Html.PartialAsync("_WindowSnapshotEntries", snapshot, new ViewDataDictionary(ViewData)
-                    {
-                        ["LinkshellId"] = Model.LinkshellId,
-                        ["CanManage"] = Model.CanManage,
-                    })
-                </details>
-            }
-        </section>
-    </div>
-}
-
-@* Grouped under one titled container rather than left as loose cards, matching the Discord
-   Activity's Current Field Activity. Hidden entirely when there are none. *@
-@if (isLive && Model.OpenEvents.Count > 0)
+@if (Model.OpenEvents.Count > 0)
 {
     <div class="card fade d3" style="margin-bottom:14px">
         <div class="card-head">
@@ -120,8 +36,3 @@
         </div>
     </div>
 }
-
-@* The shared <datalist id="we-roster-options"> used to live here. It moved to Event/Index.cshtml
-   when this partial started rendering twice: both slices contain snapshot editors that reference
-   it via list=, so emitting it here would have produced either a duplicate id or — if gated on the
-   slice — a dangling reference for a linkshell that has unlinked snapshots but no open events. *@

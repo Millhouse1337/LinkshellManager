@@ -4,11 +4,11 @@ import { FormsModule } from '@angular/forms';
 
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import type {
+  ActivityLootEventOption,
   ActivityLootHistoryItem,
   ActivityLootHistoryList
 } from '../../discord/discord-activity.types';
 
-type SourceFilter = 'all' | 'tod' | 'event';
 
 interface LootEditFormModel {
   itemName: string;
@@ -38,7 +38,6 @@ export class LootHistoryPanelComponent implements OnInit {
   @Input({ required: true }) selectedLinkshellId!: number;
   @Input() rosterCharacterNames: string[] = [];
 
-  protected readonly sourceFilter = signal<SourceFilter>('all');
   protected readonly pageIndex = signal(0); // 0-based for UI; server uses 1-based
   protected readonly pageSize = 20;
   protected readonly winnerFilter = signal('');
@@ -51,22 +50,33 @@ export class LootHistoryPanelComponent implements OnInit {
   protected readonly addingLoot = signal(false);
   protected addFormModel: LootAddFormModel = this.emptyAddForm();
   protected addError = signal<string | null>(null);
-  // "Event / source" is a dropdown of this linkshell's events plus an "Other…"
-  // option; picking Other reveals a free-text field to name a one-off source.
-  protected readonly OTHER_EVENT = '__other__';
-  protected addEventChoice = '';
-  protected addCustomEvent = '';
+  // Which kind of event the loot came from, and the id within that kind. Loot used to carry a
+  // free-text label that the server turned into a throwaway ToD; it points at a real Event or
+  // EventHistory now, or at nothing.
+  protected addSourceKind: "none" | "live" | "past" = "none";
+  protected addEventId: number | null = null;
+  protected addEventHistoryId: number | null = null;
 
-  // Distinct names of the selected linkshell's current events, for the
-  // "Event / source" picker. (Past events aren't in the overview — use "Other…"
-  // to name one.)
-  protected eventOptions(): string[] {
-    const events = this.activity.overview()?.activeEvents ?? [];
-    const names = events
-      .filter(event => event.linkshellId === this.selectedLinkshellId)
-      .map(event => (event.name ?? '').trim())
-      .filter(name => name.length > 0);
-    return Array.from(new Set(names));
+  // Fetched rather than read off the overview: the overview only carries LIVE events, and past
+  // ones are the whole point of the second picker.
+  protected readonly liveEventOptions = signal<ActivityLootEventOption[]>([]);
+  protected readonly pastEventOptions = signal<ActivityLootEventOption[]>([]);
+  protected readonly pastEventQuery = signal("");
+  private pastEventSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Debounced: each keystroke would otherwise fire a request, and this runs inside the Discord
+  // iframe where that is worth avoiding.
+  protected onPastEventQueryChange(value: string): void {
+    this.pastEventQuery.set(value);
+    if (this.pastEventSearchTimer) clearTimeout(this.pastEventSearchTimer);
+    this.pastEventSearchTimer = setTimeout(() => void this.loadEventOptions(), 350);
+  }
+
+  private async loadEventOptions(): Promise<void> {
+    const options = await this.activity.loadLootEventOptions(this.pastEventQuery());
+    if (!options) return;
+    this.liveEventOptions.set(options.liveEvents ?? []);
+    this.pastEventOptions.set(options.pastEvents ?? []);
   }
 
   // Whether the current user may add loot to the selected linkshell (drives the
@@ -78,17 +88,21 @@ export class LootHistoryPanelComponent implements OnInit {
 
   protected openAdd(): void {
     this.addFormModel = this.emptyAddForm();
-    this.addEventChoice = '';
-    this.addCustomEvent = '';
+    this.addSourceKind = "none";
+    this.addEventId = null;
+    this.addEventHistoryId = null;
+    this.pastEventQuery.set("");
     this.addError.set(null);
     this.addingLoot.set(true);
+    void this.loadEventOptions();
   }
 
   protected closeAdd(): void {
     this.addingLoot.set(false);
     this.addFormModel = this.emptyAddForm();
-    this.addEventChoice = '';
-    this.addCustomEvent = '';
+    this.addSourceKind = "none";
+    this.addEventId = null;
+    this.addEventHistoryId = null;
     this.addError.set(null);
   }
 
@@ -114,14 +128,22 @@ export class LootHistoryPanelComponent implements OnInit {
       return;
     }
 
-    // Source = the picked event name, or the custom name when "Other…" is chosen.
-    const context = this.addEventChoice === this.OTHER_EVENT
-      ? (this.addCustomEvent ?? '').trim()
-      : (this.addEventChoice ?? '').trim();
+    // An event has to actually be CHOSEN once its kind is picked, or the loot would silently
+    // fall back to "No event" and the officer would think they had filed it.
+    if (this.addSourceKind === "live" && !this.addEventId) {
+      this.addError.set("Choose a live event, or switch to No event.");
+      return;
+    }
+    if (this.addSourceKind === "past" && !this.addEventHistoryId) {
+      this.addError.set("Choose a past event, or switch to No event.");
+      return;
+    }
 
     this.addError.set(null);
     const ok = await this.activity.addManualLoot({
-      context: context || null,
+      sourceKind: this.addSourceKind,
+      eventId: this.addSourceKind === "live" ? this.addEventId : null,
+      eventHistoryId: this.addSourceKind === "past" ? this.addEventHistoryId : null,
       itemName,
       itemWinner,
       winningDkpSpent: dkp
@@ -141,14 +163,7 @@ export class LootHistoryPanelComponent implements OnInit {
   }
 
   protected async refresh(): Promise<void> {
-    await this.activity.loadLootHistory(this.sourceFilter(), this.pageIndex() + 1, this.pageSize);
-  }
-
-  protected setSource(value: SourceFilter): void {
-    if (this.sourceFilter() === value) return;
-    this.sourceFilter.set(value);
-    this.pageIndex.set(0);
-    void this.refresh();
+    await this.activity.loadLootHistory(this.pageIndex() + 1, this.pageSize);
   }
 
   protected goPrev(): void {

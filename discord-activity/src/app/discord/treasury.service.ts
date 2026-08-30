@@ -4,10 +4,12 @@ import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
+  ActivitySettleOwedResult,
   ActivityTreasuryEntryInput,
   ActivityTreasuryFilter,
   ActivityTreasuryFixInput,
-  ActivityTreasuryPage
+  ActivityTreasuryPage,
+  ActivityTreasurySettlePick
 } from './discord-activity.types';
 
 /**
@@ -128,19 +130,75 @@ export class TreasuryService {
     );
   }
 
-  /** Someone counted the mule. The server works out which way the difference goes. */
-  async checkGil(linkshellId: number, countedAmount: number, memo?: string | null): Promise<void> {
-    await this.write(
-      () =>
-        this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/treasury/check-gil`, {
-          countedAmount,
-          transactionDate: null,
-          memo: memo ?? null
-        }),
-      'Gil on hand checked.',
-      'Checking gil on hand failed.'
-    );
+  /**
+   * Pays the ticked members off the "who we owe" list, in full, in one save.
+   *
+   * Each one becomes an ordinary "We paid a member what we owed" transaction — the same movement the
+   * form's settle option records, reached without retyping the names and figures.
+   *
+   * The banner wording comes from the server rather than from a string here, because only the server
+   * knows which ticks became payments: a row whose figure moved while the panel was open is skipped
+   * rather than paid, and the officer has to be told which one and why.
+   */
+  async settleOwed(
+    linkshellId: number,
+    picks: ActivityTreasurySettlePick[],
+    holderCharacterName: string
+  ): Promise<void> {
+    await this.settle(linkshellId, picks, holderCharacterName, 'settle');
   }
+
+  /**
+   * The mirror on the other half of the sheet: ticking whoever has now paid the LINKSHELL.
+   *
+   * Same endpoint shape, same result shape, same skip rules — one method with the path swapped
+   * rather than a second copy, because the two are the same operation with the direction flipped and
+   * a copy is how they would drift.
+   */
+  async settleOwedToUs(
+    linkshellId: number,
+    picks: ActivityTreasurySettlePick[],
+    holderCharacterName: string
+  ): Promise<void> {
+    await this.settle(linkshellId, picks, holderCharacterName, 'settle-owed-to-us');
+  }
+
+  private async settle(
+    linkshellId: number,
+    picks: ActivityTreasurySettlePick[],
+    // Whose mule the gil leaves from, or lands on. ONE for the whole run: a payout is one person
+    // sitting at one mule handing gil out, so asking per ticked name would ask eight times. The
+    // server refuses the batch without it.
+    holderCharacterName: string,
+    path: 'settle' | 'settle-owed-to-us'
+  ): Promise<void> {
+    let outcome: ActivitySettleOwedResult | null = null;
+    await this.write(
+      async () => {
+        outcome = await this.http.postActivityJson<ActivitySettleOwedResult>(
+          `/api/activity/linkshells/${linkshellId}/treasury/${path}`,
+          { picks, holderCharacterName }
+        );
+      },
+      'Payment recorded.',
+      'Recording the payment failed.'
+    );
+
+    // After write(), so this replaces the placeholder above rather than being overwritten by it.
+    const result = outcome as ActivitySettleOwedResult | null;
+    if (!result) {
+      return;
+    }
+    if (result.success) {
+      this.auth.setActionMessage(result.message);
+    } else {
+      // Every tick was skipped. Nothing failed, but nothing was recorded either, so it does not
+      // belong in the banner that means "done".
+      this.auth.setActionMessage(null);
+      this.auth.setActionError(result.message);
+    }
+  }
+
 
   async setLock(linkshellId: number, lockedThrough: string | null, reason?: string | null): Promise<void> {
     await this.write(

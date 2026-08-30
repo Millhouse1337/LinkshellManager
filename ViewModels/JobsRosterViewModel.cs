@@ -13,13 +13,17 @@ public class JobsRosterViewModel
 
     public List<JobsRosterEntry> Entries { get; set; } = new();
 
-    // Catalog job names in display order (WAR..SMN); each entry's level arrays
+    // Catalog job names in display order (WAR..PUP); each entry's level arrays
     // are aligned to this same order via ProfileJobLevels.ToCatalogLevels.
     public IReadOnlyList<string> JobCatalog { get; } = EventJobCatalog.MainJobOptions;
 }
 
 public class JobsRosterEntry
 {
+    // The AppUserLinkshell row id this entry was built from, so a roster row can
+    // look up its own jobs (0 when built outside a roster, e.g. View Profile).
+    public int MemberId { get; set; }
+
     public string CharacterName { get; set; } = string.Empty;
 
     public string? Rank { get; set; }

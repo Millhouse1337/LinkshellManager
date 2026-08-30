@@ -141,14 +141,14 @@
                           @if (needsRole(slot) || needsMainJob(slot) || needsSubJob(slot)) {
                             <span class="ps-signup__fields">
                               @if (needsRole(slot)) {
-                                <select [ngModel]="draftFor(slot.slotId).role" (ngModelChange)="setDraft(slot.slotId, { role: $event })">
-                                  <option value="">Role&hellip;</option>
+                                <select class="ps-sel-role" [ngModel]="draftFor(slot.slotId).role" (ngModelChange)="setDraft(slot.slotId, { role: $event })">
+                                  <option value="">Role</option>
                                   @for (r of roleOptions(); track r) { <option [value]="r">{{ r }}</option> }
                                 </select>
                               }
                               @if (needsMainJob(slot)) {
                                 <select [ngModel]="draftFor(slot.slotId).mainJob" (ngModelChange)="setDraft(slot.slotId, { mainJob: $event })">
-                                  <option value="">Main job&hellip;</option>
+                                  <option value="">Main</option>
                                   @for (j of mainJobOptions(); track j) {
                                     @if (j !== (draftFor(slot.slotId).subJob || slot.subJob)) { <option [value]="j">{{ j }}</option> }
                                   }
@@ -156,7 +156,7 @@
                               }
                               @if (needsSubJob(slot)) {
                                 <select [ngModel]="draftFor(slot.slotId).subJob" (ngModelChange)="setDraft(slot.slotId, { subJob: $event })">
-                                  <option value="">Sub job&hellip;</option>
+                                  <option value="">Sub</option>
                                   @for (j of subJobOptions(); track j) {
                                     @if (j !== (draftFor(slot.slotId).mainJob || slot.mainJob)) { <option [value]="j">{{ j }}</option> }
                                   }
@@ -167,7 +167,12 @@
                           <span class="ps-signup__actions">
                             @if (isEventBoard() && !partyHasLeader(party)) {
                               <span class="ps-leader-toggle" title="Claim this party's leader spot">
+                                <!-- The word on a stacked slot, the crown on a single-row one: the
+                                     label is the widest thing in this cluster and the row has no
+                                     width to spare. 👑 is already the app's party-leader mark, and
+                                     the toggle below carries the full name for screen readers. -->
                                 <span class="ps-leader-toggle__label">Leader</span>
+                                <span class="ps-leader-toggle__crown" aria-hidden="true">👑</span>
                                 <span class="yesno" role="group" aria-label="Sign up as party leader">
                                   <button type="button" class="yesno__btn"
                                     [class.is-on]="draftFor(slot.slotId).asLeader"
@@ -252,23 +257,6 @@
       </section>
     }
 
-    @if (signupNudge(); as n) {
-      <div class="ps-nudge-overlay" (click)="dismissNudge()">
-        <div class="ps-nudge-card" (click)="$event.stopPropagation()">
-          <div class="ps-nudge-title">Fill earlier alliances first</div>
-          <p class="ps-nudge-body">
-            There's still
-            <strong>{{ n.nudge.requirement === 'open' ? 'an open spot' : 'an open ' + n.nudge.requirement + ' spot' }}</strong>
-            in <strong>{{ n.nudge.location }}</strong>. Filling earlier alliances first keeps parties together —
-            take that slot, or sign up where you chose.
-          </p>
-          <div class="ps-nudge-actions">
-            <button type="button" class="btn ghost sm" [disabled]="partySetup.busy()" (click)="signUpAnyway()">Sign up here anyway</button>
-            <button type="button" class="btn primary sm" [disabled]="partySetup.busy()" (click)="takeSuggestedSlot()">Take {{ n.nudge.location }}</button>
-          </div>
-        </div>
-      </div>
-    }
   </div>
 } @else {
   <div class="ps-loading">Loading&hellip;</div>

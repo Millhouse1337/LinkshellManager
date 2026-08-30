@@ -105,6 +105,8 @@
                     <span>Skill</span>
                     <app-star-rating [value]="selfSkillValue(i)" (valueChange)="setSelfSkill(i, $event)" />
                   </div>
+                  <!-- Jobs with no relic weapon (BLU/COR/PUP) drop the block entirely. -->
+                  @if (relicOptions(i).length > 0 || selfRelicsValue(i).length > 0) {
                   <div class="relic-block">
                     <span class="relic-block__label">Relic</span>
                     @if (selfRelicsValue(i).length > 0) {
@@ -128,6 +130,7 @@
                       </select>
                     }
                   </div>
+                  }
                 </div>
               }
             </div>
@@ -572,16 +575,14 @@
                 <span class="muted">Fix DKP awarded/charged on a past event or auction.</span>
               </span>
             </label>
-            @if (canCreditSnapshot()) {
-              <label class="dkp-audit-form__mode-option">
-                <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
-                  (ngModelChange)="onDkpAuditModeChange('Add')" value="Add" />
-                <span>
-                  <strong>Add to a previous entry</strong>
-                  <span class="muted">Credit a member who was missed by a snapshot.</span>
-                </span>
-              </label>
-            }
+            <label class="dkp-audit-form__mode-option">
+              <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
+                (ngModelChange)="onDkpAuditModeChange('Add')" value="Add" />
+              <span>
+                <strong>Add to a previous entry</strong>
+                <span class="muted">Credit a member who was missed by a snapshot.</span>
+              </span>
+            </label>
             <label class="dkp-audit-form__mode-option">
               <input type="radio" name="auditMode" [ngModel]="dkpAuditModel.mode"
                 (ngModelChange)="onDkpAuditModeChange('Misc')" value="Misc" />

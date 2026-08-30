@@ -14,15 +14,14 @@
     <div>
         <h2 class="page-title" style="font-size:16px">Attendance Archive</h2>
         <div class="page-sub">
-            <span>Unlinked snapshots and closed attendance events</span>
+            <span>Closed attendance events</span>
         </div>
     </div>
 </div>
 
-@* Unlinked snapshots only — the open-event cards render up in Current Field Activity. *@
-@await Html.PartialAsync("../WindowEvents/_AttendanceSections", Model.Attendance!,
-    new ViewDataDictionary(ViewData) { ["AttendanceSection"] = "archive" })
-
+@* Closed attendance events only. Unlinked snapshots used to render above this block; they are
+   their own section now (Views/Event/_UnlinkedSnapshots.cshtml), since triage of an unpaid
+   capture is live work rather than archive. *@
 <div class="card fade d4" style="margin-bottom:14px">
     <div class="card-head">
         @* Titled to match the Activity's closed-events block (attendance-sections.component.html). *@

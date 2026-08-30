@@ -39,16 +39,29 @@
 <div class="section-head">
   <div>
     <div class="section-label">Charts</div>
-    <div class="section-title">{{ chart()?.boardLabel || boardKey() }} Pop Item Tracker</div>
+    <div class="section-title">{{ chart()?.boardLabel || boardKey() }} Tracker</div>
   </div>
 
   <div class="section-head-right">
     @if (chart()?.lastUpdatedUtc) {
       <span class="chart-updated">Updated {{ chart()!.lastUpdatedUtc | date:'short' }}</span>
     }
-    @if (canManage()) {
-      <button type="button" class="btn sm primary" (click)="toggleForm()">
-        {{ showForm() && editingItemId() === null ? 'Close' : 'Add pop item' }}
+    <!--
+      Two buttons where the board takes both kinds, each opening the SAME form pre-set. The website
+      stacks two always-open cards instead; inside a Discord iframe that would push the boards off
+      the bottom of the panel, so this surface toggles one.
+
+      Gated on features, not on whether a list happens to be populated: HENM declares no pop items
+      and still takes them, while Dynamis declares none and no longer offers the form at all.
+    -->
+    @if (canManage() && features().popItems) {
+      <button type="button" class="btn sm primary" (click)="toggleForm('Pop')">
+        {{ showForm() && editingItemId() === null && formKind() === 'Pop' ? 'Close' : 'Add pop item' }}
+      </button>
+    }
+    @if (canManage() && features().dropItems) {
+      <button type="button" class="btn sm primary" (click)="toggleForm('Drop')">
+        {{ showForm() && editingItemId() === null && formKind() === 'Drop' ? 'Close' : 'Add drop item' }}
       </button>
     }
   </div>
@@ -63,7 +76,9 @@
        dropdown where it hangs past the bottom of the card. -->
   <div class="card chart-form-card">
     <div class="card-head">
-      <div class="card-title">{{ editingItemId() === null ? 'Add a pop item' : 'Edit pop item' }}</div>
+      <div class="card-title">
+        {{ editingItemId() === null ? 'Add a ' + itemLabel().toLowerCase() : 'Edit ' + itemLabel().toLowerCase() }}
+      </div>
     </div>
     <div class="card-body">
       <form class="chart-form" (ngSubmit)="submitForm()">
@@ -82,11 +97,11 @@
           board today). The list comes off the payload, so this template never names an item itself.
         -->
         <div class="chart-form__field">
-          <label for="chart-item">Pop item</label>
+          <label for="chart-item">{{ itemLabel() }}</label>
           @if (picksPopItem()) {
             <select id="chart-item" name="itemName"
                     [ngModel]="formItemName()" (ngModelChange)="formItemName.set($event)" required>
-              <option value="">Pick a pop item…</option>
+              <option value="">Pick a {{ itemLabel().toLowerCase() }}…</option>
               @for (option of popItemChoices(); track option.name) {
                 <option [value]="option.name">{{ option.label }}</option>
               }
@@ -175,7 +190,7 @@
           <button type="button" class="btn sm ghost" (click)="cancelForm()">Cancel</button>
           <button type="submit" class="btn sm primary"
                   [disabled]="charts.busySave() || !formItemName().trim()">
-            {{ editingItemId() === null ? 'Add item' : 'Save changes' }}
+            {{ editingItemId() === null ? 'Add ' + itemLabel().toLowerCase() : 'Save changes' }}
           </button>
         </div>
       </form>
@@ -198,6 +213,43 @@
 <!-- ONE card template, rendered from BOTH containers below. It was inline in the grid loop until the
      path columns needed the same card in a second place, and a copy would have been two card
      layouts to keep in step. -->
+<!--
+  The key item this card grants, and exactly who is still short of it.
+
+  A count plus a drawer, because "3 of 14" answers how far along the linkshell is while the list
+  answers who to chase - and only the second one is actionable. Its own template rather than pasted
+  into both card branches below: it is a footer strip AND a drawer, which is more than the three
+  duplicated lines the heading blocks already carry.
+
+  The stored fact is "has it"; missing is its inverse against the live roster, so somebody who joins
+  tomorrow shows up here with no backfill.
+-->
+<ng-template #cardKeyItem let-boss>
+  @if (boss.keyItemName) {
+    <div class="chart-card__footer chart-rewards__bar">
+      <button type="button" class="chart-rewards__toggle" (click)="toggleKeyItem(boss.boss)"
+              [attr.aria-expanded]="keyItemOpenBoss() === boss.boss">
+        <span class="chart-rewards__chevron" [class.is-open]="keyItemOpenBoss() === boss.boss">›</span> Key item
+      </button>
+      <strong>{{ boss.keyItemHaveCount }} of {{ boss.keyItemTotalMembers }} have it</strong>
+    </div>
+    @if (keyItemOpenBoss() === boss.boss) {
+      <aside class="chart-rewards">
+        @if (boss.keyItemMissing.length === 0) {
+          <div class="chart-rewards__note">Everybody on the roster has {{ boss.keyItemName }}.</div>
+        } @else {
+          <div class="chart-rewards__note">Still needed by {{ boss.keyItemMissing.length }}:</div>
+          <ul>
+            @for (name of boss.keyItemMissing; track name) {
+              <li><span>◈</span> {{ name }}</li>
+            }
+          </ul>
+        }
+      </aside>
+    }
+  }
+</ng-template>
+
 <ng-template #bossCard let-boss>
   @if (boss.kind !== 'Final') {
         <article class="card chart-card" [ngClass]="'is-' + boss.themeKey">
@@ -223,17 +275,34 @@
                 @if (boss.subtitle) {
                   <div class="chart-card__subtitle" [title]="boss.subtitle">{{ boss.subtitle }}</div>
                 }
+                <!-- The key item this card grants. A card that grants none renders nothing: the one
+                     board-level key item belongs to no card, so it lives only in the grid below. -->
+                @if (boss.keyItemName) {
+                  <div class="chart-card__subtitle chart-card__keyitem">{{ boss.keyItemName }}</div>
+                }
               </div>
             </div>
             <!-- A Mini NM is farmed rather than popped, so stock is the headline, not item count. -->
             @if (boss.kind === 'MiniNm') {
               <span class="tag chart-count">{{ boss.totalQuantity }} held</span>
+            } @else if (!features().popItems && !features().dropItems) {
+              <!-- A board that tracks no items has nothing to count here. Dynamis and Limbus
+                   headline outstanding requests instead, which is what those cards are about now. -->
+              <span class="tag chart-count">{{ boss.pendingRequestCount }} requested</span>
             } @else {
               <!-- Distinct items, matching the lines on the card — totalItems counts ROWS, and the
                    card folds several rows of one item into one line. -->
               <span class="tag chart-count">{{ itemsFor(boss.boss).length }} {{ itemsFor(boss.boss).length === 1 ? 'Item' : 'Items' }}</span>
             }
           </div>
+
+          <!-- Requests tied to THIS card. Board-level ones ("anywhere") count toward none, which is
+               exactly what leaving the zone blank said. Skipped where the header already shows it. -->
+          @if (boss.pendingRequestCount && (features().popItems || features().dropItems)) {
+            <div class="chart-card__requests">
+              <span class="tag accent">{{ boss.pendingRequestCount }} requested</span>
+            </div>
+          }
 
           <div class="card-body chart-card__body">
             <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
@@ -247,6 +316,8 @@
             <span>Total Items: <strong>{{ itemsFor(boss.boss).length }}</strong></span>
             <span>Total Qty: <strong>{{ boss.totalQuantity }}</strong></span>
           </div>
+
+          <ng-container [ngTemplateOutlet]="cardKeyItem" [ngTemplateOutletContext]="{ $implicit: boss }" />
         </article>
       } @else {
         <!-- Final encounter: same card shape as the rest. Its reward list is reference text, not
@@ -275,10 +346,25 @@
                 @if (boss.subtitle) {
                   <div class="chart-card__subtitle" [title]="boss.subtitle">{{ boss.subtitle }}</div>
                 }
+                <!-- The key item this card grants. A card that grants none renders nothing: the one
+                     board-level key item belongs to no card, so it lives only in the grid below. -->
+                @if (boss.keyItemName) {
+                  <div class="chart-card__subtitle chart-card__keyitem">{{ boss.keyItemName }}</div>
+                }
               </div>
             </div>
-            <span class="tag chart-count">{{ boss.totalItems }} {{ boss.totalItems === 1 ? 'Item' : 'Items' }}</span>
+            @if (!features().popItems && !features().dropItems) {
+              <span class="tag chart-count">{{ boss.pendingRequestCount }} requested</span>
+            } @else {
+              <span class="tag chart-count">{{ boss.totalItems }} {{ boss.totalItems === 1 ? 'Item' : 'Items' }}</span>
+            }
           </div>
+
+          @if (boss.pendingRequestCount && (features().popItems || features().dropItems)) {
+            <div class="chart-card__requests">
+              <span class="tag accent">{{ boss.pendingRequestCount }} requested</span>
+            </div>
+          }
 
           <div class="card-body chart-card__body">
             <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
@@ -305,6 +391,8 @@
               </aside>
             }
           }
+
+          <ng-container [ngTemplateOutlet]="cardKeyItem" [ngTemplateOutletContext]="{ $implicit: boss }" />
         </article>
       }
 </ng-template>
@@ -360,5 +448,20 @@
     [bosses]="loaded.bosses"
     [boardLabel]="loaded.boardLabel"
     [canManage]="canManage()"
+    [tracksDrops]="features().dropItems"
     (edit)="beginEdit($event)" />
+
+  <!-- Below the holdings table, matching the website. Both ride in THIS payload rather than
+       fetching separately, so a card badge and the list under it are always the same rows. -->
+  @if (features().wishlist) {
+    <app-chart-wishlist-section
+      [board]="loaded"
+      [canManage]="canManage()" />
+  }
+
+  @if (features().keyItems) {
+    <app-chart-key-item-section
+      [board]="loaded"
+      [canManage]="canManage()" />
+  }
 }

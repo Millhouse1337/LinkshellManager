@@ -37,7 +37,7 @@ public class HnmCampPopServiceTests
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
             NullLogger<HnmCampReviewHandoffService>.Instance);
-        return new HnmCampPopService(db, handoff, NullLogger<HnmCampPopService>.Instance);
+        return new HnmCampPopService(db, handoff, new MonsterTimingResolver(db), NullLogger<HnmCampPopService>.Instance);
     }
 
     /// <summary>A live Standard-mode HNM camp on its 6th window, scheduled to have popped an hour ago.</summary>

@@ -14,6 +14,7 @@ public partial class AuctionController : Controller
 {
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly TimeZoneConversionService _timeZones;
 
     private readonly DkpLedgerWriter _dkpLedger;
@@ -25,6 +26,7 @@ public partial class AuctionController : Controller
     public AuctionController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         TimeZoneConversionService timeZones,
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools,
@@ -34,6 +36,7 @@ public partial class AuctionController : Controller
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _timeZones = timeZones;
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;

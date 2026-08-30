@@ -65,32 +65,15 @@ export class PartySetupEditorComponent {
   protected notes = '';
   protected alliances: EditorAlliance[] = [];
 
-  protected linkshellType(): string {
-    const membership = (this.activity.overview()?.linkshells ?? []).find(link => link.id === this.linkshellId());
-    return membership?.settings?.linkshellType ?? 'Both';
-  }
-
-  protected isHnmOnlyLinkshell(): boolean {
-    return this.linkshellType() === 'HnmOnly';
-  }
-
-  protected allowsHnmEventType(): boolean {
-    return this.linkshellType() !== 'SkySeaDynamis';
-  }
-
-  protected shouldShowEventTypeSelector(): boolean {
-    return !this.isHnmOnlyLinkshell();
-  }
-
   protected shouldShowMonsterField(): boolean {
-    return this.isHnmOnlyLinkshell() || this.eventTypeSelection === this.HNM_EVENT_TYPE;
+    return this.eventTypeSelection === this.HNM_EVENT_TYPE;
   }
 
   protected eventTypeOptions(): string[] {
     return [
       this.ANY_EVENT_TYPE,
       ...PartySetupEditorComponent.BASE_EVENT_TYPE_OPTIONS,
-      ...(this.allowsHnmEventType() ? [this.HNM_EVENT_TYPE] : []),
+      this.HNM_EVENT_TYPE,
       this.OTHER_EVENT_TYPE
     ];
   }
@@ -110,10 +93,6 @@ export class PartySetupEditorComponent {
   }
 
   private resolvedEventType(): string {
-    if (this.isHnmOnlyLinkshell()) {
-      return this.HNM_EVENT_TYPE;
-    }
-
     if (this.eventTypeSelection === this.OTHER_EVENT_TYPE) {
       return this.customEventType.trim();
     }
@@ -122,13 +101,6 @@ export class PartySetupEditorComponent {
   }
 
   private applyEventType(eventType: string | null | undefined, assignedMonsterName?: string | null): void {
-    if (this.isHnmOnlyLinkshell()) {
-      this.eventTypeSelection = this.HNM_EVENT_TYPE;
-      this.customEventType = '';
-      this.assignedMonster = assignedMonsterName ?? '';
-      return;
-    }
-
     const trimmed = (eventType ?? '').trim();
     if (!trimmed && assignedMonsterName) {
       this.eventTypeSelection = this.HNM_EVENT_TYPE;

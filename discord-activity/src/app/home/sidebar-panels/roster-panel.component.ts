@@ -6,7 +6,16 @@ import {
   ActivityLinkshellRole,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import { formatAlts, memberAvatarClass, memberInitials, memberStatusClass, rankIcon } from '../activity-home.helpers';
+import {
+  ADMIN_BADGE,
+  canManageLinkshellIn,
+  formatAlts,
+  isLeaderTierIn,
+  memberAvatarClass,
+  memberInitials,
+  memberStatusClass,
+  rankIcon
+} from '../activity-home.helpers';
 
 @Component({
   selector: 'app-roster-panel',
@@ -115,9 +124,7 @@ export class RosterPanelComponent {
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {
-    const membership = this.linkshellMemberships().find(link => link.id === linkshellId);
-    const rank = (membership?.rank ?? '').toLowerCase();
-    return rank === 'leader' || rank === 'officer';
+    return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }
 
   protected canManageMembers(): boolean {
@@ -126,8 +133,7 @@ export class RosterPanelComponent {
       return false;
     }
 
-    const currentMembership = this.linkshellMemberships().find(link => link.id === selectedId);
-    return (currentMembership?.rank ?? '').toLowerCase() === 'leader';
+    return isLeaderTierIn(this.activity.overview(), selectedId, this.linkshellMemberships());
   }
 
   protected canRequestLinkshellAccess(): boolean {
@@ -348,6 +354,7 @@ export class RosterPanelComponent {
   }
 
   protected readonly rankIcon = rankIcon;
+  protected readonly ADMIN_BADGE = ADMIN_BADGE;
   protected readonly statusOptions = ['Active', 'Pending', 'Inactive'] as const;
 
   protected changeMemberStatus(linkshellId: number, memberId: number, characterName: string, newStatus: string): void {

@@ -88,7 +88,8 @@ public class AppUserLinkshell
     public int[]? StrongJobs { get; set; }
 
     // Per-job free-text merit notes for the main character, catalog-aligned (index
-    // 0 = WAR … 14 = SMN, NOT the FFXI-job-id format the level arrays use). Set
+    // 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP, NOT the FFXI-job-id format the level
+    // arrays use). Set
     // when a job is marked merited; empty otherwise. Written to every membership
     // like JobLevels/StrongJobs (one character, one set of merits).
     [Column(TypeName = "jsonb")]

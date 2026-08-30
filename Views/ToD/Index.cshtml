@@ -295,6 +295,10 @@
             {
                 <div class="tod-alert">@psMsg</div>
             }
+            @if (TempData["TodMessage"] is string todMsg && !string.IsNullOrWhiteSpace(todMsg))
+            {
+                <div class="tod-alert">@todMsg</div>
+            }
             @if (Model.TodItems.Any())
             {
                 <div class="tod-table-wrap">

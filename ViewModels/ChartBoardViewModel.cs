@@ -36,6 +36,42 @@ public class ChartBoardViewModel
     /// <summary>Gates the edit affordances. The real control is each POST action re-checking.</summary>
     public bool CanManage { get; set; }
 
+    // ---- what this board offers, straight off the catalog ------------------------
+    //
+    // Carried on the view model rather than read off ChartBoardCatalog in the view, so the page has
+    // no logic in it - the same call PopItemOptionsJson already made.
+
+    /// <summary>Gates the "Add a pop item" CARD. Rows already on a board that turns this off stay
+    /// listed and editable; only the add affordance goes.</summary>
+    public bool AllowsPopItems { get; set; } = true;
+
+    public bool AllowsDropItems { get; set; }
+
+    public bool AllowsWishlist { get; set; }
+
+    public bool AllowsKeyItems { get; set; }
+
+    /// <summary>The board's item requests and the per-card counts its badges show.</summary>
+    public ChartWishlistBoard Wishlist { get; set; } =
+        new(Array.Empty<ChartWishlistRow>(), new Dictionary<string, int>(), 0);
+
+    /// <summary>Per-member key item progress. No columns on a board that tracks none.</summary>
+    public ChartKeyItemGrid KeyItems { get; set; } =
+        new(Array.Empty<ChartKeyItemColumn>(), Array.Empty<ChartKeyItemGridRow>());
+
+    /// <summary>
+    /// The VIEWER's own membership, so the key item grid knows which row is theirs to tick. Null for
+    /// somebody with no membership row. Presentation only - SetKeyItem re-checks on every post.
+    /// </summary>
+    public int? ViewerMembershipId { get; set; }
+
+    /// <summary>
+    /// Whether the viewer may submit an item request. Deliberately NOT CanManage: the wishlist is
+    /// the one part of Charts a plain member writes, which is why it has its own flag rather than
+    /// reusing the officer one.
+    /// </summary>
+    public bool CanRequest { get; set; }
+
     /// <summary>
     /// Every card, split into contiguous RUNS of the same group label. One grid, in the catalog's
     /// order, mirroring the Activity's bossGroups computed.
@@ -110,15 +146,27 @@ public class ChartBoardViewModel
     /// </summary>
     public bool HasPopItemOptions => Bosses.Any(boss => boss.PopItemOptions.Count > 0);
 
+    /// <summary>Twin of the above for the drop form, and Any for the same reason.</summary>
+    public bool HasDropItemOptions => Bosses.Any(boss => boss.DropItemOptions.Count > 0);
+
     /// <summary>
     /// The whole board's items as { boss: [{ name, source }] }, for the one script on the page that
     /// repopulates a dropdown when its boss select changes. Serialised here rather than in the view
     /// so the page has no logic in it, and camelCased to read like every other payload this app
     /// hands the browser.
     /// </summary>
-    public string PopItemOptionsJson =>
+    /// <remarks>
+    /// Keyed by KIND first, then by boss, because the page can carry two add forms and each has to
+    /// repopulate from its own list. One island rather than two: the swap script reads the kind off
+    /// the form that fired, so the shape is { Pop: { boss: [...] }, Drop: { boss: [...] } }.
+    /// </remarks>
+    public string ItemOptionsJson =>
         System.Text.Json.JsonSerializer.Serialize(
-            Bosses.ToDictionary(boss => boss.Boss, boss => boss.PopItemOptions),
+            new Dictionary<string, Dictionary<string, IReadOnlyList<ChartPopItemOption>>>
+            {
+                [ChartItemKinds.Pop] = Bosses.ToDictionary(boss => boss.Boss, boss => boss.PopItemOptions),
+                [ChartItemKinds.Drop] = Bosses.ToDictionary(boss => boss.Boss, boss => boss.DropItemOptions),
+            },
             new System.Text.Json.JsonSerializerOptions
             {
                 PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
@@ -162,6 +210,22 @@ public class ChartBossCardViewModel
 
     /// <summary>The pop items this boss takes, or empty when the board does not spell them out.</summary>
     public IReadOnlyList<ChartPopItemOption> PopItemOptions { get; set; } = Array.Empty<ChartPopItemOption>();
+
+    /// <summary>What falls OFF this boss, for the drop form. Empty leaves that box free text.</summary>
+    public IReadOnlyList<ChartPopItemOption> DropItemOptions { get; set; } = Array.Empty<ChartPopItemOption>();
+
+    /// <summary>Pending item requests tied to THIS card. Board-level requests count toward none.</summary>
+    public int PendingRequestCount { get; set; }
+
+    /// <summary>The key item earned here, or null for a card that grants none.</summary>
+    public string? KeyItemName { get; set; }
+
+    public int KeyItemHaveCount { get; set; }
+
+    public int KeyItemTotalMembers { get; set; }
+
+    /// <summary>Exactly who still needs it, in roster order - what the card's drawer lists.</summary>
+    public IReadOnlyList<string> KeyItemMissing { get; set; } = Array.Empty<string>();
 
     public List<ChartPopItemViewModel> Items { get; set; } = new();
 
@@ -232,10 +296,39 @@ public sealed record ChartBossGroupViewModel(string? Label, IReadOnlyList<ChartB
 /// — Sea has bosses of both kinds, so this is decided per boss, not per board.</param>
 /// <param name="Current">The row's saved item name when editing; null on the add form.</param>
 /// <param name="FieldId">id for the control a &lt;label for&gt; points at, or null when nothing does.</param>
+/// <param name="Kind">ChartItemKinds.Pop or Drop. Decides the placeholder wording and rides on the
+/// control as a data attribute; LAST, because this record's tail is two optional string?s and a new
+/// one inserted before them would compile clean and silently steal a value.</param>
 public sealed record ChartPopItemFieldContext(
     IReadOnlyList<ChartPopItemOption> Options,
     string? Current = null,
-    string? FieldId = null);
+    string? FieldId = null,
+    string Kind = ChartItemKinds.Pop);
+
+/// <summary>
+/// What _ChartAddItemForm needs to draw ONE add card. The page renders it TWICE on Sky and Sea - a
+/// pop card and a drop card, stacked.
+/// </summary>
+/// <param name="IdPrefix">Every element id in the form is built from this. Two forms sharing a
+/// literal id would break every &lt;label for&gt; on the second AND let the picker-swap script move
+/// the id off the control the first one's label points at, because that script sets picker.id from
+/// data-chart-item-id whenever a boss changes.</param>
+public sealed record ChartAddItemFormContext(
+    ChartBoardViewModel Board,
+    string Kind,
+    string Title,
+    string ItemLabel,
+    string SubmitLabel,
+    string IdPrefix)
+{
+    /// <summary>The options the form OPENS on: the first card's list, for this kind.</summary>
+    public IReadOnlyList<ChartPopItemOption> OpeningOptions =>
+        Board.Bosses.Count == 0
+            ? Array.Empty<ChartPopItemOption>()
+            : Kind == ChartItemKinds.Drop
+                ? Board.Bosses[0].DropItemOptions
+                : Board.Bosses[0].PopItemOptions;
+}
 
 public class ChartPopItemViewModel
 {
@@ -244,6 +337,10 @@ public class ChartPopItemViewModel
     public string Boss { get; set; } = string.Empty;
 
     public string ItemName { get; set; } = string.Empty;
+
+    /// <summary>ChartItemKinds.Pop or Drop. Picks the pill in the holdings table and which option
+    /// list the row's edit drawer offers.</summary>
+    public string Kind { get; set; } = ChartItemKinds.Pop;
 
     public string? HeldByCharacterName { get; set; }
 

@@ -1,5 +1,8 @@
 @model Linkshell
+@inject LinkshellManagerDiscordApp.Services.AdminOverrideService AdminOverride
 @{
+    // AppUserIds carrying the app-wide admin override (empty when it is switched off).
+    var adminAppUserIds = await AdminOverride.GetActiveAdminAppUserIdsAsync(Context.RequestAborted);
     ViewData["Title"] = "Linkshell details";
 
     string RosterAvClass(string? name)
@@ -108,7 +111,13 @@
                                     <div class="roster-name-sub">Alts: @string.Join(", ", alts)</div>
                                 }
                             </div>
-                            <div class="roster-rank">@rank</div>
+                            <div class="roster-rank">
+                                @rank
+                                @if (adminAppUserIds.Contains(member.AppUserId ?? string.Empty))
+                                {
+                                    <span class="tag accent" title="App-wide admin override: full permissions in every linkshell they belong to.">🔧 ADMIN</span>
+                                }
+                            </div>
                             <div class="roster-dkp">@((member.LinkshellDkp ?? 0).ToString("0.##"))</div>
                             <div><span class="tag @statusClass">@status</span></div>
                         </div>

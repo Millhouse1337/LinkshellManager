@@ -1,0 +1,201 @@
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.ChartBoardViewModel
+@*
+    Item requests: what members WANT off this board, as distinct from what the linkshell is holding.
+
+    The one part of Charts a plain member writes, which is why the submit form is gated on CanRequest
+    (membership) rather than on CanManage. Per-row buttons are gated on request.CanWithdraw, which the
+    SERVER decided per viewer - a template working that out for itself would be a second copy of the
+    ownership rule, and two copies are how one surface ends up more permissive than the other.
+*@
+@{
+    var pending = Model.Wishlist.Requests
+        .Where(request => request.Status == ChartWishlistStatuses.Pending)
+        .ToList();
+}
+
+@if (Model.CanRequest)
+{
+    <div class="card chart-form-card fade d3">
+        <div class="card-head"><div class="card-title">Submit item request</div></div>
+        <div class="card-body">
+            <form asp-action="AddWishlistRequest" method="post" class="chart-form">
+                <input type="hidden" name="board" value="@Model.BoardKey" />
+                <div class="chart-form__field">
+                    <label for="wish-boss">Zone</label>
+                    @* Opens on "anywhere" because both readings are real: somebody wants a specific
+                       drop out of one zone, somebody else just wants the item wherever it turns up.
+                       An empty value is what NormalizeDraft turns into a null Boss. *@
+                    <select id="wish-boss" name="boss">
+                        <option value="">Anywhere on this board</option>
+                        @foreach (var boss in Model.Bosses)
+                        {
+                            <option value="@boss.Boss">@boss.Boss</option>
+                        }
+                    </select>
+                </div>
+                <div class="chart-form__field">
+                    <label for="wish-item">Item</label>
+                    <input id="wish-item" name="itemName" class="input" type="text"
+                           placeholder="What are you after?" required />
+                </div>
+                <div class="chart-form__field">
+                    <label for="wish-qty">Qty</label>
+                    <input id="wish-qty" name="quantity" class="input" type="number" min="1" value="1" />
+                </div>
+                <div class="chart-form__field">
+                    <label for="wish-notes">Notes</label>
+                    <input id="wish-notes" name="notes" class="input" type="text" placeholder="Optional" />
+                </div>
+                <div class="chart-form__actions">
+                    <button type="submit" class="btn primary">Submit request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
+
+<div class="card fade d3">
+    <div class="card-head">
+        <div class="card-title">Item Requests</div>
+        @if (Model.Wishlist.PendingCount > 0)
+        {
+            <span class="tag accent">@Model.Wishlist.PendingCount outstanding</span>
+        }
+    </div>
+
+    @if (Model.Wishlist.Requests.Count == 0)
+    {
+        <div class="empty">Nobody has asked for anything on this board yet.</div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table chart-wishlist">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Requested By</th>
+                        <th>Zone</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var request in Model.Wishlist.Requests)
+                    {
+                        var settled = request.Status == ChartWishlistStatuses.Fulfilled;
+                        <tr class="@(settled ? "is-settled" : null)">
+                            <td>
+                                <span class="chart-wishlist__item">
+                                    <span class="chart-holdings__name">@request.ItemName</span>
+                                    @if (request.Quantity > 1)
+                                    {
+                                        <span class="chart-item__qty">x@request.Quantity</span>
+                                    }
+                                </span>
+                                @if (!string.IsNullOrWhiteSpace(request.Notes))
+                                {
+                                    <span class="chart-holdings__note">@request.Notes</span>
+                                }
+                            </td>
+
+                            <td><strong class="chart-holdings__holder">@request.RequestedByCharacterName</strong></td>
+
+                            <td>
+                                @if (string.IsNullOrWhiteSpace(request.Boss))
+                                {
+                                    @* Not a card, so it badges nothing above - which is exactly what
+                                       leaving the zone blank said. *@
+                                    <span class="chart-item__muted">Anywhere</span>
+                                }
+                                else
+                                {
+                                    var card = Model.Bosses.FirstOrDefault(boss =>
+                                        string.Equals(boss.Boss, request.Boss, StringComparison.OrdinalIgnoreCase));
+                                    <span class="chart-holdings__boss is-@(card?.ThemeKey)">@request.Boss</span>
+                                }
+                            </td>
+
+                            <td>
+                                @if (settled)
+                                {
+                                    <span class="pill is-success">Fulfilled</span>
+                                    @if (!string.IsNullOrWhiteSpace(request.FulfilledByCharacterName))
+                                    {
+                                        <span class="chart-holdings__note">by @request.FulfilledByCharacterName</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="pill is-muted">Pending</span>
+                                }
+                            </td>
+
+                            <td class="chart-wishlist__actions">
+                                @* Priority, moved one place at a time. Each arrow posts the COMPLETE
+                                   ordered id list with this row swapped, because ReorderWishlist is
+                                   set-wise - it rewrites a board's queue rather than nudging one row,
+                                   so two officers clicking at once cannot interleave into an order
+                                   neither of them chose.
+
+                                   Only the PENDING queue is ordered. A fulfilled request is settled
+                                   and has no place in a queue. *@
+                                @if (Model.CanManage && !settled && pending.Count > 1)
+                                {
+                                    var at = pending.FindIndex(row => row.Id == request.Id);
+                                    for (var step = -1; step <= 1; step += 2)
+                                    {
+                                        var swapWith = at + step;
+                                        if (swapWith < 0 || swapWith >= pending.Count) continue;
+
+                                        var order = pending.Select(row => row.Id).ToList();
+                                        (order[at], order[swapWith]) = (order[swapWith], order[at]);
+
+                                        <form asp-action="ReorderWishlist" method="post" class="chart-inline-form">
+                                            <input type="hidden" name="board" value="@Model.BoardKey" />
+                                            @foreach (var id in order)
+                                            {
+                                                <input type="hidden" name="orderedIds" value="@id" />
+                                            }
+                                            <button type="submit" class="btn ghost sm"
+                                                    title="@(step < 0 ? "Move up" : "Move down")">
+                                                @(step < 0 ? "▲" : "▼")
+                                            </button>
+                                        </form>
+                                    }
+                                }
+                                @* Officers only: marking a request fulfilled is a claim about what
+                                   the linkshell did, not about what somebody wants. *@
+                                @if (Model.CanManage)
+                                {
+                                    <form asp-action="SetWishlistStatus" method="post" class="chart-inline-form">
+                                        <input type="hidden" name="id" value="@request.Id" />
+                                        <input type="hidden" name="status"
+                                               value="@(settled ? ChartWishlistStatuses.Pending : ChartWishlistStatuses.Fulfilled)" />
+                                        <button type="submit" class="btn ghost sm">
+                                            @(settled ? "Reopen" : "Mark fulfilled")
+                                        </button>
+                                    </form>
+                                }
+                                @* Server-decided: your own, or anybody's if you can manage. *@
+                                @if (request.CanWithdraw)
+                                {
+                                    <form asp-action="WithdrawWishlistRequest" method="post" class="chart-inline-form">
+                                        <input type="hidden" name="id" value="@request.Id" />
+                                        <button type="submit" class="btn danger sm">Withdraw</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <p class="chart-holdings__footer">
+        Anyone in the linkshell can ask for something here. Officers tick a request off once it has
+        been handed over.
+    </p>
+</div>

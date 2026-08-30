@@ -73,4 +73,16 @@ public class EventPartySlotSignup
     // advances until explicitly cleared, so an all-night camper only clicks once.
     // Surfaced on the board as a 🔒 next to the name + a "N staying next window" count.
     public bool StayNextWindow { get; set; }
+
+    // Self-declared readiness tags, set by the member on the DISCORD board after they've signed
+    // up ("🎖️ My Readiness"). Independent flags — a member can carry all three. Shown as a symbol
+    // beside their name on the text board, and as a spiked halo around their role gem on the
+    // rendered picture board. Declarations only: nothing checks them and they grant nothing.
+    // See EventReadiness for the labels, and AppUserEvent for the same three on a no-slot
+    // attendee.
+    public bool EnfeebReady { get; set; }
+
+    public bool ResistReady { get; set; }
+
+    public bool RelicWeapon { get; set; }
 }

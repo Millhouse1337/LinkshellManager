@@ -541,3 +541,14 @@
   margin-top: 6px;
   justify-self: end;
 }
+
+/* A two-button confirm pair (Confirm delete / Keep) occupying ONE grid row.
+   The pair has to be wrapped rather than dropped into the grid loose: the meta
+   column stretches its items, so two bare buttons came out full-width and
+   stacked instead of a narrow side-by-side pair. The wrapper takes the
+   justify-self: end from .event-card__edit; this only lays out its contents. */
+.event-card__confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

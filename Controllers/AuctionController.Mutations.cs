@@ -468,10 +468,20 @@ public partial class AuctionController
 
     private async Task<LinkshellRole?> GetEffectiveRoleAsync(string appUserId, int linkshellId)
     {
-        var rank = await _context.AppUserLinkshells
-            .Where(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId)
-            .Select(m => m.Rank)
-            .FirstOrDefaultAsync();
+        // The membership ROW, not just the rank string: a null rank and a missing
+        // membership are otherwise indistinguishable, and the override below must
+        // only ever fire for an actual member.
+        var membership = await _context.AppUserLinkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId);
+        if (membership is null) return null;
+
+        if (await _adminOverride.IsActiveForAsync(appUserId, HttpContext.RequestAborted))
+        {
+            return LinkshellRoleDefaults.BuildFullAccessRole(linkshellId);
+        }
+
+        var rank = membership.Rank;
         if (rank is null) return null;
         var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
         return await _context.LinkshellRoles
@@ -634,7 +644,10 @@ public partial class AuctionController
                     // during SaveChanges; ManualPoints picks these up by SourceAuctionHistoryId so
                     // a single close lands in one column on the sheet.
                     SourceAuctionHistory: auctionHistory),
-                HttpContext.RequestAborted);
+                HttpContext.RequestAborted,
+                // Affordability was enforced at bid time (AuctionBidService). Re-blocking at close
+                // would strand a whole auction over one winner whose balance moved since.
+                DkpOverdraft.Allow);
 
             // Gil auctions pay out of the treasury: the winner spent DKP, and the linkshell hands over
             // the listed gil. Positive amount, direction carried by which categories the two halves

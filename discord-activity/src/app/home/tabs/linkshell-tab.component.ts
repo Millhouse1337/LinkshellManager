@@ -10,7 +10,16 @@ import {
 import type { ActivityJobRatingOverall, ActivityJobRatingsResponse } from '../../discord/discord-activity.types';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
 import { JobsRosterStore, type RosterCharacterJobs, type RosterJobPill } from '../jobs-roster.store';
-import { formatAlts, memberAvatarClass, memberInitials, memberStatusClass, rankIcon } from '../activity-home.helpers';
+import {
+  ADMIN_BADGE,
+  canManageLinkshellIn,
+  formatAlts,
+  isLeaderTierIn,
+  memberAvatarClass,
+  memberInitials,
+  memberStatusClass,
+  rankIcon
+} from '../activity-home.helpers';
 import { StarRatingComponent } from '../sidebar-panels/star-rating.component';
 
 // HorizonXI is classic-75. A job at 75 is "max level" (shown by default in the
@@ -102,9 +111,7 @@ export class LinkshellTabComponent {
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {
-    const membership = (this.activity.overview()?.linkshells ?? []).find(link => link.id === linkshellId);
-    const rank = (membership?.rank ?? '').toLowerCase();
-    return rank === 'leader' || rank === 'officer';
+    return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }
 
   protected selectedDashboardLinkshellId(): number {
@@ -364,6 +371,7 @@ export class LinkshellTabComponent {
   protected editingCreditValue = 0;
   protected editingAbsentValue = 0;
   protected readonly rankIcon = rankIcon;
+  protected readonly ADMIN_BADGE = ADMIN_BADGE;
   protected readonly statusOptions = ['Active', 'Pending', 'Inactive'] as const;
 
   // "Jun 7, 2026"-style joined date for the roster column.
@@ -497,8 +505,12 @@ export class LinkshellTabComponent {
     return this.selectedDashboardMembers().length > 1;
   }
 
+  // Leader-tier permission, so the app-wide admin override applies. Deliberately NOT
+  // isCurrentUserLeaderOfSelected(), which stays a literal rank check because
+  // mustHandoffBeforeLeaving() above is an integrity rail, not a permission — an admin
+  // who is only a Member must not be told to hand off leadership before leaving.
   protected canRemoveMember(memberAppUserId: string | null | undefined): boolean {
-    if (!this.isCurrentUserLeaderOfSelected()) return false;
+    if (!isLeaderTierIn(this.activity.overview(), this.selectedDashboardLinkshell()?.id)) return false;
     if (this.isCurrentUser(memberAppUserId)) return false;
     return true;
   }

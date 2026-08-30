@@ -136,6 +136,30 @@ public class HnmWindowRosterSnapshotTests
         Assert.Empty(await db.EventWindowRosterSnapshots.ToListAsync());
     }
 
+    // A Manual Check In wyrm wipes its grid every window like any other wyrm, but its ATTENDANCE is
+    // AppUserEvent.WdArrivalWindow / WdDepartureWindow — WdCampFinalizer pays arrival..departure off
+    // those very rows at End Camp. Deleting them at the hour boundary would erase everyone's credit
+    // back to whoever checked in during the final window, so a checked-in participation rides
+    // through the wipe whether or not its slot was locked. Its slot still goes.
+    [Fact]
+    public async Task Wipe_SparesCheckedInParticipations_SoAManualCheckInCampKeepsItsCredit()
+    {
+        using var db = SeededBoard(Signup(1, "Solaire"), Signup(2, "Mirena"));
+        db.AppUserEvents.AddRange(
+            new AppUserEvent { Id = 1, EventId = EventId, AppUserId = "user-1", CharacterName = "Solaire", WdArrivalWindow = 2 },
+            // Signed up but never checked in — nothing to protect, so this goes with the grid.
+            new AppUserEvent { Id = 2, EventId = EventId, AppUserId = "user-2", CharacterName = "Mirena" });
+        await db.SaveChangesAsync();
+
+        await EventPartySignupService.ClearWindowRosterAsync(db, EventId, closingWindow: 5, CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        var kept = await db.AppUserEvents.SingleAsync();
+        Assert.Equal("Solaire", kept.CharacterName);
+        Assert.Equal(2, kept.WdArrivalWindow);
+        Assert.Empty(await db.EventPartySlotSignups.ToListAsync());
+    }
+
     // An empty board writes no rows at all, so "View Previous Window" falls through to its "nothing
     // captured" reply rather than showing an empty window that looks like data loss.
     [Fact]

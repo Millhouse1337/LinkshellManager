@@ -1,0 +1,37 @@
+@using LinkshellManagerDiscordApp.Utils
+@model LinkshellManagerDiscordApp.ViewModels.DiscordPostViewModel
+@{
+    // The category badge doubles as the "role color" of the message: it tints the avatar
+    // and the author name, so a category reads at a glance the way a Discord role does.
+    var badge = RuleContent.Badge(Model.Category, Model.Index);
+}
+
+<article class="dc-message @badge.Accent">
+    <div class="dc-avatar" aria-hidden="true">@badge.Icon</div>
+
+    <div class="dc-body">
+        <div class="dc-head">
+            <span class="dc-author">@(string.IsNullOrWhiteSpace(Model.Author) ? "Linkshell" : Model.Author)</span>
+            @if (!string.IsNullOrWhiteSpace(Model.Category))
+            {
+                <span class="dc-tag">@Model.Category</span>
+            }
+            <span class="dc-time">@Model.CreatedAt.ToString("MMM d, yyyy")</span>
+        </div>
+
+        <h2 class="dc-title">@Model.Title</h2>
+        <div class="dc-md">@DiscordMarkdown.Render(Model.Details)</div>
+    </div>
+
+    @if (Model.CanManage)
+    {
+        <div class="dc-toolbar">
+            <a class="dc-toolbtn" asp-action="Edit" asp-route-id="@Model.Id" title="Edit" aria-label="Edit">&#9998;</a>
+            <form class="dc-toolform" asp-action="Delete" asp-route-id="@Model.Id" method="post"
+                  onsubmit="return confirm('@Model.DeleteConfirm');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="dc-toolbtn danger" title="Delete" aria-label="Delete">&#128465;</button>
+            </form>
+        </div>
+    }
+</article>

@@ -1,7 +1,8 @@
 namespace LinkshellManagerDiscordApp.Services;
 
 // Single source of truth for HNM-event window counts and labels.
-// Tiamat / Jormungand / Vrtra spawn over a long pop window split into 24 attendance slots.
+// Tiamat / Jormungand / Vrtra spawn over a long pop window split into 25 hourly attendance slots;
+// the ToAU three (Cerberus / Hydra / Khimaira) cover that same 24-hour band in 5 six-hour slots.
 // Fafnir / Nidhogg / Behemoth / King Behemoth / Adamantoise / Aspidochelone use 2 slots
 // ("Open" + "Close"), as do the timed NMs that share their 7 × 10-min spawn band
 // (Capricious Cassie / Bune / Boroka / Roc). Everything else is a single-window event.
@@ -11,12 +12,52 @@ public static class HnmConfig
     {
         "Tiamat",
         "Jormungand",
-        "Vrtra"
+        "Vrtra",
+        // The ToAU HNMs. In this set for its SHAPE — a long pop band split into windows, with the
+        // camp re-forming at every boundary — and NOT for its numbers. They run their own
+        // 5 × 6-hour band and their own repop; see ToauHnms, which every lookup that resolves a
+        // number tests FIRST, precisely because these three are a subset of this set.
+        "Cerberus",
+        "Hydra",
+        "Khimaira"
     };
 
-    // The window-cycle HNMs above pop across successive windows. Their signup board shows
-    // "Window N" + an officer-only "Next Window" button that wipes the signups and advances
-    // N (Event.HnmWindowNumber) up to MaxWindow, then stops.
+    // The ToAU three, split out of the set above because every number they carry differs from the
+    // wyrms': the repop, the window count and the cadence. This file (DefaultWindowCadence,
+    // GetWindowCount) and MonsterTimingDefaults.DefaultCooldownMinutes all read it, and all three
+    // must test it BEFORE LongWindowHnms — these names are in both sets, so testing the wider one
+    // first silently hands them the wyrms' band.
+    //
+    // Their cooldown is 48h — the moment the window OPENS. The 5 × 6-hour band then runs it out
+    // to 72h, and 72 is what these were seeded as before: the window's CLOSE stored where its open
+    // belongs, so a board set to re-post BEFORE the pop only came back after the whole window had
+    // already passed. Every other cooldown in this file is a window open (the wyrms' 84h opens a
+    // band that closes at 108h), so these three now agree with the rest.
+    public static readonly HashSet<string> ToauHnms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Cerberus",
+        "Hydra",
+        "Khimaira"
+    };
+
+    // The ToAU band: FIVE windows six hours apart. It spans exactly the same 24 hours the wyrms'
+    // 25 × 60-min band does — window 1 at the pop (ToD + 48h), window 5 a full day later at
+    // ToD + 72h — so when one of these camps runs out has not moved; only how coarsely the band is
+    // bucketed has. A camp that used to take twenty-five hourly roster reads now takes five.
+    //
+    // Named rather than written as literals in DefaultWindowCadence because the migration that
+    // rewrites already-seeded LinkshellMonsterTiming rows names the same two numbers, and a test
+    // holds the two side by side.
+    public const int ToauWindowCount = 5;
+    public const int ToauWindowCadenceMinutes = 6 * 60;
+
+    // The window-cycle HNMs above pop across successive windows, and their signup board shows
+    // "Window N of M" against a counter (Event.HnmWindowNumber) the cadence advances.
+    //
+    // This is the CEILING on M, not the length of any one band: the longest band in the file is the
+    // wyrms' 25, and Discord caps a select menu at 25 options, so nothing may exceed it. The band a
+    // given camp actually runs comes from DefaultWindowCadence (or the linkshell's own setup) —
+    // 5 for the ToAU three, 7 for the kings/dragons — and is what stops that camp's counter.
     public const int MaxWindow = 25;
 
     public static bool SupportsWindowAdvance(string? monsterName) =>
@@ -24,11 +65,16 @@ public static class HnmConfig
 
     // Whether stepping to the next window CLEARS the camp's roster.
     //
-    // The 25-window wyrms only. Their hour-long windows are effectively separate sittings, so the
-    // camp re-signs for each one (hence "🔒 Stay Next Window" to pin a slot through it). The
+    // The LongWindowHnms only — the wyrms' 25 hourly windows and the ToAU three's 5 six-hour ones.
+    // A window on either band is long enough to be its own sitting, so the camp re-signs for each
+    // one (hence "🔒 Stay Next Window" to pin a slot through it). The
     // 7-window kings/dragons — Fafnir, Behemoth, Adamantoise and their HQ halves — march through
     // ONE camp at 10-minute steps, so wiping there threw away a roster nobody meant to clear.
-    // Manual Check In camps never wipe either, but that's decided by attendance mode, not the monster.
+    //
+    // The MONSTER decides this outright — attendance mode does not enter into it. A Manual Check In
+    // wyrm re-forms its camp every hour exactly like a Standard one, so it wipes too; what differs
+    // there is only that the check-in ledger (AppUserEvent.WdArrivalWindow) survives the wipe, which
+    // is EventPartySignupService.ClearWindowRosterAsync's business, not this predicate's.
     public static bool WindowAdvanceWipesRoster(string? monsterName) =>
         MonsterSegments(monsterName).Any(LongWindowHnms.Contains);
 
@@ -108,6 +154,28 @@ public static class HnmConfig
         ("Fafnir", "Nidhogg"),
     };
 
+    // The name a KILL/CLAIM should be COUNTED under. Either half of a merge pair — and the
+    // combined "Base/Stronger" label itself — collapse to the one combined entry, so a camp
+    // logged as "Behemoth" (a manual ToD, or a board on a day below CombinedFromDay) and one
+    // logged as "Behemoth/King Behemoth" (the stored AssignedMonsterName an HNM board writes)
+    // land in the SAME bucket instead of splitting one monster's claims across two slices.
+    // Every other monster groups under its own trimmed name.
+    public static string ClaimGroupName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+        var segments = MonsterSegments(name);
+        foreach (var (baseName, stronger) in MonsterMergePairs)
+        {
+            if (segments.Any(segment =>
+                    segment.Equals(baseName, StringComparison.OrdinalIgnoreCase)
+                    || segment.Equals(stronger, StringComparison.OrdinalIgnoreCase)))
+            {
+                return $"{baseName}/{stronger}";
+            }
+        }
+        return name.Trim();
+    }
+
     // From this day number onward a merged entry shows the combined "Base/Stronger" label;
     // below it, only the base name.
     public const int CombinedFromDay = 4;
@@ -129,10 +197,10 @@ public static class HnmConfig
     public static bool HasHqVariant(string? monster) =>
         MonsterSegments(monster).Any(HqVariantMonsters.Contains);
 
-    // Which TIER a monster belongs to on the create-event form: the HNMs (the three
-    // long-window wyrms plus the three NQ/HQ families) against everything else, which is
+    // Which TIER a monster belongs to on the create-event form: the HNMs (the six
+    // long-window monsters plus the three NQ/HQ families) against everything else, which is
     // the NMs. This is the split the in-game addon's preset list has always drawn —
-    // "HNMS (6)" over "NMS (11)" — and the form's HNM / NM buttons are the same cut.
+    // "HNMS (9)" over "NMS (11)" — and the form's HNM / NM buttons are the same cut.
     //
     // Deliberately NOT ShortWindowHnms membership, which is the neighbouring and wrong
     // answer: the timed NMs (Capricious Cassie, Bune, Boroka, Roc) live in that set because
@@ -381,6 +449,10 @@ public static class HnmConfig
         ["Tiamat"]         = "Attohwa Chasm",
         ["Jormungand"]     = "Uleguerand Range",
         ["Vrtra"]          = "King Ranperre's Tomb",
+        // The ToAU three. Same 24-hour band as the wyrms above, cut into 5 six-hour windows.
+        ["Cerberus"]       = "Mount Zhayolm",
+        ["Hydra"]          = "Wajaom Woodlands",
+        ["Khimaira"]       = "Caedarva Mire",
         // Timed NMs on the short band. Same job as the rows above: the camp a board sends people to.
         ["Capricious Cassie"] = "Fei'Yin",
         ["Bune"]              = "Gustav Tunnel",
@@ -410,25 +482,18 @@ public static class HnmConfig
         ["Aspidochelone"] = 3,
     };
 
-    // Best-effort default repop window (hours) for a monster, used by the Discord "Pop / End Camp"
-    // quick-end to schedule the next camp without the officer typing an exact cooldown. The precise
-    // value comes from the Activity Post-ToD form; this is just a sensible fallback.
-    public static double DefaultRepopHours(string? monster)
-    {
-        foreach (var seg in MonsterSegments(monster))
-        {
-            if (SkyGods.Contains(seg) || SeaNms.Contains(seg)) return 5.0 / 60.0; // 5 minutes
-            if (SkyFarmNms.Contains(seg)) return 2.0;
-            if (seg.Equals("Tiamat", StringComparison.OrdinalIgnoreCase)) return 84.0;
-            if (LongWindowHnms.Contains(seg)) return 72.0;  // long-window wyrms
-            if (ShortWindowHnms.Contains(seg)) return 21.0; // Kings/Dragons ~21-24h
-        }
-        return 21.0;
-    }
+    // (DefaultRepopHours lived here: a second repop table for the Discord "Pop / End Camp"
+    // quick-end. That path resolves the LINKSHELL'S configured cooldown now
+    // (HnmCampPopService -> GetDefaultTodCooldownAsync -> MonsterTimingResolver), so nothing had
+    // called this in some time — and it had already drifted, answering 72h for Jormungand and
+    // Vrtra where MonsterTimingDefaults says 84h. A dead duplicate of the very fact this file
+    // owns is exactly what it looks like next time someone edits a band, so it is gone;
+    // MonsterTimingDefaults.DefaultCooldownMinutes is the one answer.)
 
     // Real spawn-window timing per HNM. Minutes and Windows drive the timed auto-advance: window 1
     // opens at the pop time and window N opens (N-1)×Minutes later. The long-window wyrms run
     // 25 windows at 60-min cadence — window 1 at the pop through window 25 a full 24h later (= MaxWindow);
+    // the ToAU three cover that same 24h in 5 windows at 6-hour cadence;
     // the kings/dragons run 7 windows at 10-min cadence — window 1 at the pop through window 7 a full
     // hour later (1:00 … 2:00 at 10-min marks). Returns null for anything not on a timed cadence
     // (Testing monsters, non-HNMs) — those advance manually. Tolerant of a combined "Base/Stronger"
@@ -437,6 +502,10 @@ public static class HnmConfig
     {
         foreach (var seg in MonsterSegments(monster))
         {
+            // ToAU first: these names are ALSO in LongWindowHnms, so testing the wider set first
+            // would hand them the wyrms' 25 × 60. Same ordering GetWindowCount and
+            // MonsterTimingDefaults.DefaultCooldownMinutes use, for the same reason.
+            if (ToauHnms.Contains(seg)) return (ToauWindowCadenceMinutes, ToauWindowCount);
             if (LongWindowHnms.Contains(seg)) return (60, 25);
             if (ShortWindowHnms.Contains(seg)) return (10, 7);
         }
@@ -476,28 +545,47 @@ public static class HnmConfig
     // landing within this of an existing snapshot on the same Window Event is FOLDED INTO it — its
     // members unioned in — instead of becoming a snapshot of its own.
     //
-    // This replaced duplicate DETECTION (a ±8 min / 75%-name-overlap guess that marked the later
-    // post "PossibleDuplicate"). That was the wrong shape twice over: three officers scanning one
-    // camp is not a mistake to flag, and a flagged snapshot is EXCLUDED from the combined roster
-    // (AttendanceSectionsBuilder.BuildCombinedMembers filters to Active), so anyone who appeared
-    // only in the flagged post silently lost their credit. Folding keeps every name.
+    // This replaced duplicate DETECTION (a +/-8 min / 75%-name-overlap guess that marked the later
+    // post "PossibleDuplicate"), which is now gone entirely. It was the wrong shape twice over:
+    // several people scanning one camp is not a mistake to flag, and a flagged snapshot was
+    // EXCLUDED from the combined roster (BuildCombinedMembers filters to Active), so anyone who
+    // appeared only in the flagged post silently lost their credit.
+    //
+    // The guessing was only ever needed because the server could not tell "one alliance captured
+    // twice" from "two alliances captured at once". The alliance number settles that outright, so
+    // the fold is now a plain rule: same alliance + same window + inside this bound = one roster,
+    // unioned by character name. The union only ever ADDS people — a later post that is missing
+    // someone the earlier one saw never removes them.
     //
     // Scaled to how long a window actually lasts, so a merge can never swallow two genuinely
     // different windows: the 10-minute kings/dragons get 3 minutes, the hour-long wyrms get 5.
     // Anything with no window cadence at all (Sky gods, farm NMs, ad-hoc `/lsm now` posts) takes
     // the tighter 3 minutes — without a known window length, the safer bound is the short one.
     public static TimeSpan SnapshotMergeWindow(string? monster) =>
-        DefaultWindowCadence(monster)?.Windows switch
-        {
-            25 => TimeSpan.FromMinutes(5),  // Tiamat / Jormungand / Vrtra, 60-min windows
-            7 => TimeSpan.FromMinutes(3),   // Fafnir / Behemoth / Adamantoise & HQ, 10-min windows
-            _ => TimeSpan.FromMinutes(3),
-        };
+        SnapshotMergeWindow(DefaultWindowCadence(monster)?.Minutes ?? 0);
 
-    // The effective number of windows a camp runs: the real per-monster cadence count when the
-    // monster is on one (25 for the wyrms, 7 for the kings/dragons), else the name-based bucket
-    // (2 for a Testing monster, 1 for anything else). Single source of truth — window counts are
-    // built in per monster and deliberately not configurable per linkshell.
+    // Scaled to the window length a camp ACTUALLY runs, which is what a configurable cadence needs:
+    // an hour-long window gets the wider 5-minute merge, anything shorter takes 3. A camp with no
+    // grid at all also takes 3 — without a known window length the safer bound is the short one.
+    //
+    // The name-based overload above delegates here, so the built-in 60/10 monsters get byte-identical
+    // answers to before and a custom 30-minute cadence gets a sane one instead of falling off the
+    // end of a hardcoded 25/7 switch.
+    public static TimeSpan SnapshotMergeWindow(int cadenceMinutes) =>
+        cadenceMinutes >= 60 ? TimeSpan.FromMinutes(5) : TimeSpan.FromMinutes(3);
+
+    // The BUILT-IN number of windows a camp runs: the real per-monster cadence count when the
+    // monster is on one (25 for the wyrms, 5 for the ToAU three, 7 for the kings/dragons), else the
+    // name-based bucket (2 for a Testing monster, 1 for anything else).
+    //
+    // No longer the last word. A linkshell can configure its own window count and cadence per
+    // monster (LinkshellMonsterTiming), and a camp CAPTURES that grid at creation into
+    // Event.SpawnWindowCount / SpawnWindowMinutes. This is the fallback the capture falls back TO —
+    // for a camp created before setups existed, and for a monster nobody configured.
+    //
+    // Read DiscordEventMessageBuilder.EffectiveWindowCount(Event) instead when you have an event;
+    // it applies the stamp first. This overload answers only "what does this monster run by
+    // default", which is what seeding a new setup needs and not much else.
     public static int EffectiveWindowCount(string? monster) =>
         DefaultWindowCadence(monster)?.Windows ?? GetWindowCount(monster);
 
@@ -506,11 +594,16 @@ public static class HnmConfig
     public static int WindowAdvanceMinutes(string? monster) =>
         DefaultWindowCadence(monster)?.Minutes ?? 0;
 
-    // Every monster on a built-in timed cadence with its window setup, longest band first
-    // (the 25-window wyrms, then the 7-window kings/dragons), alphabetical within each band.
+    // Every monster on a built-in timed cadence with its window setup, most windows first
+    // (the 25-window wyrms, then the 7-window kings/dragons and timed NMs, then the 5-window ToAU
+    // three), alphabetical within each band. Ordered by window COUNT, which is not the same as by
+    // band length: the ToAU three sort last on five windows while covering a full 24 hours.
     // Derived from the membership sets + DefaultWindowCadence, so adding a monster to either set
-    // surfaces it here automatically. Backs the read-only "Spawn windows" list in the Activity
-    // HNM Settings card. Testing presets are excluded — they carry no timed cadence.
+    // surfaces it here automatically. Testing presets are excluded — they carry no timed cadence.
+    //
+    // It used to back the read-only "Window setups" list in the Activity's HNM Settings card; that
+    // list is per-linkshell and editable now (LinkshellMonsterTiming), so this survives as the
+    // canonical enumeration of the BUILT-IN bands — which is what the cadence tests sweep.
     public static IReadOnlyList<(string Monster, int Windows, int Minutes)> WindowedHnmSetups() =>
         LongWindowHnms.Concat(ShortWindowHnms)
             .Select(name => (Monster: name, Cadence: DefaultWindowCadence(name)))
@@ -528,12 +621,16 @@ public static class HnmConfig
     // Attendance Windows card ("1 of 24") one short of the board above it ("Window 1 of 25") and
     // left window 25 with no place in the count, even though ingestion accepts a post for it.
     //
+    // The ToAU three coincide the same way at their own number: one post per six-hour window, so 5.
+    // They must be tested BEFORE LongWindowHnms, which they are also members of — see ToauHnms.
+    //
     // The kings/dragons keep 2 on purpose: Open + Close across the 7 spawn windows they sit
     // through. There the two counts genuinely differ; on a wyrm they genuinely coincide.
     public static int GetWindowCount(string? eventName)
     {
         if (string.IsNullOrWhiteSpace(eventName)) return 1;
         var trimmed = eventName.Trim();
+        if (ToauHnms.Contains(trimmed)) return ToauWindowCount;
         if (LongWindowHnms.Contains(trimmed)) return 25;
         if (ShortWindowHnms.Contains(trimmed)) return 2;
         if (TestingHnms.Contains(trimmed)) return 2;
@@ -544,6 +641,7 @@ public static class HnmConfig
         {
             var seg = segment.Trim();
             if (seg.Length == 0) continue;
+            if (ToauHnms.Contains(seg)) return ToauWindowCount;
             if (LongWindowHnms.Contains(seg)) return 25;
             if (ShortWindowHnms.Contains(seg)) return 2;
             if (TestingHnms.Contains(seg)) return 2;

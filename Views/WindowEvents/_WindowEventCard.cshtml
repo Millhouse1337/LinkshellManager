@@ -34,9 +34,16 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
                 @Model.FirstCapturedDisplay
             </span>
-            @if (Model.DuplicateSnapshotCount > 0)
+            @if (Model.AllianceNumbers.Count > 1)
             {
-                <span class="tag warning">@Model.DuplicateSnapshotCount duplicate review</span>
+                @* More than one is the healthy shape for a big camp: it means every alliance
+                   fielded its own poster. One alliance on a 36-person turnout means somebody's
+                   half of the raid is not being counted. *@
+                <span class="tag we-alliance-chip">@Model.AllianceNumbers.Count alliances</span>
+            }
+            @if (Model.PendingSnapshotCount > 0)
+            {
+                <span class="tag warning">@Model.PendingSnapshotCount pending</span>
             }
             @if (isClosed)
             {
@@ -152,7 +159,11 @@
                     <tr>
                         <th>Character</th>
                         <th>Jobs</th>
+                        <th>Alliance</th>
                         <th>Zone</th>
+                        @* Window / Misc / Both. It is what tells an officer why one person on this
+                           roster is priced differently from the person above them. *@
+                        <th>Source</th>
                         <th class="num">Snapshots</th>
                         <th class="num">Combined DKP</th>
                     </tr>
@@ -173,6 +184,21 @@
                             }
                         </td>
                         <td>
+                            @* Usually one chip. Two means they moved between alliances mid-camp,
+                               which is worth seeing rather than flattening to whichever came last. *@
+                            @if (member.AllianceNumbers.Count > 0)
+                            {
+                                foreach (var alliance in member.AllianceNumbers)
+                                {
+                                    <span class="tag we-alliance-chip">@alliance</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="we-muted">-</span>
+                            }
+                        </td>
+                        <td>
                             @if (!string.IsNullOrWhiteSpace(member.Zone))
                             {
                                 <span class="we-zone">
@@ -184,6 +210,9 @@
                             {
                                 <span class="we-muted">-</span>
                             }
+                        </td>
+                        <td>
+                            <span class="tag we-credit-chip we-credit-chip--@member.CreditSource.ToLowerInvariant()">@member.CreditSource</span>
                         </td>
                         <td class="num">@member.SnapshotCount</td>
                         <td class="num">
@@ -211,6 +240,21 @@
                         Update on DKP sheet
                     </button>
                 }
+                else if (Model.PendingSnapshotCount > 0)
+                {
+                    @* Posting is one-way and a pending capture is NOT in the roster above, so
+                       publishing now would quietly short those people. The server refuses this
+                       too — the disabled button is just the honest version of that answer. *@
+                    <span class="we-posted-meta">
+                        @Model.PendingSnapshotCount snapshot@(Model.PendingSnapshotCount == 1 ? "" : "s")
+                        awaiting verification — confirm or reject before posting.
+                    </span>
+                    <button type="button" class="btn sm primary" disabled
+                            title="Confirm or reject the pending snapshots first; their members are not in the roster above.">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 19V5"/><polyline points="5 12 12 5 19 12"/></svg>
+                        Post to DKP sheet
+                    </button>
+                }
                 else
                 {
                     <button type="submit" form="@dkpFormId" class="btn sm primary"
@@ -229,10 +273,64 @@
 
     @if (Model.Snapshots.Any())
     {
+        @* Windows and Miscellaneous render as two labelled groups.
+           ONE loop, deliberately. memberDkpStartIndex below is the MemberDkp[i] form index that
+           binds every per-character DKP input on this card; splitting this into two foreach blocks
+           and restarting the counter would silently overwrite half the overrides. Concatenating the
+           two lists and emitting a heading when the kind changes gives the same two sections with
+           no way to get that wrong. *@
         <section class="we-snapshots">
-            @foreach (var snapshot in Model.Snapshots)
+            @{
+                var groupedSnapshots = Model.WindowSnapshots.Concat(Model.MiscSnapshots).ToList();
+                var emittedWindowHead = false;
+                var emittedMiscHead = false;
+                @* An ungridded camp (Sky gods, farm NMs) has no window numbers to show, so calling
+                   its captures "Windows" would promise a distinction it does not have. *@
+                var windowGroupTitle = Model.HasWindowGrid ? "Windows" : "Captures";
+            }
+            @foreach (var snapshot in groupedSnapshots)
             {
+                if (!snapshot.IsMisc && !emittedWindowHead)
+                {
+                    emittedWindowHead = true;
+                    <div class="we-snapshots__group-head">
+                        <span class="we-snapshots__group-title">@windowGroupTitle</span>
+                        <span class="we-snapshots__group-count">@Model.WindowSnapshots.Count</span>
+                    </div>
+                }
+                if (snapshot.IsMisc && !emittedMiscHead)
+                {
+                    emittedMiscHead = true;
+                    <div class="we-snapshots__group-head we-snapshots__group-head--misc">
+                        <span class="we-snapshots__group-title">Miscellaneous Posts</span>
+                        <span class="we-snapshots__group-count">@Model.MiscSnapshotCount</span>
+                        <span class="we-snapshots__group-help">
+                            At the camp, outside any window.
+                        </span>
+                        @if (canManage)
+                        {
+                            @* Rides the card's existing DKP form, so Save / Post / Update all carry
+                               it — no separate endpoint. Blank means misc-only members are paid
+                               exactly what a window attendee is, which is the default. *@
+                            <label class="we-misc-dkp">
+                                <span>Misc DKP</span>
+                                <input class="input we-dkp-input" type="number" step="0.25" min="0"
+                                       name="miscDkpAmount" form="@dkpFormId"
+                                       value="@FormatDkp(Model.MiscDkpAmount)"
+                                       placeholder="@FormatDkp(memberDkpDefault)"
+                                       title="DKP for members credited only by Misc posts. Blank pays them the same as a window attendee." />
+                            </label>
+                        }
+                    </div>
+                }
+
                 var snapshotDeleteForm = $"snapshot-delete-{snapshot.Id}";
+                var snapshotVerifyForm = $"snapshot-verify-{snapshot.Id}";
+                var snapshotRejectForm = $"snapshot-reject-{snapshot.Id}";
+                var snapshotSlotForm = $"snapshot-slot-{snapshot.Id}";
+                @* Out-of-line forms, submitted by the buttons in the <summary> via form=. A form
+                   nested inside a <summary> would be activated by the click that toggles the
+                   details, so the markup has to sit outside it. *@
                 if (canManage)
                 {
                     <form id="@snapshotDeleteForm" asp-controller="WindowEvents" asp-action="DeleteSnapshot"
@@ -241,14 +339,46 @@
                           onsubmit="return confirm('Permanently delete this snapshot posted by @Dash(snapshot.CapturedByCharacterName)? This cannot be undone.');">
                         @Html.AntiForgeryToken()
                     </form>
+                    if (!alreadyPosted)
+                    {
+                        @* Re-filing a POSTED event would move members between the window and misc
+                           rates after the DKP was paid, and this action doesn't reconcile the
+                           ledger — the server refuses it too. *@
+                        <form id="@snapshotSlotForm" asp-controller="WindowEvents" asp-action="SetSnapshotSlot"
+                              asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id"
+                              method="post" class="we-hidden-form">
+                            @Html.AntiForgeryToken()
+                        </form>
+                    }
+                    if (snapshot.IsPending)
+                    {
+                        <form id="@snapshotVerifyForm" asp-controller="WindowEvents" asp-action="VerifySnapshot"
+                              asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id"
+                              method="post" class="we-hidden-form">
+                            @Html.AntiForgeryToken()
+                        </form>
+                        <form id="@snapshotRejectForm" asp-controller="WindowEvents" asp-action="RejectSnapshot"
+                              asp-route-linkshellId="@linkshellId" asp-route-snapshotId="@snapshot.Id"
+                              method="post" class="we-hidden-form"
+                              onsubmit="return confirm('Reject this capture? Its members will not be counted.');">
+                            @Html.AntiForgeryToken()
+                        </form>
+                    }
                 }
-                <details class="we-snapshot">
+                <details class="we-snapshot@(snapshot.IsMisc ? " we-snapshot--misc" : "")">
                     <summary class="we-snapshot__head">
                         <span class="we-snapshot__caret" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><polyline points="9 6 15 12 9 18"/></svg>
                         </span>
                         <span class="we-snapshot__title">
-                            @if (snapshot.WindowLabel is not null)
+                            @* Alliance first: on a multi-alliance camp it is what tells two
+                               same-minute captures apart, so it has to lead the line. *@
+                            <span class="tag we-alliance-chip">@snapshot.AllianceLabel</span>
+                            @if (snapshot.IsMisc)
+                            {
+                                <span class="tag we-snapshot__misc">Misc</span>
+                            }
+                            else if (snapshot.WindowLabel is not null)
                             {
                                 <span class="tag we-snapshot__window">@snapshot.WindowLabel</span>
                             }
@@ -262,6 +392,38 @@
                         @if (canManage)
                         {
                             <span class="we-snapshot__actions" onclick="event.stopPropagation()">
+                                @if (!alreadyPosted)
+                                {
+                                    @* Filing is entirely manual now, so mis-filing is routine
+                                       rather than exceptional — correcting it here beats
+                                       detaching and hunting for the capture in the triage queue. *@
+                                    <span class="we-slot-picker">
+                                        <select class="form-select we-slot-picker__kind" name="slotKind"
+                                                form="@snapshotSlotForm" aria-label="Slot kind">
+                                            <option value="@AttendanceSnapshotSlotKinds.Window"
+                                                    selected="@(!snapshot.IsMisc)">@windowGroupTitle</option>
+                                            <option value="@AttendanceSnapshotSlotKinds.Misc"
+                                                    selected="@snapshot.IsMisc">Misc</option>
+                                        </select>
+                                        @if (Model.HasWindowGrid)
+                                        {
+                                            <input class="input we-slot-picker__window" type="number"
+                                                   name="windowNumber" form="@snapshotSlotForm"
+                                                   min="1" max="@Model.WindowCount"
+                                                   value="@(snapshot.WindowNumber?.ToString())"
+                                                   placeholder="#" aria-label="Window number"
+                                                   title="Window 1-@Model.WindowCount. Ignored when the slot is Misc." />
+                                        }
+                                        <button form="@snapshotSlotForm" type="submit" class="btn sm ghost">Move</button>
+                                    </span>
+                                }
+                                @if (snapshot.IsPending)
+                                {
+                                    <button form="@snapshotVerifyForm" type="submit"
+                                            class="btn sm primary">Confirm</button>
+                                    <button form="@snapshotRejectForm" type="submit"
+                                            class="btn sm ghost">Reject</button>
+                                }
                                 <button form="@snapshotDeleteForm" type="submit"
                                         class="btn sm danger-outline">Delete snapshot</button>
                             </span>

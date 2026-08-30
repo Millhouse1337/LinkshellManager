@@ -19,6 +19,7 @@ public class AccountController : Controller
     private readonly AppUserProfileService _appUserProfileService;
     private readonly TimeZoneConversionService _timeZones;
     private readonly GlobalSettingsService _globalSettings;
+    private readonly ILogger<AccountController> _logger;
 
     public AccountController(
         UserManager<AppUser> userManager,
@@ -26,7 +27,8 @@ public class AccountController : Controller
         ApplicationDbContext context,
         AppUserProfileService appUserProfileService,
         TimeZoneConversionService timeZones,
-        GlobalSettingsService globalSettings)
+        GlobalSettingsService globalSettings,
+        ILogger<AccountController> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
@@ -34,6 +36,7 @@ public class AccountController : Controller
         _appUserProfileService = appUserProfileService;
         _timeZones = timeZones;
         _globalSettings = globalSettings;
+        _logger = logger;
     }
 
     [AllowAnonymous]
@@ -293,19 +296,47 @@ public class AccountController : Controller
             return Challenge();
         }
 
-        var linkshells = await _context.AppUserLinkshells
-            .Where(link => link.AppUserId == user.Id)
-            .Select(link => link.Linkshell!)
-            .OrderBy(linkshell => linkshell.LinkshellName)
-            .ToListAsync();
-
+        // Switching the active linkshell lives in the sidebar (LinkshellController.Select),
+        // so this page is only the server-wide switches.
         return View(new SettingsViewModel
         {
-            Linkshells = linkshells,
-            SelectedLinkshellId = user.PrimaryLinkshellId,
             IsSuperAdmin = user.IsSuperAdmin,
-            AddonGloballyDisabled = user.IsSuperAdmin && await _globalSettings.IsAddonGloballyDisabledAsync()
+            AddonGloballyDisabled = user.IsSuperAdmin && await _globalSettings.IsAddonGloballyDisabledAsync(),
+            ClaimShieldGloballyDisabled = user.IsSuperAdmin && await _globalSettings.IsClaimShieldGloballyDisabledAsync(),
+            AdminOverrideEnabled = user.IsSuperAdmin && await _globalSettings.IsAdminOverrideEnabledAsync()
         });
+    }
+
+    // Super-admin-only app-wide permission override. When on, an account carrying
+    // AppUser.IsSuperAdmin has every LinkshellRole permission in every linkshell it is
+    // a MEMBER of — the stored AppUserLinkshell.Rank is untouched, and the override
+    // never reaches a linkshell they have not joined. See AdminOverrideService.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetAdminOverride(bool enabled)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        if (!user.IsSuperAdmin)
+        {
+            return Forbid();
+        }
+
+        await _globalSettings.SetAdminOverrideEnabledAsync(enabled);
+        _logger.LogWarning(
+            "Admin override {State} by super admin {AppUserId} ({CharacterName}).",
+            enabled ? "ENABLED" : "DISABLED",
+            user.Id,
+            user.CharacterName);
+
+        TempData["AdminOverrideMessage"] = enabled
+            ? "Admin override enabled. You now have every permission in every linkshell you belong to."
+            : "Admin override disabled. You are back to your normal rank permissions.";
+        return RedirectToAction(nameof(Settings));
     }
 
     // Super-admin-only global kill-switch for the in-game addon. When disabled,
@@ -333,9 +364,12 @@ public class AccountController : Controller
         return RedirectToAction(nameof(Settings));
     }
 
+    // Super-admin-only server-wide switch for the addon's Claim Shield capture. Narrower than the
+    // kill-switch above: the addon keeps working, it just stops recording lottery windows. Per
+    // MONSTER control lives on each linkshell's Monster setups; this is the master over all of it.
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SetPrimaryLinkshell(SettingsViewModel model)
+    public async Task<IActionResult> SetClaimShieldKillSwitch(bool disabled)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user is null)
@@ -343,30 +377,17 @@ public class AccountController : Controller
             return Challenge();
         }
 
-        if (model.SelectedLinkshellId.HasValue)
+        if (!user.IsSuperAdmin)
         {
-            var selectedLinkshell = await _context.AppUserLinkshells
-                .Where(link => link.AppUserId == user.Id && link.LinkshellId == model.SelectedLinkshellId.Value)
-                .Select(link => link.Linkshell)
-                .FirstOrDefaultAsync();
-
-            if (selectedLinkshell is null)
-            {
-                return Forbid();
-            }
-
-            user.PrimaryLinkshellId = selectedLinkshell.Id;
-            user.PrimaryLinkshellName = selectedLinkshell.LinkshellName;
-        }
-        else
-        {
-            user.PrimaryLinkshellId = null;
-            user.PrimaryLinkshellName = null;
+            return Forbid();
         }
 
-        await _userManager.UpdateAsync(user);
-
+        await _globalSettings.SetClaimShieldGloballyDisabledAsync(disabled);
+        TempData["ClaimShieldKillSwitchMessage"] = disabled
+            ? "Claim Shield disabled globally. No addon will record lottery windows until you re-enable it."
+            : "Claim Shield re-enabled globally. Each linkshell's per-monster switches apply again.";
         return RedirectToAction(nameof(Settings));
     }
+
 }
 

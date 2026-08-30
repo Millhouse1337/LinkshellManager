@@ -39,6 +39,63 @@ public sealed partial class AddonApiController
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
 
+        // This linkshell's ENABLED Repeat-on-ToD leads, keyed by lower-cased monster, so each camp
+        // below can report whether ending it is supposed to be followed by a re-posted board.
+        //
+        // The addon needs this to know that a ToD is REQUIRED before End Event: a recurring camp
+        // ended with no ToD logged leaves the standing board with nothing to count back from, so
+        // it silently never re-posts. Knowing the lead as well lets the addon say when the board
+        // is coming back before the officer commits.
+        var repeatLeadByMonster = (await _dbContext.HnmRecurringBoards
+                .AsNoTracking()
+                .Where(b => b.LinkshellId == linkshellId && b.Enabled)
+                .Select(b => new { b.MonsterName, b.LeadHours })
+                .ToListAsync(cancellationToken))
+            .GroupBy(b => (b.MonsterName ?? string.Empty).Trim().ToLowerInvariant())
+            .ToDictionary(g => g.Key, g => g.First().LeadHours);
+        // Matched on every spelling of the spawn (either half of a merge pair and the combined
+        // "Base/Stronger" label), the same rule HnmRecurringBoardService.FindAsync applies.
+        double? RepeatLeadFor(string? monsterName)
+        {
+            foreach (var name in HnmConfig.MonsterMatchNamesLower(monsterName))
+            {
+                if (repeatLeadByMonster.TryGetValue(name, out var lead))
+                {
+                    return lead;
+                }
+            }
+            return null;
+        }
+
+        // The linkshell's CONFIGURED cooldown for each camp's monster, in fractional hours. Sent so
+        // the addon can show the repop a captured ToD is about to produce ("dies now → pops at X →
+        // board back at X − lead") before the officer confirms, instead of only learning it from
+        // the POST /api/addon/tod response after the fact.
+        //
+        // Resolved through the same MonsterTimingResolver → ResolveTodCooldownHours path
+        // HnmCampPopService uses, so the addon's preview and the number the server later stores
+        // come from one source. One lookup per DISTINCT monster, not per event.
+        var cooldownHoursByMonster = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var monster in raw
+                     .Select(evt => evt.AssignedMonsterName?.Trim())
+                     .Where(name => !string.IsNullOrWhiteSpace(name))
+                     .Select(name => name!)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var cooldown = await ActivityDataController.GetDefaultTodCooldownAsync(
+                _monsterTimings, linkshellId, monster, cancellationToken);
+            cooldownHoursByMonster[monster] = ActivityDataController.ResolveTodCooldownHours(cooldown);
+        }
+        double? CooldownHoursFor(string? monsterName)
+        {
+            var monster = monsterName?.Trim();
+            return !string.IsNullOrWhiteSpace(monster)
+                && cooldownHoursByMonster.TryGetValue(monster, out var hours)
+                && hours > 0
+                    ? hours
+                    : (double?)null;
+        }
+
         // createdFromAddon is sourced from the explicit CreationSource column. Legacy
         // rows (CreationSource null) fall back to a Details-prefix check so events
         // created before the column existed still show the cancel button if they
@@ -102,10 +159,12 @@ public sealed partial class AddonApiController
             // windows" is a real answer, and a local default in its place is what produced
             // "+1 DKP each" on a camp the app pays 0 for.
             //
-            // A PREDICTION that moves on purpose: posting window N makes N the close, so a fresh
-            // Standard camp's window 1 reads open+close and drops to open once a later window
-            // lands. Recomputed every poll, which is how the moving close stays tracked without
-            // the addon ever knowing what a close window is.
+            // STABLE, as of the explicit close. It used to be a prediction that moved — posting
+            // window N made N the close, so window 1 quoted open+close and dropped to open once a
+            // later window landed — and because the addon writes its quote back as the window's
+            // explicit price, every window kept the close bonus it had briefly been quoted. The
+            // close is an officer's checkbox now, so this quotes the open on window 1 and the
+            // regular window rate everywhere else, and what is quoted is what is paid.
             openedWindowDkp = HnmCampPricing.DefaultWindowValue(
                 evt, linkshell,
                 Math.Clamp(evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt))),
@@ -118,7 +177,22 @@ public sealed partial class AddonApiController
             createdFromAddon = evt.CreationSource == "Addon"
                 || (evt.CreationSource is null
                     && (evt.Details ?? string.Empty)
-                        .StartsWith("Created from addon.", StringComparison.Ordinal))
+                        .StartsWith("Created from addon.", StringComparison.Ordinal)),
+            // Whether this camp's monster has an ENABLED standing signup board, and how many hours
+            // before the next predicted pop it re-posts. Both null/false for a non-HNM event and
+            // for a monster with recurrence switched off.
+            //
+            // These drive the addon's End Event guard: on a recurring camp it will not end without
+            // a Time of Death, because the ToD is the only thing the re-post can be scheduled from.
+            repeatOnTod = RepeatLeadFor(evt.AssignedMonsterName) is not null,
+            repeatLeadHours = RepeatLeadFor(evt.AssignedMonsterName),
+            // The board's "Day N" label, so a ToD the addon posts while ending the camp is filed
+            // under the same day the board is printing. Without it a day-cycle monster's next
+            // board would come back bare ("Nidhogg" rather than "Nidhogg D3").
+            dayNumber = evt.DayNumber,
+            // The monster's configured cooldown in fractional hours, for the addon's
+            // "pops at / board back at" preview. Null when the monster has none configured.
+            todCooldownHours = CooldownHoursFor(evt.AssignedMonsterName)
         });
 
         return Ok(new { events });
@@ -539,8 +613,7 @@ public sealed partial class AddonApiController
         // server's own numbers instead of re-deriving them from Event.DkpPerHour — the column the
         // addon itself used to write and then read back as if it were a payout.
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
-            eventEntity.AttendanceWindows.Select(w => w.SequenceNumber).Distinct().ToList(),
-            eventEntity.HnmWindowNumber);
+            eventEntity.AttendanceWindows, eventEntity.HnmWindowNumber);
 
         return Ok(new
         {
@@ -563,24 +636,38 @@ public sealed partial class AddonApiController
                     // actually pays each attendee once the camp's defaults are applied.
                     dkpAmount = w.DkpAmount,
                     dkpValue = HnmCampPricing.WindowValueFor(
-                        eventEntity, linkshell, w.SequenceNumber, closeWindow, w.DkpAmount),
-                    // Name falls back to the DENORMALIZED one on the snapshot row. The
-                    // participation is deleted by a roster clear (the wyrm camps wipe every
-                    // window) while the snapshot survives it via SetNull — which is the whole
-                    // reason AppUserEventWindow.CharacterName exists. Reading the name only
-                    // through the navigation handed the addon a null for exactly those rows,
-                    // and it rendered them as blank entries whose Remove button posted an
-                    // empty name. Jobs have no such fallback and stay null; the addon shows
-                    // its unknown-jobs placeholder.
+                        eventEntity, linkshell, w.SequenceNumber, closeWindow, w.DkpAmount,
+                        w.IsKillWindow),
+                    // So the addon can tick the right tab and label the kill roster as its own
+                    // read rather than as "window N" — see constants.window_label.
+                    isClosingWindow = w.IsClosingWindow,
+                    isKillWindow = w.IsKillWindow,
+                    // The DENORMALIZED name on the snapshot row leads, falling back to the
+                    // participation for rows written before it was stamped. The participation is
+                    // deleted by a roster clear (the wyrm camps wipe every window) while the
+                    // snapshot survives it via SetNull — which is the whole reason
+                    // AppUserEventWindow.CharacterName exists. Reading the name only through the
+                    // navigation handed the addon a null for exactly those rows, and it rendered
+                    // them as blank entries whose Remove button posted an empty name. It is also
+                    // the only row that knows WHICH character was scanned, so a player on an alt
+                    // rehydrates as the alt here — with mainCharacterName carrying the "(alt of X)"
+                    // note the addon already prints from its own live scan. Jobs have no such
+                    // fallback and stay null; the addon shows its unknown-jobs placeholder.
                     attendees = w.Attendees
-                        .OrderBy(a => a.AppUserEvent != null ? a.AppUserEvent.CharacterName : a.CharacterName)
+                        .OrderBy(a => a.CharacterName ?? (a.AppUserEvent != null ? a.AppUserEvent.CharacterName : null))
                         .Select(a => new
                         {
                             id = a.Id,
-                            characterName = a.AppUserEvent != null ? a.AppUserEvent.CharacterName : a.CharacterName,
+                            characterName = a.CharacterName ?? (a.AppUserEvent != null ? a.AppUserEvent.CharacterName : null),
+                            mainCharacterName = a.MainCharacterName,
                             jobName = a.AppUserEvent != null ? a.AppUserEvent.JobName : null,
                             subJobName = a.AppUserEvent != null ? a.AppUserEvent.SubJobName : null,
                             zone = a.Zone,
+                            // Which alliance posted this attendee. Null on rows written before the
+                            // window path carried one -- the addon buckets those as "unknown"
+                            // rather than assuming alliance 1.
+                            allianceNumber = a.AllianceNumber,
+                            allianceKey = a.AllianceKey,
                             verifiedAt = a.VerifiedAt
                         })
                         .ToList()

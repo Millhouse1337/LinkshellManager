@@ -15,7 +15,7 @@
 | **Create New Event** | Builds a new timed event from inside the addon. | Use when the event was not already created on the website or Discord Activity. |
 | **Event Presets** | Fast-start lists for common event types such as Events, NMs, and HNMs. | Expand a category, choose a monster/event, then post windows as they happen. |
 | **Queued Events** | Events already created but not started. | Select the event you are about to run. |
-| **Attendance panel** | The live roster and posting controls. | Choose Party / Alliance / Zone, review attendees, then **Start & Post** or **Post Window**. |
+| **Attendance panel** | The live roster and posting controls. | Choose Party / Alliance and your alliance number, review attendees, then **Start & Post** or **Post Window**. |
 | **Loot Pool** | Captured drops for the current kill. | Assign winners and post loot after drops appear in chat. |
 | **Settings** | DKP defaults, panel visibility, opacity, ToD capture lists, Claim Shield messages. | Set defaults once, then save. |
 | **ToD Tracker** | Countdown view for tracked monsters. | Watch repop windows and post a ToD when a tracked mob pops/dies. |
@@ -69,7 +69,7 @@ desk:
 |---|---|
 | **1. Header** | Confirm web sync is active and the selected linkshell is correct. |
 | **2. Timezone** | Verify the displayed timezone is the one you expect officers to use. |
-| **3. Scope** | Pick `Party`, `Alliance`, or `Zone` for the roster you are about to post. |
+| **3. Scope** | Pick `Party` or `Alliance` for the roster you are about to post, and set your alliance number. |
 | **4. Events** | Use Event Presets, create a new event, or select an existing queued event. |
 | **5. Attendance** | Check the visible roster before posting. |
 | **6. Loot / ToD tools** | Leave these open if you want automatic kill, ToD, and loot follow-through. |
@@ -103,8 +103,12 @@ For attendance scope:
 | Scope | Use it when |
 |---|---|
 | **Party** | Only your six-person party should count. |
-| **Alliance** | The whole alliance should count. This is the usual event default. |
-| **Zone** | LS members in the current zone should count, even if they are not in alliance yet. |
+| **Alliance** | The whole alliance should count. This is the default, and what you want almost every time. |
+
+There is no Zone scope. The FFXI client cannot show an addon who is in the zone outside your own
+alliance, so a second alliance at the same camp is invisible to you — **it needs its own poster.**
+Set which one you are with `/lsm alliance <1-6>` (or the dropdown beside the scope radios) so the
+web keeps the two rosters apart.
 
 ---
 
@@ -117,7 +121,7 @@ The Event Presets list is built for repeatable window posting. In the screenshot
 1. Expand Event Presets.
 2. Pick the NM/HNM.
 3. Confirm the window number and DKP per window.
-4. Choose Party / Alliance / Zone.
+4. Choose Party or Alliance, and set your alliance number.
 5. Click Start & Post: Window 1.
 6. For later windows, click Post Window.
 7. Close or end the event when the camp is done.
@@ -146,9 +150,8 @@ when paired. The final token may be a scope:
 
 | Token | Captures |
 |---|---|
-| `a` or omitted | Full alliance |
-| `p` | Your party |
-| `z` | LS members visible in your current zone |
+| `a` or omitted | Your full alliance (up to 18) |
+| `p` | Your party (up to 6) |
 
 Named snapshots create or update a Window Event on the web. The server also
 auto-tags common camps:
@@ -156,13 +159,15 @@ auto-tags common camps:
 | Monster name | Entry Type |
 |---|---|
 | `Tiamat`, `Jormungand`, `Vrtra` | Wyrms Camp |
+| `Cerberus`, `Hydra`, `Khimaira` | Misc Camp (ToAU — neither wyrm nor king) |
 | `Adamantoise`, `Aspidochelone`, `Behemoth`, `Fafnir`, `King Behemoth`, `Nidhogg` | Kings Camp |
 | Anything else | Misc Camp |
 
 Repeat snapshots with the same normalized name attach to the same open Window
 Event while it is fresh. Posts landing close together are folded into a single
-snapshot holding the union of their rosters — within 5 minutes on the wyrms
-(Tiamat/Jormungand/Vrtra) and 3 minutes on everything else. Nothing is flagged
+snapshot holding the union of their rosters — within 5 minutes on the 60-minute
+band (Tiamat/Jormungand/Vrtra plus Cerberus/Hydra/Khimaira) and 3 minutes on
+everything else. Nothing is flagged
 as a duplicate: DKP is credited per Window Event rather than per snapshot, so
 several officers scanning the same camp produce one roster, not double credit.
 
@@ -262,7 +267,8 @@ Before pull:
   /attend
   Refresh
   Select the event or preset
-  Confirm scope = Zone or Alliance
+  Confirm scope = Alliance
+  Confirm your alliance number (/lsm alliance <n>)
 
 At the first attendance point:
   Review visible roster

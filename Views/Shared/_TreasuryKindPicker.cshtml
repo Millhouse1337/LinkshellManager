@@ -1,0 +1,95 @@
+@using LinkshellManagerDiscordApp.Models
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.RecordTreasuryEntryViewModel
+@*
+    "What happened?" — an ACTION, and then a box to type in.
+
+    There is NO category list any more. Gil In and Gil Out offer exactly one thing each, so choosing
+    either asks no second question: the officer types what happened and that sentence is the record.
+    The select below survives only for the actions that genuinely have two movements behind one
+    button (Owed to us) and for Fix, which has to be able to re-offer an entry's own retired kind.
+
+    Shared by Record and Fix, which previously carried this markup twice with the group headings
+    written out by hand in each (and a third time in the Discord Activity). The headings come from
+    TreasuryTransactionActions, so there is one place they can be changed.
+
+    TWO PICKERS IN ONE, on purpose:
+
+      * With script: the button row appears, the select narrows to one action's reasons, and an
+        action with a single reason hides the select entirely — which is now nearly all of them.
+      * Without script: the buttons stay hidden and the select is an ordinary grouped list of every
+        reason under its action heading. Slower, but complete and correct.
+
+    The buttons are rendered `hidden` rather than omitted so the no-script page never shows a
+    control that does nothing.
+*@
+@{
+    // Only actions with something to offer. Fix adds the entry's own kind to Options even when it
+    // is retired, so an action can appear here that has no pickable reason at all — which is
+    // exactly what has to happen for that entry to be correctable.
+    var actions = TreasuryTransactionActions.All
+        .Where(action => Model.Options.Any(option => option.Action == action.Key))
+        .ToList();
+
+    // The everyday ones lead; the ones that are neither frequent nor about gil moving sit after a
+    // divider, so the common path is three buttons rather than six.
+    var primary = new[]
+    {
+        TreasuryTransactionActions.GilIn,
+        TreasuryTransactionActions.GilOut,
+        TreasuryTransactionActions.WhatWeOwe,
+    };
+    var demoted = actions.Where(action => !primary.Contains(action.Key)).ToList();
+    var leading = actions.Where(action => primary.Contains(action.Key)).ToList();
+}
+
+<div class="field" style="grid-column:1/-1">
+    <div class="lsm-actionrow" id="kindActions" hidden>
+        @foreach (var action in leading)
+        {
+            <button type="button" class="btn ghost sm" data-action-pick="@action.Key">@action.Label</button>
+        }
+        @if (demoted.Count > 0 && leading.Count > 0)
+        {
+            <span class="lsm-actionrow__sep" aria-hidden="true"></span>
+        }
+        @foreach (var action in demoted)
+        {
+            <button type="button" class="btn ghost sm" data-action-pick="@action.Key">@action.Label</button>
+        }
+    </div>
+
+    <label asp-for="TransactionKind"></label>
+    <select asp-for="TransactionKind" class="form-select" id="TransactionKind" required>
+        @foreach (var action in actions)
+        {
+            <optgroup label="@action.Label" data-action="@action.Key">
+                @foreach (var option in Model.Options.Where(option => option.Action == action.Key))
+                {
+                    @* The whole JS contract is these data-* attributes. data-action drives the
+                       button row; the rest drive which fields show and what the preview says. *@
+                    <option value="@option.Key" data-help="@option.Help" data-preview="@option.PreviewTemplate"
+                            data-action="@option.Action"
+                            data-member="@(option.ShowsMember ? "1" : "0")"
+                            data-memberlabel="@option.CounterpartyLabel"
+                            data-split="@(option.IsSplittable ? "1" : "0")"
+                            data-settles="@(option.SettlesMemberDebt ? "1" : "0")"
+                            data-holder="@(option.RequiresHolder ? "1" : "0")"
+                            data-holderlabel="@option.HolderLabel">@option.ReasonLabel</option>
+                }
+            </optgroup>
+        }
+    </select>
+    <span asp-validation-for="TransactionKind" class="text-danger"></span>
+    <div id="kindHelp" style="font-size:12px;color:var(--fg-3);margin-top:4px"></div>
+</div>
+
+@* The reason, in the officer's own words. This is the SAME field the transactions list shows under
+   "Reason" — there is no second Note box, because two free-text boxes on one form is two places to
+   look for the same sentence and nothing to say which. *@
+<div class="field" style="grid-column:1/-1">
+    <label asp-for="Memo"></label>
+    <textarea asp-for="Memo" class="form-control" rows="2" maxlength="1024"
+              placeholder="@TreasuryLabels.ReasonHelp"></textarea>
+    <span asp-validation-for="Memo" class="text-danger"></span>
+</div>

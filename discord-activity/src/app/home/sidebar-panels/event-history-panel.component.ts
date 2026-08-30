@@ -9,7 +9,9 @@ import type {
   ActivityEventComment,
   ActivityEventHistory,
   ActivityEventHistoryAbsentee,
-  ActivityEventHistoryParticipant
+  ActivityEventHistoryParticipant,
+  ActivityEventHistoryWindow,
+  ActivityEventHistoryWindowsResponse
 } from '../../discord/discord-activity.types';
 
 // Past (closed) event browser + editor for the Activity. Mirrors the web
@@ -77,6 +79,14 @@ import type {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
                 {{ h.dkpPerHour ?? 0 }} DKP/h
               </span>
+              <!-- Only a windowed camp has one, so it doubles as the "this was an HNM" marker in
+                   the collapsed list. -->
+              @if ((h.archivedWindowCount ?? 0) > 0) {
+                <span class="chip chip--win" title="Attendance windows this camp posted. Open the card to see each window's roster.">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                  {{ h.archivedWindowCount }} {{ h.archivedWindowCount === 1 ? 'window' : 'windows' }}
+                </span>
+              }
             </span>
 
             <span class="badge">Past Event</span>
@@ -114,6 +124,75 @@ import type {
                 </section>
               }
 
+              <!-- HNM camps archive the attendance windows they posted; a timed event has none,
+                   and neither does a camp closed before the archive existed. Contents load on
+                   expand rather than with the list — a wyrm camp is 25 windows of roster. -->
+              @if ((h.archivedWindowCount ?? 0) > 0) {
+                <section class="panel">
+                  <div class="section-head">
+                    <h3>
+                      <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span>
+                      Attendance Windows <em class="count">{{ h.archivedWindowCount }}</em>
+                    </h3>
+                    @if (windowArchiveFor(h.id); as archive) {
+                      <span class="tag" title="Distinct characters scanned across every window. Can exceed the attendee list — the addon records who was standing there, not who joined on the site.">
+                        {{ archive.distinctAttendeeCount }} scanned
+                      </span>
+                    }
+                  </div>
+                  <p class="hint" style="margin-bottom:12px">
+                    What this camp actually posted, kept from before the event closed. A DKP figure
+                    shows only where an officer priced that window explicitly — the camp's own
+                    open/close bonuses aren't recoverable once the board is gone.
+                  </p>
+                  @if (windowsLoading() === h.id) {
+                    <p class="hint">Loading windows…</p>
+                  } @else if (windowsFor(h.id).length === 0) {
+                    <p class="hint">No window record survived for this event.</p>
+                  } @else {
+                    <div class="win-list">
+                      @for (w of windowsFor(h.id); track w.id) {
+                        <div class="win">
+                          <button type="button" class="win-head" (click)="toggleWindow(h.id, w.id)">
+                            <strong>{{ w.label }}</strong>
+                            <span class="tag">{{ w.sequenceNumber }} of {{ windowCountFor(h.id) }}</span>
+                            @if (w.isClosingWindow) {
+                              <span class="tag accent" title="The window the officer marked as closing the camp out — the one the close bonus paid on.">Closing</span>
+                            }
+                            @if (w.isKillWindow) {
+                              <span class="tag warn" title="The addon's Post Kill roster: who was there when the mob died. Worth nothing as a window; being on it earns the kill bonus.">Kill</span>
+                            }
+                            @if (w.dkpAmount != null) {
+                              <span class="tag success">{{ w.dkpAmount }} DKP</span>
+                            }
+                            <span class="win-meta">
+                              {{ w.attendees.length }} present · {{ w.postedAt | date:'MMM d, h:mm a' }}
+                            </span>
+                            <span class="win-chev" [class.is-open]="isWindowOpen(h.id, w.id)" aria-hidden="true">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                            </span>
+                          </button>
+                          @if (isWindowOpen(h.id, w.id)) {
+                            <div class="win-body">
+                              @if (w.attendees.length === 0) {
+                                <span class="muted">Nobody was scanned in this window.</span>
+                              } @else {
+                                @for (a of w.attendees; track $index) {
+                                  <span class="win-att" [title]="a.zone || 'Zone not recorded'">
+                                    {{ a.characterName }}
+                                    @if (a.mainCharacterName) { <small>alt of {{ a.mainCharacterName }}</small> }
+                                  </span>
+                                }
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                </section>
+              }
+
               @if (canManage()) {
                 <div class="split">
                   <section class="panel">
@@ -146,6 +225,9 @@ import type {
                           <tr>
                             <th>Attendee</th>
                             <th>Job</th>
+                            @if (showWindowsColumn(h)) {
+                              <th class="ctr" title="Attendance windows this member was scanned in. On a windowed camp this — not the duration — is what their DKP was computed from.">Windows</th>
+                            }
                             <th class="ctr">Active Credit</th>
                             <th class="ctr">Absent</th>
                             <th>DKP Awarded</th>
@@ -164,6 +246,15 @@ import type {
                                 @if (p.jobName) { <span class="job">{{ p.jobName }}@if (p.subJobName) {/{{ p.subJobName }}}</span> }
                                 @else { <span class="muted">—</span> }
                               </td>
+                              @if (showWindowsColumn(h)) {
+                                <td class="ctr">
+                                  @if (p.windowsAttended != null) {
+                                    <span class="win-count">{{ p.windowsAttended }} of {{ windowCountFor(h.id) }}</span>
+                                  } @else {
+                                    <span class="muted">—</span>
+                                  }
+                                </td>
+                              }
                               <td class="ctr">
                                 <input type="checkbox" [checked]="p.activeCredit !== false"
                                        (change)="toggleCredit(h, p, $any($event.target).checked)"
@@ -234,6 +325,9 @@ import type {
                             {{ p.characterName }}
                             @if (p.altNames?.length) { <small class="alts">{{ p.altNames!.join(', ') }}</small> }
                             <small>{{ p.jobName }}@if (p.subJobName) {/{{ p.subJobName }}}</small>
+                            @if (p.windowsAttended != null) {
+                              <small>{{ p.windowsAttended }} of {{ windowCountFor(h.id) }} windows</small>
+                            }
                           </span>
                           <span class="ro-dkp">
                             <span class="tag" [class.success]="p.activeCredit !== false">{{ p.activeCredit !== false ? 'Credited' : 'No credit' }}</span>
@@ -398,6 +492,7 @@ import type {
       border: 1px solid var(--border); background: rgba(255, 255, 255, .03); border-radius: 8px; padding: 6px 10px;
     }
     .chip svg { width: 13px; height: 13px; opacity: .85; }
+    .chip--win { color: #cdd9ff; border-color: rgba(79, 124, 255, .35); background: var(--accent-weak); }
     .badge {
       color: #cdd9ff; background: var(--accent-weak); border: 1px solid rgba(79, 124, 255, .35);
       border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; white-space: nowrap;
@@ -410,7 +505,8 @@ import type {
     .chevron svg { width: 18px; height: 18px; }
     .chevron.is-open { transform: rotate(180deg); }
 
-    .event-body { margin-top: 16px; }
+    /* Ceiling for the Attendees / Absent Members lists — see .table-wrap. */
+    .event-body { margin-top: 16px; --list-h: 30rem; }
 
     /* Panels */
     .panel {
@@ -453,13 +549,23 @@ import type {
     .confirm-q { font-size: 12px; color: var(--fg-2); }
 
     /* Table */
-    .table-wrap { margin-top: 12px; overflow-x: auto; }
+    /* Attendees and Absent Members each scroll inside --list-h instead of growing
+       without bound: a 169-member absent list ran the card thousands of pixels tall
+       and dragged Attendees with it, since a grid row is as tall as its tallest item.
+       max-height (not height) so a small event still collapses to just its rows. */
+    .table-wrap { margin-top: 12px; overflow: auto; max-height: var(--list-h); }
     .evt-table { width: 100%; border-collapse: collapse; }
     .evt-table th, .evt-table td {
       padding: 10px 8px; border-top: 1px solid rgba(255, 255, 255, .06); color: var(--fg-3);
       text-align: left; vertical-align: middle;
     }
-    .evt-table thead th { border-top: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    /* Pinned while the rows scroll under it. Needs an opaque background (the panel's
+       is translucent) and an inset line, since border-collapse drops sticky borders. */
+    .evt-table thead th {
+      border-top: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+      position: sticky; top: 0; z-index: 1;
+      background: var(--surface-2); box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .06);
+    }
     .evt-table th.ctr, .evt-table td.ctr { text-align: center; }
     .evt-who { color: var(--fg); font-weight: 600; white-space: nowrap; }
     .avatar {
@@ -497,21 +603,54 @@ import type {
     .empty__ico { color: var(--fg-4); }
     .empty__ico svg { width: 30px; height: 30px; }
     .empty strong { color: var(--fg-2); font-weight: 600; }
-    .absent-list { display: flex; flex-direction: column; gap: 8px; }
+    /* padding-right keeps the scrollbar off the "Add to Event" buttons. */
+    .absent-list {
+      display: flex; flex-direction: column; gap: 8px;
+      overflow-y: auto; max-height: var(--list-h); padding-right: 4px;
+    }
     .absent-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.015); }
     .absent-row__who { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; flex-wrap: wrap; }
     .absent-name { color: var(--fg); font-weight: 600; }
     .absent-row .primary { flex: 0 0 auto; }
     .alts { color: var(--fg-3); font-size: 11px; font-weight: 400; }
 
-    /* Read-only attendees (non-managers) */
-    .ro-list { display: flex; flex-direction: column; }
+    /* Read-only attendees (non-managers) — same card, so the same ceiling. */
+    .ro-list { display: flex; flex-direction: column; overflow-y: auto; max-height: var(--list-h); }
     .ro-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.06); }
     .ro-row:first-child { border-top: 0; }
     .ro-row .evt-who small { color: var(--fg-3); margin-left: 6px; font-weight: 400; }
     .ro-dkp { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-2); }
     .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-3); }
     .tag.success { color: var(--success); border-color: rgba(67,209,122,.4); background: var(--success-weak); }
+    .tag.accent { color: #cdd9ff; border-color: rgba(79,124,255,.4); background: var(--accent-weak); }
+    .tag.warn { color: var(--warning); border-color: rgba(245,158,11,.4); background: var(--warning-weak); }
+
+    /* Archived attendance windows. One collapsible row per posted window; the roster inside is a
+       name-chip wrap rather than a table, because a wyrm camp is 25 of these and 25 nested tables
+       would bury the rest of the card. */
+    .win-list { display: flex; flex-direction: column; gap: 6px; }
+    .win { border: 1px solid var(--border); border-radius: 8px; background: rgba(255, 255, 255, .015); }
+    .win-head {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%;
+      background: transparent; border: 0; color: var(--fg); text-align: left; cursor: pointer;
+      padding: 9px 12px; font: inherit;
+    }
+    .win-head:hover { background: rgba(79, 124, 255, .06); border-radius: 8px; }
+    .win-head strong { font-weight: 600; font-size: 13px; }
+    .win-meta { margin-left: auto; color: var(--fg-3); font-size: 12px; white-space: nowrap; }
+    .win-chev { display: inline-flex; color: var(--fg-3); transition: transform .18s ease; }
+    .win-chev svg { width: 15px; height: 15px; }
+    .win-chev.is-open { transform: rotate(180deg); }
+    .win-body {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 9px 12px; border-top: 1px solid var(--border);
+    }
+    .win-att {
+      font-size: 12px; padding: 3px 9px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+    }
+    .win-att small { color: var(--fg-4); margin-left: 5px; }
+    .win-count { font-variant-numeric: tabular-nums; font-size: 12.5px; white-space: nowrap; }
 
     /* Discussion */
     .discussion p { color: var(--fg-3); }
@@ -617,6 +756,15 @@ export class EventHistoryPanelComponent {
   protected readonly edit: Record<number, ActivityEditEventHistoryInput> = {};
   protected readonly dkpDraft: Record<number, number> = {};
 
+  // Archived attendance windows per closed camp, fetched on expand. A key present with an empty
+  // window list means "asked, nothing there" — distinct from an absent key ("not asked yet"), so
+  // a camp with no surviving record isn't re-requested every time it's opened.
+  protected readonly windowArchives = signal<Record<number, ActivityEventHistoryWindowsResponse>>({});
+  protected readonly windowsLoading = signal<number | null>(null);
+  // Which window rows have their roster expanded, keyed "historyId:windowId" so two cards can't
+  // share open state.
+  protected readonly openWindows = signal<Record<string, boolean>>({});
+
   // Post-event discussion: comments per event + compose drafts.
   protected readonly comments = signal<Record<number, ActivityEventComment[]>>({});
   protected readonly commentDraft: Record<number, string> = {};
@@ -655,6 +803,49 @@ export class EventHistoryPanelComponent {
     };
     for (const p of h.participants) { this.dkpDraft[p.id] = p.eventDkp ?? 0; }
     void this.loadComments(h.id);
+    if ((h.archivedWindowCount ?? 0) > 0) { void this.loadWindows(h.id); }
+  }
+
+  // ----- Archived attendance windows -----
+
+  protected windowArchiveFor(historyId: number): ActivityEventHistoryWindowsResponse | null {
+    return this.windowArchives()[historyId] ?? null;
+  }
+
+  protected windowsFor(historyId: number): ActivityEventHistoryWindow[] {
+    return this.windowArchives()[historyId]?.windows ?? [];
+  }
+
+  // The denominator for "3 of 25". Falls back to the archived count while the fetch is still in
+  // flight so the attendee column doesn't flash a nonsense "3 of 0".
+  protected windowCountFor(historyId: number): number {
+    const archive = this.windowArchives()[historyId];
+    if (archive && archive.windowCount > 0) return archive.windowCount;
+    return this.histories().find(h => h.id === historyId)?.archivedWindowCount ?? 0;
+  }
+
+  // The Windows column only earns its place on a windowed camp. Keyed off the event rather than
+  // off any one attendee: a member who was scanned in zero windows still needs the cell, or the
+  // row would come up short a column.
+  protected showWindowsColumn(h: ActivityEventHistory): boolean {
+    return (h.archivedWindowCount ?? 0) > 0 || h.participants.some(p => p.windowsAttended != null);
+  }
+
+  protected isWindowOpen(historyId: number, windowId: number): boolean {
+    return this.openWindows()[`${historyId}:${windowId}`] === true;
+  }
+
+  protected toggleWindow(historyId: number, windowId: number): void {
+    const key = `${historyId}:${windowId}`;
+    this.openWindows.update(map => ({ ...map, [key]: !map[key] }));
+  }
+
+  private async loadWindows(historyId: number): Promise<void> {
+    if (this.windowArchives()[historyId]) return;   // already fetched, empty result included
+    this.windowsLoading.set(historyId);
+    const res = await this.activity.loadEventHistoryWindows(historyId);
+    this.windowsLoading.set(null);
+    if (res) { this.windowArchives.update(map => ({ ...map, [historyId]: res })); }
   }
 
   protected initial(name?: string | null): string {

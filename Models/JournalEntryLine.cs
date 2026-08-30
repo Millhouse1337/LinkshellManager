@@ -62,6 +62,27 @@ public class JournalEntryLine
     [MaxLength(256)]
     public string? CounterpartyCharacterName { get; set; }
 
+    // WHOSE MULE THE GIL IS SITTING ON. Set only on the gil-on-hand line — the exact complement of
+    // the counterparty above, which is set on every line EXCEPT that one, because the two answer
+    // different questions: the counterparty is who the linkshell dealt with, the holder is where
+    // the gil physically ended up.
+    //
+    // A linkshell has no bank. Its gil is spread across members' mules, and "gil on hand" was one
+    // number with no way to ask which of them is carrying it — so the answer lived in Discord
+    // scrollback, or nowhere. Because this sits on the SIGNED cash line, summing by holder gives a
+    // live per-person balance that adds to gil on hand by construction: gil arriving on a mule is
+    // positive, gil leaving it is negative, and the two cannot drift apart the way a separately
+    // maintained "who has what" list would.
+    //
+    // Nullable, and stays that way: every line recorded before this existed has no answer, and the
+    // gil-auction close still has none to give. Those group into one honestly-labelled bucket
+    // rather than being guessed at.
+    [MaxLength(450)]
+    public string? HolderAppUserId { get; set; }
+
+    [MaxLength(256)]
+    public string? HolderCharacterName { get; set; }
+
     // --- derived, never stored ---
 
     // The amount as a user should read it: gil received on a money-in category is a positive

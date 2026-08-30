@@ -969,3 +969,65 @@
   color: var(--fg-3);
   white-space: nowrap;
 }
+
+/* ---- Charts: drop items, item requests, key items -------------------------------
+   Twins of the .chart-wishlist / .chart-keyitems blocks in the website's
+   wwwroot/css/lsm-theme.css. Tokens only - nothing here carries a literal colour. */
+
+/* Only DROP rows wear a pill. Pop is the default and the common case, so the badge marks
+   the exception rather than labelling every row on Sky. */
+.panel-tab .chart-holdings__kind {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.panel-tab .chart-card__keyitem { color: var(--gold); }
+.panel-tab .chart-card__requests { padding: 0 12px 8px; }
+
+.panel-tab .chart-wishlist__item { display: inline-flex; align-items: baseline; gap: 8px; }
+.panel-tab .chart-wishlist__actions { white-space: nowrap; }
+.panel-tab .chart-wishlist__actions > * + * { margin-left: 6px; }
+/* Settled requests stay listed - the queue is history as well as a to-do - but recede. */
+.panel-tab .chart-wishlist tr.is-settled { opacity: 0.6; }
+.panel-tab .chart-wishlist tr.is-busy { opacity: 0.5; }
+
+.panel-tab .chart-keyitems__head { vertical-align: bottom; }
+.panel-tab .chart-keyitems__name { display: block; font-weight: 500; color: var(--fg); }
+.panel-tab .chart-keyitems__count {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--fg-3);
+}
+.panel-tab .chart-keyitems__cell.is-has { color: var(--success); }
+.panel-tab .chart-keyitems__cell.is-needs { color: var(--fg-3); }
+/* A bare glyph button: the cell IS the control, so it carries no chrome until hovered. Not
+   .btn - those are sized for a form's action row, not for a grid cell. */
+.panel-tab .chart-keyitems__toggle {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.panel-tab .chart-keyitems__toggle:hover:not(:disabled) {
+  border-color: var(--border-2);
+  background: var(--surface-2);
+}
+.panel-tab .chart-keyitems__toggle:disabled { cursor: default; opacity: 0.5; }
+.panel-tab .chart-keyitems__static { opacity: 0.75; }
+/* The viewer's own row, so the one line they can edit is findable in a roster of forty. */
+.panel-tab .chart-keyitems tr.is-you { background: var(--accent-weak); }

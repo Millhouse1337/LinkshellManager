@@ -23,7 +23,7 @@ public class LinkshellDropdownViewComponent : ViewComponent
         var user = await _userManager.GetUserAsync(UserClaimsPrincipal);
         if (user is null)
         {
-            return View(new SettingsViewModel());
+            return View(new LinkshellDropdownViewModel());
         }
 
         var userLinkshells = await _context.AppUserLinkshells
@@ -32,7 +32,7 @@ public class LinkshellDropdownViewComponent : ViewComponent
             .OrderBy(linkshell => linkshell.LinkshellName)
             .ToListAsync();
 
-        return View(new SettingsViewModel
+        return View(new LinkshellDropdownViewModel
         {
             Linkshells = userLinkshells,
             SelectedLinkshellId = user.PrimaryLinkshellId

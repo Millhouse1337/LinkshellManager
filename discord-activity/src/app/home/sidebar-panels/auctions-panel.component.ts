@@ -6,7 +6,7 @@ import {
   ActivityCreateAuctionInput,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import { formatElapsed, parseDate } from '../sidebar-panel.helpers';
+import { formatElapsed, parseDate } from '../sidebar-panel.helpers';import { ADMIN_BADGE, canManageLinkshellIn } from '../activity-home.helpers';
 
 @Component({
   selector: 'app-auctions-panel',
@@ -91,10 +91,7 @@ export class AuctionsPanelComponent {
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {
-    const memberships = this.activity.overview()?.linkshells ?? [];
-    const membership = memberships.find(link => link.id === linkshellId);
-    const rank = (membership?.rank ?? '').toLowerCase();
-    return rank === 'leader' || rank === 'officer';
+    return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }
 
   // The CanLockAuctions permission for the selected linkshell (gates the toggle).

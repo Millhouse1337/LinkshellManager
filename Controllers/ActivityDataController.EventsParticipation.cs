@@ -367,13 +367,6 @@ public sealed partial class ActivityDataController
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        // If they vacated a party slot, re-resolve that party's leadership.
-        if (affectedPartyId is not null)
-        {
-            await EventPartySignupService.ResolvePartyLeadershipAsync(
-                _dbContext, eventId, affectedPartyId, cancellationToken);
-        }
-
         EnqueueEventBoardRefresh(eventId);
 
         return Ok(new { success = true });

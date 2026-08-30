@@ -299,10 +299,24 @@ namespace LinkshellManagerDiscordApp.Data
                     continue;
                 }
                 var channelId = entry.Entity.DiscordChannelId;
-                var messageId = entry.Entity.DiscordMessageId;
-                if (!string.IsNullOrWhiteSpace(channelId) && !string.IsNullOrWhiteSpace(messageId))
+                if (string.IsNullOrWhiteSpace(channelId))
                 {
-                    boards.Add(new DiscordMessageRef(channelId!, messageId!));
+                    continue;
+                }
+                if (!string.IsNullOrWhiteSpace(entry.Entity.DiscordMessageId))
+                {
+                    boards.Add(new DiscordMessageRef(channelId!, entry.Entity.DiscordMessageId!));
+                }
+                // A wide board is one message per ALLIANCE, so deleting the event has to take
+                // all of them. Missing these would leave orphaned messages in the channel that
+                // still carry Sign Up buttons for an event that no longer exists.
+                if (!string.IsNullOrWhiteSpace(entry.Entity.DiscordExtraMessageIds))
+                {
+                    foreach (var extra in entry.Entity.DiscordExtraMessageIds!
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        boards.Add(new DiscordMessageRef(channelId!, extra));
+                    }
                 }
             }
             return boards;
@@ -970,6 +984,9 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<EventAttendanceWindow> EventAttendanceWindows => Set<EventAttendanceWindow>();
         public DbSet<AppUserEventWindow> AppUserEventWindows => Set<AppUserEventWindow>();
         public DbSet<AttendanceSnapshot> AttendanceSnapshots => Set<AttendanceSnapshot>();
+        // Who is in the world right now, per linkshell. A cache of the present, not a record --
+        // see LinkshellPresence for why the game leaves no alternative.
+        public DbSet<LinkshellPresence> LinkshellPresences => Set<LinkshellPresence>();
         public DbSet<AttendanceSnapshotEntry> AttendanceSnapshotEntries => Set<AttendanceSnapshotEntry>();
         public DbSet<WindowEvent> WindowEvents => Set<WindowEvent>();
         public DbSet<WindowEventMemberDkp> WindowEventMemberDkps => Set<WindowEventMemberDkp>();
@@ -985,9 +1002,12 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<LinkshellDiscordChannel> LinkshellDiscordChannels => Set<LinkshellDiscordChannel>();
         public DbSet<LinkshellChannelRoute> LinkshellChannelRoutes => Set<LinkshellChannelRoute>();
         public DbSet<HnmRecurringBoard> HnmRecurringBoards => Set<HnmRecurringBoard>();
+        public DbSet<LinkshellMonsterTiming> LinkshellMonsterTimings => Set<LinkshellMonsterTiming>();
         public DbSet<ChartPopItem> ChartPopItems => Set<ChartPopItem>();
         public DbSet<ChartPopItemCredit> ChartPopItemCredits => Set<ChartPopItemCredit>();
         public DbSet<ChartBossProgress> ChartBossProgresses => Set<ChartBossProgress>();
+        public DbSet<ChartWishlistRequest> ChartWishlistRequests => Set<ChartWishlistRequest>();
+        public DbSet<ChartMemberKeyItem> ChartMemberKeyItems => Set<ChartMemberKeyItem>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
         protected override void OnModelCreating(ModelBuilder builder)
@@ -1048,6 +1068,24 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(board => board.PartySetupId)
                     .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            builder.Entity<LinkshellMonsterTiming>(entity =>
+            {
+                entity.ToTable("LinkshellMonsterTimings");
+                entity.Property(timing => timing.MonsterName).HasMaxLength(128).IsRequired();
+                entity.Property(timing => timing.NormalizedMonsterName).HasMaxLength(128).IsRequired();
+                entity.Property(timing => timing.Category).HasMaxLength(32);
+                // One setup per monster per linkshell. Keyed on the NORMALIZED name so casing can't
+                // slip a second row past it. It still cannot catch "Nidhogg" sitting beside
+                // "Fafnir/Nidhogg" — those are different strings for one spawn — which is why
+                // MonsterTimingEditor rejects a duplicate under HnmConfig.MonsterMatchNames before
+                // it ever reaches the DB.
+                entity.HasIndex(timing => new { timing.LinkshellId, timing.NormalizedMonsterName }).IsUnique();
+                entity.HasOne(timing => timing.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(timing => timing.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             builder.Entity<AppSetting>(entity =>
@@ -1291,6 +1329,19 @@ namespace LinkshellManagerDiscordApp.Data
                     .OnDelete(DeleteBehavior.NoAction);
             });
 
+            // EventHistory has no config block of its own — conventions cover it — except for
+            // this one FK. Convention would make PartySetupId REQUIRED-ish/cascade here, and a
+            // deleted template must never take closed history with it: the history row is the
+            // payout record, the setup reference is only a convenience for the next pop.
+            builder.Entity<EventHistory>(entity =>
+            {
+                entity.HasOne(item => item.PartySetup)
+                    .WithMany()
+                    .HasForeignKey(item => item.PartySetupId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(item => new { item.LinkshellId, item.EventName });
+            });
+
             builder.Entity<PartySetup>(entity =>
             {
                 entity.ToTable("PartySetups");
@@ -1319,6 +1370,12 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => item.OwnerEventId)
                     .IsUnique()
                     .HasFilter("\"OwnerEventId\" IS NOT NULL");
+                // Provenance only, so SET NULL: deleting a template must not cascade into the
+                // snapshots that were cloned from it (those belong to their events).
+                entity.HasOne(item => item.ClonedFromPartySetup)
+                    .WithMany()
+                    .HasForeignKey(item => item.ClonedFromPartySetupId)
+                    .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.LinkshellId, item.AssignedMonsterName });
                 entity.HasIndex(item => new { item.LinkshellId, item.Name });
             });
@@ -1377,6 +1434,18 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.EventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.EventHistoryId);
+                // The loot-history list is per linkshell, and a "No event" row has no Event or
+                // EventHistory to reach one through, so this is the only predicate that finds it.
+                entity.HasIndex(item => item.LinkshellId);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // SetNull, like TodLootDetail: deleting a pool must not destroy the loot record.
+                entity.HasOne(item => item.DkpPool)
+                    .WithMany()
+                    .HasForeignKey(item => item.DkpPoolId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             builder.Entity<EventComment>(entity =>
@@ -1583,6 +1652,8 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.LineMemo).HasMaxLength(256);
                 entity.Property(item => item.CounterpartyAppUserId).HasMaxLength(450);
                 entity.Property(item => item.CounterpartyCharacterName).HasMaxLength(256);
+                entity.Property(item => item.HolderAppUserId).HasMaxLength(450);
+                entity.Property(item => item.HolderCharacterName).HasMaxLength(256);
                 entity.HasOne(item => item.JournalEntry)
                     .WithMany(header => header.Lines)
                     .HasForeignKey(item => item.JournalEntryId)
@@ -1641,6 +1712,10 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.ToTable("ChartPopItems");
                 entity.Property(item => item.Board).HasMaxLength(16).IsRequired();
                 entity.Property(item => item.Boss).HasMaxLength(64).IsRequired();
+                // Pop or Drop. A default rather than a backfill: every row that predates the column
+                // is a pop item, which is exactly what the default says.
+                entity.Property(item => item.Kind).HasMaxLength(8).IsRequired()
+                    .HasDefaultValue(ChartItemKinds.Pop);
                 entity.Property(item => item.ItemName).HasMaxLength(128).IsRequired();
                 entity.Property(item => item.HeldByCharacterName).HasMaxLength(256);
                 entity.Property(item => item.Notes).HasMaxLength(512);
@@ -1653,8 +1728,15 @@ namespace LinkshellManagerDiscordApp.Data
                 // Covers the one read this feature has: every row for a linkshell's board, grouped
                 // by boss, in the order the officers put them in.
                 entity.HasIndex(item => new { item.LinkshellId, item.Board, item.Boss, item.SortOrder });
-                entity.ToTable(table => table.HasCheckConstraint(
-                    "CK_ChartPopItems_Quantity_NonNegative", "\"Quantity\" >= 0"));
+                // No index on Kind: it is a display split applied in memory after the board is
+                // loaded, never a query predicate. The index above already returns every row.
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_ChartPopItems_Quantity_NonNegative", "\"Quantity\" >= 0");
+                    table.HasCheckConstraint(
+                        "CK_ChartPopItems_Kind", "\"Kind\" IN ('Pop','Drop')");
+                });
             });
 
             builder.Entity<ChartPopItemCredit>(entity =>
@@ -1695,6 +1777,68 @@ namespace LinkshellManagerDiscordApp.Data
                 // At most one note per boss per linkshell; no row at all means no note, which is the
                 // normal state.
                 entity.HasIndex(item => new { item.LinkshellId, item.Board, item.Boss }).IsUnique();
+            });
+
+            // --- Charts: what members have ASKED for on a board. ---
+            // A separate feature from the pop items above, not a status on them: written by the
+            // member rather than by an officer, and carrying no holder, no held quantity and no
+            // farming credit.
+            builder.Entity<ChartWishlistRequest>(entity =>
+            {
+                entity.ToTable("ChartWishlistRequests");
+                entity.Property(item => item.Board).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.Boss).HasMaxLength(64);
+                entity.Property(item => item.ItemName).HasMaxLength(128).IsRequired();
+                entity.Property(item => item.Notes).HasMaxLength(512);
+                entity.Property(item => item.Status).HasMaxLength(16).IsRequired()
+                    .HasDefaultValue(ChartWishlistStatuses.Pending);
+                entity.Property(item => item.RequestedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.RequestedByCharacterName).HasMaxLength(256).IsRequired();
+                entity.Property(item => item.FulfilledByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.FulfilledByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // Covers the one read this feature has: every request for a linkshell's board,
+                // pending first, in the order officers put them in. No per-Boss index - the card
+                // badges are counted in memory off the list this one already returned, the same way
+                // the per-boss item counts are.
+                entity.HasIndex(item => new { item.LinkshellId, item.Board, item.Status, item.Priority });
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_ChartWishlistRequests_Quantity_Positive", "\"Quantity\" >= 1");
+                    table.HasCheckConstraint(
+                        "CK_ChartWishlistRequests_Status", "\"Status\" IN ('Pending','Fulfilled')");
+                });
+            });
+
+            // --- Charts: which members hold which key item. ---
+            // Presence is the fact; unticking deletes the row. See ChartMemberKeyItem for why.
+            builder.Entity<ChartMemberKeyItem>(entity =>
+            {
+                entity.ToTable("ChartMemberKeyItems");
+                entity.Property(item => item.Board).HasMaxLength(16).IsRequired();
+                entity.Property(item => item.KeyItemName).HasMaxLength(128).IsRequired();
+                entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
+                entity.Property(item => item.SetByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.SetByCharacterName).HasMaxLength(256);
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // UNIQUE, unlike ChartPopItemCredits directly above. Credits are written set-wise -
+                // the whole list is deleted and re-inserted - so a duplicate cannot survive a write.
+                // A key item is a per-cell TOGGLE instead, and a double-clicked tick would otherwise
+                // write two rows that read as one.
+                entity.HasIndex(item => new
+                {
+                    item.LinkshellId,
+                    item.Board,
+                    item.KeyItemName,
+                    item.MembershipId,
+                }).IsUnique();
             });
 
             builder.Entity<AddonApiToken>(entity =>
@@ -1739,11 +1883,25 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.ToTable("EventAttendanceWindows");
                 entity.Property(item => item.Label).HasMaxLength(64);
                 entity.Property(item => item.PostedBySource).HasMaxLength(64);
+                // Still Cascade even though EventId is now nullable: an event DELETED outright
+                // (not closed) should take its windows with it. The close path doesn't rely on
+                // this — it clears EventId and sets EventHistoryId first, so by the time the Event
+                // is removed the window no longer points at it and survives.
                 entity.HasOne(item => item.Event)
                     .WithMany(evt => evt.AttendanceWindows)
                     .HasForeignKey(item => item.EventId)
                     .OnDelete(DeleteBehavior.Cascade);
+                // The archive side of the same row. Cascade so deleting a closed event's history
+                // cleans up its windows rather than orphaning them with both FKs null.
+                entity.HasOne(item => item.EventHistory)
+                    .WithMany(history => history.AttendanceWindows)
+                    .HasForeignKey(item => item.EventHistoryId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // Postgres treats NULLs as distinct, so the archived rows (EventId null) don't
+                // collide with each other here even when they share a SequenceNumber.
                 entity.HasIndex(item => new { item.EventId, item.SequenceNumber }).IsUnique();
+                // The only archive read path: "the windows for closed event H", in sequence.
+                entity.HasIndex(item => new { item.EventHistoryId, item.SequenceNumber });
             });
 
             builder.Entity<AppUserEventWindow>(entity =>
@@ -1782,16 +1940,48 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany(item => item.Snapshots)
                     .HasForeignKey(item => item.WindowEventId)
                     .OnDelete(DeleteBehavior.SetNull);
-                entity.HasOne(item => item.DuplicateOfSnapshot)
-                    .WithMany()
-                    .HasForeignKey(item => item.DuplicateOfSnapshotId)
-                    .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.LinkshellId, item.CapturedAtUtc });
                 entity.HasIndex(item => item.WindowEventId);
+                // The Pending review sweep: every surface that lists snapshots awaiting an
+                // officer's Confirm filters on exactly this pair.
+                entity.HasIndex(item => new { item.LinkshellId, item.SnapshotStatus });
                 entity.Property(item => item.SnapshotStatus)
                     .HasMaxLength(32)
                     .HasDefaultValue(AttendanceSnapshotStatuses.Active);
+                // Defaulted in the DATABASE, not just in the model. HnmCampReviewHandoffService
+                // builds its End-Camp snapshot inline and never sets this, and so does any row
+                // written before the column existed — without the default those would read as
+                // Misc and be paid the misc rate for a camp roster nobody classified.
+                entity.Property(item => item.SlotKind)
+                    .HasMaxLength(16)
+                    .HasDefaultValue(AttendanceSnapshotSlotKinds.Window);
+                entity.Property(item => item.PostedByAppUserId).HasMaxLength(450);
+                entity.Property(item => item.VerifiedByAppUserId).HasMaxLength(450);
             });
+            builder.Entity<LinkshellPresence>(entity =>
+            {
+                entity.ToTable("LinkshellPresences");
+                entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
+                entity.Property(item => item.AppUserId).HasMaxLength(450);
+                entity.Property(item => item.MainCharacterName).HasMaxLength(256);
+                entity.Property(item => item.AllianceKey).HasMaxLength(256);
+                entity.Property(item => item.MainJob).HasMaxLength(8);
+                entity.Property(item => item.SubJob).HasMaxLength(8);
+                entity.Property(item => item.ReportedByCharacterName).HasMaxLength(256);
+                // THE upsert key. A character is in exactly one place at a time no matter which of
+                // their alliance-mates reported them, so a second reporter must overwrite the row
+                // rather than add a duplicate that would list them twice in the Lobby.
+                entity.HasIndex(item => new { item.LinkshellId, item.CharacterName }).IsUnique();
+                // The fresh sweep: every read is "this linkshell, seen in the last N seconds".
+                entity.HasIndex(item => new { item.LinkshellId, item.LastSeenUtc });
+                // Cascade, unlike the snapshot FKs: presence is a cache of the present with no
+                // evidentiary value, so it has no reason to outlive its linkshell.
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
             builder.Entity<WindowEvent>(entity =>
             {
                 entity.ToTable("WindowEvents");

@@ -1,0 +1,119 @@
+@using LinkshellManagerDiscordApp.Services
+@model LinkshellManagerDiscordApp.ViewModels.TreasurySettlePanelViewModel
+@*
+    One side of the balance sheet's tick-and-record panel. The SAME partial renders both:
+    "who we owe" pays members off, "owed to us by" records gil arriving. Only the endpoint and the
+    words differ, and both come off the model — so a rule that makes ticking safe on one side cannot
+    go missing on the other.
+
+    Ticking rows and recording them writes one ordinary transaction per ticked name. That is the same
+    movement an officer would have typed by hand; this is only a way to reach it without typing each
+    name and figure back in. Nothing about the balance sheet is a flag being flipped — a name leaves
+    a list when its lines sum to zero, so each list is the report AND the worksheet, and the two
+    cannot disagree.
+
+    The hidden ExpectedAmount beside each tick is what the screen was showing. The server settles what
+    the books say and refuses any row where the two differ, so a page left open while another officer
+    records more gil cannot hand over — or take in — the newer, larger figure.
+
+    The names are not behind a disclosure of their own: the sheet is already one, and hiding them
+    behind a second meant two clicks to answer "who". The Member/Amount header says what the two
+    columns are.
+*@
+
+@if (!Model.CanSettleAny)
+{
+    @* Read-only: either a member is looking, or there is nothing settleable on the list. *@
+    <div class="member-table">
+        <div class="member-table-header">
+            <span>@TreasuryLabels.Member</span>
+            <span>@TreasuryLabels.Amount</span>
+        </div>
+        @foreach (var owed in Model.Obligations)
+        {
+            <div class="member-row is-fixed">
+                <span class="member-info">@owed.CharacterName</span>
+                <strong class="num">@owed.Amount.ToString("N0")</strong>
+            </div>
+        }
+    </div>
+}
+else
+{
+    @* data-cash is empty on the collecting side, which is how the script knows there is no shortfall
+       to warn about: gil arriving cannot overdraw anything. *@
+    <form asp-action="@Model.FormAction" method="post" class="lsm-settle"
+          data-cash="@(Model.CashOnHand?.ToString() ?? "")"
+          data-shortfall="@(Model.Shortfall ?? "")"
+          data-confirm="@Model.Confirm">
+        @Html.AntiForgeryToken()
+
+        @* pickIndex counts only the rows that actually post fields, NOT the position in the list.
+           The default collection binder stops at the first missing index, so numbering by list
+           position would silently drop every settleable name sitting after an unsettleable one. *@
+        @{ var pickIndex = 0; }
+        <div class="member-table">
+            <div class="member-table-header">
+                <span>@TreasuryLabels.Member</span>
+                <span>@TreasuryLabels.Amount</span>
+            </div>
+
+            @foreach (var owed in Model.Obligations)
+            {
+                if (!owed.CanSettle)
+                {
+                    @* The "no member named" bucket, or a row over-settled into a negative. Both are
+                       real and both belong on screen — settling just has nothing to mean for them. *@
+                    <div class="member-row is-fixed">
+                        <span class="member-info">@owed.CharacterName</span>
+                        <strong class="num">@owed.Amount.ToString("N0")</strong>
+                    </div>
+                    continue;
+                }
+
+                @* The hidden "false" after the box is the standard pair asp-for generates for a
+                   bool: on its own an unticked box posts nothing at all, and this index would then
+                   carry a different name and figure. *@
+                <label class="member-row">
+                    <span class="member-info">
+                        <input type="checkbox" name="picks[@pickIndex].Selected" value="true"
+                               class="lsm-settle__tick" data-amount="@owed.Amount" />
+                        <input type="hidden" name="picks[@pickIndex].Selected" value="false" />
+                        <input type="hidden" name="picks[@pickIndex].CharacterName" value="@owed.CharacterName" />
+                        <input type="hidden" name="picks[@pickIndex].ExpectedAmount" value="@owed.Amount" />
+                        <span class="lsm-settle__name">@owed.CharacterName</span>
+                    </span>
+                    <strong class="num">@owed.Amount.ToString("N0")</strong>
+                </label>
+                pickIndex++;
+            }
+        </div>
+
+        @* Enabled, and disabled by script the moment it can see nothing is ticked. Rendering it
+           disabled instead made the panel genuinely dead without script. The server already answers
+           an empty submission by saying so. *@
+        <div class="payment-area">
+            <span class="lsm-settle__hint">@Model.Hint</span>
+            @* Which mule. Ticking a name here writes a real gil movement, so it answers the same
+               question the Record form asks. ONE box for the whole run, not one per tick: a payout is
+               one person sitting at one mule handing gil out, and asking per name would ask the same
+               thing eight times. `required` is the browser half of the rule; the controller refuses
+               a post without it either way. *@
+            <label class="lsm-settle__holder">
+                <span>@Model.HolderLabel</span>
+                <input type="text" name="holder" maxlength="256" required autocomplete="off"
+                       list="settleHolders-@Model.FormAction" placeholder="Search members…" />
+            </label>
+            <datalist id="settleHolders-@Model.FormAction">
+                @foreach (var name in Model.Roster)
+                {
+                    <option value="@name"></option>
+                }
+            </datalist>
+            <button type="submit" class="btn primary payment-button">
+                <span class="payment-button__mark" aria-hidden="true">✦</span>
+                @Model.ButtonLabel
+            </button>
+        </div>
+    </form>
+}

@@ -15,37 +15,31 @@ public class DashboardController : Controller
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
     private readonly TreasuryBalanceService _treasury;
+    private readonly JobsRosterService _jobsRoster;
+    private readonly HnmClaimStatsService _hnmClaimStats;
 
-    private static readonly string[] HnmPaletteClasses = { "a", "b", "c", "d", "e", "f" };
     private const int HnmClaimsWindowDays = 30;
 
-    // True HNMs only — used to scope the Dashboard "HNM Claims" donut so
-    // it isn't dominated by Sky farm pops, ground NMs, HENMs, or Sea NMs
-    // that also flow through the Tods table with Claim=true.
-    private static readonly HashSet<string> HnmNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Fafnir",
-        "Nidhogg",
-        "Behemoth",
-        "King Behemoth",
-        "Adamantoise",
-        "Aspidochelone",
-        "Tiamat",
-        "Jormungand",
-        "Vrtra",
-        "Bahamut",
-    };
+    // (HnmPaletteClasses / HnmNames / BuildHnmClaims lived here: a hand-kept copy of the true-HNM
+    // name list and the donut's aggregation. The copy had gone stale against HnmConfig — it never
+    // learned the timed NMs on the kings' band, and a plain set lookup could not match the
+    // combined "Behemoth/King Behemoth" label an HNM board stores, so those claims were dropped
+    // outright. HnmClaimStatsService is the one aggregation now, shared with the Activity.)
     private static readonly TimeSpan SoonThreshold = TimeSpan.FromHours(3);
     private static readonly TimeSpan DefaultSpawnWindow = TimeSpan.FromHours(3);
 
     public DashboardController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
-        TreasuryBalanceService treasury)
+        TreasuryBalanceService treasury,
+        JobsRosterService jobsRoster,
+        HnmClaimStatsService hnmClaimStats)
     {
         _context = context;
         _userManager = userManager;
         _treasury = treasury;
+        _jobsRoster = jobsRoster;
+        _hnmClaimStats = hnmClaimStats;
     }
 
     public async Task<IActionResult> Index(int? linkshellId = null)
@@ -83,6 +77,15 @@ public class DashboardController : Controller
                 .OrderBy(link => link.CharacterName)
                 .ToListAsync()
             : new List<AppUserLinkshell>();
+
+        // Roster parity with the Discord Activity dashboard: which members have
+        // actually opened the app (the "App" tag — an AppUserId alone only means an
+        // account exists), plus each row's leveled jobs for the "Show Jobs" toggle.
+        var syncedAppUserIds = await _jobsRoster.GetSyncedAppUserIdsAsync(members, HttpContext.RequestAborted);
+        var memberJobs = selectedLinkshellId.HasValue
+            ? (await _jobsRoster.BuildForMembersAsync(selectedLinkshellId.Value, members, HttpContext.RequestAborted))
+                .ToDictionary(entry => entry.MemberId)
+            : new Dictionary<int, JobsRosterEntry>();
 
         var events = selectedLinkshellId.HasValue
             ? await _context.Events
@@ -127,7 +130,7 @@ public class DashboardController : Controller
             : null;
 
         var itemCount = selectedLinkshellId.HasValue
-            ? await _context.Items.CountAsync(item => item.LinkshellId == selectedLinkshellId.Value)
+            ? await _context.Items.CountAsync(item => item.LinkshellId == selectedLinkshellId.Value && !item.IsSold)
             : 0;
 
         var revenueTotal = selectedLinkshellId.HasValue
@@ -184,7 +187,19 @@ public class DashboardController : Controller
 
         var todTracker = BuildTodTracker(tods);
         var upcomingRepops = BuildUpcomingRepops(tods);
-        var hnmClaims = BuildHnmClaims(tods, out var hnmTotal);
+        // Off its own query, not the 200-row `tods` page above — that page is the most recent ToDs
+        // of any monster, so a busy month of Sky pops used to push the HNM claims out of the chart.
+        var hnmStats = await _hnmClaimStats.BuildAsync(selectedLinkshellId);
+        var hnmClaims = hnmStats.Last30Days
+            .Select(slice => new HnmClaimEntry
+            {
+                MonsterName = slice.MonsterName,
+                Count = slice.Count,
+                Percent = slice.Percent,
+                ColorClass = slice.ColorClass
+            })
+            .ToList();
+        var hnmTotal = hnmStats.Last30Days.Sum(slice => slice.Count);
         var recentActivity = BuildRecentActivity(events, eventHistories, tods);
         var newsUpdates = BuildNewsUpdates(announcements, rules, auctions, dkpAudits, members);
 
@@ -195,6 +210,8 @@ public class DashboardController : Controller
             SelectedLinkshellName = selectedLinkshellName,
             BannerUrl = bannerUrl,
             Members = members,
+            SyncedAppUserIds = syncedAppUserIds,
+            MemberJobs = memberJobs,
             Events = events,
             TotalMembers = members.Count,
             UpcomingEvents = events.Count(evt => evt.CommencementStartTime is null),
@@ -207,7 +224,6 @@ public class DashboardController : Controller
             EnableRevenue = selectedLinkshell?.EnableRevenue ?? true,
             EnableToDs = selectedLinkshell?.EnableToDs ?? true,
             EnableHnmSection = selectedLinkshell?.EnableHnmSection ?? true,
-            LinkshellType = selectedLinkshell?.LinkshellType,
             TodTracker = todTracker,
             HnmClaims = hnmClaims,
             HnmClaimsTotal = hnmTotal,
@@ -219,6 +235,7 @@ public class DashboardController : Controller
             {
                 Title = rule.RuleTitle,
                 Details = rule.RuleDetails,
+                Category = rule.Category,
                 RelativeTime = FormatRelative(rule.CreatedAt),
                 Author = rule.CreatedByCharacterName
             }).ToList(),
@@ -226,6 +243,7 @@ public class DashboardController : Controller
             {
                 Title = announcement.AnnouncementTitle,
                 Details = announcement.AnnouncementDetails,
+                Category = announcement.Category,
                 RelativeTime = FormatRelative(announcement.CreatedAt),
                 Author = announcement.CreatedByCharacterName
             }).ToList(),
@@ -326,39 +344,6 @@ public class DashboardController : Controller
         }
 
         return entries.OrderBy(entry => entry.RepopTime).ToList();
-    }
-
-    private static List<HnmClaimEntry> BuildHnmClaims(IReadOnlyCollection<Tod> tods, out int total)
-    {
-        var cutoff = DateTime.UtcNow - TimeSpan.FromDays(HnmClaimsWindowDays);
-        var claims = tods
-            .Where(tod => tod.Claim == true)
-            .Where(tod => !string.IsNullOrWhiteSpace(tod.MonsterName))
-            .Where(tod => HnmNames.Contains(tod.MonsterName!.Trim()))
-            .Where(tod => (tod.Time ?? tod.TimeStamp ?? DateTime.MinValue) >= cutoff)
-            .GroupBy(tod => tod.MonsterName!.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Select(group => new { Monster = group.Key, Count = group.Count() })
-            .OrderByDescending(item => item.Count)
-            .ThenBy(item => item.Monster)
-            .ToList();
-
-        total = claims.Sum(item => item.Count);
-        if (total == 0)
-        {
-            return new List<HnmClaimEntry>();
-        }
-
-        var computedTotal = total;
-        return claims
-            .Select((item, index) => new HnmClaimEntry
-            {
-                MonsterName = item.Monster,
-                Count = item.Count,
-                Percent = Math.Round(item.Count * 100.0 / computedTotal, 1),
-                ColorClass = HnmPaletteClasses[index % HnmPaletteClasses.Length]
-            })
-            .Take(6)
-            .ToList();
     }
 
     private static List<RecentActivityEntry> BuildRecentActivity(IReadOnlyCollection<Event> activeEvents, IReadOnlyCollection<EventHistory> eventHistories, IReadOnlyCollection<Tod> tods)
@@ -555,12 +540,17 @@ public class DashboardController : Controller
             .ToList();
     }
 
+    // News & updates icon tints. Deliberately its own short list rather than the donut's — the
+    // `.news-icon.donut-seg-*` rules only paint a–f, so this must not reach into the wider
+    // palette the donut grew.
+    private static readonly string[] NewsIconPaletteClasses = { "a", "b", "c", "d", "e", "f" };
+
     private static string PickColorFromName(string name)
     {
         if (string.IsNullOrEmpty(name)) return "a";
         var hash = 0;
         foreach (var ch in name) { hash = (hash * 31 + ch) & 0x7fffffff; }
-        return HnmPaletteClasses[hash % HnmPaletteClasses.Length];
+        return NewsIconPaletteClasses[hash % NewsIconPaletteClasses.Length];
     }
 
     private static string FormatRelative(DateTime when)

@@ -15,7 +15,9 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public sealed partial class ActivityDataController
 {
     [HttpGet("overview")]
-    public async Task<IActionResult> GetOverviewAsync(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetOverviewAsync(
+        [FromServices] HnmClaimStatsService hnmClaimStats,
+        CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -70,7 +72,7 @@ public sealed partial class ActivityDataController
             .ToDictionaryAsync(item => item.LinkshellId, item => item.Count, cancellationToken);
 
         var itemCounts = await _dbContext.Items
-            .Where(item => linkshellIds.Contains(item.LinkshellId))
+            .Where(item => linkshellIds.Contains(item.LinkshellId) && !item.IsSold)
             .GroupBy(item => item.LinkshellId)
             .Select(group => new { LinkshellId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.LinkshellId, item => item.Count, cancellationToken);
@@ -125,6 +127,11 @@ public sealed partial class ActivityDataController
                 .Take(25)
                 .ToListAsync(cancellationToken)
             : new List<Tod>();
+
+        // The HNM Claims donut is aggregated over ALL claimed ToDs, not the 25 above — those are
+        // the most recent pops of any monster, so a run of Sky/ground NM kills pushed every HNM
+        // claim out of the chart and the "All" toggle silently charted a tail.
+        var hnmClaimStatsResult = await hnmClaimStats.BuildAsync(primaryLinkshellId, cancellationToken);
 
         var pendingInvites = await _dbContext.Invites
             .Include(invite => invite.Linkshell)
@@ -291,10 +298,16 @@ public sealed partial class ActivityDataController
                 snapshot.CapturedByCharacterName,
                 // Named the same way the window tabs above it are, so a snapshot taken in the
                 // camp's first window reads "Open" here too rather than "Window 1".
-                snapshot.WindowNumber is { } window
-                    ? HnmConfig.GetDefaultWindowLabel(evt.EventName, window, windowCount)
-                      ?? $"Window {window}"
-                    : null,
+                //
+                // A Misc capture is labelled as such rather than left blank: it carries no window
+                // number by construction, and an unlabelled row here would read as a capture whose
+                // window nobody had got round to setting.
+                AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind)
+                    ? "Misc"
+                    : snapshot.WindowNumber is { } window
+                        ? HnmConfig.GetDefaultWindowLabel(evt.EventName, window, windowCount)
+                          ?? $"Window {window}"
+                        : null,
                 snapshot.SnapshotStatus,
                 snapshot.Entries
                     // Hand-added names sort last so an asserted attendee never sits among the
@@ -406,6 +419,16 @@ public sealed partial class ActivityDataController
             .AnyAsync(token => token.IssuedToAppUserId == appUser.Id && token.RevokedAt == null, cancellationToken);
 
         var addonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(cancellationToken);
+        // Rides the polled overview rather than the monster-timings GET, so the editor learns about
+        // it on the next poll instead of only when someone reopens the tab.
+        var claimShieldGloballyDisabled = await _globalSettings.IsClaimShieldGloballyDisabledAsync(cancellationToken);
+
+        // The app-wide admin override, resolved once for the whole payload. The first
+        // flag decides THIS user's permissions (only for linkshells listed below, which
+        // are already membership- and guild-lock-filtered); the second decides whose
+        // roster rows get the ADMIN badge.
+        var adminOverrideActive = await _adminOverride.IsActiveForAsync(appUser, cancellationToken);
+        var adminOverrideEnabled = await _adminOverride.IsEnabledAsync(cancellationToken);
 
         Response.Headers.CacheControl = "no-store";
         Response.Headers.Pragma = "no-cache";
@@ -481,14 +504,27 @@ public sealed partial class ActivityDataController
                 ? byUser.GetValueOrDefault(userId)
                 : BiddableDkp(lsId, userId);
 
-        // Enabled repeat-on-ToD board lead times for this linkshell, keyed by lower-cased
-        // monster, so the HNM edit form can repopulate the "Repeat post" toggle + lead.
-        var hnmBoardLeadByMonster = (await _dbContext.HnmRecurringBoards
-                .Where(b => b.LinkshellId == primaryLinkshellId && b.Enabled)
-                .Select(b => new { b.MonsterName, b.LeadHours })
+        // Enabled repeat-on-ToD board lead times, keyed linkshell -> lower-cased monster, so the
+        // HNM event forms can repopulate the "Repeat post" toggle + lead.
+        //
+        // Every membership, not just the primary one: the same numbers are stamped onto each
+        // linkshell's monster catalog below (ActivityMonsterSetupDto.RepeatLeadHours), and the
+        // create-event form reads them for whichever linkshell the camp is being made in.
+        var hnmBoardLeadsByLinkshell = (await _dbContext.HnmRecurringBoards
+                .Where(b => linkshellIds.Contains(b.LinkshellId) && b.Enabled)
+                .Select(b => new { b.LinkshellId, b.MonsterName, b.LeadHours })
                 .ToListAsync(cancellationToken))
-            .GroupBy(b => (b.MonsterName ?? string.Empty).Trim().ToLowerInvariant())
-            .ToDictionary(g => g.Key, g => g.First().LeadHours);
+            .GroupBy(b => b.LinkshellId)
+            .ToDictionary(
+                byLinkshell => byLinkshell.Key,
+                byLinkshell => byLinkshell
+                    .GroupBy(b => (b.MonsterName ?? string.Empty).Trim().ToLowerInvariant())
+                    .ToDictionary(g => g.Key, g => g.First().LeadHours));
+        var hnmBoardLeadByMonster =
+            primaryLinkshellId.HasValue
+            && hnmBoardLeadsByLinkshell.TryGetValue(primaryLinkshellId.Value, out var primaryLeads)
+                ? primaryLeads
+                : new Dictionary<string, double>();
         // Matched on every spelling of the spawn (either half of a merge pair and the
         // combined "Base/Stronger" label) so a board keyed on one still pre-fills the
         // End Camp form's re-post toggle + lead for an event keyed on another.
@@ -529,9 +565,10 @@ public sealed partial class ActivityDataController
                 ? $"/api/activity/linkshells/{lsId}/banner?v={updated.Ticks}"
                 : null;
 
-        var hnmWindowSetups = HnmConfig.WindowedHnmSetups()
-            .Select(setup => new HnmWindowSetupDto(setup.Monster, setup.Windows, setup.Minutes))
-            .ToList();
+        // One query for every linkshell the viewer is in, rather than a lookup per membership.
+        // A linkshell that has never opened the editor has no rows and projects the built-in
+        // defaults, so the client always receives a complete catalog.
+        var monsterTimingMaps = await _monsterTimings.GetMapsAsync(linkshellIds, cancellationToken);
 
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
@@ -565,8 +602,14 @@ public sealed partial class ActivityDataController
                 itemCounts.GetValueOrDefault(link.LinkshellId, 0),
                 revenueTotals.GetValueOrDefault(link.LinkshellId, 0L),
                 link.Linkshell?.Details,
-                ResolvePermissionsFor(link.LinkshellId, link.Rank, rolesByLinkshellAndName),
-                MapLinkshellSettingsDto(link.Linkshell),
+                ResolvePermissionsFor(link.LinkshellId, link.Rank, rolesByLinkshellAndName, adminOverrideActive),
+                MapLinkshellSettingsDto(
+                    link.Linkshell,
+                    MonsterSetupsFor(
+                        monsterTimingMaps, link.LinkshellId,
+                        hnmBoardLeadsByLinkshell.TryGetValue(link.LinkshellId, out var linkLeads)
+                            ? linkLeads
+                            : null)),
                 link.Linkshell?.AuctionsLocked ?? false,
                 BannerUrl(link.LinkshellId))).ToList(),
             primaryLinkshell is null
@@ -590,7 +633,8 @@ public sealed partial class ActivityDataController
                         member.AppUserId != null ? primaryStreaks.GetValueOrDefault(member.AppUserId).Absent : 0,
                         IsPlaceholder: member.AppUser?.IsPlaceholder ?? false,
                         BiddableDkp: BiddableDkp(primaryLinkshellId!.Value, member.AppUserId),
-                        HasSyncedActivity: member.AppUserId != null && primarySyncedAppUserIds.Contains(member.AppUserId))).ToList(),
+                        HasSyncedActivity: member.AppUserId != null && primarySyncedAppUserIds.Contains(member.AppUserId),
+                        IsAdmin: adminOverrideEnabled && (member.AppUser?.IsSuperAdmin ?? false))).ToList(),
                     primaryRules.Select(rule => new ActivityRuleDto(
                         rule.Id,
                         rule.LinkshellId,
@@ -758,17 +802,44 @@ public sealed partial class ActivityDataController
                                 DiscordEventMessageBuilder.AttendancePostCount(evt)),
                         window.PostedAt,
                         window.Attendees
-                            .OrderBy(att => att.AppUserEvent != null ? att.AppUserEvent.CharacterName : string.Empty)
+                            // Sorted on the SAME fallback the row renders, or a roster clear would
+                            // sort half the table under the empty string.
+                            .OrderBy(att => att.CharacterName
+                                ?? (att.AppUserEvent != null ? att.AppUserEvent.CharacterName : null)
+                                ?? string.Empty)
                             .Select(att => new ActivityAttendanceWindowAttendeeDto(
                                 att.Id,
-                                att.AppUserEvent != null ? att.AppUserEvent.CharacterName : null,
+                                // The DENORMALIZED name on the snapshot row WINS, and falls back to
+                                // the participation only for rows written before it was stamped.
+                                // Two reasons it leads. The participation is DELETED by a roster
+                                // clear — the 25-window wyrm camps wipe theirs every window — while
+                                // the snapshot survives it via SetNull, so reading the name only
+                                // through the navigation turned every window of a wyrm camp into
+                                // "Unknown attendee" the moment the window advanced. And the window
+                                // row is the one that knows which CHARACTER was scanned: a player on
+                                // an alt has the alt here and their main on the participation.
+                                // Same order the addon's GET /events/{id} applies; these two must
+                                // agree, because they render the same roster.
+                                att.CharacterName
+                                    ?? (att.AppUserEvent != null ? att.AppUserEvent.CharacterName : null),
+                                // Non-null only when the name above is one of the member's alts, in
+                                // which case the UI reads "Athmilk (alt of Edicius)" — matching what
+                                // the addon showed the officer when it scanned them.
+                                att.MainCharacterName,
+                                // Jobs have NO such fallback — they were only ever on the
+                                // participation — so they stay null and render as "Anon" after a
+                                // clear. Recording them per snapshot is a schema change; until
+                                // then, a missing job on an old window is missing data, not a bug
+                                // in this projection.
                                 att.AppUserEvent != null ? att.AppUserEvent.JobName : null,
                                 att.AppUserEvent != null ? att.AppUserEvent.SubJobName : null,
                                 att.Zone,
                                 att.VerifiedAt,
                                 att.VerifiedBy))
                             .ToList(),
-                        window.DkpAmount))
+                        window.DkpAmount,
+                        window.IsClosingWindow,
+                        window.IsKillWindow))
                     .ToList(),
                 LinkedSnapshotsFor(evt),
                 ClaimShieldsFor(evt),
@@ -834,6 +905,10 @@ public sealed partial class ActivityDataController
                 history.Duration,
                 history.AppUserEventHistories.Count)).ToList(),
             recentTods.Select(MapTodDto).ToList(),
+            new ActivityHnmClaimsDto(
+                MapHnmClaimSlices(hnmClaimStatsResult.Last7Days),
+                MapHnmClaimSlices(hnmClaimStatsResult.Last30Days),
+                MapHnmClaimSlices(hnmClaimStatsResult.AllTime)),
             new ActivityOverviewStatsDto(
                 linkshellMemberships.Count,
                 activeEvents.Count,
@@ -841,7 +916,60 @@ public sealed partial class ActivityDataController
                 activeEvents.Count(evt => evt.CommencementStartTime.HasValue)),
             addonConfigured,
             addonGloballyDisabled,
-            hnmWindowSetups));
+            adminOverrideActive,
+            claimShieldGloballyDisabled));
+    }
+
+    // The compact per-linkshell monster catalog for the polled overview. Falls back to the built-in
+    // defaults when the linkshell has no rows yet, which is what lets the client drop its own copies
+    // of the cadence / cooldown tables entirely.
+    // `repeatLeadsByMonster` is the linkshell's ENABLED Repeat-on-ToD leads keyed by lower-cased
+    // monster name (null/absent = it has none). Each row is matched on every spelling of its spawn,
+    // so a board first created under "Fafnir" still answers for the catalog's combined
+    // "Fafnir/Nidhogg" row — the same rule HnmRecurringBoardService.FindAsync applies, and the one
+    // thing that keeps the create form's toggle from opening OFF on a monster that is repeating.
+    private static IReadOnlyList<ActivityMonsterSetupDto> MonsterSetupsFor(
+        IReadOnlyDictionary<int, MonsterTimingMap> maps, int linkshellId,
+        IReadOnlyDictionary<string, double>? repeatLeadsByMonster = null)
+    {
+        double? LeadFor(string? monsterName)
+        {
+            if (repeatLeadsByMonster is null || repeatLeadsByMonster.Count == 0)
+            {
+                return null;
+            }
+            foreach (var name in HnmConfig.MonsterMatchNamesLower(monsterName))
+            {
+                if (repeatLeadsByMonster.TryGetValue(name, out var lead))
+                {
+                    return lead;
+                }
+            }
+            return null;
+        }
+
+        if (maps.TryGetValue(linkshellId, out var map) && map.IsSeeded)
+        {
+            return map.Rows
+                .Select(row => new ActivityMonsterSetupDto(
+                    row.MonsterName,
+                    row.WindowCount,
+                    row.WindowCadenceMinutes,
+                    row.CooldownMinutes,
+                    MonsterTimingDefaults.NormalizeCategory(row.Category),
+                    LeadFor(row.MonsterName)))
+                .ToList();
+        }
+
+        return MonsterTimingDefaults.BuildAll()
+            .Select(timing => new ActivityMonsterSetupDto(
+                timing.MonsterName,
+                timing.WindowCount,
+                timing.WindowCadenceMinutes,
+                timing.CooldownMinutes,
+                timing.Category,
+                LeadFor(timing.MonsterName)))
+            .ToList();
     }
 
     [HttpGet("history")]

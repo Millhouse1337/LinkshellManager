@@ -36,12 +36,15 @@ public sealed class HnmBoardNoticeService
             ? ev.AssignedMonsterName!
             : (!string.IsNullOrWhiteSpace(ev.EventName) ? ev.EventName! : "The monster");
 
-        // Discord <t:unix:F/R> renders each viewer's local time + a live "in N hours".
+        // Discord <t:unix:D/T/R> renders each viewer's local time + a live "in N hours".
+        // D + T ("August 26, 2026" + "6:07:35 PM") rather than the single F style: F is the only
+        // style that carries the weekday but it stops at minutes, and a repop time is ToD math —
+        // the seconds matter more here than the weekday does.
         var description = new StringBuilder();
         if (ev.StartTime.HasValue)
         {
             var repop = ToUnix(ev.StartTime.Value);
-            description.Append($"Will repop <t:{repop}:F> (<t:{repop}:R>).");
+            description.Append($"Will repop <t:{repop}:D> <t:{repop}:T> (<t:{repop}:R>).");
         }
         else
         {
@@ -84,6 +87,20 @@ public sealed class HnmBoardNoticeService
                 "Failed to edit HNM board message {MessageId} to a defeated note for event {EventId}.",
                 ev.DiscordMessageId, ev.Id);
         }
+
+        // A wide board is one message per alliance. The note replaces the FIRST; the rest have to
+        // go, or the channel keeps showing a live-looking roster for a monster that is already
+        // down — buttons and all.
+        if (!string.IsNullOrWhiteSpace(ev.DiscordExtraMessageIds))
+        {
+            foreach (var extra in ev.DiscordExtraMessageIds!
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                await _bot.DeleteMessageAsync(ev.DiscordChannelId!, extra, cancellationToken);
+            }
+            ev.DiscordExtraMessageIds = null;
+        }
+
         return ok;
     }
 

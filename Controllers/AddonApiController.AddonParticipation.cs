@@ -262,6 +262,19 @@ public sealed partial class AddonApiController
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
         var nowUtc = request.RecordedAtUtc ?? DateTime.UtcNow;
 
+        // Which alliance this roster is FOR, resolved ONLY when the addon actually sent one.
+        //
+        // AttendanceSnapshotAlliances.Resolve(null) returns 1, so calling it unconditionally would
+        // stamp every post from an addon that predates this as "alliance 1" -- inventing a fact
+        // nobody reported, and exactly the trap AttendanceSnapshot.AllianceNumber's own comment
+        // warns about. Null has to stay null.
+        var postedAllianceNumber = request.AllianceNumber.HasValue
+            ? AttendanceSnapshotAlliances.Resolve(request.AllianceNumber)
+            : (int?)null;
+        var postedAllianceKey = string.IsNullOrWhiteSpace(request.AllianceKey)
+            ? null
+            : request.AllianceKey.Trim();
+
         var eventEntity = await _dbContext.Events
             .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
 
@@ -346,9 +359,17 @@ public sealed partial class AddonApiController
             // window and decides whether the Close ends the posting; both are about posts, not
             // pop chances.
             var postCount = DiscordEventMessageBuilder.AttendancePostCount(eventEntity);
-            if (windowSequence < 1 || windowSequence > maxWindows)
+            // The kill roster is allowed ONE sequence past the camp's spawn count. It is filed
+            // after the last window by definition, and on a camp whose spawn count is also its post
+            // count (a 2-window NM) there is no in-range sequence left for it — the range check
+            // would reject the very post the Post Kill button exists to make. Everything else still
+            // has to name a real spawn window.
+            var ceiling = request.IsKillWindow
+                ? Math.Min(maxWindows + 1, HnmConfig.MaxWindow + 1)
+                : maxWindows;
+            if (windowSequence < 1 || windowSequence > ceiling)
             {
-                return BadRequest(new { error = $"Window sequence {windowSequence} is out of range for this event (max {maxWindows})." });
+                return BadRequest(new { error = $"Window sequence {windowSequence} is out of range for this event (max {ceiling})." });
             }
 
             attendanceWindow = await _dbContext.EventAttendanceWindows
@@ -376,7 +397,13 @@ public sealed partial class AddonApiController
                 //     correction. This reads the post count, not the spawn count: a king/dragon
                 //     is a 2-post camp with 7 spawn windows, and testing it against the spawn
                 //     count meant the guard never fired on exactly the camps it was written for.
-                if (postCount == 2 && await _dbContext.EventAttendanceWindows.AnyAsync(
+                //   * and NOT to the Post Kill roster, which is filed after the Close by design.
+                //     The kill read is the point of that button: people turn up for the fight who
+                //     never sat the window, and on a 2-post camp there is no later sequence for
+                //     them to land in. Excluding it here is what lets a king/dragon camp record a
+                //     kill roster at all.
+                if (postCount == 2 && !request.IsKillWindow
+                    && await _dbContext.EventAttendanceWindows.AnyAsync(
                         w => w.EventId == eventId && w.SequenceNumber == 2, cancellationToken))
                 {
                     return BadRequest(new
@@ -390,11 +417,29 @@ public sealed partial class AddonApiController
                 {
                     EventId = eventId,
                     SequenceNumber = windowSequence,
-                    Label = HnmConfig.GetDefaultWindowLabel(eventEntity.EventName, windowSequence, postCount),
+                    // A kill roster is named for what it is. Running it through the positional
+                    // labeller would call it "Window 3" or, worse, "Close" — the one name it must
+                    // never carry, since the close is the window an officer ticked.
+                    Label = request.IsKillWindow
+                        ? "Kill"
+                        : HnmConfig.GetDefaultWindowLabel(eventEntity.EventName, windowSequence, postCount),
                     PostedAt = nowUtc,
-                    PostedBySource = AddonSource
+                    PostedBySource = AddonSource,
+                    IsKillWindow = request.IsKillWindow
                 };
                 _dbContext.EventAttendanceWindows.Add(attendanceWindow);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            else if (request.IsKillWindow && !attendanceWindow.IsKillWindow)
+            {
+                // Post Kill landing in a row that already exists — a second kill post correcting
+                // the first, or a retry. Promote it rather than silently filing the kill roster as
+                // an ordinary window, which would pay it the window rate and pay nobody the kill.
+                //
+                // Never demotes: an ordinary post into a kill row must not strip the flag, or the
+                // per-window "add a member" backfill would turn the kill roster back into a window.
+                attendanceWindow.IsKillWindow = true;
+                attendanceWindow.IsClosingWindow = false;   // a kill roster can never be the close
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
 
@@ -407,7 +452,12 @@ public sealed partial class AddonApiController
             // Applied on the backfill branch too, so re-posting into an existing window can
             // correct its price. Null means "leave it alone", which is what the ARMED automatic
             // capture always sends — nobody typed a rate.
+            //
+            // Never applied to a kill roster. That window is worth 0 as a window and pays through
+            // the kill bonus (HnmStandardCampFinalizer.WindowValue); an explicit amount would
+            // replace the 0 and pay the late arrivals twice for one appearance.
             if (request.WindowDkp is { } typedWindowDkp
+                && !attendanceWindow.IsKillWindow
                 && !double.IsNaN(typedWindowDkp)
                 && !double.IsInfinity(typedWindowDkp)
                 && typedWindowDkp >= 0
@@ -473,6 +523,12 @@ public sealed partial class AddonApiController
         // resolve to different members (rare but possible if two players share an
         // alt name).
         var membershipByName = new Dictionary<string, AppUserLinkshell>(StringComparer.OrdinalIgnoreCase);
+        // Each member's MAIN, so a scan that matched through one of the alt names above can say so
+        // ("Athmilk (alt of Edicius)") instead of silently renaming the alt to the main on the way
+        // into the window row. Same precedence the name lookup uses: the membership's own character
+        // name is the roster main, with the account main as the fallback for a membership that
+        // never had one filled in.
+        var mainNameByAppUserId = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var pair in membershipsWithUser)
         {
             foreach (var candidate in new[]
@@ -489,6 +545,12 @@ public sealed partial class AddonApiController
                 {
                     membershipByName[key] = pair.Membership;
                 }
+            }
+
+            var mainName = pair.Membership.CharacterName ?? pair.User.CharacterName;
+            if (!string.IsNullOrWhiteSpace(mainName) && pair.Membership.AppUserId is { } mainAppUserId)
+            {
+                mainNameByAppUserId[mainAppUserId] = mainName.Trim();
             }
         }
 
@@ -531,6 +593,14 @@ public sealed partial class AddonApiController
                 if (!membershipByName.ContainsKey(selfName))
                 {
                     membershipByName[selfName] = issuerMembership;
+                }
+
+                // ...and treat it as their main for the alt readout, unless they already had one.
+                // This is the name the roster has nothing else to offer for them, so calling any
+                // later scan of it an "alt of" nothing would be the only other option.
+                if (!string.IsNullOrWhiteSpace(issuerId) && !mainNameByAppUserId.ContainsKey(issuerId))
+                {
+                    mainNameByAppUserId[issuerId] = selfName;
                 }
             }
         }
@@ -579,8 +649,17 @@ public sealed partial class AddonApiController
                 .ToListAsync(cancellationToken))
                 .ToHashSet(StringComparer.Ordinal);
 
-        foreach (var (entry, membership, _) in resolvedEntries)
+        foreach (var (entry, membership, scannedName) in resolvedEntries)
         {
+            // Which character the scan actually saw, versus who the roster calls them. These differ
+            // whenever a player shows up on an alt — membershipByName resolves alt names too — and
+            // the window row below records BOTH: the alt is who was at camp, the main is who the
+            // DKP belongs to. Null main means the roster has no other name for them, which is not
+            // an alt sighting no matter what was scanned.
+            var mainName = mainNameByAppUserId.GetValueOrDefault(membership.AppUserId!);
+            var scannedIsAlt = !string.IsNullOrWhiteSpace(mainName)
+                && !string.Equals(mainName, scannedName, StringComparison.OrdinalIgnoreCase);
+
             existingByAppUserId.TryGetValue(membership.AppUserId!, out var existing);
 
             AppUserEvent participation;
@@ -644,15 +723,25 @@ public sealed partial class AddonApiController
                     // Denormalized so the snapshot survives a roster clear deleting the
                     // participation above — see AppUserEventWindow.AppUserEventId.
                     AppUserId = membership.AppUserId,
-                    CharacterName = participation.CharacterName ?? membership.CharacterName,
+                    // The SCANNED name, not the participation's. A player on an alt is credited
+                    // through their account either way, but the window is a record of who was
+                    // standing there — rewriting the alt to the main here is what made the web and
+                    // Activity rosters disagree with the addon's own "(alt of X)" readout.
+                    CharacterName = scannedName,
+                    MainCharacterName = scannedIsAlt ? mainName : null,
                     VerifiedAt = nowUtc,
                     VerifiedBy = verifiedBy,
+                    AllianceNumber = postedAllianceNumber,
+                    AllianceKey = postedAllianceKey,
                     Zone = string.IsNullOrWhiteSpace(entry.Zone) ? null : entry.Zone.Trim()
                 });
 
                 creditedAttendees.Add(new
                 {
-                    characterName = participation.CharacterName,
+                    // Echoes the scanned character for the same reason: the addon prints this list
+                    // straight back under the post, next to the names it just scanned.
+                    characterName = scannedName,
+                    mainCharacterName = scannedIsAlt ? mainName : null,
                     jobName       = participation.JobName,
                     subJobName    = participation.SubJobName,
                     dkpEarned     = perWindowDkp
@@ -694,6 +783,10 @@ public sealed partial class AddonApiController
             // report its old "On Time" / "Claim/Kill" name back to the addon.
             windowLabel = HnmConfig.NormalizeWindowLabel(attendanceWindow?.Label),
             dkpPerWindow = perWindowDkp,
+            // Echoed so the addon can colour its local copy of this window the same way a re-read
+            // from the server would. Null when the post carried no alliance -- the addon then
+            // renders those rows muted rather than assuming they are the reader's own.
+            allianceNumber = postedAllianceNumber,
             creditedAttendees
         });
     }
@@ -728,9 +821,16 @@ public sealed partial class AddonApiController
         }
 
         var trimmed = (characterName ?? string.Empty).Trim();
+        // Matched against the ROW's own name first, then the participation's. The addon sends back
+        // whatever name it is showing, and that is the row's: the scanned character, which for a
+        // player on an alt is not the name on their participation. Matching only through the
+        // navigation also meant a row whose participation had been cleared away (the wyrm camps
+        // clear every window) could never be removed at all.
         var attendee = attendanceWindow.Attendees.FirstOrDefault(a =>
-            a.AppUserEvent != null
-            && string.Equals(a.AppUserEvent.CharacterName, trimmed, StringComparison.OrdinalIgnoreCase));
+            string.Equals(a.CharacterName, trimmed, StringComparison.OrdinalIgnoreCase))
+            ?? attendanceWindow.Attendees.FirstOrDefault(a =>
+                a.AppUserEvent != null
+                && string.Equals(a.AppUserEvent.CharacterName, trimmed, StringComparison.OrdinalIgnoreCase));
         if (attendee is null) return NotFound(new { error = "Attendee not found in this window." });
 
         await RemoveWindowAttendeeRowAsync(attendee, cancellationToken);
@@ -951,15 +1051,15 @@ public sealed partial class AddonApiController
         return Ok(new { success = true, characterName = membership.CharacterName });
     }
 
-    // Posts a single TodLootDetail row attached to an existing Tod. Mirrors
-    // the Discord Activity create-tod-loot flow but accepts one item per
-    // call (matches the per-row "Post Loot" UX in the addon launcher) and
-    // is gated by addon-token auth on the parent Tod's linkshell.
+    // Posts one loot row from the addon Loot Pool panel. Still addressed by ToD id -- that is what
+    // the addon knows -- but the row is filed against the EVENT for that monster (see below), so
+    // in-game drops land in the Loot History against a camp rather than as a bare "ToD".
     [HttpPost("tod/{todId:int}/loot")]
     [AddonApiAuth]
     public async Task<IActionResult> PostTodLootAsync(
         int todId,
         [FromBody] AddonPostLootRequest request,
+        [FromServices] ManualLootService manualLoot,
         CancellationToken cancellationToken)
     {
         var itemName   = request.ItemName?.Trim();
@@ -1035,27 +1135,67 @@ public sealed partial class AddonApiController
             }
         }
 
-        var detail = new TodLootDetail
+        // Loot from the addon is filed against the EVENT for this monster, not against the ToD.
+        //
+        // A ToD is an observation ("Fafnir died at 21:04"); the loot belongs to the camp that
+        // killed it. Filing it on the ToD is what put every in-game drop in the Loot History as
+        // source "ToD" with no event behind it. Merge-pair tolerant, so a Fafnir kill finds a
+        // "Fafnir/Nidhogg" camp.
+        var monsterMatches = HnmConfig.MonsterMatchNamesLower(tod.MonsterName);
+
+        var liveEventId = await _dbContext.Events
+            .AsNoTracking()
+            .Where(evt => evt.LinkshellId == token.LinkshellId
+                          && evt.EventName != null
+                          && monsterMatches.Contains(evt.EventName.ToLower()))
+            .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
+            .Select(evt => (int?)evt.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        // No live camp: the kill may already have been closed out, so fall back to the most recent
+        // matching past event before giving up and filing it with no event at all.
+        int? pastEventId = null;
+        if (liveEventId is null)
         {
-            TodId = tod.Id,
-            ItemName = itemName,
-            ItemWinner = rosterMatch,
-            WinningDkpSpent = request.WinningDkpSpent
-        };
+            pastEventId = await _dbContext.EventHistories
+                .AsNoTracking()
+                .Where(history => history.LinkshellId == token.LinkshellId
+                                  && history.EventName != null
+                                  && monsterMatches.Contains(history.EventName.ToLower()))
+                .OrderByDescending(history => history.EndTime ?? history.StartTime)
+                .Select(history => (int?)history.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
 
-        _dbContext.TodLootDetails.Add(detail);
-        await ActivityDataController.AdjustTodLootDkpAsync(
-            _dbContext, _dkpLedger, _dkpPools, tod, new[] { detail }, nowUtc, isRefund: false, cancellationToken);
+        var target = liveEventId is int live
+            ? new ManualLootTarget(ManualLootTargetKind.LiveEvent, live, null)
+            : pastEventId is int past
+                ? new ManualLootTarget(ManualLootTargetKind.PastEvent, null, past)
+                : ManualLootTarget.None;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var result = await manualLoot.AddAsync(
+            token.LinkshellId,
+            target,
+            itemName,
+            rosterMatch,
+            request.WinningDkpSpent.Value,
+            dkpPoolId: null,
+            cancellationToken);
+
+        if (!result.Success)
+        {
+            return BadRequest(new { error = result.Error ?? "Adding loot failed." });
+        }
 
         return Ok(new
         {
-            lootDetailId      = detail.Id,
-            itemName          = detail.ItemName,
-            itemWinner        = detail.ItemWinner,
-            winningDkpSpent   = detail.WinningDkpSpent,
-            actualDeductedDkp = detail.ActualDeductedDkp
+            lootDetailId      = result.Detail!.Id,
+            itemName          = result.Detail.ItemName,
+            itemWinner        = result.Detail.ItemWinner,
+            winningDkpSpent   = result.Detail.WinningDkpSpent,
+            actualDeductedDkp = result.Detail.ActualDeductedDkp,
+            // Echoed so the addon can say which camp it landed on, or that it landed on none.
+            eventLinked       = target.Kind != ManualLootTargetKind.None
         });
     }
 
@@ -1090,8 +1230,12 @@ public sealed partial class AddonApiController
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
         var nowUtc = DateTime.UtcNow;
 
-        var cooldown = ActivityDataController.GetDefaultTodCooldown(monsterName);
-        var interval = ActivityDataController.GetDefaultTodInterval(monsterName);
+        // The LINKSHELL'S configured values, not the global defaults. An addon-posted ToD used to
+        // ignore the configuration entirely, because it only ever reached the Activity's client.
+        var cooldown = await ActivityDataController.GetDefaultTodCooldownAsync(
+            _monsterTimings, token.LinkshellId, monsterName, cancellationToken);
+        var interval = await ActivityDataController.GetDefaultTodIntervalAsync(
+            _monsterTimings, token.LinkshellId, monsterName, cancellationToken);
         var repopTimeUtc = defeatedAtUtc.AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown));
 
         // Claim arrives verbatim on the request — tri-state:

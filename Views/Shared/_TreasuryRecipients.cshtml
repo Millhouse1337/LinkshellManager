@@ -1,6 +1,8 @@
 @model LinkshellManagerDiscordApp.ViewModels.RecordTreasuryEntryViewModel
 @*
-    Who shares one amount, for the "what happened" options that split it.
+    Who one amount is for, for the "what happened" options that split it. One member is a normal
+    answer: What We Owe records the whole amount against a single name when only one is ticked, and
+    splits it evenly when several are. There is no separate single-member form to choose first.
 
     Flat repeated checkboxes bound to List<int> — the same shape EventHistory/Details uses for its
     credited list. No hidden false-sentinel here: only the checked set matters, and an unchecked box

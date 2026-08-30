@@ -381,41 +381,6 @@
 .tod-monster-picker__option { width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: 4px; color: var(--fg); background: transparent; font: inherit; text-align: left; cursor: pointer; }
 .tod-monster-picker__option:hover, .tod-monster-picker__option.is-active { color: var(--fg); background: var(--accent-weak); }
 .tod-monster-picker__option[aria-selected="true"] { color: var(--accent); font-weight: 700; }
-.tod-timings { position: relative; display: grid; gap: 30px; }
-.tod-timings__toggle { display: flex; align-items: center; gap: 10px; width: 100%; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
-.tod-timings__toggle-chevron { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; color: var(--accent); font-size: 28px; line-height: 1; transition: transform 150ms ease; }
-.tod-timings__toggle-chevron.is-open { transform: rotate(90deg); }
-.tod-timings__toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-.tod-timings__intro { display: grid; gap: 4px; }
-.tod-timings__intro > strong { color: var(--fg); font-size: 16px; }
-.tod-timings__intro .muted { margin: 0; }
-.tod-timings__content { display: grid; gap: 30px; }
-.tod-timings__content-actions { display: flex; justify-content: flex-end; margin-bottom: -14px; }
-.tod-new-monster-dialog { width: min(560px, calc(100vw - 32px)); }
-.tod-new-monster-form { display: grid; gap: 14px; }
-.tod-new-monster-form__timings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-@media (max-width: 560px) { .tod-new-monster-form__timings { grid-template-columns: 1fr; } }
-.tod-timings__section { display: grid; gap: 14px; }
-.tod-timings__section-header { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.tod-timings__section-mark { display: grid; place-items: center; flex: 0 0 auto; width: 26px; height: 26px; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 50%; background: var(--accent-weak); font-size: 12px; font-weight: 700; }
-.tod-timings__section h4 { flex: 0 0 auto; margin: 0; color: var(--fg); font-size: 18px; font-weight: 700; letter-spacing: 0; text-transform: uppercase; }
-.tod-timings__section-line { height: 1px; min-width: 24px; flex: 1; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 50%, var(--border)), transparent); }
-.tod-timings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
-.tod-timings__monster { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; overflow: hidden; padding: 14px; border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border)); border-radius: 8px; background: linear-gradient(145deg, color-mix(in srgb, var(--surface-3) 82%, #13233f), var(--surface-2)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035), 0 8px 18px rgba(0, 0, 0, .14); transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
-.tod-timings__monster:hover { z-index: 1; transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .055), 0 12px 24px rgba(0, 0, 0, .2); }
-.tod-timings__monster-header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; min-width: 0; min-height: 20px; }
-.tod-timings__monster-header > strong { position: relative; z-index: 1; overflow: hidden; color: var(--fg); font-size: 15px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.tod-timings__delete { position: relative; z-index: 2; flex: 0 0 auto; color: var(--danger); }
-.tod-timings__monster-mark { position: absolute; top: 1px; right: 8px; color: color-mix(in srgb, var(--accent) 19%, transparent); font-size: 40px; font-weight: 800; line-height: 1; user-select: none; }
-.tod-timings__monster label { position: relative; z-index: 1; display: grid; gap: 5px; min-width: 0; color: var(--fg-2); font-size: 10px; font-weight: 600; line-height: 1.15; }
-.tod-timings__monster input { width: 100%; min-width: 0; height: 37px; padding: 0 8px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: 6px; outline: 0; color: var(--fg); background: color-mix(in srgb, var(--bg) 75%, transparent); font: 650 14px var(--font-mono); }
-.tod-timings__monster input:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
-.tod-timings__monster input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
-@media (max-width: 560px) {
-  .tod-timings__grid { grid-template-columns: 1fr; }
-  .tod-timings__monster { gap: 8px; padding: 12px; }
-  .tod-timings__section h4 { font-size: 16px; }
-}
 .tod-form__row--monster.tod-form__row--split { grid-template-columns: minmax(0, 220px) minmax(0, 1fr); }
 /* Board lead row: the locked monster, the read-only day, and the HQ toggle riding on the end. */
 .tod-form__row--monster.tod-form__row--monster-day { grid-template-columns: minmax(0, 1fr) minmax(0, 120px); }
@@ -429,6 +394,12 @@
 .tod-form__row--trio { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .tod-form__row--pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .tod-form__row--pair.tod-form__row--split { grid-template-columns: minmax(0, 1fr) minmax(0, 180px) minmax(0, 180px); }
+/* A duration field: the number and its unit ride together so the pair reads as one control.
+   Used by the ToD form's Cooldown and Interval, which are free-form now that each monster
+   carries its own configured value. */
+.tod-form__duration { display: flex; gap: 6px; min-width: 0; }
+.tod-form__duration .form-input { flex: 1 1 auto; min-width: 0; font-variant-numeric: tabular-nums; }
+.tod-form__duration .form-select { flex: 0 0 92px; min-width: 0; }
 @media (max-width: 720px) {
   .tod-form__row--monster.tod-form__row--split,
   .tod-form__row--monster.tod-form__row--monster-day,
@@ -468,6 +439,15 @@
 /* The body takes the leftover height so every card in a row ends flush. */
 .customize-cards-grid > .card > .card-body {
   flex: 1 1 auto;
+}
+
+/* A card whose contents are a ROW of fields rather than a stack — it spans two
+   grid columns so those fields sit side by side instead of wrapping one per line,
+   while still sharing the row with the narrower cards beside it. Auto-placement
+   clamps the span to the explicit column count, so it degrades to a full row on
+   the one-column breakpoint. Used by the HNM scoring card and its bonus inputs. */
+.customize-cards-grid > .card--span2 {
+  grid-column: span 2;
 }
 
 @media (max-width: 1280px) {
@@ -1205,19 +1185,42 @@
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
-/* Read-only per-monster spawn-window table in the Configurations → HNM Settings card. Global
-   rather than component-scoped to keep configurations-tab.component.scss under its size budget. */
-.hnm-window-setups {
-  width: 100%;
-  margin-top: 8px;
-  border-collapse: collapse;
-  font-size: 12.5px;
+/* The editable Monster Setups table in Configurations → Monster setups. A flex grid rather than a
+   <table> so each row can hold real form controls and still collapse cleanly on a narrow viewport.
+   Global rather than component-scoped to keep configurations-tab.component.scss under its budget. */
+.monster-setups__section { display: grid; gap: 8px; }
+.monster-setups__section-header { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.monster-setups__section-header h4 { flex: 0 0 auto; margin: 0; color: var(--fg); font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.monster-setups__section-line { height: 1px; min-width: 24px; flex: 1; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 50%, var(--border)), transparent); }
 
-  th, td { padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--border); }
-  th { color: var(--fg-3); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-  td { color: var(--fg-2); }
-  td:first-child { color: var(--fg); }
-  /* Counts read as data, not prose. */
-  td + td { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  tr:last-child td { border-bottom: 0; }
+.monster-setups__row-head,
+.monster-setups__row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.monster-setups__row-head { padding: 0 2px; color: var(--fg-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.monster-setups__row { padding: 4px 2px; border-bottom: 1px solid var(--border); }
+.monster-setups__row:last-child { border-bottom: 0; }
+
+.monster-setups__col-name { flex: 1 1 200px; min-width: 0; color: var(--fg); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.monster-setups__col-name input { width: 100%; min-width: 0; }
+.monster-setups__col-windows { flex: 0 0 92px; }
+.monster-setups__col-windows input { width: 100%; min-width: 0; }
+/* Number + unit ride together so the pair reads as one field. */
+.monster-setups__col-duration { flex: 0 0 168px; display: flex; gap: 6px; min-width: 0; }
+.monster-setups__col-duration input { flex: 0 0 68px; min-width: 0; }
+.monster-setups__col-duration select { flex: 1 1 auto; min-width: 0; }
+/* Claim Shield on/off. A labelled checkbox rather than a bare one so the row still reads at a
+   glance once the header scrolls out of view on a long list. */
+.monster-setups__col-claim { flex: 0 0 96px; display: flex; align-items: center; }
+.monster-setups__col-claim .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.monster-setups__col-claim .check span { color: var(--fg-3); font-size: 12px; }
+/* (.claim-shield-off styled a server-wide-off banner above the monster table. The banner is gone —
+   the Claim Shield column is hidden entirely while the switch is off, so it announced an absence. */
+
+.monster-setups__col-actions { flex: 0 0 86px; display: flex; justify-content: flex-end; }
+.monster-setups__row input, .monster-setups__row select { font-variant-numeric: tabular-nums; }
+.monster-setups__delete { color: var(--danger); }
+
+@media (max-width: 760px) {
+  .monster-setups__row-head { display: none; }
+  .monster-setups__row { flex-wrap: wrap; gap: 8px; padding: 10px 2px; }
+  .monster-setups__col-name { flex: 1 1 100%; }
 }

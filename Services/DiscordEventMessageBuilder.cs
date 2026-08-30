@@ -11,7 +11,13 @@ public sealed record EventSignupLine(
     string CharacterName, string? JobName, string? SubJobName = null, string? JobType = null,
     // Manual Check In attendance: the window this member first x'd in for (null for Standard signups).
     // Drives the on-board "✅ X'd In" roster grouped by arrival window.
-    int? WdArrivalWindow = null);
+    int? WdArrivalWindow = null,
+    // Self-declared readiness tags (see EventReadiness) — a symbol beside the member on the
+    // text board, a spiked halo on the rendered PICTURE board, for a no-slot ("Also Attending")
+    // member.
+    bool EnfeebReady = false,
+    bool ResistReady = false,
+    bool RelicWeapon = false);
 
 // Builds the Discord message payloads for an event announcement.
 //
@@ -47,10 +53,6 @@ public static class DiscordEventMessageBuilder
     public const string PartySlotSignUpPrefix = "evt:pssignup:";
     public const string PartySlotClaimPrefix = "evt:psclaim:";
     public const string PartySlotLeavePrefix = "evt:psleave:";
-    // "Fill earlier alliances first" nudge buttons. Tail: {eventId}:{slotId}:{L}:{role}:{main}:{sub}
-    // ("-" = none). Take = claim the suggested earlier slot; Keep = claim the chosen one anyway.
-    public const string PartyNudgeTakePrefix = "evt:psnT:";
-    public const string PartyNudgeKeepPrefix = "evt:psnK:";
     // General attendance on a party-board event: join the roster WITHOUT claiming
     // a slot (overflow / "I'm coming"). Backed by AppUserEvent, same as the
     // attendance roster used for DKP at close.
@@ -94,9 +96,11 @@ public static class DiscordEventMessageBuilder
     //   evt:mkalead:{eventId}
     public const string MakeAllianceLeaderPrefix = "evt:mkalead:";
 
-    // "View Previous Window" on the window-cycle HNM boards (Tiamat/Jormungand/Vrtra).
-    // READ-ONLY and open to everyone: replies ephemerally with the roster snapshot taken when the
-    // previous window turned over (EventWindowRosterSnapshot). It changes nothing on the board.
+    // "View Previous Window" on the boards whose roster wipes each window (the wyrms, either
+    // attendance mode). READ-ONLY and open to everyone: replies ephemerally with the roster
+    // snapshot taken when the previous window turned over (EventWindowRosterSnapshot), and that
+    // ephemeral then carries its own controls (below) for walking the rest of the camp's history.
+    // It changes nothing on the board.
     //
     // There is deliberately NO "Next Window" counterpart. The counter is advanced solely by
     // HnmWindowAdvanceBackgroundService on the monster's cadence — a manual step could only
@@ -107,6 +111,93 @@ public static class DiscordEventMessageBuilder
     // change are still live in Discord and their buttons still send it.
     //   evt:prevwindow:{eventId}
     public const string ViewPrevWindowPrefix = "evt:prevwindow:";
+
+    // The window viewer's OWN navigation, emitted inside that ephemeral rather than on the board —
+    // see BuildWindowViewerComponents. The board button opens the viewer at the newest capture;
+    // these two move it, and because the ephemeral is private to its clicker, paging around in it
+    // is invisible to everyone else.
+    //   evt:winview:{eventId}:{window}  — the ◀ / ▶ arrows; the window is baked into the id
+    public const string WindowViewPrefix = "evt:winview:";
+    //   evt:winviewpick:{eventId}       — the "Jump to a window" select; the window is the VALUE
+    public const string WindowViewPickPrefix = "evt:winviewpick:";
+
+    // The viewer's controls: ◀ / ▶ across the windows this camp actually captured, plus a jump
+    // list once there is more than one to jump between.
+    //
+    // `capturedWindows` is ASCENDING and holds only windows with a stored roster behind them — the
+    // arrows therefore step to the neighbouring CAPTURED window rather than to ±1. That matters on
+    // a camp that sat through a boundary while the app was down: the advancer deliberately skips
+    // that window's clear rather than wipe a live roster over an unwatched boundary, leaving a hole
+    // in the history that a ±1 arrow would walk straight into and bounce off.
+    public static object[] BuildWindowViewerComponents(
+        int eventId, int window, IReadOnlyList<int> capturedWindows)
+    {
+        var at = Enumerable.Range(0, capturedWindows.Count).FirstOrDefault(i => capturedWindows[i] == window, -1);
+        var older = at > 0 ? capturedWindows[at - 1] : (int?)null;
+        var newer = at >= 0 && at < capturedWindows.Count - 1 ? capturedWindows[at + 1] : (int?)null;
+
+        // Both arrows are always rendered, disabled at the ends, so the row keeps its width and
+        // position as you page instead of reflowing under the cursor that's clicking it.
+        var rows = new List<object>
+        {
+            new
+            {
+                type = 1, // action row
+                components = new object[]
+                {
+                    new
+                    {
+                        type = 2, style = 2, // secondary — read-only, like the board button that opened this
+                        label = older is { } o ? $"◀ Window {o}" : "◀ Oldest window",
+                        custom_id = $"{WindowViewPrefix}{eventId}:{older ?? window}",
+                        disabled = older is null,
+                    },
+                    new
+                    {
+                        type = 2, style = 2,
+                        label = newer is { } n ? $"Window {n} ▶" : "Newest window ▶",
+                        custom_id = $"{WindowViewPrefix}{eventId}:{newer ?? window}",
+                        disabled = newer is null,
+                    },
+                },
+            },
+        };
+
+        // The jump list, so reaching window 2 of a 25-window Tiamat isn't twenty-odd clicks. Discord
+        // caps a select at 25 options and a camp can capture at most 24 windows (window 1 is never
+        // cleared, MaxWindow is the ceiling), so this never truncates in practice — TakeLast is a
+        // guard rather than a policy, and keeps the NEWEST windows if it ever bites.
+        if (capturedWindows.Count > 1)
+        {
+            rows.Add(new
+            {
+                type = 1,
+                components = new object[]
+                {
+                    new
+                    {
+                        type = 3, // string select
+                        custom_id = $"{WindowViewPickPrefix}{eventId}",
+                        placeholder = "Jump to a window…",
+                        min_values = 1,
+                        max_values = 1,
+                        // Marking the current one `default` is what makes the select read as "you
+                        // are here" rather than as an empty prompt sitting under a roster.
+                        options = capturedWindows
+                            .TakeLast(25)
+                            .Select(n => (object)new
+                            {
+                                label = $"Window {n}",
+                                value = $"{n}",
+                                @default = n == window,
+                            })
+                            .ToArray(),
+                    },
+                },
+            });
+        }
+        return rows.ToArray();
+    }
 
     // Manual Check In attendance buttons (only emitted on Manual Check In boards, i.e. Event.AttendanceMode == "Wd").
     //   evt:xin:{eventId}        — member self-serve "X-in (this window)": records the clicker's
@@ -133,6 +224,16 @@ public static class DiscordEventMessageBuilder
     public const string LockNextWindowPrefix = "evt:lockwin:";
     public const string OfficerLockButtonPrefix = "evt:olock:";
     public const string OfficerLockPickPrefix = "evt:olockpick:";
+
+    // "🎖️ My Readiness" — the member's own gear/prep tags on this board (Enfeeb Ready /
+    // Resist Ready / Relic Weapon, see EventReadiness). Button opens an ephemeral MULTI
+    // select pre-ticked with what they already carry; the select writes the whole set at
+    // once, so unticking everything clears them. One step, because it's a declaration
+    // about themselves — there is nothing to confirm and nobody else to pick.
+    //   evt:ready:{eventId}      — member button → their own ephemeral picker
+    //   evt:readypick:{eventId}  — that picker's select (values = EventReadiness tag values)
+    public const string ReadinessButtonPrefix = "evt:ready:";
+    public const string ReadinessPickPrefix = "evt:readypick:";
 
     // Officer-only "Add Member" — manually seat a roster member (or a brand-new placeholder)
     // into a slot on behalf of someone who didn't sign up themselves. The button is shared
@@ -202,7 +303,11 @@ public static class DiscordEventMessageBuilder
         Event ev,
         IReadOnlyList<EventSignupLine> signups,
         PartySetup? partySetup = null,
-        IReadOnlyDictionary<int, EventPartySlotSignup>? slotSignups = null)
+        IReadOnlyDictionary<int, EventPartySlotSignup>? slotSignups = null,
+        // True when this board TRIED to render its image and the renderer was unavailable,
+        // so the embed can say so. False for an ad-hoc (no party setup) event, which is
+        // legitimately a text embed and has nothing to apologise for.
+        bool imageUnavailable = false)
     {
         if (partySetup is not null)
         {
@@ -210,7 +315,7 @@ public static class DiscordEventMessageBuilder
             return new
             {
                 content = BuildStartHeading(ev, signupsBySlot.Values.Count(s => s.StayNextWindow)),
-                embeds = new[] { BuildBoardEmbed(ev, partySetup, signupsBySlot, signups) },
+                embeds = new[] { BuildBoardEmbed(ev, partySetup, signupsBySlot, signups, null, imageUnavailable) },
                 components = BuildBoardComponents(ev, signupsBySlot.Count > 0, signups.Count > 0, partySetup.Alliances.Count > 1),
                 attachments = Array.Empty<object>(),
                 allowed_mentions = new { parse = Array.Empty<string>() },
@@ -258,85 +363,378 @@ public static class DiscordEventMessageBuilder
     // posts with it must keep it for every subsequent edit (image refresh AND fallback).
     private const int IsComponentsV2Flag = 1 << 15; // 32768
 
-    // The party board as a Components V2 message: a container (blurple accent bar) holding
-    // the start heading (text display) and the rendered PNG in a single-item MEDIA GALLERY
-    // (attachment://file) — which fills the message column with no embed padding/left-bar
-    // and no bare-attachment height clamp, so the board reads wider than the embed version.
-    // The same action rows sit below the container. No `content`/`embeds` (V2 forbids them).
-    // `attachments:[{id:0,...}]` references the file uploaded as files[0].
-    public static object BuildBoardImageV2Message(
-        Event ev, IReadOnlyList<EventSignupLine> signups, PartySetup setup,
-        IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups, string fileName)
-    {
-        var container = new
-        {
-            type = 17, // Container
-            accent_color = EmbedColor,
-            components = new object[]
-            {
-                new { type = 10, content = BuildV2Heading(ev, slotSignups) }, // Text Display
-                new { type = 14, divider = true, spacing = 1 },               // Separator
-                new
-                {
-                    type = 12, // Media Gallery — exactly ONE item (multiple tile smaller)
-                    items = new object[]
-                    {
-                        new { media = new { url = $"attachment://{fileName}" }, description = "Event party board" },
-                    },
-                },
-            },
-        };
-
-        var components = new List<object> { container };
-        components.AddRange(BuildBoardComponents(ev, slotSignups.Count > 0, signups.Count > 0, setup.Alliances.Count > 1));
-
-        return new
-        {
-            flags = IsComponentsV2Flag,
-            components = components.ToArray(),
-            attachments = new object[] { new { id = 0, filename = fileName } },
-            allowed_mentions = new { parse = Array.Empty<string>() },
-        };
-    }
-
-    // Components V2 fallback for when the image renderer is unavailable. MUST be V2 too
-    // (the flag can't be toggled on edit), so the board can refresh between the image
-    // version and this one. A container with the heading + the roster as text displays
-    // (each ≤4000 chars — less truncated than the embed's 1024-char fields), no media
-    // gallery, no attachments. The same action rows sit below.
-    public static object BuildBoardV2FallbackMessage(
+    // ─── The wide text board ─────────────────────────────────────────────────────────────
+    // The board: heading and key in `content`, the roster as a fenced code block beneath it.
+    //
+    // This is the only shape that is wide AND columned AND keeps the icons. Measured:
+    //
+    //   embed fields          ~430px   columns ✓  icons ✓  — but an embed is hard-capped
+    //   flowing markdown     ~1100px   columns ✗  icons ✓
+    //   fenced code block    ~1080px   columns ✓  icons ✓  ← here
+    //   Components V2 text    ~600px   (and V2 forbids `content` entirely)
+    //
+    // Columns exist because a code block is monospace and can be aligned by counting
+    // characters. Icons survive that because of ONE rule — see BuildRosterGridBlocks.
+    // The wide board, as ONE DISCORD MESSAGE PER ALLIANCE.
+    //
+    // A message caps at 2000 characters, and a 54-slot roster with names, jobs and icons needs
+    // about 2100. Everything that was ever cut from this board — names down to 7 characters, the
+    // column spacing, the grey vacancies, the readiness icons — was cut against that one number.
+    // Splitting gives each alliance its own 2000 (a 3-party alliance uses about a third), so the
+    // board keeps all of it at once instead of trading one against another.
+    //
+    // Message 0 carries the heading and the icon key; the LAST carries the buttons and the
+    // no-slot roster, so the reader meets them after the parties rather than between them.
+    // A single-alliance board is a single message and reads exactly as it did before.
+    public static IReadOnlyList<object> BuildWideBoardMessages(
         Event ev, IReadOnlyList<EventSignupLine> signups, PartySetup setup,
         IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups)
     {
-        var children = new List<object>
+        var header = BuildV2Heading(ev, slotSignups) + "\n" + BuildGridKey(ev, slotSignups) + "\n";
+
+        // ONE layout across every message, chosen so that the WIDEST of them still fits. Fitting
+        // each alliance independently would let them disagree — alliance 1 with 15-character
+        // names beside alliance 2 with 9 — and the board would read as three different tables.
+        List<string> blocks = BuildRosterGridBlocks(
+            setup, slotSignups, GridMinNameWidth, GridMinGutter, GridMinNameGap, readiness: false);
+        foreach (var (nameWidth, gutterWidth, nameGap, readiness) in GridAttempts())
         {
-            new { type = 10, content = BuildV2Heading(ev, slotSignups) }, // Text Display (heading)
-            new { type = 14, divider = true, spacing = 1 },               // Separator
-        };
-        // Roster as markdown text blocks; pack into ≤7 text displays so container children
-        // stay under Discord's 10-per-container cap (heading + separator already use 2).
-        foreach (var block in BuildRosterTextBlocks(ev, setup, slotSignups, signups).Take(7))
-        {
-            children.Add(new { type = 10, content = block });
+            var candidate = BuildRosterGridBlocks(setup, slotSignups, nameWidth, gutterWidth, nameGap, readiness);
+            if (candidate.Count == 0) { blocks = candidate; break; }
+
+            // The first message pays for the header; the rest carry only their own alliance.
+            var worst = candidate.Select((block, i) => block.Length + (i == 0 ? header.Length : 0)).Max();
+            if (worst <= ContentCap)
+            {
+                blocks = candidate;
+                break;
+            }
         }
 
-        var container = new
-        {
-            type = 17, // Container
-            accent_color = EmbedColor,
-            components = children.ToArray(),
-        };
+        // An alliance so large it can't fit even its own message. Nothing sane is left to shed at
+        // that point, so say what happened rather than shipping a half-rendered code block — the
+        // failure a blind Truncate() once produced, which cut inside a fence and left the whole
+        // alliance unaligned.
+        var bodies = blocks
+            .Select((block, i) => i == 0 ? header + block : block)
+            .Select(text => text.Length <= ContentCap
+                ? text
+                : Truncate(text, ContentCap - OverflowNoteLength)
+                  + "\n-# ⚠️ This alliance is too large to show in one Discord message.")
+            .ToList();
 
-        var components = new List<object> { container };
-        components.AddRange(BuildBoardComponents(ev, slotSignups.Count > 0, signups.Count > 0, setup.Alliances.Count > 1));
-
-        return new
+        if (bodies.Count == 0)
         {
-            flags = IsComponentsV2Flag,
-            components = components.ToArray(),
-            attachments = Array.Empty<object>(), // no file
-            allowed_mentions = new { parse = Array.Empty<string>() },
-        };
+            bodies.Add(header.TrimEnd());
+        }
+
+        // The no-slot roster rides with the buttons on the last message.
+        var aside = BuildExtraRosterSections(ev, slotSignups, signups);
+        var embed = new Dictionary<string, object?> { ["color"] = EmbedColor };
+        if (aside.Count > 0) { embed["description"] = Truncate(string.Join("\n\n", aside), 4000); }
+
+        var messages = new List<object>(bodies.Count);
+        for (var i = 0; i < bodies.Count; i++)
+        {
+            var last = i == bodies.Count - 1;
+            messages.Add(new Dictionary<string, object?>
+            {
+                ["content"] = bodies[i],
+                // Buttons only on the last message: Discord renders them under the message they
+                // belong to, and a row of them between alliances would break the roster in half.
+                ["components"] = last
+                    ? BuildBoardComponents(ev, slotSignups.Count > 0, signups.Count > 0, setup.Alliances.Count > 1)
+                    : Array.Empty<object>(),
+                ["embeds"] = last && embed.Count > 1 ? new object[] { embed } : Array.Empty<object>(),
+                // Always cleared, never set: this board carries NO image. An edit from a board
+                // that had one must send an empty array, or Discord keeps the old attachment.
+                ["attachments"] = Array.Empty<object>(),
+                ["allowed_mentions"] = new { parse = Array.Empty<string>() },
+            });
+        }
+        return messages;
+    }
+
+    // Successively cheaper layouts, tried in order until one fits the 2000-char cap.
+    //
+    // Readiness is never inline. Keeping the emoji count constant would mean THREE spacer
+    // slots in every cell to serve the few members who set a tag — a wall of ▫️▫️▫️ across the
+    // whole board — so the tags get a roll-call under the grid instead, which reads better
+    // anyway: a leader wants "who is enfeeb ready", not to scan a column of squares.
+    // Successively cheaper layouts, tried in order until one fits the 2000-char cap.
+    //
+    // The order IS the priority. Names are read, so a character of name outranks everything;
+    // then the gap that separates a job from its name, which is what makes a row scannable;
+    // then the space between columns, which is only separation. The dimmed vacancy label goes
+    // LAST because ANSI escapes are pure overhead — ~9 characters per vacancy that a reader
+    // never sees — and a board that has to choose between showing a name and shading a
+    // vacancy should show the name.
+    // Gutter caps to try, widest first. Coarse on purpose: the value is only a CEILING —
+    // GutterToFill narrows it to whatever actually spreads this board across the code block —
+    // so stepping every integer would just multiply the number of trial renders for nothing.
+    private static readonly int[] GutterLadder = { 26, 20, 16, 12, 9, 7, 5, 4, 3, 2, 1 };
+
+    private static IEnumerable<(int NameWidth, int Gutter, int NameGap, bool Readiness)> GridAttempts()
+    {
+        foreach (var readiness in new[] { true, false })
+        {
+            for (var width = GridMaxNameWidth; width >= GridMinNameWidth; width--)
+            {
+                for (var gap = GridMaxNameGap; gap >= GridMinNameGap; gap--)
+                {
+                    foreach (var gutter in GutterLadder)
+                    {
+                        yield return (width, gutter, gap, readiness);
+                    }
+                }
+            }
+        }
+    }
+
+    // The roster as fenced code blocks, parties side by side — three columns per alliance row.
+    //
+    // THE ALIGNMENT RULE, measured: an emoji in a Discord code block is ~2.3 monospace cells —
+    // NOT a whole number. You therefore cannot pad around a VARYING number of them; a cell
+    // carrying a crown lands wider than one without and shears every column to its right. That
+    // is what once forced the icons out to ">" and "E/R/L".
+    //
+    // The way to keep both: give EVERY cell exactly the SAME number of emoji in the SAME
+    // position. Their fractional width then contributes an identical constant to every column
+    // and cancels out, so only the ASCII needs padding. Per cell:
+    //
+    //     [role]  🔵 🟢 🟡 🔴 ⚪            always present, always first
+    //     [state] 👑 leader · 🔒 staying · ▪️ neither    always present, never absent
+    //     [ready] 🧪 🛡️ 🗡️                one slot per tag IN USE on this board, spacer otherwise
+    //
+    // ▪️ is not decoration, it is a spacer that has to be an emoji so the count stays constant.
+    private static List<string> BuildRosterGridBlocks(
+        PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
+        int nameWidth, int gutterWidth, int nameGap, bool readiness)
+    {
+        var sections = new List<string>();
+        var alliances = setup.Alliances.OrderBy(a => a.SortOrder).ToList();
+        var multiAlliance = alliances.Count > 1;
+        // Readiness slots cost an emoji in EVERY cell, because the count has to stay constant.
+        // So reserve a slot only for the tags somebody on this board has ACTUALLY claimed: a
+        // board where only Enfeeb is in play spends one slot, not three, and an untagged board
+        // spends none. That is four characters of every character name bought back for free.
+        var readySlots = readiness
+            ? EventReadiness.SlotsInUse(slotSignups.Values)
+            : Array.Empty<EventReadinessTag>();
+
+        // The name column is sized to what's actually IN it — the longest name present, or the
+        // vacancy label when a slot is open — never padded out to FFXI's 15-char limit for names
+        // nobody has yet. That is what closed the corridor of empty padding between the icons
+        // and the job on a board full of vacancies.
+        var anyVacant = setup.Alliances.SelectMany(a => a.Parties).SelectMany(p => p.Slots)
+            .Any(s => !slotSignups.ContainsKey(s.Id));
+        var longestName = slotSignups.Values
+            .Select(s => (s.CharacterName?.Trim() ?? string.Empty).Length)
+            .DefaultIfEmpty(0).Max();
+        nameWidth = Math.Min(nameWidth, Math.Max(longestName, anyVacant ? VacantLabel.Length : 0));
+
+        // One job column for the WHOLE board so alliances line up with each other, not just
+        // internally. An empty slot prints its requirement here, which can be the widest thing
+        // on the board ("Any Support").
+        var jobWidth = Math.Min(11, Math.Max(3,
+            alliances.SelectMany(a => a.Parties).SelectMany(p => p.Slots)
+                .Select(s => slotSignups.TryGetValue(s.Id, out var su)
+                    ? SignedUpJobs(su).Length
+                    : SlotRequirement(s).Length)
+                .DefaultIfEmpty(7).Max()));
+
+        for (var ai = 0; ai < alliances.Count; ai++)
+        {
+            var parties = alliances[ai].Parties.OrderBy(p => p.SortOrder).ToList();
+            if (parties.Count == 0) { continue; }
+
+            var heading = new StringBuilder();
+            if (multiAlliance)
+            {
+                var allianceName = string.IsNullOrWhiteSpace(alliances[ai].Name)
+                    ? $"Alliance {ai + 1}"
+                    : alliances[ai].Name!.Trim();
+                var lead = AllianceLeadName(alliances[ai], slotSignups);
+                var leadSuffix = string.IsNullOrEmpty(lead)
+                    ? string.Empty
+                    : $" · {StateLeader} {Escape(lead)}";
+                // Outside the block, so it keeps real markdown weight instead of monospace.
+                heading.Append($"## {Escape(allianceName)}{leadSuffix}\n");
+            }
+
+            // Columns FIRST, then fit the content into what's left. Sizing cells to their content
+            // and then asking how many fit is what let one long name drop a three-party alliance
+            // to two columns — the regression this whole layout exists to avoid.
+            var perRow = Math.Min(parties.Count, MaxGridColumns);
+
+            // NAMES ARE PRICED FIRST, against the tightest gap and gutter — then the gap takes
+            // what's left, and GutterToFill spreads whatever survives that. The order is the
+            // priority: a character of name is information, a character of spacing is not.
+            //
+            // Pricing the gap first is a bug that looks like a preference: with a 4-space gap the
+            // display budget handed names 8 characters and "Bartholomewxyz" arrived as
+            // "Bartholo", while the padding it lost them sat there doing nothing.
+            var width = Math.Min(nameWidth, GridNameWidthByDisplay(perRow, jobWidth, readySlots.Count, GridMinNameGap));
+            var gap = Math.Clamp(GapToFill(perRow, jobWidth, readySlots.Count, width, nameGap), GridMinNameGap, nameGap);
+
+            // Cells carry their PLAIN text and their DECORATED text separately. ANSI escapes are
+            // zero-width on screen but very much not zero-length in a string, so every width
+            // decision is made on the plain half and the escapes ride along untouched.
+            var columns = new List<(string Header, List<GridCell> Cells)>();
+            foreach (var (party, pi) in parties.Select((p, i) => (p, i)))
+            {
+                var slots = party.Slots.OrderBy(s => s.SortOrder).ToList();
+                var filled = slots.Count(s => slotSignups.ContainsKey(s.Id));
+                var hasSignedUpLeader = slots.Any(s => slotSignups.TryGetValue(s.Id, out var su) && su.IsPartyLeader);
+                var partyName = string.IsNullOrWhiteSpace(party.Name) ? $"Party {pi + 1}" : party.Name!.Trim();
+
+                var cells = new List<GridCell>();
+                foreach (var slot in slots)
+                {
+                    slotSignups.TryGetValue(slot.Id, out var signup);
+                    var crown = signup is not null ? signup.IsPartyLeader : (slot.IsPartyLeader && !hasSignedUpLeader);
+
+                    // Icons and text are kept APART because only the text can be padded: the
+                    // icons are a fixed, constant-count prefix whose real width isn't a whole
+                    // number of characters, so measuring the cell means measuring the text half.
+                    var icons = new StringBuilder(RoleIcon(slot, signup));
+                    icons.Append(crown ? StateLeader
+                        : (signup?.StayNextWindow ?? false) ? StateStaying
+                        : StateNone);
+                    if (readySlots.Count > 0)
+                    {
+                        icons.Append(EventReadiness.PaddedMarkers(
+                            signup?.EnfeebReady ?? false, signup?.ResistReady ?? false,
+                            signup?.RelicWeapon ?? false, StateNone, readySlots));
+                    }
+
+                    // JOB first, then the name. The job is the fixed, scannable half — every row
+                    // has one and they're all the same shape — so it forms a clean second column
+                    // right against the icons, and the ragged names sit off to the right where
+                    // their varying length costs nothing.
+                    var job = signup is null ? SlotRequirement(slot) : SignedUpJobs(signup);
+                    var text = new StringBuilder(" ").Append(job.PadRight(jobWidth));
+                    if (width > 0)
+                    {
+                        text.Append(' ', gap);
+                        // A vacancy says so, rather than leaving a blank run that reads as a
+                        // rendering fault. Greying it was tried and removed: colour only exists
+                        // inside an ansi block, each span costs ~9 invisible characters against
+                        // the 2000-char cap, and a 54-slot board has far more vacancies than that
+                        // budget holds — so it never appeared on the boards that needed it most.
+                        text.Append(signup is null
+                            ? VacantLabel.PadRight(width)
+                            : GridName(signup, width).PadRight(width));
+                    }
+
+                    cells.Add(new GridCell(icons.ToString(), text.ToString()));
+                }
+                columns.Add(($"{partyName} ({filled}/{slots.Count})", cells));
+            }
+
+            // Each emoji is counted as 2 characters for the header row, which is pure ASCII
+            // standing over proportional icons — the closest monospace can get to lining up with
+            // them. The column is then widened if a party NAME is longer than its slots, or
+            // "Party 1 (0/6)" gets hard-trimmed to "Party 1 (0/6" on a board with no names.
+            var iconCount = 2 + readySlots.Count;
+            var iconPad = 2 * iconCount;
+            var textWidth = Math.Max(
+                columns.SelectMany(c => c.Cells).Select(c => c.Text.Length).DefaultIfEmpty(0).Max(),
+                columns.Max(c => c.Header.Length) - iconPad);
+            var headerWidth = iconPad + textWidth;
+            var gutter = new string(' ', Math.Min(gutterWidth, GutterToFill(perRow, textWidth, iconCount)));
+
+            // A plain fence: there is no colour in this grid any more, so the ansi language tag
+            // would cost 4 characters for nothing.
+            var body = new StringBuilder("```\n");
+            for (var start = 0; start < columns.Count; start += perRow)
+            {
+                var row = columns.Skip(start).Take(perRow).ToList();
+                if (start > 0) { body.Append('\n'); }
+
+                // Centred over the column it titles, not left-aligned against it: the cells below
+                // start with a proportional emoji, so a left-aligned header sits visibly off its
+                // own column. Centring hides that mismatch and reads as a caption.
+                body.Append(string.Join(gutter, row.Select(c => CentreHeader(c.Header, headerWidth))).TrimEnd()).Append('\n');
+
+                var lines = row.Max(c => c.Cells.Count);
+                for (var r = 0; r < lines; r++)
+                {
+                    // Pad the TEXT half only — the icons are a constant-count prefix whose width
+                    // isn't a whole number of characters, so padding across them would shear —
+                    // and pad by the PLAIN length, so escapes don't eat into the column.
+                    //
+                    // The dim wraps the vacancy LABEL and nothing else. Wrapping a whole all-open
+                    // row in one escape pair was tried as a way to afford the colour on a big
+                    // board — 9 characters instead of 27 — and it greys the job requirements too,
+                    // which are the one thing a reader of an empty board actually needs.
+                    body.Append(string.Join(gutter, row.Select(c => r < c.Cells.Count
+                        ? c.Cells[r].Icons + c.Cells[r].Text
+                          + new string(' ', Math.Max(0, textWidth - c.Cells[r].Text.Length))
+                        : new string(' ', headerWidth))).TrimEnd()).Append('\n');
+                }
+            }
+            body.Append("```");
+
+            sections.Add(heading.Append(body).ToString());
+        }
+
+        return sections;
+    }
+
+    // The job→name gap, once the names have been paid for. Whatever display room the names left
+    // goes here before it goes to the gutter: separating a job from its name makes a row
+    // scannable, while the space between columns is only separation.
+    private static int GapToFill(int columns, int jobWidth, int readySlots, int nameWidth, int wanted)
+    {
+        var icons = 2 + readySlots;
+        var perCellFixed = (((icons * EmojiCellsX10) + 9) / 10) + 1 + jobWidth + nameWidth;
+        var spare = GridDisplayCap - (perCellFixed * columns) - ((columns - 1) * GridMinGutter);
+        return spare <= 0 ? GridMinNameGap : Math.Min(wanted, spare / columns);
+    }
+
+    // The gutter that spreads `columns` cells across the whole code block, so the last column
+    // lands at the right-hand edge instead of leaving dead space.
+    //
+    // Display cells, not characters: the icons are emoji at ~2.3 cells each, so a cell's real
+    // width on screen is not its string length. Getting this wrong in the generous direction is
+    // the expensive mistake — one character too many and the block soft-wraps and the grid
+    // shears — hence the floor and no rounding up.
+    private static int GutterToFill(int columns, int textWidth, int iconCount)
+    {
+        if (columns < 2) { return GridMinGutter; }
+        // ROUNDED UP. Truncating here is what let the last column overflow: two emoji are 4.6
+        // cells, integer division called them 4, and the three-tenths lost per cell added up to
+        // more than the block could hold — pushing "<Vacant>" onto the next line.
+        var cellCells = (((iconCount * EmojiCellsX10) + 9) / 10) + textWidth;
+        var spare = GridDisplayCap - (columns * cellCells);
+        return Math.Clamp(spare / (columns - 1), GridMinGutter, GridMaxGutter);
+    }
+
+    // Widest name that fits the code block's ~112 display cells at this column count. The other
+    // ceiling — `content`'s 2000 characters — is not predicted here; the caller builds and
+    // shrinks until it actually fits, which is exact where a prediction is not.
+    private static int GridNameWidthByDisplay(int columns, int jobWidth, int readySlots, int nameGap)
+    {
+        // Costed against the MINIMUM gutter, not the one the caller wants. Names are content and
+        // the gutter is slack, so names are budgeted first and GutterToFill then spreads whatever
+        // is left. Doing it the other way round — pricing names after a wide gutter — is a bug
+        // that ate the whole name column: a 26-space gutter left nothing, the width came out 0,
+        // and every "<Vacant>" silently vanished off the board.
+        //
+        // Every part of a cell has to appear here or the line overruns the block and WRAPS,
+        // folding the last column's name onto its own line. A cell is:
+        //     icons · one space · job · nameGap · name
+        // and nameGap was the piece missing — with a 4-space gap that is three cells per column
+        // unaccounted for, which is exactly how far the last column overflowed.
+        var icons = 2 + readySlots;
+        var gutters = (columns - 1) * GridMinGutter;
+        var perCell = ((icons * EmojiCellsX10) + 9) / 10   // emoji, rounded UP
+                      + 1 + jobWidth + nameGap;
+        var width = (GridDisplayCap - (perCell * columns) - gutters) / columns;
+        // Floor at 0, not at a minimum: a board with no names and no vacancies wants NO name
+        // column, and clamping up to a minimum is what put a corridor of padding there.
+        return Math.Clamp(width, 0, GridMaxNameWidth);
     }
 
     // Components V2 "defeated" notice — the V2 equivalent of HnmBoardNoticeService's classic
@@ -366,87 +764,147 @@ public static class DiscordEventMessageBuilder
     // plus the event title on its own line. Mirrors the classic board's content+embed title.
     private static string BuildV2Heading(Event ev, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups)
     {
-        var heading = BuildStartHeading(ev, slotSignups.Values.Count(s => s.StayNextWindow));
-        var typePrefix = string.IsNullOrWhiteSpace(ev.EventType) ? string.Empty : $"{ev.EventType!.Trim()}: ";
-        var title = Truncate($"## ⚔️ {typePrefix}{ev.EventName ?? $"Event #{ev.Id}"}", 250);
-        // Start/window heading above the title, matching the classic board (content heading
-        // renders above the embed title).
-        return string.Join("\n", new[] { heading, title }.Where(s => !string.IsNullOrEmpty(s)));
+        // Just the start/window heading. The "⚔️ HNM: name" title line that used to sit under it
+        // is gone: on the wide board it repeated what the heading above already says, and every
+        // character it took came out of the roster's 2000.
+        return BuildStartHeading(ev, slotSignups.Values.Count(s => s.StayNextWindow));
+    }
+
+    // The grid's key. The colour key is the same one the embed prints; the marker key exists
+    // only for the grid, where 👑 and 🔒 had to become `>` and `+` — an emoji is double-width
+    // in a monospace block and would shear every column to its right.
+    private static string BuildGridKey(Event ev, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups)
+    {
+        // The key sits ABOVE the grid, because that is the order it gets read in — you meet the
+        // icons on the board after you have been told what they are, not before.
+        //
+        // Every readiness tag is listed whether or not anybody has claimed one yet. Listing only
+        // the tags in use was tried and it's the wrong call: the key doubles as the ADVERTISEMENT
+        // for the "🎖️ My Readiness" button, so a member has to see that "Relic Weapon" is a thing
+        // they could set before any of them have set it.
+        var anyLocked = HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName)
+                        || slotSignups.Values.Any(s => s.StayNextWindow);
+        var key = new StringBuilder("-# 🔵 Tank · 🟢 Healer · 🟡 Support · 🔴 DPS · ⚪ Any");
+        key.Append($"\n-# {StateLeader} party leader");
+        if (anyLocked) { key.Append($" · {StateStaying} staying next window"); }
+        foreach (var tag in EventReadiness.All)
+        {
+            key.Append($" · {tag.Emoji} {tag.Label}");
+        }
+        return key.ToString();
     }
 
     // Renders the roster as full-markdown text blocks for the V2 text fallback. Reuses the
     // same slot-line logic as the embed (RoleIcon/SignedUpJobs/SlotRequirement, 👑/🔒 marks)
     // but WITHOUT the narrow-column name trimming — the text display is full width — and
     // packs alliance/party sections into ≤4000-char chunks.
-    private static List<string> BuildRosterTextBlocks(
-        Event ev, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
+    // ─── The roster body ─────────────────────────────────────────────────────────────────
+    //
+    // Plain markdown, deliberately — see BuildRosterPlainBlocks for why the fenced-code-block
+    // column grid was abandoned. What survives from that attempt is the measurement that
+    // justified abandoning it: an emoji in a Discord code block is about 2.3 monospace cells,
+    // NOT a whole number, so a cell carrying a crown lands wider than one that doesn't and
+    // shears every column to its right. Columns therefore cost either the icons or a fixed
+    // emoji count per cell with a spacer standing in — and the icons are worth more.
+    // One grid cell. Plain is what the reader SEES (used for every width decision); Shown is
+    // the same text with ANSI escapes woven in. They are separate because an escape is
+    // zero-width on screen and very much not zero-length in a string — padding on Shown would
+    // eat the column.
+    // One grid cell, split so only the TEXT half is padded: the icons are a constant-count
+    // prefix whose real width isn't a whole number of characters, so padding across them shears.
+    private sealed record GridCell(string Icons, string Text);
+
+
+    // Gap between the job column and the name beside it, INSIDE a cell. Fitted like everything
+    // else — see GridAttempts.
+    private const int GridMinNameGap = 1;
+    private const int GridMaxNameGap = 4;
+
+    // Centre a header over its column. Monospace, so this is just arithmetic — and it is the
+    // one place the icon prefix has to be guessed at, since a proportional emoji has no whole
+    // number of character cells to centre against.
+    private static string CentreHeader(string text, int width)
+    {
+        if (text.Length >= width) { return text[..width]; }
+        var left = (width - text.Length) / 2;
+        return new string(' ', left) + text + new string(' ', width - text.Length - left);
+    }
+    private const string StateLeader = "👑";
+    private const string StateStaying = "🔒";
+
+    // A spacer, not decoration: the alignment rule needs a constant emoji COUNT per cell, so a
+    // member who is neither leader nor staying still has to occupy that slot with something
+    // emoji-width. Deliberately the faintest one available.
+    private const string StateNone = "▪️";
+
+    // Display cells one emoji occupies in a code block, x10 to keep the arithmetic integer.
+    // MEASURED — an emoji is NOT a whole number of cells, which is the whole reason the count
+    // has to be constant rather than the width padded.
+    private const int EmojiCellsX10 = 23;
+
+    // How wide the grid may get, in display cells. Measured at ~112 with a 140-char ruler, and
+    // deliberately set BELOW that: the block's real width follows the reader's window, so 112 is
+    // the ceiling on ONE screen and an overflow on a narrower one — and an overflow doesn't
+    // clip, it wraps, folding the last column's name onto its own line.
+    //
+    // Sitting under the measurement costs nothing now that each alliance has its own message and
+    // is only half full. Before the split every spare character was contested, which is why this
+    // was pinned to the maximum and kept overflowing.
+    private const int GridDisplayCap = 100;
+
+    // Discord's hard cap on a message's `content` — the other ceiling, and the one that binds
+    // on a big board. Everything in the roster comes out of this single budget.
+    private const int ContentCap = 2000;
+
+    // Room reserved for the "couldn't fit" note when whole alliances have to be dropped.
+    private const int OverflowNoteLength = 70;
+
+    // The gap between party columns. Spending is decided per board by GridAttempts: the widest
+    // gap that still fits after the names have been paid for, because separation is cosmetic
+    // and a character name is not.
+    // One character, not two. A single space between columns is tight, but the fitter only
+    // reaches it when the alternative is dropping information off the board — and on a 54-slot
+    // board the readiness icons fit or not on a margin of about ten characters.
+    private const int GridMinGutter = 1;
+    // Deliberately large. The gutter is what SPREADS the columns across the code block, and the
+    // block is ~112 characters wide — a board that stops short has visible dead space to the
+    // right of the last party. The real ceiling is computed per board from the display width
+    // (GutterToFill); this only bounds the search.
+    private const int GridMaxGutter = 26;
+
+    // What a vacant slot shows where a name would go. Short on purpose: it sets the FLOOR for
+    // the name column, so "Vacant Slot" would widen every row on every board to label the empty
+    // ones. The job requirement beside it already says what the slot wants.
+    private const string VacantLabel = "<Vacant>";
+    private const int GridMaxNameWidth = 15;  // FFXI's own character-name limit
+    private const int GridMinNameWidth = 6;
+
+    // Never more than 3 side by side — the shape the embed board established and the one
+    // officers read a roster in.
+    private const int MaxGridColumns = 3;
+
+    // A signup's display name, trimmed to what the grid can give it. No ellipsis: a "…" costs
+    // a character a squeezed FFXI name needs more.
+    private static string GridName(EventPartySlotSignup signup, int width)
+    {
+        var name = signup.CharacterName?.Trim() is { Length: > 0 } n ? n : "Member";
+        return name.Length > width ? name[..width] : name;
+    }
+
+    // Pad or hard-trim to an exact visible width.
+    private static string Fit(string text, int width)
+        => text.Length >= width ? text[..width] : text.PadRight(width);
+
+
+    // The no-slot rosters that sit under the party grid, shared by both layouts so the two can
+    // never drift: Manual Check In's "Checked In" list grouped by arrival window, or the
+    // "Also Attending" bench. Flat lists either way, so they stay ordinary markdown — a
+    // monospace grid would buy them nothing and cost them wrapping.
+    private static List<string> BuildExtraRosterSections(
+        Event ev, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
         IReadOnlyList<EventSignupLine> generalSignups)
     {
         var sections = new List<string>();
-
-        var colorKey = "🔵 Tank · 🟢 Healer · 🟡 Support · 🔴 DPS · ⚪ Any";
-        if (HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
-        {
-            colorKey += "\n🔒 Staying next window (survives the window advance)";
-        }
-        sections.Add($"-# {colorKey}");
-
-        var alliances = setup.Alliances.OrderBy(a => a.SortOrder).ToList();
-        var multiAlliance = alliances.Count > 1;
-        for (var ai = 0; ai < alliances.Count; ai++)
-        {
-            var parties = alliances[ai].Parties.OrderBy(p => p.SortOrder).ToList();
-            if (parties.Count == 0)
-            {
-                continue;
-            }
-            var sb = new StringBuilder();
-            if (multiAlliance)
-            {
-                var allianceName = string.IsNullOrWhiteSpace(alliances[ai].Name)
-                    ? $"Alliance {ai + 1}"
-                    : alliances[ai].Name!.Trim();
-                // The alliance lead (if claimed) rides on the header, right of the name.
-                var lead = AllianceLeadName(alliances[ai], slotSignups);
-                var leadSuffix = string.IsNullOrEmpty(lead) ? string.Empty : $" 👑 Alliance Lead: {Escape(lead)}";
-                sb.Append($"## {Escape(allianceName)}{leadSuffix}\n");
-            }
-            for (var pi = 0; pi < parties.Count; pi++)
-            {
-                var party = parties[pi];
-                var slots = party.Slots.OrderBy(s => s.SortOrder).ToList();
-                var filled = slots.Count(s => slotSignups.ContainsKey(s.Id));
-                // Crown the empty designated-leader seat so signups can see it's the leader
-                // slot — unless someone already claimed leadership (their filled slot wears it).
-                var hasSignedUpLeader = slots.Any(s => slotSignups.TryGetValue(s.Id, out var su) && su.IsPartyLeader);
-                var partyName = string.IsNullOrWhiteSpace(party.Name) ? $"Party {pi + 1}" : party.Name!.Trim();
-                sb.Append($"### {Escape(partyName)} ({filled}/{slots.Count})\n");
-                if (slots.Count == 0)
-                {
-                    sb.Append("-# _No slots_\n");
-                }
-                foreach (var slot in slots)
-                {
-                    slotSignups.TryGetValue(slot.Id, out var signup);
-                    var icon = RoleIcon(slot, signup);
-                    var isLeaderSeat = signup is not null ? signup.IsPartyLeader : (slot.IsPartyLeader && !hasSignedUpLeader);
-                    var crown = isLeaderSeat ? "👑 " : string.Empty;
-                    var lockMark = (signup?.StayNextWindow ?? false) ? "🔒 " : string.Empty;
-                    if (signup is not null)
-                    {
-                        var jobs = SignedUpJobs(signup);
-                        sb.Append($"{icon} {crown}{lockMark}**{Escape(signup.CharacterName ?? "Member")}**"
-                            + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}") + "\n");
-                    }
-                    else
-                    {
-                        sb.Append($"-# {icon} {crown}{Escape(SlotRequirement(slot))}\n");
-                    }
-                }
-            }
-            sections.Add(sb.ToString().TrimEnd());
-        }
-
         if (IsWd(ev))
         {
             // Manual Check In: "✅ X'd In" grouped by arrival window (mirrors the embed's section).
@@ -463,50 +921,33 @@ public static class DiscordEventMessageBuilder
                 }
                 sections.Add(sb.ToString().TrimEnd());
             }
-        }
-        else
-        {
-            // Also-attending (no-slot) roster, same shape as the embed's section.
-            var slotNames = new HashSet<string>(
-                slotSignups.Values
-                    .Where(s => !string.IsNullOrWhiteSpace(s.CharacterName))
-                    .Select(s => s.CharacterName!.Trim()),
-                StringComparer.OrdinalIgnoreCase);
-            var extra = generalSignups
-                .Where(g => !string.IsNullOrWhiteSpace(g.CharacterName) && !slotNames.Contains(g.CharacterName.Trim()))
-                .ToList();
-            if (extra.Count > 0)
-            {
-                var sb = new StringBuilder("### Also Attending\n");
-                foreach (var g in extra)
-                {
-                    var icon = GeneralRoleIcon(g.JobType);
-                    var jobs = GeneralSignupJobs(g);
-                    sb.Append($"{icon} **{Escape(g.CharacterName!)}**"
-                        + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}") + "\n");
-                }
-                sections.Add(sb.ToString().TrimEnd());
-            }
+            return sections;
         }
 
-        // Pack sections into ≤4000-char text-display blocks (Discord's Text Display cap),
-        // starting a new block when the next section would overflow. A single oversized
-        // section is hard-truncated so it still posts.
-        var blocks = new List<string>();
-        var current = new StringBuilder();
-        foreach (var section in sections)
+        // Also-attending (no-slot) roster, same shape as the embed's section.
+        var slotNames = new HashSet<string>(
+            slotSignups.Values
+                .Where(s => !string.IsNullOrWhiteSpace(s.CharacterName))
+                .Select(s => s.CharacterName!.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        var extra = generalSignups
+            .Where(g => !string.IsNullOrWhiteSpace(g.CharacterName) && !slotNames.Contains(g.CharacterName.Trim()))
+            .ToList();
+        if (extra.Count > 0)
         {
-            var piece = Truncate(section, 3900);
-            if (current.Length > 0 && current.Length + piece.Length + 2 > 3900)
+            var sb = new StringBuilder("### Also Attending\n");
+            foreach (var g in extra)
             {
-                blocks.Add(current.ToString());
-                current.Clear();
+                var icon = GeneralRoleIcon(g.JobType);
+                var jobs = GeneralSignupJobs(g);
+                var ready = EventReadiness.Markers(g.EnfeebReady, g.ResistReady, g.RelicWeapon);
+                sb.Append($"{icon} **{Escape(g.CharacterName!)}**"
+                    + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}")
+                    + (string.IsNullOrEmpty(ready) ? string.Empty : $" {ready}") + "\n");
             }
-            if (current.Length > 0) { current.Append("\n\n"); }
-            current.Append(piece);
+            sections.Add(sb.ToString().TrimEnd());
         }
-        if (current.Length > 0) { blocks.Add(current.ToString()); }
-        return blocks;
+        return sections;
     }
 
     // Action rows for the ephemeral "pick a slot" message shown when someone hits
@@ -547,8 +988,9 @@ public static class DiscordEventMessageBuilder
             {
                 var party = parties[pi];
                 // Leader flow: only offer slots in parties without a leader yet
-                // (first-claim-wins). A full party always has a leader (auto-promoted
-                // on fill), so leaderless parties always have open slots.
+                // (first-claim-wins). Leadership is never auto-assigned, so a party
+                // can stay leaderless — including a full one, which simply offers
+                // nothing here until someone uses "Make Me Party Lead".
                 if (asLeader && party.Slots.Any(s => slotSignups.TryGetValue(s.Id, out var su) && su.IsPartyLeader))
                 {
                     continue;
@@ -762,6 +1204,51 @@ public static class DiscordEventMessageBuilder
                 },
             },
         };
+
+    // "🎖️ My Readiness" picker: ONE multi-select of the readiness tags, pre-ticked with
+    // what the clicker already carries, so the whole set is written in a single step.
+    //
+    // min_values = 0 is the point — without it Discord won't let a member submit an empty
+    // selection, and "I'm no longer resist ready" would need its own clear button. The
+    // handler therefore treats the submitted values as the complete set, not as additions.
+    public static object[] BuildReadinessPickerComponents(
+        int eventId, bool enfeeb, bool resist, bool relic)
+    {
+        var options = EventReadiness.All.Select(tag => new
+        {
+            label = tag.Label,
+            value = tag.Value,
+            description = Truncate(tag.Description, 100),
+            emoji = new { name = tag.Emoji },
+            @default = tag.Value switch
+            {
+                EventReadiness.Enfeeb => enfeeb,
+                EventReadiness.Resist => resist,
+                EventReadiness.Relic => relic,
+                _ => false,
+            },
+        }).ToArray();
+
+        return new object[]
+        {
+            new
+            {
+                type = 1, // action row
+                components = new object[]
+                {
+                    new
+                    {
+                        type = 3, // string select
+                        custom_id = $"{ReadinessPickPrefix}{eventId}",
+                        placeholder = "Pick everything that applies (or none)",
+                        min_values = 0,
+                        max_values = options.Length,
+                        options,
+                    },
+                },
+            },
+        };
+    }
 
     // Action rows for the officer "pick a participant" step shared by Move / Set
     // Leader / Remove. Lists members currently ON the board: each occupied slot
@@ -1037,10 +1524,10 @@ public static class DiscordEventMessageBuilder
     // board offering "Pick your job to sign up" next to a "Signed up (N)" list reads exactly like
     // the way to get credit. It isn't, so those camps get a board with neither.
     //
-    // Deliberately narrower than "every HNM event". An HNM board created in the Activity is the
-    // separate HNM Outside Sign Up feature (gated by Linkshell.HnmOutsideSignupEnabled, off by
-    // default), whose entire purpose IS collecting Discord signups; it keeps them. CreationSource
-    // is the existing discriminator for addon-made rows — see Event.CreationSource.
+    // Deliberately narrower than "every HNM event". An HNM board created in the app (web or
+    // Activity) exists to COLLECT Discord signups, so it keeps its buttons; only the addon's own
+    // camps, which score themselves off in-game scans, lose them. CreationSource is the existing
+    // discriminator for addon-made rows — see Event.CreationSource.
     public static bool IsAddonSnapshotCamp(Event ev) =>
         IsHnm(ev) && string.Equals(ev.CreationSource, "Addon", StringComparison.OrdinalIgnoreCase);
 
@@ -1048,10 +1535,13 @@ public static class DiscordEventMessageBuilder
     // monster runs a multi-window spawn cycle — the long-window wyrms OR the short-window
     // kings/dragons (both have a DefaultWindowCadence) — or when it's a Manual Check In camp with a custom count.
     // This is what lights up automatic window advance for Standard-mode kings/dragons, not just Manual Check In.
+    // The stamped grid is included so a monster with no BUILT-IN cadence that a linkshell gave one
+    // still lights up the window UI.
     public static bool UsesWindows(Event ev) =>
         IsWd(ev)
         || HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName)
-        || HnmConfig.DefaultWindowCadence(ev.AssignedMonsterName) is not null;
+        || HnmConfig.DefaultWindowCadence(ev.AssignedMonsterName) is not null
+        || (ev.SpawnWindowCount > 1 && ev.SpawnWindowMinutes > 0);
 
     // The window number every surface must display: the board, the Activity/web app, and the
     // LSM addon. THIS is the single source of truth for "what window is this camp on" — callers
@@ -1100,13 +1590,19 @@ public static class DiscordEventMessageBuilder
         && ev.WdFinalizedAt is null
         && ev.HnmDefeatedAt is null;
 
-    // Does stepping this camp's window throw its roster away? The wyrms do; the kings/dragons are
-    // one continuous camp, and Manual Check In boards let members X-in per window themselves. This
-    // is the SAME condition HnmWindowAdvanceBackgroundService gates its clear on — named once here
-    // so the number the board prints and the roster underneath it can't disagree about which
-    // windows wipe.
+    // Does stepping this camp's window throw its roster away? The wyrms do, in BOTH attendance
+    // modes; the kings/dragons are one continuous camp and never do. This is the SAME condition
+    // HnmWindowAdvanceBackgroundService gates its clear on — named once here so the number the
+    // board prints and the roster underneath it can't disagree about which windows wipe.
+    //
+    // Manual Check In used to be excluded here, on the reasoning that members X-in per window so
+    // the grid could stand. It can't: a Tiamat camp re-forms every hour whoever is tracking it, and
+    // leaving the parties seated meant hour 12 was still showing the people who signed up at hour 1.
+    // The check-in ledger is untouched by the wipe (ClearWindowRosterAsync spares any participation
+    // carrying a WdArrivalWindow), so what a Manual Check In camp actually pays is unchanged — only
+    // the party grid re-signs.
     public static bool ClearsRosterOnWindowAdvance(Event ev) =>
-        !IsWd(ev) && HnmConfig.WindowAdvanceWipesRoster(ev.AssignedMonsterName);
+        HnmConfig.WindowAdvanceWipesRoster(ev.AssignedMonsterName);
 
     // The SPAWN window count: how many pop chances the camp sits through. This is the "of M" the
     // board prints, the ceiling the advance poller marches to, and the scale attendance posts
@@ -1123,14 +1619,27 @@ public static class DiscordEventMessageBuilder
     // NOT windowed, pay it by accumulated duration", which EventBreakPolicy reads to decide the
     // camp keeps its Break Room. Letting the cadence overrule that would flip a timed camp onto the
     // windowed payout path and strand its members with no way to stop the clock.
+    // ev.SpawnWindowCount — the grid this camp captured at creation from its linkshell's monster
+    // setup — wins over the built-in cadence, and null falls straight through to the old chain, so
+    // a camp created before per-linkshell setups behaves byte-identically.
+    //
+    // The WindowCountOverride == 1 short-circuit MUST stay first, stamp or no stamp: 1 means "this
+    // camp is NOT windowed, pay it by accumulated duration", which EventBreakPolicy reads to decide
+    // the camp keeps its Break Room.
     public static int EffectiveWindowCount(Event ev) =>
         Math.Clamp(
             ev.WindowCountOverride == 1
                 ? 1
-                : HnmConfig.DefaultWindowCadence(ev.AssignedMonsterName)?.Windows
+                : ev.SpawnWindowCount
+                    ?? HnmConfig.DefaultWindowCadence(ev.AssignedMonsterName)?.Windows
                     ?? ev.WindowCountOverride
                     ?? HnmConfig.GetWindowCount(ev.AssignedMonsterName ?? ev.EventName),
             1, HnmConfig.MaxWindow);
+
+    // Minutes between window openings for THIS camp. The companion to EffectiveWindowCount, and its
+    // one home, so the count and the cadence can never come from different grids.
+    public static int EffectiveWindowMinutes(Event ev) =>
+        ev.SpawnWindowMinutes ?? HnmConfig.WindowAdvanceMinutes(ev.AssignedMonsterName);
 
     // The ATTENDANCE POST count: how many times the roster is read. The companion to
     // EffectiveWindowCount above, and deliberately a different number — a Standard king/dragon
@@ -1220,7 +1729,7 @@ public static class DiscordEventMessageBuilder
             // it is rebuilt. Windows past the first are self-evident (the advancer only moves the
             // counter after a boundary passes); window 1 needs the anchor to be at or before the
             // camp going live, which an early manual start can break.
-            var cadenceMinutes = HnmConfig.WindowAdvanceMinutes(ev.AssignedMonsterName);
+            var cadenceMinutes = EffectiveWindowMinutes(ev);
             var anchor = ev.WindowAnchorAt ?? ev.StartTime;
             if (UsesWindows(ev)
                 && cadenceMinutes > 0
@@ -1298,7 +1807,8 @@ public static class DiscordEventMessageBuilder
     // claimed slots show the member + jobs, open slots show the requirement.
     private static object BuildBoardEmbed(
         Event ev, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
-        IReadOnlyList<EventSignupLine> generalSignups, string? imageFileName = null)
+        IReadOnlyList<EventSignupLine> generalSignups, string? imageFileName = null,
+        bool imageUnavailable = false)
     {
         var fields = BuildEventDetailFields(ev);
 
@@ -1310,6 +1820,10 @@ public static class DiscordEventMessageBuilder
         {
             colorKey += "\n🔒 Staying next window (survives the window advance)";
         }
+        // Readiness tags ride inline on a tagged member's line above, so a bare ⬛ next to
+        // somebody's name has to be explained here. Listed on EVERY board (as on the image
+        // board's key) so the key also says what the "🎖️ My Readiness" button is for.
+        colorKey += "\n" + string.Join(" · ", EventReadiness.All.Select(tag => $"{tag.Emoji} {tag.Label}"));
         fields.Add(new
         {
             name = "Color Key",
@@ -1397,8 +1911,12 @@ public static class DiscordEventMessageBuilder
                         // Hard-trim the name (no ellipsis) to keep "name — jobs" short in the
                         // narrow inline columns. Full names stay legible on the rendered image board.
                         var name = FitSlotName(signup.CharacterName ?? "Member", jobs, !string.IsNullOrEmpty(crown), !string.IsNullOrEmpty(lockMark), columns);
+                        // Readiness tags go AFTER the jobs, so they never enter FitSlotName's
+                        // width budget — only a tagged member's line can run long here.
+                        var ready = EventReadiness.Markers(signup.EnfeebReady, signup.ResistReady, signup.RelicWeapon);
                         line = $"{icon} {crown}{lockMark}**{Escape(name)}**"
-                             + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}");
+                             + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}")
+                             + (string.IsNullOrEmpty(ready) ? string.Empty : $" {ready}");
                     }
                     else
                     {
@@ -1470,8 +1988,10 @@ public static class DiscordEventMessageBuilder
                     if (sb.Length > 0) { sb.Append('\n'); }
                     var icon = GeneralRoleIcon(g.JobType);
                     var jobs = GeneralSignupJobs(g);
+                    var ready = EventReadiness.Markers(g.EnfeebReady, g.ResistReady, g.RelicWeapon);
                     sb.Append($"{icon} **{Escape(g.CharacterName)}**"
-                        + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}"));
+                        + (string.IsNullOrEmpty(jobs) ? string.Empty : $" — {Escape(jobs)}")
+                        + (string.IsNullOrEmpty(ready) ? string.Empty : $" {ready}"));
                 }
                 fields.Add(new
                 {
@@ -1500,6 +2020,13 @@ public static class DiscordEventMessageBuilder
             // Referencing the uploaded file (files[0]) by name lets the wide,
             // readable embed carry the themed image too.
             image = imageFileName is null ? null : new { url = $"attachment://{imageFileName}" },
+            // A board that WANTED to be an image and couldn't says so. Without this the
+            // degrade is silent and indistinguishable from a layout problem: the text embed
+            // is capped narrow by Discord and packs parties into 3 cramped columns, so it
+            // reads as "my board is too narrow" rather than "Chromium isn't installed".
+            footer = imageUnavailable
+                ? new { text = "Board image unavailable — showing the text layout. (Server: Playwright Chromium isn't rendering.)" }
+                : null,
         };
     }
 
@@ -1553,13 +2080,12 @@ public static class DiscordEventMessageBuilder
         }
         // "🔒 Stay Next Window" (member self-service): a member holding a slot pins their OWN slot so
         // it survives the roster wipe when the window turns over. Shown only where a wipe can actually
-        // happen — Standard-mode WYRM boards. A Manual Check In camp never wipes (attendance
-        // accumulates), and neither do the kings/dragons any more, so the lock would be a no-op
-        // there and the button is hidden. Shown once at least one slot is filled (you can only lock
-        // a slot you're already in); the click handler re-checks that the clicker actually holds a
-        // slot. Sits before Withdraw, keeping this HNM row at 4 buttons — under Discord's 5-per-row cap.
-        if (UsesWindows(ev) && hasSignups && !IsWd(ev)
-            && HnmConfig.WindowAdvanceWipesRoster(ev.AssignedMonsterName))
+        // happen — WYRM boards, in either attendance mode. The kings/dragons don't wipe, so the lock
+        // would be a no-op there and the button is hidden. Shown once at least one slot is filled
+        // (you can only lock a slot you're already in); the click handler re-checks that the clicker
+        // actually holds a slot. Sits before Withdraw, keeping this HNM row at 4 buttons — under
+        // Discord's 5-per-row cap.
+        if (UsesWindows(ev) && hasSignups && ClearsRosterOnWindowAdvance(ev))
         {
             firstRow.Add(new
             {
@@ -1592,43 +2118,58 @@ public static class DiscordEventMessageBuilder
             },
         };
 
-        // ── Row 2 — leadership (crown actions), once at least one slot is claimed ─────────────
-        // "Make Me Party Lead" (+ "Make Me Alliance Lead" on multi-alliance boards) for seated members,
-        // grouped with the officer-only "Set Leader". All three need a seated member, so the whole row
-        // is slot-gated. Discord components are shared by every viewer, so this board-level gate (hide
-        // until somebody has signed up) is the closest we can get to "show it once the person signs up".
-        if (hasSignups)
+        var hasAnyone = hasSignups || hasAttendees;
+
+        // ── Row 2 — "already on the board" member actions ─────────────────────────────────────
+        // Leadership (crown) actions once at least one SLOT is claimed: "Make Me Party Lead"
+        // (+ "Make Me Alliance Lead" on multi-alliance boards) for seated members, grouped with the
+        // officer-only "Set Leader" — all three need a seated member. "🎖️ My Readiness" joins them
+        // as soon as ANYONE is on the board, seat or bench, since a no-slot attendee carries tags
+        // too. Discord components are shared by every viewer, so these board-level gates (hide until
+        // somebody has signed up) are the closest we can get to "show it once the person signs up".
+        //
+        // Four buttons at the widest (multi-alliance), inside Discord's 5-per-row cap — and this
+        // stays the row with room, which is why Readiness lives here rather than on the sign-up row
+        // (that one already reaches 5 on a windowed board that also offers "Sign Up (No Slot)").
+        if (hasAnyone)
         {
-            var leadershipRow = new List<object>
+            var memberRow = new List<object>();
+            if (hasSignups)
             {
-                new
+                memberRow.Add(new
                 {
                     type = 2, // button
                     style = 2, // secondary — for members ALREADY in a slot; takes the party crown
                     label = "👑 Make Me Party Lead",
                     custom_id = $"{MakeLeaderPrefix}{eventId}",
-                },
-            };
-            if (multiAlliance)
-            {
-                leadershipRow.Add(new
+                });
+                if (multiAlliance)
                 {
-                    type = 2, // button
-                    style = 2, // secondary — takes the alliance crown (one rung up)
-                    label = "👑 Make Me Alliance Lead",
-                    custom_id = $"{MakeAllianceLeaderPrefix}{eventId}",
+                    memberRow.Add(new
+                    {
+                        type = 2, // button
+                        style = 2, // secondary — takes the alliance crown (one rung up)
+                        label = "👑 Make Me Alliance Lead",
+                        custom_id = $"{MakeAllianceLeaderPrefix}{eventId}",
+                    });
+                }
+                memberRow.Add(new
+                {
+                    type = 2, style = 2, // secondary — officer sets any seated member as their party's leader
+                    label = "👑 Set Leader (officers)",
+                    custom_id = $"{SetLeaderButtonPrefix}{eventId}",
                 });
             }
-            leadershipRow.Add(new
+            memberRow.Add(new
             {
-                type = 2, style = 2, // secondary — officer sets any seated member as their party's leader
-                label = "👑 Set Leader (officers)",
-                custom_id = $"{SetLeaderButtonPrefix}{eventId}",
+                type = 2, style = 2, // secondary — the clicker tags their OWN signup (no perms)
+                label = "🎖️ My Readiness",
+                custom_id = $"{ReadinessButtonPrefix}{eventId}",
             });
             rows.Add(new
             {
                 type = 1, // action row
-                components = leadershipRow.ToArray(),
+                components = memberRow.ToArray(),
             });
         }
 
@@ -1646,7 +2187,6 @@ public static class DiscordEventMessageBuilder
                 custom_id = $"{OfficerAddButtonPrefix}{eventId}",
             },
         };
-        var hasAnyone = hasSignups || hasAttendees;
         // Move/Remove work on anyone on the board — including a bench (no-slot) member,
         // so they show even before a slot is filled (e.g. to seat the bench into a slot).
         if (hasAnyone)
@@ -1658,11 +2198,10 @@ public static class DiscordEventMessageBuilder
                 custom_id = $"{MoveMemberButtonPrefix}{eventId}",
             });
         }
-        // Lock Member (pins a slot through the Next Window wipe) only means something on a board
-        // that actually wipes: Standard-mode wyrms with seated members. Same gate as the member's
-        // "🔒 Stay Next Window" button above.
-        if (UsesWindows(ev) && hasSignups && !IsWd(ev)
-            && HnmConfig.WindowAdvanceWipesRoster(ev.AssignedMonsterName))
+        // Lock Member (pins a slot through the window wipe) only means something on a board that
+        // actually wipes: wyrms with seated members, either attendance mode. Same gate as the
+        // member's "🔒 Stay Next Window" button above.
+        if (UsesWindows(ev) && hasSignups && ClearsRosterOnWindowAdvance(ev))
         {
             officerButtons.Add(new
             {
@@ -1725,9 +2264,10 @@ public static class DiscordEventMessageBuilder
         // roster the board was showing publicly a window ago — so it carries no "(officers)" tag,
         // unlike End Camp beside it. Disabled on window 1, which has no predecessor.
         //
-        // Manual Check In (self-serve X-in) boards show no window control: members X-in per window
-        // themselves and those boards never wipe, so there is no per-window roster to look back at.
-        // End Camp still shows.
+        // A Manual Check In board shows the viewer only on a WYRM, where the grid does wipe and
+        // there IS a per-window roster to look back at. On a Manual Check In king/dragon nothing is
+        // ever captured, so the button would only ever answer "no roster was captured" — hidden
+        // there. End Camp shows on all of them.
         //
         // They share ONE row so a populated Manual Check In board (Sign Up · leadership · officer · Check In ·
         // this row) stays within Discord's hard 5-row-per-message cap.
@@ -1735,9 +2275,12 @@ public static class DiscordEventMessageBuilder
             && ev.WdFinalizedAt is null
             && ev.HnmDefeatedAt is null)
         {
-            var atMin = ev.HnmWindowNumber <= 1;
+            // On the PRINTED scale, matching the captures: the camp's first roster is captured when
+            // the board goes live and steps to window 2, while HnmWindowNumber is still 1 — reading
+            // the counter here left the button disabled over a capture that existed.
+            var atMin = FocusWindow(ev) <= 1;
             var windowRow = new List<object>();
-            if (!IsWd(ev))
+            if (!IsWd(ev) || ClearsRosterOnWindowAdvance(ev))
             {
                 windowRow.Add(new
                 {

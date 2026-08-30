@@ -3,26 +3,6 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LinkshellManagerDiscordApp.Models;
 
-public static class LinkshellTypes
-{
-    public const string SkySeaDynamis = "SkySeaDynamis";
-    public const string HnmOnly       = "HnmOnly";
-    public const string Both          = "Both";
-
-    public static readonly IReadOnlyList<string> All = new[]
-    {
-        SkySeaDynamis, HnmOnly, Both,
-    };
-
-    public static bool IsValid(string? value)
-        => !string.IsNullOrEmpty(value) && All.Contains(value);
-
-    // Anything unknown/null is treated as Both (fail-open) so a missing or
-    // stale value never hides content the linkshell expects to see.
-    public static string Normalize(string? value)
-        => IsValid(value) ? value! : Both;
-}
-
 // How a linkshell tracks HNM attendance + scores DKP.
 //   Standard = leader/addon-driven windowed attendance, scored from the addon's window scans
 //              (open / close / claim / kill bonuses).
@@ -45,7 +25,7 @@ public static class HnmAttendanceModes
         => !string.IsNullOrEmpty(value) && All.Contains(value);
 
     // Fail-CLOSED to Standard: an unknown/stale value must never silently turn a
-    // linkshell into a DKP-paying Manual Check In board. (Contrast LinkshellTypes, which fails open.)
+    // linkshell into a DKP-paying Manual Check In board.
     public static string Normalize(string? value)
         => IsValid(value) ? value! : Standard;
 }
@@ -80,15 +60,6 @@ public class Linkshell
     // only fetched when the banner endpoint serves them. Navigation is NOT
     // eager-loaded anywhere; presence/version is read via a lightweight projection.
     public LinkshellBanner? Banner { get; set; }
-
-    // Drives which content the in-game addon and the web sidebar surface:
-    //   SkySeaDynamis = timed-event experience (no HNM presets / no Window
-    //                   Events nav)
-    //   HnmOnly       = HNM snapshot sessions only (no Create Event / timed
-    //                   presets / Queued / Active; no Event System nav)
-    //   Both          = everything (default; matches legacy behavior)
-    [MaxLength(16)]
-    public string LinkshellType { get; set; } = LinkshellTypes.Both;
 
     [MaxLength(32)]
     public string LootStructure { get; set; } = "Dkp";
@@ -209,28 +180,18 @@ public class Linkshell
     public int ActiveAfterAttendances { get; set; } = 2;
 
     // Outside Party Signup: when ON, Discord-server members who have NEVER linked an
-    // LSM account can still sign up for NON-HNM events from the party board. Their first
-    // signup creates/adopts a placeholder member (AppUser.IsPlaceholder) keyed to their
-    // Discord id, so they aren't re-prompted for their name. That placeholder has a real
-    // AppUserId, so — like any member — it DOES earn DKP and IS activity-tracked (there is
-    // no IsPlaceholder filter in the DKP/activity paths). Off by default; account users'
-    // behavior is unaffected either way. (For HNM use HnmOutsideSignupEnabled instead.)
+    // LSM account can still sign up — or Check In — from a board, for EVERY event type
+    // including HNM. Their first click creates/adopts a placeholder member
+    // (AppUser.IsPlaceholder) keyed to their Discord id, so they aren't re-prompted for
+    // their name. That placeholder has a real AppUserId, so — like any member — it DOES
+    // earn DKP and IS activity-tracked (there is no IsPlaceholder filter in the DKP/
+    // activity paths). Off by default; account users' behavior is unaffected either way.
+    //
+    // This was once two switches: HNM had its own HnmOutsideSignupEnabled, which ALSO
+    // gated whether the HNM event type existed at all. Both jobs are gone — HNM camps are
+    // ordinary events that pay DKP through the field-activity queue like anything else, so
+    // the event type is always offered and one identity gate covers every board.
     public bool OutsidePartySignupEnabled { get; set; } = false;
-
-    // "Fill earlier alliances first" nudge: when a member signs up for a slot in a
-    // LATER alliance while an open slot their job can fill is still free in an EARLIER
-    // alliance, warn them and offer to take that earlier slot (or sign up anyway).
-    // Soft (never blocks) and job-aware (no nudge when nothing earlier fits them).
-    // Default ON; automatic no-op on single-alliance boards.
-    public bool FillAlliancesInOrder { get; set; } = true;
-
-    // HNM Outside Sign Up: independent of OutsidePartySignupEnabled (HNM works with that
-    // OFF). When ON it gates everything HNM — the HNM event type in the Activity create
-    // dropdown, HNM manual-create validation, and account-less Discord signups onto HNM
-    // boards. HNM signups are ROSTER MEMORY ONLY: a placeholder is still created/adopted
-    // so the player isn't re-prompted, but they earn NO DKP and NO active/absent credit
-    // because HNM events null End/Duration, zero DkpPerHour, and set CountsTowardActive=false.
-    public bool HnmOutsideSignupEnabled { get; set; } = false;
 
     // Components V2 event boards (experimental): when ON, this linkshell's Discord
     // event sign-up boards are posted as Discord "Components V2" messages — the

@@ -6,46 +6,24 @@
 <div class="page-head fade d1">
     <div>
         <h1 class="page-title">Settings</h1>
-        <div class="page-sub"><span>Choose your primary linkshell context</span></div>
+        <div class="page-sub"><span>Server-wide controls</span></div>
     </div>
     <div class="page-actions">
         <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
     </div>
 </div>
 
-<div class="card fade d2" style="padding:20px;max-width:720px">
-    @if (Model.Linkshells.Count == 0)
-    {
-        <div class="alert alert-warning" style="margin:0">
-            You are not a member of any linkshells yet. <a asp-controller="Linkshell" asp-action="Create" style="color:var(--accent)">Create one now</a>.
+@* The active linkshell is switched from the sidebar, so this page carries only the
+   settings that apply to the whole server. *@
+@if (!Model.IsSuperAdmin)
+{
+    <div class="card fade d2" style="padding:20px;max-width:720px">
+        <div style="color:var(--fg-3);font-size:13px">
+            There are no settings to change here. Switch your active linkshell from the picker
+            at the top of the sidebar.
         </div>
-    }
-    else
-    {
-        <form asp-action="SetPrimaryLinkshell" method="post">
-            <div class="field">
-                <label for="SelectedLinkshellId">Primary linkshell</label>
-                <select class="form-select" id="SelectedLinkshellId" name="SelectedLinkshellId">
-                    @foreach (var linkshell in Model.Linkshells)
-                    {
-                        if (linkshell.Id == Model.SelectedLinkshellId)
-                        {
-                            <option value="@linkshell.Id" selected>@linkshell.LinkshellName</option>
-                        }
-                        else
-                        {
-                            <option value="@linkshell.Id">@linkshell.LinkshellName</option>
-                        }
-                    }
-                </select>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-                <button type="submit" class="btn primary">Save settings</button>
-                <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Cancel</a>
-            </div>
-        </form>
-    }
-</div>
+    </div>
+}
 
 @if (Model.IsSuperAdmin)
 {
@@ -85,6 +63,91 @@
                 else
                 {
                     <button type="submit" class="btn danger">Disable addon globally</button>
+                }
+            </form>
+        </div>
+    </div>
+
+    <div class="card fade d3" style="padding:20px;max-width:720px;margin-top:16px;border:1px solid var(--accent)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <h2 class="card-title" style="margin:0">Claim Shield (server-wide)</h2>
+            <span class="tag accent">Super admin</span>
+        </div>
+        <div style="color:var(--fg-3);font-size:13px;margin-bottom:14px">
+            Master switch for the addon's claim-shield capture — the record of who tagged an HNM
+            during a lottery. Disabling stops <strong>every</strong> linkshell's addon recording
+            them; the addon itself keeps working. Individual monsters are switched on and off per
+            linkshell under <strong>Monster setups</strong>, and those only apply while this is on.
+        </div>
+
+        @if (TempData["ClaimShieldKillSwitchMessage"] is string claimShieldMessage)
+        {
+            <div class="alert alert-info" style="margin:0 0 14px">@claimShieldMessage</div>
+        }
+
+        <div style="display:flex;align-items:center;gap:12px">
+            @if (Model.ClaimShieldGloballyDisabled)
+            {
+                <span class="tag danger">Claim Shield is DISABLED</span>
+            }
+            else
+            {
+                <span class="tag success">Claim Shield is enabled</span>
+            }
+
+            <form asp-action="SetClaimShieldKillSwitch" method="post" style="margin:0">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="disabled" value="@((!Model.ClaimShieldGloballyDisabled).ToString().ToLowerInvariant())" />
+                @if (Model.ClaimShieldGloballyDisabled)
+                {
+                    <button type="submit" class="btn primary">Re-enable Claim Shield</button>
+                }
+                else
+                {
+                    <button type="submit" class="btn danger">Disable Claim Shield globally</button>
+                }
+            </form>
+        </div>
+    </div>
+
+    <div class="card fade d4" style="padding:20px;max-width:720px;margin-top:16px;border:1px solid var(--accent)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <h2 class="card-title" style="margin:0">Admin override (all linkshells)</h2>
+            <span class="tag accent">Super admin</span>
+        </div>
+        <div style="color:var(--fg-3);font-size:13px;margin-bottom:14px">
+            Grants you <strong>every</strong> permission in every linkshell you are a member of,
+            on top of the rank that linkshell gave you — your rank is never changed, and this
+            never reaches a linkshell you have not joined. While it is on, an
+            <span class="tag accent">🔧 ADMIN</span> tag appears beside your rank on the roster.
+            Turn it off to fall back to your normal rank permissions.
+        </div>
+
+        @if (TempData["AdminOverrideMessage"] is string adminOverrideMessage)
+        {
+            <div class="alert alert-info" style="margin:0 0 14px">@adminOverrideMessage</div>
+        }
+
+        <div style="display:flex;align-items:center;gap:12px">
+            @if (Model.AdminOverrideEnabled)
+            {
+                <span class="tag success">Admin override is ON</span>
+            }
+            else
+            {
+                <span class="tag">Admin override is off</span>
+            }
+
+            <form asp-action="SetAdminOverride" method="post" style="margin:0">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="enabled" value="@((!Model.AdminOverrideEnabled).ToString().ToLowerInvariant())" />
+                @if (Model.AdminOverrideEnabled)
+                {
+                    <button type="submit" class="btn danger">Turn off admin override</button>
+                }
+                else
+                {
+                    <button type="submit" class="btn primary">Turn on admin override</button>
                 }
             </form>
         </div>

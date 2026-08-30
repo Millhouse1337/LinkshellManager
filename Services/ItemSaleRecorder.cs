@@ -26,7 +26,17 @@ public sealed class ItemSaleRecorder
     // The item's Sold flags and the treasury entry land in ONE transaction. Both paths previously did
     // two unguarded saves, so a failure between them left the treasury recording a sale the item did
     // not — and the balance was permanently wrong by the sale price, with nothing to point at.
-    public async Task RecordSaleAsync(Item item, long salePrice, TreasuryActor actor, CancellationToken cancellationToken)
+    // soldBy is WHO SOLD IT, which is not the same person as the actor: an officer records sales
+    // other members made all the time, and this used to store the clicker as the seller. It is also
+    // the answer to where the gil went — whoever sold it is holding it until they hand it on — so
+    // one answer fills both the item's seller and the treasury entry's holder. Callers require it;
+    // it stays nullable here so the writer can still record an entry that genuinely has no answer.
+    public async Task RecordSaleAsync(
+        Item item,
+        long salePrice,
+        TreasuryActor actor,
+        TreasuryHolder? soldBy,
+        CancellationToken cancellationToken)
     {
         if (item.IsSold)
         {
@@ -49,6 +59,8 @@ public sealed class ItemSaleRecorder
                 salePrice,
                 now,
                 Memo: item.Quantity > 1 ? $"Sold: {item.ItemName} (x{item.Quantity})" : $"Sold: {item.ItemName}",
+                HolderAppUserId: soldBy?.AppUserId,
+                HolderCharacterName: soldBy?.CharacterName,
                 Source: JournalEntrySources.ItemSale,
                 SourceItemId: item.Id),
             actor,
@@ -57,7 +69,11 @@ public sealed class ItemSaleRecorder
         item.IsSold = true;
         item.SoldPrice = salePrice;
         item.SoldAt = now;
-        item.SoldByCharacterName = actor.CharacterName;
+        // The seller, not the recorder. Falling back to the actor keeps an older caller honest
+        // rather than blank, but every live caller now asks.
+        item.SoldByCharacterName = string.IsNullOrWhiteSpace(soldBy?.CharacterName)
+            ? actor.CharacterName
+            : soldBy!.CharacterName;
         item.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
 

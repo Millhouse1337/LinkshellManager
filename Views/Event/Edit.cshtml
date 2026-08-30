@@ -1,34 +1,18 @@
 @model EventViewModel
 @{
     ViewData["Title"] = "Edit event";
-    var mainJobOptionsJson = System.Text.Json.JsonSerializer.Serialize(LinkshellManagerDiscordApp.Utils.EventJobCatalog.MainJobOptions);
-    var subJobOptionsJson = System.Text.Json.JsonSerializer.Serialize(LinkshellManagerDiscordApp.Utils.EventJobCatalog.SubJobOptions);
-    var typeOptionsJson = System.Text.Json.JsonSerializer.Serialize(LinkshellManagerDiscordApp.Utils.EventJobCatalog.JobTypeOptions);
+    ViewData["BodyClass"] = "lsm-page";
 }
 
-<div class="page-head fade d1">
-    <div>
-        <h1 class="page-title">Edit event</h1>
-        <div class="page-sub"><span>@(Model.Event.EventName ?? "Untitled event")</span></div>
-    </div>
-    <div class="page-actions">
-        <a class="btn ghost" asp-action="Index">Cancel</a>
-    </div>
-</div>
-
-<div class="card fade d2" style="padding:20px">
-    <form asp-action="Edit" method="post">
-        <input type="hidden" name="id" value="@Model.Event.Id" />
-        @await Html.PartialAsync("_EventForm", Model)
-        <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-            <button type="submit" class="btn primary">Save event</button>
-            <a class="btn ghost" asp-action="Index">Cancel</a>
-        </div>
-    </form>
-</div>
+@* Same form as Create — its header carries the title, the linkshell picker and the close
+   button, and its footer the Cancel / Update pair, so this page adds no chrome. *@
+<form asp-action="Edit" method="post" class="cem cem--page fade d1">
+    <input type="hidden" name="id" value="@Model.Event.Id" />
+    @await Html.PartialAsync("_EventForm", Model)
+</form>
 
 @* Inline "Create New Party Setup" modal — rendered OUTSIDE the event form so its
-   editor <form> isn't nested. Opened by the "+ Create New Party Setup" button. *@
+   editor <form> isn't nested. Opened by the "+ New setup" button. *@
 @if (Model.PartySetupEditor is not null)
 {
     @await Html.PartialAsync("~/Views/Event/_PartySetupCreateModal.cshtml", Model.PartySetupEditor)
@@ -39,48 +23,5 @@
     {
         @await Html.PartialAsync("~/Views/PartySetup/_EditorScripts.cshtml")
     }
-<script nonce="@Html.CspNonce()">
-(() => {
-    const mainJobOptions = @Html.Raw(mainJobOptionsJson);
-    const subJobOptions = @Html.Raw(subJobOptionsJson);
-    const typeOptions = @Html.Raw(typeOptionsJson);
-    const container = document.getElementById('jobs-container');
-    const addButton = document.getElementById('add-job');
-    const buildOptions = (options, placeholder) => [
-        `<option value="">${placeholder}</option>`,
-        ...options.map(option => `<option value="${option}">${option}</option>`)
-    ].join('');
-
-    function reindex() {
-        const rows = container.querySelectorAll('.job-row');
-        rows.forEach((row, index) => {
-            row.querySelectorAll('input, select').forEach(field => {
-                field.name = field.name.replace(/Jobs\[\d+\]/, `Jobs[${index}]`);
-            });
-        });
-    }
-    addButton.addEventListener('click', () => {
-        const index = container.querySelectorAll('.job-row').length;
-        const wrapper = document.createElement('div');
-        wrapper.className = 'card job-row';
-        wrapper.style.padding = '12px';
-        wrapper.innerHTML = `
-            <div class="form-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));align-items:end">
-                <div class="field"><label>Role</label><select class="form-select" name="Jobs[${index}].JobType">${buildOptions(typeOptions, 'Select role')}</select></div>
-                <div class="field"><label>Main job</label><select class="form-select" name="Jobs[${index}].JobName">${buildOptions(mainJobOptions, 'Select main job')}</select></div>
-                <div class="field"><label>Sub job</label><select class="form-select" name="Jobs[${index}].SubJobName">${buildOptions(subJobOptions, 'Select sub job')}</select></div>
-                <div class="field"><label>Quantity</label><input class="form-control" type="number" name="Jobs[${index}].Quantity" /></div>
-                <div class="field" style="grid-column:1/-1"><label>Details</label><input class="form-control" name="Jobs[${index}].Details" /></div>
-                <div class="field" style="grid-column:1/-1"><button class="btn ghost sm remove-job" type="button">Remove job</button></div>
-            </div>`;
-        container.appendChild(wrapper);
-    });
-    container.addEventListener('click', event => {
-        const button = event.target.closest('.remove-job');
-        if (!button) return;
-        button.closest('.job-row')?.remove();
-        reindex();
-    });
-})();
-</script>
+    <script src="~/js/markdown-toolbar.js" asp-append-version="true"></script>
 }

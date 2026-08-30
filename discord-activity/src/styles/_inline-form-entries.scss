@@ -70,8 +70,9 @@
   margin-top: 4px;
 }
 
-/* The treasury's chip row is .fin-chips in _finances.scss now; the old .revenue-totals rule went
-   with the markup that used it. */
+/* The treasury's period figures are .fin-summary-card in _finances.scss now; the old .revenue-totals
+   rule went with the markup that used it, and the chip row that briefly replaced it went the same
+   way when the balance sheet gained a proper header. */
 
 /* ===== Rules / Announcements cards (dashboard) =====
    Each card carries an accent class that sets --acc; the icon + tag + hover read it,

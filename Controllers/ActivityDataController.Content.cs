@@ -433,9 +433,21 @@ public sealed partial class ActivityDataController
         var salePrice = request?.SalePrice ?? 0;
         if (salePrice < 0) { salePrice = 0; }
 
+        // Required, because a sale is gil arriving and gil that arrives on nobody's mule cannot be
+        // found again. The seller is very often not whoever is clicking this.
+        var soldBy = request?.SoldByCharacterName?.Trim();
+        if (string.IsNullOrWhiteSpace(soldBy))
+        {
+            return BadRequest(new { error = "Say who sold it — they are the one holding the gil." });
+        }
+
         var characterName = membership!.CharacterName ?? appUser.CharacterName;
         await _itemSales.RecordSaleAsync(
-            item, salePrice, new TreasuryActor(appUser.Id, characterName), cancellationToken);
+            item,
+            salePrice,
+            new TreasuryActor(appUser.Id, characterName),
+            new TreasuryHolder(request!.SoldByAppUserId, soldBy),
+            cancellationToken);
 
         return Ok(new { success = true });
     }

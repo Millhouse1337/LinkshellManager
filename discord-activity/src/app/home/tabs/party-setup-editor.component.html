@@ -18,16 +18,14 @@
         <input class="pse-input" [(ngModel)]="name" name="psName" maxlength="128" required />
       </label>
 
-      @if (shouldShowEventTypeSelector()) {
-        <label class="pse-field">
-          <span class="pse-field-label">Event Type</span>
-          <select class="pse-input pse-select" [ngModel]="eventTypeSelection" name="psEventType"
-            (ngModelChange)="setEventTypeSelection($event)">
-            <option value="">Select event type</option>
-            @for (type of eventTypeOptions(); track type) { <option [value]="type">{{ type }}</option> }
-          </select>
-        </label>
-      }
+      <label class="pse-field">
+        <span class="pse-field-label">Event Type</span>
+        <select class="pse-input pse-select" [ngModel]="eventTypeSelection" name="psEventType"
+          (ngModelChange)="setEventTypeSelection($event)">
+          <option value="">Select event type</option>
+          @for (type of eventTypeOptions(); track type) { <option [value]="type">{{ type }}</option> }
+        </select>
+      </label>
 
       @if (isOtherEventTypeSelected()) {
         <label class="pse-field">

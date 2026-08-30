@@ -85,7 +85,7 @@ public static class RevenueEntryConversionMap
         }
 
         // An EntryType nobody has seen. Fall back to the sign, which is the only signal left, and
-        // file it in a catch-all so it shows up in the "Uncategorized" count rather than vanishing.
+        // file it in the catch-all — which is where every hand-recorded entry lands now anyway.
         return value >= 0
             ? new TreasuryConversion(
                 TreasuryAccounts.GilOnHand, TreasuryAccounts.OtherMoneyIn, amount,

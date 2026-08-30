@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using LinkshellManagerDiscordApp.Models;
@@ -15,18 +16,57 @@ namespace LinkshellManagerDiscordApp.Services;
 // passes the loaded setup tree + per-event slot signups.
 public static class EventBoardHtmlBuilder
 {
+    // Layout constants the card width is derived from. A party column at 310px fits
+    // "WHM/BLM  Charactername" plus its haloed gem without the name ellipsing.
+    private const int ColumnWidth = 310;
+    private const int ColumnGap = 22;   // .parties gap
+    private const int CardPadX = 34;    // .pad horizontal padding, per side
+    private const int MaxColumns = 3;   // parties per row (the layout's fixed grid)
+
+    // Below this the header, stat tiles and Color Key start wrapping into a mess, so a
+    // one- or two-party board stops shrinking here rather than tracking its content down.
+    private const int MinCardWidth = 680;
+
+    // The canvas this board should be authored at — the ONE control over how large it reads
+    // in Discord.
+    //
+    // Discord scales a board image down to fit the message column, whose width is fixed and
+    // cannot be exceeded by any bot. So canvas width is a zoom control, inverted: the wider
+    // the canvas, the harder Discord squeezes it and the smaller the type arrives. The old
+    // fixed 1600/2000 canvases were therefore rendering at roughly 30–37% in a ~600px column,
+    // which is where "my boards look tiny and narrow" came from — the 2000px "wide" Components
+    // V2 canvas was the WORST of the two, not the best.
+    //
+    // Sizing to content instead keeps the board only as wide as its widest alliance row needs,
+    // so a 3-party board lands near 1040px (≈60% in that same column, with legible names) and
+    // a single-party board doesn't pay for columns it never fills.
+    public static int CardWidthFor(PartySetup setup)
+    {
+        var columns = ColumnsFor(setup);
+        var width = (CardPadX * 2) + (columns * ColumnWidth) + ((columns - 1) * ColumnGap);
+        return Math.Clamp(Math.Max(width, MinCardWidth), MinCardWidth, EventBoardImageRenderer.MaxCardWidth);
+    }
+
+    // Columns the grid actually needs: the busiest alliance's party count, capped at the
+    // layout's 3-per-row. Rows shorter than this are padded so columns stay aligned down the
+    // whole board.
+    private static int ColumnsFor(PartySetup setup)
+    {
+        var widestRow = setup.Alliances.Count == 0
+            ? 0
+            : setup.Alliances.Max(a => a.Parties.Count);
+        return Math.Clamp(widestRow, 1, MaxColumns);
+    }
+
     public static string Build(
         Event ev,
         PartySetup setup,
         IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
         IReadOnlyList<EventSignupLine> generalSignups,
-        string? theme = null,
-        bool wide = false)
+        string? theme = null)
     {
-        // Components V2 boards (wide) use a wider internal canvas so each party column is
-        // wider and more of the board reads at once. Kept at/below 2048px so the renderer
-        // can screenshot it at 2× density and still stay under Discord's 4096px/side cap.
-        var cardWidth = wide ? EventBoardImageRenderer.WideCardWidth : EventBoardImageRenderer.DefaultCardWidth;
+        var cardWidth = CardWidthFor(setup);
+        var columns = ColumnsFor(setup);
 
         var parties = LabeledParties(setup).ToList();
         var totalSlots = parties.Sum(p => p.Party.Slots.Count);
@@ -77,7 +117,7 @@ public static class EventBoardHtmlBuilder
     .tile .val{font-size:22px;font-weight:600;color:var(--soft);margin-top:6px;display:flex;align-items:center;gap:9px;}
   .tile .val .rel{font-style:italic;color:var(--dim);font-weight:400;}
     .legend{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 16px;background:var(--tint);border-left:2px solid var(--accent);border-radius:2px;}
-    .legend .item{display:inline-flex;align-items:center;gap:10px;}
+    .legend .item{display:inline-flex;align-items:center;gap:16px;}
     .legend .name{font-family:var(--cinzel);font-size:14px;letter-spacing:1px;color:var(--muted);}
     .legend .key-lab{font-family:var(--cinzel);font-size:13px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin-right:4px;}
     .legend .crown{color:var(--accent);font-size:18px;line-height:1;}
@@ -88,6 +128,24 @@ public static class EventBoardHtmlBuilder
   .gem.empty .face{background:transparent!important;border-width:1.5px;border-style:dashed;opacity:.6;box-shadow:none!important;}
   .gem .spark{position:absolute;left:18%;top:18%;width:32%;height:32%;background:rgba(255,255,255,.7);border-radius:1px;}
   .gem.empty .spark{display:none;}
+  /* Readiness halo — an 8-point spiked star sitting BEHIND the gem, so only its points
+     show around the face. A member carrying more than one tag gets one ring split into
+     equal conic wedges: concentric rings would be mush at this size. The gem is rotated
+     45deg and the star is its child, so the star rotates with it and still reads as spikes.
+     The star is ~2x the gem — at anything tighter the points barely clear the face. */
+  .gem .ring{position:absolute;inset:-9px;clip-path:polygon(50% 0%,62.2% 20.4%,85.4% 14.6%,79.6% 37.8%,100% 50%,79.6% 62.2%,85.4% 85.4%,62.2% 79.6%,50% 100%,37.8% 79.6%,14.6% 85.4%,20.4% 62.2%,0% 50%,20.4% 37.8%,14.6% 14.6%,37.8% 20.4%);}
+  /* A slightly larger star behind the coloured one, showing as a hard outline. This is
+     what makes Enfeeb's BLACK readable at all — unrimmed it is the same value as the
+     board's own dark ground and vanishes — and it's a mid slate so it also edges the
+     white and gold rather than only rescuing the dark one. A blur would soften the
+     points back into a smudge, which is the thing the spikes exist to avoid. */
+  .gem .ring.rim{inset:-11px;background:#93a2b5;}
+  .gem.sm .ring{inset:-7px;}
+  .gem.sm .ring.rim{inset:-8.5px;}
+  /* The role glow paints OVER the ring (the face is later in paint order), washing out a
+     dark wedge. A haloed gem trades that outer glow for the halo and keeps only the inner
+     highlight — more specific than the .g-* rules below, so it wins without !important. */
+  .gem.ring-on .face{box-shadow:inset 1px 1px 2px rgba(255,255,255,.4);}
   .g-tank .face{background:linear-gradient(135deg,var(--tank),#4a9eff99);border:1px solid var(--tank);box-shadow:0 0 9px rgba(74,158,255,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
   .g-heal .face{background:linear-gradient(135deg,var(--heal),#3fcf6b99);border:1px solid var(--heal);box-shadow:0 0 9px rgba(63,207,107,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
   .g-supp .face{background:linear-gradient(135deg,var(--supp),#f5c45199);border:1px solid var(--supp);box-shadow:0 0 9px rgba(245,196,81,.55),inset 1px 1px 2px rgba(255,255,255,.4);}
@@ -105,7 +163,7 @@ public static class EventBoardHtmlBuilder
     .pbar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-bottom:4px;}
   .pbar>i{display:block;height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent-deep),var(--accent-bright));box-shadow:0 0 8px var(--glow);}
   .pbar.full>i{background:linear-gradient(90deg,#3fcf6b,#8fe0a6);box-shadow:0 0 8px rgba(63,207,107,.45);}
-    .slot{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--slot-line);}
+    .slot{display:flex;align-items:center;gap:20px;padding:10px 2px;border-bottom:1px solid var(--slot-line);}
     .slot .combo{font-family:var(--cinzel);font-size:17px;font-weight:600;letter-spacing:.5px;color:var(--soft);white-space:nowrap;flex-shrink:0;}
   .slot.empty .combo{color:var(--vacant);}
     .slot .who{font-size:18px;font-style:italic;color:var(--name);display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -128,7 +186,7 @@ public static class EventBoardHtmlBuilder
     .extra{padding-top:20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:12px;}
     .extra-title{font-family:var(--cinzel);font-size:15px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);}
     .extra-list{display:flex;flex-wrap:wrap;gap:12px 26px;}
-    .extra-member{display:inline-flex;align-items:center;gap:10px;}
+    .extra-member{display:inline-flex;align-items:center;gap:18px;}
     .extra-name{font-size:18px;font-weight:600;color:var(--soft);}
     .extra-jobs{font-family:var(--cinzel);font-size:14px;letter-spacing:.5px;color:var(--name);}
 """);
@@ -172,7 +230,8 @@ public static class EventBoardHtmlBuilder
 
         // Color key — explains what each gem colour / marker means so the board
         // reads at a glance. Gem colour = the slot's ROLE; the dashed gem is an
-        // open slot; the crown marks the party leader.
+        // open slot; the crown marks the party leader; a spiked halo is a readiness
+        // tag the member set on themselves.
         sb.Append("""
 <div class="legend">
 <span class="key-lab">Color Key</span>
@@ -184,6 +243,15 @@ public static class EventBoardHtmlBuilder
 <span class="item"><span class="gem sm empty b-any"><span class="face"></span></span><span class="name">Open slot</span></span>
 <span class="item"><span class="crown">&#9819;</span><span class="name">Party leader</span></span>
 """);
+        // Readiness tags — a spiked halo in the tag's colour around the member's own role
+        // gem. Shown on every board (not just ones where somebody has used it) so the key
+        // also explains what the board's "🎖️ My Readiness" button is for.
+        foreach (var tag in EventReadiness.All)
+        {
+            var (ring, gemClass) = ReadinessHalo(tag);
+            sb.Append(
+                $"""<span class="item"><span class="gem sm g-any{gemClass}">{ring}<span class="face"></span><span class="spark"></span></span><span class="name">{Enc(tag.Label)}</span></span>""");
+        }
         // Window-cycle HNMs explain the 🔒 (a signup staying through the next window advance).
         if (HnmConfig.SupportsWindowAdvance(ev.AssignedMonsterName))
         {
@@ -223,8 +291,9 @@ public static class EventBoardHtmlBuilder
                 // Alliance is conveyed by the header above, so no per-party suffix.
                 AppendParty(sb, party, name, null, slotSignups);
             }
-            // Pad short rows to 3 columns so parties keep a consistent width.
-            for (var i = allianceParties.Count; i < 3 && parties.Count > 1; i++)
+            // Pad short rows out to the board's column count so parties keep a consistent
+            // width down the whole card (an alliance of 2 in a 3-column board still lines up).
+            for (var i = allianceParties.Count; i < columns && parties.Count > 1; i++)
             {
                 sb.Append("<div class=\"party\"></div>");
             }
@@ -265,7 +334,8 @@ public static class EventBoardHtmlBuilder
                 {
                     var roleClass = RoleClass(g.JobType);
                     var combo = GeneralCombo(g);
-                    sb.Append($"""<div class="extra-member"><span class="gem sm g-{roleClass}"><span class="face"></span><span class="spark"></span></span><span class="extra-name">{Enc(g.CharacterName)}</span>""");
+                    var (ring, ringClass) = ReadinessHalo(g.EnfeebReady, g.ResistReady, g.RelicWeapon);
+                    sb.Append($"""<div class="extra-member"><span class="gem sm g-{roleClass}{ringClass}">{ring}<span class="face"></span><span class="spark"></span></span><span class="extra-name">{Enc(g.CharacterName)}</span>""");
                     if (!string.IsNullOrEmpty(combo))
                     {
                         sb.Append($"""<span class="extra-jobs">{Enc(combo)}</span>""");
@@ -308,7 +378,9 @@ public static class EventBoardHtmlBuilder
                 // 🔒 marks a signup locked to survive the next window advance (it's staying).
                 var lockMark = signup.StayNextWindow ? "<span class=\"lock\">&#128274;</span>" : string.Empty;
                 var combo = Enc(SignedUpCombo(signup, slot));
-                sb.Append($"""<div class="slot"><span class="gem g-{roleClass}"><span class="face"></span><span class="spark"></span></span><span class="combo">{combo}</span><span class="who">{crown}{lockMark}{Enc(signup.CharacterName ?? "Member")}</span></div>""");
+                // The member's own readiness tags, as a spiked halo around their role gem.
+                var (ring, ringClass) = ReadinessHalo(signup.EnfeebReady, signup.ResistReady, signup.RelicWeapon);
+                sb.Append($"""<div class="slot"><span class="gem g-{roleClass}{ringClass}">{ring}<span class="face"></span><span class="spark"></span></span><span class="combo">{combo}</span><span class="who">{crown}{lockMark}{Enc(signup.CharacterName ?? "Member")}</span></div>""");
             }
             else
             {
@@ -360,6 +432,47 @@ public static class EventBoardHtmlBuilder
             }
         }
     }
+
+    // The spiked halo for a signup's readiness tags: the ring span to drop INSIDE the gem
+    // (before the face, so the face paints over its centre and only the points show), plus
+    // the extra class the gem itself needs. Empty strings when the member set no tags.
+    //
+    // More than one tag becomes ONE ring split into equal conic wedges, in EventReadiness.All
+    // order — stacking concentric rings at gem size just produces a smudge.
+    private static (string Ring, string GemClass) ReadinessHalo(bool enfeeb, bool resist, bool relic)
+    {
+        var tags = EventReadiness.Selected(enfeeb, resist, relic);
+        if (tags.Count == 0)
+        {
+            return (string.Empty, string.Empty);
+        }
+        string background;
+        if (tags.Count == 1)
+        {
+            background = tags[0].RingColor;
+        }
+        else
+        {
+            // InvariantCulture, not the server's: a comma-decimal locale would emit
+            // "33,33%" and silently break the gradient's stop list.
+            var step = 100d / tags.Count;
+            var stops = tags.Select((tag, i) =>
+                $"{tag.RingColor} {(i * step).ToString("0.##", CultureInfo.InvariantCulture)}%"
+                + $" {((i + 1) * step).ToString("0.##", CultureInfo.InvariantCulture)}%");
+            background = $"conic-gradient({string.Join(",", stops)})";
+        }
+        // Rim star first (it must paint behind), then the coloured one.
+        return (
+            $"""<span class="ring rim"></span><span class="ring" style="background:{background};"></span>""",
+            " ring-on");
+    }
+
+    // Single-tag overload for the Color Key, which shows each tag on its own.
+    private static (string Ring, string GemClass) ReadinessHalo(EventReadinessTag tag)
+        => ReadinessHalo(
+            tag.Value == EventReadiness.Enfeeb,
+            tag.Value == EventReadiness.Resist,
+            tag.Value == EventReadiness.Relic);
 
     private static string RoleClass(string? role) => role?.Trim().ToLowerInvariant() switch
     {

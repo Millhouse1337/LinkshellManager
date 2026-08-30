@@ -126,8 +126,8 @@
 </div>
 
 @* Every flash message for this page, surfaced once, above every section. The two WindowEvent
-   ones used to live inside _AttendanceSections; that partial now renders twice, and reading
-   TempData marks the entry consumed, so whichever slice ran first would have eaten them. *@
+   ones used to live inside _AttendanceSections; reading TempData marks the entry consumed, and
+   several sections can raise them, so whichever rendered first would have eaten them. *@
 @if (TempData["StartError"] is string startError && !string.IsNullOrWhiteSpace(startError))
 {
     <div class="card fade d1" style="border:1px solid var(--accent);padding:14px 16px;margin-bottom:16px">
@@ -154,19 +154,22 @@
     <div class="alert alert-success fade d1" style="margin-bottom:12px">@attendanceStatus</div>
 }
 
-@* The three sections, in the Discord Activity's order. *@
+@* The sections, in the Discord Activity's order. Unlinked Snapshots sits directly under Pending
+   Events rather than down in the archive: an unverified or unfiled capture is unpaid attendance
+   waiting on an officer, which is live work. *@
 @await Html.PartialAsync("_CurrentFieldActivity", Model)
 @await Html.PartialAsync("_PendingEvents", Model)
 @if (Model.Attendance is not null)
 {
+    @await Html.PartialAsync("_UnlinkedSnapshots", Model)
     @await Html.PartialAsync("_AttendanceArchive", Model)
 }
 @await Html.PartialAsync("_PastEvents", Model)
 
 @* Shared roster typeahead source for every "Add a character by name…" input in the snapshot
-   editors above (they reference it via list=). Emitted here, once, because _AttendanceSections
-   renders twice on this page and both slices contain those editors. Managers only — they're the
-   only ones who see the add form. *@
+   editors above (they reference it via list=). Emitted here, once, because those editors appear
+   in two separate sections — the open event cards and Unlinked Snapshots — and a datalist id has
+   to be unique. Managers only: they're the only ones who see the add form. *@
 @if (Model.Attendance is { CanManage: true } attendanceForRoster && attendanceForRoster.RosterCharacterNames.Count > 0)
 {
     <datalist id="we-roster-options">
@@ -416,15 +419,35 @@
         var repostEl = document.getElementById('tod-modal-repost');
         var repostLeadEl = document.getElementById('tod-modal-repost-lead');
         var repostLeadFieldEl = document.getElementById('tod-modal-repost-lead-field');
-        // Wyrms use an 84h window; the other window-cycle HNMs use 72h / 1h.
-        var LONG = ['Tiamat', 'Jormungand', 'Vrtra'];
+        // (A hardcoded monster table lived here, mapping the wyrms to 84h and the ToAU three to 72h
+        // with a 1-hour interval for both. Cooldown and cadence are per-linkshell and editable now,
+        // so a table in the browser could only ever be a stale second opinion — and it had already
+        // become one. The button carries the server-resolved values instead.)
 
+        // Mirrors Utils/TodDurationFormat: "<n> Hour" / "<n> Min", with a bare number meaning HOURS
+        // for a cooldown. Returns 0 for anything unreadable, which the caller treats as "no repop".
         function cooldownHours(v) {
-            if (v === '5 Min') { return 5 / 60; }
-            if (v === '2 Hour') { return 2; }
-            if (v === '84 Hour') { return 84; }
-            if (v === '72 Hour') { return 72; }
-            return 22;
+            var m = /^\s*(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)?\s*$/i.exec(v || '');
+            if (!m) { return 0; }
+            var n = parseFloat(m[1]);
+            return (m[2] || 'h').toLowerCase().charAt(0) === 'm' ? n / 60 : n;
+        }
+
+        // The options in the Cooldown and Interval selects are convenience presets; the value that
+        // matters is whatever the linkshell configured, which may be none of them (a 6-hour ToAU
+        // cadence, a 48-hour repop). Add it rather than let the browser drop the assignment and
+        // leave the select showing an unrelated preset.
+        function setDuration(el, value) {
+            var text = (value || '').trim();
+            if (!text) { return; }
+            var known = Array.prototype.some.call(el.options, function (o) { return o.value === text; });
+            if (!known) {
+                var opt = document.createElement('option');
+                opt.value = text;
+                opt.textContent = text;
+                el.insertBefore(opt, el.firstChild);
+            }
+            el.value = text;
         }
 
         // The lead only means anything while re-posting is on.
@@ -436,7 +459,9 @@
             if (!timeEl.value) { repopEl.textContent = 'Pick a time of death.'; return; }
             var d = new Date(timeEl.value);
             if (isNaN(d.getTime())) { repopEl.textContent = 'Pick a time of death.'; return; }
-            var repop = new Date(d.getTime() + cooldownHours(cooldownEl.value) * 3600000);
+            var hours = cooldownHours(cooldownEl.value);
+            if (hours <= 0) { repopEl.textContent = 'Enter a valid cooldown.'; return; }
+            var repop = new Date(d.getTime() + hours * 3600000);
             repopEl.textContent = repop.toLocaleString();
         }
 
@@ -470,8 +495,10 @@
             if (editing && prefillTime) {
                 // Edit ToD: open with the board's already-logged values.
                 timeEl.value = prefillTime;
-                cooldownEl.value = btn.getAttribute('data-cooldown') || '22 Hour';
-                intervalEl.value = btn.getAttribute('data-interval') || '10 Min';
+                setDuration(cooldownEl, btn.getAttribute('data-cooldown')
+                    || btn.getAttribute('data-default-cooldown') || '22 Hour');
+                setDuration(intervalEl, btn.getAttribute('data-interval')
+                    || btn.getAttribute('data-default-interval') || '10 Min');
                 // data-claim is 'true' / 'false' / '' (Not specified) — matches the select.
                 document.getElementById('tod-modal-claim').value = btn.getAttribute('data-claim') || '';
                 // data-killed is 'true' / 'false'; unrecorded ToDs fall back to 'true', the
@@ -479,11 +506,12 @@
                 document.getElementById('tod-modal-killed').value =
                     btn.getAttribute('data-killed') === 'false' ? 'false' : 'true';
             } else {
-                // Post ToD: blank time, defaults keyed to the monster's window length.
-                var isLong = LONG.indexOf(monster) !== -1;
+                // Post ToD: blank time, and the cooldown + interval THIS LINKSHELL has configured
+                // for the monster — resolved server-side onto the button (see
+                // EventViewModel.BoardTodDefaultCooldown), so this form and the Activity's agree.
                 timeEl.value = '';
-                cooldownEl.value = isLong ? '84 Hour' : '22 Hour';
-                intervalEl.value = isLong ? '1 Hour' : '10 Min';
+                setDuration(cooldownEl, btn.getAttribute('data-default-cooldown') || '22 Hour');
+                setDuration(intervalEl, btn.getAttribute('data-default-interval') || '10 Min');
                 document.getElementById('tod-modal-claim').value = 'true';
                 document.getElementById('tod-modal-killed').value = 'true';
             }

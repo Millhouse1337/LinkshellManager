@@ -74,4 +74,20 @@ public sealed class EventHistoryListViewModel
 
     public int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
     public List<Models.EventHistory> Items { get; set; } = new();
+
+    // Officer rights on the selected linkshell. The collapsed cards read it only for their wording
+    // ("manage" vs "view") — every editor inside a card body is re-authorized server-side when that
+    // body loads, so this is presentation and never the gate.
+    public bool CanManage { get; set; }
+
+    // Attendees per event, keyed by history id — the "N attendees" chip on a collapsed card.
+    // Counted in SQL instead of Include()ing the rows, because the card BODY is what actually needs
+    // the attendees and it loads lazily, one card at a time.
+    public Dictionary<int, int> ParticipantCounts { get; set; } = new();
+
+    // Archived attendance windows per event, keyed by history id. Greater than zero marks an
+    // HNM-style camp whose window record survived the close, and it is the only thing separating a
+    // windowed camp from a timed event in this list — see EventHistoryWindowsReader. Always absent
+    // for camps closed before the archive existed; those windows are not recoverable.
+    public Dictionary<int, int> ArchivedWindowCounts { get; set; } = new();
 }

@@ -102,11 +102,15 @@
                         @if (characters.length === 0) {
                           <div class="jobs-roster-member__empty">No jobs entered</div>
                         }
-                        @for (ch of characters; track ch.label) {
+                        @for (ch of characters; track ch.label; let i = $index) {
                           <div class="jobs-roster-member__character">
-                            @if (ch.isAlt) {
-                              <div class="jobs-roster-member__alt">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
-                            }
+                            <!-- characters() always yields [main, alt1?, alt2?], so the loop
+                                 index doubles as the alt's number. -->
+                            <span class="jobs-roster-member__who">
+                              <span class="jobs-roster-member__name">{{ ch.label }}</span>
+                              <span class="jobs-roster-member__dot">·</span>
+                              <span class="jobs-roster-member__tag" [class.jobs-roster-member__tag--main]="!ch.isAlt">{{ ch.isAlt ? 'Alt ' + i : 'Main' }}</span>
+                            </span>
                             @if (leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName); as jobs) {
                               @if (jobs.length === 0) {
                                 <div class="jobs-roster-member__empty">No jobs entered</div>
@@ -138,6 +142,9 @@
                       </select>
                     } @else {
                       <span class="tag default">{{ rankIcon(member.rank) }} {{ member.rank || 'Member' }}</span>
+                    }
+                    @if (member.isAdmin) {
+                      <span class="tag accent" title="App-wide admin override: full permissions in every linkshell they belong to.">{{ ADMIN_BADGE }}</span>
                     }
                   </div>
                   <div class="ac-roster-status">

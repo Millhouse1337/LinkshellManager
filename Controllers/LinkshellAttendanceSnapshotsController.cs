@@ -18,15 +18,18 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
 
     private readonly ApplicationDbContext _db;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly TimeZoneConversionService _timeZones;
 
     public LinkshellAttendanceSnapshotsController(
         ApplicationDbContext db,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         TimeZoneConversionService timeZones)
     {
         _db = db;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _timeZones = timeZones;
     }
 
@@ -144,7 +147,7 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
         var membership = await _db.AppUserLinkshells
             .AsNoTracking()
             .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId, cancellationToken);
-        var canRename = membership is not null && LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+        var canRename = await CanManageAsync(membership, user.Id, cancellationToken);
 
         var viewModel = new LinkshellAttendanceSnapshotsViewModel
         {
@@ -170,8 +173,7 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
             .AsNoTracking()
             .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId, cancellationToken);
         if (membership is null) return Forbid();
-        var rank = membership.Rank ?? string.Empty;
-        if (!LinkshellRanks.IsLeaderOrOfficer(rank))
+        if (!await CanManageAsync(membership, user.Id, cancellationToken))
         {
             return Forbid();
         }
@@ -289,8 +291,7 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
             .AsNoTracking()
             .FirstOrDefaultAsync(link => link.AppUserId == user.Id && link.LinkshellId == linkshellId, cancellationToken);
         if (membership is null) return Forbid();
-        var rank = membership.Rank ?? string.Empty;
-        if (!LinkshellRanks.IsLeaderOrOfficer(rank))
+        if (!await CanManageAsync(membership, user.Id, cancellationToken))
         {
             return Forbid();
         }
@@ -313,5 +314,19 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
         var time = dt.ToString("h:mm", CultureInfo.InvariantCulture);
         var meridian = dt.ToString("tt", CultureInfo.InvariantCulture).ToLowerInvariant();
         return $"{month} {day}{suffix} {year} {time}{meridian} {zoneSuffix}";
+    }
+
+    // Renaming/managing captures is gated to leader / officer (rank-based) to keep
+    // members from relabeling other people's captures, OR to the app-wide admin
+    // override. The membership must already be resolved — the override never reaches
+    // a linkshell the user has not joined.
+    private async Task<bool> CanManageAsync(
+        AppUserLinkshell? membership,
+        string appUserId,
+        CancellationToken cancellationToken)
+    {
+        if (membership is null) return false;
+        return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
+               || await _adminOverride.IsActiveForAsync(appUserId, cancellationToken);
     }
 }

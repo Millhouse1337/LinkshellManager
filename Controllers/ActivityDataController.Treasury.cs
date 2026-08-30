@@ -52,7 +52,7 @@ public sealed partial class ActivityDataController
         {
             query = query.Where(entry => entry.Status == JournalEntryStatuses.Confirmed);
         }
-        query = ApplyTreasuryFilter(query, filter);
+        query = TreasuryEntryFilters.Apply(query, filter);
 
         var term = search?.Trim();
         if (!string.IsNullOrWhiteSpace(term))
@@ -65,7 +65,11 @@ public sealed partial class ActivityDataController
                 || entry.Lines.Any(line =>
                     EF.Functions.ILike(line.AccountName, pattern)
                     || (line.CounterpartyCharacterName != null
-                        && EF.Functions.ILike(line.CounterpartyCharacterName, pattern))));
+                        && EF.Functions.ILike(line.CounterpartyCharacterName, pattern))
+                    // The mule too, so "Edicius" finds what he is carrying and not only what he was
+                    // paid — which is the question the who's-holding-it list makes people ask.
+                    || (line.HolderCharacterName != null
+                        && EF.Functions.ILike(line.HolderCharacterName, pattern))));
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -84,7 +88,14 @@ public sealed partial class ActivityDataController
             pageIndex,
             TreasuryPageSize,
             categories.Select(MapTreasuryCategory).ToList(),
-            TreasuryTransactionKinds.Pickable().Select(MapTreasuryKind).ToList(),
+            // ALL of them, not just the pickable ones. The client resolves the selected kind out of
+            // this list and the whole form hangs off the result — the split picker, the member box,
+            // the preview, and whether Submit does anything. Send only the pickable ones and a Fix
+            // on an app-recorded entry does not just lose its option, it loses the form.
+            TreasuryTransactionKinds.All.Select(MapTreasuryKind).ToList(),
+            TreasuryTransactionActions.All
+                .Select(action => new ActivityTreasuryActionDto(action.Key, action.Label))
+                .ToList(),
             canManage ? await LoadTreasuryRosterAsync(linkshellId, cancellationToken) : new(),
             canManage));
     }
@@ -102,7 +113,8 @@ public sealed partial class ActivityDataController
         }
 
         var invalid = ValidateTreasuryRequest(
-            request.TransactionKind, request.Amount, request.CounterpartyCharacterName);
+            request.TransactionKind, request.Amount, request.CounterpartyCharacterName,
+            request.HolderCharacterName);
         if (invalid is not null)
         {
             return invalid;
@@ -170,8 +182,11 @@ public sealed partial class ActivityDataController
             return found.Failure;
         }
 
+        // Retired kinds are allowed HERE and nowhere else: correcting an entry must be able to
+        // reproduce the movement it is correcting.
         var invalid = ValidateTreasuryRequest(
-            request.TransactionKind, request.Amount, request.CounterpartyCharacterName);
+            request.TransactionKind, request.Amount, request.CounterpartyCharacterName,
+            request.HolderCharacterName, allowRetired: true);
         if (invalid is not null)
         {
             return invalid;
@@ -282,7 +297,8 @@ public sealed partial class ActivityDataController
         }
 
         var invalid = ValidateTreasuryRequest(
-            request.TransactionKind, request.Amount, request.CounterpartyCharacterName);
+            request.TransactionKind, request.Amount, request.CounterpartyCharacterName,
+            request.HolderCharacterName);
         if (invalid is not null)
         {
             return invalid;
@@ -302,18 +318,22 @@ public sealed partial class ActivityDataController
             return shared.Failure;
         }
 
+        // Named arguments throughout: the request grew a holder pair in the middle, and a positional
+        // call silently re-aims every argument after it at the wrong parameter.
         var corrected = new TreasuryEntryRequest(
             request.TransactionKind,
             request.Amount,
             (request.TransactionDate ?? found.Entry!.TransactionDate).ToUniversalTime(),
-            request.Memo,
-            shared.Recipients.Count > 0 ? null : request.CounterpartyAppUserId,
-            shared.Recipients.Count > 0 ? null : request.CounterpartyCharacterName,
-            found.Entry!.Source,
-            found.Entry.SourceItemId,
-            found.Entry.SourceAuctionItemId,
-            found.Entry.SourceAuctionHistoryId,
-            shared.Recipients.Count > 0 ? shared.Recipients : null);
+            Memo: request.Memo,
+            CounterpartyAppUserId: shared.Recipients.Count > 0 ? null : request.CounterpartyAppUserId,
+            CounterpartyCharacterName: shared.Recipients.Count > 0 ? null : request.CounterpartyCharacterName,
+            HolderAppUserId: request.HolderAppUserId,
+            HolderCharacterName: request.HolderCharacterName,
+            Source: found.Entry!.Source,
+            SourceItemId: found.Entry.SourceItemId,
+            SourceAuctionItemId: found.Entry.SourceAuctionItemId,
+            SourceAuctionHistoryId: found.Entry.SourceAuctionHistoryId,
+            Recipients: shared.Recipients.Count > 0 ? shared.Recipients : null);
 
         try
         {
@@ -332,12 +352,37 @@ public sealed partial class ActivityDataController
         }
     }
 
-    // Someone logged onto the mule and counted. The app works out which way the gap goes — the officer
-    // enters what they counted, nothing more.
-    [HttpPost("linkshells/{linkshellId:int}/treasury/check-gil")]
-    public async Task<IActionResult> CheckGilOnHandAsync(
+    // Pay the ticked members straight off the balance sheet's "who we owe" list, in full.
+    //
+    // One ordinary "We paid a member what we owed" transaction each, in a single save, so a payout
+    // run lands whole or not at all. Same service the website's SettleOwed uses, so the two surfaces
+    // cannot pay differently.
+    [HttpPost("linkshells/{linkshellId:int}/treasury/settle")]
+    public Task<IActionResult> SettleOwedAsync(
         int linkshellId,
-        [FromBody] ActivityCheckGilRequest request,
+        [FromBody] ActivitySettleOwedRequest request,
+        CancellationToken cancellationToken) =>
+        SettleAsync(
+            linkshellId, request, TreasurySettlementDirection.WePaidThem,
+            "Tick who was paid first.", cancellationToken);
+
+    // The mirror on the other half of the sheet: tick whoever has now paid the LINKSHELL. Same
+    // service, same rules, opposite direction — clearing an owed-to-us debt has no other route, and
+    // the Record form deliberately offers none.
+    [HttpPost("linkshells/{linkshellId:int}/treasury/settle-owed-to-us")]
+    public Task<IActionResult> SettleOwedToUsAsync(
+        int linkshellId,
+        [FromBody] ActivitySettleOwedRequest request,
+        CancellationToken cancellationToken) =>
+        SettleAsync(
+            linkshellId, request, TreasurySettlementDirection.TheyPaidUs,
+            "Tick who paid first.", cancellationToken);
+
+    private async Task<IActionResult> SettleAsync(
+        int linkshellId,
+        ActivitySettleOwedRequest request,
+        TreasurySettlementDirection direction,
+        string nothingTickedMessage,
         CancellationToken cancellationToken)
     {
         var gate = await AuthorizeTreasuryWriteAsync(linkshellId, cancellationToken);
@@ -345,37 +390,43 @@ public sealed partial class ActivityDataController
         {
             return gate.Failure;
         }
-        if (request.CountedAmount < 0)
-        {
-            return BadRequest(new { error = "The gil you counted cannot be negative." });
-        }
 
-        var onTheBooks = await _treasuryJournal.GetCashOnHandAsync(linkshellId, cancellationToken);
-        var difference = request.CountedAmount - onTheBooks;
-        if (difference == 0)
+        var picks = (request.Picks ?? Array.Empty<ActivityTreasurySettlePickDto>())
+            .Where(pick => !string.IsNullOrWhiteSpace(pick.CharacterName))
+            .Select(pick => new TreasurySettlementPick(pick.CharacterName, pick.ExpectedAmount))
+            .ToList();
+        if (picks.Count == 0)
         {
-            return Ok(new { success = true, difference = 0L, recorded = false });
+            return BadRequest(new { error = nothingTickedMessage });
         }
-
-        var kind = difference > 0
-            ? TreasuryTransactionKinds.FoundExtraGil
-            : TreasuryTransactionKinds.MissingGil;
+        // Ticking a name here moves real gil, so it answers the same question the record form asks.
+        // Without it a payout run would quietly file the whole batch under "nobody named".
+        if (string.IsNullOrWhiteSpace(request.HolderCharacterName))
+        {
+            return BadRequest(new
+            {
+                error = direction == TreasurySettlementDirection.TheyPaidUs
+                    ? "Say who is holding this gil."
+                    : "Say whose gil this is coming out of.",
+            });
+        }
 
         try
         {
-            var entry = await _treasuryJournal.RecordAsync(
-                linkshellId,
-                new TreasuryEntryRequest(
-                    kind,
-                    Math.Abs(difference),
-                    (request.TransactionDate ?? DateTime.UtcNow).ToUniversalTime(),
-                    Memo: string.IsNullOrWhiteSpace(request.Memo)
-                        ? $"Counted {request.CountedAmount:N0} gil; the books said {onTheBooks:N0}."
-                        : request.Memo),
-                gate.Actor,
-                cancellationToken);
+            var result = await _treasurySettlements.SettleAsync(
+                linkshellId, picks, direction,
+                new TreasuryHolder(request.HolderAppUserId, request.HolderCharacterName.Trim()),
+                gate.Actor, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
-            return Ok(new { success = true, difference, recorded = true, entryNumber = entry.EntryNumber });
+
+            // 200 even when every tick was skipped: nothing failed, the books had simply moved on.
+            // The panel reads Success to decide whether that is a confirmation or a warning.
+            return Ok(new ActivitySettleOwedResultDto(
+                !result.DidNothing,
+                result.Message,
+                result.TotalPaid,
+                result.Settled.Select(line => line.CharacterName).ToList(),
+                result.Skipped.Select(skip => skip.CharacterName).ToList()));
         }
         catch (TreasuryPeriodLockedException locked)
         {
@@ -397,7 +448,9 @@ public sealed partial class ActivityDataController
             return Unauthorized(new { error = "Sign in to manage the treasury." });
         }
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (membership is null || !LinkshellRanks.IsLeader(membership.Rank))
+        if (membership is null ||
+            !(LinkshellRanks.IsLeader(membership.Rank) ||
+              await _adminOverride.IsActiveForAsync(appUser, cancellationToken)))
         {
             return Forbid();
         }
@@ -436,27 +489,11 @@ public sealed partial class ActivityDataController
 
     // ---- helpers ----------------------------------------------------------------
 
-    private static IQueryable<JournalEntry> ApplyTreasuryFilter(IQueryable<JournalEntry> query, string? filter) =>
-        filter?.Trim().ToLowerInvariant() switch
-        {
-            // Direction comes from whether gil on hand went up or down, never from a string match — that
-            // is what made the old chips hide legacy entries under both filters at once.
-            "in" => query.Where(entry => entry.Lines.Any(line =>
-                line.AccountNumber == TreasuryAccounts.GilOnHand && line.Amount > 0)),
-            "out" => query.Where(entry => entry.Lines.Any(line =>
-                line.AccountNumber == TreasuryAccounts.GilOnHand && line.Amount < 0)),
-            "drafts" => query.Where(entry => entry.Status == JournalEntryStatuses.Draft),
-            "reversed" => query.Where(entry =>
-                entry.Kind == JournalEntryKinds.Reversal
-                || query.Any(other => other.ReversesJournalEntryId == entry.Id)),
-            _ => query,
-        };
-
     private async Task<ActivityTreasurySnapshotDto> BuildTreasurySnapshotAsync(
         int linkshellId, CancellationToken cancellationToken)
     {
-        var (snapshot, owedToMembers) =
-            await _treasury.GetBalanceSheetAsync(linkshellId, null, null, cancellationToken);
+        var sheet = await _treasury.GetBalanceSheetAsync(linkshellId, null, null, cancellationToken);
+        var snapshot = sheet.Snapshot;
         return new ActivityTreasurySnapshotDto(
             snapshot.CashOnHand,
             snapshot.OwedToUs,
@@ -467,15 +504,31 @@ public sealed partial class ActivityDataController
             snapshot.NetWorth,
             snapshot.StartingBalance,
             snapshot.Balances,
-            await _treasury.GetUncategorizedCountAsync(linkshellId, cancellationToken),
             await _ledgerPeriods.GetLockedThroughAsync(linkshellId, cancellationToken),
             TreasuryLabels.BasisNote,
             // The word for "nobody was named" is decided here, once, so both surfaces say it the same.
-            owedToMembers
-                .Select(owed => new ActivityTreasuryMemberObligationDto(
-                    owed.CharacterName ?? TreasuryLabels.UnnamedMember, owed.Amount))
+            // CanSettle comes off the obligation rather than the displayed name for the same reason:
+            // a member could in principle be called whatever UnnamedMember says.
+            MapObligations(sheet.OwedToMembers),
+            MapObligations(sheet.OwedToUsBy),
+            // Sent RAW — the name stays null where nobody was named, and the front-end labels it. The
+            // obligation lists resolve their own null to a word here because CanSettle has to be
+            // decided beside it; this list is never ticked, so there is nothing to decide.
+            sheet.GilHolders
+                .Select(holder => new ActivityTreasuryGilHolderDto(holder.CharacterName, holder.Amount))
                 .ToList());
     }
+
+    // Both halves of the sheet, mapped the same way — they are the same kind of list and the same
+    // kind of tick, so a difference between them here could only be a mistake.
+    private static List<ActivityTreasuryMemberObligationDto> MapObligations(
+        IReadOnlyList<MemberObligation> obligations) =>
+        obligations
+            .Select(owed => new ActivityTreasuryMemberObligationDto(
+                owed.CharacterName ?? TreasuryLabels.UnnamedMember,
+                owed.Amount,
+                owed.CharacterName is not null && owed.Amount > 0))
+            .ToList();
 
     private async Task<List<ActivityTreasuryEntryDto>> MapTreasuryEntriesAsync(
         List<JournalEntry> entries, CancellationToken cancellationToken)
@@ -486,14 +539,14 @@ public sealed partial class ActivityDataController
         }
 
         var ids = entries.Select(entry => entry.Id).ToList();
-
-        // Which of these have been cancelled out, and which entry each reversal points at. Both read as
-        // lookups rather than stored flags, because storing them would mean updating a confirmed entry.
-        var reversedIds = await _dbContext.JournalEntries
+        // Which of these have been cancelled out, why, and which entry each reversal points at. Both
+        // read as lookups rather than stored flags, because storing them would mean updating a
+        // confirmed entry. The WHY matters as much as the fact: a Correction pointing at an entry
+        // means it was FIXED, a Reversal alone means it was called off, and the list says so.
+        var cancels = await _dbContext.JournalEntries
             .AsNoTracking()
             .Where(entry => entry.ReversesJournalEntryId != null && ids.Contains(entry.ReversesJournalEntryId.Value))
-            .Select(entry => entry.ReversesJournalEntryId!.Value)
-            .Distinct()
+            .Select(entry => new CancelledEntryRow(entry.ReversesJournalEntryId!.Value, entry.Kind))
             .ToListAsync(cancellationToken);
 
         var targetIds = entries
@@ -528,15 +581,20 @@ public sealed partial class ActivityDataController
             .GroupBy(member => (member.LinkshellId, Name: member.CharacterName!.ToLowerInvariant()))
             .ToDictionary(group => group.Key, group => group.First().Id);
 
-        var reversed = reversedIds.ToHashSet();
+        var reversed = cancels.Select(row => row.OriginalId).ToHashSet();
+        var corrected = cancels
+            .Where(row => string.Equals(row.Kind, JournalEntryKinds.Correction, StringComparison.OrdinalIgnoreCase))
+            .Select(row => row.OriginalId)
+            .ToHashSet();
         return entries
-            .Select(entry => MapTreasuryEntry(entry, reversed, targetNumbers, byAppUser, byName))
+            .Select(entry => MapTreasuryEntry(entry, reversed, corrected, targetNumbers, byAppUser, byName))
             .ToList();
     }
 
     private static ActivityTreasuryEntryDto MapTreasuryEntry(
         JournalEntry entry,
         HashSet<int> reversedIds,
+        HashSet<int> correctedIds,
         Dictionary<int, string> targetNumbers,
         Dictionary<(int, string), int> membershipByAppUser,
         Dictionary<(int, string), int> membershipByName)
@@ -549,8 +607,15 @@ public sealed partial class ActivityDataController
         // it is spread over. Reading one line would report a split as one member's share.
         var amount = lines.Where(line => line.Amount > 0).Sum(line => line.Amount);
 
+        // One row per person, not per line. A member's name goes onto every half that is not gil on
+        // hand, so an entry where NEITHER half is gil on hand — "someone owes us for work", or gil
+        // owed to one member — names the same person twice and used to read as "Bob, Bob" and take
+        // the who-got-what layout meant for splits. A real split cannot collide: its recipients are
+        // distinct membership rows. First line wins, so the amount shown is the first half's.
         var recipients = lines
             .Where(line => !string.IsNullOrWhiteSpace(line.CounterpartyCharacterName))
+            .GroupBy(line => line.CounterpartyCharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
             .Select(line => new ActivityTreasuryRecipientDto(
                 ResolveMembershipId(entry.LinkshellId, line, membershipByAppUser, membershipByName),
                 line.CounterpartyAppUserId,
@@ -585,6 +650,7 @@ public sealed partial class ActivityDataController
                 ? targetNumbers.GetValueOrDefault(entry.ReversesJournalEntryId.Value)
                 : null,
             reversedIds.Contains(entry.Id),
+            correctedIds.Contains(entry.Id),
             entry.CorrectionReason,
             recipients,
             lines.Select(line => new ActivityTreasuryLineDto(
@@ -593,7 +659,12 @@ public sealed partial class ActivityDataController
                 line.AccountName,
                 TreasuryLabels.ClassLabelForNumber(line.AccountNumber),
                 line.PresentedAmount,
-                line.CounterpartyCharacterName)).ToList());
+                line.CounterpartyCharacterName)).ToList(),
+            // Only the gil-on-hand line can carry one, so this reads the entry's holder without
+            // having to say which line it came from.
+            lines
+                .Select(line => line.HolderCharacterName)
+                .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)));
     }
 
     // Account first, because a character rename should not lose the link. Name second, because an
@@ -627,8 +698,10 @@ public sealed partial class ActivityDataController
             account.SortOrder);
 
     private static ActivityTreasuryKindDto MapTreasuryKind(TreasuryTransactionKind kind) =>
-        new(kind.Key, kind.Label, kind.Help, kind.Group, kind.ShowsMember, kind.IsSplittable,
-            kind.SettlesMemberDebt, kind.PreviewTemplate);
+        new(kind.Key, kind.Label, kind.ReasonLabel, kind.Help, kind.Action, kind.ShowsMember, kind.RequiresMember,
+            kind.IsSplittable, kind.SettlesMemberDebt, kind.IsPickable, kind.IsRetired,
+            kind.PreviewTemplate, kind.CounterpartyLabel, kind.RequiresHolder, kind.HolderLabel,
+            kind.BringsCashIn);
 
     // Who a split can be shared with. Unsynced characters are included: they are real members of the
     // linkshell and get real shares, they just have no account behind the name.
@@ -667,7 +740,7 @@ public sealed partial class ActivityDataController
         }
         if (wanted.Count == 0)
         {
-            return (BadRequest(new { error = "Pick at least one member to share the gil with." }), new());
+            return (BadRequest(new { error = "Pick who this is for — one member, or several to split it." }), new());
         }
 
         var recipients = await _dbContext.AppUserLinkshells
@@ -702,15 +775,31 @@ public sealed partial class ActivityDataController
             // conflicting answer to "who was this for".
             recipients.Count > 0 ? null : request.CounterpartyAppUserId,
             recipients.Count > 0 ? null : request.CounterpartyCharacterName,
+            // The holder is NOT suppressed for a split, unlike the counterparty above: a split that
+            // moves gil on hand moves it off one mule however many people share it, and the writer
+            // puts it on the whole half for exactly that reason.
+            HolderAppUserId: request.HolderAppUserId,
+            HolderCharacterName: request.HolderCharacterName,
             Recipients: recipients.Count > 0 ? recipients : null);
 
+    // allowRetired is true ONLY from Fix. A retired kind may never start a new movement, but an
+    // entry already recorded under one has to be correctable without being re-filed onto two
+    // different categories — which is what happens when its option is simply missing from the form.
     private IActionResult? ValidateTreasuryRequest(
-        string? transactionKind, long amount, string? counterpartyCharacterName)
+        string? transactionKind,
+        long amount,
+        string? counterpartyCharacterName,
+        string? holderCharacterName,
+        bool allowRetired = false)
     {
         var kind = TreasuryTransactionKinds.Find(transactionKind);
         if (kind is null)
         {
             return BadRequest(new { error = "Pick what happened from the list." });
+        }
+        if (kind.IsRetired && !allowRetired)
+        {
+            return BadRequest(new { error = "That option is no longer available. Pick what happened from the list." });
         }
         if (amount <= 0)
         {
@@ -720,6 +809,18 @@ public sealed partial class ActivityDataController
         if (kind.RequiresMember && string.IsNullOrWhiteSpace(counterpartyCharacterName))
         {
             return BadRequest(new { error = "Say which member this is for." });
+        }
+        // And gil that moves with no mule attached cannot appear on the who's-holding-it list. The
+        // same argument as above, applied to the one figure that had no names behind it: a linkshell
+        // has no bank, so gil on hand that belongs to nobody in particular cannot be found again.
+        if (kind.RequiresHolder && string.IsNullOrWhiteSpace(holderCharacterName))
+        {
+            return BadRequest(new
+            {
+                error = kind.BringsCashIn
+                    ? "Say who is holding this gil."
+                    : "Say whose gil this is coming out of.",
+            });
         }
         return null;
     }

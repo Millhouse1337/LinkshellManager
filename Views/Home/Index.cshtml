@@ -3,31 +3,259 @@
     Layout = "_Layout";
 }
 
+@* Page-scoped: the framed gold masthead below is only on this page. (@@ is a literal @ in Razor.) *@
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@@500;600;700&display=swap');
+
+    .linkshell-banner {
+        width: 100%;
+        min-height: 210px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 14px;
+        background: radial-gradient(circle at center,
+                rgba(39, 48, 75, 0.55) 0%,
+                rgba(14, 19, 31, 0.9) 45%,
+                #080a0e 100%);
+        box-sizing: border-box;
+    }
+
+    /* ---- Main frame ---- */
+    .banner-inner {
+        position: relative;
+        width: 100%;
+        min-height: 175px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: 1px solid rgba(176, 126, 36, 0.65);
+        background: radial-gradient(ellipse at center, rgba(46, 54, 82, 0.26), transparent 60%),
+                    linear-gradient(180deg, rgba(15, 20, 31, 0.95), rgba(5, 8, 13, 0.98));
+        box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.9),
+                    inset 0 0 4px rgba(255, 190, 65, 0.15),
+                    0 8px 25px rgba(0, 0, 0, 0.65);
+    }
+
+    /* Second inner gold frame. */
+    .banner-inner::before {
+        content: "";
+        position: absolute;
+        inset: 7px;
+        pointer-events: none;
+        border-top: 1px solid rgba(215, 157, 54, 0.38);
+        border-bottom: 1px solid rgba(215, 157, 54, 0.38);
+    }
+
+    /* Subtle centre glow. */
+    .banner-inner::after {
+        content: "";
+        position: absolute;
+        width: 520px;
+        height: 180px;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        background: radial-gradient(ellipse, rgba(84, 99, 145, 0.18), transparent 68%);
+        filter: blur(10px);
+        pointer-events: none;
+    }
+
+    .banner-content {
+        position: relative;
+        z-index: 5;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 90%;
+    }
+
+    /* ---- Title ---- */
+    .banner-content h1 {
+        margin: 0;
+        font-family: "Cinzel", Georgia, serif;
+        font-size: clamp(38px, 5vw, 78px);
+        font-weight: 600;
+        letter-spacing: 2px;
+        color: #e8b64f;
+        text-align: center;
+        /* Metallic gold painted through the glyphs. */
+        background: linear-gradient(to bottom,
+                #fff0a2 0%, #ffd66b 15%, #b97916 42%,
+                #fff0a0 57%, #e8ae36 72%, #84510d 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        /* Gold edge / depth. */
+        filter: drop-shadow(0 1px 0 #fff2a6)
+                drop-shadow(0 2px 0 #8c520d)
+                drop-shadow(0 5px 5px rgba(0, 0, 0, 0.9))
+                drop-shadow(0 0 12px rgba(232, 174, 55, 0.25));
+        text-shadow: 0 1px 0 rgba(255, 232, 151, 0.35),
+                     0 4px 7px rgba(0, 0, 0, 0.95);
+    }
+
+    /* ---- Decorative divider ---- */
+    .title-divider {
+        width: min(780px, 80%);
+        margin-top: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .divider-line {
+        height: 1px;
+        flex: 1;
+        background: linear-gradient(to right, transparent, #8d5a15 15%, #e4ad3e 45%, #ffd76e 100%);
+        box-shadow: 0 0 5px rgba(230, 171, 57, 0.25);
+    }
+
+    .divider-line:last-child { transform: scaleX(-1); }
+
+    .divider-center {
+        position: relative;
+        width: 86px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Horizontal curved decoration. */
+    .divider-center::before,
+    .divider-center::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        width: 35px;
+        height: 12px;
+        border-top: 2px solid #d39b30;
+    }
+
+    .divider-center::before {
+        left: 1px;
+        border-radius: 90% 0 0 0;
+        transform: rotate(8deg);
+    }
+
+    .divider-center::after {
+        right: 1px;
+        border-radius: 0 90% 0 0;
+        transform: rotate(-8deg);
+    }
+
+    /* Glowing centre diamond. */
+    .divider-diamond {
+        position: relative;
+        width: 12px;
+        height: 12px;
+        transform: rotate(45deg);
+        background: linear-gradient(135deg, #fff4af, #e4a72f, #9c6210);
+        box-shadow: 0 0 5px #ffe28b,
+                    0 0 14px rgba(255, 196, 70, 0.9),
+                    0 0 28px rgba(255, 169, 39, 0.4);
+    }
+
+    /* Vertical point. */
+    .divider-diamond::after {
+        content: "";
+        position: absolute;
+        width: 5px;
+        height: 30px;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%) rotate(-45deg);
+        background: linear-gradient(to bottom, transparent, #e7ad3d, transparent);
+    }
+
+    /* ---- Corner ornaments ---- */
+    .corner {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        z-index: 2;
+        opacity: 0.8;
+    }
+
+    .corner::before,
+    .corner::after {
+        content: "";
+        position: absolute;
+        background: linear-gradient(90deg, #70430c, #d79c30, #70430c);
+    }
+
+    .corner::before { width: 50px; height: 2px; }
+    .corner::after { width: 2px; height: 50px; }
+
+    .corner-top-left { top: 10px; left: 10px; }
+    .corner-top-left::before,
+    .corner-top-left::after { top: 0; left: 0; }
+
+    .corner-top-right { top: 10px; right: 10px; transform: scaleX(-1); }
+    .corner-top-right::before,
+    .corner-top-right::after { top: 0; left: 0; }
+
+    .corner-bottom-left { bottom: 10px; left: 10px; transform: scaleY(-1); }
+    .corner-bottom-left::before,
+    .corner-bottom-left::after { top: 0; left: 0; }
+
+    .corner-bottom-right { bottom: 10px; right: 10px; transform: scale(-1); }
+    .corner-bottom-right::before,
+    .corner-bottom-right::after { top: 0; left: 0; }
+
+    /* ---- Mobile ---- */
+    @@media (max-width: 700px) {
+        .linkshell-banner { min-height: 150px; padding: 8px; }
+        .banner-inner { min-height: 135px; }
+        .banner-content h1 { font-size: 34px; letter-spacing: 1px; }
+        .title-divider { width: 75%; margin-top: 12px; }
+        .corner { width: 35px; height: 35px; }
+        .corner::before { width: 30px; }
+        .corner::after { height: 30px; }
+    }
+</style>
+
 @* align-items:flex-start, not center: this page is taller than the viewport, and centering it
    parked the wordmark a few hundred pixels down with dead space above it. Top-aligned, the name
    is the first thing on the page. min-height is kept so a short viewport still fills. *@
 <div class="auth-shell" style="display:flex;align-items:flex-start;justify-content:center;min-height:calc(100vh - 40px);padding:32px 16px">
     <div style="max-width:960px;width:100%">
-        @* The wordmark leads the page — set as TEXT, not art. It replaced a banner image that
-           stacked two illustrated bands on top of each other and read as clutter.
+        @* The wordmark leads the page — set as TEXT inside a drawn frame, not as art, so it stays
+           crisp at any width. The gold is painted through the glyphs (background-clip:text +
+           transparent fill) with the depth carried by filter: drop-shadow() rather than a
+           text-shadow, which would show through the transparent letterforms and muddy them;
+           `color` is set first so a browser without background-clip:text still renders gold.
 
-           Font stack, not a webfont: the site self-hosts Geist and loads nothing from a CDN, so
-           this borrows the display serifs that already ship with the OS — Cinzel/Trajan where
-           they exist, then Optima, then the Palatino/Book Antiqua/Georgia chain that covers
-           Windows and macOS. Every fallback is a classical serif, so the wordmark keeps its
-           character wherever it lands rather than dropping to the body sans.
+           Cinzel comes from Google Fonts (the only CDN asset the site loads — the CSP in
+           Program.cs allows fonts.googleapis.com / fonts.gstatic.com for exactly this). Georgia
+           and the generic serif behind it keep the classical look if it never arrives. *@
+        @* Deliberately a wide gap below (not the 24px the cards use): the wordmark is the page's
+           masthead, and letting the artwork crowd it made the two read as one stacked band. *@
+        <div class="linkshell-banner fade d1" style="margin:0 0 64px">
+            <div class="banner-inner">
 
-           The gold gradient is painted through the glyphs (background-clip:text + transparent
-           fill), which is why the glow is a filter on the WRAPPER and not a text-shadow: a shadow
-           behind transparent glyphs shows through the letterforms and muddies them. `color` is
-           set first so a browser without background-clip:text still renders gold, not nothing. *@
-        <div class="fade d1" style="text-align:center;margin:0 0 28px;filter:drop-shadow(0 0 28px rgba(129,140,248,0.28))">
-            <div style="font-family:'Cinzel','Trajan Pro','Optima','Palatino Linotype','Book Antiqua',Georgia,'Times New Roman',serif;font-size:clamp(34px,6.6vw,66px);font-weight:600;letter-spacing:0.055em;line-height:1.08;color:#e9cd8a;background:linear-gradient(180deg,#fffaf0 0%,#f0d494 42%,#c9963c 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">
-                Linkshell Manager
+                <span class="corner corner-top-left"></span>
+                <span class="corner corner-top-right"></span>
+                <span class="corner corner-bottom-left"></span>
+                <span class="corner corner-bottom-right"></span>
+
+                <div class="banner-content">
+                    <h1>Linkshell Manager</h1>
+
+                    <div class="title-divider">
+                        <span class="divider-line"></span>
+
+                        <span class="divider-center">
+                            <span class="divider-diamond"></span>
+                        </span>
+
+                        <span class="divider-line"></span>
+                    </div>
+                </div>
+
             </div>
-            @* Hairline under the wordmark, fading out at both ends so it reads as part of the
-               lettering rather than as a section divider. *@
-            <div style="height:1px;margin:14px auto 0;max-width:420px;background:linear-gradient(90deg,transparent 0%,rgba(201,150,60,0.55) 50%,transparent 100%)"></div>
         </div>
 
         @* Decorative: the wordmark above already carries the name, so this one is alt="" rather

@@ -26,11 +26,20 @@
 | `/lsm unlink [1\|2\|all]` | Drop a slot pairing (or all). |
 | `/lsm status` | Show server + pairings. Auto-drops revoked tokens. |
 
-### Alliance / party / zone snapshot
+### Alliance / party snapshot
+
+A capture is **one alliance**. The game gives the addon no way to see past your own alliance, so
+an event spanning two alliances needs **one paired poster in each** — otherwise the second
+alliance is not counted at all.
 
 | Command | What it does |
 |---|---|
-| `/lsm now [name] [p\|z\|a]` | Write a local CSV **and** push the same payload to LSManager. Optional **name** labels it in the web UI. Trailing scope: `p` = own party (slots 0-5), `z` = everyone in current zone, `a` (default) = full alliance. Quoted names with spaces work: `/lsm now "Fafnir Window 2" p`. |
+| `/lsm now [name] [p\|a]` | Write a local CSV **and** push the same payload to LSManager. Optional **name** labels it in the web UI. Trailing scope: `p` = own party (slots 0-5), `a` (default) = your full alliance (slots 0-17). Quoted names with spaces work: `/lsm now "Fafnir Window 2" p`. |
+| `/lsm alliance <1-6>` | Set which alliance you are posting for. Rides along with every capture and is what keeps two alliances from being merged into one roster on the web. Shown by `/lsm status`. |
+
+Anyone paired to the linkshell may post. A capture from someone without live-event moderation
+rights arrives **Pending** — visible on the event, but not in the roster and earning nothing until
+an officer confirms it on the web or in the Discord Activity.
 
 ### Windows / panels
 
@@ -90,6 +99,11 @@ whitespace-insensitive.
 > ⚠️ **Note.** Jormungand is intentionally only in the **Wyrms** set even
 > though FFXI lore puts it on both lists. Wyrms wins per the linkshell
 > convention.
+
+> ⚠️ **Note.** The ToAU three — Cerberus, Hydra, Khimaira — run the wyrms'
+> 60 min × 25 window band but are neither wyrms nor kings, so they fall to
+> **Misc Camp**. Move them into `WyrmsMonsters` in `WindowEventEntryTypes`
+> if the sheet should pay them on the wyrm line.
 
 > 🚫 **What it does NOT auto-detect.**
 > - Does **not** auto-switch to HNM-style multi-window mode (`/lsm now` is
@@ -152,6 +166,7 @@ can never span two real windows (`HnmConfig.SnapshotMergeWindow`):
 | Camp | Spawn window | Merge window |
 |---|---|---|
 | Tiamat / Jormungand / Vrtra | 60 min × 25 | **5 min** |
+| Cerberus / Hydra / Khimaira | 60 min × 25 | **5 min** |
 | Fafnir / Behemoth / Adamantoise (+HQ) | 10 min × 7 | **3 min** |
 | Everything else (Sky, farm NMs, ad-hoc) | — | **3 min** |
 

@@ -78,7 +78,12 @@
 
 .ps-party-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  /* 380px is the width at which a slot fits label + 2 dropdowns + Leader + Sign up on ONE
+     row; at 320 the grid would sometimes fit a third column and hand every slot in it a
+     wrapped second line. Dropping to fewer, wider columns is the better trade.
+     min(…, 100%) is what keeps that safe on a narrow Activity panel: below 380 the column
+     becomes the container width rather than overflowing it. */
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
   gap: 14px;
   align-items: start;
 }
@@ -156,9 +161,29 @@
   flex-direction: row;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  /* 8px, not 12: three gaps sit between the label, the dropdowns and the actions,
+     and 12px each was 12px more than a 2-dropdown row had to give. */
+  gap: 8px;
 }
-.ps-slot--inline .ps-slot-req { flex: 0 0 auto; }
+/* The requirement label is the only variable-width thing on the row — a role slot can read
+   "Any Support" and a Player's-Choice slot appends its own "(…)", which is unbounded.
+   flex-basis:0 keeps it out of the wrap calculation entirely, so a long label ellipsises
+   instead of shoving Leader/Sign up down onto a second row; grow:1 then lets it take
+   whatever the controls leave over. */
+.ps-slot--inline .ps-slot-req {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.ps-slot--inline .ps-slot-req-label {
+  /* Both halves matter: the base rule pins flex-shrink:0 and a 64px min-width, and with
+     either of those left standing a long label overruns the dropdowns instead of
+     ellipsising against them. */
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Promote the two signup CLUSTERS (not the individual controls) to direct flex
    items of the slot, so the slot only ever wraps between them. The actions
    cluster owns the single right-push, which keeps Leader/Sign-up in the same
@@ -167,31 +192,43 @@
 .ps-slot--inline .ps-signup { display: contents; }
 .ps-slot--inline .ps-leader-toggle { gap: 6px; }
 .ps-slot--inline .ps-slot-open-readonly { margin-left: auto; }
-/* Match the slot's own 12px rhythm so grouping the controls doesn't visibly
-   tighten the spacing between them. */
+/* Match the slot's own rhythm so grouping the controls doesn't visibly change
+   the spacing between them. */
 .ps-slot--inline .ps-signup__fields,
-.ps-slot--inline .ps-signup__actions { gap: 12px; }
+.ps-slot--inline .ps-signup__actions { gap: 8px; }
 
-/* "way smaller" Leader [Yes|No] toggle for the single-row slots. */
-.ps-slot--inline .ps-leader-toggle__label { font-size: 11px; }
+/* "way smaller" Leader [Yes|No] toggle for the single-row slots. The word gives way
+   to the crown here — at ~36px it was the widest thing in the actions cluster, and
+   these rows are fighting for every pixel. The wrapper keeps its title, and the
+   toggle its aria-label, so nothing is lost to a reader. */
+.ps-slot--inline .ps-leader-toggle__label { display: none; }
+.ps-slot--inline .ps-leader-toggle__crown { display: inline; }
 .ps-slot--inline .yesno__btn {
-  padding: 3px 9px;
+  padding: 3px 8px;
   font-size: 11px;
 }
 
-/* Every open slot is inline now: keep each role/main/sub dropdown a fixed,
-   non-growing size so they sit on the same row as the char/leader/sign-up
-   instead of stretching and ballooning the controls below. flex-grow:0 is the
-   load-bearing anti-balloon part; 120px keeps the closed-state placeholders
-   ("Main job…", "Sub job…", "Role…") legible.
-   Shrink IS allowed (flex-shrink:1 + a legibility floor): the fields row is
-   nowrap now, so on a narrow party column the dropdowns must give way rather
-   than overflow the card. */
+/* Every open slot is inline: each role/main/sub dropdown is a fixed size so they sit on the
+   same row as the label/leader/sign-up instead of stretching and pushing the actions onto a
+   second line. Flex line-breaking is decided on the BASIS, before any shrinking, so these
+   numbers are exactly what keeps a 2-dropdown slot on one row.
+   Sized to MEASURED text at this font rather than to a guess: 10px + 26px of padding leaves
+   32px for the label, and the widest thing a job dropdown ever shows is 29px ("Main", just
+   over "WAR") — every value here is a 3-letter job code. The placeholder was the ONLY reason
+   these ever needed 120px, which is why it now reads "Main"/"Sub" and not "Main job…".
+   Deliberately no shrink: a shrinking select clipped the placeholder to "Mair". */
 .ps-slot--inline .ps-signup select {
-  flex: 0 1 120px;
-  min-width: 76px;
-  max-width: 120px;
+  flex: 0 0 68px;
+  /* Must be cleared explicitly — the base .ps-signup select pins min-width:110px, which
+     silently overrode the flex-basis and held every dropdown at its full stacked width. */
+  min-width: 0;
   height: 30px;
+  padding: 0 26px 0 10px;
+}
+/* The role dropdown carries words, not job codes — "Support" is 47px, so it needs the
+   extra room the job dropdowns don't. */
+.ps-slot--inline .ps-signup select.ps-sel-role {
+  flex-basis: 84px;
 }
 /* Force the inline job-edit popup onto its own full-width wrapped line so it is
    not cramped beside the label/char header or the right-anchored "Open" chip in
@@ -299,6 +336,12 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--fg-2);
+}
+/* Crown stand-in for the label — shown only on the single-row (.ps-slot--inline) slots. */
+.ps-leader-toggle__crown {
+  display: none;
+  font-size: 13px;
+  line-height: 1;
 }
 .yesno {
   display: inline-flex;
@@ -504,19 +547,3 @@
 .ps-slots.cdk-drop-list-dragging .ps-slot:not(.cdk-drag-placeholder) {
   transition: transform 180ms cubic-bezier(0, 0, 0.2, 1);
 }
-
-/* "Fill earlier alliances first" signup prompt. */
-.ps-nudge-overlay {
-  position: fixed; inset: 0; z-index: 1000;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex; align-items: center; justify-content: center; padding: 16px;
-}
-.ps-nudge-card {
-  max-width: 440px; width: 100%;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  padding: 16px; display: flex; flex-direction: column; gap: 12px;
-}
-.ps-nudge-title { font-weight: 700; color: var(--fg); }
-.ps-nudge-body { margin: 0; font-size: 13px; color: var(--fg-3); }
-.ps-nudge-body strong { color: var(--fg); }
-.ps-nudge-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }

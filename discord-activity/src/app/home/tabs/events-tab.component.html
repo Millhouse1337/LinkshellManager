@@ -84,10 +84,19 @@
                 @if (isHnmEvent(event) && canManageLinkshell(event.linkshellId)) {
                   @if (pendingDeleteEventId() === event.id) {
                     <span style="font-size:12px;color:var(--fg-2)">Delete this camp entirely? No ToD, no history — the board and its sign-ups are removed.</span>
-                    <button type="button" class="btn danger-fill sm"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="confirmDeleteCamp(event.id)">Confirm delete</button>
-                    <button type="button" class="btn ghost sm" (click)="abortDeleteCamp()">Keep</button>
+                    <!-- Wrapped, and the WRAPPER is what carries event-card__edit. This column is a
+                         grid: a bare button in it stretches to the full column width (see the
+                         comment on .event-card__edit), which is what made this pair render twice
+                         the width of every other button on the card. One grid item holding a
+                         two-button row keeps them side by side and hugging their labels, matching
+                         the End Camp / Edit Live Event / Add a Member stack above and below. -->
+                    <span class="event-card__edit event-card__confirm">
+                      <button type="button" class="evt-btn evt-btn--small evt-btn--danger"
+                        [disabled]="activity.busyEventId() === event.id"
+                        (click)="confirmDeleteCamp(event.id)">Confirm delete</button>
+                      <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
+                        (click)="abortDeleteCamp()">Keep</button>
+                    </span>
                   } @else {
                     <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
                       [disabled]="activity.busyEventId() === event.id"
@@ -290,8 +299,13 @@
                 <div class="event-section__header">
                   <h3>Attendance Windows</h3>
                   <!-- Counted against the POST count, not the spawn count: these tabs are roster
-                       reads, so a Standard king/dragon is "1 of 2", not "1 of 7". -->
-                  <span class="tag default num">{{ attendanceWindowsFor(event).length }} of {{ postCount(event) }}</span>
+                       reads, so a Standard king/dragon is "1 of 2", not "1 of 7". The Post Kill
+                       roster is counted separately — it is not one of the camp's windows, and
+                       folding it in made a king camp read "3 of 2" the moment it was pressed. -->
+                  <span class="tag default num">{{ postedWindowCount(event) }} of {{ postCount(event) }}</span>
+                  @if (hasKillWindow(event)) {
+                    <span class="tag default">+ kill</span>
+                  }
                 </div>
 
                 <!-- Manual Check In credits from Check In / Check Out only; WdCampFinalizer never
@@ -341,28 +355,60 @@
                   @if (activeAttendanceWindow(event); as activeWindow) {
                     <div class="attendance-window-pane">
                       <div class="attendance-window-pane__meta">
-                        Posted {{ activeWindow.postedAt | date:'short' }}
-                        <!-- Price ONE window by hand, for when the camp's open / close bonuses
-                             aren't the right answer for it ("we sat this window two hours and the
-                             pop was a no-show"). Standard camps only: WdCampFinalizer credits the
-                             check-in range and never reads this column, which is what the notice
-                             at the top of this card already tells the officer. -->
-                        @if (canManageLinkshell(event.linkshellId) && !isWdCamp(event)) {
-                          <span class="window-dkp-edit">
-                            <label [attr.for]="'window-dkp-' + activeWindow.id">DKP this window</label>
-                            <input type="number" step="0.25" min="0" class="input num"
-                                   [id]="'window-dkp-' + activeWindow.id"
-                                   [value]="windowDkpDraft(activeWindow)"
-                                   (input)="setWindowDkpDraft(activeWindow, $event)"
-                                   placeholder="default" />
-                            <button type="button" class="btn ghost sm" [disabled]="windowDkpSaving()"
-                                    (click)="saveWindowDkp(activeWindow)">Apply</button>
-                            @if (activeWindow.dkpAmount != null) {
-                              <button type="button" class="btn ghost sm" [disabled]="windowDkpSaving()"
-                                      (click)="clearWindowDkp(activeWindow)">Use default</button>
-                            }
-                          </span>
-                        }
+                        <span class="attendance-window-pane__posted">
+                          Posted {{ activeWindow.postedAt | date:'short' }}
+                        </span>
+                        <!-- The window's controls, pushed to the far right so the line reads as
+                             "what this window is" on the left and "what you can change about it"
+                             on the right. -->
+                        <span class="attendance-window-pane__controls">
+                          <!-- Price ONE window by hand, for when the camp's open / close bonuses
+                               aren't the right answer for it ("we sat this window two hours and the
+                               pop was a no-show"). Standard camps only: WdCampFinalizer credits the
+                               check-in range and never reads this column, which is what the notice
+                               at the top of this card already tells the officer.
+
+                               No Apply button: whatever is in the box IS this window's DKP. It
+                               commits on change — blur or Enter, NOT every keystroke, or typing
+                               1.25 would write 1, then 12, then 125 on the way there. Emptying it
+                               is what puts the window back on the camp's default, which is what
+                               the old "Use default" button did — and the default then shows as the
+                               number it resolves to rather than as a blank box, so a control named
+                               for a DKP amount always has one in it. Nothing is final until the
+                               event is ended and posted to the sheet anyway. -->
+                          @if (canManageLinkshell(event.linkshellId) && !isWdCamp(event)) {
+                            <span class="window-dkp-edit">
+                              <label [attr.for]="'window-dkp-' + activeWindow.id">DKP this window</label>
+                              <input type="number" step="0.25" min="0" class="input num"
+                                     [id]="'window-dkp-' + activeWindow.id"
+                                     [disabled]="windowDkpSaving()"
+                                     [value]="windowDkpDraft(event, activeWindow)"
+                                     [title]="windowDkpHint(activeWindow)"
+                                     (input)="setWindowDkpDraft(activeWindow, $event)"
+                                     (change)="commitWindowDkp(event, activeWindow)" />
+                            </span>
+                          }
+                          <!-- Which window closes the camp out. Ticking it is the ONLY thing that
+                               pays the close bonus — it used to be guessed as "the newest window
+                               posted", which is what put a close bonus on every window of every
+                               camp. Ticking also clears this window's hand-set price, because an
+                               explicit amount replaces the computed one and would swallow the
+                               bonus; the server does that, hence the round trip. -->
+                          @if (canManageLinkshell(event.linkshellId) && canMarkClosingWindow(event, activeWindow)) {
+                            <span class="window-close-mark">
+                              <label>
+                                <input type="checkbox"
+                                       [checked]="activeWindow.isClosingWindow"
+                                       [disabled]="windowDkpSaving()"
+                                       (change)="toggleClosingWindow(activeWindow)" />
+                                Closing window
+                              </label>
+                            </span>
+                          }
+                          @if (activeWindow.isKillWindow) {
+                            <span class="tag default">Post Kill roster</span>
+                          }
+                        </span>
                       </div>
                       @if (activeWindow.attendees.length === 0) {
                         <p class="notice">No attendees recorded for this window.</p>
@@ -384,7 +430,15 @@
                             <tbody>
                               @for (attendee of activeWindow.attendees; track attendee.id) {
                                 <tr>
-                                  <td><strong>{{ attendee.characterName || 'Unknown attendee' }}</strong></td>
+                                  <!-- The character the scan actually SAW, with their main beside
+                                       it when that was an alt — the same "(alt of X)" the addon
+                                       prints in-game, so the two rosters read alike. -->
+                                  <td>
+                                    <strong>{{ attendee.characterName || 'Unknown attendee' }}</strong>
+                                    @if (attendee.mainCharacterName) {
+                                      <span class="roster-muted">(alt of {{ attendee.mainCharacterName }})</span>
+                                    }
+                                  </td>
                                   <td>
                                     @if (attendee.jobName) {
                                       <span class="job-pill">{{ attendee.jobName }}</span>
@@ -518,13 +572,31 @@
                      on the mob before the lottery resolved. Sits at the BOTTOM of
                      this card, after the windows, because it is evidence about the
                      same camp — and its timestamp comes from the game, so it dates
-                     the window rather than the other way round. -->
+                     the window rather than the other way round.
+
+                     No longer read-only evidence: this list is WHO GETS THE CLAIM
+                     BONUS. Both finalizers gate the claim on a tag here instead of
+                     on having been scanned in the close window, so an officer
+                     reading this card is reading the payout. -->
                 @if (claimShieldsFor(event).length > 0) {
                   <div class="claim-shield">
                     <div class="claim-shield__header">
                       <h4>Claim Shield</h4>
                       <span class="tag default num">{{ claimShieldsFor(event).length }}</span>
                     </div>
+                    <!-- Said up front, because the list below is per-lottery and the PAYOUT is
+                         per-member: someone who tagged in three captures is paid once. -->
+                    @if (claimShieldPaidNames(event).length > 0) {
+                      <p class="notice">
+                        {{ claimShieldPaidNames(event).length }}
+                        {{ claimShieldPaidNames(event).length === 1 ? 'member' : 'members' }}
+                        tagged this camp and will earn the claim bonus
+                        @if (claimBonusAmount(event) > 0) {
+                          ({{ claimBonusAmount(event) | number:'1.0-2' }} DKP each)
+                        }
+                        when it is ended and posted — {{ claimShieldPaidNames(event).join(', ') }}.
+                      </p>
+                    }
                     @for (capture of claimShieldsFor(event); track capture.id) {
                       <div class="claim-shield__capture">
                         <div class="claim-shield__result">
@@ -984,18 +1056,21 @@
            review rows an ended camp hands off. Each one is an unposted payout, so it belongs on the
            live board rather than behind its own tab. Mounted OUTSIDE the camp loop above: the camp
            cards contain <form> elements and this markup drives bare [(ngModel)] with no form. -->
-      @if (attendanceVisible()) {
-        <app-attendance-sections section="live" />
-      }
+      <app-attendance-sections section="live" />
 
       <!-- Queue / Create event -->
       <app-activity-queue-panel />
 
-      <!-- Unlinked snapshots + closed attendance events. Below the queue because this is archive and
-           triage work, not the live board. -->
-      @if (attendanceVisible()) {
-        <app-attendance-sections section="archive" />
-      }
+      <!-- Unlinked Snapshots: captures with no attendance event yet, and the only landing place
+           for one posted by a member without moderation rights. Its own mount directly under the
+           queue rather than buried in the archive below, because an unverified or unfiled capture
+           is unpaid attendance waiting on an officer — live work, not leftovers. Matches the web,
+           where it is a top-level section between Pending Events and Attendance Archive. -->
+      <app-attendance-sections section="unlinked" />
+
+      <!-- Attendance Archive: the searchable closed-event history. Below everything because this
+           is finished work. Its own section heading comes from the component. -->
+      <app-attendance-sections section="archive" />
 
       <!-- Past events: browse + (officer) edit metadata / DKP / attendees -->
       <app-event-history-panel [linkshellId]="activity.overview()?.appUser?.primaryLinkshellId ?? 0" />

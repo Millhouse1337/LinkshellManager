@@ -63,7 +63,7 @@ public sealed partial class ActivityDataController
         }
 
         var cooldown = string.IsNullOrWhiteSpace(request.Cooldown)
-            ? GetDefaultTodCooldown(monsterName)
+            ? await GetDefaultTodCooldownAsync(_monsterTimings, eventEntity.LinkshellId, monsterName, cancellationToken)
             : request.Cooldown.Trim();
         if (!IsAcceptableTodCooldown(cooldown))
         {
@@ -75,9 +75,11 @@ public sealed partial class ActivityDataController
         {
             interval = null;
         }
-        else if (!SupportedTodIntervals.Contains(interval))
+        else if (!IsAcceptableTodInterval(interval))
         {
-            return BadRequest(new { error = "Select a valid interval." });
+            // Was a strict preset check while the cooldown beside it already accepted free text,
+            // so End Camp rejected any interval a linkshell had actually configured.
+            return BadRequest(new { error = "Enter a valid interval (a positive number of hours or minutes)." });
         }
 
         // Hand the validated inputs to the shared pop service, which logs (or edits) the ToD,

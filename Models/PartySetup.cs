@@ -40,6 +40,19 @@ public class PartySetup
     [ForeignKey(nameof(OwnerEventId))]
     public Event? OwnerEvent { get; set; }
 
+    // The TEMPLATE this snapshot was cloned from. Null on a template itself, and on snapshots
+    // created before this column existed.
+    //
+    // Exists so a camp whose board was customized can still name where it came from. A snapshot
+    // is cascade-deleted with its event, so without this the moment an officer drag-drops one
+    // person the event's link to the shared template is gone forever — and the next pop of that
+    // camp has nothing to inherit. SET NULL on delete: losing the template must not destroy the
+    // snapshot that outlived it.
+    public int? ClonedFromPartySetupId { get; set; }
+
+    [ForeignKey(nameof(ClonedFromPartySetupId))]
+    public PartySetup? ClonedFromPartySetup { get; set; }
+
     [MaxLength(450)]
     public string? CreatedByAppUserId { get; set; }
 

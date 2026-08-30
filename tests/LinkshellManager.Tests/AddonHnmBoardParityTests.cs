@@ -363,6 +363,11 @@ public class AlignAddonHnmCampsMigrationTests
             "Bune",
             "Boroka",
             "Roc",
+            // The ToAU HNMs, added with the expansion's release on HorizonXI — long after this
+            // backfill ran, so there was never a camp of theirs for it to repair.
+            "Cerberus",
+            "Hydra",
+            "Khimaira",
         };
 
     // Every timed monster that predates the migration is covered — a wyrm left out keeps its

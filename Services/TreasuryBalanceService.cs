@@ -9,7 +9,10 @@ namespace LinkshellManagerDiscordApp.Services;
 // The counterparty is defaulted so every existing construction still compiles: it is only read by
 // ProjectByMember, which needs to know whose obligation a what-we-owe line is.
 public readonly record struct LedgerLineRow(
-    int AccountNumber, long Amount, string? CounterpartyCharacterName = null);
+    int AccountNumber, long Amount, string? CounterpartyCharacterName = null,
+    // Whose mule the gil is on. Only ever set on a gil-on-hand line, and only read by
+    // ProjectByHolder — defaulted for the same reason the counterparty above is.
+    string? HolderCharacterName = null);
 
 // One category's running total, as a user should read it.
 public sealed record CategoryTotal(int AccountNumber, string AccountName, string AccountClass, long Amount, int EntryCount);
@@ -17,6 +20,27 @@ public sealed record CategoryTotal(int AccountNumber, string AccountName, string
 // What one member is still owed. Null name = the obligation was recorded without saying who, which
 // was possible before a member became required; the WORD for that lives in TreasuryLabels.
 public sealed record MemberObligation(string? CharacterName, long Amount);
+
+// How much of the linkshell's gil one person is carrying. Null name = gil recorded before anyone
+// was asked whose mule it went on, or a gil-auction payout, which has no answer to give.
+public sealed record GilHolding(string? CharacterName, long Amount);
+
+// The whole sheet from one read: the figures, and the two lists of names behind the two figures that
+// have names behind them.
+//
+// A record rather than a tuple because it now carries three things and a positional `var (_, owed)`
+// silently takes the wrong one the moment a fourth arrives. Both lists come from the SAME rows as
+// the snapshot, so each always adds up to the figure it sits under — see GetBalanceSheetAsync.
+public sealed record TreasuryBalanceSheet(
+    TreasurySnapshot Snapshot,
+    // Who the linkshell still owes. Ticking one records a payment out.
+    IReadOnlyList<MemberObligation> OwedToMembers,
+    // Who still owes the linkshell. Ticking one records the gil arriving.
+    IReadOnlyList<MemberObligation> OwedToUsBy,
+    // And the third figure's names: whose mules the gil on hand is actually sitting on. The last of
+    // the three to get a list behind it, and the one that needed it most — the other two are
+    // promises, and this is the gil itself.
+    IReadOnlyList<GilHolding> GilHolders);
 
 // Everything the treasury summary shows, all of it derived.
 public readonly record struct TreasurySnapshot(
@@ -118,13 +142,77 @@ public sealed class TreasuryBalanceService
     //
     // Known limit: renaming a character splits them into two rows. Matching against the roster does
     // not help, because a line recorded under the old name matches neither its name nor its id.
-    public static List<MemberObligation> ProjectByMember(IEnumerable<LedgerLineRow> lines)
+    public static List<MemberObligation> ProjectByMember(IEnumerable<LedgerLineRow> lines) =>
+        ProjectByCounterparty(lines, TreasuryAccounts.WeOwe);
+
+    // The mirror image: who owes the LINKSHELL, and how much each. Same rules, other direction.
+    //
+    // The two lists are what make both halves of the balance sheet tickable — one settles by paying
+    // a member, the other by recording that someone paid us — so they have to be projected the same
+    // way or one side would drift from the figure above it in a way the other never does.
+    //
+    // The names on these lines are usually NOT members: whoever owes a linkshell gil is typically
+    // another linkshell or a buyer, typed in free text. That costs nothing here, because this keys
+    // on the name either way and never consults the roster.
+    public static List<MemberObligation> ProjectByDebtor(IEnumerable<LedgerLineRow> lines) =>
+        ProjectByCounterparty(lines, TreasuryAccounts.OwedToUs);
+
+    // Whose mules the gil on hand is sitting on. Same shape as the two lists above and fed the same
+    // rows, so this ALWAYS adds up to the gil-on-hand figure it sits under — that is the whole
+    // reason the holder lives on the signed cash line rather than in a table of its own. Gil
+    // arriving on a mule is a positive line, gil leaving it is a negative one, and no separate
+    // bookkeeping step can be forgotten.
+    //
+    // Keyed on the NAME for exactly the reason ProjectByCounterparty is: the two write paths
+    // populate the account id differently, and keying on "id if present, else name" would file a
+    // sale under the id and the later spend under the name, showing one person twice.
+    //
+    // Unlike the obligation lists, a null name is KEPT rather than dropped: every line recorded
+    // before holders existed has one, as does every gil-auction payout, and hiding that bucket
+    // would make the rows visibly fail to add up to the figure above them. TreasuryLabels.
+    // UnnamedHolder is what both front-ends call it.
+    public static List<GilHolding> ProjectByHolder(IEnumerable<LedgerLineRow> lines)
     {
         var totals = new Dictionary<string, (string? Name, long Amount)>(StringComparer.Ordinal);
 
         foreach (var line in lines)
         {
-            if (line.AccountNumber != TreasuryAccounts.WeOwe)
+            if (line.AccountNumber != TreasuryAccounts.GilOnHand)
+            {
+                continue;
+            }
+
+            var name = string.IsNullOrWhiteSpace(line.HolderCharacterName)
+                ? null
+                : line.HolderCharacterName.Trim();
+            var key = name?.ToLowerInvariant() ?? string.Empty;
+
+            // Gil on hand's normal side is positive, so the stored amount already reads the right
+            // way round and no presentation flip is needed here.
+            totals[key] = totals.TryGetValue(key, out var running)
+                ? (running.Name ?? name, running.Amount + line.Amount)
+                : (name, line.Amount);
+        }
+
+        // A holder who has handed everything over drops off. A NEGATIVE is kept, for the same reason
+        // it is on the obligation lists: it means more gil was spent off that mule than was ever
+        // recorded onto it, and burying that would both break the add-up and hide the mistake.
+        return totals.Values
+            .Where(entry => entry.Amount != 0)
+            .OrderByDescending(entry => entry.Amount)
+            .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => new GilHolding(entry.Name, entry.Amount))
+            .ToList();
+    }
+
+    private static List<MemberObligation> ProjectByCounterparty(
+        IEnumerable<LedgerLineRow> lines, int accountNumber)
+    {
+        var totals = new Dictionary<string, (string? Name, long Amount)>(StringComparer.Ordinal);
+
+        foreach (var line in lines)
+        {
+            if (line.AccountNumber != accountNumber)
             {
                 continue;
             }
@@ -196,23 +284,30 @@ public sealed class TreasuryBalanceService
     //
     // The breakdown ignores the date range on purpose: holdings are since-inception, so a ranged
     // breakdown could not add up to the what-we-owe figure it sits under.
-    public async Task<(TreasurySnapshot Snapshot, List<MemberObligation> OwedToMembers)> GetBalanceSheetAsync(
+    public async Task<TreasuryBalanceSheet> GetBalanceSheetAsync(
         int linkshellId, DateTime? fromUtc, DateTime? toUtc, CancellationToken cancellationToken)
     {
         var holdings = await ConfirmedLines(linkshellId)
             .Where(line => line.AccountNumber < 4000)
             .Select(line => new LedgerLineRow(
-                line.AccountNumber, line.Amount, line.CounterpartyCharacterName))
+                line.AccountNumber, line.Amount, line.CounterpartyCharacterName, line.HolderCharacterName))
             .ToListAsync(cancellationToken);
 
-        // All three arguments spelled out: an EF expression tree cannot call a constructor that
-        // relies on an optional one. Flow lines carry no member — only what-we-owe is attributable.
+        // All four arguments spelled out: an EF expression tree cannot call a constructor that
+        // relies on an optional one. Flow lines carry neither a member nor a holder — only
+        // what-we-owe is attributable, and only gil on hand sits on a mule.
         var flows = await InRange(ConfirmedLines(linkshellId), fromUtc, toUtc)
             .Where(line => line.AccountNumber >= 4000)
-            .Select(line => new LedgerLineRow(line.AccountNumber, line.Amount, null))
+            .Select(line => new LedgerLineRow(line.AccountNumber, line.Amount, null, null))
             .ToListAsync(cancellationToken);
 
-        return (Project(holdings.Concat(flows)), ProjectByMember(holdings));
+        return new TreasuryBalanceSheet(
+            Project(holdings.Concat(flows)),
+            ProjectByMember(holdings),
+            ProjectByDebtor(holdings),
+            // Holdings, not the ranged flows: gil on hand is since-inception, so a ranged breakdown
+            // could not add up to the figure it sits under — the same rule the two lists above follow.
+            ProjectByHolder(holdings));
     }
 
     // Per-category totals — the "does it add up" breakdown, in the officer's categories.
@@ -241,18 +336,6 @@ public sealed class TreasuryBalanceService
                 row.EntryCount))
             .OrderBy(row => row.AccountNumber)
             .ToList();
-    }
-
-    // How many entries landed in a catch-all category. Surfaced as a count chip so the leftovers from
-    // the one-time conversion are a finite, visible chore rather than permanent silent noise.
-    public async Task<int> GetUncategorizedCountAsync(int linkshellId, CancellationToken cancellationToken)
-    {
-        return await ConfirmedLines(linkshellId)
-            .Where(line => line.AccountNumber == TreasuryAccounts.OtherMoneyIn
-                || line.AccountNumber == TreasuryAccounts.OtherMoneyOut)
-            .Select(line => line.JournalEntryId)
-            .Distinct()
-            .CountAsync(cancellationToken);
     }
 
     // Drafts are not on the books. Reversals ARE — they are ordinary entries and net against their

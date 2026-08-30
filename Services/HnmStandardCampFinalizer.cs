@@ -12,13 +12,34 @@ namespace LinkshellManagerDiscordApp.Services;
 // showing and one AppUserEventWindow per scanned character, so "who was here in window N" is
 // already recorded per player. This service reads that and pays, per member:
 //
-//     windowValue(seq) = DkpAmount[seq] ?? ( HnmStandardWindowBonus
-//                                          + (seq == 1           ? HnmStandardOpenBonus  : 0)
-//                                          + (seq == closeWindow ? HnmStandardCloseBonus : 0) )
+//     windowValue(seq) = DkpAmount[seq] ?? ( isKillWindow ? 0 :
+//                                            seq == 1     ? HnmStandardOpenBonus  :
+//                                            seq == close ? HnmStandardCloseBonus :
+//                                                           HnmStandardWindowBonus )
 //
 //     dkp = round( Σ over every window the member was scanned in of windowValue(seq)
-//                + (camp claimed AND scanned in close window ? HnmStandardClaimBonus : 0)
-//                + (camp killed  AND scanned in close window ? HnmStandardKillBonus  : 0) , step )
+//                + (tagged the mob on the Claim Shield ? HnmStandardClaimBonus : 0)
+//                + (scanned in the Post Kill window    ? HnmStandardKillBonus  : 0) , step )
+//
+// Each window pays ONE amount — the open, the close, or the regular rate — rather than the rate
+// with bonuses added on top. That is a deliberate reversal: the bonuses used to ADD to the
+// per-window rate, so window 1 paid rate + open. Combined with a close that was GUESSED as "the
+// newest window posted", the result was every window on a camp carrying the close bonus and window
+// 1 carrying open + close + rate. The close is now an explicit officer mark
+// (EventAttendanceWindow.IsClosingWindow) and each window names its own price.
+//
+// A window that is BOTH the open and the close pays the OPEN, alone. One window, one amount, with
+// no exception — not even for the camp that genuinely opened and closed in a single roster read.
+// That camp is the OFFICER'S to settle: they add the close by hand from the review page, where the
+// amounts are editable, because only they can say whether one scan really was both ends of a camp.
+//
+// Paying both automatically is what made posting the opening window read as 2 DKP on a linkshell
+// configured for 1 open + 1 close. The close FALLS BACK to the latest window posted whenever
+// nobody has ticked one (ResolveCloseWindow), so on a fresh camp the open window is always also
+// the close — every camp hit the exception on its first post, and the "rare" case was the norm.
+//
+// The open is tested FIRST for the same reason: sequence 1 is the open by definition, it is what
+// the officer just posted, and it must not read as anything else while the close is still a guess.
 //
 // Each bonus reads Event.Hnm*BonusOverride first and falls back to the linkshell value when that
 // is null — see HnmCampPricing.StandardBonuses, which owns that precedence for this service, for
@@ -28,12 +49,19 @@ namespace LinkshellManagerDiscordApp.Services;
 // or typed into the addon's "Dkp this window" box before a post. It REPLACES that window's default
 // contribution rather than adding to it — see WindowValue.
 //
-// Claim and kill are gated on the CLOSE window, not merely on having been scanned somewhere. They
-// reward the outcome — being there when the mob was claimed / killed — and the close window is
-// where that happened. Ungated, someone scanned into one middle window collected the identical
-// outcome bonus as the people who camped every window through the kill. A priced middle window
-// must never become a claim/kill qualifier either: pricing a window says what IT pays, nothing
-// about the outcome.
+// Claim and kill are each gated on the EVIDENCE that the member was part of that outcome, and the
+// two pieces of evidence are different things:
+//
+//   claim — their name is on a ClaimShieldCapture for this event. The addon replays chat and only
+//           counts someone who actually landed an action on the mob (claim_shield.lua), so this is
+//           the list of people who tagged it. Being at the camp is not tagging it.
+//   kill  — they were scanned in the Post Kill window. That roster is read when the mob dies, which
+//           is the only read that can include the people who turned up only for the fight and
+//           exclude the ones who had already left.
+//
+// Both used to gate on "scanned in the close window", which stood in for both outcomes because
+// there was nothing better to gate on. There is now: a tagger who logged out before the pop earns
+// their claim, and a late arrival who helped kill it earns their kill.
 //
 // The per-window base rate is HnmStandardWindowBonus, and it is still NOT Event.DkpPerHour. That
 // column is 0 on HNM boards created through the Activity, but HnmAutoEventService copies a prior
@@ -87,22 +115,43 @@ public sealed class HnmStandardCampFinalizer
     // Close-only camp: close + claim + kill, and no open. Pinned by CloseOnlyCamp_* in
     // HnmStandardMemberGatingTests.
     //
-    // `windowBonus` is the BASE every window pays — the regular in-between windows that used to be
-    // worth nothing at all unless an officer priced them one at a time. Open and close ADD to it
-    // rather than replacing it, which is the only reading under which they are "bonuses": a camp
-    // paying 0.25 a window with a 1.0 open pays 1.25 for window 1, not 1.0. It defaults to 0, so a
-    // linkshell that never sets it gets exactly the open/close-only payout it had before.
+    // A window pays ONE of the three amounts, with NO exception: a camp with 0.25 window / 0.5 open
+    // / 1.5 close pays 0.5 for window 1, 0.25 for the middle windows and 1.5 for the close.
+    // `windowBonus` is what the in-between windows pay and defaults to 0, which is the
+    // open/close-only payout most camps run on.
+    //
+    // A window that is both ends at once — a single-post NM claimed and dead in one roster read, a
+    // camp that popped in its opener — is NOT an exception to that. It pays the open, and the close
+    // is the officer's to add by hand from the review page. This used to pay open + close, on the
+    // reasoning that the camp really did earn both; what that missed is that the close falls back
+    // to "the latest window posted" whenever nobody has ticked one, so EVERY camp's opening post
+    // was both ends of the camp for as long as it was the only window. Posting the open on a
+    // 1 open / 1 close linkshell read as 2 DKP, which is not a payout an officer asked for.
+    //
+    // The open is tested before the close so sequence 1 always prices as the open — it is what the
+    // officer posted, and the only one of the two that is a fact rather than a mark or a guess.
+    //
+    // A kill window is worth 0 as a window. It is not a roster read of the camp, it is the record
+    // of who was standing there when the mob died, and the kill bonus is what pays for that
+    // (ComputeMemberDkp). Pricing it as a regular window on top would pay the late arrivals twice
+    // for one appearance.
     //
     // Mirrored in the Activity by EventsTabComponent.windowValue — the same rule in two languages.
     // They must move together.
     public static double WindowValue(
         int sequence, int closeWindow, double? explicitAmount,
-        double windowBonus, double openBonus, double closeBonus)
-        => explicitAmount is { } amount
-            ? Math.Max(0d, amount)
-            : windowBonus
-              + (sequence == 1 ? openBonus : 0d)
-              + (closeWindow > 0 && sequence == closeWindow ? closeBonus : 0d);
+        double windowBonus, double openBonus, double closeBonus,
+        bool isKillWindow = false)
+    {
+        if (explicitAmount is { } amount) return Math.Max(0d, amount);
+        if (isKillWindow) return 0d;
+
+        var isOpen = sequence == 1;
+        var isClose = closeWindow > 0 && sequence == closeWindow;
+        if (isOpen) return openBonus;
+        if (isClose) return closeBonus;
+        return windowBonus;
+    }
 
     // One member's payout: every window they were scanned in, plus the outcome bonuses. The caller
     // has already run each scanned sequence through WindowValue, so this is the sum — which is why
@@ -111,42 +160,100 @@ public sealed class HnmStandardCampFinalizer
     // Rounds the TOTAL, not each window. Three windows priced 0.1 pay 0.25 on a Quarter grid, not
     // 0.75: snapping per window would let the grid multiply the error by the window count.
     //
+    // `tagged` is "their name is on this camp's Claim Shield"; `inKillWindow` is "they were scanned
+    // in the Post Kill roster". Two separate gates because they are two separate claims about the
+    // member, and one person can easily be one and not the other.
+    //
     // Pure (no DB), like ComputeDkp above, so the gating is testable without staging a camp.
     public static double ComputeMemberDkp(
-        IEnumerable<double> earnedWindowValues, bool atClose,
+        IEnumerable<double> earnedWindowValues, bool tagged, bool inKillWindow,
         double claimBonus, double killBonus, double step)
         => DkpRounding.Round(
-            earnedWindowValues.Sum() + (atClose ? claimBonus : 0d) + (atClose ? killBonus : 0d),
+            earnedWindowValues.Sum() + (tagged ? claimBonus : 0d) + (inKillWindow ? killBonus : 0d),
             step);
 
     // THE gating rule for a camp nobody has priced by hand AND that pays no regular-window rate:
-    // open needs the open window, and close / claim / kill all need the close window.
+    // the open needs window 1, the close needs the marked closing window, the claim needs a Claim
+    // Shield tag, and the kill needs the Post Kill roster.
     //
-    // Deliberately has no windowBonus parameter. This overload knows only two booleans, and a rate
-    // that pays PER WINDOW needs the count of them — a member scanned in six windows earns six
-    // times it. Camps with a regular-window rate go through the IEnumerable overload above (which
+    // Deliberately has no windowBonus parameter. This overload knows only booleans, and a rate that
+    // pays PER WINDOW needs the count of them — a member scanned in six windows earns six times it.
+    // Camps with a regular-window rate go through the IEnumerable overload above (which
     // BuildRosterAsync always uses); this one stays the spec for the rate-free default.
     //
-    // Expressed THROUGH the per-window sum above rather than beside it, so the override-free and
-    // the priced forms can never disagree. HnmStandardMemberGatingTests is the spec for both.
+    // Expressed THROUGH WindowValue and the per-window sum above rather than beside them, so the
+    // override-free and the priced forms can never disagree — the two bonuses are not added here,
+    // they are PRICED, by the same function that prices a real camp.
+    //
+    // `atOpen` and `atClose` are about DIFFERENT windows — scanned in window 1, and scanned in the
+    // marked closing window — so a member who was in both earns both. That is two windows and two
+    // payments, not one window paying twice, and the sequences below say so out loud.
+    //
+    // A camp whose open IS its close cannot be expressed here, and deliberately so: it has ONE
+    // window, that window prices as the open (see WindowValue), and the close is the officer's to
+    // add by hand. Pass atClose: false for it — a caller that passes both would be describing a
+    // member scanned in two windows on a camp that only ever had one.
+    // ComputeMemberDkp_NoExplicitAmounts_MatchesTheBooleanOverload pins the agreement.
     public static double ComputeMemberDkp(
-        bool atOpen, bool atClose,
+        bool atOpen, bool atClose, bool tagged, bool inKillWindow,
         double openBonus, double closeBonus, double claimBonus, double killBonus, double step)
     {
+        // Any close AFTER the open would do; 2 is the earliest camp shape that has both ends.
+        const int closeSequence = 2;
         var earned = new List<double>(2);
-        if (atOpen) earned.Add(openBonus);
-        if (atClose) earned.Add(closeBonus);
-        return ComputeMemberDkp(earned, atClose, claimBonus, killBonus, step);
+        if (atOpen) earned.Add(WindowValue(1, closeSequence, null, 0d, openBonus, closeBonus));
+        if (atClose)
+        {
+            earned.Add(WindowValue(closeSequence, closeSequence, null, 0d, openBonus, closeBonus));
+        }
+
+        return ComputeMemberDkp(earned, tagged, inKillWindow, claimBonus, killBonus, step);
     }
 
-    // Which window counts as the camp's "close". The pop window when a snapshot was actually
-    // posted for it; otherwise the latest window that HAS a snapshot (an officer who stopped
-    // scanning three windows before the pop still closes out the people in that last scan).
+    // Which window counts as the camp's "close".
+    //
+    // The officer's explicit mark wins outright and needs no corroboration — a checked "closing
+    // window" box is a statement about the camp, not a guess to be second-guessed.
+    //
+    // Everything else is the OLD derivation, kept only as a fallback for camps where nobody ticked
+    // the box: the pop window when a snapshot exists for it, otherwise the latest window that has
+    // one. That derivation is why this parameter list exists at all, and it is exactly what went
+    // wrong — since the addon only ever posts windows that have already opened, "the latest posted
+    // window" is whichever one was posted most recently, so every window in turn looked like the
+    // close while it was newest. Harmless at payout (only the final answer is paid), ruinous as a
+    // QUOTE, which is what HnmCampPricing.DefaultWindowValue was doing with it. That quote no
+    // longer asks this question; see DefaultWindowValue.
+    //
+    // `postedWindows` must EXCLUDE kill windows — the Post Kill roster is filed after the close and
+    // would otherwise take the close bonus off the window the officer marked. Callers filter.
+    //
+    // This can still answer 1 — one window posted, nothing ticked — and that answer is now inert at
+    // payout: WindowValue prices sequence 1 as the open whether or not it is also the close, so the
+    // fallback landing on the opening window costs nobody anything. It used to pay open + close.
+    //
     // 0 when the camp has no snapshots at all — then nobody is at the open or the close.
-    public static int ResolveCloseWindow(IReadOnlyCollection<int> postedWindows, int popWindow)
+    public static int ResolveCloseWindow(
+        IReadOnlyCollection<int> postedWindows, int popWindow, int? markedCloseWindow = null)
     {
+        if (markedCloseWindow is > 0) return markedCloseWindow.Value;
         if (postedWindows.Count == 0) return 0;
         return postedWindows.Contains(popWindow) ? popWindow : postedWindows.Max();
+    }
+
+    // The same question asked of the ROWS, which is how every caller outside this file has it.
+    //
+    // Exists so the two filters that make the answer correct — find the ticked box, drop the kill
+    // windows — are applied in one place instead of at each call site. They were open-coded nowhere
+    // before this because neither concept existed; adding two flags and trusting three callers to
+    // remember both is how the addon's window number and the board's drifted apart the last time.
+    public static int ResolveCloseWindow(IEnumerable<EventAttendanceWindow> windows, int popWindow)
+    {
+        var rows = windows as IReadOnlyCollection<EventAttendanceWindow> ?? windows.ToList();
+        var marked = rows.FirstOrDefault(w => w.IsClosingWindow && !w.IsKillWindow);
+        return ResolveCloseWindow(
+            rows.Where(w => !w.IsKillWindow).Select(w => w.SequenceNumber).Distinct().ToList(),
+            popWindow,
+            marked?.SequenceNumber);
     }
 
     // Who this camp owes and how much, read off the addon's window scans. Read-only: stages
@@ -179,16 +286,36 @@ public sealed class HnmStandardCampFinalizer
             {
                 AppUserId = w.AppUserId!,
                 w.CharacterName,
+                // Set only when the scan caught them on an alt. The payout review is a roster
+                // document — it lists who is owed DKP, not which character was standing there —
+                // so this is what the fallback name below prefers.
+                w.MainCharacterName,
                 w.AppUserEventId,
                 w.EventAttendanceWindow!.SequenceNumber,
                 // The officer's price for this window, null when they never set one. Rides on the
                 // join already being walked — no extra round trip.
-                w.EventAttendanceWindow!.DkpAmount
+                w.EventAttendanceWindow!.DkpAmount,
+                w.EventAttendanceWindow!.IsClosingWindow,
+                w.EventAttendanceWindow!.IsKillWindow
             })
             .ToListAsync(cancellationToken);
-        if (scans.Count == 0) return new List<HnmCampMember>();
 
-        var closeWindow = ResolveCloseWindow(scans.Select(s => s.SequenceNumber).Distinct().ToList(), popWindow);
+        // NO early return on an empty scan list any more. A camp can owe DKP with not one snapshot
+        // posted: the Claim Shield fires off chat, so the taggers are recorded whether or not an
+        // officer ever read the roster. Bailing here paid them nothing, and the officer who forgot
+        // to post a window is exactly the officer who most needs the record.
+
+        // The officer's ticked box, if there is one. Kill windows are excluded from the fallback
+        // derivation below for the reason ResolveCloseWindow gives — the Post Kill roster is filed
+        // after the close and must not take the close bonus off the window that earned it.
+        var markedCloseWindow = scans
+            .Where(s => s.IsClosingWindow && !s.IsKillWindow)
+            .Select(s => (int?)s.SequenceNumber)
+            .FirstOrDefault();
+        var closeWindow = ResolveCloseWindow(
+            scans.Where(s => !s.IsKillWindow).Select(s => s.SequenceNumber).Distinct().ToList(),
+            popWindow,
+            markedCloseWindow);
 
         // Price every posted window ONCE, up front. The amount is a property of the window, so
         // resolving it per member would be the same lookup N times over.
@@ -197,7 +324,31 @@ public sealed class HnmStandardCampFinalizer
             .ToDictionary(
                 g => g.Key,
                 g => WindowValue(
-                    g.Key, closeWindow, g.First().DkpAmount, windowBonus, openBonus, closeBonus));
+                    g.Key, closeWindow, g.First().DkpAmount,
+                    windowBonus, openBonus, closeBonus, g.First().IsKillWindow));
+
+        // Which sequences are the Post Kill rosters. A camp can hold more than one if the officer
+        // posted a kill, corrected it and posted again; being in ANY of them is the kill.
+        var killWindows = scans
+            .Where(s => s.IsKillWindow)
+            .Select(s => s.SequenceNumber)
+            .ToHashSet();
+
+        // Who tagged the mob, straight off this camp's Claim Shield captures. Accounts only —
+        // an unmatched name resolved to no membership, so there is no balance to credit and no
+        // way to tell whether it was even a linkshell member. Those rows stay visible in the
+        // Claim Shield panel, which is where an officer fixes them (by fixing the roster name).
+        //
+        // Every capture on the event contributes names, won or lost — a tag is a tag whether or not
+        // the lottery went our way. WHETHER the claim bonus is paid at all is still the officer's
+        // call at End Camp: `claimBonus` arrives here already zeroed when the camp wasn't claimed
+        // (HnmCampPricing.StandardBonuses). The Claim Shield decides WHO, not IF.
+        var taggedAppUserIds = (await _db.ClaimShieldCaptureMembers
+                .Where(m => m.Capture!.EventId == ev.Id && m.AppUserId != null)
+                .Select(m => m.AppUserId!)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var participations = await _db.AppUserEvents
             .Where(p => p.EventId == ev.Id)
@@ -223,10 +374,13 @@ public sealed class HnmStandardCampFinalizer
             windows.Add(scan.SequenceNumber);
 
             // Last non-empty name wins, so a member whose participation was cleared away still has
-            // a character name on their history row.
-            if (!string.IsNullOrWhiteSpace(scan.CharacterName))
+            // a character name on their history row. Their MAIN when the scan was of an alt: the
+            // row that comes out of this is a DKP credit, and crediting "Athmilk" when the roster
+            // (and every other DKP row they own) says "Edicius" reads as a second person.
+            var scanRosterName = scan.MainCharacterName ?? scan.CharacterName;
+            if (!string.IsNullOrWhiteSpace(scanRosterName))
             {
-                characterNameByAppUserId[appUserId] = scan.CharacterName;
+                characterNameByAppUserId[appUserId] = scanRosterName;
             }
 
             // Represent the account with whichever participation the addon scanned most — that's
@@ -245,7 +399,9 @@ public sealed class HnmStandardCampFinalizer
             }
             scanCountByAppUserId[appUserId] = count + 1;
         }
-        if (windowsByAppUserId.Count == 0) return new List<HnmCampMember>();
+
+        // Deliberately falls through on an empty map, for the same reason the scan guard above
+        // does: the Claim Shield taggers are appended after this loop and owe nothing to it.
 
         var memberships = await _db.AppUserLinkshells
             .Where(m => m.LinkshellId == ev.LinkshellId && m.AppUserId != null)
@@ -273,7 +429,11 @@ public sealed class HnmStandardCampFinalizer
             // Only the OUTCOME bonuses are gated here now — the per-window credit is whatever
             // each window they were scanned in is priced at (see WindowValue for why the open is
             // gated on window 1 specifically rather than on the earliest window posted).
-            var atClose = closeWindow > 0 && windows.Contains(closeWindow);
+            //
+            // Each outcome answers to its OWN evidence: the claim to the Claim Shield tag list, the
+            // kill to the Post Kill roster. Neither reads the close window any more.
+            var tagged = taggedAppUserIds.Contains(appUserId);
+            var inKillWindow = windows.Overlaps(killWindows);
 
             // A member who scanned but qualified for nothing is still LISTED — they were at the
             // camp, and that's what the review page is for. They just carry 0, which an officer
@@ -286,13 +446,46 @@ public sealed class HnmStandardCampFinalizer
                 SubJobName: participation?.SubJobName,
                 Dkp: ComputeMemberDkp(
                     windows.Select(seq => valueBySequence.GetValueOrDefault(seq)),
-                    atClose, claimBonus, killBonus, step)));
+                    tagged, inKillWindow, claimBonus, killBonus, step)));
+        }
+
+        // Someone can tag the mob and never appear in a single scan — they died on the tag, or
+        // logged out, or the officer's first snapshot came after they left. The claim is evidence
+        // of presence in its own right (the addon only counts an action that LANDED on the mob), so
+        // they get a row for it rather than being dropped for having no window.
+        //
+        // Runs after the scan loop and skips anyone already listed, so a tagger who was also
+        // scanned keeps their window credit and is not duplicated.
+        if (claimBonus > 0)
+        {
+            var listedAppUserIds = members
+                .Where(m => m.AppUserId is not null)
+                .Select(m => m.AppUserId!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var appUserId in taggedAppUserIds)
+            {
+                if (listedAppUserIds.Contains(appUserId)) continue;
+                if (!membershipByAppUserId.TryGetValue(appUserId, out var membership)) continue;
+
+                var taggerName = membership.CharacterName;
+                if (string.IsNullOrWhiteSpace(taggerName)) continue;
+
+                members.Add(new HnmCampMember(
+                    AppUserId: appUserId,
+                    CharacterName: taggerName.Trim(),
+                    JobName: null,
+                    SubJobName: null,
+                    Dkp: DkpRounding.Round(claimBonus, step)));
+            }
         }
 
         _logger.LogInformation(
             "Standard HNM camp roster built: event {EventId} has {Count} member(s) "
-            + "(close window {Close}, claimed={Claimed}, killed={Killed}).",
-            ev.Id, members.Count, closeWindow, claimed, killed);
+            + "(close window {Close}, {Tagged} tagged on the Claim Shield, "
+            + "kill window(s) {KillWindows}, claimed={Claimed}, killed={Killed}).",
+            ev.Id, members.Count, closeWindow, taggedAppUserIds.Count,
+            killWindows.Count, claimed, killed);
         return members;
     }
 }

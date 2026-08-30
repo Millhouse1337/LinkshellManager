@@ -61,8 +61,10 @@ public sealed class WindowEventDkpLedgerService
 
         // Index every name a member might have been captured under: the
         // membership's own CharacterName plus the account's CharacterName and
-        // alt names. This lets a linkshell/zone-scope snapshot credit a member
-        // who showed up on an alt. First-write-wins, so a membership's own
+        // alt names. This lets a snapshot credit a member who showed up on an
+        // alt — the addon captures whatever character is standing in the
+        // alliance, which is often not the one on the roster.
+        // First-write-wins, so a membership's own
         // CharacterName takes precedence over an alt that resolves to a
         // different member (same rule PostAttendanceAsync uses).
         var membershipsByCharacterName = new Dictionary<string, AppUserLinkshell>(StringComparer.OrdinalIgnoreCase);
@@ -257,12 +259,6 @@ public sealed class WindowEventDkpLedgerService
             .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
 
-        double AmountForCharacter(string? characterName)
-            => !string.IsNullOrWhiteSpace(characterName) &&
-               overridesByName.TryGetValue(characterName.Trim(), out var v)
-                ? v
-                : defaultAmount;
-
         var ledgerEntries = await _db.DkpLedgerEntries
             .Where(entry => entry.SourceWindowEventId == windowEventId && entry.AppUserId != null)
             .ToListAsync(cancellationToken);
@@ -283,6 +279,63 @@ public sealed class WindowEventDkpLedgerService
             .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
+        // EVERY name each credited account could have been captured under.
+        //
+        // This exists because the two halves of this service key overrides DIFFERENTLY. Ensure
+        // looks an override up by the SNAPSHOT ENTRY name — the character actually standing in the
+        // alliance — while the ledger row it writes stores the MEMBERSHIP name. For anyone who
+        // showed up on an alt those are different strings, so an override applied at post time was
+        // silently dropped here on the next edit and that member snapped back to the event default.
+        //
+        // Survivable while overrides were rare and hand-typed. The Misc rate materializes them
+        // automatically for a whole class of members, so it would now be routine.
+        var nameRows = await _db.AppUserLinkshells
+            .Where(link => link.LinkshellId == windowEvent.LinkshellId && appUserIds.Contains(link.AppUserId!))
+            .Join(_db.Users, link => link.AppUserId, user => user.Id, (link, user) => new
+            {
+                link.AppUserId,
+                MembershipName = link.CharacterName,
+                AccountName = user.CharacterName,
+                Alt1 = user.AltCharacterName1,
+                Alt2 = user.AltCharacterName2,
+            })
+            .ToListAsync(cancellationToken);
+
+        var candidateNames = nameRows
+            .Where(item => !string.IsNullOrWhiteSpace(item.AppUserId))
+            .GroupBy(item => item.AppUserId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .SelectMany(item => new[] { item.MembershipName, item.AccountName, item.Alt1, item.Alt2 })
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Select(name => name!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+        // The ledger row's own name wins, so nothing that already resolved changes; the account's
+        // other names are consulted only as a fallback.
+        double AmountForEntry(DkpLedgerEntry entry)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.CharacterName) &&
+                overridesByName.TryGetValue(entry.CharacterName.Trim(), out var direct))
+            {
+                return direct;
+            }
+
+            if (!string.IsNullOrWhiteSpace(entry.AppUserId) &&
+                candidateNames.TryGetValue(entry.AppUserId, out var names))
+            {
+                foreach (var name in names)
+                {
+                    if (overridesByName.TryGetValue(name, out var viaAlt)) return viaAlt;
+                }
+            }
+
+            return defaultAmount;
+        }
+
         // The edit may have changed the entry type, which changes which pool these rows belong to.
         var newPoolId = await _dkpPools.ResolveAsync(windowEvent.LinkshellId, newEntryType, cancellationToken);
 
@@ -302,7 +355,7 @@ public sealed class WindowEventDkpLedgerService
 
         foreach (var entry in ledgerEntries)
         {
-            var newAmountForEntry = AmountForCharacter(entry.CharacterName);
+            var newAmountForEntry = AmountForEntry(entry);
             AppUserLinkshell? membership = null;
             if (!string.IsNullOrWhiteSpace(entry.AppUserId))
             {

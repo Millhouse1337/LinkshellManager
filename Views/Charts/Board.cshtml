@@ -1,13 +1,15 @@
 @using LinkshellManagerDiscordApp.Services
 @model LinkshellManagerDiscordApp.ViewModels.ChartBoardViewModel
 @{
-    ViewData["Title"] = $"{Model.BoardLabel} Pop Item Tracker";
+    // "Tracker", not "Pop Item Tracker": Sky and Sea now track drops too, and Dynamis and Limbus
+    // track requests and key items rather than pop items at all.
+    ViewData["Title"] = $"{Model.BoardLabel} Tracker";
     ViewData["BodyClass"] = "lsm-page";
 }
 
 <div class="page-head fade d1">
     <div>
-        <h1 class="page-title">@Model.BoardLabel Pop Item Tracker</h1>
+        <h1 class="page-title">@Model.BoardLabel Tracker</h1>
         <div class="page-sub">
             @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
             {
@@ -49,98 +51,41 @@
 }
 else
 {
+    @* Sky and Sea carry TWO add cards, stacked: what is traded TO a boss and what falls OFF one are
+       different questions, and they were sharing one box. Dynamis and Limbus carry neither - members
+       submit requests there instead - but rows those boards already hold stay listed and editable
+       below, because AllowsPopItems gates the FORM and nothing else. *@
+    @if (Model.CanManage && Model.AllowsPopItems)
+    {
+        <partial name="_ChartAddItemForm" model='new ChartAddItemFormContext(
+            Model, ChartItemKinds.Pop, "Add a pop item", "Pop item", "Add pop item", "add-pop")' />
+    }
+    @if (Model.CanManage && Model.AllowsDropItems)
+    {
+        <partial name="_ChartAddItemForm" model='new ChartAddItemFormContext(
+            Model, ChartItemKinds.Drop, "Add a drop item", "Drop item", "Add drop item", "add-drop")' />
+    }
+
+    @* Each member, then their REAL alts by their own names - the same characters their profile
+       registers, not a made-up "alt of X" string. A pop item sitting on somebody's alt sits there
+       under the alt's name, which is what an officer would look for. The main is the option's label,
+       so it is obvious whose alt it is.
+
+       PAGE LEVEL, not inside an add card. Two add cards would carry two copies of the same id, and
+       on Dynamis and Limbus there is no add card at all - which would have taken the datalist with
+       it and silently killed the holder autocomplete in every edit drawer on those boards. *@
     @if (Model.CanManage)
     {
-        @* chart-form-card lifts the card's `overflow: hidden`, which would otherwise clip the credit
-           dropdown where it hangs past the bottom of the card. *@
-        <div class="card chart-form-card fade d2">
-            <div class="card-head"><div class="card-title">Add a pop item</div></div>
-            <div class="card-body">
-                <form asp-action="AddItem" method="post" class="chart-form">
-                    <input type="hidden" name="board" value="@Model.BoardKey" />
-                    <div class="chart-form__field">
-                        <label for="add-boss">Boss</label>
-                        <select id="add-boss" name="boss">
-                            @foreach (var boss in Model.Bosses)
-                            {
-                                <option value="@boss.Boss">@boss.Boss</option>
-                            }
-                        </select>
-                    </div>
-                    @* Rendered for the boss the select above opens on — the first card on the board.
-                       The script at the foot of the page swaps it when that changes. *@
-                    <div class="chart-form__field">
-                        <label for="add-item">Pop item</label>
-                        <partial name="_ChartPopItemField"
-                                 model='new ChartPopItemFieldContext(Model.Bosses[0].PopItemOptions, null, "add-item")' />
-                    </div>
-                    <div class="chart-form__field">
-                        <label for="add-holder">Held by</label>
-                        <input id="add-holder" name="heldByCharacterName" class="input" type="text"
-                               list="chart-roster-names" placeholder="Character name or alt" />
-                    </div>
-                    <div class="chart-form__field">
-                        <label for="add-qty">Qty</label>
-                        <input id="add-qty" name="quantity" class="input" type="number" min="0" value="1" />
-                    </div>
-                    @* Farming credit, picked while the row is written rather than in a second pass
-                       through the row's Credits drawer. A <details> rather than a <select multiple>:
-                       crediting a whole farm night is the common case, and ctrl-clicking fifteen
-                       names is not that — and this needs no script at all. Unticked boxes do not
-                       post, so it is the same set-wise contract SetCredits uses. *@
-                    <div class="chart-form__field">
-                        <label for="add-credits">Farming credit</label>
-                        <details id="add-credits" class="chart-multiselect">
-                            <summary class="chart-multiselect__toggle">
-                                <span class="chart-multiselect__value">Nobody credited</span>
-                            </summary>
-                            <div class="chart-multiselect__panel">
-                                @if (Model.Roster.Count == 0)
-                                {
-                                    <div class="chart-multiselect__none">No members on the roster to credit.</div>
-                                }
-                                else
-                                {
-                                    <div class="chart-multiselect__list">
-                                        @foreach (var member in Model.Roster)
-                                        {
-                                            <label class="chart-multiselect__row">
-                                                <input type="checkbox" name="membershipIds" value="@member.MembershipId" />
-                                                @member.CharacterName
-                                            </label>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </details>
-                    </div>
-
-                    <div class="chart-form__field">
-                        <label for="add-notes">Notes</label>
-                        <input id="add-notes" name="notes" class="input" type="text" placeholder="Optional" />
-                    </div>
-                    <div class="chart-form__actions">
-                        <button type="submit" class="btn primary">Add item</button>
-                    </div>
-                </form>
-
-                @* Each member, then their REAL alts by their own names — the same characters their
-                   profile registers, not a made-up "alt of X" string. A pop item sitting on
-                   somebody's alt sits there under the alt's name, which is what an officer would
-                   look for. The main is the option's label, so it is obvious whose alt it is.
-                   Shared by the add form and every edit drawer on the page. *@
-                <datalist id="chart-roster-names">
-                    @foreach (var member in Model.Roster)
-                    {
-                        <option value="@member.CharacterName"></option>
-                        @foreach (var alt in member.AltCharacterNames)
-                        {
-                            <option value="@alt">alt of @member.CharacterName</option>
-                        }
-                    }
-                </datalist>
-            </div>
-        </div>
+        <datalist id="chart-roster-names">
+            @foreach (var member in Model.Roster)
+            {
+                <option value="@member.CharacterName"></option>
+                @foreach (var alt in member.AltCharacterNames)
+                {
+                    <option value="@alt">alt of @member.CharacterName</option>
+                }
+            }
+        </datalist>
     }
 
     @* ---- ONE grid over every card, in the catalog's order, with a full-row heading per group run.
@@ -218,7 +163,9 @@ else
          its boss card, which is the one place it lives. ---- *@
     <div class="card fade d3">
         <div class="card-head">
-            <div class="card-title">@Model.BoardLabel Pop Item Holdings</div>
+            @* "Holdings" rather than "Pop Item Holdings" once a board tracks both kinds - the pill
+               on each row says which, and a heading naming one of them would be wrong half the time. *@
+            <div class="card-title">@Model.BoardLabel @(Model.AllowsDropItems ? "Holdings" : "Pop Item Holdings")</div>
             @if (!Model.IsEmpty)
             {
                 <span class="tag">@Model.Bosses.Sum(boss => boss.TotalQuantity) held</span>
@@ -227,7 +174,16 @@ else
 
         @if (Model.IsEmpty)
         {
-            <div class="empty">Nothing is tracked yet. Add pop items to a boss above and they are listed here.</div>
+            <div class="empty">
+                @if (Model.AllowsPopItems || Model.AllowsDropItems)
+                {
+                    <text>Nothing is tracked yet. Add items to a boss above and they are listed here.</text>
+                }
+                else
+                {
+                    <text>Nothing is tracked here. This board takes item requests instead.</text>
+                }
+            </div>
         }
         else
         {
@@ -235,7 +191,7 @@ else
                 <table class="table chart-holdings">
                     <thead>
                         <tr>
-                            <th>Pop Item</th>
+                            <th>@(Model.AllowsDropItems ? "Item" : "Pop Item")</th>
                             <th>Held By</th>
                             <th>Qty</th>
                             <th>Farming Credit</th>
@@ -275,6 +231,16 @@ else
                                         {
                                             <span class="chart-holdings__item">
                                                 <span class="chart-holdings__name">@item.ItemName</span>
+                                                @* Only on DROP rows. A "Pop" pill on every Sky row
+                                                   is noise: pop is the default and the common case,
+                                                   so the pill marks the exception. And it is a
+                                                   badge inside the existing cell rather than a new
+                                                   column, because holdingsColumns feeds three
+                                                   separate colspans. *@
+                                                @if (item.Kind == ChartItemKinds.Drop)
+                                                {
+                                                    <span class="chart-holdings__kind">Drop</span>
+                                                }
                                                 <span class="chart-holdings__boss is-@boss.ThemeKey">@boss.Boss</span>
                                             </span>
                                         }
@@ -352,7 +318,11 @@ else
                                 {
                                     <tr id="chart-edit-@item.Id" class="chart-drawer" hidden>
                                         <td colspan="@holdingsColumns">
-                                            <form asp-action="EditItem" method="post" class="chart-form">
+                                            @* The row's OWN kind, so the swap script offers the
+                                               right list. A row never changes kind - EditItem takes
+                                               it from the row, never from this form. *@
+                                            <form asp-action="EditItem" method="post" class="chart-form"
+                                                  data-chart-kind="@item.Kind">
                                                 <input type="hidden" name="id" value="@item.Id" />
                                                 <div class="chart-form__field">
                                                     <label>Boss</label>
@@ -364,9 +334,11 @@ else
                                                     </select>
                                                 </div>
                                                 <div class="chart-form__field">
-                                                    <label>Pop item</label>
+                                                    <label>@(item.Kind == ChartItemKinds.Drop ? "Drop item" : "Pop item")</label>
                                                     <partial name="_ChartPopItemField"
-                                                             model="new ChartPopItemFieldContext(boss.PopItemOptions, item.ItemName)" />
+                                                             model="new ChartPopItemFieldContext(
+                                                                 item.Kind == ChartItemKinds.Drop ? boss.DropItemOptions : boss.PopItemOptions,
+                                                                 item.ItemName, null, item.Kind)" />
                                                 </div>
                                                 <div class="chart-form__field">
                                                     <label>Held by</label>
@@ -438,13 +410,26 @@ else
             Credit is awarded when a member is present for the pop and remains until the NM is defeated.
         </p>
     </div>
+
+    @* ---- Below the holdings table, deliberately, and not between the path columns and the trailing
+         run: chart-finale is sized in --chart-path-count column widths, and anything dropped into
+         that gap breaks the alignment Sky and Sea depend on. ---- *@
+    @if (Model.AllowsWishlist)
+    {
+        <partial name="_ChartWishlistCard" model="Model" />
+    }
+
+    @if (Model.AllowsKeyItems)
+    {
+        <partial name="_ChartKeyItemGrid" model="Model" />
+    }
 }
 
 @* The whole board's pop items, for the picker script below. Only emitted when there is a picker to
    feed — every board but Sky still takes free text. *@
-@if (Model.CanManage && Model.HasPopItemOptions)
+@if (Model.CanManage && (Model.HasPopItemOptions || Model.HasDropItemOptions))
 {
-    <script id="chart-pop-items" type="application/json">@Html.Raw(Model.PopItemOptionsJson)</script>
+    <script id="chart-item-options" type="application/json">@Html.Raw(Model.ItemOptionsJson)</script>
 }
 
 @section Scripts {
@@ -455,9 +440,11 @@ else
         // box. Server-rendered for the boss each form OPENS on, so this only handles the change; with
         // JS off the form is still correct, it just cannot switch.
         (function () {
-            var source = document.getElementById('chart-pop-items');
+            var source = document.getElementById('chart-item-options');
             if (!source) return;
-            var byBoss = JSON.parse(source.textContent);
+            // { Pop: { boss: [...] }, Drop: { boss: [...] } } - the page can carry two add forms,
+            // and each repopulates from its own kind's list.
+            var byKind = JSON.parse(source.textContent);
 
             // A disabled control does not post, so exactly one itemName ever reaches the action.
             function setLive(control, live, fieldId) {
@@ -481,10 +468,13 @@ else
 
                 // Rebuilt rather than filtered: the old boss's items are not answers for the new one,
                 // and neither is a name carried over from the row being edited.
-                var options = byBoss[bossSelect.value] || [];
+                // The kind rides on the FORM, so the pop card and the drop card each rebuild from
+                // their own list. An edit drawer carries the row's own kind for the same reason.
+                var kind = bossSelect.form.dataset.chartKind || 'Pop';
+                var options = (byKind[kind] || {})[bossSelect.value] || [];
                 if (options.length) {
                     picker.innerHTML = '';
-                    picker.appendChild(new Option('Pick a pop item…', ''));
+                    picker.appendChild(new Option(kind === 'Drop' ? 'Pick a drop item…' : 'Pick a pop item…', ''));
                     options.forEach(function (option) {
                         picker.appendChild(new Option(option.label, option.name));
                     });

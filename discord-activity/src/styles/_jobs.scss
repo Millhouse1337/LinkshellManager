@@ -219,14 +219,53 @@
 /* The jobs list used to be its own card (search box + paged member cards). It now
    renders inline in the Manage Team roster table under the "Show Jobs" toggle, so
    only the per-character pill styles below are still needed. */
+/* One line per character: who it is sits to the LEFT of the job pills (or of
+   "No jobs entered") rather than stacked above them, so a member with alts reads
+   as "Durbin · [Main] <pills> / Durbins · [Alt 1] <pills> / Durbinb · [Alt 2]
+   <pills>" — every line names the character it belongs to. */
 .panel-tab .jobs-roster-member__character {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
   margin-top: 6px;
 }
 
-.panel-tab .jobs-roster-member__alt {
+/* Name + badge travel as one unit and never split across a wrap. */
+.panel-tab .jobs-roster-member__who {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.panel-tab .jobs-roster-member__name {
   font-size: 12px;
   color: var(--fg-2);
-  margin-bottom: 4px;
+}
+
+.panel-tab .jobs-roster-member__dot {
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+/* Same shape as the "App" pill beside a member's name, but neutral rather than
+   accent-colored: one appears on every line, so they must not out-shout the jobs. */
+.panel-tab .jobs-roster-member__tag {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--fg-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+}
+
+.panel-tab .jobs-roster-member__tag--main {
+  color: var(--fg-1);
+  background: var(--surface-3);
 }
 
 .panel-tab .jobs-roster-member__empty {
@@ -235,10 +274,14 @@
   font-style: italic;
 }
 
+/* Shrinkable so the pills stay on the label's line and wrap inside their own box
+   (hanging-indented past the name) instead of dropping the whole block below it. */
 .panel-tab .jobs-roster-member__pills {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .panel-tab .jobs-roster-member__pill {

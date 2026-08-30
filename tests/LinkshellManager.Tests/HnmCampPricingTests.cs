@@ -51,25 +51,71 @@ public class HnmCampPricingTests
         var ev = StandardCamp();
         ev.HnmOpenBonusOverride = 4.0;
 
-        // Sequence 1 on a camp with nothing posted yet: posting it makes it the close too, so the
-        // quote is open + close. The override replaces only the open.
-        Assert.Equal(4.0 + 1.5, HnmCampPricing.DefaultWindowValue(ev, Ls(), sequence: 1)!.Value, precision: 3);
+        // Sequence 1 quotes the OPEN, and only the open.
+        Assert.Equal(4.0, HnmCampPricing.DefaultWindowValue(ev, Ls(), sequence: 1)!.Value, precision: 3);
     }
 
     [Fact]
     public void DefaultWindowValue_StandardCamp_FallsBackToTheLinkshellWhenNoOverrideIsSet()
     {
-        Assert.Equal(0.5 + 1.5, HnmCampPricing.DefaultWindowValue(StandardCamp(), Ls(), sequence: 1)!.Value, precision: 3);
+        Assert.Equal(0.5, HnmCampPricing.DefaultWindowValue(StandardCamp(), Ls(), sequence: 1)!.Value, precision: 3);
     }
 
-    // Posting window 3 makes 3 the close, so window 1 is only worth the open by then. This number
-    // MOVES on purpose — it is a prediction about the next post, not a fact about the past.
+    // THE bug this whole change came out of. The quote used to price the window being posted as if
+    // it were the close (closeWindow := sequence), so window 1 quoted open + close and every later
+    // window quoted the close again. The addon writes its quote back as the window's explicit
+    // price, and an explicit price REPLACES the computed one — so that moving prediction got frozen
+    // into every window on the camp.
+    //
+    // The quote must never contain a close bonus: the close is an officer's checkbox and is not
+    // knowable at post time.
     [Fact]
-    public void WindowValueFor_StandardCamp_WindowOneDropsToTheOpenOnceALaterWindowCloses()
+    public void DefaultWindowValue_StandardCamp_NeverQuotesTheCloseBonus()
     {
+        var ls = Ls();   // open 0.5, close 1.5
+        Assert.Equal(0.5, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 1)!.Value, precision: 3);
+        Assert.Equal(0d, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 2)!.Value, precision: 3);
+        Assert.Equal(0d, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 9)!.Value, precision: 3);
+    }
+
+    // What is quoted is what is paid. The old quote moved as later windows landed; this one is a
+    // fact about the sequence, so the addon's box and the finalizer agree by construction.
+    [Fact]
+    public void DefaultWindowValue_StandardCamp_MatchesWhatTheFinalizerPaysForThatWindow()
+    {
+        var ls = Ls();
+        // Window 1 with the close ticked elsewhere (window 3) — which is the normal shape.
+        Assert.Equal(
+            HnmCampPricing.WindowValueFor(StandardCamp(), ls, sequence: 1, closeWindow: 3, explicitAmount: null)!.Value,
+            HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 1)!.Value,
+            precision: 3);
+    }
+
+    // The close bonus reaches a window only once an officer has ticked it, which is what
+    // WindowValueFor's closeWindow argument carries.
+    [Fact]
+    public void WindowValueFor_StandardCamp_PaysTheCloseOnTheMarkedWindowOnly()
+    {
+        var ls = Ls();
+        Assert.Equal(
+            1.5,
+            HnmCampPricing.WindowValueFor(StandardCamp(), ls, sequence: 3, closeWindow: 3, explicitAmount: null)!.Value,
+            precision: 3);
         Assert.Equal(
             0.5,
-            HnmCampPricing.WindowValueFor(StandardCamp(), Ls(), sequence: 1, closeWindow: 3, explicitAmount: null)!.Value,
+            HnmCampPricing.WindowValueFor(StandardCamp(), ls, sequence: 1, closeWindow: 3, explicitAmount: null)!.Value,
+            precision: 3);
+    }
+
+    // A Post Kill roster is worth 0 as a window — the kill bonus pays it instead.
+    [Fact]
+    public void WindowValueFor_KillWindow_IsZero()
+    {
+        Assert.Equal(
+            0d,
+            HnmCampPricing.WindowValueFor(
+                StandardCamp(), Ls(), sequence: 3, closeWindow: 2, explicitAmount: null,
+                isKillWindow: true)!.Value,
             precision: 3);
     }
 
@@ -171,18 +217,17 @@ public class HnmCampPricingTests
 
     // The regular-window rate reaches the addon through the same resolved-number channel as the
     // rest — the addon is told what one more window is worth, never the four bonuses, so it can't
-    // re-derive the precedence and drift. A middle window that used to quote null now quotes the
-    // rate, and the open/close ends quote the rate plus their bonus.
+    // re-derive the precedence and drift.
     [Fact]
     public void DefaultWindowValue_RegularWindowRate_ReachesTheAddonsQuote()
     {
         var ls = Ls();
         ls.HnmStandardWindowBonus = 0.25;
 
-        // DefaultWindowValue prices the window being posted as the close, so window 4 quotes
-        // rate + close and window 1 quotes rate + open + close.
-        Assert.Equal(0.25 + 1.5, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 4)!.Value, precision: 3);
-        Assert.Equal(0.25 + 0.5 + 1.5, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 1)!.Value, precision: 3);
+        // One amount per window, and never the close: window 4 quotes the regular rate, window 1
+        // quotes the open. The rate does NOT ride underneath either of them.
+        Assert.Equal(0.25, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 4)!.Value, precision: 3);
+        Assert.Equal(0.5, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 1)!.Value, precision: 3);
     }
 
     // The Manual Check In open / close bonuses share Event.HnmOpen/CloseBonusOverride with their

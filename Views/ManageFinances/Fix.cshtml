@@ -4,12 +4,6 @@
 @{
     ViewData["Title"] = $"Fix entry {TreasuryLabels.EntryReference(Model.EntryNumber)}";
     ViewData["BodyClass"] = "lsm-page";
-    var groups = new[]
-    {
-        (Key: TreasuryTransactionKinds.GroupCommon, Label: "Everyday"),
-        (Key: TreasuryTransactionKinds.GroupOwed, Label: "Gil promised but not moved yet"),
-        (Key: TreasuryTransactionKinds.GroupSetup, Label: "Setup"),
-    };
 }
 
 <div class="page-head fade d1">
@@ -28,26 +22,10 @@
         <div asp-validation-summary="ModelOnly" class="text-danger"></div>
 
         <div class="form-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));column-gap:24px;align-items:end">
-            <div class="field" style="grid-column:1/-1">
-                <label asp-for="TransactionKind"></label>
-                <select asp-for="TransactionKind" class="form-select" id="TransactionKind" required>
-                    @foreach (var group in groups)
-                    {
-                        var options = Model.Options.Where(option => option.Group == group.Key).ToList();
-                        if (options.Count == 0) { continue; }
-                        <optgroup label="@group.Label">
-                            @foreach (var option in options)
-                            {
-                                <option value="@option.Key" data-help="@option.Help" data-preview="@option.PreviewTemplate"
-                                        data-member="@(option.ShowsMember ? "1" : "0")"
-                                        data-split="@(option.IsSplittable ? "1" : "0")"
-                                        data-settles="@(option.SettlesMemberDebt ? "1" : "0")">@option.Label</option>
-                            }
-                        </optgroup>
-                    }
-                </select>
-                <div id="kindHelp" style="font-size:12px;color:var(--fg-3);margin-top:4px"></div>
-            </div>
+            @* The same picker Record uses. Its Options include this entry's OWN kind even when
+               that kind is retired — without it the browser would select whatever sorts first and
+               "fixing" the entry would quietly re-file it onto two different categories. *@
+            <partial name="_TreasuryKindPicker" model="Model" />
 
             <div class="field">
                 <label asp-for="Amount"></label>
@@ -76,14 +54,25 @@
                 <span asp-validation-for="Member" class="text-danger"></span>
             </div>
 
+            @* Whose mule. Pre-filled from the entry being fixed for the same reason the split's
+               members are: the replacement is built from THIS form, not from the original's lines,
+               so an empty box here would quietly move the gil onto nobody's mule. *@
+            <div class="field" id="holderField">
+                <label asp-for="Holder" id="holderLabel"></label>
+                <input asp-for="Holder" class="form-control" maxlength="256" autocomplete="off"
+                       list="holderOptions" placeholder="Search members…" />
+                <datalist id="holderOptions">
+                    @foreach (var option in Model.Roster)
+                    {
+                        <option value="@option.CharacterName"></option>
+                    }
+                </datalist>
+                <span asp-validation-for="Holder" class="text-danger"></span>
+            </div>
+
             @* A fix rebuilds the entry from this form, so a split has to be re-stated in full — the
                original's members come back pre-picked. *@
             <partial name="_TreasuryRecipients" model="Model" />
-
-            <div class="field" style="grid-column:1/-1">
-                <label asp-for="Memo"></label>
-                <textarea asp-for="Memo" class="form-control" rows="2" maxlength="1024"></textarea>
-            </div>
 
             @* Required: an entry that says an earlier one was wrong has to say why. A database CHECK
                enforces the same thing, so this cannot be bypassed by posting round the form. *@

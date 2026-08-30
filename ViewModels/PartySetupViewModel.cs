@@ -4,8 +4,8 @@ using LinkshellManagerDiscordApp.Utils;
 namespace LinkshellManagerDiscordApp.ViewModels;
 
 // Slot requirement discriminator values. Mirrors the existing constants-class
-// convention (e.g. LinkshellTypes / WindowEventStatuses) — stored as a short
-// string on PartySetupSlot.RequirementType, not a DB enum.
+// convention (e.g. WindowEventStatuses) — stored as a short string on
+// PartySetupSlot.RequirementType, not a DB enum.
 public static class PartySetupSlotRequirementTypes
 {
     public const string Any = "Any";
@@ -59,10 +59,6 @@ public class PartySetupEditorViewModel
     // AssignedMonsterName by the controller before validation.
     [MaxLength(256)]
     public string? AssignedMonsterCustom { get; set; }
-
-    // The active linkshell's content style (SkySeaDynamis / HnmOnly / Both).
-    // Drives which of the Event Type / Assigned Monster inputs the editor shows.
-    public string? LinkshellType { get; set; }
 
     [MaxLength(1024)]
     public string? Notes { get; set; }

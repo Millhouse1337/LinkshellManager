@@ -28,6 +28,8 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly DkpLedgerWriter _dkpLedger;
     private readonly DkpPoolResolver _dkpPools;
     private readonly DkpPoolBalanceService _dkpPoolBalances;
+    private readonly MonsterTimingResolver _monsterTimings;
+    private readonly WindowEventLinkService _windowEventLinks;
     private readonly ILogger<AddonApiController> _logger;
 
     public AddonApiController(
@@ -43,6 +45,8 @@ public sealed partial class AddonApiController : ControllerBase
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools,
         DkpPoolBalanceService dkpPoolBalances,
+        MonsterTimingResolver monsterTimings,
+        WindowEventLinkService windowEventLinks,
         ILogger<AddonApiController> logger)
     {
         _dbContext = dbContext;
@@ -57,6 +61,8 @@ public sealed partial class AddonApiController : ControllerBase
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
         _dkpPoolBalances = dkpPoolBalances;
+        _monsterTimings = monsterTimings;
+        _windowEventLinks = windowEventLinks;
         _logger = logger;
     }
 
@@ -265,7 +271,24 @@ public sealed partial class AddonApiController : ControllerBase
         // the post because this request is what CREATES the window row — see the write in
         // PostAttendanceAsync. Null means "leave the window at whatever price it already has",
         // which is what an automatic capture and every older addon build both send.
-        double? WindowDkp = null);
+        double? WindowDkp = null,
+        // True when this is the addon's "Post Kill" roster: who was standing there when the mob
+        // died, which is a different list from who sat the window. Files its own window row rather
+        // than folding into the close — see EventAttendanceWindow.IsKillWindow. Defaults false, so
+        // every existing caller keeps posting ordinary windows.
+        bool IsKillWindow = false,
+        // Which alliance this roster came from, and the identity it was recognised by.
+        //
+        // The addon has been sending allianceNumber on every window post since per-alliance
+        // attendance landed (api.lua post_attendance -> render/callbacks_event.lua), but this record
+        // had no member for it, so the binder discarded it on arrival and every window row was
+        // written alliance-blind. AllianceKey is the addon's derived identity for that alliance --
+        // its leader's character name where the game confirms one -- which is what lets two posters
+        // in one alliance agree without anyone typing a number.
+        //
+        // Both null from an addon that predates this. Stored as null, never resolved to 1.
+        int? AllianceNumber = null,
+        string? AllianceKey = null);
 
     public sealed record AddonBreakRequest(int ParticipantId);
 

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using LinkshellManagerDiscordApp.Services;
 
 namespace LinkshellManagerDiscordApp.Models;
 
@@ -32,6 +33,23 @@ public class ChartPopItem
     /// <summary>Which card this row appears under. Always a canonical catalog spelling.</summary>
     [MaxLength(64)]
     public string Boss { get; set; } = string.Empty;
+
+    /// <summary>
+    /// ChartItemKinds.Pop (traded TO this boss) or Drop (fell OFF it).
+    ///
+    /// A column rather than a second table, because a drop row is the same row: same fields, same
+    /// per-item farming credit, same derived ledger. A ChartDropItems table would need its own twin
+    /// of ChartPopItemCredit - that FK is non-nullable and cannot point at two parents - and with it
+    /// a forked BuildLedger, ResolveCreditsAsync, AttachCredits and ReplaceCreditsAsync, plus a UNION
+    /// and a cross-id-space sort every time the holdings table is drawn. This is the same argument
+    /// the class comment above makes for one table across five boards, pointed the other way.
+    ///
+    /// Defaulted to Pop so every row written before drops existed reads correctly with no backfill.
+    /// A row never changes kind: both edit paths pass the row's own Kind back through NormalizeDraft
+    /// rather than accepting one from the form, exactly as they do with its Board.
+    /// </summary>
+    [MaxLength(8)]
+    public string Kind { get; set; } = ChartItemKinds.Pop;
 
     [MaxLength(128)]
     public string ItemName { get; set; } = string.Empty;

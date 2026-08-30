@@ -139,16 +139,45 @@
             window.jQuery.validator.methods.step = function () { return true; };
         }
 
-        const longWindowMonsters = new Set(['Tiamat', 'Jormungand', 'Vrtra']);
         const todForm = document.getElementById('tod-form');
         if (!todForm) { return; }
 
         const qs = (sel) => todForm.querySelector(sel);
         const todTimeInput = qs('[name="Tod.Time"]');
         const monsterSelect = qs('[name="Tod.MonsterName"]');
-        const cooldownSelect = qs('[name="Tod.Cooldown"]');
+        const cooldownValueInput = qs('[name="CooldownValue"]');
+        const cooldownUnitSelect = qs('[name="CooldownUnit"]');
         const repopTimeInput = qs('[name="Tod.RepopTime"]');
-        const intervalSelect = qs('[name="Tod.Interval"]');
+        const intervalValueInput = qs('[name="IntervalValue"]');
+        const intervalUnitSelect = qs('[name="IntervalUnit"]');
+
+        // Per-monster cooldown / cadence for THIS linkshell, in canonical minutes, stamped on the
+        // form by the server. Replaced two hardcoded monster sets that were a copy of the old global
+        // defaults and knew nothing about what the linkshell had actually configured.
+        let monsterTimings = {};
+        try {
+            monsterTimings = JSON.parse(todForm.dataset.monsterTimings || '{}') || {};
+        } catch (err) {
+            monsterTimings = {};
+        }
+        const timingFor = (name) => {
+            if (!name) { return null; }
+            const wanted = String(name).trim().toLowerCase();
+            const key = Object.keys(monsterTimings).find(k => k.trim().toLowerCase() === wanted);
+            return key ? monsterTimings[key] : null;
+        };
+        // Mirrors TodDurationFormat.Split: whole hours read as hours, everything else as minutes.
+        const applyDuration = (valueInput, unitSelect, minutes) => {
+            if (!valueInput || !unitSelect) { return; }
+            if (minutes === null || minutes === undefined || !(minutes > 0)) {
+                valueInput.value = '';
+                unitSelect.value = 'mins';
+                return;
+            }
+            const whole = minutes % 60 === 0;
+            valueInput.value = String(whole ? minutes / 60 : minutes);
+            unitSelect.value = whole ? 'hours' : 'mins';
+        };
 
         function toDateTimeLocalValue(date) {
             const pad = (v) => String(v).padStart(2, '0');
@@ -157,21 +186,19 @@
         }
 
         function getCooldownHours() {
-            if (cooldownSelect && cooldownSelect.value === '84 Hour') return 84;
-            return cooldownSelect && cooldownSelect.value === '72 Hour' ? 72 : 22;
+            const amount = parseFloat(cooldownValueInput && cooldownValueInput.value);
+            if (!isFinite(amount) || amount <= 0) return 0;
+            return (cooldownUnitSelect && cooldownUnitSelect.value === 'hours') ? amount : amount / 60;
         }
 
-        // Wyrms auto-fill their 84h / 1h defaults; other long-window HNMs use 72h.
-        // Everything else falls back to the common 22h / 10m. The user can still override.
+        // Pre-fill from what this linkshell configured for the picked monster. Unknown monsters
+        // (the free-text "Other" option) keep whatever is already in the fields.
         function applyMonsterDefaults() {
             if (!monsterSelect || !monsterSelect.value) return;
-            if (longWindowMonsters.has(monsterSelect.value)) {
-                if (cooldownSelect) cooldownSelect.value = '84 Hour';
-                if (intervalSelect) intervalSelect.value = '1 Hour';
-            } else {
-                if (cooldownSelect) cooldownSelect.value = '22 Hour';
-                if (intervalSelect) intervalSelect.value = '10 Min';
-            }
+            const timing = timingFor(monsterSelect.value);
+            if (!timing) return;
+            applyDuration(cooldownValueInput, cooldownUnitSelect, timing.cooldownMinutes);
+            applyDuration(intervalValueInput, intervalUnitSelect, timing.cadenceMinutes);
         }
 
         function updateRepopTime() {
@@ -191,7 +218,11 @@
             todTimeInput.addEventListener('input', updateRepopTime);
             todTimeInput.addEventListener('blur', updateRepopTime);
         }
-        if (cooldownSelect) cooldownSelect.addEventListener('change', updateRepopTime);
+        if (cooldownValueInput) {
+            cooldownValueInput.addEventListener('change', updateRepopTime);
+            cooldownValueInput.addEventListener('input', updateRepopTime);
+        }
+        if (cooldownUnitSelect) cooldownUnitSelect.addEventListener('change', updateRepopTime);
 
         applyMonsterDefaults();
         updateRepopTime();

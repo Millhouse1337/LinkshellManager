@@ -37,7 +37,7 @@
           </div>
           <p class="cem__subtitle">
             @if (isEditingLiveEvent) {
-              Update a live event in progress. Linkshell and party setup are locked while the event is running.
+              Update a live event in progress. The linkshell is locked while the event is running.
             } @else if (editingEventId) {
               Update a queued event directly from the Activity.
             } @else {
@@ -105,18 +105,25 @@
             <div class="cem__grid">
               <label class="cem__field">
                 <span class="cem__label">Monster</span>
-                <select class="cem__select" [value]="createModel.monsterName ?? ''"
+                <!-- Selection lives on the OPTIONS, not on a [value] binding on the select.
+                     Opening the EDIT form sets createModel.monsterName before this select's
+                     options exist (the @for below fills in after the element's own bindings
+                     run), so a [value] applied to a still-empty select was dropped by the
+                     browser and never re-applied — which is why editing a camp opened on
+                     "Select a monster". [selected] lands as each option is created, and
+                     re-runs whenever the model changes, so both paths stay in sync. -->
+                <select class="cem__select"
                         (change)="onMonsterSelect($any($event.target).value)"
                         name="monsterName" required>
-                  <option value="">Select a monster</option>
+                  <option value="" [selected]="!createModel.monsterName">Select a monster</option>
                   @for (monster of monsterOptions(); track monster) {
-                    <option [value]="monster">{{ monster }}</option>
+                    <option [value]="monster" [selected]="isMonsterSelected(monster)">{{ monster }}</option>
                   }
                 </select>
               </label>
-              <!-- Day number belongs to the HNM tier only: it exists to walk the three NQ/HQ
-                   families through their pop cycle, and no NM has one. -->
-              @if (!isNmTierSelected()) {
+              <!-- Day number exists to walk the three NQ/HQ families through their pop cycle,
+                   so it is offered for those monsters and no others (see dayNumberVisible). -->
+              @if (dayNumberVisible()) {
                 <label class="cem__field">
                   <span class="cem__label">Day number <em>optional</em></span>
                   <input class="cem__input" [(ngModel)]="createModel.dayNumber" name="dayNumber" type="number" min="0" step="1"
@@ -127,10 +134,50 @@
                 <label class="cem__field">
                   <span class="cem__label">Monster name</span>
                   <input class="cem__input" [(ngModel)]="customMonsterName" name="customMonsterName"
+                    (ngModelChange)="onCustomMonsterNameChange()"
                     placeholder="Enter the monster's name" required />
                 </label>
               }
             </div>
+
+            <!-- Recurring camp: does this board come back on its own, and how long before the
+                 next predicted pop? Both halves are asked on create AND on a queued-camp edit.
+                 A camp made without asking took the 1-hour default silently and the officer had
+                 no say until End Camp, by which point the first re-post was already scheduled.
+
+                 Hidden while editing a LIVE camp: that board is not waiting on a re-post, and
+                 the next thing that happens to it is End Camp / Post ToD, which sets the same
+                 two values. Hidden too for an "Other" monster with no name typed yet, since
+                 recurrence keys on an exact ToD name match (canRepeatOnTod). -->
+            @if (!isEditingLiveEvent && canRepeatOnTod()) {
+              <div class="cem__switches">
+                <button type="button" class="cem__switch" [class.is-on]="createModel.repeatOnTod === true"
+                  [attr.aria-pressed]="createModel.repeatOnTod === true"
+                  (click)="toggleRepeatOnTod()">
+                  <span class="cem__track"><span class="cem__knob"></span></span>
+                  <span class="cem__switch-text">
+                    <span class="cem__switch-title">Repeat post when ToD is updated</span>
+                    <span class="cem__switch-hint">When a new ToD for this monster is recorded, re-post the sign-up board ahead of the next pop</span>
+                  </span>
+                </button>
+              </div>
+            }
+            @if (!isEditingLiveEvent && canRepeatOnTod() && createModel.repeatOnTod === true) {
+              <label class="cem__field">
+                <span class="cem__label">Hours before repop <em>optional</em></span>
+                <!-- step=".25" so the lead can be given in quarter-hours (1.5 = 1h30m),
+                     matching the End Camp / Post ToD form. Left blank it posts null, which
+                     the server reads as "keep the lead this board already has". -->
+                <input class="cem__input" type="number" min="0" max="168" step="0.25"
+                  [(ngModel)]="createModel.repostLeadHours" name="repostLeadHours"
+                  placeholder="e.g. 2"
+                  title="How many hours before the predicted next pop the event and sign-up board are re-posted" />
+                <small class="cem__hint">
+                  Blank keeps this monster's current setting (1 hour if it has never had one).
+                  The End Camp / Post ToD form opens on whatever is set here.
+                </small>
+              </label>
+            }
           }
         </section>
 
@@ -159,6 +206,26 @@
               </label>
             }
           </div>
+
+          <!-- The picked monster already has a predicted pop, so that IS the start time this
+               camp is being staged for. Pre-filled automatically into an empty box; offered as
+               a button when the box holds something we won't overwrite. -->
+          @if (selectedUpcomingRepop(); as repop) {
+            <small class="cem__hint cem__hint--inline">
+              <span>
+                Next predicted pop for {{ repop.monsterName }}:
+                {{ activity.formatDateTimeWithSeconds(repop.repopTime) }}
+                @if (isStartAtUpcomingRepop()) {
+                  — Starts is set to it.
+                }
+              </span>
+              @if (!isStartAtUpcomingRepop()) {
+                <button type="button" class="cem__chip cem__chip--sm" (click)="useUpcomingRepopStartTime()">
+                  Use this time
+                </button>
+              }
+            </small>
+          }
 
           @if (!isHnmSelected()) {
             <!-- Duration is derived from Start + End, so it reads out here instead of
@@ -279,60 +346,79 @@
           </div>
         </section>
 
-        @if (!isEditingLiveEvent) {
-          <!-- Party setup is OMITTED while editing a LIVE event: officers edit the
-               live board inline (drag/job/assign) on the Party Setup panel instead.
-               Still shown for create + queued-event edits, where the setup is chosen. -->
-          <section class="cem__section">
-            <div class="cem__section-head">
-              <span class="cem__section-title">05 — Party setup</span>
-              <span class="cem__rule"></span>
-            </div>
+        <!-- Party setup, on every path INCLUDING a live event: linking the wrong setup (or
+             none at all) is something an officer only notices once the camp is running, so the
+             picker stays available there. Changing it WIPES the sign-up board — the old setup's
+             slot signups can't be carried onto different slots — while participation, timers and
+             DKP are left alone (see submitCreateForm's confirm and the server's
+             ClearSlotSignupsAsync). Slot-level tweaks (drag / job / assign) still belong to the
+             live board editor on the Party Setup panel; this picker only chooses which setup the
+             board is built from. -->
+        <section class="cem__section">
+          <div class="cem__section-head">
+            <span class="cem__section-title">05 — Party setup</span>
+            <span class="cem__rule"></span>
+          </div>
 
-            <div class="cem__party-row">
-              <div class="cem__segment" role="radiogroup" aria-label="Use a party setup">
-                <button type="button" role="radio"
-                  [class.is-active]="!partySetupNotSpecified"
-                  [attr.aria-checked]="!partySetupNotSpecified"
-                  (click)="onPartySetupNotSpecifiedChange(false)">Linked</button>
-                <button type="button" role="radio"
-                  [class.is-active]="partySetupNotSpecified"
-                  [attr.aria-checked]="partySetupNotSpecified"
-                  (click)="onPartySetupNotSpecifiedChange(true)">None</button>
-              </div>
-
-              @if (!partySetupNotSpecified) {
-                <select class="cem__select cem__party-select" [(ngModel)]="createModel.partySetupId"
-                  name="partySetupId" aria-label="Linked party setup">
-                  <option [ngValue]="null">— Select party setup —</option>
-                  @for (setup of availablePartySetups(); track setup.id) {
-                    <option [ngValue]="setup.id">
-                      {{ setup.name }}{{ setup.assignedMonsterName ? ' — ' + setup.assignedMonsterName : '' }}
-                    </option>
-                  }
-                </select>
-                <button type="button" class="cem__btn cem__btn--dashed"
-                  (click)="openCreatePartySetup()">+ New setup</button>
-              }
+          <div class="cem__party-row">
+            <div class="cem__segment" role="radiogroup" aria-label="Use a party setup">
+              <button type="button" role="radio"
+                [class.is-active]="!partySetupNotSpecified"
+                [attr.aria-checked]="!partySetupNotSpecified"
+                (click)="onPartySetupNotSpecifiedChange(false)">Linked</button>
+              <button type="button" role="radio"
+                [class.is-active]="partySetupNotSpecified"
+                [attr.aria-checked]="partySetupNotSpecified"
+                (click)="onPartySetupNotSpecifiedChange(true)">None</button>
             </div>
 
             @if (!partySetupNotSpecified) {
-              @if (availablePartySetups().length === 0) {
-                <p class="cem__hint">
-                  No party setups exist for this linkshell yet. Create one with “+ New setup” above.
-                </p>
-              }
-              @if (createModel.partySetupId) {
-                <!-- Template preview of the chosen setup's parties/slots (no names —
-                     sign-ups happen on the event once it's created). -->
-                <app-party-setup-panel
-                  [setupId]="createModel.partySetupId"
-                  [linkshellId]="createModel.linkshellId"
-                  [templateOnly]="true" />
-              }
+              <select class="cem__select cem__party-select" [(ngModel)]="createModel.partySetupId"
+                name="partySetupId" aria-label="Linked party setup">
+                <option [ngValue]="null">— Select party setup —</option>
+                <!-- A board customized on the live editor is a per-event SNAPSHOT, which the
+                     template list deliberately excludes. With no option of its own the picker
+                     would open blank and read as "no setup linked", so the event's current
+                     board gets an entry here; leaving it selected changes nothing. -->
+                @if (currentBoardSetupId() !== null) {
+                  <option [ngValue]="currentBoardSetupId()">
+                    {{ editingCurrentSetupName || 'Current board' }} — current board
+                  </option>
+                }
+                @for (setup of availablePartySetups(); track setup.id) {
+                  <option [ngValue]="setup.id">
+                    {{ setup.name }}{{ setup.assignedMonsterName ? ' — ' + setup.assignedMonsterName : '' }}
+                  </option>
+                }
+              </select>
+              <button type="button" class="cem__btn cem__btn--dashed"
+                (click)="openCreatePartySetup()">+ New setup</button>
             }
-          </section>
-        }
+          </div>
+
+          @if (isEditingLiveEvent) {
+            <p class="cem__hint">
+              Changing the party setup wipes the sign-up board: every slot is cleared and members
+              claim again. Their participation, timers and DKP are untouched.
+            </p>
+          }
+
+          @if (!partySetupNotSpecified) {
+            @if (availablePartySetups().length === 0 && currentBoardSetupId() === null) {
+              <p class="cem__hint">
+                No party setups exist for this linkshell yet. Create one with “+ New setup” above.
+              </p>
+            }
+            @if (createModel.partySetupId) {
+              <!-- Template preview of the chosen setup's parties/slots (no names —
+                   sign-ups happen on the event once it's created). -->
+              <app-party-setup-panel
+                [setupId]="createModel.partySetupId"
+                [linkshellId]="createModel.linkshellId"
+                [templateOnly]="true" />
+            }
+          }
+        </section>
       </div>
 
       <footer class="cem__footer">
@@ -415,7 +501,10 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
               <div>
                 <span>Starts</span>
-                <strong>{{ activity.formatDateTime(event.startTime) || 'TBD' }}</strong>
+                <!-- Seconds: a pending HNM board's start time IS the predicted repop (ToD math),
+                     so minute precision hides the part the camp is actually timed on. -->
+
+                <strong>{{ activity.formatDateTimeWithSeconds(event.startTime) || 'TBD' }}</strong>
               </div>
             </div>
 
@@ -510,10 +599,10 @@
                 } @else {
                   <strong>💀 {{ event.assignedMonsterName || event.name }} defeated</strong>
                   <span>
-                    Will repop {{ activity.formatDateTime(event.startTime) || 'soon' }}.
+                    Will repop {{ activity.formatDateTimeWithSeconds(event.startTime) || 'soon' }}.
                     @if (event.hnmRepostAt) {
                       Sign-up board automatically re-posts in the Discord channel
-                      {{ activity.formatDateTime(event.hnmRepostAt) }}@if (repostLeadLabel(event)) { ({{ repostLeadLabel(event) }} before the first window)}.
+                      {{ activity.formatDateTimeWithSeconds(event.hnmRepostAt) }}@if (repostLeadLabel(event)) { ({{ repostLeadLabel(event) }} before the first window)}.
                     } @else {
                       Turn on “Repeat post when ToD is updated” on this board to auto-re-post it.
                     }

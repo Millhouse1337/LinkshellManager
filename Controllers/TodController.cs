@@ -1,6 +1,7 @@
 ﻿using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -18,31 +19,40 @@ public class TodController : Controller
     {
         "Tiamat",
         "Jormungand",
-        "Vrtra"
+        "Vrtra",
+        "Cerberus",
+        "Hydra",
+        "Khimaira"
     };
 
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly AdminOverrideService _adminOverride;
     private readonly TimeZoneConversionService _timeZones;
     private readonly SubmissionApprovalService _submissionApproval;
 
     private readonly DkpLedgerWriter _dkpLedger;
     private readonly DkpPoolResolver _dkpPools;
+    private readonly MonsterTimingResolver _monsterTimings;
 
     public TodController(
         ApplicationDbContext context,
         UserManager<AppUser> userManager,
+        AdminOverrideService adminOverride,
         TimeZoneConversionService timeZones,
         SubmissionApprovalService submissionApproval,
         DkpLedgerWriter dkpLedger,
-        DkpPoolResolver dkpPools)
+        DkpPoolResolver dkpPools,
+        MonsterTimingResolver monsterTimings)
     {
         _context = context;
         _userManager = userManager;
+        _adminOverride = adminOverride;
         _timeZones = timeZones;
         _submissionApproval = submissionApproval;
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
+        _monsterTimings = monsterTimings;
     }
 
     [HttpGet]
@@ -127,12 +137,7 @@ public class TodController : Controller
         model.Tod ??= new Tod { Claim = true };
         ResolveCustomMonsterName(model);
         model.Tod.LinkshellId = await ResolveActiveLinkshellIdAsync(user);
-        model.Tod.Cooldown = string.IsNullOrWhiteSpace(model.Tod.Cooldown)
-            ? GetDefaultCooldown(model.Tod.MonsterName)
-            : model.Tod.Cooldown.Trim();
-        model.Tod.Interval = string.IsNullOrWhiteSpace(model.Tod.Interval)
-            ? GetDefaultInterval(model.Tod.MonsterName)
-            : model.Tod.Interval.Trim();
+        await ApplyPostedDurationsAsync(model, HttpContext.RequestAborted);
 
         var hasLinkshellAccess = model.Tod.LinkshellId > 0 && await HasLinkshellAccessAsync(user.Id, model.Tod.LinkshellId);
         var linkshellCharacterNames = hasLinkshellAccess
@@ -218,9 +223,16 @@ public class TodController : Controller
             // Was a web-only copy of this logic that silently ignored LootStructure — a Hybrid or
             // LootCouncil linkshell recording a ToD here got flat DKP deductions anyway. Now it's
             // the same shared path the Activity and the addon use.
-            await ActivityDataController.AdjustTodLootDkpAsync(
+            var insufficient = await ActivityDataController.AdjustTodLootDkpAsync(
                 _context, _dkpLedger, _dkpPools, newTod, normalizedLootDetails, occurredAtUtc,
                 isRefund: false, HttpContext.RequestAborted);
+            if (insufficient is not null)
+            {
+                // The ToD row is already committed — the kill happened. Only the unaffordable loot
+                // is dropped; it can be re-added from Loot History once the DKP is sorted.
+                TempData["TodMessage"] = $"{insufficient} The ToD was recorded without its loot.";
+                return RedirectToAction(nameof(Index));
+            }
             await _context.SaveChangesAsync();
         }
 
@@ -228,15 +240,30 @@ public class TodController : Controller
         // this monster (the old roster is for the pop that just happened).
         await PartySetupController.ClearSignupsForMonsterAsync(_context, newTod.LinkshellId, newTod.MonsterName);
 
+        // The tracker writes only the Tod row, so any board parked waiting to re-post would keep
+        // showing the old pop time until it actually re-posted. Re-point it at this ToD's repop.
+        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
+            _context, newTod.LinkshellId, newTod.MonsterName, HttpContext.RequestAborted);
+
         return RedirectToAction(nameof(Index));
     }
 
     private async Task<LinkshellRole?> GetEffectiveRoleAsync(string appUserId, int linkshellId)
     {
-        var rank = await _context.AppUserLinkshells
-            .Where(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId)
-            .Select(m => m.Rank)
-            .FirstOrDefaultAsync();
+        // The membership ROW, not just the rank string: a null rank and a missing
+        // membership are otherwise indistinguishable, and the override below must
+        // only ever fire for an actual member.
+        var membership = await _context.AppUserLinkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(m => m.AppUserId == appUserId && m.LinkshellId == linkshellId);
+        if (membership is null) return null;
+
+        if (await _adminOverride.IsActiveForAsync(appUserId, HttpContext.RequestAborted))
+        {
+            return LinkshellRoleDefaults.BuildFullAccessRole(linkshellId);
+        }
+
+        var rank = membership.Rank;
         if (rank is null) return null;
         var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
         return await _context.LinkshellRoles
@@ -335,12 +362,7 @@ public class TodController : Controller
         ResolveCustomMonsterName(model);
         model.Tod.Id = id;
         model.Tod.LinkshellId = tod.LinkshellId;
-        model.Tod.Cooldown = string.IsNullOrWhiteSpace(model.Tod.Cooldown)
-            ? GetDefaultCooldown(model.Tod.MonsterName)
-            : model.Tod.Cooldown.Trim();
-        model.Tod.Interval = string.IsNullOrWhiteSpace(model.Tod.Interval)
-            ? GetDefaultInterval(model.Tod.MonsterName)
-            : model.Tod.Interval.Trim();
+        await ApplyPostedDurationsAsync(model, HttpContext.RequestAborted);
 
         var characterNames = await _context.AppUserLinkshells
             .Where(link => link.LinkshellId == tod.LinkshellId)
@@ -358,9 +380,15 @@ public class TodController : Controller
         var todTimeUtc = ConvertUserTimeZoneToUtc(model.Tod.Time, user.TimeZone);
         var occurredAtUtc = DateTime.UtcNow;
 
-        // Reverse DKP impact from existing loot, remove it, then apply the
-        // new set. Mirrors ActivityDataController.UpdateTodAsync.
-        if (tod.TodLootDetails.Count > 0)
+        // A form that carries NO loot rows means "leave the loot alone", not "delete it".
+        //
+        // This form has never HAD loot inputs -- loot is recorded in the Loot section -- so without
+        // this, correcting a typo in the time of an old ToD that still carries legacy loot would
+        // refund and destroy it as a side effect. Mirrors ActivityDataController.UpdateTodAsync.
+        var replaceLoot = model.TodLootDetails is { Count: > 0 };
+
+        // Reverse DKP impact from existing loot, remove it, then apply the new set.
+        if (replaceLoot && tod.TodLootDetails.Count > 0)
         {
             await ActivityDataController.AdjustTodLootDkpAsync(_context, _dkpLedger, _dkpPools, tod, tod.TodLootDetails.ToList(), occurredAtUtc, isRefund: true, cancellationToken);
             _context.TodLootDetails.RemoveRange(tod.TodLootDetails);
@@ -390,9 +418,21 @@ public class TodController : Controller
                 lootDetail.TodId = tod.Id;
             }
             await _context.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            await ActivityDataController.AdjustTodLootDkpAsync(_context, _dkpLedger, _dkpPools, tod, normalizedLootDetails, occurredAtUtc, isRefund: false, cancellationToken);
+            var insufficient = await ActivityDataController.AdjustTodLootDkpAsync(_context, _dkpLedger, _dkpPools, tod, normalizedLootDetails, occurredAtUtc, isRefund: false, cancellationToken);
+            if (insufficient is not null)
+            {
+                // The ToD edit is already committed; only the unaffordable loot is dropped. The old
+                // loot was refunded earlier in this action.
+                TempData["TodMessage"] = $"{insufficient} The ToD was updated without its loot.";
+                return RedirectToAction(nameof(Index));
+            }
             await _context.SaveChangesAsync(cancellationToken);
         }
+
+        // A corrected repop has to reach any board parked waiting on it: re-point its displayed
+        // pop / re-post time, and re-open the cycle if the poller had already given up on it.
+        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
+            _context, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(previousImage) && !string.Equals(previousImage, newImagePath, StringComparison.Ordinal))
         {
@@ -476,6 +516,11 @@ public class TodController : Controller
         _context.Tods.Remove(tod);
         await _context.SaveChangesAsync();
 
+        // Deleting the ToD a parked board was counting on leaves it advertising a pop that no
+        // longer exists — fall back to the monster's next-newest ToD, or to no time at all.
+        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
+            _context, tod.LinkshellId, tod.MonsterName, HttpContext.RequestAborted);
+
         return RedirectToAction(nameof(Index));
     }
 
@@ -490,6 +535,10 @@ public class TodController : Controller
         var selectedLinkshellId = user.PrimaryLinkshellId.HasValue && linkshells.Any(link => link.Id == user.PrimaryLinkshellId.Value)
             ? user.PrimaryLinkshellId.Value
             : linkshells.FirstOrDefault()?.Id ?? 0;
+
+        // The linkshell's own monster catalog, resolved once: it drives the picker AND the
+        // per-monster pre-fill hints the form's JS reads.
+        var monsterTimings = await _monsterTimings.GetMapAsync(selectedLinkshellId, HttpContext.RequestAborted);
 
         var characterNames = selectedLinkshellId > 0
             ? await _context.AppUserLinkshells
@@ -610,11 +659,12 @@ public class TodController : Controller
         todDraft.LinkshellId = selectedLinkshellId;
 
         todDraft.Claim = source?.Tod?.Claim ?? todDraft.Claim;
+        var draftTiming = monsterTimings.For(todDraft.MonsterName);
         todDraft.Cooldown = string.IsNullOrWhiteSpace(todDraft.Cooldown)
-            ? GetDefaultCooldown(todDraft.MonsterName)
+            ? TodDurationFormat.Format(draftTiming.CooldownMinutes)
             : todDraft.Cooldown;
         todDraft.Interval = string.IsNullOrWhiteSpace(todDraft.Interval)
-            ? GetDefaultInterval(todDraft.MonsterName)
+            ? TodDurationFormat.Format(draftTiming.TodIntervalMinutes)
             : todDraft.Interval;
 
         var lootDetails = source?.TodLootDetails?.Count > 0
@@ -653,14 +703,20 @@ public class TodController : Controller
             TodLootDetails = lootDetails,
             NoLoot = source?.NoLoot ?? false,
             Notifications = source?.Notifications ?? new List<string>(),
-            // Full curated monster list (HNMs included), with each NQ/HQ pair offered as ONE
-            // combined "Base/Stronger" entry rather than as two halves -- the same list the
-            // create-event form and the Activity's ToD picker show, and the same form the
-            // sign-up board stores in Event.AssignedMonsterName. "Other" is appended in the
-            // view to reveal a free-text field for anything not listed.
-            MonsterOptions = HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters),
-            CooldownOptions = TodManagerViewModel.SupportedCooldowns.ToList(),
-            IntervalOptions = TodManagerViewModel.SupportedIntervals.ToList(),
+            // The linkshell's OWN monster catalog, already stored with each NQ/HQ pair as one
+            // combined "Base/Stronger" row -- the same list the create-event form and the
+            // Activity's ToD picker show, and the same form the sign-up board stores in
+            // Event.AssignedMonsterName. Includes any monster the linkshell added itself.
+            // "Other" is appended in the view to reveal a free-text field for anything not listed.
+            MonsterOptions = monsterTimings.EventMonsterOptions.ToList(),
+            // Per-monster cooldown / cadence, so the form can pre-fill the moment a monster is
+            // picked without a round trip. Keyed by the exact option text above.
+            MonsterTimings = monsterTimings.Rows.Count > 0
+                ? monsterTimings.Rows.ToDictionary(
+                    row => row.MonsterName,
+                    row => new TodMonsterTimingHint(row.CooldownMinutes, row.WindowCadenceMinutes),
+                    StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, TodMonsterTimingHint>(StringComparer.OrdinalIgnoreCase),
             CharacterNames = characterNames,
             CanCreateImmediately = canCreateImmediately,
             AssignedPartySetups = assignedPartySetups,
@@ -731,14 +787,17 @@ public class TodController : Controller
             ModelState.AddModelError("Tod.Time", "Enter a Time of Death.");
         }
 
-        if (string.IsNullOrWhiteSpace(model.Tod.Cooldown) || !SupportedCooldowns.Contains(model.Tod.Cooldown.Trim()))
+        // Free-form rather than preset-only: a monster's cooldown and cadence are configured
+        // per-linkshell now, so the form composes an arbitrary "<number> <unit>" and the shared
+        // parser decides whether it reads as a positive duration.
+        if (!ActivityDataController.IsAcceptableTodCooldown(model.Tod.Cooldown))
         {
-            ModelState.AddModelError("Tod.Cooldown", "Select a valid cooldown.");
+            ModelState.AddModelError("Tod.Cooldown", "Enter a valid cooldown (a positive number of hours or minutes).");
         }
 
-        if (string.IsNullOrWhiteSpace(model.Tod.Interval) || !SupportedIntervals.Contains(model.Tod.Interval.Trim()))
+        if (!ActivityDataController.IsAcceptableTodInterval(model.Tod.Interval))
         {
-            ModelState.AddModelError("Tod.Interval", "Select a valid interval.");
+            ModelState.AddModelError("Tod.Interval", "Enter a valid interval (a positive number of hours or minutes).");
         }
 
         for (var index = 0; index < model.TodLootDetails.Count; index++)
@@ -821,24 +880,41 @@ public class TodController : Controller
     private DateTime? ConvertUserTimeZoneToUtc(DateTime? localDateTime, string? timeZoneId)
         => _timeZones.ToUtc(localDateTime, timeZoneId);
 
-    private static double ResolveCooldownHours(string? cooldown)
-    {
-        return string.Equals(cooldown, TodManagerViewModel.SeventyTwoHourCooldown, StringComparison.OrdinalIgnoreCase)
-            ? 72d
-            : 22d;
-    }
+    // Delegates to the Activity's parser, which is the only implementation that reads every label
+    // this form actually offers. The local copy this replaced compared against "72 Hour" and fell
+    // through to 22 for everything else, so an 84/71/2 Hour or 5 Min ToD picked on the web silently
+    // stored a 22-hour repop.
+    private static double ResolveCooldownHours(string? cooldown) =>
+        ActivityDataController.ResolveTodCooldownHours(cooldown);
 
-    private static string GetDefaultCooldown(string? monsterName)
+    // Composes the posted number + unit into the label form Tod.Cooldown / Tod.Interval store, and
+    // falls back to the LINKSHELL'S configured value for the monster — not a hardcoded 22h/72h
+    // split, which is what this used to do and which ignored the configuration entirely.
+    //
+    // Runs before ValidateTodSubmission, so what gets validated is what gets saved.
+    private async Task ApplyPostedDurationsAsync(TodManagerViewModel model, CancellationToken cancellationToken)
     {
-        return !string.IsNullOrWhiteSpace(monsterName) && LongWindowMonsters.Contains(monsterName.Trim())
-            ? TodManagerViewModel.SeventyTwoHourCooldown
-            : TodManagerViewModel.TwentyTwoHourCooldown;
-    }
+        var timing = await _monsterTimings.ResolveAsync(
+            model.Tod.LinkshellId, model.Tod.MonsterName, cancellationToken);
 
-    private static string GetDefaultInterval(string? monsterName)
-    {
-        return !string.IsNullOrWhiteSpace(monsterName) && LongWindowMonsters.Contains(monsterName.Trim())
-            ? TodManagerViewModel.OneHourInterval
-            : TodManagerViewModel.TenMinuteInterval;
+        var cooldown = model.CooldownValue is > 0
+            ? TodDurationFormat.Format(
+                TodDurationFormat.FromValueAndUnit(model.CooldownValue.Value, model.CooldownUnit))
+            : null;
+        model.Tod.Cooldown = cooldown
+            ?? (string.IsNullOrWhiteSpace(model.Tod.Cooldown)
+                ? TodDurationFormat.Format(timing.CooldownMinutes)
+                : model.Tod.Cooldown.Trim());
+
+        // A blank interval is legitimate — it means "not recorded" — so an explicitly cleared
+        // field is only backfilled when nothing at all came through.
+        var interval = model.IntervalValue is > 0
+            ? TodDurationFormat.Format(
+                TodDurationFormat.FromValueAndUnit(model.IntervalValue.Value, model.IntervalUnit))
+            : null;
+        model.Tod.Interval = interval
+            ?? (string.IsNullOrWhiteSpace(model.Tod.Interval)
+                ? TodDurationFormat.Format(timing.TodIntervalMinutes)
+                : model.Tod.Interval.Trim());
     }
 }

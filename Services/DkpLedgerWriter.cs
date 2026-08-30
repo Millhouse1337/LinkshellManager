@@ -16,6 +16,33 @@ public readonly record struct DkpPoolRef(int? PinnedPoolId, string? DerivedFromE
     public static DkpPoolRef Derived(string? eventType) => new(null, eventType);
 }
 
+// Whether a debit is allowed to take the member's pool balance below zero.
+//
+// Block is the DEFAULT, and that default is the point: a new spend path that never thought about
+// overdraft gets the safe answer instead of silently minting negative DKP. Forgetting to opt out
+// fails closed (a rejected debit an officer can see) rather than open.
+public enum DkpOverdraft
+{
+    // Reject the debit if it would overdraw the pool. Every member-initiated spend.
+    Block,
+
+    // The debit may go below zero. Two legitimate shapes:
+    //   * officer intent — audits, manual adjustments, loot-edit corrections. The officer is
+    //     deliberately restating a balance and a floor would just get in the way.
+    //   * batch settlement already checked upstream — auction close (checked at bid time) and
+    //     event close (checked at award time by LootDkpGuard). Blocking HERE would fail the whole
+    //     close over one member whose balance moved in between, which is worse than the overdraft.
+    Allow,
+}
+
+// Thrown when a Block debit would overdraw. This is the backstop, not the user-facing check —
+// callers that can produce this should pre-validate and return a friendly message (LootDkpGuard,
+// AdjustTodLootDkpAsync). Reaching this exception means a path forgot to.
+public sealed class DkpOverdraftException : InvalidOperationException
+{
+    public DkpOverdraftException(string message) : base(message) { }
+}
+
 // The denormalized display context every ledger row carries.
 public sealed record DkpEntryContext(
     string? CharacterName = null,
@@ -48,10 +75,20 @@ public sealed record DkpEntryContext(
 // ledger row in the same save. ApplicationDbContext asserts it in DEBUG. INV-1 is what lets pool
 // balances be derived rather than cached (DkpPoolBalanceService).
 //
+// It also enforces INV-3: a debit never takes a pool below zero unless the caller explicitly says
+// it may (DkpOverdraft.Allow). Putting the floor HERE rather than at the spend sites is the same
+// argument as above — the affordability guard used to live only on the two event-loot call sites,
+// so ToD loot (nine call sites, none of them checking) happily minted negative balances for
+// months. One choke point, safe by default.
+//
 // This service never calls SaveChanges — callers batch their own save, and event close has to
 // stay a single transaction.
 public sealed class DkpLedgerWriter
 {
+    // Float slack for the INV-3 floor. Public so the friendly pre-checks compare the same way the
+    // backstop does — otherwise a debit could pass the pre-check and then throw here.
+    public const double OverdraftEpsilon = 1e-4;
+
     private readonly ApplicationDbContext _db;
     private readonly DkpPoolResolver _resolver;
     private readonly ILogger<DkpLedgerWriter> _logger;
@@ -79,6 +116,9 @@ public sealed class DkpLedgerWriter
 
     // Append one ledger row and move the member's balance by the same amount.
     // amount > 0 = earned, amount < 0 = spent.
+    //
+    // Throws DkpOverdraftException when a Block debit would take the pool below zero. Callers that
+    // can hit that should pre-validate so the officer gets a useful message instead of a 500.
     public async Task<DkpLedgerEntry?> AppendAsync(
         AppUserLinkshell member,
         string entryType,
@@ -86,7 +126,8 @@ public sealed class DkpLedgerWriter
         DateTime occurredAtUtc,
         DkpPoolRef pool,
         DkpEntryContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DkpOverdraft overdraft = DkpOverdraft.Block)
     {
         if (string.IsNullOrWhiteSpace(member.AppUserId))
         {
@@ -95,6 +136,20 @@ public sealed class DkpLedgerWriter
         }
 
         var (poolId, pinned) = await ResolvePoolAsync(member.LinkshellId, pool, cancellationToken);
+
+        // INV-3. Credits can't overdraw, so only debits pay for the balance read — and that read is
+        // the SAME GetPoolBalanceAsync the pre-checks use, so a friendly "you can't afford this"
+        // and this backstop can never disagree about the number.
+        if (amount < 0 && overdraft == DkpOverdraft.Block)
+        {
+            var available = await GetPoolBalanceAsync(member, poolId, cancellationToken);
+            if (-amount > available + OverdraftEpsilon)
+            {
+                throw new DkpOverdraftException(
+                    $"{member.CharacterName ?? "That member"} has {available:0.##} DKP in this pool — "
+                    + $"a {-amount:0.##} DKP debit would overdraw it.");
+            }
+        }
 
         var entry = new DkpLedgerEntry
         {

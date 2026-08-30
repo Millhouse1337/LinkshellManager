@@ -54,6 +54,53 @@ public class TreasuryJournalWriterTests
         Assert.Equal(-4_000_000, entry.Lines.Single(l => l.AccountNumber == TreasuryAccounts.ItemSales).Amount);
     }
 
+    // The holder is the exact complement of the counterparty: it goes on gil on hand and NOWHERE
+    // else. Both halves of an entry carry the same magnitude, so a holder on the second half too
+    // would double every arrival the moment anything sums by holder.
+    [Fact]
+    public async Task Draft_PutsTheHolderOnTheGilOnHandHalfAndNowhereElse()
+    {
+        using var db = await SeededContextAsync();
+        var writer = NewWriter(db);
+
+        var entry = await writer.DraftAsync(
+            Linkshell,
+            Sale(4_000_000) with { HolderAppUserId = "user-9", HolderCharacterName = "Edicius" },
+            Officer,
+            CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        var cash = entry.Lines.Single(line => line.AccountNumber == TreasuryAccounts.GilOnHand);
+        var other = entry.Lines.Single(line => line.AccountNumber == TreasuryAccounts.ItemSales);
+        Assert.Equal("Edicius", cash.HolderCharacterName);
+        Assert.Equal("user-9", cash.HolderAppUserId);
+        Assert.Null(other.HolderCharacterName);
+        Assert.Null(other.HolderAppUserId);
+    }
+
+    // Undoing a sale has to take the gil back off the mule it was put on, or the seller is left
+    // holding gil the treasury no longer counts and the difference lands in the unattributed bucket.
+    [Fact]
+    public async Task Reverse_TakesTheGilBackOffTheSameMule()
+    {
+        using var db = await SeededContextAsync();
+        var writer = NewWriter(db);
+
+        var sale = await writer.RecordAsync(
+            Linkshell,
+            Sale(4_000_000) with { HolderCharacterName = "Edicius" },
+            Officer,
+            CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        var reversal = await writer.ReverseAsync(sale, "Sold in error.", Officer, CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        var cash = reversal.Lines.Single(line => line.AccountNumber == TreasuryAccounts.GilOnHand);
+        Assert.Equal("Edicius", cash.HolderCharacterName);
+        Assert.Equal(-4_000_000, cash.Amount);
+    }
+
     // A draft is a scratch pad — it must NOT count toward the balance.
     [Fact]
     public async Task Draft_DoesNotMoveTheBalanceUntilConfirmed()
@@ -598,5 +645,68 @@ public class TreasuryJournalWriterTests
         Assert.Equal(600_000, snapshot.WeOwe);
         Assert.Equal(4_700_000, snapshot.CashOnHand);
         Assert.True(snapshot.Balances);
+    }
+
+    // The evidence for retiring "gil owed to one member": a Split Gil with a single person picked
+    // produces the same obligation, on the same category, under the same name — so the picker loses
+    // an option and nobody loses a capability.
+    [Fact]
+    public async Task SplitOfOne_RecordsTheSameObligationTheRetiredSingleKindDid()
+    {
+        using var db = await SeededContextAsync();
+        var writer = NewWriter(db);
+        var balances = new TreasuryBalanceService(db);
+
+        await writer.RecordAsync(
+            Linkshell,
+            new TreasuryEntryRequest(TreasuryTransactionKinds.StartingGil, 5_000_000, DateTime.UtcNow),
+            Officer, CancellationToken.None);
+        var entry = await writer.RecordAsync(
+            Linkshell,
+            Split(
+                TreasuryTransactionKinds.WeOweSeveralMembers,
+                300_000,
+                new[] { new TreasuryRecipient("user-a", "Ashira") }),
+            Officer, CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        // One name, on the what-we-owe half, for the whole amount.
+        var owedLine = Assert.Single(entry.Lines.Where(line => line.AccountNumber == TreasuryAccounts.WeOwe));
+        Assert.Equal("Ashira", owedLine.CounterpartyCharacterName);
+        Assert.Equal(-300_000, owedLine.Amount);
+        Assert.Equal(0, entry.Lines.Sum(line => line.Amount));
+        // Gil on hand is untouched — the point of an obligation.
+        Assert.DoesNotContain(entry.Lines, line => line.AccountNumber == TreasuryAccounts.GilOnHand);
+
+        // And they show up on the list the tick-and-pay panel reads.
+        var sheet = await balances.GetBalanceSheetAsync(Linkshell, null, null, CancellationToken.None);
+        var snapshot = sheet.Snapshot;
+        var owed = sheet.OwedToMembers;
+        Assert.Equal(300_000, snapshot.WeOwe);
+        Assert.Equal(5_000_000, snapshot.CashOnHand);
+        var obligation = Assert.Single(owed);
+        Assert.Equal("Ashira", obligation.CharacterName);
+        Assert.Equal(300_000, obligation.Amount);
+    }
+
+    // Retiring a kind is a PICKER decision, not a writer one. The writer must still record one,
+    // because a Fix on an entry already recorded under it rebuilds the entry from that same kind.
+    [Fact]
+    public async Task Writer_StillRecordsARetiredKind_SoFixesCanReproduceThem()
+    {
+        using var db = await SeededContextAsync();
+        var writer = NewWriter(db);
+
+        foreach (var kind in TreasuryTransactionKinds.All.Where(kind => kind.IsRetired))
+        {
+            var entry = await writer.RecordAsync(
+                Linkshell,
+                new TreasuryEntryRequest(
+                    kind.Key, 100_000, DateTime.UtcNow, CounterpartyCharacterName: "Ashira"),
+                Officer, CancellationToken.None);
+            Assert.Equal(0, entry.Lines.Sum(line => line.Amount));
+            Assert.Equal(kind.Key, entry.TransactionKind);
+        }
+        await db.SaveChangesAsync();
     }
 }

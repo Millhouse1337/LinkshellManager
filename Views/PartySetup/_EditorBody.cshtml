@@ -61,77 +61,55 @@
     </label>
 
     @{
-        var lsType = LinkshellManagerDiscordApp.Models.LinkshellTypes.Normalize(Model.LinkshellType);
-        var isSkySea = lsType == LinkshellManagerDiscordApp.Models.LinkshellTypes.SkySeaDynamis;
-        var isHnmOnly = lsType == LinkshellManagerDiscordApp.Models.LinkshellTypes.HnmOnly;
-        var isBoth = lsType == LinkshellManagerDiscordApp.Models.LinkshellTypes.Both;
-
         var monsterIsKnown = string.IsNullOrEmpty(Model.AssignedMonsterName)
             || Model.MonsterOptions.Any(m => string.Equals(m, Model.AssignedMonsterName, StringComparison.OrdinalIgnoreCase));
         var monsterPick = string.IsNullOrEmpty(Model.AssignedMonsterName)
             ? string.Empty
             : (monsterIsKnown ? Model.AssignedMonsterName! : "Other");
         var monsterCustomValue = monsterIsKnown ? string.Empty : Model.AssignedMonsterName;
-        var showMonsterInitially = isHnmOnly
-            || (isBoth && string.Equals(Model.EventType, "HNM", StringComparison.OrdinalIgnoreCase));
+        var showMonsterInitially = string.Equals(Model.EventType, "HNM", StringComparison.OrdinalIgnoreCase);
     }
 
-    @if (isHnmOnly)
-    {
-        @* HNM-only linkshells run a single content style — the Event Type
-           picker is hidden and the setup is implicitly HNM. *@
-        <input type="hidden" asp-for="EventType" value="HNM" />
-    }
-    else
-    {
-        <label>
-            <span>Event type</span>
-            <select asp-for="EventType" id="ps-event-type">
-                @foreach (var t in Model.EventTypeOptions)
-                {
-                    <option value="@t"
-                            selected="@(string.Equals(t, Model.EventType, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
-                        @t
-                    </option>
-                }
-                @if (isBoth)
-                {
-                    <option value="HNM"
-                            selected="@(string.Equals("HNM", Model.EventType, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
-                        HNM
-                    </option>
-                }
-            </select>
-            <span asp-validation-for="EventType" class="create-form__error"></span>
-        </label>
-    }
-
-    @if (!isSkySea)
-    {
-        @* Sky/Sea/Dynamis never assign a monster. HNM-only always shows the
-           picker; Both reveals it only once Event Type = HNM (see script). *@
-        <label id="ps-monster-field" style="@(showMonsterInitially ? null : "display:none")">
-            <span>Assigned monster</span>
-            <select asp-for="AssignedMonsterName" id="ps-monster-select">
-                <option value="">— Unassigned —</option>
-                @foreach (var monster in Model.MonsterOptions)
-                {
-                    <option value="@monster"
-                            selected="@(string.Equals(monster, monsterPick, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
-                        @monster
-                    </option>
-                }
-                <option value="Other"
-                        selected="@(string.Equals("Other", monsterPick, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
-                    Other (custom)
+    <label>
+        <span>Event type</span>
+        <select asp-for="EventType" id="ps-event-type">
+            @foreach (var t in Model.EventTypeOptions)
+            {
+                <option value="@t"
+                        selected="@(string.Equals(t, Model.EventType, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                    @t
                 </option>
-            </select>
-            <input asp-for="AssignedMonsterCustom" id="ps-monster-custom" class="input"
-                   value="@monsterCustomValue" placeholder="Name the monster" maxlength="256"
-                   style="margin-top:6px;@(string.Equals(monsterPick, "Other", StringComparison.OrdinalIgnoreCase) ? string.Empty : "display:none")" />
-            <span asp-validation-for="AssignedMonsterName" class="create-form__error"></span>
-        </label>
-    }
+            }
+            <option value="HNM"
+                    selected="@(string.Equals("HNM", Model.EventType, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                HNM
+            </option>
+        </select>
+        <span asp-validation-for="EventType" class="create-form__error"></span>
+    </label>
+
+    @* The monster picker is revealed only once Event Type = HNM (see script). *@
+    <label id="ps-monster-field" style="@(showMonsterInitially ? null : "display:none")">
+        <span>Assigned monster</span>
+        <select asp-for="AssignedMonsterName" id="ps-monster-select">
+            <option value="">— Unassigned —</option>
+            @foreach (var monster in Model.MonsterOptions)
+            {
+                <option value="@monster"
+                        selected="@(string.Equals(monster, monsterPick, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                    @monster
+                </option>
+            }
+            <option value="Other"
+                    selected="@(string.Equals("Other", monsterPick, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                Other (custom)
+            </option>
+        </select>
+        <input asp-for="AssignedMonsterCustom" id="ps-monster-custom" class="input"
+               value="@monsterCustomValue" placeholder="Name the monster" maxlength="256"
+               style="margin-top:6px;@(string.Equals(monsterPick, "Other", StringComparison.OrdinalIgnoreCase) ? string.Empty : "display:none")" />
+        <span asp-validation-for="AssignedMonsterName" class="create-form__error"></span>
+    </label>
 
     <label>
         <span>Notes (optional)</span>

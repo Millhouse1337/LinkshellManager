@@ -14,6 +14,67 @@ public static class ChartBossKinds
 }
 
 /// <summary>
+/// Whether a tracked row is something traded TO a boss or something that fell OFF one.
+///
+/// Strings on the wire and in the column, like ChartBossKinds and ChartCreditStatuses, rather than an
+/// enum: the value is stored on ChartPopItem.Kind and round-trips through two JSON payloads and a
+/// form post, and a string that survives all three unchanged is one fewer place to map.
+/// </summary>
+public static class ChartItemKinds
+{
+    /// <summary>Traded to the boss to pop it. The original -- and the DEFAULT, so every row written
+    /// before drops existed reads correctly with no backfill.</summary>
+    public const string Pop = "Pop";
+
+    /// <summary>Fell off the boss. Same fields, same farming credit, same ledger: only the list it is
+    /// picked from and the pill beside it differ.</summary>
+    public const string Drop = "Drop";
+}
+
+/// <summary>
+/// Which affordances a board offers.
+///
+/// Declared ONCE per board rather than inferred from whether it happens to declare pop items or key
+/// items. Dynamis and Limbus declare no PopItems today and still had an add form, so inferring would
+/// have made "this board takes no trade items" and "this board has no add form" the same fact when
+/// they are not. A board carrying data for a feature it does not flag renders nothing at all,
+/// silently, which is what ChartBoardCatalogTests.OnlyBoardsThatAllow* exist to catch.
+/// </summary>
+[Flags]
+public enum ChartBoardFeatures
+{
+    None = 0,
+
+    /// <summary>The "Add a pop item" form. Gates the ADD only -- see ChartsController.AddItem.</summary>
+    PopItems = 1,
+
+    /// <summary>The "Add a drop item" form, a twin of the pop one over the same rows.</summary>
+    DropItems = 2,
+
+    /// <summary>Members may submit item requests; officers may fulfil, order and remove them.</summary>
+    Wishlist = 4,
+
+    /// <summary>Per-member key item progress, with a card badge and a roster grid.</summary>
+    KeyItems = 8,
+}
+
+/// <summary>
+/// One key item tracked per member on a board.
+///
+/// <paramref name="Name"/> is STORED verbatim on ChartMemberKeyItem.KeyItemName, so it is the same
+/// kind of key a boss name is: renaming one here orphans every row spelled the old way and needs a
+/// data migration. Unlike a pop item name it is also a CLOSED list -- see
+/// <see cref="ChartBoardCatalog.NormalizeKeyItemName"/> for why that one rejects where the item
+/// normalizer canonicalises.
+/// </summary>
+/// <param name="Boss">The card it is earned on, or null for a board-level prerequisite that belongs
+/// to no zone at all (Vial of Shrouded Sand). A null Boss still gets a grid COLUMN; it just gets no
+/// card badge, because there is no card to put one on.</param>
+/// <param name="Caption">Progression note under the column header ("One of four needed for
+/// Beaucedine"). Reference text only: nothing is stored against it, so it is free to be reworded.</param>
+public sealed record ChartKeyItem(string Name, string? Boss = null, string? Caption = null);
+
+/// <summary>
 /// One pop item a boss is known to take.
 ///
 /// <paramref name="Name"/> is STORED verbatim on ChartPopItem.ItemName when an officer picks it, so
@@ -99,7 +160,23 @@ public sealed record ChartBoss(
     /// because a row the author chose the length of is a row that should look deliberate rather than
     /// left-aligned with a ragged gap.
     /// </summary>
-    bool EndsRow = false);
+    bool EndsRow = false,
+    /// <summary>
+    /// What falls OFF this boss and gets held, as distinct from what is traded TO it. A non-empty
+    /// list turns the DROP form's item box from free text into a picker on both surfaces, exactly as
+    /// <see cref="PopItems"/> does for the pop form.
+    ///
+    /// A separate list rather than more entries in PopItems, for two reasons. One, the pop list is
+    /// what NormalizeDraft canonicalises a pop row's name against, and a name in both lists would
+    /// make that canonicalisation depend on which form was used - a coin flip at edit time, which
+    /// ChartBoardCatalogTests.NoBoardListsAnItemAsBothAPopAndADrop refuses. Two, the two Refile
+    /// migrations are pinned against Sky's and Sea's PopItems by set equality, so an addition there
+    /// would be a failing test rather than a silent reclassification of somebody's rows.
+    ///
+    /// LAST, after EndsRow, for the reason spelled out at Group and LeadsTo: a new optional member
+    /// anywhere earlier compiles clean and silently captures the value meant for the one after it.
+    /// </summary>
+    IReadOnlyList<ChartPopItemOption>? DropItems = null);
 
 /// <summary>One board (Sky, Sea, …) and the bosses it tracks, in display order.</summary>
 public sealed record ChartBoard(
@@ -132,6 +209,42 @@ public sealed record ChartBoard(
     /// </summary>
     public bool CentersRows { get; init; }
 
+    /// <summary>
+    /// What this board offers.
+    ///
+    /// An init property rather than a constructor parameter, exactly like PathColumns and
+    /// CentersRows above: board-level switches are keyword-only here, which is what makes them
+    /// immune to the positional hazard ChartBoss has to keep warning about.
+    ///
+    /// Defaulted to PopItems so a board that says nothing behaves the way every board did before
+    /// drops, wishlists and key items existed.
+    /// </summary>
+    public ChartBoardFeatures Features { get; init; } = ChartBoardFeatures.PopItems;
+
+    /// <summary>
+    /// Gates the "Add a pop item" FORM only. Rows already on a board that turns this off stay
+    /// listed, editable and deletable - ChartsController.AddItem is the ONE place this is checked,
+    /// and putting it anywhere ChartBoardService.NormalizeDraft can reach would strand every row
+    /// Dynamis and Limbus already hold.
+    /// </summary>
+    public bool AllowsPopItems => Features.HasFlag(ChartBoardFeatures.PopItems);
+
+    public bool AllowsDropItems => Features.HasFlag(ChartBoardFeatures.DropItems);
+
+    public bool AllowsWishlist => Features.HasFlag(ChartBoardFeatures.Wishlist);
+
+    public bool AllowsKeyItems => Features.HasFlag(ChartBoardFeatures.KeyItems);
+
+    /// <summary>
+    /// The key items tracked per member here, in the order the grid's columns go.
+    ///
+    /// ONE list on the BOARD rather than a field on each ChartBoss, for two reasons. The column
+    /// order is a board-level fact - the access prerequisite first, then the zones in progression
+    /// order - and deriving it from the card order would put Vial of Shrouded Sand nowhere. And a
+    /// board-level key item belongs to no card at all, so there is no ChartBoss to hang it on.
+    /// </summary>
+    public IReadOnlyList<ChartKeyItem> KeyItems { get; init; } = Array.Empty<ChartKeyItem>();
+
     public ChartBoss? Find(string? boss) =>
         string.IsNullOrWhiteSpace(boss)
             ? null
@@ -163,6 +276,36 @@ public sealed record ChartBoard(
     /// answers whether the board has to ship the machinery.
     /// </summary>
     public bool HasPopItemOptions => Bosses.Any(boss => boss.PopItems is { Count: > 0 });
+
+    /// <summary>The drop items a boss is known to yield; empty when it does not spell them out.</summary>
+    public IReadOnlyList<ChartPopItemOption> DropItemsFor(string? boss) =>
+        Find(boss)?.DropItems ?? Array.Empty<ChartPopItemOption>();
+
+    /// <summary>Twin of <see cref="HasPopItemOptions"/>, and Any for the same reason: boards MIX.</summary>
+    public bool HasDropItemOptions => Bosses.Any(boss => boss.DropItems is { Count: > 0 });
+
+    /// <summary>
+    /// The pop or the drop list for a boss, chosen by kind. One resolver, so neither surface picks a
+    /// list for itself and the two cannot offer different options on the same form.
+    ///
+    /// Anything that is not Drop resolves to the pop list, which is what makes an absent or unknown
+    /// kind behave exactly like the pop-only world this replaced.
+    /// </summary>
+    public IReadOnlyList<ChartPopItemOption> ItemOptionsFor(string? boss, string? kind) =>
+        string.Equals(kind, ChartItemKinds.Drop, StringComparison.OrdinalIgnoreCase)
+            ? DropItemsFor(boss)
+            : PopItemsFor(boss);
+
+    /// <summary>
+    /// The key item earned on a card, or null. A board-level key item never matches: it belongs to
+    /// no card, so it gets a grid column and no card badge.
+    /// </summary>
+    public ChartKeyItem? KeyItemFor(string? boss) =>
+        string.IsNullOrWhiteSpace(boss)
+            ? null
+            : KeyItems.FirstOrDefault(item =>
+                item.Boss is not null
+                && string.Equals(item.Boss, boss.Trim(), StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>
@@ -314,6 +457,10 @@ public static class ChartBoardCatalog
             .ToList())
     {
         // The four path runs are drawn as columns; anything else — Kirin's run — falls below them.
+        // Gear and currency that falls off these cards is tracked too, on a second add form over the
+        // same rows. Sky's PopItems already hold what each card DROPS - that is this board's rule -
+        // so nothing moves; DropItems is the list for everything that is loot rather than pop fodder.
+        Features = ChartBoardFeatures.PopItems | ChartBoardFeatures.DropItems,
         PathColumns = HnmConfig.SkyGodOrder
             .Where(god => god != "Kirin")
             .Select(SkyPathRun)
@@ -556,6 +703,7 @@ public static class ChartBoardCatalog
         })
     {
         // The three path runs are drawn as columns; the Final stage run falls below them.
+        Features = ChartBoardFeatures.PopItems | ChartBoardFeatures.DropItems,
         PathColumns = new[] { SeaJusticePath, SeaHopePath, SeaPrudencePath },
     };
 
@@ -606,6 +754,42 @@ public static class ChartBoardCatalog
         })
     {
         CentersRows = true,
+
+        // NO PopItems flag. Every zone here took free text and nobody agreed on what to type, so the
+        // add form is replaced by the wishlist: on this board the useful fact is what a member WANTS
+        // out of a zone, not what the linkshell is sitting on. Rows already entered stay listed,
+        // editable and deletable - see ChartBoard.AllowsPopItems for where that is enforced.
+        Features = ChartBoardFeatures.Wishlist | ChartBoardFeatures.KeyItems,
+
+        // The eleven permanent Dynamis key items, in PROGRESSION order, which is the order the grid
+        // draws its columns in: the access prerequisite, the four city clears that open Beaucedine,
+        // Beaucedine's own key to Xarcabard, Xarcabard's completion key, then the three Dreamworld
+        // Slivers that open Tavnazia and Tavnazia's own.
+        //
+        // Vial of Shrouded Sand names NO boss. It is earned outside the zones, so it gets a grid
+        // column and no card badge - ChartBoard.KeyItemFor is what makes that fall out rather than
+        // needing a special case.
+        //
+        // Plain ASCII hyphens in the Sliver names, never an en dash. These strings are STORED on
+        // ChartMemberKeyItem.KeyItemName and compared, and an en dash that survives a copy-paste
+        // into one file and not another renders as an empty column with no error anywhere.
+        // ChartBoardCatalogTests.KeyItemNamesAreAsciiOnly is the guard.
+        KeyItems = new[]
+        {
+            new ChartKeyItem("Vial of Shrouded Sand", Caption: "Opens the original Dynamis zones."),
+
+            new ChartKeyItem("Hydra Corps Command Scepter", "San d'Oria", "One of four needed for Beaucedine."),
+            new ChartKeyItem("Hydra Corps Eyeglass", "Bastok", "One of four needed for Beaucedine."),
+            new ChartKeyItem("Hydra Corps Lantern", "Windurst", "One of four needed for Beaucedine."),
+            new ChartKeyItem("Hydra Corps Tactical Map", "Jeuno", "One of four needed for Beaucedine."),
+            new ChartKeyItem("Hydra Corps Insignia", "Beaucedine", "Needed for Xarcabard."),
+            new ChartKeyItem("Hydra Corps Battle Standard", "Xarcabard"),
+
+            new ChartKeyItem("Dynamis - Valkurm Sliver", "Valkurm", "One of three needed for Tavnazia."),
+            new ChartKeyItem("Dynamis - Buburimu Sliver", "Buburimu", "One of three needed for Tavnazia."),
+            new ChartKeyItem("Dynamis - Qufim Sliver", "Qufim", "One of three needed for Tavnazia."),
+            new ChartKeyItem("Dynamis - Tavnazia Sliver", "Tavnazia"),
+        },
     };
 
     // Same contiguity rule as Dynamis: the two runs must not interleave in LimbusBoard.Bosses.
@@ -685,6 +869,11 @@ public static class ChartBoardCatalog
         })
     {
         CentersRows = true,
+
+        // Same call Dynamis makes, and for the same reason: fourteen areas that all took free text.
+        // No key items here - Limbus passes are consumed rather than kept, so there is no permanent
+        // per-member state to track.
+        Features = ChartBoardFeatures.Wishlist,
     };
 
     // HENM : Zilart is a TIER ladder — three NMs per tier, each tier unlocking the next, ending at
@@ -730,6 +919,11 @@ public static class ChartBoardCatalog
         })
     {
         CentersRows = true,
+
+        // The only board that keeps its pop form AND takes requests. The ladder really is popped
+        // with tracked items, and it is also the board people queue up wanting things off, so
+        // neither affordance replaces the other.
+        Features = ChartBoardFeatures.PopItems | ChartBoardFeatures.Wishlist,
     };
 
     /// <summary>Every board, in the order the Charts sub-nav shows them.</summary>
@@ -761,7 +955,36 @@ public static class ChartBoardCatalog
     /// saved with — a picker that refused them would strand them. The gain is that ItemName, which
     /// nothing else canonicalises, cannot end up holding two spellings of one item.
     /// </summary>
-    public static string? NormalizePopItemName(string? board, string? boss, string? itemName)
+    /// <remarks>Kept as a Pop-kind shim over <see cref="NormalizeItemName"/> rather than deleted:
+    /// it is the spelling every caller that predates drop items uses, and the contract is
+    /// unchanged.</remarks>
+    public static string? NormalizePopItemName(string? board, string? boss, string? itemName) =>
+        NormalizeItemName(board, boss, itemName, ChartItemKinds.Pop);
+
+    /// <summary>
+    /// Canonical item kind. Anything that is not Drop, INCLUDING null and blank, is Pop.
+    ///
+    /// Defaults rather than rejects, deliberately: a form or a payload that says nothing about kind
+    /// is one written before drops existed, and the right reading of silence is the original
+    /// behaviour. The board still decides whether a kind may be ADDED at all - see
+    /// <see cref="ChartBoard.AllowsDropItems"/> - so this being permissive costs nothing.
+    /// </summary>
+    public static string NormalizeItemKind(string? kind) =>
+        string.Equals(kind?.Trim(), ChartItemKinds.Drop, StringComparison.OrdinalIgnoreCase)
+            ? ChartItemKinds.Drop
+            : ChartItemKinds.Pop;
+
+    /// <summary>
+    /// The catalog's spelling of an item when the name given is one the boss's list for that KIND
+    /// knows ("winterstone" to "Winterstone"), and the trimmed name unchanged otherwise. Null only
+    /// for a blank name.
+    ///
+    /// Canonicalises rather than rejects, deliberately. Boards that declare no items still take free
+    /// text, and rows written before Sky had a list must stay editable under the name they were
+    /// saved with - a picker that refused them would strand them. The gain is that ItemName, which
+    /// nothing else canonicalises, cannot end up holding two spellings of one item.
+    /// </summary>
+    public static string? NormalizeItemName(string? board, string? boss, string? itemName, string? kind)
     {
         var typed = itemName?.Trim();
         if (string.IsNullOrWhiteSpace(typed))
@@ -770,9 +993,31 @@ public static class ChartBoardCatalog
         }
 
         var known = Find(board)?
-            .PopItemsFor(boss)
+            .ItemOptionsFor(boss, NormalizeItemKind(kind))
             .FirstOrDefault(option => string.Equals(option.Name, typed, StringComparison.OrdinalIgnoreCase));
 
         return known?.Name ?? typed;
+    }
+
+    /// <summary>
+    /// Canonical key item name on a board, or null when the board does not track that one.
+    ///
+    /// REJECTS unknown names, unlike <see cref="NormalizeItemName"/> directly above. A key item list
+    /// is CLOSED - it is progression, not inventory - and the grid draws one column per catalog
+    /// entry, so a name the catalog does not have would write a row that appears in no column at
+    /// all. That reads as data loss rather than as a typo, which is why this refuses instead.
+    /// </summary>
+    public static string? NormalizeKeyItemName(string? board, string? keyItemName)
+    {
+        var typed = keyItemName?.Trim();
+        if (string.IsNullOrWhiteSpace(typed))
+        {
+            return null;
+        }
+
+        return Find(board)?
+            .KeyItems
+            .FirstOrDefault(item => string.Equals(item.Name, typed, StringComparison.OrdinalIgnoreCase))?
+            .Name;
     }
 }
