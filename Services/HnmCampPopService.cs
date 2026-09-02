@@ -225,14 +225,13 @@ public sealed class HnmCampPopService
             .Where(p => p.EventId == ev.Id)
             .ToListAsync(cancellationToken);
         _db.AppUserEvents.RemoveRange(noSlotAttendees);
-        // The board is RECYCLED, not deleted, so its EventAttendanceWindows would otherwise
-        // outlive this camp with their attendee rows cascaded away — and the unique
-        // (EventId, SequenceNumber) index would then hand the next camp's window-1 scan the
-        // stale row from this one. Clear them so the re-posted board starts fresh.
-        var scannedWindows = await _db.EventAttendanceWindows
-            .Where(w => w.EventId == ev.Id)
-            .ToListAsync(cancellationToken);
-        _db.EventAttendanceWindows.RemoveRange(scannedWindows);
+        // Attendance windows are NOT deleted here: StageHandoffAsync above moved them onto the
+        // camp archive (EventId cleared), which frees the unique (EventId, SequenceNumber) index
+        // for the recycled board AND keeps the window history visible under Past Events.
+        // Removing them here would undo that -- the query reads pre-save database rows and EF
+        // returns the same tracked instances, so the delete would win. Their attendee rows are
+        // safe either way: AppUserEventWindow.AppUserEvent is SetNull, not Cascade, and the
+        // denormalized CharacterName is what the archive reader displays.
 
         await _db.SaveChangesAsync(cancellationToken);
 
