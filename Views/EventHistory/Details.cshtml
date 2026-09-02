@@ -1,5 +1,9 @@
 @model EventHistory
 @{
+    // HNM camps are priced per window, so every DKP/hour surface below is hidden for them.
+    var isHnm = string.Equals(Model.EventType, "HNM", StringComparison.OrdinalIgnoreCase);
+}
+@{
     ViewData["Title"] = "History details";
 }
 
@@ -36,7 +40,12 @@
             <div style="color:var(--fg-3)">Started</div><div>@(Model.StartTime?.ToString("g") ?? "—")</div>
             <div style="color:var(--fg-3)">Ended</div><div>@(Model.EndTime?.ToString("g") ?? "—")</div>
             <div style="color:var(--fg-3)">Duration</div><div class="num">@((Model.Duration ?? 0).ToString("0.##")) h</div>
-            <div style="color:var(--fg-3)">DKP/hour</div><div class="num">@(Model.DkpPerHour ?? 0)</div>
+            @* HNM camps pay per WINDOW (open / close / kill / claim bonuses), never by the hour,
+               so a DKP/hour row on one is noise that reads as a rate nobody set. *@
+            @if (!isHnm)
+            {
+                <div style="color:var(--fg-3)">DKP/hour</div><div class="num">@(Model.DkpPerHour ?? 0)</div>
+            }
         </div>
         @if (!string.IsNullOrWhiteSpace(Model.Details))
         {
@@ -60,10 +69,23 @@
                 <div class="field"><label>Type</label><input class="input" name="eventType" value="@Model.EventType" /></div>
                 <div class="field"><label>Location</label><input class="input" name="eventLocation" value="@Model.EventLocation" /></div>
                 <div class="field"><label>Duration (hours)</label><input class="input" type="number" step="0.01" min="0" name="duration" value="@(Model.Duration?.ToString("0.##"))" /></div>
-                <div class="field"><label>DKP / hour</label><input class="input" type="number" min="0" name="dkpPerHour" value="@(Model.DkpPerHour ?? 0)" /></div>
+                @* Omitted on an HNM: the field does not apply, and EventHistoryEditService reads
+                   `input.DkpPerHour ?? oldRate`, so leaving it out is a no-op rather than a
+                   rescale of every attendee's earned DKP. *@
+                @if (!isHnm)
+                {
+                    <div class="field"><label>DKP / hour</label><input class="input" type="number" min="0" name="dkpPerHour" value="@(Model.DkpPerHour ?? 0)" /></div>
+                }
                 <div class="field" style="grid-column:1 / -1"><label>Details</label><textarea class="input" name="details" rows="2">@Model.Details</textarea></div>
                 <div style="grid-column:1 / -1;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-                    <small style="color:var(--fg-3)">Changing <strong>DKP / hour</strong> rescales every attendee's earned DKP and adjusts their balance.</small>
+                    @if (!isHnm)
+                    {
+                        <small style="color:var(--fg-3)">Changing <strong>DKP / hour</strong> rescales every attendee's earned DKP and adjusts their balance.</small>
+                    }
+                    else
+                    {
+                        <small style="color:var(--fg-3)">This camp pays per window, not by the hour.</small>
+                    }
                     <button type="submit" class="btn primary sm">Save event</button>
                 </div>
             </form>
