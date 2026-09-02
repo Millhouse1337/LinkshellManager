@@ -59,25 +59,16 @@
     }
 
     <!-- Open events are the LIVE slice: each one is an unposted payroll row waiting on an officer,
-         so they sit in Current Field Activity next to the camps that produced them. Grouped under
-         one titled container rather than left as loose cards, so it reads as a section of Current
-         Field Activity instead of an unlabelled run of rows. Hidden entirely when there are none —
-         Current Field Activity carries its own empty state. -->
+         so they sit DIRECTLY in Current Field Activity next to the camps that produced them, as
+         full cards in that section's own flow. They used to be boxed under a titled "HNM Events"
+         container, which read as a separate list rather than part of the live board. Hidden
+         entirely when there are none — Current Field Activity carries its own empty state. -->
     @if (section() === 'live' && model.openEvents.length > 0) {
-      <section class="card we-open-block">
-        <div class="card-head">
-          <div class="card-title">
-            <span class="we-crystal" aria-hidden="true"></span>
-            HNM Events
-            <span class="tag">{{ model.openEvents.length }}</span>
-          </div>
-        </div>
-        <div class="we-open-list">
-          @for (event of model.openEvents; track event.id) {
-            <ng-container *ngTemplateOutlet="eventCard; context: { event: event, closed: false, model: model }" />
-          }
-        </div>
-      </section>
+      <div class="we-open-list">
+        @for (event of model.openEvents; track event.id) {
+          <ng-container *ngTemplateOutlet="eventCard; context: { event: event, closed: false, model: model }" />
+        }
+      </div>
     }
 
     <!-- Attendance History: one PAGE of closed events, searched and paged by the server. The count
