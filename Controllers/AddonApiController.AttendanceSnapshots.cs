@@ -258,15 +258,21 @@ public sealed partial class AddonApiController
     [AddonApiAuth]
     public async Task<IActionResult> GetRecentAttendanceSnapshotsAsync(
         CancellationToken cancellationToken,
-        [FromQuery] int limit = 25)
+        [FromQuery] int limit = 25,
+        [FromQuery] bool miscOnly = false)
     {
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
         var take = Math.Clamp(limit, 1, 50);
 
+        // miscOnly backs the addon's "Misc Posts" panel, which is about /lsm now captures only.
+        // Filtering here rather than in the addon matters because `take` is applied BEFORE the
+        // caller could filter: on a busy camp the window posts alone fill the page, and the misc
+        // captures the panel exists to show get pushed off it entirely.
         var rows = await _dbContext.AttendanceSnapshots
             .AsNoTracking()
             .Where(s => s.LinkshellId == token.LinkshellId
-                        && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
+                        && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored
+                        && (!miscOnly || s.SlotKind == AttendanceSnapshotSlotKinds.Misc))
             .OrderByDescending(s => s.CapturedAtUtc)
             .Take(take)
             .Include(s => s.WindowEvent)
