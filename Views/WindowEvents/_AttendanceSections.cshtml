@@ -17,29 +17,27 @@
    was written for a view that opted out of the lsm theme (ViewData["BodyClass"] = ""), and
    Event/Index is a themed lsm-page. The base .we-* rules in site.css style these cards. *@
 
+@* No "HNM Events" card wrapper: these are live camps, so they sit directly in Current Field
+   Activity next to the timed-event cards rather than behind their own sub-heading. The grid
+   matches _CurrentFieldActivity's LiveEvents container so the two lists read as one board. *@
 @if (Model.OpenEvents.Count > 0)
 {
-    <div class="card fade d3" style="margin-bottom:14px">
-        <div class="card-head">
-            <div class="card-title"><span class="attendance-crystal"></span> HNM Events <span class="tag">@Model.OpenEvents.Count</span></div>
-        </div>
-        <div class="we-open-list">
-            @foreach (var ev in Model.OpenEvents)
+    <div class="fade d3" style="display:grid;gap:16px;margin-top:16px">
+        @foreach (var ev in Model.OpenEvents)
+        {
+            @* By FULL PATH, not by name. A bare "_WindowEventCard" is resolved against the
+               executing CONTROLLER's folder (/Views/<controller>/ then /Views/Shared/), never
+               against the folder this partial happens to live in. That is fine while
+               WindowEvents renders it, and throws "The partial view was not found" the moment
+               the Event System page mounts this section -- which it does, so /Event 500'd for
+               every linkshell that had an open attendance event. Same rule applies to every
+               partial reference in this folder: it is mounted cross-controller. *@
+            @await Html.PartialAsync("~/Views/WindowEvents/_WindowEventCard.cshtml", ev, new ViewDataDictionary(ViewData)
             {
-                @* By FULL PATH, not by name. A bare "_WindowEventCard" is resolved against the
-                   executing CONTROLLER's folder (/Views/<controller>/ then /Views/Shared/), never
-                   against the folder this partial happens to live in. That is fine while
-                   WindowEvents renders it, and throws "The partial view was not found" the moment
-                   the Event System page mounts this section -- which it does, so /Event 500'd for
-                   every linkshell that had an open attendance event. Same rule applies to every
-                   partial reference in this folder: it is mounted cross-controller. *@
-                @await Html.PartialAsync("~/Views/WindowEvents/_WindowEventCard.cshtml", ev, new ViewDataDictionary(ViewData)
-                {
-                    ["LinkshellId"] = Model.LinkshellId,
-                    ["CanManage"] = Model.CanManage,
-                    ["IsClosed"] = false,
-                })
-            }
-        </div>
+                ["LinkshellId"] = Model.LinkshellId,
+                ["CanManage"] = Model.CanManage,
+                ["IsClosed"] = false,
+            })
+        }
     </div>
 }
