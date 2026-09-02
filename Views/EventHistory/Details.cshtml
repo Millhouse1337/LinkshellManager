@@ -110,12 +110,46 @@
         // does any camp closed before the archive shipped.
         var windowArchive = ViewBag.WindowArchive as LinkshellManagerDiscordApp.Services.ArchivedWindowSet
             ?? LinkshellManagerDiscordApp.Services.ArchivedWindowSet.Empty;
-        // The Windows column only earns its place on a windowed event, where it — not Duration —
-        // is what the member's DKP was computed from.
+        // The Windows column only earns its place on a windowed event.
         var showWindows = participants.Any(p => p.WindowsAttended.HasValue) || windowArchive.HasWindows;
-        var windowDenominator = windowArchive.WindowCount > 0
-            ? windowArchive.WindowCount
-            : LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(Model.EventName);
+
+        // DISPLAY ONLY. This column answers "how many windows did the NM run before it popped,
+        // and how many was this member there for" — it deliberately does NOT reuse
+        // AppUserEventHistory.WindowsAttended, which is the CREDIT count that
+        // EventAttendanceDkpCalculator paid from. The two differ on purpose:
+        //
+        //   * The kill roster is a post taken when the mob dies, paid by the kill bonus rather
+        //     than by a window (see the addon's Post Kill copy), so it is not a window and is
+        //     excluded here.
+        //   * Nothing below may feed a payout. Changing the credit count would move real DKP;
+        //     this is a read of the archive and moves nothing.
+        var countedWindows = windowArchive.Windows.Where(w => !w.IsKillWindow).ToList();
+        var windowDenominator = countedWindows.Count > 0
+            ? countedWindows.Count
+            : (windowArchive.WindowCount > 0
+                ? windowArchive.WindowCount
+                : LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(Model.EventName));
+
+        // [character] -> how many non-kill windows they were scanned in. Case-insensitive because
+        // the archive stores whatever name the scan carried.
+        var attendedWindowsByName = countedWindows
+            .SelectMany(w => w.Attendees.Select(a => a.CharacterName))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .GroupBy(name => name!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+
+        // Falls back to the stored credit count only when there is no archive to read — a camp
+        // closed before windows were archived has nothing else to show.
+        Func<string?, int?, string> windowsCell = (characterName, storedCount) =>
+        {
+            if (countedWindows.Count > 0)
+            {
+                var seen = !string.IsNullOrWhiteSpace(characterName)
+                    && attendedWindowsByName.TryGetValue(characterName!, out var n) ? n : 0;
+                return $"{seen} of {windowDenominator}";
+            }
+            return storedCount.HasValue ? $"{storedCount} of {windowDenominator}" : "—";
+        };
     }
     @if (windowArchive.HasWindows)
     {
@@ -219,7 +253,7 @@
                             <th style="text-align:right">Duration</th>
                             @if (showWindows)
                             {
-                                <th style="text-align:right" title="Attendance windows this member was scanned in. On a windowed camp this is what their DKP was computed from, not the duration.">Windows</th>
+                                <th style="text-align:right" title="Spawn windows this camp ran before the pop, and how many this member was scanned in for. The kill roster is not a window and is not counted. Display only — DKP is not computed from this.">Windows</th>
                             }
                             <th style="text-align:right">DKP</th>
                             <th>Verification</th>
@@ -237,7 +271,7 @@
                                 @if (showWindows)
                                 {
                                     <td style="text-align:right;font-family:var(--font-mono)">
-                                        @(participant.WindowsAttended.HasValue ? $"{participant.WindowsAttended} of {windowDenominator}" : "—")
+                                        @windowsCell(participant.CharacterName, participant.WindowsAttended)
                                     </td>
                                 }
                                 <td style="text-align:right;font-family:var(--font-mono)" class="num">@((participant.EventDkp ?? 0).ToString("0.##"))</td>
@@ -322,7 +356,7 @@
                         <th style="text-align:right">Duration</th>
                         @if (showWindows)
                         {
-                            <th style="text-align:right" title="Attendance windows this member was scanned in. On a windowed camp this is what their DKP was computed from, not the duration.">Windows</th>
+                            <th style="text-align:right" title="Spawn windows this camp ran before the pop, and how many this member was scanned in for. The kill roster is not a window and is not counted. Display only — DKP is not computed from this.">Windows</th>
                         }
                         <th style="text-align:right">DKP</th>
                         <th>Verification</th>
@@ -342,7 +376,7 @@
                             @if (showWindows)
                             {
                                 <td style="text-align:right;font-family:var(--font-mono)">
-                                    @(participant.WindowsAttended.HasValue ? $"{participant.WindowsAttended} of {windowDenominator}" : "—")
+                                    @windowsCell(participant.CharacterName, participant.WindowsAttended)
                                 </td>
                             }
                             <td style="text-align:right;font-family:var(--font-mono)" class="num">@((participant.EventDkp ?? 0).ToString("0.##"))</td>
