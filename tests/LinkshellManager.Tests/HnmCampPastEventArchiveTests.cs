@@ -174,6 +174,58 @@ public class HnmCampPastEventArchiveTests
         Assert.Equal(history.Id, windowEvent!.CampEventHistoryId);
     }
 
+    // ------------------------------------------------- the camp's posted windows survive it ---
+
+    // REGRESSION. All three End Camp callers used to DELETE the camp's EventAttendanceWindows
+    // once the board recycled, to free the unique (EventId, SequenceNumber) index for the next
+    // camp's window-1 scan. Those rows are the only record of which windows were posted and who
+    // was scanned in each, and nothing re-derives them -- so any camp that posted a ToD showed no
+    // windows at all under Past Events. Clearing EventId frees the index just as well.
+    [Fact]
+    public async Task EndingACamp_MovesItsPostedWindowsOntoTheArchive()
+    {
+        using var db = await SeededAsync();
+
+        var windowEvent = await EndCampAsync(db);
+
+        var window = await db.EventAttendanceWindows.SingleAsync();
+        Assert.Null(window.EventId);
+        Assert.Equal(windowEvent!.CampEventHistoryId, window.EventHistoryId);
+    }
+
+    // The roster has to come along, or Past Events lists a window nobody attended. It survives
+    // because AppUserEventWindow.AppUserEvent is SetNull rather than Cascade and CharacterName is
+    // denormalized -- the participations themselves are deleted when the board recycles.
+    [Fact]
+    public async Task ArchivedWindows_KeepWhoWasScannedInThem()
+    {
+        using var db = await SeededAsync();
+
+        await EndCampAsync(db);
+
+        var window = await db.EventAttendanceWindows
+            .Include(w => w.Attendees)
+            .SingleAsync();
+        Assert.Equal(
+            new[] { "Alpha", "Beta" },
+            window.Attendees.Select(a => a.CharacterName).OrderBy(name => name).ToArray());
+    }
+
+    // End to end through the real Past Events reader, which is what the page renders from.
+    [Fact]
+    public async Task PastEvents_ShowsTheCampsPostedWindows()
+    {
+        using var db = await SeededAsync();
+
+        await EndCampAsync(db);
+
+        var history = await db.EventHistories.SingleAsync();
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        Assert.Single(archive.Windows);
+        Assert.Equal(1, archive.Windows[0].SequenceNumber);
+    }
+
     // THE dating trap. The camp row is recycled, so by the time anything reads it StartTime points
     // at the NEXT pop — three days out in this fixture. An archive dated from it would file a past
     // event in the future.

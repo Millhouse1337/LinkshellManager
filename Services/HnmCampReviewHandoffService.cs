@@ -205,6 +205,25 @@ public sealed class HnmCampReviewHandoffService
             capture.EventId = null;
         }
 
+        // The camp's posted attendance windows move onto the archive for the same reason. These
+        // rows are the ONLY record of which windows a camp posted and who was scanned in each --
+        // nothing re-derives them. All three End Camp callers used to DELETE them once the board
+        // recycled, so any camp that posted a ToD lost its entire window history and showed no
+        // windows under Past Events. Clearing EventId also frees the unique
+        // (EventId, SequenceNumber) index the recycled board needs for the next camp's window-1
+        // scan, which is what those deletes were really for -- so archiving replaces them rather
+        // than being additive. Matches both close paths (EventController.Lifecycle EndEventCore
+        // and ActivityDataController EndEventAsync), which archive exactly this way.
+        var postedWindows = await _db.EventAttendanceWindows
+            .Where(window => window.EventId == ev.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var window in postedWindows)
+        {
+            window.EventHistory = archive;
+            window.Event = null;
+            window.EventId = null;
+        }
+
         _logger.LogInformation(
             "HNM camp handed off for review: event {EventId} ({Monster}, mode {Mode}) staged "
             + "{Count} member(s) totalling {Total} DKP — archived as a past event, pending an "
@@ -354,12 +373,11 @@ public sealed class HnmCampReviewHandoffService
             .Where(s => s.EventId == eventId)
             .ToListAsync(cancellationToken);
         _db.EventPartySlotSignups.RemoveRange(slotSignups);
-        // The board is RECYCLED, not deleted, so the unique (EventId, SequenceNumber) index would
-        // otherwise hand the next camp's window-1 scan this camp's stale row.
-        var scannedWindows = await _db.EventAttendanceWindows
-            .Where(w => w.EventId == eventId)
-            .ToListAsync(cancellationToken);
-        _db.EventAttendanceWindows.RemoveRange(scannedWindows);
+        // The camp's attendance windows are NOT deleted here: StageHandoffAsync above moved them
+        // onto the camp archive (EventId cleared), which both frees the unique
+        // (EventId, SequenceNumber) index for the recycled board and keeps the window history
+        // visible under Past Events. Re-querying and removing them here would undo that -- the
+        // query reads the pre-save database rows and EF hands back the same tracked instances.
 
         await _db.SaveChangesAsync(cancellationToken);
         return true;

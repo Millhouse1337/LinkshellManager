@@ -229,12 +229,11 @@ public partial class EventController
             .Where(p => p.EventId == eventId)
             .ToListAsync();
         _context.AppUserEvents.RemoveRange(noSlotAttendees);
-        // Recycled board — clear this camp's attendance windows too, or the unique
-        // (EventId, SequenceNumber) index hands the next camp's scans these stale rows.
-        var scannedWindows = await _context.EventAttendanceWindows
-            .Where(w => w.EventId == eventId)
-            .ToListAsync();
-        _context.EventAttendanceWindows.RemoveRange(scannedWindows);
+        // Attendance windows are NOT deleted here: StageHandoffAsync moved them onto the camp
+        // archive (EventId cleared), which frees the unique (EventId, SequenceNumber) index for
+        // the recycled board AND keeps the window history visible under Past Events. Deleting
+        // them here would undo that -- the query reads pre-save database rows and EF returns the
+        // same tracked instances, so the removal would win.
 
         // The Event is now Modified (defeated note), so the DbContext save-hook enqueues it and
         // DiscordEventChannelPublisher edits the posted board message accordingly (single
