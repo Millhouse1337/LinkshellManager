@@ -169,8 +169,57 @@ After 24-48h of stable running:
 | Tail logs | `ssh root@<IP> 'sudo journalctl -u lsmanager -f'` |
 | Service status | `ssh root@<IP> 'sudo systemctl status lsmanager'` |
 | Restart service | `ssh root@<IP> 'sudo systemctl restart lsmanager'` |
-| Postgres shell | `ssh root@<IP> 'sudo -u postgres psql lsmanager'` |
-| Backup DB | `ssh root@<IP> 'sudo -u postgres pg_dump lsmanager' > backup-$(date +%F).sql` |
+| Postgres shell | `ssh root@<IP> '/tmp/dbshell.sh'` — see **Database access** below |
+| Backup DB | `ssh root@<IP> '/tmp/dbbackup.sh'` — see **Database access** below |
+
+## Database access — READ THIS BEFORE BACKING UP
+
+**The application does NOT use the droplet's local Postgres.** It connects to a
+DigitalOcean **Managed Database** over TLS:
+
+```
+Host      dbaas-db-3934998-do-user-36034864-0.e.db.ondigitalocean.com
+Port      25060
+Database  defaultdb
+User      doadmin
+```
+
+The local `lsmanager` database still exists but has **zero tables** — it is an
+unused leftover from an earlier setup. The command this table used to recommend
+(`sudo -u postgres pg_dump lsmanager`) therefore dumped an EMPTY database and
+produced a ~700-byte file that looks like a valid dump. A real dump is ~13 MB
+across ~74 tables. Do not trust a backup you have not size-checked.
+
+Two more traps:
+
+- **Client version.** The managed server is Postgres 18.x; Ubuntu 24.04 ships
+  client 16, and `pg_dump` refuses to dump a newer server. Install the matching
+  client once:
+  `apt-get install -y postgresql-common && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y && apt-get install -y postgresql-client-18`
+- **TLS.** The managed database requires it — export `PGSSLMODE=require`.
+
+Credentials live in `/etc/lsmanager/env` as `ConnectionStrings__DefaultConnection`.
+Read them from there rather than pasting the password into a shell command, so it
+does not land in your shell history:
+
+```bash
+#!/bin/bash
+# /tmp/dbbackup.sh — dump the REAL production database.
+conn=$(grep -m1 'ConnectionStrings__DefaultConnection' /etc/lsmanager/env | cut -d= -f2-)
+get() { echo "$conn" | tr ';' '
+' | grep -i "^ *$1=" | head -1 | cut -d= -f2- | xargs; }
+export PGPASSWORD="$(get Password)"; export PGSSLMODE=require
+OUT=/root/lsmanager-prod-$(date +%F-%H%M).sql
+pg_dump -h "$(get Host)" -p "$(get Port)" -U "$(get Username)" -d "$(get Database)"   --no-owner --no-acl > "$OUT"
+unset PGPASSWORD
+ls -lh "$OUT"; grep -c '^CREATE TABLE' "$OUT"   # sanity: expect ~74, not 0
+```
+
+Swap `pg_dump` for `psql` in the last block for an interactive shell.
+
+Note DigitalOcean managed databases also take their own automated daily backups
+with point-in-time recovery, so the console is the faster path for a real
+restore. The dump above is for pre-deploy safety and for moving data around.
 
 ## One-time migration: persistent Data Protection keys
 
