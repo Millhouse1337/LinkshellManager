@@ -1,4 +1,4 @@
-﻿using LinkshellManagerDiscordApp.Authorization;
+using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -980,6 +980,10 @@ public sealed partial class AddonApiController
                 CharacterName = link.CharacterName!,
                 Alt1 = link.AppUser != null ? link.AppUser.AltCharacterName1 : null,
                 Alt2 = link.AppUser != null ? link.AppUser.AltCharacterName2 : null,
+                // Same FFXI-job-id-indexed int[] shape as the main's JobLevels below, so the
+                // addon's "Can equip" test runs unchanged over an alt.
+                Alt1JobLevels = link.AppUser != null ? link.AppUser.Alt1JobLevels : null,
+                Alt2JobLevels = link.AppUser != null ? link.AppUser.Alt2JobLevels : null,
                 JobLevels = link.JobLevels
             })
             .OrderBy(row => row.CharacterName)
@@ -993,10 +997,25 @@ public sealed partial class AddonApiController
                 var alts = new List<string>(2);
                 if (!string.IsNullOrWhiteSpace(row.Alt1)) alts.Add(row.Alt1!.Trim());
                 if (!string.IsNullOrWhiteSpace(row.Alt2)) alts.Add(row.Alt2!.Trim());
+
+                // altDetails carries each alt's OWN job levels. `alts` (names only) stays as it
+                // is: an addon build that predates this reads that key, and dropping it would
+                // blank the alt handling those versions already do.
+                var altDetails = new List<object>(2);
+                if (!string.IsNullOrWhiteSpace(row.Alt1))
+                {
+                    altDetails.Add(new { name = row.Alt1!.Trim(), jobLevels = row.Alt1JobLevels });
+                }
+                if (!string.IsNullOrWhiteSpace(row.Alt2))
+                {
+                    altDetails.Add(new { name = row.Alt2!.Trim(), jobLevels = row.Alt2JobLevels });
+                }
+
                 return new
                 {
                     characterName = row.CharacterName,
                     alts,
+                    altDetails,
                     jobLevels = row.JobLevels
                 };
             })
