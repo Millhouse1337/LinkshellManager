@@ -682,6 +682,11 @@ public static class HnmConfig
     public const string OpenWindowLabel = "Open";
     public const string CloseWindowLabel = "Close";
 
+    // The Kill roster is a THIRD post on a 2-post camp, taken when the mob dies and paid by
+    // the kill bonus rather than by a window. It needs its own name: labelling it "Close"
+    // (which "anything past 1 is Close" used to do) put two identical tabs side by side.
+    public const string KillWindowLabel = "Kill";
+
     // Labels these two carried before the rename. Only ever read, never written — see
     // NormalizeWindowLabel.
     private const string LegacyOpenWindowLabel = "On Time";
@@ -700,9 +705,19 @@ public static class HnmConfig
         // the addon's constants.window_label; the two must agree or a camp reads one way in game
         // and another in the app.
         var count = effectiveWindowCount ?? GetWindowCount(eventName);
-        return count == 2
-            ? (sequenceNumber == 1 ? OpenWindowLabel : CloseWindowLabel)
-            : null;
+        if (count != 2)
+        {
+            return null;
+        }
+
+        // 1 and 2 are the camp's two roster reads. Anything beyond them on a 2-post camp is
+        // the kill roster, which is posted after the Close.
+        return sequenceNumber switch
+        {
+            1 => OpenWindowLabel,
+            2 => CloseWindowLabel,
+            _ => KillWindowLabel,
+        };
     }
 
     // The label to SHOW for a stored window. Rows written before the rename hold "On Time" /
