@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LinkshellManagerDiscordApp.Controllers;
@@ -7,19 +8,25 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public class HomeController : Controller
 {
     private readonly ILogger<HomeController> _logger;
+    private readonly GlobalSettingsService _globalSettings;
 
-    public HomeController(ILogger<HomeController> logger)
+    public HomeController(ILogger<HomeController> logger, GlobalSettingsService globalSettings)
     {
         _logger = logger;
+        _globalSettings = globalSettings;
     }
 
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
         if (IsDiscordEmbeddedRequest())
         {
             return Redirect("/discord-activity");
         }
 
+        // Set here as well as in _Layout: a view body renders before its layout, so Index.cshtml
+        // cannot see what _Layout writes. This is the only anonymous-reachable surface, so it is
+        // where a tester without a Discord account finds the launcher.
+        ViewData["ShowLauncherDownload"] = await _globalSettings.IsLauncherDownloadEnabledAsync(HttpContext.RequestAborted);
         return View();
     }
 

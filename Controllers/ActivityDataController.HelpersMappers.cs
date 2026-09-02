@@ -212,8 +212,37 @@ public sealed partial class ActivityDataController
                 slice.MonsterName,
                 slice.Count,
                 slice.Percent,
-                slice.ColorClass))
+                slice.ColorClass,
+                slice.IsHq,
+                slice.HasHqVariant))
             .ToList();
+
+    private static ActivityHnmWindowsDto MapHnmWindows(HnmWindowStats stats) =>
+        new(
+            stats.Monsters
+                .Select(monster =>
+                {
+                    // Drawn against the monster's busiest window, so its shape is readable whether
+                    // its pops cluster in three windows or spread across twenty-five. Computed here
+                    // rather than client-side so the web and the Activity can't scale differently.
+                    var peakCount = monster.Bars.Count == 0 ? 0 : monster.Bars.Max(bar => bar.Count);
+                    return new ActivityHnmWindowMonsterDto(
+                        monster.MonsterName,
+                        monster.ColorClass,
+                        monster.TotalPops,
+                        monster.WindowCount,
+                        monster.PeakWindow,
+                        monster.PeakPercent,
+                        monster.Bars
+                            .Select(bar => new ActivityHnmWindowBarDto(
+                                bar.Window,
+                                bar.Count,
+                                bar.Percent,
+                                peakCount == 0 ? 0 : Math.Round(bar.Count * 100.0 / peakCount, 1)))
+                            .ToList());
+                })
+                .ToList(),
+            stats.TotalPops);
 
     private static ActivityTodDto MapTodDto(Tod tod)
     {

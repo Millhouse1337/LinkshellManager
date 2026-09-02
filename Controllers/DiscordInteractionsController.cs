@@ -76,6 +76,12 @@ public sealed class DiscordInteractionsController : ControllerBase
     private const string WdPopHqFieldId = "wdpop_hq";
     private const string WdPopOutcomeFieldId = "wdpop_outcome";
     private const string WdPopWindowFieldId = "wdpop_window";
+    // The pop-window picker's escape hatch. A required field with no default forces an ANSWER, and
+    // "I didn't see which window it popped on" is a true one — without a way to say it the officer
+    // has to invent a window, and an invented window silently caps somebody's credit at it. Reads
+    // as null on the submit side, which is what the pop service already treats as "use the board's
+    // own counter" — the best guess available, and what the field did before it became required.
+    private const string WdPopWindowUnknownValue = "unknown";
     private const string WdPopRepostFieldId = "wdpop_repost";
     // Retired — no longer rendered, but still READ, so a modal opened before the field changed and
     // submitted afterwards is still recorded correctly instead of silently taking a default. A
@@ -541,6 +547,15 @@ public sealed class DiscordInteractionsController : ControllerBase
                 cancellationToken);
         }
 
+        // "📋 View Camp Details" on the DEFEATED note → anyone in the linkshell: the camp that just
+        // ended, read-only. The trailing id is an EventHistory, not an event — the board row is
+        // recycled for the next pop, so an event id here would open whatever is being camped now.
+        if (customId.StartsWith(DiscordEventMessageBuilder.PastEventDetailsPrefix, StringComparison.Ordinal))
+        {
+            var historyId = ParseTrailingId(customId, DiscordEventMessageBuilder.PastEventDetailsPrefix);
+            return await HandlePastEventDetailsAsync(historyId, appUserId, cancellationToken);
+        }
+
         // "◀ View Previous Window" on the board → anyone: read-only ephemeral opening on the newest
         // captured roster, navigable from there. Boards posted before this change send the same id
         // from what was "Prev Window", so an old button now opens the viewer instead of stepping the
@@ -879,6 +894,166 @@ public sealed class DiscordInteractionsController : ControllerBase
             RenderWindowSnapshot(ev, window, rows),
             DiscordEventMessageBuilder.BuildWindowViewerComponents(eventId, window, captured));
     }
+
+    // The camp behind the defeated note — what it paid, who was on it, what dropped.
+    //
+    // WHY THIS EXISTS. Ending a camp replaces its board with three lines saying the monster is down
+    // and when it repops. Everything the camp actually WAS goes with it: the roster, the DKP, the
+    // loot, the lotteries. That record lives on a web page nobody in the channel has a link to, and
+    // the recycled board will shortly be advertising the next pop over the top of it. This is the
+    // way back.
+    //
+    // Read-only and ephemeral. Anyone in the linkshell may open it — it is their own attendance and
+    // their own DKP — but nobody outside it, because a Discord channel can hold guests.
+    private async Task<IActionResult> HandlePastEventDetailsAsync(
+        int eventHistoryId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (eventHistoryId <= 0)
+        {
+            return Ephemeral("That camp isn't recognized.");
+        }
+
+        var history = await _db.EventHistories
+            .AsNoTracking()
+            .Include(h => h.AppUserEventHistories)
+            .FirstOrDefaultAsync(h => h.Id == eventHistoryId, cancellationToken);
+        if (history is null)
+        {
+            return Ephemeral("That camp's record has been deleted.");
+        }
+
+        if (string.IsNullOrWhiteSpace(appUserId))
+        {
+            return Ephemeral(
+                "Open LSM and sign in with Discord once to link your account, then try again.");
+        }
+        var isMember = await _db.AppUserLinkshells.AnyAsync(
+            m => m.AppUserId == appUserId && m.LinkshellId == history.LinkshellId, cancellationToken);
+        if (!isMember)
+        {
+            return Ephemeral("That camp belongs to a linkshell you're not in.");
+        }
+
+        var loot = await _db.EventLootDetails
+            .AsNoTracking()
+            .Where(l => l.EventHistoryId == eventHistoryId)
+            .OrderBy(l => l.Id)
+            .Select(l => new { l.ItemName, l.ItemWinner, l.WinningDkpSpent })
+            .ToListAsync(cancellationToken);
+
+        var captures = await _db.ClaimShieldCaptures
+            .AsNoTracking()
+            .Where(c => c.EventHistoryId == eventHistoryId)
+            .OrderByDescending(c => c.CapturedAtUtc)
+            .Select(c => new ClaimShieldBoardCapture(
+                c.MonsterName, c.Won, c.TotalPlayers, c.CapturedAtUtc,
+                c.Members.OrderBy(m => m.Id)
+                    .Select(m => new ClaimShieldBoardMember(m.CharacterName, m.Matched))
+                    .ToList()))
+            .ToListAsync(cancellationToken);
+
+        return Ephemeral(RenderPastEventDetails(history, loot.Count, loot.Select(
+            l => (l.ItemName, l.ItemWinner, l.WinningDkpSpent)).ToList(), captures));
+    }
+
+    // Plain text, not an embed: this has to come back inside Discord's 3-second interaction window,
+    // and a roster of eighteen with amounts is already most of an embed's field budget.
+    private static string RenderPastEventDetails(
+        EventHistory history,
+        int lootCount,
+        IReadOnlyList<(string? ItemName, string? ItemWinner, int? WinningDkpSpent)> loot,
+        IReadOnlyList<ClaimShieldBoardCapture> captures)
+    {
+        var lines = new List<string>
+        {
+            $"📋 **{history.EventName ?? "Camp"}** · past event, read-only",
+        };
+
+        var when = new List<string>();
+        if (history.StartTime is { } start)
+        {
+            when.Add($"Started <t:{ToUnixSeconds(start)}:f>");
+        }
+        if (history.EndTime is { } end)
+        {
+            when.Add($"ended <t:{ToUnixSeconds(end)}:t>");
+        }
+        if (history.Duration is { } hours and > 0)
+        {
+            var span = TimeSpan.FromHours(hours);
+            when.Add($"{(int)span.TotalHours}h {span.Minutes:00}m");
+        }
+        if (when.Count > 0) lines.Add(string.Join(" · ", when));
+        if (!string.IsNullOrWhiteSpace(history.EventLocation)) lines.Add($"📍 {history.EventLocation}");
+
+        // The roster, with what each person was credited. Ordered by amount then name, so the
+        // question this is usually opened to answer -- "what did I get" -- is answered by scanning
+        // rather than by reading all eighteen.
+        var roster = history.AppUserEventHistories
+            .Where(p => !string.IsNullOrWhiteSpace(p.CharacterName))
+            .OrderByDescending(p => p.EventDkp ?? 0)
+            .ThenBy(p => p.CharacterName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        lines.Add(string.Empty);
+        if (roster.Count == 0)
+        {
+            lines.Add("_Nobody was credited for this camp._");
+        }
+        else
+        {
+            var total = roster.Sum(p => p.EventDkp ?? 0);
+            lines.Add($"**Roster ({roster.Count})** — {total:0.##} DKP in total");
+            foreach (var member in roster.Take(PastEventRosterLimit))
+            {
+                var dkp = member.EventDkp is { } amount and > 0 ? $" — **{amount:0.##}**" : string.Empty;
+                var job = string.IsNullOrWhiteSpace(member.JobName)
+                    ? string.Empty
+                    : $" ({member.JobName}{(string.IsNullOrWhiteSpace(member.SubJobName) ? "" : "/" + member.SubJobName)})";
+                lines.Add($"• {member.CharacterName}{job}{dkp}");
+            }
+            if (roster.Count > PastEventRosterLimit)
+            {
+                lines.Add($"-# +{roster.Count - PastEventRosterLimit} more on the event page.");
+            }
+        }
+
+        if (lootCount > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"**Loot ({lootCount})**");
+            foreach (var drop in loot.Take(PastEventLootLimit))
+            {
+                // 0 or null both mean "no DKP changed hands" -- a free drop, or Loot Council.
+                var spent = drop.WinningDkpSpent is > 0
+                    ? $" for **{drop.WinningDkpSpent}** DKP"
+                    : string.Empty;
+                lines.Add($"• {drop.ItemName} → {drop.ItemWinner}{spent}");
+            }
+            if (lootCount > PastEventLootLimit)
+            {
+                lines.Add($"-# +{lootCount - PastEventLootLimit} more on the event page.");
+            }
+        }
+
+        if (ClaimShieldBoardSection.Build(captures) is { Length: > 0 } shield)
+        {
+            lines.Add(string.Empty);
+            lines.Add(shield);
+        }
+
+        var text = string.Join("\n", lines);
+        // Discord rejects a message body over 2000 outright, so the trim is not optional.
+        return text.Length <= 1990 ? text : text[..1990].TrimEnd() + "\n-# (truncated)";
+    }
+
+    // An alliance is 18, and a camp roster is rarely more. Past that the event page is the right
+    // place to read it -- an ephemeral caps at 2000 characters and a truncated roster in the middle
+    // of a list reads as data loss.
+    private const int PastEventRosterLimit = 24;
+    private const int PastEventLootLimit = 12;
+
+    private static long ToUnixSeconds(DateTime value)
+        => ((DateTimeOffset)DateTime.SpecifyKind(value, DateTimeKind.Utc)).ToUnixTimeSeconds();
 
     // The window out of a viewer arrow's "{eventId}:{window}" tail, or null when it carries none
     // (in which case the caller opens on the newest capture).
@@ -1337,13 +1512,33 @@ public sealed class DiscordInteractionsController : ControllerBase
                 ? ParseCampOutcome(ExtractModalValue(data, WdPopOutcomeFieldId))
                 : (ParseYesNo(claimRaw, defaultValue: true), ParseYesNo(killRaw, defaultValue: true));
 
-            // The window it popped on, capping credit. Absent or unparseable leaves this null and
-            // the pop service falls back to the board's own counter — the same value the field was
-            // pre-selected to, so a submit that never touched it lands exactly where it used to.
+            // The window it popped on, capping credit. It is a REQUIRED field on every multi-window
+            // camp and it carries an explicit "I don't know", so there are three cases here — and
+            // two of them are null:
+            //
+            //   a window  → that window, clamped to the camp
+            //   "unknown" → null, the officer SAYING they didn't see it. The pop service falls back
+            //               to the board's own counter, the best guess available.
+            //   nothing   → null, but nobody answered: a modal opened before the field became
+            //               required, or a client that skipped it. Bail rather than record that
+            //               same fallback silently — an unanswered guess is the thing the
+            //               requirement exists to stop, and "I don't know" is how an officer opts
+            //               into the fallback deliberately, on the record.
+            //
+            // A single-window camp is never shown the field at all; null there is the ordinary path.
             var effectiveWindows = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
-            int? popWindow = int.TryParse(ExtractModalValue(data, WdPopWindowFieldId)?.Trim(), out var pw) && pw >= 1
+            var popWindowRaw = ExtractModalValue(data, WdPopWindowFieldId)?.Trim();
+            var popWindowUnknown = string.Equals(
+                popWindowRaw, WdPopWindowUnknownValue, StringComparison.OrdinalIgnoreCase);
+            int? popWindow = int.TryParse(popWindowRaw, out var pw) && pw >= 1
                 ? Math.Clamp(pw, 1, effectiveWindows)
                 : (int?)null;
+            if (effectiveWindows > 1 && popWindow is null && !popWindowUnknown)
+            {
+                return Ephemeral(
+                    "**Which window did it pop on?** has to be answered — credit stops at that window. "
+                    + "Nothing was saved; hit **End Camp** again and pick a window, or **I don't know**.");
+            }
 
             // Day number is still not asked — it only finds a value when a modal opened before its
             // removal is submitted afterwards. Absent (the normal path) leaves the board's day alone.
@@ -1905,7 +2100,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     //   1. Time of Death   — text, blank = not entered, accepts seconds
     //   2. Was it HQ?      — the three NQ/HQ families only
     //   3. Outcome         — killed / claimed-no-kill / somebody else claimed it
-    //   4. Pop window      — multi-window camps only; defaults to the window the board is on
+    //   4. Pop window      — multi-window camps only; REQUIRED, and starts empty
     //   5. Re-post lead    — text, blank = leave the standing Repeat-on-ToD config alone
     //
     // Five on an HQ family, four elsewhere. Rows 2 and 4 are the two that can drop out, and they
@@ -1996,24 +2191,28 @@ public sealed class DiscordInteractionsController : ControllerBase
             };
         }
 
-        // A select whose pre-selected option isn't the first one — the pop-window picker, which
-        // opens on whatever window the board is showing rather than on window 1.
+        // The pop-window picker: the one REQUIRED field on the form, and the only select that
+        // opens with nothing chosen. It used to pre-select the window the board was showing, which
+        // made the board's clock-driven counter the recorded answer whenever an officer submitted
+        // without looking — and that counter runs ahead of the pop by however long the kill, the
+        // loot and the rebuff took. No default plus `required` turns it into a question the officer
+        // has to answer; the counter survives as a hint in the placeholder.
         static object WindowSelectRow(string fieldId, string label, string description,
-            IEnumerable<(string Value, string Label)> options, string selectedValue)
+            string placeholder, IEnumerable<(string Value, string Label)> options)
         {
             var select = new Dictionary<string, object?>
             {
                 ["type"] = 3, // string select
                 ["custom_id"] = fieldId,
-                ["required"] = false,
-                ["min_values"] = 0,
+                ["placeholder"] = placeholder,
+                ["required"] = true,
+                ["min_values"] = 1,
                 ["max_values"] = 1,
                 ["options"] = options
                     .Select(option => new Dictionary<string, object?>
                     {
                         ["label"] = option.Label,
                         ["value"] = option.Value,
-                        ["default"] = option.Value == selectedValue,
                     })
                     .ToArray(),
             };
@@ -2053,22 +2252,42 @@ public sealed class DiscordInteractionsController : ControllerBase
         // Which window it actually popped on. The board's own counter is only ever a good GUESS
         // here: it marches on the clock, so a camp that killed the mob at 10 past the hour and
         // spent forty minutes on loot and a rebuff ends with the counter a window or two ahead of
-        // the pop. Credit stops at whatever goes in here, so the counter is the DEFAULT rather
-        // than the answer. Omitted on a single-window camp — there's nothing to choose.
+        // the pop. Credit stops at whatever goes in here, so the counter is demoted to a HINT in
+        // the placeholder: the field opens EMPTY and is required, and the officer answers it for
+        // themselves. Omitted on a single-window camp — there's nothing to choose.
         var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
         if (effectiveCount > 1)
         {
             // Discord caps a select at 25 options and EffectiveWindowCount is clamped to
-            // HnmConfig.MaxWindow (25), so the longest camp there is fills the list exactly.
-            var windowOptions = Enumerable.Range(1, effectiveCount).Select(n => (
+            // HnmConfig.MaxWindow (25), so a wyrm's window list filled it EXACTLY — the "I don't
+            // know" row can only be paid for out of the windows themselves. It is bought with a
+            // sliding 24-window pane that always ENDS at the window the board is on: the pop has
+            // already happened, so anything past the board's counter is a window that hasn't opened
+            // yet, and the only camp that loses a real option is a wyrm that has run the full 25
+            // hours — where what drops off is window 1, a pop nobody logged for a day, which is the
+            // "I don't know" case anyway. Every shorter camp (the kings, the ToAU three, the 2-post
+            // NMs) is nowhere near the cap and still lists every window it has.
+            const int selectOptionCap = 25;
+            var shownWindows = Math.Min(effectiveCount, selectOptionCap - 1);
+            var firstWindow = Math.Clamp(
+                DiscordEventMessageBuilder.FocusWindow(ev) - shownWindows + 1,
+                1, effectiveCount - shownWindows + 1);
+            var windowOptions = new[]
+            {
+                // First, not last: an officer who doesn't know has to SEE this without scrolling a
+                // 24-row list, or they will pick a plausible-looking window instead — which is the
+                // wrong data this option exists to stop being entered.
+                (Value: WdPopWindowUnknownValue, Label: "I don't know — use the board's window"),
+            }.Concat(Enumerable.Range(firstWindow, shownWindows).Select(n => (
                 Value: $"{n}",
                 Label: HnmConfig.GetDefaultWindowLabel(ev.AssignedMonsterName ?? ev.EventName, n, effectiveCount)
                     is { Length: > 0 } named
                         ? $"{named} (window {n})"   // the 2-post camps name their windows Open/Close
-                        : $"Window {n}"));
+                        : $"Window {n}")));
             fields.Add(WindowSelectRow(WdPopWindowFieldId, "Which window did it pop on?",
-                "Credit stops here. Defaults to the window the board is on.",
-                windowOptions, $"{DiscordEventMessageBuilder.FocusWindow(ev)}"));
+                "Credit stops here. Pick the window, or “I don’t know” — never a guess.",
+                $"Choose a window (the board is on window {DiscordEventMessageBuilder.FocusWindow(ev)})",
+                windowOptions));
         }
 
         // The auto-re-post lead. Free text rather than a dropdown because the useful values run

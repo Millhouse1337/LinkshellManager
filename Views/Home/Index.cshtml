@@ -279,6 +279,10 @@
                     <div style="display:flex;flex-wrap:wrap;gap:8px">
                         <a class="btn primary" asp-controller="Account" asp-action="Login">Discord Activity Experience</a>
                         <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Website Experience</a>
+                        @if (ViewData["ShowLauncherDownload"] as bool? ?? false)
+                        {
+                            <a class="btn ghost" asp-controller="Launcher" asp-action="Download">Download Launcher</a>
+                        }
                     </div>
                 </div>
             </div>

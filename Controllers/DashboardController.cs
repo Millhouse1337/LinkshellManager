@@ -17,6 +17,7 @@ public class DashboardController : Controller
     private readonly TreasuryBalanceService _treasury;
     private readonly JobsRosterService _jobsRoster;
     private readonly HnmClaimStatsService _hnmClaimStats;
+    private readonly HnmWindowStatsService _hnmWindowStats;
 
     private const int HnmClaimsWindowDays = 30;
 
@@ -33,13 +34,15 @@ public class DashboardController : Controller
         UserManager<AppUser> userManager,
         TreasuryBalanceService treasury,
         JobsRosterService jobsRoster,
-        HnmClaimStatsService hnmClaimStats)
+        HnmClaimStatsService hnmClaimStats,
+        HnmWindowStatsService hnmWindowStats)
     {
         _context = context;
         _userManager = userManager;
         _treasury = treasury;
         _jobsRoster = jobsRoster;
         _hnmClaimStats = hnmClaimStats;
+        _hnmWindowStats = hnmWindowStats;
     }
 
     public async Task<IActionResult> Index(int? linkshellId = null)
@@ -196,10 +199,41 @@ public class DashboardController : Controller
                 MonsterName = slice.MonsterName,
                 Count = slice.Count,
                 Percent = slice.Percent,
-                ColorClass = slice.ColorClass
+                ColorClass = slice.ColorClass,
+                IsHq = slice.IsHq,
+                HasHqVariant = slice.HasHqVariant
             })
             .ToList();
         var hnmTotal = hnmStats.Last30Days.Sum(slice => slice.Count);
+        // Second tab of the same card. All-time, and off Tod.PopWindow rather than the claims
+        // query — see HnmWindowStatsService for why unclaimed pops count here.
+        var hnmWindowStats = await _hnmWindowStats.BuildAsync(selectedLinkshellId);
+        var hnmWindows = hnmWindowStats.Monsters
+            .Select(monster =>
+            {
+                // Bars are drawn against the monster's BUSIEST window, so its shape is readable
+                // whether its pops cluster in 3 windows or spread across 25.
+                var peakCount = monster.Bars.Count == 0 ? 0 : monster.Bars.Max(bar => bar.Count);
+                return new HnmWindowRow
+                {
+                    MonsterName = monster.MonsterName,
+                    ColorClass = monster.ColorClass,
+                    TotalPops = monster.TotalPops,
+                    WindowCount = monster.WindowCount,
+                    PeakWindow = monster.PeakWindow,
+                    PeakPercent = monster.PeakPercent,
+                    Bars = monster.Bars
+                        .Select(bar => new HnmWindowBarEntry
+                        {
+                            Window = bar.Window,
+                            Count = bar.Count,
+                            Percent = bar.Percent,
+                            HeightPercent = peakCount == 0 ? 0 : Math.Round(bar.Count * 100.0 / peakCount, 1),
+                        })
+                        .ToList(),
+                };
+            })
+            .ToList();
         var recentActivity = BuildRecentActivity(events, eventHistories, tods);
         var newsUpdates = BuildNewsUpdates(announcements, rules, auctions, dkpAudits, members);
 
@@ -228,6 +262,8 @@ public class DashboardController : Controller
             HnmClaims = hnmClaims,
             HnmClaimsTotal = hnmTotal,
             HnmClaimsWindowDays = HnmClaimsWindowDays,
+            HnmWindows = hnmWindows,
+            HnmWindowsTotal = hnmWindowStats.TotalPops,
             RecentActivity = recentActivity,
             NewsUpdates = newsUpdates,
             UpcomingRepops = upcomingRepops,

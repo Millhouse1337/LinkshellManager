@@ -80,7 +80,9 @@ public sealed class DiscordEventChannelPublisher
             // the board was never posted (nothing to edit in Discord).
             if (ev.HnmDefeatedAt != null)
             {
-                await _hnmBoardNotice.PostDefeatedNoticeAsync(ev, useV2, cancellationToken);
+                await _hnmBoardNotice.PostDefeatedNoticeAsync(
+                    ev, useV2, cancellationToken,
+                    await ResolveCampArchiveIdAsync(ev.Id, cancellationToken));
                 _logger.LogInformation("Event {EventId} board set to defeated note (message {MessageId}).",
                     eventId, ev.DiscordMessageId);
                 return;
@@ -111,7 +113,8 @@ public sealed class DiscordEventChannelPublisher
                 }
 
                 var posted = await _poster.SendWideAsync(
-                    channel!, ev, signups, slotSignups!, BoardMessageIds(ev), cancellationToken);
+                    channel!, ev, signups, slotSignups!, BoardMessageIds(ev), cancellationToken,
+                    await LoadClaimShieldAsync(ev.Id, cancellationToken));
                 if (posted is null || posted.Count == 0)
                 {
                     _logger.LogWarning(
@@ -203,6 +206,48 @@ public sealed class DiscordEventChannelPublisher
             "events for type \"{EventType}\" (and no unfiltered event route). Set one under " +
             "Linkshell → Configurations → Discord channel routes.",
             eventId, ev.LinkshellId, ev.EventType ?? "(none)");
+
+    // The PAST EVENT this camp was just archived as, for the "View Camp Details" button on the
+    // defeated note.
+    //
+    // Found through the camp's review row rather than by matching event names and dates: End Camp
+    // stages both together and links them (WindowEvent.CampEventHistoryId), so this is the camp's
+    // own answer rather than a guess. Newest first, because a recycled board has ended several
+    // times and the note is about the pop that just finished.
+    //
+    // Null for a camp that ended with nobody on it (no review row, no archive) and for any camp
+    // ended before the archive moved to End Camp. The button is simply not drawn.
+    private async Task<int?> ResolveCampArchiveIdAsync(int eventId, CancellationToken cancellationToken)
+        => await _db.WindowEvents
+            .AsNoTracking()
+            .Where(w => w.SourceEventId == eventId && w.CampEventHistoryId != null)
+            .OrderByDescending(w => w.CampEndedAtUtc)
+            .ThenByDescending(w => w.Id)
+            .Select(w => w.CampEventHistoryId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    // The camp's Claim Shield lotteries, for the block at the foot of the last board message.
+    //
+    // Read on every board render rather than only when a capture arrives: a board refreshes for
+    // any number of reasons (a signup, a window turning over, an officer editing the setup), and
+    // one that quietly dropped the Claim Shield block on the next unrelated refresh would look
+    // exactly like the capture had been lost.
+    private async Task<List<ClaimShieldBoardCapture>> LoadClaimShieldAsync(
+        int eventId, CancellationToken cancellationToken)
+        => await _db.ClaimShieldCaptures
+            .AsNoTracking()
+            .Where(capture => capture.EventId == eventId)
+            .OrderByDescending(capture => capture.CapturedAtUtc)
+            .Select(capture => new ClaimShieldBoardCapture(
+                capture.MonsterName,
+                capture.Won,
+                capture.TotalPlayers,
+                capture.CapturedAtUtc,
+                capture.Members
+                    .OrderBy(member => member.Id)
+                    .Select(member => new ClaimShieldBoardMember(member.CharacterName, member.Matched))
+                    .ToList()))
+            .ToListAsync(cancellationToken);
 
     private async Task<List<EventSignupLine>> LoadSignupsAsync(int eventId, CancellationToken cancellationToken)
     {

@@ -67,10 +67,11 @@ public sealed class EventBoardPoster
     public async Task<IReadOnlyList<string>?> SendWideAsync(
         string channelId, Event ev, IReadOnlyList<EventSignupLine> signups,
         IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
-        IReadOnlyList<string> existing, CancellationToken cancellationToken)
+        IReadOnlyList<string> existing, CancellationToken cancellationToken,
+        IReadOnlyList<ClaimShieldBoardCapture>? claimShield = null)
     {
         var payloads = DiscordEventMessageBuilder.BuildWideBoardMessages(
-            ev, signups, ev.PartySetup!, slotSignups);
+            ev, signups, ev.PartySetup!, slotSignups, claimShield);
 
         var ids = new List<string>(payloads.Count);
         for (var i = 0; i < payloads.Count; i++)

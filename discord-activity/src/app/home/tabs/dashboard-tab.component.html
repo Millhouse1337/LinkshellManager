@@ -541,20 +541,88 @@
         @if (settings.enableHnmSection) {
         <div class="card">
           <div class="card-head">
-            <div class="card-title">HNM Claims ({{ dashboardHnmWindow() === 'all' ? 'all time' : 'last ' + dashboardHnmWindow() }})</div>
+            <!-- Title tracks the visible tab: the two charts cover different spans (claims honour
+                 the 7d/30d/All toggle, the window distribution is always all-time), so one fixed
+                 heading would misdescribe whichever tab was open. -->
+            <div class="card-title">
+              @if (dashboardHnmChartTab() === 'claims') {
+                HNM Claims ({{ dashboardHnmWindow() === 'all' ? 'all time' : 'last ' + dashboardHnmWindow() }})
+              } @else {
+                Window frequency (all time)
+              }
+            </div>
             <div class="card-head-right">
-              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '7d'" (click)="dashboardHnmWindow.set('7d')">7d</button>
-              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '30d'" (click)="dashboardHnmWindow.set('30d')">30d</button>
-              <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === 'all'" (click)="dashboardHnmWindow.set('all')">All</button>
+              <!-- The 7d/30d/All span only applies to the donut. It is hidden rather than disabled
+                   on the Windows tab, where it would silently do nothing. -->
+              @if (dashboardHnmChartTab() === 'claims') {
+                <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '7d'" (click)="dashboardHnmWindow.set('7d')">7d</button>
+                <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '30d'" (click)="dashboardHnmWindow.set('30d')">30d</button>
+                <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === 'all'" (click)="dashboardHnmWindow.set('all')">All</button>
+              }
+              <div class="hnm-chart-tabs" role="tablist" aria-label="HNM chart">
+                <button type="button" class="hnm-chart-tab" role="tab"
+                  [class.is-active]="dashboardHnmChartTab() === 'claims'"
+                  [attr.aria-selected]="dashboardHnmChartTab() === 'claims'"
+                  (click)="setDashboardHnmChartTab('claims')">Claims</button>
+                <button type="button" class="hnm-chart-tab" role="tab"
+                  [class.is-active]="dashboardHnmChartTab() === 'windows'"
+                  [attr.aria-selected]="dashboardHnmChartTab() === 'windows'"
+                  (click)="setDashboardHnmChartTab('windows')">Windows</button>
+              </div>
             </div>
           </div>
-          @if (dashboardHnmClaimsTotal() > 0) {
+          @if (dashboardHnmChartTab() === 'windows') {
+            <!-- Which window of its band each HNM actually pops on, off Tod.PopWindow. A column
+                 per window across the whole grid, so the windows a monster never pops in are as
+                 visible as the one it favours. -->
+            @if (dashboardHnmWindows().length > 0) {
+              <div class="winfreq">
+                @for (monster of dashboardHnmWindows(); track monster.monsterName) {
+                  <div class="winfreq-row">
+                    <div class="winfreq-head">
+                      <span class="winfreq-name">
+                        <span class="donut-swatch donut-seg-{{ monster.colorClass }}"></span>
+                        {{ monster.monsterName }}
+                      </span>
+                      <span class="winfreq-peak">W{{ monster.peakWindow }} · {{ monster.peakPercent | number:'1.0-1' }}%</span>
+                    </div>
+                    <div class="winfreq-bars" [style.--winfreq-count]="monster.windowCount">
+                      @for (bar of monster.bars; track bar.window) {
+                        <span class="winfreq-bar"
+                          [class.is-peak]="bar.window === monster.peakWindow && bar.count > 0"
+                          [title]="windowBarTitle(monster.monsterName, bar)">
+                          <span class="winfreq-bar-fill donut-seg-{{ monster.colorClass }}"
+                            [style.height.%]="bar.heightPercent"></span>
+                        </span>
+                      }
+                    </div>
+                    <div class="winfreq-foot">
+                      <span>W1</span>
+                      <span class="winfreq-total">{{ monster.totalPops }} pop{{ monster.totalPops === 1 ? '' : 's' }} recorded</span>
+                      <span>W{{ monster.windowCount }}</span>
+                    </div>
+                  </div>
+                }
+              </div>
+            } @else {
+              <div class="empty-state empty-state--compact">
+                <div class="empty-state-desc">
+                  No pop windows recorded yet. Ending a camp from its board records the window
+                  automatically; a hand-logged ToD records it from the "Popped on window" field.
+                </div>
+              </div>
+            }
+          } @else if (dashboardHnmClaimsTotal() > 0) {
             <div class="donut-wrap">
               <svg class="donut" viewBox="0 0 100 100" aria-hidden="true">
                 <circle class="donut-track" cx="50" cy="50" r="40" fill="none" stroke-width="12"></circle>
+                <!-- An NQ and its HQ share the family's colour class and are separated by .is-hq,
+                     which lightens the arc — so Fafnir and Nidhogg read as one monster's two
+                     outcomes rather than two unrelated monsters sitting side by side. -->
                 @for (entry of dashboardHnmClaims(); track entry.monsterName; let i = $index) {
                   <circle
-                    class="donut-seg-{{ entry.colorClass }}"
+                    class="donut-seg donut-seg-{{ entry.colorClass }}"
+                    [class.is-hq]="entry.isHq"
                     cx="50" cy="50" r="40"
                     fill="none"
                     stroke-width="12"
@@ -568,8 +636,15 @@
               <div class="donut-legend">
                 @for (entry of dashboardHnmClaims(); track entry.monsterName) {
                   <div class="donut-legend-row">
-                    <span class="donut-swatch donut-seg-{{ entry.colorClass }}"></span>
-                    <span class="donut-legend-name">{{ entry.monsterName }}</span>
+                    <span class="donut-swatch donut-seg-{{ entry.colorClass }}" [class.is-hq]="entry.isHq"></span>
+                    <span class="donut-legend-name">
+                      {{ entry.monsterName }}
+                      <!-- Only the three NQ/HQ families get a badge: the shading alone would leave
+                           a colour-blind reader guessing, and "NQ" on a Tiamat means nothing. -->
+                      @if (entry.hasHqVariant) {
+                        <span class="donut-hq-tag" [class.is-hq]="entry.isHq">{{ entry.isHq ? 'HQ' : 'NQ' }}</span>
+                      }
+                    </span>
                     <span class="donut-legend-stats">{{ entry.count }} · {{ entry.percent | number:'1.0-0' }}%</span>
                   </div>
                 }

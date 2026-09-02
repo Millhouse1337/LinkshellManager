@@ -16,4 +16,9 @@ public class SettingsViewModel
     // App-wide permission override: full permissions in every linkshell the super
     // admin is a member of, plus an ADMIN badge beside their real rank.
     public bool AdminOverrideEnabled { get; set; }
+
+    // Controls the "Download Launcher" button on the public home page and in the sidebar,
+    // and the absolute URL it points at.
+    public bool LauncherDownloadEnabled { get; set; }
+    public string? LauncherDownloadUrl { get; set; }
 }

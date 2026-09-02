@@ -1629,17 +1629,17 @@ table.themed .num {
   transform: rotate(90deg);
   transform-origin: center;
 }
-.donut-seg-a { stroke: #6366f1; }
-.donut-seg-b { stroke: #10b981; }
-.donut-seg-c { stroke: #f59e0b; }
-.donut-seg-d { stroke: #ef4444; }
-.donut-seg-e { stroke: #06b6d4; }
-.donut-seg-f { stroke: #a855f7; }
+.donut-seg-a { stroke: #6366f1; --seg-color: #6366f1; }
+.donut-seg-b { stroke: #10b981; --seg-color: #10b981; }
+.donut-seg-c { stroke: #f59e0b; --seg-color: #f59e0b; }
+.donut-seg-d { stroke: #ef4444; --seg-color: #ef4444; }
+.donut-seg-e { stroke: #06b6d4; --seg-color: #06b6d4; }
+.donut-seg-f { stroke: #a855f7; --seg-color: #a855f7; }
 /* g-i extend the run to nine so the donut can give each chartable HNM its own colour
    rather than truncating to the first six. Same family, shifted around the wheel. */
-.donut-seg-g { stroke: #ec4899; }
-.donut-seg-h { stroke: #14b8a6; }
-.donut-seg-i { stroke: #f97316; }
+.donut-seg-g { stroke: #ec4899; --seg-color: #ec4899; }
+.donut-seg-h { stroke: #14b8a6; --seg-color: #14b8a6; }
+.donut-seg-i { stroke: #f97316; --seg-color: #f97316; }
 .donut-legend { display: flex; flex-direction: column; gap: 6px; }
 .donut-legend-row {
   display: grid;
@@ -1662,8 +1662,136 @@ table.themed .num {
 .donut-swatch.donut-seg-g { background: #ec4899; }
 .donut-swatch.donut-seg-h { background: #14b8a6; }
 .donut-swatch.donut-seg-i { background: #f97316; }
+/* NQ vs HQ on the three merge families. The pair SHARES its family's hue — Fafnir and Nidhogg are
+   one monster's two outcomes, not two unrelated monsters — and the HQ half is lightened. Done with
+   a filter rather than nine more colour rules so it applies to whichever hue the family holds, and
+   so the ring and its swatch can never drift apart. */
+.donut-seg.is-hq,
+.donut-swatch.is-hq { filter: brightness(1.55) saturate(0.72); }
+
+/* The badge carries the same fact in text, because a lighter shade of the same hue is not
+   something every reader can see. */
+.donut-legend-name .donut-hq-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  color: var(--fg-3);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+}
+/* --gold-main is the lsm-theme token; the Dashboard is an lsm-page, which is the only place this
+   legend renders. */
+.donut-legend-name .donut-hq-tag.is-hq {
+  border-color: var(--gold-main);
+  color: var(--gold-main);
+}
 .donut-legend-name { color: var(--fg); font-weight: 500; }
 .donut-legend-stats { color: var(--fg-3); font-family: var(--font-sans); }
+
+/* ===== HNM card tabs: Claims donut <-> Window frequency ===== */
+.hnm-chart-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+.hnm-chart-tab {
+  padding: 3px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.hnm-chart-tab:hover { color: var(--fg); }
+.hnm-chart-tab.is-active {
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ===== Window frequency: one bar strip per monster =====
+   A column per window of that monster's band, so the row shows the WHOLE grid — the windows a
+   monster never pops in are as much of the finding as the one it favours. Bar heights are a share
+   of the monster's own busiest window (see HnmWindowBarEntry.HeightPercent); the percentage in the
+   header is the share of its pops. */
+.winfreq {
+  display: grid;
+  gap: 14px;
+}
+.winfreq-row {
+  display: grid;
+  gap: 5px;
+}
+.winfreq-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+.winfreq-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg);
+  font-weight: 500;
+  min-width: 0;
+}
+.winfreq-peak { color: var(--fg-3); font-size: 11px; white-space: nowrap; }
+
+/* Equal-width columns across whatever band the monster has: 25 for the wyrms, 5 for the ToAU
+   three. A fixed column width would either overflow the card at 25 or leave 5 marooned. */
+.winfreq-bars {
+  display: grid;
+  grid-template-columns: repeat(var(--winfreq-count, 25), minmax(0, 1fr));
+  align-items: end;
+  gap: 1px;
+  height: 46px;
+  padding: 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm, 6px);
+  background: var(--surface);
+}
+.winfreq-bar {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  min-width: 0;
+  border-radius: 1px;
+}
+.winfreq-bar:hover { background: rgba(255, 255, 255, 0.06); }
+/* A zero-pop window still paints a hairline, so the empty windows read as "measured and empty"
+   rather than as a gap in the chart. */
+.winfreq-bar-fill {
+  width: 100%;
+  min-height: 1px;
+  border-radius: 1px;
+  background: var(--seg-color, var(--accent));
+  opacity: 0.75;
+}
+.winfreq-bar.is-peak .winfreq-bar-fill {
+  opacity: 1;
+  box-shadow: 0 0 6px var(--seg-color, var(--accent));
+}
+.winfreq-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--fg-4);
+  font-size: 10px;
+}
+.winfreq-total { color: var(--fg-3); }
 
 /* News & Updates */
 .news-list { display: flex; flex-direction: column; }
@@ -1791,6 +1919,7 @@ table.themed .num {
 }
 
 .create-form > label,
+.create-form__row > label,
 .create-form__grid > label {
   display: grid;
   gap: 6px;
@@ -1800,6 +1929,7 @@ table.themed .num {
 }
 
 .create-form > label > span,
+.create-form__row > label > span,
 .create-form__grid > label > span {
   font-size: 11px;
   color: var(--fg-3);
@@ -1809,6 +1939,7 @@ table.themed .num {
   display: block;
 }
 
+.create-form__row > label.create-form__field--full,
 .create-form__grid > label.create-form__field--full {
   grid-column: 1 / -1;
 }
@@ -1816,9 +1947,17 @@ table.themed .num {
 .create-form > label > input,
 .create-form > label > select,
 .create-form > label > textarea,
+.create-form__row > label > input,
 .create-form__grid > label > input,
+.create-form__row > label > select,
 .create-form__grid > label > select,
-.create-form__grid > label > textarea {
+.create-form__row > label > textarea,
+.create-form__grid > label > textarea,
+/* The number + unit that make up a Cooldown / Interval field. They sit one level deeper (inside
+   .create-form__duration), so without these they were the only controls on the form the theme
+   never reached and the only ones that didn't fill their field. */
+.create-form .create-form__duration > input,
+.create-form .create-form__duration > select {
   width: 100%;
   height: 34px;
   padding: 0 10px;
@@ -1835,6 +1974,7 @@ table.themed .num {
   transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
 }
 .create-form > label > textarea,
+.create-form__row > label > textarea,
 .create-form__grid > label > textarea {
   height: auto;
   min-height: 72px;
@@ -1842,7 +1982,9 @@ table.themed .num {
   resize: vertical;
 }
 .create-form > label > select,
-.create-form__grid > label > select {
+.create-form__row > label > select,
+.create-form__grid > label > select,
+.create-form .create-form__duration > select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
@@ -1856,18 +1998,28 @@ table.themed .num {
 .create-form > label > input:hover:not(:disabled),
 .create-form > label > select:hover:not(:disabled),
 .create-form > label > textarea:hover:not(:disabled),
+.create-form__row > label > input:hover:not(:disabled),
 .create-form__grid > label > input:hover:not(:disabled),
+.create-form__row > label > select:hover:not(:disabled),
 .create-form__grid > label > select:hover:not(:disabled),
-.create-form__grid > label > textarea:hover:not(:disabled) {
+.create-form__row > label > textarea:hover:not(:disabled),
+.create-form__grid > label > textarea:hover:not(:disabled),
+.create-form .create-form__duration > input:hover:not(:disabled),
+.create-form .create-form__duration > select:hover:not(:disabled) {
   border-color: rgba(255, 255, 255, 0.22);
   background-color: rgba(255, 255, 255, 0.04);
 }
 .create-form > label > input:focus-visible,
 .create-form > label > select:focus-visible,
 .create-form > label > textarea:focus-visible,
+.create-form__row > label > input:focus-visible,
 .create-form__grid > label > input:focus-visible,
+.create-form__row > label > select:focus-visible,
 .create-form__grid > label > select:focus-visible,
-.create-form__grid > label > textarea:focus-visible {
+.create-form__row > label > textarea:focus-visible,
+.create-form__grid > label > textarea:focus-visible,
+.create-form .create-form__duration > input:focus-visible,
+.create-form .create-form__duration > select:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-weak);
 }
@@ -1999,10 +2151,20 @@ table.themed .num {
 /* A duration field: the number and its unit ride together so the pair reads as one control.
    Used by the ToD form's Cooldown and Interval, which are free-form now that each monster carries
    its own configured value. */
+/* The number + its unit ride together so the pair reads as ONE control that fills its field.
+   Stated at the caption rule's specificity (`… > label > span`, which this span also matches):
+   without that the pair was blockified back to its natural width and picked up the caption's
+   uppercase 11px, so Cooldown and Interval sat as two small boxes in a half-empty field. */
+.create-form > label > .create-form__duration,
+.create-form__row > label > .create-form__duration,
+.create-form__grid > label > .create-form__duration,
 .create-form__duration {
   display: flex;
   gap: 6px;
   min-width: 0;
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .create-form__duration > input {
@@ -2019,6 +2181,83 @@ table.themed .num {
 .create-form__error {
   font-size: 11px;
   color: var(--danger, #e05a5a);
+}
+
+/* ----- Field ROWS (Add ToD) -----
+   The rhythm the Activity's Log ToD form uses: a lead row, then paired rows, rather than one
+   auto-fit grid that packs every control onto a single very wide line. Flex rather than grid so a
+   field the form hides for the picked monster (Day, HQ, Popped on window) collapses instead of
+   leaving the hole its column used to occupy. */
+.create-form__rows {
+  display: grid;
+  gap: 12px;
+}
+
+.create-form__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.create-form__row > label {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+/* A paired row: two equal halves, and a half that stays a half when the field beside it is hidden
+   for this monster (the Activity's `--pair` is a 1fr 1fr grid, and an empty cell there stays
+   empty rather than letting its neighbour sprawl the width of the card). */
+.create-form__row--pair > label { flex: 1 1 calc(50% - 6px); }
+/* Day: a small number, so it doesn't claim a half-row of the lead line. */
+.create-form__row > label.create-form__field--narrow { flex: 0 1 130px; }
+.create-form__row > label.create-form__field--auto { flex: 0 0 auto; }
+
+/* A checkbox field (HQ). The box and its word ride together on the control line so the field
+   lines up with the labelled inputs beside it, and the label's own uppercase caption styling is
+   undone here rather than inherited by the word next to the box. */
+.create-form__row > label > .create-form__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  white-space: nowrap;
+  color: var(--fg);
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* The control itself is the shared .switch pill; only its margin needs resetting here. */
+.create-form__toggle > input { margin: 0; }
+.create-form__toggle > span { color: var(--fg); }
+
+/* Calculated-repop panel: the computed summary on the left, the read-only repop time filling the
+   space on the right (the Activity's .tod-repop-card--with-time). */
+.create-form__repop {
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--accent-weak);
+}
+.create-form__repop-info {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.create-form__repop > label { flex: 0 1 320px; }
+.create-form__repop-label {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.create-form__repop-value {
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-mono);
 }
 
 .create-form__section {

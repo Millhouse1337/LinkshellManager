@@ -439,7 +439,10 @@
                         };
                         memberDkpStartIndex += snapshot.Entries.Count;
                     }
-                    @await Html.PartialAsync("_WindowSnapshotEntries", snapshot, snapshotEntriesViewData)
+                    @* Full path: this card is rendered from the Event page as well as from
+                       WindowEvents/History, and a bare name resolves against the executing
+                       controller's folder. See the note in _AttendanceSections.cshtml. *@
+                    @await Html.PartialAsync("~/Views/WindowEvents/_WindowSnapshotEntries.cshtml", snapshot, snapshotEntriesViewData)
                 </details>
             }
         </section>

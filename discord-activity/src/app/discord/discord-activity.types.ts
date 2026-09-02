@@ -1568,11 +1568,18 @@ export interface ActivityParticipantInviteCandidate {
 
 // One slice of the HNM Claims donut. `percent` is already relative to its own window's total
 // and `colorClass` is the palette letter the ring and legend paint with.
+//
+// The three NQ/HQ families chart as two slices each — Fafnir beside Nidhogg, and so on. Both
+// halves share the FAMILY's `colorClass` and are told apart by `isHq`: a lighter arc plus an HQ
+// badge in the legend. `hasHqVariant` is false for the monsters with no stronger half, which show
+// no badge at all rather than a meaningless "NQ".
 export interface ActivityHnmClaimSlice {
   monsterName: string;
   count: number;
   percent: number;
   colorClass: string;
+  isHq: boolean;
+  hasHqVariant: boolean;
 }
 
 // All three windows arrive together, so the 7d / 30d / All toggle never re-queries.
@@ -1580,6 +1587,36 @@ export interface ActivityHnmClaims {
   last7Days: ActivityHnmClaimSlice[];
   last30Days: ActivityHnmClaimSlice[];
   allTime: ActivityHnmClaimSlice[];
+}
+
+// One window of one monster's spawn band, on the card's Windows tab. `percent` is the share of
+// that MONSTER's pops ("Adamantoise pops on window 4 42% of the time"); `heightPercent` is the
+// share of its busiest window, which is what the bar draws to — a monster whose best window holds
+// 30% would otherwise render as a row of stubs.
+export interface ActivityHnmWindowBar {
+  window: number;
+  count: number;
+  percent: number;
+  heightPercent: number;
+}
+
+// One monster's window distribution. `colorClass` is the family's donut colour, so a monster looks
+// the same on both tabs. NQ and HQ share a row here (unlike the Claims donut) because the spawn
+// grid belongs to the family, not to which half turned up.
+export interface ActivityHnmWindowMonster {
+  monsterName: string;
+  colorClass: string;
+  totalPops: number;
+  windowCount: number;
+  peakWindow: number;
+  peakPercent: number;
+  bars: ActivityHnmWindowBar[];
+}
+
+// All-time on purpose — a spawn distribution needs volume, so there is no 7d/30d split here.
+export interface ActivityHnmWindows {
+  monsters: ActivityHnmWindowMonster[];
+  totalPops: number;
 }
 
 export interface ActivityOverviewStats {
@@ -1604,6 +1641,8 @@ export interface ActivityOverview {
   // recentTods is a 25-row tail of every monster, so counting this here charted only the
   // claims that happened to survive in that tail — and "All" could never mean all.
   hnmClaims: ActivityHnmClaims;
+  // The same card's other tab: which window of its band each HNM pops on, off Tod.PopWindow.
+  hnmWindows: ActivityHnmWindows;
   stats: ActivityOverviewStats;
   addonConfigured: boolean;
   addonGloballyDisabled: boolean;

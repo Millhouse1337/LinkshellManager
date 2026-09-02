@@ -150,6 +150,12 @@
         const repopTimeInput = qs('[name="Tod.RepopTime"]');
         const intervalValueInput = qs('[name="IntervalValue"]');
         const intervalUnitSelect = qs('[name="IntervalUnit"]');
+        const additionalSecondsInput = qs('[name="AdditionalSeconds"]');
+        const repopSummary = document.getElementById('repop-summary');
+        // The two fields only SOME monsters can answer: Day (a pop cycle, which only the three
+        // NQ/HQ families have) and Popped on window (a monster with a spawn grid).
+        const dayNumberWrap = document.getElementById('day-number-wrap');
+        const popWindowWrap = document.getElementById('pop-window-wrap');
 
         // Per-monster cooldown / cadence for THIS linkshell, in canonical minutes, stamped on the
         // form by the server. Replaced two hardcoded monster sets that were a copy of the old global
@@ -191,6 +197,11 @@
             return (cooldownUnitSelect && cooldownUnitSelect.value === 'hours') ? amount : amount / 60;
         }
 
+        function getAdditionalSeconds() {
+            const amount = parseInt(additionalSecondsInput && additionalSecondsInput.value, 10);
+            return isFinite(amount) && amount > 0 ? Math.floor(amount) : 0;
+        }
+
         // Pre-fill from what this linkshell configured for the picked monster. Unknown monsters
         // (the free-text "Other" option) keep whatever is already in the fields.
         function applyMonsterDefaults() {
@@ -201,18 +212,59 @@
             applyDuration(intervalValueInput, intervalUnitSelect, timing.cadenceMinutes);
         }
 
+        // Show Day / Popped on window only for a monster that can answer them, the same rule the
+        // Activity's form applies. An unknown monster ("Other", or one with no configured setup)
+        // answers neither.
+        function applyMonsterFieldVisibility() {
+            const timing = monsterSelect ? timingFor(monsterSelect.value) : null;
+            // A hidden input still posts, so the value goes with the field — otherwise switching
+            // from Behemoth to Tiamat would quietly file a day number against a monster that has
+            // no pop cycle to count.
+            const setVisible = (wrap, visible) => {
+                if (!wrap) { return; }
+                wrap.classList.toggle('d-none', !visible);
+                if (!visible) {
+                    const input = wrap.querySelector('input');
+                    if (input) input.value = '';
+                }
+            };
+            setVisible(dayNumberWrap, !!(timing && timing.hasHqVariant));
+            setVisible(popWindowWrap, !!(timing && timing.hasSpawnGrid));
+        }
+
         function updateRepopTime() {
             if (!todTimeInput || !repopTimeInput) return;
             const rawValue = (todTimeInput.value || '').trim();
-            if (!rawValue) { repopTimeInput.value = ''; return; }
+            const clear = (message) => {
+                repopTimeInput.value = '';
+                if (repopSummary) repopSummary.textContent = message;
+            };
+            if (!rawValue) { clear('Pick a date and time to calculate the next repop window.'); return; }
             const normalised = rawValue.length === 16 ? rawValue + ':00' : rawValue;
             const todTime = new Date(normalised);
-            if (Number.isNaN(todTime.getTime())) { repopTimeInput.value = ''; return; }
-            const repopTime = new Date(todTime.getTime() + (getCooldownHours() * 60 * 60 * 1000));
+            if (Number.isNaN(todTime.getTime())) { clear('Pick a date and time to calculate the next repop window.'); return; }
+            const cooldownHours = getCooldownHours();
+            if (cooldownHours <= 0) { clear('Enter a positive cooldown to calculate the next repop window.'); return; }
+            // Cooldown, then the officer's fine "Additional seconds" offset — the same sum the
+            // server stores (TodController.ResolveRepopTime) and the Activity previews.
+            const repopTime = new Date(
+                todTime.getTime() + (cooldownHours * 60 * 60 * 1000) + (getAdditionalSeconds() * 1000));
             repopTimeInput.value = toDateTimeLocalValue(repopTime);
+            if (repopSummary) {
+                repopSummary.textContent = repopTime.toLocaleString(undefined, {
+                    year: 'numeric', month: 'numeric', day: 'numeric',
+                    hour: 'numeric', minute: '2-digit', second: '2-digit'
+                });
+            }
         }
 
-        if (monsterSelect) monsterSelect.addEventListener('change', () => { applyMonsterDefaults(); updateRepopTime(); });
+        if (monsterSelect) {
+            monsterSelect.addEventListener('change', () => {
+                applyMonsterDefaults();
+                applyMonsterFieldVisibility();
+                updateRepopTime();
+            });
+        }
         if (todTimeInput) {
             todTimeInput.addEventListener('change', updateRepopTime);
             todTimeInput.addEventListener('input', updateRepopTime);
@@ -223,8 +275,15 @@
             cooldownValueInput.addEventListener('input', updateRepopTime);
         }
         if (cooldownUnitSelect) cooldownUnitSelect.addEventListener('change', updateRepopTime);
+        if (additionalSecondsInput) {
+            additionalSecondsInput.addEventListener('change', updateRepopTime);
+            additionalSecondsInput.addEventListener('input', updateRepopTime);
+        }
 
-        applyMonsterDefaults();
+        // Deliberately NOT applyMonsterDefaults() on load: the server already pre-filled the
+        // durations for the drafted monster, and on the Edit form the fields hold the values that
+        // were SAVED — re-applying the monster's configured defaults here would quietly overwrite
+        // a cooldown an officer had adjusted for that particular pop.
         updateRepopTime();
         // Loot is recorded in the dedicated Loot section now, so the loot-row
         // / claim-toggle wiring that used to live here was removed.

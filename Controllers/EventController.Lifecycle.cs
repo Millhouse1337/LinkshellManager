@@ -1184,11 +1184,28 @@ public partial class EventController
             return Forbid();
         }
 
-        // Manual Check In camps end through the camp path — a normal end pays HNM boards 0 DKP and
-        // would discard the check-in credit. Hands the roster to the Event System page's attendance sections for review
-        // (an officer's Post is what credits DKP) and recycles the board.
-        if (string.Equals(eventEntity.AttendanceMode, HnmAttendanceModes.Wd, StringComparison.OrdinalIgnoreCase)
-            && eventEntity.WdFinalizedAt is null)
+        // EVERY HNM camp ends through the camp path, in BOTH attendance modes. It hands the roster
+        // to the Event System page's attendance sections as a pending review row — an officer's
+        // Post is what credits DKP — and recycles the board.
+        //
+        // A generic end pays an HNM camp NOTHING. EndEventCoreAsync's windowed branch is
+        // windowsAttended × DkpPerHour, and DkpPerHour is forced to 0 on HNM camps at creation
+        // (EventController create, the Activity's, and the recurring-board poller) precisely
+        // because that column is not how a camp is priced: HnmCampPricing prices the SHAPE of one
+        // — a per-window rate plus open / close / claim / kill bonuses. So the generic path
+        // multiplied windows by zero and archived the camp with every attendee on 0 DKP.
+        //
+        // This was gated on Manual Check In ALONE, which is how it went unnoticed: that mode also
+        // loses its check-in credit on the generic path, so the visible half of the bug got fixed
+        // and the silent half — every Standard camp, the common case — kept falling through to the
+        // 0. HandOffAndRecycleAsync's own summary says it exists for "the generic End Event
+        // actions"; the condition was simply narrower than the method's stated purpose.
+        //
+        // Deliberately NOT widened to every windowed event. A Claim/Kill-style windowed event that
+        // is not an HNM camp really IS paid windowsAttended × DkpPerHour by EndEventCoreAsync —
+        // HnmCampPricing.WindowValueFor says so in as many words — so IsHnm is exactly the line
+        // between the two payout models, and AttendanceMode is a distinction WITHIN the HNM side.
+        if (HnmCampReviewHandoffService.EndsThroughCampPath(eventEntity))
         {
             if (HttpContext.RequestServices.GetService(typeof(HnmCampReviewHandoffService))
                 is HnmCampReviewHandoffService handoff)

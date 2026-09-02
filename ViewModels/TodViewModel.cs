@@ -100,6 +100,13 @@ public class TodManagerViewModel
     public double? IntervalValue { get; set; }
     public string? IntervalUnit { get; set; }
 
+    // The Log ToD form's "Additional seconds" — the fine offset added on top of the cooldown when
+    // the repop is computed. Bound here rather than straight onto Tod.AdditionalSeconds because
+    // that one is a non-nullable int: an officer who clears the box would otherwise post an empty
+    // string at it and get a binding error instead of "no offset". Folded into the Tod in
+    // ApplyPostedDurationsAsync.
+    public int? AdditionalSeconds { get; set; }
+
     public List<string> CharacterNames { get; set; } = new();
 
     // Drives the submit-button label on Create.cshtml. When false, the user has
@@ -190,4 +197,13 @@ public class TodTableRowViewModel
 }
 // One monster's configured durations, in canonical minutes, for the ToD form's pre-fill. Cadence is
 // null when the monster has no spawn grid and no configured check interval.
-public sealed record TodMonsterTimingHint(int CooldownMinutes, int? CadenceMinutes);
+//
+// HasHqVariant / HasSpawnGrid answer the two questions the form only asks of SOME monsters -- the
+// Day box and HQ toggle (the three NQ/HQ families) and "Popped on window" (a monster with a spawn
+// grid). They ride along here so the form can show and hide those fields the moment the picker
+// changes, which is what the Activity's Log ToD form does off its monster-setups payload.
+public sealed record TodMonsterTimingHint(
+    int CooldownMinutes,
+    int? CadenceMinutes,
+    bool HasHqVariant,
+    bool HasSpawnGrid);

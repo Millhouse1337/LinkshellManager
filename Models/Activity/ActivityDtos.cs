@@ -17,6 +17,8 @@ public sealed record ActivityOverviewDto(
     // claimed ToDs. RecentTods is a 25-row tail of every monster, so the client cannot count
     // this itself — it charted only the claims that happened to survive in that tail.
     ActivityHnmClaimsDto HnmClaims,
+    // The same card's other tab: which window of its band each HNM pops on, off Tod.PopWindow.
+    ActivityHnmWindowsDto HnmWindows,
     ActivityOverviewStatsDto Stats,
     // True when the user has at least one non-revoked AddonApiToken.
     // Drives the onboarding "Set up the addon" checklist item.
@@ -1275,17 +1277,46 @@ public sealed record ActivityTodLootDto(
 
 // One slice of the HNM Claims donut. Percent is already relative to its own window's total,
 // and ColorClass is the palette letter the donut/legend paint with.
+//
+// The three NQ/HQ families chart as two slices each (Fafnir beside Nidhogg, and so on). Both
+// halves carry the FAMILY's ColorClass and are told apart by IsHq, which the donut renders as a
+// lighter arc and the legend as an HQ badge. HasHqVariant is false for monsters with no stronger
+// half, so they show no badge at all.
 public sealed record ActivityHnmClaimSliceDto(
     string MonsterName,
     int Count,
     double Percent,
-    string ColorClass);
+    string ColorClass,
+    bool IsHq,
+    bool HasHqVariant);
 
 // The donut's three windows, so the 7d / 30d / All toggle is instant and never re-queries.
 public sealed record ActivityHnmClaimsDto(
     IReadOnlyList<ActivityHnmClaimSliceDto> Last7Days,
     IReadOnlyList<ActivityHnmClaimSliceDto> Last30Days,
     IReadOnlyList<ActivityHnmClaimSliceDto> AllTime);
+
+// One window of one monster's spawn band on the card's second tab. Percent is the share of THAT
+// monster's pops; HeightPercent is the share of its busiest window, which is what the bar draws to
+// (a monster whose best window holds 30% would otherwise render as a row of stubs).
+public sealed record ActivityHnmWindowBarDto(int Window, int Count, double Percent, double HeightPercent);
+
+// One monster's window distribution. ColorClass is the family's donut colour, so a monster looks
+// the same on both tabs. The NQ/HQ halves share a row here — unlike the Claims donut — because the
+// spawn grid belongs to the family, not to which half showed up.
+public sealed record ActivityHnmWindowMonsterDto(
+    string MonsterName,
+    string ColorClass,
+    int TotalPops,
+    int WindowCount,
+    int PeakWindow,
+    double PeakPercent,
+    IReadOnlyList<ActivityHnmWindowBarDto> Bars);
+
+// All-time on purpose: a spawn distribution needs volume, so there is no 7d/30d split to toggle.
+public sealed record ActivityHnmWindowsDto(
+    IReadOnlyList<ActivityHnmWindowMonsterDto> Monsters,
+    int TotalPops);
 
 public sealed record ActivityOverviewStatsDto(
     int LinkshellCount,
@@ -1465,7 +1496,12 @@ public sealed record ActivityCreateTodRequest(
     string? Cooldown,
     string? Interval,
     bool NoLoot,
-    IReadOnlyList<ActivityCreateTodLootRequest> LootDetails,
+    // NULLABLE on purpose. The ToD form no longer carries loot, so the client sends null, and on
+    // update null means "leave the existing loot alone" (an explicit list, empty included, still
+    // replaces it). It must ALSO stay nullable because [ApiController] + <Nullable>enable gives a
+    // non-nullable reference property an IMPLICIT [Required] -- which rejected every ToD save with
+    // a ProblemDetails 400 before the action body ever ran.
+    IReadOnlyList<ActivityCreateTodLootRequest>? LootDetails,
     string? ImagePath,
     bool Hq = false,
     int AdditionalSeconds = 0,
@@ -1481,7 +1517,12 @@ public sealed record ActivityUpdateTodRequest(
     string? Cooldown,
     string? Interval,
     bool NoLoot,
-    IReadOnlyList<ActivityCreateTodLootRequest> LootDetails,
+    // NULLABLE on purpose. The ToD form no longer carries loot, so the client sends null, and on
+    // update null means "leave the existing loot alone" (an explicit list, empty included, still
+    // replaces it). It must ALSO stay nullable because [ApiController] + <Nullable>enable gives a
+    // non-nullable reference property an IMPLICIT [Required] -- which rejected every ToD save with
+    // a ProblemDetails 400 before the action body ever ran.
+    IReadOnlyList<ActivityCreateTodLootRequest>? LootDetails,
     string? ImagePath,
     bool Hq = false,
     int AdditionalSeconds = 0,

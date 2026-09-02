@@ -3,6 +3,7 @@ using System;
 using LinkshellManagerDiscordApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LinkshellManagerDiscordApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260830152926_ArchiveHnmCampAtEndCamp")]
+    partial class ArchiveHnmCampAtEndCamp
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1314,9 +1317,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("EventHistoryId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("EventId")
                         .HasColumnType("integer");
 
@@ -1341,8 +1341,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("boolean");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("EventHistoryId");
 
                     b.HasIndex("EventId");
 
@@ -4526,11 +4524,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ClaimShieldCapture", b =>
                 {
-                    b.HasOne("LinkshellManagerDiscordApp.Models.EventHistory", "EventHistory")
-                        .WithMany()
-                        .HasForeignKey("EventHistoryId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("LinkshellManagerDiscordApp.Models.Event", "Event")
                         .WithMany()
                         .HasForeignKey("EventId")
@@ -4543,8 +4536,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .IsRequired();
 
                     b.Navigation("Event");
-
-                    b.Navigation("EventHistory");
 
                     b.Navigation("Linkshell");
                 });

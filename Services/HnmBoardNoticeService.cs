@@ -25,7 +25,15 @@ public sealed class HnmBoardNoticeService
     // useComponentsV2 mirrors the board's posted mode: a V2 board can't be edited with a
     // classic payload (Discord forbids dropping the V2 flag on edit), so the note is sent as
     // a V2 message too when the board was posted that way.
-    public async Task<bool> PostDefeatedNoticeAsync(Event ev, bool useComponentsV2, CancellationToken cancellationToken)
+    //
+    // eventHistoryId is the camp's PAST EVENT — the archive written at End Camp. It puts a
+    // "View Camp Details" button on this note, which is the only way back to a camp once its
+    // board is gone: the roster, the DKP, the loot and the ToD all live on a page nobody in
+    // Discord has a link to, and the board that used to carry them has just been replaced by
+    // these three lines. Null leaves the note exactly as it was.
+    public async Task<bool> PostDefeatedNoticeAsync(
+        Event ev, bool useComponentsV2, CancellationToken cancellationToken,
+        int? eventHistoryId = null)
     {
         if (string.IsNullOrWhiteSpace(ev.DiscordChannelId) || string.IsNullOrWhiteSpace(ev.DiscordMessageId))
         {
@@ -58,7 +66,8 @@ public sealed class HnmBoardNoticeService
 
         var title = $"💀 {monster} defeated";
         object payload = useComponentsV2
-            ? DiscordEventMessageBuilder.BuildV2DefeatedNoticeMessage(title, description.ToString())
+            ? DiscordEventMessageBuilder.BuildV2DefeatedNoticeMessage(
+                title, description.ToString(), eventHistoryId)
             : new
             {
                 content = string.Empty,
@@ -71,9 +80,11 @@ public sealed class HnmBoardNoticeService
                         color = 0x6B7280
                     }
                 },
-                // Empty arrays REPLACE the existing buttons + board image (Discord keeps fields
-                // that are omitted, so they must be sent explicitly to clear them).
-                components = Array.Empty<object>(),
+                // This REPLACES the board's sign-up buttons rather than adding to them (Discord
+                // keeps fields that are omitted, so the array must be sent explicitly). It is
+                // empty unless the camp has an archive to open, which is the pre-existing
+                // behaviour for a camp nobody attended.
+                components = DiscordEventMessageBuilder.BuildDefeatedNoticeComponents(eventHistoryId),
                 attachments = Array.Empty<object>()
             };
 

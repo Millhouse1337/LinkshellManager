@@ -219,6 +219,31 @@
 .panel-tab .donut-swatch.donut-seg-g { background: var(--chart-g); }
 .panel-tab .donut-swatch.donut-seg-h { background: var(--chart-h); }
 .panel-tab .donut-swatch.donut-seg-i { background: var(--chart-i); }
+/* NQ vs HQ on the three merge families. The pair SHARES its family's hue — Fafnir and Nidhogg are
+   one monster's two outcomes, not two unrelated monsters — and the HQ half is lightened. A filter
+   rather than nine more colour rules, so it applies to whichever hue the family holds and the ring
+   and its swatch can never drift apart. Mirrors the web's .donut-seg.is-hq. */
+.panel-tab circle.donut-seg.is-hq,
+.panel-tab .donut-swatch.is-hq { filter: brightness(1.55) saturate(0.72); }
+
+/* The badge carries the same fact in text: a lighter shade of one hue is not something every
+   reader can see. */
+.panel-tab .donut-legend-name .donut-hq-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid var(--border-2);
+  color: var(--fg-3);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+}
+.panel-tab .donut-legend-name .donut-hq-tag.is-hq {
+  border-color: var(--gold);
+  color: var(--gold);
+}
 .panel-tab .donut-legend-name { color: var(--fg); font-weight: 500; }
 .panel-tab .donut-legend-stats { color: var(--fg-3); font-family: var(--font-sans); }
 .panel-tab .btn.active {
@@ -257,3 +282,129 @@
   align-self: center;
   width: 100%;
 }
+
+/* ===== HNM card tabs: Claims donut <-> Window frequency ===== */
+.panel-tab .hnm-chart-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.panel-tab .hnm-chart-tab {
+  padding: 3px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.panel-tab .hnm-chart-tab:hover { color: var(--fg); }
+
+.panel-tab .hnm-chart-tab.is-active {
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ===== Window frequency: one bar strip per monster =====
+   Mirrors the web's .winfreq-* block in wwwroot/css/site.css — edit both or neither.
+   A column per window of that monster's band, so the row shows the WHOLE grid; the windows a
+   monster never pops in are as much of the finding as the one it favours. Bar heights are a share
+   of the monster's own busiest window (heightPercent), the header percentage a share of its pops. */
+.panel-tab .winfreq {
+  display: grid;
+  gap: 14px;
+}
+
+.panel-tab .winfreq-row {
+  display: grid;
+  gap: 5px;
+}
+
+.panel-tab .winfreq-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.panel-tab .winfreq-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.panel-tab .winfreq-peak {
+  color: var(--fg-3);
+  font-size: 11px;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+/* Equal-width columns across whatever band the monster has: 25 for the wyrms, 5 for the ToAU
+   three. A fixed column width would either overflow the card at 25 or leave 5 marooned. */
+.panel-tab .winfreq-bars {
+  display: grid;
+  grid-template-columns: repeat(var(--winfreq-count, 25), minmax(0, 1fr));
+  align-items: end;
+  gap: 1px;
+  height: 46px;
+  padding: 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.panel-tab .winfreq-bar {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  min-width: 0;
+  border-radius: 1px;
+}
+
+.panel-tab .winfreq-bar:hover { background: var(--accent-weak); }
+
+/* A zero-pop window still paints a hairline, so an empty window reads as measured-and-empty
+   rather than as a gap in the chart. */
+.panel-tab .winfreq-bar-fill {
+  width: 100%;
+  min-height: 1px;
+  border-radius: 1px;
+  background: var(--chart-a);
+  opacity: 0.75;
+}
+
+.panel-tab .winfreq-bar.is-peak .winfreq-bar-fill { opacity: 1; }
+
+.panel-tab .winfreq-bar-fill.donut-seg-a { background: var(--chart-a); }
+.panel-tab .winfreq-bar-fill.donut-seg-b { background: var(--chart-b); }
+.panel-tab .winfreq-bar-fill.donut-seg-c { background: var(--chart-c); }
+.panel-tab .winfreq-bar-fill.donut-seg-d { background: var(--chart-d); }
+.panel-tab .winfreq-bar-fill.donut-seg-e { background: var(--chart-e); }
+.panel-tab .winfreq-bar-fill.donut-seg-f { background: var(--chart-f); }
+.panel-tab .winfreq-bar-fill.donut-seg-g { background: var(--chart-g); }
+.panel-tab .winfreq-bar-fill.donut-seg-h { background: var(--chart-h); }
+.panel-tab .winfreq-bar-fill.donut-seg-i { background: var(--chart-i); }
+
+.panel-tab .winfreq-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--fg-4);
+  font-size: 10px;
+}
+
+.panel-tab .winfreq-total { color: var(--fg-3); }

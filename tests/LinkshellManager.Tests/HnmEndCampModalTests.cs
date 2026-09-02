@@ -95,33 +95,95 @@ public class HnmEndCampModalTests
         Assert.True(Options(outcome)[0].GetProperty("default").GetBoolean());
     }
 
-    // The window picker opens on the window the BOARD is on, not on window 1 — an officer ending a
-    // camp normally just submits, and that has to record where the board already said it was.
+    // The window picker opens EMPTY and has to be answered. It used to pre-select the window the
+    // board was on, which meant an officer submitting without looking recorded the board's
+    // clock-driven counter — and that counter runs ahead of the pop by however long the kill, the
+    // loot and the rebuff took. No option may carry `default`, or the old behaviour is back.
     [Fact]
-    public void PopWindow_PreselectsTheBoardsCurrentWindow()
+    public void PopWindow_OpensEmptyAndIsRequired()
+    {
+        var camp = Camp("Tiamat", windowNumber: 9);
+
+        var select = Fields(camp).EnumerateArray()
+            .Single(f => FieldId(f) == "wdpop_window").GetProperty("component");
+
+        Assert.True(select.GetProperty("required").GetBoolean());
+        Assert.Equal(1, select.GetProperty("min_values").GetInt32());
+        Assert.DoesNotContain(
+            select.GetProperty("options").EnumerateArray(),
+            o => o.TryGetProperty("default", out var d) && d.GetBoolean());
+    }
+
+    // The board's counter isn't thrown away — it is demoted to the placeholder, so the officer
+    // still sees where the board thought it was while having to choose for themselves.
+    [Fact]
+    public void PopWindow_KeepsTheBoardsCounterAsAHint()
     {
         var camp = Camp("Tiamat", windowNumber: 9);
         var expected = $"{DiscordEventMessageBuilder.FocusWindow(camp)}";
 
-        var window = Fields(camp).EnumerateArray().Single(f => FieldId(f) == "wdpop_window");
-        var marked = Assert.Single(
-            Options(window).EnumerateArray().ToList(), o => o.GetProperty("default").GetBoolean());
+        var placeholder = Fields(camp).EnumerateArray()
+            .Single(f => FieldId(f) == "wdpop_window")
+            .GetProperty("component").GetProperty("placeholder").GetString()!;
 
-        Assert.Equal(expected, marked.GetProperty("value").GetString());
+        Assert.Contains(expected, placeholder, StringComparison.Ordinal);
+        Assert.InRange(placeholder.Length, 1, 150); // Discord's placeholder cap
     }
 
-    // A select is capped at 25 options, and the 25-window wyrms fill it exactly — one window added
-    // to that band without a paging story would start silently dropping the last ones.
-    [Fact]
-    public void PopWindow_ListsEveryWindow_WithoutBreachingTheOptionCap()
+    // "I don't know" is the first option on every multi-window camp — an officer who didn't see the
+    // pop has to be able to say so instead of picking a plausible window, and has to see it without
+    // scrolling. Its value is what the submit side reads as "fall back to the board's counter".
+    [Theory]
+    [InlineData("Tiamat")]
+    [InlineData("Behemoth/King Behemoth")]
+    [InlineData("Cerberus")]
+    [InlineData("Goblin Furrier")]
+    public void PopWindow_OffersIDontKnowFirst(string monster)
     {
-        var window = Fields(Camp("Tiamat")).EnumerateArray().Single(f => FieldId(f) == "wdpop_window");
+        var window = Fields(Camp(monster)).EnumerateArray().Single(f => FieldId(f) == "wdpop_window");
         var options = Options(window).EnumerateArray().ToList();
 
-        Assert.Equal(HnmConfig.EffectiveWindowCount("Tiamat"), options.Count);
+        Assert.Equal("unknown", options[0].GetProperty("value").GetString());
+        Assert.StartsWith("I don't know", options[0].GetProperty("label").GetString(), StringComparison.Ordinal);
+        // And exactly once — a second escape hatch would mean two ways to record the same thing.
+        Assert.Single(options, o => o.GetProperty("value").GetString() == "unknown");
+    }
+
+    // A select is capped at 25 options and the wyrms' 25 windows filled it EXACTLY, so the "I don't
+    // know" row is paid for out of the window list: a wyrm shows 24 windows, everything shorter
+    // still shows every window it has. Breaching the cap is a 400 from Discord — an officer clicking
+    // End Camp and getting nothing at all.
+    [Theory]
+    [InlineData("Tiamat", 24)]                      // 25-window wyrm, trimmed by one
+    [InlineData("Behemoth/King Behemoth", 7)]       // king/dragon band, untouched
+    [InlineData("Cerberus", 5)]                     // the ToAU three, untouched
+    [InlineData("Goblin Furrier", 2)]               // 2-post camp, untouched
+    public void PopWindow_FitsTheOptionCap_WithTheIDontKnowRow(string monster, int expectedWindows)
+    {
+        var window = Fields(Camp(monster)).EnumerateArray().Single(f => FieldId(f) == "wdpop_window");
+        var options = Options(window).EnumerateArray().ToList();
+
         Assert.InRange(options.Count, 1, 25);
-        Assert.Equal("Window 1", options[0].GetProperty("label").GetString());
-        Assert.Equal("Window 25", options[^1].GetProperty("label").GetString());
+        Assert.Equal(expectedWindows + 1, options.Count); // + the "I don't know" row
+        Assert.Equal(Math.Min(HnmConfig.EffectiveWindowCount(monster), 24), expectedWindows);
+    }
+
+    // The 24-window pane slides so it always ENDS on the window the board is on: the pop has already
+    // happened, so a window past the board's counter hasn't opened yet, while the window the board
+    // IS on is the single most likely answer and can never be the one that drops off.
+    [Theory]
+    [InlineData(1, "Window 1", "Window 24")]
+    [InlineData(25, "Window 2", "Window 25")]
+    public void PopWindow_PaneEndsOnTheBoardsWindow(int boardWindow, string firstLabel, string lastLabel)
+    {
+        var window = Fields(Camp("Tiamat", windowNumber: boardWindow)).EnumerateArray()
+            .Single(f => FieldId(f) == "wdpop_window");
+        var labels = Options(window).EnumerateArray()
+            .Skip(1) // the "I don't know" row
+            .Select(o => o.GetProperty("label").GetString()).ToList();
+
+        Assert.Equal(firstLabel, labels[0]);
+        Assert.Equal(lastLabel, labels[^1]);
     }
 
     private static JsonElement RepostInput(Event ev, double? lead) =>
@@ -193,6 +255,7 @@ public class HnmEndCampModalTests
     {
         var window = Fields(Camp("Goblin Furrier")).EnumerateArray().Single(f => FieldId(f) == "wdpop_window");
         var labels = Options(window).EnumerateArray()
+            .Skip(1) // the "I don't know" row
             .Select(o => o.GetProperty("label").GetString()).ToList();
 
         Assert.Equal(new[] { "Open (window 1)", "Close (window 2)" }, labels);

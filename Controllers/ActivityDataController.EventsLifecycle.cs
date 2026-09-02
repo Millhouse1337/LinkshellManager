@@ -418,11 +418,11 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        // Manual Check In camps end through the camp path — a normal end pays HNM boards 0 DKP and
-        // would discard the check-in credit. Hands the roster to the Event System page's attendance sections for review
-        // (an officer's Post is what credits DKP) and recycles the board.
-        if (string.Equals(eventEntity.AttendanceMode, HnmAttendanceModes.Wd, StringComparison.OrdinalIgnoreCase)
-            && eventEntity.WdFinalizedAt is null)
+        // EVERY HNM camp ends through the camp path, in both attendance modes: it stages a review
+        // row (an officer's Post credits the DKP) and recycles the board. A generic end pays an HNM
+        // camp windowsAttended × DkpPerHour, and DkpPerHour is 0 on every HNM camp — see the long
+        // note on EventController.EndEvent, which this mirrors exactly.
+        if (HnmCampReviewHandoffService.EndsThroughCampPath(eventEntity))
         {
             var finalized = HttpContext.RequestServices.GetService(typeof(HnmCampReviewHandoffService))
                     is HnmCampReviewHandoffService handoff

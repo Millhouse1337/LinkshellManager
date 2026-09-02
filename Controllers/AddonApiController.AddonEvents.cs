@@ -557,6 +557,42 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
+        // An HNM camp ends through the CAMP path, in both attendance modes — the same redirect the
+        // web and Activity End Event actions make, and for the same reason. EndEventCoreAsync's
+        // windowed branch pays windowsAttended × DkpPerHour, and DkpPerHour is 0 on every HNM camp
+        // because that column is not how a camp is priced; running it here archived the camp with
+        // every attendee on 0 DKP and never consulted the open / close / claim / kill bonuses at
+        // all. See the note on EventController.EndEvent.
+        //
+        // This endpoint had NO such guard, not even the Manual Check In one the other two carried,
+        // so the in-game "End Event" button was the one surface where the 0 was reachable on a camp
+        // in EITHER mode. It is also the button an officer standing at the camp actually presses,
+        // which is why the bug showed up there first.
+        if (HnmCampReviewHandoffService.EndsThroughCampPath(eventEntity))
+        {
+            var handoff = HttpContext.RequestServices.GetService(typeof(HnmCampReviewHandoffService))
+                as HnmCampReviewHandoffService;
+            var staged = handoff is not null
+                && await handoff.HandOffAndRecycleAsync(eventEntity.Id, cancellationToken);
+
+            // No participants and no rate: nothing has been PAID yet, and reporting a per-member
+            // figure here would be inventing one. The addon prints stagedForReview as an
+            // instruction to go and Post instead of a DKP summary.
+            return Ok(new
+            {
+                eventId               = eventId,
+                eventName             = eventEntity.EventName,
+                eventType             = eventEntity.EventType,
+                eventLocation         = eventEntity.EventLocation,
+                commencementStartTime = eventEntity.CommencementStartTime,
+                endTime               = DateTime.UtcNow,
+                stagedForReview       = true,
+                staged                = staged,
+                windowCount           = DiscordEventMessageBuilder.EffectiveWindowCount(eventEntity),
+                participants          = Array.Empty<object>()
+            });
+        }
+
         var result = await EventController.EndEventCoreAsync(_dbContext, _dkpLedger, _dkpPools, eventEntity);
         var windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName);
 

@@ -76,7 +76,7 @@ else
 {
     @foreach (var ev in Model.Events)
     {
-        @await Html.PartialAsync("_WindowEventCard", ev, new ViewDataDictionary(ViewData)
+        @await Html.PartialAsync("~/Views/WindowEvents/_WindowEventCard.cshtml", ev, new ViewDataDictionary(ViewData)
         {
             ["LinkshellId"] = Model.LinkshellId,
             ["CanManage"] = Model.CanManage,

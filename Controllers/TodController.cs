@@ -181,7 +181,7 @@ public class TodController : Controller
                 todTimeUtc,
                 model.Tod.Cooldown,
                 model.Tod.Interval,
-                todTimeUtc?.AddHours(ResolveCooldownHours(model.Tod.Cooldown)),
+                ResolveRepopTime(todTimeUtc, model.Tod.Cooldown, model.Tod.AdditionalSeconds),
                 uploadedImagePath,
                 loot.Select(l => new TodSubmissionLootInput(l.ItemName, l.ItemWinner, l.WinningDkpSpent)).ToList());
 
@@ -194,10 +194,13 @@ public class TodController : Controller
         {
             MonsterName = model.Tod.MonsterName?.Trim(),
             DayNumber = model.Tod.DayNumber,
+            PopWindow = model.Tod.PopWindow,
             Claim = model.Tod.Claim,
+            Hq = model.Tod.Hq,
+            AdditionalSeconds = Math.Max(0, model.Tod.AdditionalSeconds),
             Time = todTimeUtc,
             Cooldown = model.Tod.Cooldown,
-            RepopTime = todTimeUtc?.AddHours(ResolveCooldownHours(model.Tod.Cooldown)),
+            RepopTime = ResolveRepopTime(todTimeUtc, model.Tod.Cooldown, model.Tod.AdditionalSeconds),
             Interval = model.Tod.Interval,
             LinkshellId = model.Tod.LinkshellId,
             TimeStamp = occurredAtUtc,
@@ -298,7 +301,10 @@ public class TodController : Controller
                 LinkshellId = tod.LinkshellId,
                 MonsterName = tod.MonsterName,
                 DayNumber = tod.DayNumber,
+                PopWindow = tod.PopWindow,
                 Claim = tod.Claim,
+                Hq = tod.Hq,
+                AdditionalSeconds = tod.AdditionalSeconds,
                 Time = localTime,
                 Cooldown = tod.Cooldown,
                 Interval = tod.Interval,
@@ -397,10 +403,13 @@ public class TodController : Controller
         var previousImage = tod.ImagePath;
         tod.MonsterName = model.Tod.MonsterName?.Trim();
         tod.DayNumber = model.Tod.DayNumber;
+        tod.PopWindow = model.Tod.PopWindow;
         tod.Claim = model.Tod.Claim;
+        tod.Hq = model.Tod.Hq;
+        tod.AdditionalSeconds = Math.Max(0, model.Tod.AdditionalSeconds);
         tod.Time = todTimeUtc;
         tod.Cooldown = model.Tod.Cooldown;
-        tod.RepopTime = todTimeUtc?.AddHours(ResolveCooldownHours(model.Tod.Cooldown));
+        tod.RepopTime = ResolveRepopTime(todTimeUtc, model.Tod.Cooldown, tod.AdditionalSeconds);
         tod.Interval = model.Tod.Interval;
         tod.TimeStamp = occurredAtUtc;
         tod.TotalClaims = model.Tod.Claim == true ? 1 : 0;
@@ -711,12 +720,12 @@ public class TodController : Controller
             MonsterOptions = monsterTimings.EventMonsterOptions.ToList(),
             // Per-monster cooldown / cadence, so the form can pre-fill the moment a monster is
             // picked without a round trip. Keyed by the exact option text above.
-            MonsterTimings = monsterTimings.Rows.Count > 0
-                ? monsterTimings.Rows.ToDictionary(
-                    row => row.MonsterName,
-                    row => new TodMonsterTimingHint(row.CooldownMinutes, row.WindowCadenceMinutes),
-                    StringComparer.OrdinalIgnoreCase)
-                : new Dictionary<string, TodMonsterTimingHint>(StringComparer.OrdinalIgnoreCase),
+            //
+            // Built off the OPTIONS the picker is showing and resolved through the map, not off the
+            // stored rows: an unseeded linkshell has no rows at all, and its picker still offers the
+            // built-in catalog — keying off Rows left every one of those options with no hint, so
+            // picking a monster pre-filled nothing.
+            MonsterTimings = BuildMonsterTimingHints(monsterTimings),
             CharacterNames = characterNames,
             CanCreateImmediately = canCreateImmediately,
             AssignedPartySetups = assignedPartySetups,
@@ -887,9 +896,36 @@ public class TodController : Controller
     private static double ResolveCooldownHours(string? cooldown) =>
         ActivityDataController.ResolveTodCooldownHours(cooldown);
 
+    // One hint per option in the picker, resolved through the map so a linkshell that has never
+    // opened the Monster setups editor still gets the built-in defaults. TryAdd rather than
+    // ToDictionary: a duplicate row is bad data the editor rejects, but it must not throw on a
+    // page load.
+    private static Dictionary<string, TodMonsterTimingHint> BuildMonsterTimingHints(MonsterTimingMap map)
+    {
+        var hints = new Dictionary<string, TodMonsterTimingHint>(StringComparer.OrdinalIgnoreCase);
+        foreach (var option in map.EventMonsterOptions)
+        {
+            var timing = map.For(option);
+            hints.TryAdd(option, new TodMonsterTimingHint(
+                timing.CooldownMinutes,
+                timing.WindowCadenceMinutes,
+                HnmConfig.HasHqVariant(option),
+                timing.HasSpawnGrid));
+        }
+        return hints;
+    }
+
+    // RepopTime = time of death + cooldown + the officer's fine "Additional seconds" offset. One
+    // place, because the create, edit and submit-for-approval paths all have to agree with the
+    // Activity (ActivityDataController.CreateTodAsync) on where the next window opens.
+    private static DateTime? ResolveRepopTime(DateTime? todTimeUtc, string? cooldown, int additionalSeconds) =>
+        todTimeUtc?.AddHours(ResolveCooldownHours(cooldown)).AddSeconds(Math.Max(0, additionalSeconds));
+
     // Composes the posted number + unit into the label form Tod.Cooldown / Tod.Interval store, and
     // falls back to the LINKSHELL'S configured value for the monster — not a hardcoded 22h/72h
     // split, which is what this used to do and which ignored the configuration entirely.
+    //
+    // Also folds the posted "Additional seconds" onto the Tod.
     //
     // Runs before ValidateTodSubmission, so what gets validated is what gets saved.
     private async Task ApplyPostedDurationsAsync(TodManagerViewModel model, CancellationToken cancellationToken)
@@ -916,5 +952,7 @@ public class TodController : Controller
             ?? (string.IsNullOrWhiteSpace(model.Tod.Interval)
                 ? TodDurationFormat.Format(timing.TodIntervalMinutes)
                 : model.Tod.Interval.Trim());
+
+        model.Tod.AdditionalSeconds = Math.Max(0, model.AdditionalSeconds ?? 0);
     }
 }

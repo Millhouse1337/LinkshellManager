@@ -112,16 +112,55 @@ export class ActivityHttpClient {
       throw new Error(this.emptyBodyMessage(response.status));
     }
 
-    let parsed: { error?: string } | null = null;
+    let parsed: ActivityErrorBody | null = null;
     try {
-      parsed = JSON.parse(responseText) as { error?: string };
+      parsed = JSON.parse(responseText) as ActivityErrorBody;
     } catch {
       // not JSON — fall through to the friendly message below
     }
     if (parsed?.error) {
       throw new Error(parsed.error);
     }
+    // ASP.NET ProblemDetails — what [ApiController] returns on its own when model
+    // binding/validation rejects the body, BEFORE the action runs, so there is no
+    // hand-written { error } to read. Left unhandled, a real "this field is required"
+    // surfaced as the generic "unexpected response (status 400)", which reads like a
+    // server fault and tells nobody which field was wrong.
+    const problem = this.problemDetailsMessage(parsed);
+    if (problem) {
+      throw new Error(problem);
+    }
     throw new Error(this.nonJsonMessage(response, responseText));
+  }
+
+  // Flattens an ASP.NET ProblemDetails body into one readable line: every field error
+  // it carries, then its detail/title as a fallback. The field names are the server’s
+  // own DTO property names, which is precisely what makes the message diagnosable.
+  private problemDetailsMessage(body: ActivityErrorBody | null): string | null {
+    if (!body) {
+      return null;
+    }
+
+    const fieldErrors: string[] = [];
+    for (const [field, messages] of Object.entries(body.errors ?? {})) {
+      const text = (Array.isArray(messages) ? messages : [messages])
+        .filter((message): message is string => typeof message === 'string' && message.trim().length > 0)
+        .join(' ');
+      if (!text) {
+        continue;
+      }
+      // A body-level error is keyed by "" or "$" — no field name worth printing.
+      fieldErrors.push(field && field !== '$' ? `${field}: ${text}` : text);
+    }
+
+    if (fieldErrors.length > 0) {
+      return `The server rejected this request — ${fieldErrors.join('; ')}`;
+    }
+
+    // `detail` is the free-text half of ProblemDetails; `title` is the generic
+    // "One or more validation errors occurred.", still better than saying nothing.
+    const fallback = body.detail?.trim() || body.title?.trim();
+    return fallback ? `The server rejected this request — ${fallback}` : null;
   }
 
   // ASP.NET's Forbid()/Challenge() return an empty body, so there's no JSON
@@ -173,6 +212,15 @@ export class ActivityHttpClient {
 
     return (await response.json()) as ActivityAntiforgeryToken;
   }
+}
+
+// Every error-body shape this client knows how to read: the app’s own { error },
+// plus the ProblemDetails ASP.NET emits for model-validation failures.
+interface ActivityErrorBody {
+  error?: string | null;
+  title?: string | null;
+  detail?: string | null;
+  errors?: Record<string, string[] | string> | null;
 }
 
 interface ActivityAntiforgeryToken {

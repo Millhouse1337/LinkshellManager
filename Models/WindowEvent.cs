@@ -112,11 +112,29 @@ public class WindowEvent
     [ForeignKey(nameof(SourceEventId))]
     public Event? SourceEvent { get; set; }
 
+    // The Past Event this camp was archived as, written at END CAMP.
+    //
+    // It used to be written at POST, which meant a camp that ended and was then RECYCLED for the
+    // next pop left no trace anywhere until an officer got round to reviewing its payout: gone
+    // from the live list (the board is reused for the next pop), absent from Past Events, and
+    // recorded only as a pending review row. Ending a camp is the thing that makes it past, so
+    // the archive is written then, and this points at it.
+    //
+    // Post still owns the DKP -- it reconciles this history's roster and amounts to whatever the
+    // review settled on. Null on review rows staged before this column existed, and on ordinary
+    // "/lsm now" snapshot rows, which are not camps and get no history at all.
+    //
+    // SET NULL on delete, for the same reason SourceEventId is: deleting the archive must not
+    // destroy an unposted payout.
+    public int? CampEventHistoryId { get; set; }
+
+    [ForeignKey(nameof(CampEventHistoryId))]
+    public EventHistory? CampEventHistory { get; set; }
+
     // The camp's own start/end, snapshotted here at End Camp because they are NOT recoverable
     // from SourceEvent later: the pop re-points Event.StartTime to the next predicted repop and
-    // clears CommencementStartTime. EventHistory is written at POST time (see
-    // WindowEventDkpLedgerService), so without these the history row would be dated to the next
-    // pop instead of the camp that earned it.
+    // clears CommencementStartTime. The archive above is dated from these rather than from
+    // SourceEvent, which by post time points at a pop that has not happened yet.
     public DateTime? CampStartedAtUtc { get; set; }
 
     public DateTime? CampEndedAtUtc { get; set; }

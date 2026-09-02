@@ -61,9 +61,21 @@ public sealed class HnmCampReviewHandoffService
         if (linkshell is null) return null;
 
         var isWd = DiscordEventMessageBuilder.IsWd(ev);
+        // FIRST, and before anything below touches the camp: both finalizers read the claim bonus
+        // off ClaimShieldCapture.EventId, which the re-parent at the end of this method clears.
         var members = isWd
             ? await _wdFinalizer.BuildRosterAsync(ev, linkshell, popWindow, claimed, killed, cancellationToken)
             : await _standardFinalizer.BuildRosterAsync(ev, linkshell, popWindow, claimed, killed, cancellationToken);
+
+        // This camp's lotteries, to be handed to the archive below.
+        //
+        // Loaded here rather than after the empty check, because they have to be detached from the
+        // board EITHER WAY. The board is recycled for the next pop, and a capture still pointing at
+        // it is one the next camp's finalizer counts as its own — which is how the claim bonus came
+        // to be paid again on every subsequent pop of the same board.
+        var captures = await _db.ClaimShieldCaptures
+            .Where(capture => capture.EventId == ev.Id)
+            .ToListAsync(cancellationToken);
 
         // Collapse to one row per CHARACTER NAME. Both the snapshot entries and the override rows
         // are keyed by name downstream — and WindowEventMemberDkp has a UNIQUE (WindowEventId,
@@ -89,6 +101,10 @@ public sealed class HnmCampReviewHandoffService
         }
         if (byCharacterName.Count == 0)
         {
+            // Nobody to review, so no archive to hand the captures to — but they still must not
+            // follow the board into the next pop. Detached and left as linkshell-level records,
+            // which is where a capture taken with no camp open already lives.
+            foreach (var capture in captures) capture.EventId = null;
             _logger.LogInformation(
                 "HNM camp handoff skipped: event {EventId} ended with nobody on the roster.", ev.Id);
             return null;
@@ -121,8 +137,7 @@ public sealed class HnmCampReviewHandoffService
             PostedToSheetAt = null,          // ← pending review; Post is what credits DKP
             SourceEventId = ev.Id,
             // Snapshotted because they are NOT recoverable later: the pop re-points
-            // Event.StartTime to the next predicted repop and clears CommencementStartTime, and
-            // EventHistory isn't written until Post.
+            // Event.StartTime to the next predicted repop and clears CommencementStartTime.
             CampStartedAtUtc = ev.CommencementStartTime ?? ev.StartTime,
             CampEndedAtUtc = nowUtc,
             CampEventType = ev.EventType,
@@ -166,14 +181,145 @@ public sealed class HnmCampReviewHandoffService
             });
         }
 
+        // THE PAST EVENT, written HERE — at End Camp — rather than at Post.
+        //
+        // Ending a camp is what makes it past, and for these camps nothing else records that it
+        // happened: the board is RECYCLED for the next pop rather than deleted, so a camp that
+        // ended vanished from the live list, never appeared under Past Events, and existed only
+        // as a pending review row until somebody got round to it. On a recurring board that gap
+        // could run for days, and a camp nobody ever reviewed left no trace at all.
+        //
+        // Post still owns the money: WindowEventDkpLedgerService reconciles this history's roster
+        // and amounts to whatever the review settled on, and writes the ledger. The amounts staged
+        // below are the camp's own proposal — the same numbers the review row opens with — so the
+        // archive is never blank and never disagrees with what the officer is looking at.
+        var archive = await BuildCampArchiveAsync(
+            ev, byCharacterName.Values, nowUtc, cancellationToken);
+        windowEvent.CampEventHistory = archive;
+
+        // The camp's lotteries move onto the archive with it. See ClaimShieldCapture.EventHistoryId
+        // for why leaving them on the recycled board was paying the claim bonus over and over.
+        foreach (var capture in captures)
+        {
+            capture.EventHistory = archive;
+            capture.EventId = null;
+        }
+
         _logger.LogInformation(
             "HNM camp handed off for review: event {EventId} ({Monster}, mode {Mode}) staged "
-            + "{Count} member(s) totalling {Total} DKP — pending an officer's Post.",
+            + "{Count} member(s) totalling {Total} DKP — archived as a past event, pending an "
+            + "officer's Post.",
             ev.Id, monster, isWd ? "Manual Check In" : "Standard",
             byCharacterName.Count, byCharacterName.Values.Sum(m => m.Dkp));
 
         return windowEvent;
     }
+
+    // The camp's Past Event row, staged (not saved) with one participant per member.
+    //
+    // Dated off the CAMP, not off the Event: the caller is about to recycle that row for the next
+    // pop, which re-points StartTime at a repop that has not happened and clears
+    // CommencementStartTime. Reading it later would date the archive to the future.
+    private async Task<EventHistory> BuildCampArchiveAsync(
+        Event ev,
+        IEnumerable<HnmCampMember> members,
+        DateTime endedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var startedAtUtc = ev.CommencementStartTime ?? ev.StartTime;
+
+        var history = new EventHistory
+        {
+            LinkshellId = ev.LinkshellId,
+            EventName = ev.EventName,
+            EventType = ev.EventType,
+            EventLocation = ev.EventLocation,
+            // Resolved to a TEMPLATE, never the per-event snapshot: a snapshot is cascade-deleted
+            // with its event, so storing one here would dangle. Same call EndEventCoreAsync makes,
+            // and it is what lets the next pop of this camp inherit the board.
+            PartySetupId = await PartySetupInheritance.ResolveTemplateIdAsync(_db, ev, cancellationToken),
+            StartDate = startedAtUtc?.Date,
+            StartTime = startedAtUtc,
+            EndTime = endedAtUtc,
+            CommencementStartTime = ev.CommencementStartTime,
+            Duration = startedAtUtc is { } startedAt
+                ? (endedAtUtc - startedAt).TotalHours
+                : ev.Duration,
+            DkpPerHour = ev.DkpPerHour,
+            EventDkp = ev.EventDkp,
+            Details = ev.Details,
+            CountsTowardActive = ev.CountsTowardActive,
+            TimeStamp = endedAtUtc,
+            AppUserEventHistories = new List<AppUserEventHistory>(),
+        };
+
+        // ONE row per ACCOUNT, not per character. The roster above is deduped by character name,
+        // which is the right key for the review card — but AppUserEventHistory is uniquely indexed
+        // on (EventHistoryId, AppUserId), so a member scanned on both their main and an alt would
+        // make this save throw and take the whole End Camp down with it. Keep the larger amount on
+        // a collision, matching the character-name fold above, so a clash can never underpay.
+        var seenAppUserIds = new Dictionary<string, AppUserEventHistory>(StringComparer.OrdinalIgnoreCase);
+        foreach (var member in members)
+        {
+            var row = new AppUserEventHistory
+            {
+                AppUserId = member.AppUserId,
+                CharacterName = member.CharacterName,
+                JobName = member.JobName,
+                SubJobName = member.SubJobName,
+                StartTime = startedAtUtc,
+                Duration = null,
+                EventDkp = member.Dkp,
+                IsQuickJoin = true,
+                IsVerified = true,
+                ActiveCredit = true,
+            };
+
+            // A member with no account is not covered by the unique index (it is filtered to
+            // non-null AppUserId), so those rows are all kept.
+            if (string.IsNullOrWhiteSpace(member.AppUserId))
+            {
+                history.AppUserEventHistories.Add(row);
+                continue;
+            }
+            if (seenAppUserIds.TryGetValue(member.AppUserId, out var existing))
+            {
+                if (member.Dkp > (existing.EventDkp ?? 0d))
+                {
+                    existing.EventDkp = member.Dkp;
+                    existing.CharacterName = member.CharacterName;
+                    existing.JobName = member.JobName;
+                    existing.SubJobName = member.SubJobName;
+                }
+                continue;
+            }
+            seenAppUserIds[member.AppUserId] = row;
+            history.AppUserEventHistories.Add(row);
+        }
+
+        _db.EventHistories.Add(history);
+        return history;
+    }
+
+    // Does this event end through the CAMP path instead of the generic one?
+    //
+    // Named here because all three generic End Event actions — web, Activity and the in-game
+    // addon — have to ask it, and when each of them wrote the condition out by hand, two got a
+    // NARROWER one than intended (Manual Check In only) and the third got none at all. The result
+    // was that every Standard camp ended through the generic path and was archived paying 0: that
+    // path multiplies windowsAttended by Event.DkpPerHour, which is forced to 0 on HNM camps
+    // exactly because a camp is priced by HnmCampPricing's shape bonuses instead.
+    //
+    // Deliberately not "is it windowed". A Claim/Kill-style windowed event that is NOT an HNM camp
+    // really is paid windowsAttended × DkpPerHour by EndEventCoreAsync — HnmCampPricing
+    // .WindowValueFor says so outright — so IsHnm is the line between the two payout models, and
+    // AttendanceMode is a distinction WITHIN the HNM side. Both modes answer true here.
+    //
+    // WdFinalizedAt is the same idempotence latch HandOffAndRecycleAsync gates on: a camp already
+    // handed off answers false, so a second End Event falls through to the generic path — which is
+    // what actually removes the recycled board.
+    public static bool EndsThroughCampPath(Event ev)
+        => DiscordEventMessageBuilder.IsHnm(ev) && ev.WdFinalizedAt is null;
 
     // "End this camp" for callers OUTSIDE the board's End Camp form — the generic End Event
     // actions, which would otherwise archive an HNM camp as a normal event and pay 0, discarding

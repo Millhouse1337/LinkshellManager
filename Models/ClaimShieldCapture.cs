@@ -31,6 +31,22 @@ public class ClaimShieldCapture
     [ForeignKey(nameof(EventId))]
     public Event? Event { get; set; }
 
+    // The camp's PAST EVENT, once it has ended. EventId is CLEARED onto this at End Camp, and the
+    // two are never both set.
+    //
+    // The move is not bookkeeping — it is the fix for a real double-pay. An HNM board is RECYCLED
+    // for the next pop rather than deleted, so a capture left pointing at it still matched
+    // `Capture.EventId == ev.Id` on the NEXT camp: both finalizers read the claim bonus off that
+    // filter with no time bound, so everyone who tagged the last pop was paid the claim bonus
+    // again on the one after it, and again after that. Handing the capture to the archive at End
+    // Camp is what makes each camp see only its own lotteries.
+    //
+    // Null while the camp is still live, and forever on a capture taken with no camp open at all.
+    public int? EventHistoryId { get; set; }
+
+    [ForeignKey(nameof(EventHistoryId))]
+    public EventHistory? EventHistory { get; set; }
+
     [MaxLength(128)]
     public string MonsterName { get; set; } = string.Empty;
 

@@ -2004,6 +2004,13 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.SourceEventId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.SourceEventId);
+                // SetNull for the same reason: the archive is written at End Camp, and deleting
+                // a Past Event must not destroy a review row whose DKP has not been posted yet.
+                entity.HasOne(item => item.CampEventHistory)
+                    .WithMany()
+                    .HasForeignKey(item => item.CampEventHistoryId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasIndex(item => item.CampEventHistoryId);
             });
             builder.Entity<WindowEventMemberDkp>(entity =>
             {
@@ -2043,9 +2050,16 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.EventId)
                     .OnDelete(DeleteBehavior.SetNull);
+                // SetNull for the same reason as the Event above: deleting the past event must
+                // not erase the record of a lottery that really happened.
+                entity.HasOne(item => item.EventHistory)
+                    .WithMany()
+                    .HasForeignKey(item => item.EventHistoryId)
+                    .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.LinkshellId, item.CapturedAtUtc });
                 // The Activity loads captures per event; without this that's a scan.
                 entity.HasIndex(item => item.EventId);
+                entity.HasIndex(item => item.EventHistoryId);
             });
 
             builder.Entity<ClaimShieldCaptureMember>(entity =>

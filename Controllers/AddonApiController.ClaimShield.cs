@@ -204,6 +204,18 @@ public sealed partial class AddonApiController
         _dbContext.ClaimShieldCaptures.Add(capture);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // Re-render the camp board so the capture shows up under it — the block at the foot of
+        // the last message, above the buttons. THIS is what makes the addon's Post button put
+        // something on Discord; nothing else here touches the Event row, and the save-hook only
+        // enqueues events that were themselves added or modified.
+        //
+        // Fire-and-forget, exactly like every other board refresh: a capture is recorded whether
+        // or not Discord is reachable, and the next render picks it up regardless.
+        if (capture.EventId is { } boardEventId)
+        {
+            _eventQueue.Enqueue(boardEventId);
+        }
+
         return Ok(new
         {
             captureId = capture.Id,

@@ -37,6 +37,12 @@ public class DashboardViewModel
     public List<HnmClaimEntry> HnmClaims { get; set; } = new();
     public int HnmClaimsTotal { get; set; }
     public int HnmClaimsWindowDays { get; set; } = 30;
+
+    // The second tab of the same card: which window of its band each HNM actually pops on.
+    // All-time on purpose — a spawn distribution needs volume, and a 30-day slice of a monster
+    // that pops twice a week says nothing.
+    public List<HnmWindowRow> HnmWindows { get; set; } = new();
+    public int HnmWindowsTotal { get; set; }
     public List<RecentActivityEntry> RecentActivity { get; set; } = new();
     public List<NewsUpdateEntry> NewsUpdates { get; set; } = new();
     // ToD repops opening within the next 2 hours, surfaced in the Upcoming
@@ -100,7 +106,40 @@ public class HnmClaimEntry
     public string MonsterName { get; init; } = string.Empty;
     public int Count { get; init; }
     public double Percent { get; init; }
+
+    // The FAMILY's colour: an NQ and its HQ share one, and are told apart by IsHq.
     public string ColorClass { get; init; } = "a";
+
+    // Was this the stronger half? Drives the lighter ring shade and the HQ badge. HasHqVariant is
+    // false for the monsters that have no stronger half — they get no badge at all, rather than a
+    // meaningless "NQ" on a Tiamat.
+    public bool IsHq { get; init; }
+    public bool HasHqVariant { get; init; }
+}
+
+// One monster's row on the card's "Window frequency" tab: which window of its spawn band it
+// actually pops on. Straight off HnmWindowStatsService — see the notes there on why this counts
+// unclaimed pops too, and why the NQ/HQ halves share one row.
+public class HnmWindowRow
+{
+    public string MonsterName { get; init; } = string.Empty;
+    public string ColorClass { get; init; } = "a";
+    public int TotalPops { get; init; }
+    public int WindowCount { get; init; }
+    public int PeakWindow { get; init; }
+    public double PeakPercent { get; init; }
+    public IReadOnlyList<HnmWindowBarEntry> Bars { get; init; } = Array.Empty<HnmWindowBarEntry>();
+}
+
+public class HnmWindowBarEntry
+{
+    public int Window { get; init; }
+    public int Count { get; init; }
+    public double Percent { get; init; }
+
+    // Height as a share of this monster's BUSIEST window, not of 100% — a monster whose best
+    // window holds 30% of its pops would otherwise draw as a row of stubs.
+    public double HeightPercent { get; init; }
 }
 
 public class RecentActivityEntry

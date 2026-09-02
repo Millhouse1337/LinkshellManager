@@ -26,24 +26,15 @@
     ViewData["Title"] = pageHeading;
     ViewData["BodyClass"] = "lsm-page";
     var selectedLinkshellName = Model.Linkshells.FirstOrDefault(item => item.Id == Model.LinkshellId)?.LinkshellName ?? "Selected Linkshell";
+    // camelCase, because the browser reads this back as JS: serialized with the default policy the
+    // payload came out PascalCase, every `timing.cooldownMinutes` read as undefined, and picking a
+    // monster BLANKED the cooldown and interval instead of pre-filling them.
+    var jsonOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 }
 
-<style>
-    /* The global dark-theme reset hides the native up/down spinner on every
-       number input. Opt the Day Number field back in (class="show-spinner")
-       so it gets clickable increment/decrement arrows. */
-    input[type="number"].show-spinner {
-        -moz-appearance: number-input;
-        appearance: auto;
-    }
-    input[type="number"].show-spinner::-webkit-inner-spin-button,
-    input[type="number"].show-spinner::-webkit-outer-spin-button {
-        -webkit-appearance: inner-spin-button;
-        appearance: auto;
-        opacity: 1;
-        margin: 0;
-    }
-</style>
+@* (A `.show-spinner` opt-in used to live here, putting the native up/down arrows back on the Day
+   field. Day and Popped on window are plain number inputs now, like their counterparts on the
+   Activity's Log ToD form -- the native spinner renders as a light block on this dark theme. *@
 
 <div class="page-head fade d1">
     <div>
@@ -67,7 +58,7 @@ else
           method="post" id="tod-form" novalidate
           enctype="multipart/form-data"
           data-character-names="@JsonSerializer.Serialize(Model.CharacterNames)"
-          data-monster-timings="@JsonSerializer.Serialize(Model.MonsterTimings)"
+          data-monster-timings="@JsonSerializer.Serialize(Model.MonsterTimings, jsonOptions)"
           class="create-form fade d2">
         @Html.AntiForgeryToken()
         <input asp-for="Tod.LinkshellId" type="hidden" />
@@ -87,7 +78,7 @@ else
             <span class="tag accent">@selectedLinkshellName</span>
         </div>
 
-        <div class="create-form__grid">
+        <div class="create-form__rows">
             @{
                 // Model is always supplied by the action; capture Tod once as
                 // non-null so the dropdown logic below stays free of null noise.
@@ -107,82 +98,146 @@ else
                 var customMonsterValue = isCustomMonster
                     ? tod.MonsterName
                     : Model.CustomMonsterName;
+                // Which of the conditional fields the picked monster actually answers for, so the
+                // FIRST render already matches what the script does on every later change: Day and
+                // HQ are merge-pair questions (only the three NQ/HQ families have a pop cycle), and
+                // a pop window only means something on a monster with a spawn grid.
+                LinkshellManagerDiscordApp.ViewModels.TodMonsterTimingHint? selectedHint = null;
+                if (monsterOption is not null)
+                {
+                    Model.MonsterTimings.TryGetValue(monsterOption, out selectedHint);
+                }
+                var showDayNumber = selectedHint?.HasHqVariant == true;
+                var showPopWindow = selectedHint?.HasSpawnGrid == true;
             }
-            <label>
-                <span>Monster</span>
-                <select asp-for="Tod.MonsterName" id="monster-select" required>
-                    <option value="">Select monster name</option>
-                    @foreach (var monster in Model.MonsterOptions)
-                    {
-                        <option value="@monster"
-                                selected="@(string.Equals(monster, monsterOption, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
-                            @monster
+            @* Lead row: the monster (plus its free-text name when "Other"), the day it is on, and
+               whether the pop was HQ -- the same monster/day/HQ shape the Activity's form opens with. *@
+            <div class="create-form__row">
+                <label>
+                    <span>Monster</span>
+                    <select asp-for="Tod.MonsterName" id="monster-select" required>
+                        <option value="">Select monster name</option>
+                        @foreach (var monster in Model.MonsterOptions)
+                        {
+                            <option value="@monster"
+                                    selected="@(string.Equals(monster, monsterOption, StringComparison.OrdinalIgnoreCase) ? "selected" : null)">
+                                @monster
+                            </option>
+                        }
+                        <option value="@TodManagerViewModel.OtherMonster" selected="@(isCustomMonster ? "selected" : null)">
+                            Other (enter a name)
                         </option>
-                    }
-                    <option value="@TodManagerViewModel.OtherMonster" selected="@(isCustomMonster ? "selected" : null)">
-                        Other (enter a name)
-                    </option>
-                </select>
-                <span asp-validation-for="Tod.MonsterName" class="create-form__error"></span>
-            </label>
-
-            <label id="custom-monster-wrap" class="@(isCustomMonster ? "" : "d-none")">
-                <span>Monster name</span>
-                <input asp-for="CustomMonsterName" id="custom-monster-input" type="text"
-                       maxlength="64" autocomplete="off" placeholder="Type the monster's name"
-                       value="@customMonsterValue" />
-                <span asp-validation-for="CustomMonsterName" class="create-form__error"></span>
-            </label>
-
-            <label>
-                <span>Claim</span>
-                <select asp-for="Tod.Claim" id="claim-select">
-                    <option value="" selected="@(Model.Tod.Claim == null ? "selected" : null)">Not Specified</option>
-                    <option value="true" selected="@(Model.Tod.Claim == true ? "selected" : null)">Yes</option>
-                    <option value="false" selected="@(Model.Tod.Claim == false ? "selected" : null)">No</option>
-                </select>
-            </label>
-
-            <label>
-                <span>Cooldown</span>
-                <span class="create-form__duration">
-                    <input asp-for="CooldownValue" id="cooldown-value" type="number" min="1" step="1"
-                           value="@cooldownValue" required
-                           title="Pre-filled from this monster's configured cooldown. Change it for this ToD only." />
-                    <select asp-for="CooldownUnit" id="cooldown-unit">
-                        <option value="hours" selected="@(cooldownUnit == "hours" ? "selected" : null)">hours</option>
-                        <option value="mins" selected="@(cooldownUnit == "mins" ? "selected" : null)">mins</option>
                     </select>
-                </span>
-                <span asp-validation-for="Tod.Cooldown" class="create-form__error"></span>
-            </label>
+                    <span asp-validation-for="Tod.MonsterName" class="create-form__error"></span>
+                </label>
 
-            <label>
-                <span>Interval</span>
-                <span class="create-form__duration">
-                    <input asp-for="IntervalValue" id="interval-value" type="number" min="1" step="1"
-                           value="@intervalValue" placeholder="Not specified"
-                           title="Pre-filled from this monster's configured cadence. Leave blank to record no interval." />
-                    <select asp-for="IntervalUnit" id="interval-unit">
-                        <option value="hours" selected="@(intervalUnit == "hours" ? "selected" : null)">hours</option>
-                        <option value="mins" selected="@(intervalUnit == "mins" ? "selected" : null)">mins</option>
+                <label id="custom-monster-wrap" class="@(isCustomMonster ? "" : "d-none")">
+                    <span>Monster name</span>
+                    <input asp-for="CustomMonsterName" id="custom-monster-input" type="text"
+                           maxlength="64" autocomplete="off" placeholder="Type the monster's name"
+                           value="@customMonsterValue" />
+                    <span asp-validation-for="CustomMonsterName" class="create-form__error"></span>
+                </label>
+
+                <label id="day-number-wrap" class="create-form__field--narrow @(showDayNumber ? "" : "d-none")">
+                    <span>Day</span>
+                    <input asp-for="Tod.DayNumber" id="day-number" type="number" min="1" step="1"
+                           placeholder="—"
+                           title="The monster's day in its cycle. Blank = not specified." />
+                </label>
+
+                <label class="create-form__field--auto">
+                    <span>HQ</span>
+                    <span class="create-form__toggle">
+                        @* The shared pill toggle (site.css .switch) -- still a native checkbox, so
+                           asp-for binding is unchanged; it just reads as the Activity's HQ switch. *@
+                        <input asp-for="Tod.Hq" type="checkbox" class="switch" id="tod-hq" />
+                        <span>Yes</span>
+                    </span>
+                </label>
+            </div>
+
+            @* Which window it popped on, and whether we claimed it. *@
+            <div class="create-form__row create-form__row--pair">
+                <label id="pop-window-wrap" class="@(showPopWindow ? "" : "d-none")">
+                    <span>Popped on window</span>
+                    <input asp-for="Tod.PopWindow" id="pop-window" type="number" min="1" step="1"
+                           placeholder="—"
+                           title="Which window the monster popped on. Blank = not recorded." />
+                </label>
+
+                <label>
+                    <span>Claim</span>
+                    <select asp-for="Tod.Claim" id="claim-select">
+                        <option value="" selected="@(Model.Tod.Claim == null ? "selected" : null)">Not Specified</option>
+                        <option value="true" selected="@(Model.Tod.Claim == true ? "selected" : null)">Yes</option>
+                        <option value="false" selected="@(Model.Tod.Claim == false ? "selected" : null)">No</option>
                     </select>
-                </span>
-                <span asp-validation-for="Tod.Interval" class="create-form__error"></span>
-            </label>
+                </label>
+            </div>
 
-            <label>
-                <span>Time of death</span>
-                <input asp-for="Tod.Time" type="datetime-local" step="1" id="tod-time"
-                       value="@Model.Tod.Time?.ToString("yyyy-MM-ddTHH:mm:ss")" />
-                <span asp-validation-for="Tod.Time" class="create-form__error"></span>
-            </label>
+            @* Time of death, and the cooldown it is measured from. *@
+            <div class="create-form__row create-form__row--pair">
+                <label>
+                    <span>Time of death</span>
+                    <input asp-for="Tod.Time" type="datetime-local" step="1" id="tod-time"
+                           value="@Model.Tod.Time?.ToString("yyyy-MM-ddTHH:mm:ss")" />
+                    <span asp-validation-for="Tod.Time" class="create-form__error"></span>
+                </label>
 
-            <label>
-                <span>Repop time</span>
-                <input asp-for="Tod.RepopTime" type="datetime-local" step="1" id="repop-time"
-                       value="@Model.Tod.RepopTime?.ToString("yyyy-MM-ddTHH:mm:ss")" readonly />
-            </label>
+                <label>
+                    <span>Cooldown</span>
+                    <span class="create-form__duration">
+                        <input asp-for="CooldownValue" id="cooldown-value" type="number" min="1" step="1"
+                               value="@cooldownValue" required
+                               title="Pre-filled from this monster's configured cooldown. Change it for this ToD only." />
+                        <select asp-for="CooldownUnit" id="cooldown-unit">
+                            <option value="hours" selected="@(cooldownUnit == "hours" ? "selected" : null)">hours</option>
+                            <option value="mins" selected="@(cooldownUnit == "mins" ? "selected" : null)">mins</option>
+                        </select>
+                    </span>
+                    <span asp-validation-for="Tod.Cooldown" class="create-form__error"></span>
+                </label>
+            </div>
+
+            @* The check cadence, and the fine seconds offset on top of the cooldown. *@
+            <div class="create-form__row create-form__row--pair">
+                <label>
+                    <span>Interval</span>
+                    <span class="create-form__duration">
+                        @* Blank rather than a literal 0 when nothing is recorded, so the field
+                           reads as its "Not specified" placeholder the way the Activity's does. *@
+                        <input asp-for="IntervalValue" id="interval-value" type="number" min="1" step="1"
+                               value="@(hasInterval ? intervalValue.ToString() : string.Empty)" placeholder="Not specified"
+                               title="Pre-filled from this monster's configured cadence. Leave blank to record no interval." />
+                        <select asp-for="IntervalUnit" id="interval-unit">
+                            <option value="hours" selected="@(intervalUnit == "hours" ? "selected" : null)">hours</option>
+                            <option value="mins" selected="@(intervalUnit == "mins" ? "selected" : null)">mins</option>
+                        </select>
+                    </span>
+                    <span asp-validation-for="Tod.Interval" class="create-form__error"></span>
+                </label>
+
+                <label>
+                    <span>Additional seconds</span>
+                    <input asp-for="AdditionalSeconds" id="additional-seconds" type="number" min="0" step="1"
+                           value="@Model.Tod.AdditionalSeconds" placeholder="0"
+                           title="Extra seconds added on top of the cooldown when calculating the repop time" />
+                </label>
+            </div>
+
+            @* Calculated repop: the summary on the left, the read-only repop time on the right. *@
+            <div class="create-form__row create-form__repop">
+                <div class="create-form__repop-info">
+                    <div class="create-form__repop-label">Calculated repop</div>
+                    <strong class="create-form__repop-value" id="repop-summary">Pick a date and time to calculate the next repop window.</strong>
+                </div>
+                <label>
+                    <span>Repop time</span>
+                    <input asp-for="Tod.RepopTime" type="datetime-local" step="1" id="repop-time"
+                           value="@Model.Tod.RepopTime?.ToString("yyyy-MM-ddTHH:mm:ss")" readonly />
+                </label>
+            </div>
         </div>
 
         <div class="create-form__section">

@@ -118,6 +118,35 @@ public static class DiscordEventMessageBuilder
     // is invisible to everyone else.
     //   evt:winview:{eventId}:{window}  — the ◀ / ▶ arrows; the window is baked into the id
     public const string WindowViewPrefix = "evt:winview:";
+
+    // "View Camp Details" on the defeated note — the one link back to a camp after its board is
+    // gone. The trailing id is an EventHistory id, NOT an event id: the camp row is recycled for
+    // the next pop, so a button pointing at it would open whatever is being camped now.
+    public const string PastEventDetailsPrefix = "evt:pastdet:";
+
+    // The button row for the defeated note. Empty when the camp has no archive to open — a camp
+    // that ended with nobody on it writes none, and a button leading to a 404 is worse than no
+    // button.
+    public static object[] BuildDefeatedNoticeComponents(int? eventHistoryId)
+        => eventHistoryId is not { } historyId
+            ? Array.Empty<object>()
+            : new object[]
+            {
+                new
+                {
+                    type = 1,
+                    components = new object[]
+                    {
+                        new
+                        {
+                            type = 2,
+                            style = 2, // secondary — this is a read, not an action
+                            label = "📋 View Camp Details",
+                            custom_id = $"{PastEventDetailsPrefix}{historyId}",
+                        },
+                    },
+                },
+            };
     //   evt:winviewpick:{eventId}       — the "Jump to a window" select; the window is the VALUE
     public const string WindowViewPickPrefix = "evt:winviewpick:";
 
@@ -386,9 +415,14 @@ public static class DiscordEventMessageBuilder
     // Message 0 carries the heading and the icon key; the LAST carries the buttons and the
     // no-slot roster, so the reader meets them after the parties rather than between them.
     // A single-alliance board is a single message and reads exactly as it did before.
+    //
+    // `claimShield` is the camp's recorded lottery windows, rendered at the foot of the LAST
+    // message. Optional and defaulted so every existing caller is unchanged; null and empty both
+    // mean "draw nothing", which is the state of every board until an officer posts a capture.
     public static IReadOnlyList<object> BuildWideBoardMessages(
         Event ev, IReadOnlyList<EventSignupLine> signups, PartySetup setup,
-        IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups)
+        IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups,
+        IReadOnlyList<ClaimShieldBoardCapture>? claimShield = null)
     {
         var header = BuildV2Heading(ev, slotSignups) + "\n" + BuildGridKey(ev, slotSignups) + "\n";
 
@@ -430,6 +464,13 @@ public static class DiscordEventMessageBuilder
 
         // The no-slot roster rides with the buttons on the last message.
         var aside = BuildExtraRosterSections(ev, slotSignups, signups);
+        // ...and the Claim Shield under it, so the last thing read before the buttons is who
+        // tagged the mob. Discord stacks a classic message content -> embeds -> components, which
+        // is what puts this after the party grid and above the Sign Up row.
+        if (ClaimShieldBoardSection.Build(claimShield) is { Length: > 0 } shield)
+        {
+            aside.Add(shield);
+        }
         var embed = new Dictionary<string, object?> { ["color"] = EmbedColor };
         if (aside.Count > 0) { embed["description"] = Truncate(string.Join("\n\n", aside), 4000); }
 
@@ -740,21 +781,27 @@ public static class DiscordEventMessageBuilder
     // Components V2 "defeated" notice — the V2 equivalent of HnmBoardNoticeService's classic
     // note, used when a V2-mode board's HNM is logged as down. A container with just the
     // note text (no buttons, no image), keeping the V2 flag so the edit is accepted.
-    public static object BuildV2DefeatedNoticeMessage(string title, string description)
+    public static object BuildV2DefeatedNoticeMessage(
+        string title, string description, int? eventHistoryId = null)
     {
         var text = string.IsNullOrWhiteSpace(description) ? title : $"## {title}\n\n{description}";
+        // The action row sits BESIDE the container, not inside it: a V2 message's top-level
+        // components list takes both, and nesting a row in a container is not a shape Discord
+        // accepts.
+        var components = new List<object>
+        {
+            new
+            {
+                type = 17, // Container
+                accent_color = 0x6B7280,
+                components = new object[] { new { type = 10, content = Truncate(text, 3900) } },
+            },
+        };
+        components.AddRange(BuildDefeatedNoticeComponents(eventHistoryId));
         return new
         {
             flags = IsComponentsV2Flag,
-            components = new object[]
-            {
-                new
-                {
-                    type = 17, // Container
-                    accent_color = 0x6B7280,
-                    components = new object[] { new { type = 10, content = Truncate(text, 3900) } },
-                },
-            },
+            components = components.ToArray(),
             attachments = Array.Empty<object>(),
             allowed_mentions = new { parse = Array.Empty<string>() },
         };

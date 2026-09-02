@@ -568,8 +568,23 @@ else
             {
             <div class="card fade d4">
                 <div class="card-head">
-                    <div class="card-title">HNM Claims (last @Model.HnmClaimsWindowDays days)</div>
+                    @* Title tracks the visible tab: the two charts cover different spans (claims
+                       are the last 30 days, the window distribution is all-time), so one fixed
+                       heading would misdescribe whichever tab was open. *@
+                    <div class="card-title">
+                        <span data-hnm-title="claims">HNM Claims (last @Model.HnmClaimsWindowDays days)</span>
+                        <span data-hnm-title="windows" hidden>Window frequency (all time)</span>
+                    </div>
+                    <div class="hnm-chart-tabs" role="tablist" aria-label="HNM chart">
+                        <button type="button" class="hnm-chart-tab is-active" role="tab"
+                                aria-selected="true" aria-controls="hnm-panel-claims"
+                                data-hnm-tab="claims">Claims</button>
+                        <button type="button" class="hnm-chart-tab" role="tab"
+                                aria-selected="false" aria-controls="hnm-panel-windows"
+                                data-hnm-tab="windows">Windows</button>
+                    </div>
                 </div>
+                <div id="hnm-panel-claims" role="tabpanel" data-hnm-panel="claims">
                 @if (Model.HnmClaims.Count == 0)
                 {
                     <div class="empty">No claims in the last @Model.HnmClaimsWindowDays days.</div>
@@ -586,7 +601,11 @@ else
                             {
                                 var dash = claim.Percent;
                                 var gap = 100 - dash;
-                                <circle class="donut-seg donut-seg-@claim.ColorClass" cx="21" cy="21" r="15.9155" fill="none" stroke-width="4"
+                                @* An NQ and its HQ share the family's colour class and are told
+                                   apart by .is-hq, which lightens the arc — so Fafnir and Nidhogg
+                                   read as one monster's two outcomes rather than two unrelated
+                                   monsters that happen to sit together. *@
+                                <circle class="donut-seg donut-seg-@claim.ColorClass @(claim.IsHq ? "is-hq" : null)" cx="21" cy="21" r="15.9155" fill="none" stroke-width="4"
                                         stroke-dasharray="@(dash.ToString("0.##")) @(gap.ToString("0.##"))"
                                         stroke-dashoffset="@(offset.ToString("0.##"))"></circle>
                                 offset = (offset - dash + 100) % 100;
@@ -598,14 +617,90 @@ else
                             @foreach (var claim in Model.HnmClaims)
                             {
                                 <div class="donut-legend-row">
-                                    <span class="donut-swatch donut-seg-@claim.ColorClass"></span>
-                                    <span class="donut-legend-name">@claim.MonsterName</span>
+                                    <span class="donut-swatch donut-seg-@claim.ColorClass @(claim.IsHq ? "is-hq" : null)"></span>
+                                    <span class="donut-legend-name">
+                                        @claim.MonsterName
+                                        @* Only the three NQ/HQ families get a badge; the shading
+                                           alone would leave a colour-blind reader guessing. *@
+                                        @if (claim.HasHqVariant)
+                                        {
+                                            <span class="donut-hq-tag @(claim.IsHq ? "is-hq" : null)">@(claim.IsHq ? "HQ" : "NQ")</span>
+                                        }
+                                    </span>
                                     <span class="donut-legend-stats"><span class="num">@claim.Count</span> · @(claim.Percent.ToString("0.#"))%</span>
                                 </div>
                             }
                         </div>
                     </div>
                 }
+                </div>
+                <div id="hnm-panel-windows" role="tabpanel" data-hnm-panel="windows" hidden>
+                @if (Model.HnmWindows.Count == 0)
+                {
+                    <div class="empty">
+                        No pop windows recorded yet. Ending a camp from its board records the window
+                        automatically; a hand-logged ToD records it from the "Popped on window" field.
+                    </div>
+                }
+                else
+                {
+                    <div class="winfreq">
+                        @foreach (var monster in Model.HnmWindows)
+                        {
+                            <div class="winfreq-row">
+                                <div class="winfreq-head">
+                                    <span class="winfreq-name">
+                                        <span class="donut-swatch donut-seg-@monster.ColorClass"></span>
+                                        @monster.MonsterName
+                                    </span>
+                                    @* The headline finding, spelled out — the bars show the shape,
+                                       this says what it means without counting columns. *@
+                                    <span class="winfreq-peak">
+                                        W@monster.PeakWindow · <span class="num">@(monster.PeakPercent.ToString("0.#"))%</span>
+                                    </span>
+                                </div>
+                                <div class="winfreq-bars" style="--winfreq-count:@monster.WindowCount">
+                                    @foreach (var bar in monster.Bars)
+                                    {
+                                        <span class="winfreq-bar@(bar.Window == monster.PeakWindow && bar.Count > 0 ? " is-peak" : "")"
+                                              title="Window @bar.Window — @bar.Count pop@(bar.Count == 1 ? "" : "s") (@(bar.Percent.ToString("0.#"))%)">
+                                            <span class="winfreq-bar-fill donut-seg-@monster.ColorClass"
+                                                  style="height:@(bar.HeightPercent.ToString("0.#"))%"></span>
+                                        </span>
+                                    }
+                                </div>
+                                <div class="winfreq-foot">
+                                    <span>W1</span>
+                                    <span class="winfreq-total"><span class="num">@monster.TotalPops</span> pop@(monster.TotalPops == 1 ? "" : "s") recorded</span>
+                                    <span>W@monster.WindowCount</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+                </div>
+                <script nonce="@Html.CspNonce()">
+                    (function () {
+                        var tabs = Array.prototype.slice.call(document.querySelectorAll('[data-hnm-tab]'));
+                        if (!tabs.length) return;
+                        tabs.forEach(function (tab) {
+                            tab.addEventListener('click', function () {
+                                var wanted = tab.getAttribute('data-hnm-tab');
+                                tabs.forEach(function (other) {
+                                    var active = other === tab;
+                                    other.classList.toggle('is-active', active);
+                                    other.setAttribute('aria-selected', active ? 'true' : 'false');
+                                });
+                                document.querySelectorAll('[data-hnm-panel]').forEach(function (panel) {
+                                    panel.hidden = panel.getAttribute('data-hnm-panel') !== wanted;
+                                });
+                                document.querySelectorAll('[data-hnm-title]').forEach(function (title) {
+                                    title.hidden = title.getAttribute('data-hnm-title') !== wanted;
+                                });
+                            });
+                        });
+                    })();
+                </script>
             </div>
             }
 

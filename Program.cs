@@ -211,6 +211,7 @@ builder.Services.AddScoped<GlobalSettingsService>();
 builder.Services.AddScoped<AdminOverrideService>();
 builder.Services.AddScoped<JobsRosterService>();
 builder.Services.AddScoped<HnmClaimStatsService>();
+builder.Services.AddScoped<HnmWindowStatsService>();
 builder.Services.AddSingleton<IDateTimeZoneProvider>(DateTimeZoneProviders.Tzdb);
 builder.Services.AddSingleton<TimeZoneConversionService>();
 builder.Services.AddScoped<LootEditService>();

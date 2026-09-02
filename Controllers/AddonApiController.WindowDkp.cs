@@ -97,6 +97,20 @@ public sealed partial class AddonApiController
             });
         }
 
+        // A KILL roster is worth 0 as a window and pays through the kill bonus instead
+        // (HnmStandardCampFinalizer.WindowValue takes an explicit amount BEFORE it checks
+        // isKillWindow, so a price here would replace that 0). Pricing it pays the people who
+        // turned up for the kill twice for one appearance. The attendance-post path has always
+        // refused a price on a kill window for exactly this reason; this route did not, which left
+        // the double-pay reachable from the Activity's own re-price cell.
+        if (window.IsKillWindow)
+        {
+            return BadRequest(new
+            {
+                error = "The kill roster pays through the camp's kill bonus, not per window, so it has no price of its own."
+            });
+        }
+
         // Closed means the roster has already been handed to review, where the amounts are edited
         // per member instead. Re-pricing a window AFTER its Close is posted is allowed on purpose,
         // though — that correction is the whole point of the control.

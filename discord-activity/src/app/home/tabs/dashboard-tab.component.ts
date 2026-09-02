@@ -2,7 +2,12 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivityTodEntry, DiscordActivityService } from '../../discord/discord-activity.service';
-import type { ActivityEvent, ActivityHnmClaimSlice } from '../../discord/discord-activity.types';
+import type {
+  ActivityEvent,
+  ActivityHnmClaimSlice,
+  ActivityHnmWindowBar,
+  ActivityHnmWindowMonster
+} from '../../discord/discord-activity.types';
 import {
   ADMIN_BADGE,
   TOD_NOT_ENTERED,
@@ -450,6 +455,25 @@ export class DashboardTabComponent {
     const total = this.dashboardHnmClaimsTotal();
     if (total === 0) return 0;
     return (count / total) * DONUT_CIRCUMFERENCE;
+  }
+
+  // ----- HNM window frequency (the card's other tab) -----
+
+  protected readonly dashboardHnmChartTab = signal<'claims' | 'windows'>('claims');
+
+  // All-time and already shaped by the server (HnmWindowStatsService + MapHnmWindows): bar heights
+  // are a share of each monster's busiest window, so the web and the Activity can't scale the same
+  // data differently. No 7d/30d/all switch — a spawn distribution needs volume to mean anything,
+  // which is also why the window toggle is hidden while this tab is open.
+  protected readonly dashboardHnmWindows = computed<ActivityHnmWindowMonster[]>(() =>
+    this.activity.overview()?.hnmWindows?.monsters ?? []);
+
+  protected setDashboardHnmChartTab(tab: 'claims' | 'windows'): void {
+    this.dashboardHnmChartTab.set(tab);
+  }
+
+  protected windowBarTitle(monsterName: string, bar: ActivityHnmWindowBar): string {
+    return `${monsterName} — window ${bar.window}: ${bar.count} pop${bar.count === 1 ? '' : 's'} (${bar.percent}%)`;
   }
 
   // ----- News & recent activity -----

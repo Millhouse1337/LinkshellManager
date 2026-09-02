@@ -152,4 +152,60 @@
             </form>
         </div>
     </div>
+
+    <div class="card fade d5" style="padding:20px;max-width:720px;margin-top:16px;border:1px solid var(--accent)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <h2 class="card-title" style="margin:0">Launcher download link</h2>
+            <span class="tag accent">Super admin</span>
+        </div>
+        <div style="color:var(--fg-3);font-size:13px;margin-bottom:14px">
+            Shows a <strong>Download Launcher</strong> button on the home page and in the sidebar.
+            The home page is reachable without signing in, so a tester can get the launcher before
+            they have a Discord account. Turning this off blocks the download link itself, not just
+            the button.
+        </div>
+
+        @if (TempData["LauncherDownloadMessage"] is string launcherDownloadMessage)
+        {
+            <div class="alert alert-info" style="margin:0 0 14px">@launcherDownloadMessage</div>
+        }
+
+        <form asp-action="SetLauncherDownloadUrl" method="post" style="margin:0 0 14px">
+            @Html.AntiForgeryToken()
+            <label for="launcher-url" style="display:block;font-size:13px;color:var(--fg-3);margin-bottom:6px">
+                Download URL (https). Point this at the installer asset on the lsb-launcher GitHub release.
+                Saving an empty box clears the URL and switches the link off.
+            </label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <input id="launcher-url" type="url" name="url" value="@Model.LauncherDownloadUrl"
+                       placeholder="https://github.com/Millhouse1337/lsb-launcher/releases/latest"
+                       style="flex:1;min-width:280px" />
+                <button type="submit" class="btn">Save URL</button>
+            </div>
+        </form>
+
+        <div style="display:flex;align-items:center;gap:12px">
+            @if (Model.LauncherDownloadEnabled)
+            {
+                <span class="tag success">Download link is ON</span>
+            }
+            else
+            {
+                <span class="tag">Download link is off</span>
+            }
+
+            <form asp-action="SetLauncherDownload" method="post" style="margin:0">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="enabled" value="@((!Model.LauncherDownloadEnabled).ToString().ToLowerInvariant())" />
+                @if (Model.LauncherDownloadEnabled)
+                {
+                    <button type="submit" class="btn danger">Hide download link</button>
+                }
+                else
+                {
+                    <button type="submit" class="btn primary">Show download link</button>
+                }
+            </form>
+        </div>
+    </div>
 }

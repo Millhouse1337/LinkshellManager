@@ -176,6 +176,35 @@ public static class HnmConfig
         return name.Trim();
     }
 
+    // The half of a merge pair a claim should be COUNTED under once the ToD's HQ answer is taken
+    // into account — "Fafnir" or "Nidhogg" rather than the combined "Fafnir/Nidhogg" — so the
+    // Claims donut can chart the NQ and the HQ as separate monsters. Everything else comes back
+    // unchanged with HasHqVariant false: NQ/HQ is not a question those monsters have.
+    //
+    // The stored NAME decides on its own when it names one half AND ONLY that half: a ToD recorded
+    // as "Nidhogg" is an HQ kill whether or not anyone touched the toggle, and that is the only way
+    // rows written before the toggle existed can be read at all. Otherwise the toggle decides,
+    // which is the case that matters for a board-logged ToD — its AssignedMonsterName is the
+    // combined label whichever half actually popped, so the name cannot answer.
+    public static (string Name, bool IsHq, bool HasHqVariant) ResolveClaimHalf(string? monsterName, bool hq)
+    {
+        var segments = MonsterSegments(monsterName);
+        foreach (var (baseName, stronger) in MonsterMergePairs)
+        {
+            var namesBase = segments.Any(segment => segment.Equals(baseName, StringComparison.OrdinalIgnoreCase));
+            var namesStronger = segments.Any(segment => segment.Equals(stronger, StringComparison.OrdinalIgnoreCase));
+            if (!namesBase && !namesStronger)
+            {
+                continue;
+            }
+
+            var isHq = hq || (namesStronger && !namesBase);
+            return (isHq ? stronger : baseName, isHq, true);
+        }
+
+        return (monsterName?.Trim() ?? string.Empty, false, false);
+    }
+
     // From this day number onward a merged entry shows the combined "Base/Stronger" label;
     // below it, only the base name.
     public const int CombinedFromDay = 4;

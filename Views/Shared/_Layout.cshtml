@@ -5,6 +5,7 @@
 @inject UserManager<AppUser> UserManager
 @inject ApplicationDbContext DbContext
 @inject LinkshellManagerDiscordApp.Services.AdminOverrideService AdminOverride
+@inject LinkshellManagerDiscordApp.Services.GlobalSettingsService GlobalSettings
 
 @{
     var isSignedIn = SignInManager.IsSignedIn(User);
@@ -120,6 +121,10 @@
     ViewData["ActiveLinkshellInitials"] = activeLinkshellInitials;
     ViewData["ActiveRole"] = activeRole;
     ViewData["ActivePermissions"] = activePermissions;
+    // Read here rather than per-view so the sidebar link and the home page agree. Cheap:
+    // GlobalSettingsService caches for 30s. Home/Index sets its own copy because a view
+    // body runs before its layout, so it cannot see anything this block writes.
+    ViewData["ShowLauncherDownload"] = await GlobalSettings.IsLauncherDownloadEnabledAsync(Context.RequestAborted);
 
     var displayName = currentUser?.CharacterName ?? currentUser?.UserName ?? "User";
     var avatarInitials = string.Concat(

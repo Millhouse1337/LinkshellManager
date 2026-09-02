@@ -26,7 +26,14 @@
         <div class="we-open-list">
             @foreach (var ev in Model.OpenEvents)
             {
-                @await Html.PartialAsync("_WindowEventCard", ev, new ViewDataDictionary(ViewData)
+                @* By FULL PATH, not by name. A bare "_WindowEventCard" is resolved against the
+                   executing CONTROLLER's folder (/Views/<controller>/ then /Views/Shared/), never
+                   against the folder this partial happens to live in. That is fine while
+                   WindowEvents renders it, and throws "The partial view was not found" the moment
+                   the Event System page mounts this section -- which it does, so /Event 500'd for
+                   every linkshell that had an open attendance event. Same rule applies to every
+                   partial reference in this folder: it is mounted cross-controller. *@
+                @await Html.PartialAsync("~/Views/WindowEvents/_WindowEventCard.cshtml", ev, new ViewDataDictionary(ViewData)
                 {
                     ["LinkshellId"] = Model.LinkshellId,
                     ["CanManage"] = Model.CanManage,

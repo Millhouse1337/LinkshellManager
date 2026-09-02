@@ -303,7 +303,9 @@ public class AccountController : Controller
             IsSuperAdmin = user.IsSuperAdmin,
             AddonGloballyDisabled = user.IsSuperAdmin && await _globalSettings.IsAddonGloballyDisabledAsync(),
             ClaimShieldGloballyDisabled = user.IsSuperAdmin && await _globalSettings.IsClaimShieldGloballyDisabledAsync(),
-            AdminOverrideEnabled = user.IsSuperAdmin && await _globalSettings.IsAdminOverrideEnabledAsync()
+            AdminOverrideEnabled = user.IsSuperAdmin && await _globalSettings.IsAdminOverrideEnabledAsync(),
+            LauncherDownloadEnabled = user.IsSuperAdmin && await _globalSettings.IsLauncherDownloadEnabledAsync(),
+            LauncherDownloadUrl = user.IsSuperAdmin ? await _globalSettings.GetLauncherDownloadUrlAsync() : null
         });
     }
 
@@ -386,6 +388,76 @@ public class AccountController : Controller
         TempData["ClaimShieldKillSwitchMessage"] = disabled
             ? "Claim Shield disabled globally. No addon will record lottery windows until you re-enable it."
             : "Claim Shield re-enabled globally. Each linkshell's per-monster switches apply again.";
+        return RedirectToAction(nameof(Settings));
+    }
+
+    // Super-admin-only URL for the launcher download link. Stored as a setting rather than
+    // hard-coded so publishing a new launcher build is a paste here instead of a redeploy.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetLauncherDownloadUrl(string? url)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        if (!user.IsSuperAdmin)
+        {
+            return Forbid();
+        }
+
+        var trimmed = url?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            await _globalSettings.SetLauncherDownloadUrlAsync(null);
+            await _globalSettings.SetLauncherDownloadEnabledAsync(false);
+            TempData["LauncherDownloadMessage"] = "Launcher download URL cleared, and the link switched off.";
+            return RedirectToAction(nameof(Settings));
+        }
+
+        // https only: this URL is handed to every visitor, including signed-out ones.
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var parsed) || parsed.Scheme != Uri.UriSchemeHttps)
+        {
+            TempData["LauncherDownloadMessage"] = "Launcher URL must be an absolute https:// address. Nothing was changed.";
+            return RedirectToAction(nameof(Settings));
+        }
+
+        await _globalSettings.SetLauncherDownloadUrlAsync(trimmed);
+        TempData["LauncherDownloadMessage"] = "Launcher download URL saved.";
+        return RedirectToAction(nameof(Settings));
+    }
+
+    // Super-admin-only switch for the launcher download link. LauncherController re-checks this
+    // on every download, so turning it off blocks the download rather than merely hiding buttons.
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetLauncherDownload(bool enabled)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Challenge();
+        }
+
+        if (!user.IsSuperAdmin)
+        {
+            return Forbid();
+        }
+
+        // Refuse to switch the link on while there is nothing for it to point at, otherwise the
+        // button appears and every click 404s.
+        if (enabled && string.IsNullOrWhiteSpace(await _globalSettings.GetLauncherDownloadUrlAsync()))
+        {
+            TempData["LauncherDownloadMessage"] = "Save a launcher download URL before turning the link on.";
+            return RedirectToAction(nameof(Settings));
+        }
+
+        await _globalSettings.SetLauncherDownloadEnabledAsync(enabled);
+        TempData["LauncherDownloadMessage"] = enabled
+            ? "Launcher download link is now visible, including to signed-out visitors."
+            : "Launcher download link hidden, and the download URL is blocked until you turn it back on.";
         return RedirectToAction(nameof(Settings));
     }
 

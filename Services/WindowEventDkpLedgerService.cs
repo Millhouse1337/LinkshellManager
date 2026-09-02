@@ -35,6 +35,8 @@ public sealed class WindowEventDkpLedgerService
         var windowEvent = await _db.WindowEvents
             .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
             .Include(w => w.MemberDkpOverrides)
+            // The camp's Past Event and everyone on it: written at End Camp, reconciled here.
+            .Include(w => w.CampEventHistory).ThenInclude(h => h!.AppUserEventHistories)
             .FirstOrDefaultAsync(w => w.Id == windowEventId, cancellationToken);
 
         if (windowEvent is null ||
@@ -113,6 +115,37 @@ public sealed class WindowEventDkpLedgerService
             .Where(item => item.Membership is not null && !string.IsNullOrWhiteSpace(item.Membership.AppUserId))
             .ToList();
 
+        // The per-character amounts the review settled on. Hoisted above the ledger work because
+        // the archive reconcile below needs the same numbers.
+        var defaultAmount = windowEvent.DkpAmount.Value;
+        var overridesByName = windowEvent.MemberDkpOverrides
+            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+
+        double AmountForCharacter(string? characterName)
+            => !string.IsNullOrWhiteSpace(characterName) &&
+               overridesByName.TryGetValue(characterName.Trim(), out var v)
+                ? v
+                : defaultAmount;
+
+        // A camp-sourced review row archives an EventHistory. It is written at END CAMP now (see
+        // HnmCampReviewHandoffService) rather than here, because a recycled board otherwise left
+        // the camp with no past-event record at all until somebody reviewed it. What is left for
+        // Post is to make that archive agree with the review: the officer may have removed
+        // someone, added someone, or changed an amount.
+        //
+        // Deliberately BEFORE the already-credited filter below. That filter exists so a second
+        // Post cannot double-credit the ledger, and it short-circuits the whole method — but an
+        // edit-then-re-post that credits nobody new must still correct the archive.
+        var campHistory = ResolveCampEventHistory(windowEvent);
+        if (campHistory is not null)
+        {
+            SyncCampArchiveRoster(campHistory, windowEvent, combined, membershipsByCharacterName,
+                membershipByAppUserId, AmountForCharacter);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
         if (candidates.Count == 0)
         {
             return 0;
@@ -138,29 +171,10 @@ public sealed class WindowEventDkpLedgerService
         }
 
 
-        var defaultAmount = windowEvent.DkpAmount.Value;
-        var overridesByName = windowEvent.MemberDkpOverrides
-            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
-            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
-
-        double AmountForCharacter(string? characterName)
-            => !string.IsNullOrWhiteSpace(characterName) &&
-               overridesByName.TryGetValue(characterName.Trim(), out var v)
-                ? v
-                : defaultAmount;
-
         // A window event's entry type ("Kings Camp", "Kill", …) is written straight into the
         // ledger's EventType column so it resolves to a pool, but those camp tags aren't assignable
         // on the DKP grouping card — they fall through to the default pool like any unmapped type.
         var windowEventPool = DkpPoolRef.Derived(windowEvent.EntryType);
-
-        // A camp-sourced event archives an EventHistory the way the old End Camp finalizers did —
-        // but at POST, because that is when the DKP becomes real. Reading the camp's dates off
-        // SourceEvent would be wrong: the pop already re-pointed Event.StartTime to the next
-        // predicted repop, so the history would be dated to the pop that hasn't happened. The
-        // Camp* columns are the snapshot taken at End Camp for exactly this.
-        var campHistory = BuildCampEventHistory(windowEvent);
 
         var written = 0;
         foreach (var item in candidates)
@@ -178,20 +192,6 @@ public sealed class WindowEventDkpLedgerService
             }
 
             var amount = AmountForCharacter(item.Entry.CharacterName);
-
-            campHistory?.AppUserEventHistories.Add(new AppUserEventHistory
-            {
-                AppUserId = membership.AppUserId,
-                CharacterName = item.Entry.CharacterName.Trim(),
-                JobName = item.Entry.MainJob,
-                SubJobName = item.Entry.SubJob,
-                StartTime = windowEvent.CampStartedAtUtc,
-                Duration = null,
-                EventDkp = amount,
-                IsQuickJoin = true,
-                IsVerified = true,
-                ActiveCredit = true,
-            });
 
             await _dkpLedger.AppendAsync(
                 membership,
@@ -214,12 +214,6 @@ public sealed class WindowEventDkpLedgerService
                     EventHistory: campHistory),
                 cancellationToken);
             written++;
-        }
-
-        // Only archive when someone was actually credited, matching how an empty event behaves.
-        if (campHistory is not null && campHistory.AppUserEventHistories.Count > 0)
-        {
-            _db.EventHistories.Add(campHistory);
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -400,21 +394,28 @@ public sealed class WindowEventDkpLedgerService
         return created;
     }
 
-    // The EventHistory archive for a camp-sourced window event, or null for an ordinary addon
-    // snapshot event (those aren't camps and get no history row, same as before).
+    // The Past Event this camp was archived as, or null for an ordinary addon snapshot row (those
+    // aren't camps and get no history, same as before).
+    //
+    // Normally it already exists: End Camp writes it (HnmCampReviewHandoffService) so a recycled
+    // board still leaves a past-event record behind while its payout waits for review. The build
+    // below is the BACKFILL for review rows staged before that was true — without it, every camp
+    // sitting unposted at deploy time would post with no archive at all.
     //
     // Everything comes off the WindowEvent's Camp* columns rather than SourceEvent: the camp row
     // is RECYCLED for the next pop, so by post time its StartTime points at a future repop and
     // CommencementStartTime is null. SourceEventId can also be null already if the camp was
     // deleted — the review row still has to be postable.
-    private static EventHistory? BuildCampEventHistory(WindowEvent windowEvent)
+    private EventHistory? ResolveCampEventHistory(WindowEvent windowEvent)
     {
+        if (windowEvent.CampEventHistory is not null) return windowEvent.CampEventHistory;
+
         if (windowEvent.SourceEventId is null && windowEvent.CampEndedAtUtc is null)
         {
             return null;
         }
 
-        return new EventHistory
+        var history = new EventHistory
         {
             LinkshellId = windowEvent.LinkshellId,
             EventName = windowEvent.Name,
@@ -431,6 +432,94 @@ public sealed class WindowEventDkpLedgerService
             TimeStamp = windowEvent.PostedToSheetAt ?? windowEvent.CampEndedAtUtc,
             AppUserEventHistories = new List<AppUserEventHistory>(),
         };
+        _db.EventHistories.Add(history);
+        // Linked so a LATER re-post reconciles this same row instead of archiving the camp twice.
+        windowEvent.CampEventHistory = history;
+        return history;
+    }
+
+    // Makes the camp's Past Event roster say exactly what the review says.
+    //
+    // End Camp stages the archive from the camp's OWN proposal, which is the right thing to show
+    // while the payout is pending. Review then edits it: someone gets removed, someone gets added,
+    // an amount changes. Without this the archive would keep quoting the proposal forever — a
+    // past event crediting a member the officer had struck off.
+    //
+    // Keyed on ACCOUNT where there is one, because AppUserEventHistory is uniquely indexed on
+    // (EventHistoryId, AppUserId): matching by character name would insert a second row for a
+    // member who was scanned on their main at End Camp and on an alt afterwards, and the save
+    // would throw. Account-less rows (an unsynced placeholder) fall back to the name, which is all
+    // they have.
+    private static void SyncCampArchiveRoster(
+        EventHistory history,
+        WindowEvent windowEvent,
+        List<(AttendanceSnapshot Snapshot, AttendanceSnapshotEntry Entry)> combined,
+        Dictionary<string, AppUserLinkshell> membershipsByCharacterName,
+        Dictionary<string, AppUserLinkshell> membershipByAppUserId,
+        Func<string?, double> amountForCharacter)
+    {
+        var byAppUserId = new Dictionary<string, AppUserEventHistory>(StringComparer.OrdinalIgnoreCase);
+        var byCharacterName = new Dictionary<string, AppUserEventHistory>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in history.AppUserEventHistories)
+        {
+            if (!string.IsNullOrWhiteSpace(row.AppUserId)) byAppUserId[row.AppUserId] = row;
+            else if (!string.IsNullOrWhiteSpace(row.CharacterName)) byCharacterName[row.CharacterName.Trim()] = row;
+        }
+
+        var kept = new HashSet<AppUserEventHistory>();
+        foreach (var item in combined)
+        {
+            var characterName = item.Entry.CharacterName.Trim();
+            if (characterName.Length == 0) continue;
+
+            var membership = (!string.IsNullOrWhiteSpace(item.Entry.AppUserId)
+                    ? membershipByAppUserId.GetValueOrDefault(item.Entry.AppUserId!)
+                    : null)
+                ?? membershipsByCharacterName.GetValueOrDefault(characterName);
+            var appUserId = membership?.AppUserId;
+            var amount = amountForCharacter(characterName);
+
+            AppUserEventHistory? row = null;
+            if (!string.IsNullOrWhiteSpace(appUserId)) byAppUserId.TryGetValue(appUserId, out row);
+            if (row is null) byCharacterName.TryGetValue(characterName, out row);
+
+            if (row is null)
+            {
+                row = new AppUserEventHistory
+                {
+                    CharacterName = characterName,
+                    StartTime = windowEvent.CampStartedAtUtc,
+                    Duration = null,
+                    IsQuickJoin = true,
+                    IsVerified = true,
+                    ActiveCredit = true,
+                };
+                history.AppUserEventHistories.Add(row);
+                if (!string.IsNullOrWhiteSpace(appUserId)) byAppUserId[appUserId] = row;
+                else byCharacterName[characterName] = row;
+            }
+            // A row already claimed by an earlier entry stays claimed: two characters resolving to
+            // one account is one attendance, and keeping the larger amount matches how End Camp
+            // and the review card fold the same collision.
+            else if (kept.Contains(row) && amount <= (row.EventDkp ?? 0d))
+            {
+                continue;
+            }
+
+            row.AppUserId = appUserId ?? row.AppUserId;
+            row.CharacterName = characterName;
+            row.JobName = item.Entry.MainJob ?? row.JobName;
+            row.SubJobName = item.Entry.SubJob ?? row.SubJobName;
+            row.EventDkp = amount;
+            kept.Add(row);
+        }
+
+        // Anyone the review struck off. Their attendance was the camp's proposal, and the officer
+        // said no -- so the archive must not keep crediting them.
+        foreach (var row in history.AppUserEventHistories.Where(r => !kept.Contains(r)).ToList())
+        {
+            history.AppUserEventHistories.Remove(row);
+        }
     }
 
     private static List<(AttendanceSnapshot Snapshot, AttendanceSnapshotEntry Entry)> BuildCombinedMembers(IEnumerable<AttendanceSnapshot> snapshots)

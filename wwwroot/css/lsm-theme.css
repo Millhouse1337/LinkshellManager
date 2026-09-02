@@ -190,12 +190,16 @@
 .lsm-page .create-form__header strong { color: var(--text-main); }
 .lsm-page .create-form__header p { color: var(--text-muted); }
 .lsm-page .create-form > label > span,
+.lsm-page .create-form__row > label > span,
 .lsm-page .create-form__grid > label > span { color: var(--text-muted); }
 .lsm-page .create-form > label > input:focus-visible,
 .lsm-page .create-form > label > select:focus-visible,
 .lsm-page .create-form > label > textarea:focus-visible,
+.lsm-page .create-form__row > label > input:focus-visible,
 .lsm-page .create-form__grid > label > input:focus-visible,
+.lsm-page .create-form__row > label > select:focus-visible,
 .lsm-page .create-form__grid > label > select:focus-visible,
+.lsm-page .create-form__row > label > textarea:focus-visible,
 .lsm-page .create-form__grid > label > textarea:focus-visible {
     outline: none; border-color: var(--blue-main); box-shadow: 0 0 0 3px rgba(79, 124, 255, .25);
 }

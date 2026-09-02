@@ -16,6 +16,7 @@ public sealed partial class ActivityDataController
 {
     [HttpGet("overview")]
     public async Task<IActionResult> GetOverviewAsync(
+        [FromServices] HnmWindowStatsService hnmWindowStats,
         [FromServices] HnmClaimStatsService hnmClaimStats,
         CancellationToken cancellationToken)
     {
@@ -132,6 +133,9 @@ public sealed partial class ActivityDataController
         // the most recent pops of any monster, so a run of Sky/ground NM kills pushed every HNM
         // claim out of the chart and the "All" toggle silently charted a tail.
         var hnmClaimStatsResult = await hnmClaimStats.BuildAsync(primaryLinkshellId, cancellationToken);
+        // The same card's Windows tab. Separate query: it reads Tod.PopWindow over every pop,
+        // claimed or not, rather than the claimed rows the donut counts.
+        var hnmWindowStatsResult = await hnmWindowStats.BuildAsync(primaryLinkshellId, cancellationToken);
 
         var pendingInvites = await _dbContext.Invites
             .Include(invite => invite.Linkshell)
@@ -909,6 +913,7 @@ public sealed partial class ActivityDataController
                 MapHnmClaimSlices(hnmClaimStatsResult.Last7Days),
                 MapHnmClaimSlices(hnmClaimStatsResult.Last30Days),
                 MapHnmClaimSlices(hnmClaimStatsResult.AllTime)),
+            MapHnmWindows(hnmWindowStatsResult),
             new ActivityOverviewStatsDto(
                 linkshellMemberships.Count,
                 activeEvents.Count,

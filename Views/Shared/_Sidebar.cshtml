@@ -360,5 +360,12 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16v12H4z"/><path d="M4 6l8 7 8-7"/></svg>
             Messages
         </a>
+        @if (ViewData["ShowLauncherDownload"] as bool? ?? false)
+        {
+            <a class="nav-item @IsOn("Launcher")" asp-controller="Launcher" asp-action="Download">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12"/><path d="M7 12l5 5 5-5"/><path d="M4 20h16"/></svg>
+                Download Launcher
+            </a>
+        }
     </nav>
 </aside>
