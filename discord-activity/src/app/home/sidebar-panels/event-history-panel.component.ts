@@ -75,10 +75,15 @@ import type {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/></svg>
                 {{ h.participants.length }} {{ h.participants.length === 1 ? 'attendee' : 'attendees' }}
               </span>
-              <span class="chip">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-                {{ h.dkpPerHour ?? 0 }} DKP/h
-              </span>
+              <!-- Hidden on an HNM: those camps are priced per WINDOW (open / close / kill /
+                   claim bonuses) and never by the hour, so the chip reads "0 DKP/h" on a camp
+                   that paid perfectly well. Mirrors Views/EventHistory/Details.cshtml. -->
+              @if (!isHnm(h)) {
+                <span class="chip">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  {{ h.dkpPerHour ?? 0 }} DKP/h
+                </span>
+              }
               <!-- Only a windowed camp has one, so it doubles as the "this was an HNM" marker in
                    the collapsed list. -->
               @if ((h.archivedWindowCount ?? 0) > 0) {
@@ -114,13 +119,22 @@ import type {
                         <input type="number" min="0" max="59" [value]="durationPart(draft, 's')" (change)="setDurationPart(draft, 's', $any($event.target).value)" [name]="'eDurS' + h.id" /><span>s</span>
                       </div>
                     </label>
-                    <label>DKP per hour<input type="number" [(ngModel)]="draft.dkpPerHour" [name]="'eRate' + h.id" /></label>
+                    <!-- Omitted on an HNM rather than disabled. draft.dkpPerHour is still
+                         seeded from the stored rate in toggle(), so Save Event round-trips the
+                         existing value unchanged instead of rescaling every attendee's DKP. -->
+                    @if (!isHnm(h)) {
+                      <label>DKP per hour<input type="number" [(ngModel)]="draft.dkpPerHour" [name]="'eRate' + h.id" /></label>
+                    }
                     <button type="button" class="primary" (click)="saveEvent(h)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
                       Save Event
                     </button>
                   </div>
-                  <p class="hint">Changing DKP per hour rescales every attendee's earned DKP and balance.</p>
+                  @if (!isHnm(h)) {
+                    <p class="hint">Changing DKP per hour rescales every attendee's earned DKP and balance.</p>
+                  } @else {
+                    <p class="hint">This camp pays per window, not by the hour.</p>
+                  }
                 </section>
               }
 
@@ -788,6 +802,14 @@ export class EventHistoryPanelComponent {
       this.histories.set(res.histories);
       this.canManage.set(res.canManage);
     }
+  }
+
+  // An HNM camp is paid per window by HnmStandardCampFinalizer / WdCampFinalizer -- open, close,
+  // kill and claim bonuses -- and DkpPerHour is never read for one. Every DKP/hour surface on the
+  // card is gated on this so it does not advertise a rate nobody set. Same test as the Razor
+  // page's `isHnm` in Views/EventHistory/Details.cshtml; the two must move together.
+  protected isHnm(h: ActivityEventHistory): boolean {
+    return (h.eventType ?? '').trim().toLowerCase() === 'hnm';
   }
 
   toggle(h: ActivityEventHistory): void {
