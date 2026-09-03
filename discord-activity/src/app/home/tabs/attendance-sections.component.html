@@ -313,7 +313,8 @@
                   <span class="tag we-credit-chip"
                         [class.we-credit-chip--window]="member.creditSource === slotWindow"
                         [class.we-credit-chip--misc]="member.creditSource === slotMisc"
-                        [class.we-credit-chip--both]="member.creditSource === 'Both'">{{ member.creditSource }}</span>
+                        [class.we-credit-chip--both]="member.creditSource === 'Both'"
+                        [title]="creditSourceHint(member.creditSource)">{{ creditSourceLabel(member.creditSource) }}</span>
                 </td>
                 <td class="num">{{ member.snapshotCount }}</td>
                 <td class="num">

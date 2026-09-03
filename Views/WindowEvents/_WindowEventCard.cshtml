@@ -212,7 +212,27 @@
                             }
                         </td>
                         <td>
-                            <span class="tag we-credit-chip we-credit-chip--@member.CreditSource.ToLowerInvariant()">@member.CreditSource</span>
+                            @*
+                                "Window" / "Misc" are the STORAGE names (AttendanceSnapshotSlotKinds)
+                                and they told an officer nothing about where the row came from. They
+                                map exactly onto the two ways attendance is captured, so the chip
+                                says that instead: a windowed capture is a Post from the addon's own
+                                UI, a misc one is a "/lsm now" taken outside any window.
+                            *@
+                            @{
+                                var creditLabel = member.CreditSource switch
+                                {
+                                    "Misc" => "/lsm now",
+                                    "Both" => "Addon UI + /lsm now",
+                                    _ => "Addon UI",
+                                };
+                            }
+                            <span class="tag we-credit-chip we-credit-chip--@member.CreditSource.ToLowerInvariant()"
+                                  title="@(member.CreditSource == "Misc"
+                                      ? "Captured with the /lsm now command, outside any window."
+                                      : member.CreditSource == "Both"
+                                          ? "Posted against a window from the addon UI, and also captured with /lsm now."
+                                          : "Posted against a window from the addon's Attendance panel.")">@creditLabel</span>
                         </td>
                         <td class="num">@member.SnapshotCount</td>
                         <td class="num">

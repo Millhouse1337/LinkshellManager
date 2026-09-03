@@ -145,34 +145,154 @@ public sealed class HnmCampReviewHandoffService
         };
         _db.WindowEvents.Add(windowEvent);
 
-        var snapshot = new AttendanceSnapshot
-        {
-            LinkshellId = ev.LinkshellId,
-            WindowEvent = windowEvent,
-            LinkedEventId = ev.Id,
-            CapturedAtUtc = nowUtc,
-            CreatedAtUtc = nowUtc,
-            SnapshotStatus = AttendanceSnapshotStatuses.Active,
-            Name = isWd
-                ? $"Check In roster · window {popWindow}"
-                : $"Camp roster · window {popWindow}",
-            EntryCount = byCharacterName.Count,
-        };
-        _db.AttendanceSnapshots.Add(snapshot);
+        // ONE SNAPSHOT PER POSTED WINDOW, built from the camp's REAL scans.
+        //
+        // This used to be a single synthetic snapshot holding the deduped roster, named "Camp
+        // roster · window N". It made the review card lie about the camp in four ways at once: it
+        // reported "1 snapshot" for a camp that posted an Open, a Close and a Kill; it carried no
+        // WindowNumber, so every capture rendered as "Unassigned"; and it had no AllianceNumber
+        // and no per-entry Zone, so both columns sat empty. All four are the same omission --
+        // the camp's per-window rows were right there in EventAttendanceWindow / AppUserEventWindow
+        // and simply were not read.
+        //
+        // The MONEY is untouched. Amounts come from the per-character WindowEventMemberDkp rows
+        // below, and AttendanceSectionsBuilder.BuildCombinedMembers takes
+        // `overrideAmount ?? baseAmount` -- so folding one snapshot into several changes what the
+        // card SHOWS about presence, never what it pays.
+        //
+        // Read before the caller tears the roster down, like everything else here: these rows
+        // cascade off AppUserEventId.
+        // Loaded ONCE and used twice: to build the snapshots below, and to re-parent the rows
+        // onto the archive further down. Tracked (no AsNoTracking) precisely so the second use
+        // gets these same instances and the re-parent actually persists.
+        var campWindows = await _db.EventAttendanceWindows
+            .Where(w => w.EventId == ev.Id)
+            .Include(w => w.Attendees)
+            .OrderBy(w => w.SequenceNumber)
+            .ToListAsync(cancellationToken);
 
+        // Jobs live on the ROSTER (they come off the participation), not on the scan row, so they
+        // are merged in by name rather than re-derived.
+        var rosterByName = byCharacterName.Values.ToDictionary(
+            m => m.CharacterName, m => m, StringComparer.OrdinalIgnoreCase);
+
+        // Everyone a window actually caught. What is left over is added below, because a roster
+        // member with no scan is a REAL case -- a Claim Shield tagger who never appeared in one --
+        // and dropping them would delete a payout the finalizer already decided on.
+        var scannedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var window in campWindows)
+        {
+            var scans = window.Attendees
+                .Where(a => !string.IsNullOrWhiteSpace(a.CharacterName))
+                .ToList();
+            if (scans.Count == 0)
+            {
+                continue;   // a window nobody was scanned in has nothing to show
+            }
+
+            var windowSnapshot = new AttendanceSnapshot
+            {
+                LinkshellId = ev.LinkshellId,
+                WindowEvent = windowEvent,
+                LinkedEventId = ev.Id,
+                // The window's OWN timestamps and identity, so the card reads as the camp
+                // happened rather than as one lump filed at End Camp.
+                CapturedAtUtc = window.PostedAt,
+                CreatedAtUtc = nowUtc,
+                SnapshotStatus = AttendanceSnapshotStatuses.Active,
+                // Named for the window: "Open", "Close", "Kill", or "Window N" on a numbered camp.
+                // Label is what the addon and HnmConfig already agreed on at post time.
+                Name = !string.IsNullOrWhiteSpace(window.Label)
+                    ? window.Label
+                    : (isWd
+                        ? $"Check In roster · window {window.SequenceNumber}"
+                        : $"Window {window.SequenceNumber}"),
+                // What made every capture render as "Unassigned".
+                WindowNumber = window.SequenceNumber,
+                SlotKind = AttendanceSnapshotSlotKinds.Window,
+                // First alliance seen in the window. A camp fielding two alliances posts two
+                // scans per window, and the combined roster unions them anyway -- this only has
+                // to stop the column being blank.
+                AllianceNumber = scans
+                    .Where(a => a.AllianceNumber.HasValue)
+                    .Select(a => a.AllianceNumber)
+                    .FirstOrDefault(),
+                AllianceKey = scans.Select(a => a.AllianceKey).FirstOrDefault(k => k != null),
+                // Who filed it. PostedBySource is the addon's own marker ("lsm-addon (lsm)");
+                // VerifiedBy on the scan is the fallback for rows written before it existed.
+                CapturedByCharacterName = !string.IsNullOrWhiteSpace(window.PostedBySource)
+                    ? window.PostedBySource
+                    : scans.Select(a => a.VerifiedBy).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+                EntryCount = scans.Count,
+            };
+            _db.AttendanceSnapshots.Add(windowSnapshot);
+
+            foreach (var scan in scans)
+            {
+                var name = scan.CharacterName!.Trim();
+                scannedNames.Add(name);
+                rosterByName.TryGetValue(name, out var rosterRow);
+
+                windowSnapshot.Entries.Add(new AttendanceSnapshotEntry
+                {
+                    Snapshot = windowSnapshot,
+                    CharacterName = name,
+                    // Carries the account through to post time so credit doesn't depend on the
+                    // character name matching one of the four names the name-resolver indexes.
+                    AppUserId = scan.AppUserId ?? rosterRow?.AppUserId,
+                    MainJob = TruncateJob(rosterRow?.JobName),
+                    SubJob = TruncateJob(rosterRow?.SubJobName),
+                    // The other blank column. Recorded per scan, so it is where they actually
+                    // were for THAT window rather than wherever they ended up.
+                    Zone = scan.Zone,
+                });
+            }
+        }
+
+        // Anyone the finalizer put on the roster that no window caught. Overwhelmingly a Claim
+        // Shield tagger: HnmStandardCampFinalizer appends them precisely because tagging is
+        // evidence of presence in its own right, and they can have no scan at all. Without this
+        // they would carry a WindowEventMemberDkp override and appear in NO snapshot, which is a
+        // row the combined roster never builds -- an officer would post the camp and silently not
+        // pay them.
+        var unscanned = byCharacterName.Values
+            .Where(m => !scannedNames.Contains(m.CharacterName))
+            .ToList();
+        if (unscanned.Count > 0)
+        {
+            var extraSnapshot = new AttendanceSnapshot
+            {
+                LinkshellId = ev.LinkshellId,
+                WindowEvent = windowEvent,
+                LinkedEventId = ev.Id,
+                CapturedAtUtc = nowUtc,
+                CreatedAtUtc = nowUtc,
+                SnapshotStatus = AttendanceSnapshotStatuses.Active,
+                Name = "Credited without a window",
+                SlotKind = AttendanceSnapshotSlotKinds.Window,
+                EntryCount = unscanned.Count,
+            };
+            _db.AttendanceSnapshots.Add(extraSnapshot);
+
+            foreach (var member in unscanned)
+            {
+                extraSnapshot.Entries.Add(new AttendanceSnapshotEntry
+                {
+                    Snapshot = extraSnapshot,
+                    CharacterName = member.CharacterName,
+                    AppUserId = member.AppUserId,
+                    MainJob = TruncateJob(member.JobName),
+                    SubJob = TruncateJob(member.SubJobName),
+                });
+            }
+        }
+
+        // The amounts, one row per roster member. Unchanged, and deliberately built from the
+        // ROSTER rather than from the snapshots above: what a member is owed is the finalizer's
+        // answer, not a function of how many windows they turned up in.
         foreach (var member in byCharacterName.Values)
         {
-            snapshot.Entries.Add(new AttendanceSnapshotEntry
-            {
-                Snapshot = snapshot,
-                CharacterName = member.CharacterName,
-                // Carries the account through to post time so credit doesn't depend on the
-                // character name matching one of the four names the name-resolver indexes.
-                AppUserId = member.AppUserId,
-                MainJob = TruncateJob(member.JobName),
-                SubJob = TruncateJob(member.SubJobName),
-            });
-
             windowEvent.MemberDkpOverrides.Add(new WindowEventMemberDkp
             {
                 WindowEvent = windowEvent,
@@ -214,10 +334,9 @@ public sealed class HnmCampReviewHandoffService
         // scan, which is what those deletes were really for -- so archiving replaces them rather
         // than being additive. Matches both close paths (EventController.Lifecycle EndEventCore
         // and ActivityDataController EndEventAsync), which archive exactly this way.
-        var postedWindows = await _db.EventAttendanceWindows
-            .Where(window => window.EventId == ev.Id)
-            .ToListAsync(cancellationToken);
-        foreach (var window in postedWindows)
+        // Reuses campWindows from above rather than re-querying: same rows, same tracked
+        // instances, one round trip.
+        foreach (var window in campWindows)
         {
             window.EventHistory = archive;
             window.Event = null;

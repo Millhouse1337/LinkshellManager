@@ -98,6 +98,22 @@ export class AttendanceSectionsComponent {
     return model.unlinkedSnapshots.filter(snapshot => snapshot.isPending).length;
   }
 
+  // "Window" / "Misc" are the STORAGE names (AttendanceSnapshotSlotKinds), and they told an
+  // officer nothing about where a row came from. They map exactly onto the two ways attendance is
+  // captured, so the chip says that instead. Mirrors Views/WindowEvents/_WindowEventCard.cshtml --
+  // the two must move together.
+  protected creditSourceLabel(source: string | null | undefined): string {
+    if (source === 'Misc') return '/lsm now';
+    if (source === 'Both') return 'Addon UI + /lsm now';
+    return 'Addon UI';
+  }
+
+  protected creditSourceHint(source: string | null | undefined): string {
+    if (source === 'Misc') return 'Captured with the /lsm now command, outside any window.';
+    if (source === 'Both') return 'Posted against a window from the addon UI, and also captured with /lsm now.';
+    return "Posted against a window from the addon's Attendance panel.";
+  }
+
   // ----- Attendance Archive search + paging -----
   //
   // The applied query and page live on WindowEventService because the server does the searching
