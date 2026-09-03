@@ -61,9 +61,22 @@ public sealed class DiscordEventEndedPublisher
                 return;
             }
 
+            // Who tagged the mob on this camp's Claim Shield. Read off the ARCHIVE
+            // (Capture.EventHistoryId), because End Camp clears Capture.EventId onto it -- the
+            // live-event id is gone by the time this summary is built.
+            //
+            // Every capture on the camp contributes names, won or lost: a tag is a tag whether or
+            // not the lottery went our way, which is the same rule HnmStandardCampFinalizer
+            // applies when it decides who the claim bonus reaches.
+            var taggers = await _db.ClaimShieldCaptureMembers
+                .AsNoTracking()
+                .Where(m => m.Capture!.EventHistoryId == eventHistoryId)
+                .Select(m => new TaggerRow(m.CharacterName, m.Matched))
+                .ToListAsync(cancellationToken);
+
             var payload = new
             {
-                embeds = new[] { BuildEmbed(history) },
+                embeds = new[] { BuildEmbed(history, taggers) },
                 allowed_mentions = new { parse = Array.Empty<string>() }
             };
             var messageId = await _bot.PostMessageAsync(channelId, payload, cancellationToken);
@@ -85,7 +98,12 @@ public sealed class DiscordEventEndedPublisher
         }
     }
 
-    private static object BuildEmbed(EventHistory history)
+    // One Claim Shield name as stored. Matched says whether it resolved to a current linkshell
+    // membership -- the gate the claim bonus itself uses, so an unmatched name is listed but must
+    // not be presented as having been paid.
+    private sealed record TaggerRow(string CharacterName, bool Matched);
+
+    private static object BuildEmbed(EventHistory history, IReadOnlyList<TaggerRow> taggers)
     {
         var attendees = history.AppUserEventHistories
             .OrderByDescending(a => a.EventDkp ?? 0)
@@ -128,7 +146,38 @@ public sealed class DiscordEventEndedPublisher
             fields.Add(new { name = "Duration", value = FormatDuration(totalHours.Value), inline = true });
         }
         fields.Add(new { name = "Attendees", value = attendees.Count.ToString(), inline = true });
-        fields.Add(new { name = "DKP awarded", value = FormatDkp(attendees.Sum(a => a.EventDkp ?? 0)), inline = true });
+        // Claim Shield, when the camp had one. Omitted entirely otherwise, so an ordinary timed
+        // event's summary is unchanged rather than carrying an empty field.
+        //
+        // Folded to one row per NAME: a member who tagged in three lotteries is one tagger and is
+        // paid once, so listing the capture rows verbatim would overstate both.
+        var claimNames = taggers
+            .Where(t => !string.IsNullOrWhiteSpace(t.CharacterName))
+            .GroupBy(t => t.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            // Matched wins on a collision: the same name can appear matched on one capture and
+            // unmatched on another (the roster changed mid-camp), and being paid is the fact.
+            .Select(g => new TaggerRow(g.Key, g.Any(t => t.Matched)))
+            .OrderByDescending(t => t.Matched)
+            .ThenBy(t => t.CharacterName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (claimNames.Count > 0)
+        {
+            // Unmatched names are shown, not hidden -- they are usually a roster typo an officer
+            // can fix -- but marked, because they earn nothing. Same transparency the in-app Claim
+            // Shield panel gives them with its "not on roster" tag.
+            var claimText = string.Join(", ", claimNames.Select(t => t.Matched
+                ? Escape(t.CharacterName)
+                : $"{Escape(t.CharacterName)} (not on roster)"));
+
+            fields.Add(new
+            {
+                name = $"Claim Shield ({claimNames.Count(t => t.Matched)})",
+                // Discord caps a field value at 1024.
+                value = Truncate(claimText, 1024),
+                inline = false,
+            });
+        }
 
         return new
         {
