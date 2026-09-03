@@ -48,10 +48,20 @@ public class EventHistoryController : Controller
             .Distinct()
             .ToListAsync();
 
+        // Settled events only, matching the Event System page's Past Events section
+        // (EventController.BuildPastEventsAsync) and the Activity's history panel. This is the
+        // SAME list on a different route -- it is where an EventHistory/Details back-link lands --
+        // so it has to agree with them about what counts as past. An ended camp archives at End
+        // Camp, long before anyone posts its DKP; until then it belongs in Events Pending DKP Post.
+        //
+        // Only histories that HAVE an unposted Window Event are held back. Ordinary timed events
+        // have none and list exactly as before.
         var histories = await _context.EventHistories
             .Where(history =>
                 linkshellIds.Contains(history.LinkshellId) &&
                 (!user.PrimaryLinkshellId.HasValue || history.LinkshellId == user.PrimaryLinkshellId.Value))
+            .Where(history => !_context.WindowEvents.Any(
+                w => w.CampEventHistoryId == history.Id && w.PostedToSheetAt == null))
             .OrderByDescending(history => history.EndTime ?? history.TimeStamp)
             .ToListAsync();
 

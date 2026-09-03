@@ -1,4 +1,4 @@
-﻿@using System.Globalization
+@using System.Globalization
 @using System.Security.Claims
 @inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @model EventViewModel
@@ -177,7 +177,15 @@
                 <div style="color:var(--fg-3)">Started</div><div>@(Model.CommencementStartTime?.ToString("g") ?? "Not started")</div>
                 <div style="color:var(--fg-3)">End</div><div>@(Model.Event.EndTime?.ToString("g") ?? "Not specified")</div>
                 <div style="color:var(--fg-3)">Duration</div><div class="num">@(Model.Event.Duration is not null ? $"{Model.Event.Duration:0.##} h" : "Not specified")</div>
-                <div style="color:var(--fg-3)">DKP/hour</div><div class="num">@(Model.Event.DkpPerHour ?? 0)</div>
+                @* Hidden on a camp, matching Views/EventHistory/Details.cshtml and the Activity's
+                   past-event card. An HNM camp pays per WINDOW -- open / close / kill / claim
+                   bonuses, resolved by HnmCampPricing -- and HnmStandardCampFinalizer ignores
+                   DkpPerHour outright (see the window-tab note further down, which had the same
+                   problem). Showing it here read as a rate nobody set, and always as 0. *@
+                @if (!isHnmEvent)
+                {
+                    <div style="color:var(--fg-3)">DKP/hour</div><div class="num">@(Model.Event.DkpPerHour ?? 0)</div>
+                }
             </div>
             @if (!string.IsNullOrWhiteSpace(Model.Event.Details))
             {
