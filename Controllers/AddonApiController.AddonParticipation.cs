@@ -1162,7 +1162,27 @@ public sealed partial class AddonApiController
         // "Fafnir/Nidhogg" camp.
         var monsterMatches = HnmConfig.MonsterMatchNamesLower(tod.MonsterName);
 
+        // Matched on AssignedMonsterName FIRST, then on EventName.
+        //
+        // EventName alone was the whole test, and it only worked while officers happened to name
+        // a camp after its monster. A camp called "faf" (or "Fafnir Tues", or anything else an
+        // officer actually types) matched nothing, so an in-game drop fell through to the past-
+        // event fallback and then to no event at all -- posted, DKP deducted, and invisible in the
+        // live camp's Loot section. AssignedMonsterName is the camp's ACTUAL monster and is what
+        // the ToD, the board and the tracker all key on.
+        //
+        // EventName is kept as a second chance rather than replaced: a camp created before the
+        // monster was assignable, or one an officer left unassigned, still resolves the old way.
         var liveEventId = await _dbContext.Events
+            .AsNoTracking()
+            .Where(evt => evt.LinkshellId == token.LinkshellId
+                          && evt.AssignedMonsterName != null
+                          && monsterMatches.Contains(evt.AssignedMonsterName.ToLower()))
+            .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
+            .Select(evt => (int?)evt.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        liveEventId ??= await _dbContext.Events
             .AsNoTracking()
             .Where(evt => evt.LinkshellId == token.LinkshellId
                           && evt.EventName != null
@@ -1176,6 +1196,10 @@ public sealed partial class AddonApiController
         int? pastEventId = null;
         if (liveEventId is null)
         {
+            // EventHistory carries no AssignedMonsterName -- it stores the camp's NAME at close --
+            // so this stays a name match. A camp named for something other than its monster is
+            // therefore still unreachable here, which is exactly why the live lookup above no
+            // longer depends on the name.
             pastEventId = await _dbContext.EventHistories
                 .AsNoTracking()
                 .Where(history => history.LinkshellId == token.LinkshellId

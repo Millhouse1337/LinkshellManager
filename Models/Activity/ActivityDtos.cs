@@ -1242,7 +1242,13 @@ public sealed record ActivityLootDto(
     int Id,
     string? ItemName,
     string? ItemWinner,
-    int? WinningDkpSpent);
+    int? WinningDkpSpent,
+    // What was ACTUALLY taken off the winner's balance when the row was written, as opposed to
+    // WinningDkpSpent, which is what the row is priced at. Non-null means the ledger entry already
+    // exists -- which is true of every row that reaches this list, in-game or hand-entered, and is
+    // exactly what an officer looking at a live camp's Loot section needs to know before deciding
+    // whether to charge someone again at End Event.
+    double? ActualDeductedDkp);
 
 public sealed record ActivityTodDto(
     int Id,

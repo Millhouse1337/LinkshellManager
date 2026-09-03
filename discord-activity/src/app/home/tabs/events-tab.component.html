@@ -585,20 +585,29 @@
                       <h4>Claim Shield</h4>
                       <span class="tag default num">{{ claimShieldsFor(event).length }}</span>
                     </div>
-                    <!-- Said up front, because the list below is per-lottery and the PAYOUT is
-                         per-member: someone who tagged in three captures is paid once. -->
-                    @if (claimShieldPaidNames(event).length > 0) {
-                      <p class="notice">
-                        {{ claimShieldPaidNames(event).length }}
-                        {{ claimShieldPaidNames(event).length === 1 ? 'member' : 'members' }}
-                        tagged this camp and will earn the claim bonus
-                        @if (claimBonusAmount(event) > 0) {
-                          ({{ claimBonusAmount(event) | number:'1.0-2' }} DKP each)
-                        }
-                        when it is ended and posted — {{ claimShieldPaidNames(event).join(', ') }}.
-                      </p>
-                    }
-                    @for (capture of claimShieldsFor(event); track capture.id) {
+                    <!-- ONE panel holding the summary AND the captures.
+                         The summary used to be a `.notice` (a dashed, centred, padded box) while
+                         the captures below it were bare divs flush against the section's left
+                         edge -- so the box read as "the Claim Shield" and the lottery cards, which
+                         are the actual evidence, read as loose content that had escaped it. They
+                         are one subject and now sit in one container. -->
+                    <div class="claim-shield__panel">
+                      <!-- Said up front, because the list below is per-lottery and the PAYOUT is
+                           per-member: someone who tagged in three captures is paid once.
+                           Not `.notice` any more -- that class IS the box, and the box is now the
+                           panel around this. -->
+                      @if (claimShieldPaidNames(event).length > 0) {
+                        <p class="claim-shield__summary">
+                          {{ claimShieldPaidNames(event).length }}
+                          {{ claimShieldPaidNames(event).length === 1 ? 'member' : 'members' }}
+                          tagged this camp and will earn the claim bonus
+                          @if (claimBonusAmount(event) > 0) {
+                            ({{ claimBonusAmount(event) | number:'1.0-2' }} DKP each)
+                          }
+                          when it is ended and posted — {{ claimShieldPaidNames(event).join(', ') }}.
+                        </p>
+                      }
+                      @for (capture of claimShieldsFor(event); track capture.id) {
                       <div class="claim-shield__capture">
                         <div class="claim-shield__result">
                           <span class="tag" [class.success]="capture.won" [class.danger]="!capture.won">
@@ -615,7 +624,9 @@
                           }
                         </div>
                         @if (capture.members.length === 0) {
-                          <p class="notice">No linkshell member landed an action before the lottery resolved.</p>
+                          <!-- Flat, not `.notice`: inside the panel a second dashed box would
+                               read as a card within a card. -->
+                          <p class="claim-shield__summary">No linkshell member landed an action before the lottery resolved.</p>
                         } @else {
                           <ul class="claim-shield__members">
                             @for (member of capture.members; track member.characterName) {
@@ -634,7 +645,8 @@
                           </ul>
                         }
                       </div>
-                    }
+                      }
+                    </div>
                   </div>
                 }
               </section>
@@ -890,7 +902,19 @@
                         <span>{{ loot.itemWinner || 'Unassigned' }}</span>
                       </div>
                       @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
-                        <div class="compact-list__meta"><span class="num">{{ formatLootCost(loot.winningDkpSpent, event.linkshellId) }}</span></div>
+                        <div class="compact-list__meta">
+                          <span class="num">{{ formatLootCost(loot.winningDkpSpent, event.linkshellId) }}</span>
+                          <!-- Says the DKP is already gone. Every row here has been charged as it
+                               was written -- in-game posts included, which is the case an officer
+                               cannot otherwise tell apart -- so ending the camp must not be read
+                               as the moment loot gets paid for. -->
+                          @if (loot.actualDeductedDkp != null) {
+                            <span class="tag success"
+                                  [title]="'Already charged to the winner: ' + (loot.actualDeductedDkp | number:'1.0-2') + ' DKP. Ending the camp will not deduct it again.'">
+                              DKP deducted
+                            </span>
+                          }
+                        </div>
                       }
                     </li>
                   }

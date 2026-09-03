@@ -901,6 +901,11 @@ export interface ActivityLootEntry {
   itemName?: string | null;
   itemWinner?: string | null;
   winningDkpSpent?: number | null;
+  // What was actually taken off the winner's balance when this row was written. Non-null means
+  // the DKP is already gone -- ManualLootService writes the ledger entry as it creates the row,
+  // whether the row came from the addon's Loot Pool or from the Add loot form beside this list.
+  // Undefined from a server predating the field.
+  actualDeductedDkp?: number | null;
 }
 
 export interface ActivityTodLootEntry {

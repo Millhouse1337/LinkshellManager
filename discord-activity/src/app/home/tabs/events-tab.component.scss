@@ -284,6 +284,27 @@
   font-size: 13px;
 }
 
+// The panel the summary and the lottery cards share. Same treatment `.panel-tab .notice`
+// gives an empty state (dashed border, surface fill), because that is what the summary line
+// used to be on its own -- the captures were simply outside it, which made the evidence look
+// like it did not belong to the section that owns it.
+.claim-shield__panel {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  padding: 12px;
+  margin: 8px 0;
+}
+
+// Left-aligned, unlike `.panel-tab .notice`, which centres. The summary sits directly above a
+// left-aligned list of captures, and centring it broke that edge.
+.claim-shield__summary {
+  font-size: 12px;
+  color: var(--fg-3);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
 .claim-shield__capture + .claim-shield__capture {
   margin-top: 12px;
   padding-top: 12px;

@@ -772,7 +772,8 @@ public sealed partial class ActivityDataController
                         loot.Id,
                         loot.ItemName,
                         loot.ItemWinner,
-                        loot.WinningDkpSpent))
+                        loot.WinningDkpSpent,
+                        loot.ActualDeductedDkp))
                     .ToList(),
                 evt.PartySetupId,
                 evt.PartySetup != null ? evt.PartySetup.Name : null,
