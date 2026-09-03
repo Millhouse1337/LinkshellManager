@@ -177,7 +177,7 @@ export class WindowEventService {
   async setSnapshotSlot(
     snapshotId: number, linkshellId: number, slotKind: string, windowNumber?: number | null,
   ): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events/snapshots//slot`,
+    await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/slot`,
       { slotKind, windowNumber: windowNumber ?? null }, "Snapshot moved.");
   }
 
@@ -190,11 +190,18 @@ export class WindowEventService {
 
   // DKP posting (set amount + entry type + per-character overrides, then
   // push/reconcile the AttInput tab).
+  //
+  // Every path here interpolates its id -- the server routes are
+  // window-events/{windowEventId}/... and reject anything else. All three of these had lost
+  // their ${windowEventId} and were posting to "window-events//post", which 404s. The button
+  // did nothing at all, which is exactly what a dropped id looks like from the outside: no
+  // error on screen, no row in the ledger, nothing in the server log because the request never
+  // reached a handler.
   async saveDkp(
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
     memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null
   ): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events//save-dkp`,
+    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/save-dkp`,
       { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null }, "DKP details saved.");
   }
 
@@ -202,7 +209,7 @@ export class WindowEventService {
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
     memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null
   ): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events//post`,
+    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/post`,
       { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null }, "Posting to the DKP sheet...");
   }
 
@@ -210,7 +217,7 @@ export class WindowEventService {
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
     memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null
   ): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events//edit-posted`,
+    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/edit-posted`,
       { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null }, "Updating the DKP sheet...");
   }
 
