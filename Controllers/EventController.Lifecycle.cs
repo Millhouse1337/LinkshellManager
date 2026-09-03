@@ -1,4 +1,4 @@
-﻿using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
@@ -289,7 +289,10 @@ public partial class EventController
                 attQ,
                 attPage,
                 ClosedAttendancePageSize,
-                HttpContext.RequestAborted);
+                HttpContext.RequestAborted,
+                // This block is "Events Pending DKP Post" now, not a full closed archive. The
+                // complete list stays on WindowEventsController.History.
+                pendingDkpPostOnly: true);
         }
 
         return View(model);
@@ -303,9 +306,18 @@ public partial class EventController
     {
         var trimmed = string.IsNullOrWhiteSpace(query) ? null : query.Trim();
 
+        // Past Events means SETTLED, not merely over. An ended camp writes its EventHistory at
+        // End Camp (HnmCampReviewHandoffService, which explains why) -- long before anyone posts
+        // the DKP -- so without this the same camp sat in Past Events and in the pending queue at
+        // once, reading as finished business while an officer still owed it a payout.
+        //
+        // Only events that HAVE an unposted Window Event are held back. An event with no Window
+        // Event at all (every ordinary timed event) is unaffected and lists exactly as before.
         var baseQuery = _context.EventHistories
             .AsNoTracking()
-            .Where(history => history.LinkshellId == linkshellId);
+            .Where(history => history.LinkshellId == linkshellId)
+            .Where(history => !_context.WindowEvents.Any(
+                w => w.CampEventHistoryId == history.Id && w.PostedToSheetAt == null));
 
         var unfilteredCount = await baseQuery.CountAsync(HttpContext.RequestAborted);
 

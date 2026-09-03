@@ -28,9 +28,13 @@ public sealed class AttendanceSectionsBuilder
         _db = db;
     }
 
-    // The OPEN half of the attendance data: events still awaiting an officer's Post, plus snapshots
-    // that landed without a monster name. Closed events are deliberately excluded — they live on the
-    // dedicated, searchable Attendance History page (WindowEventsController.History).
+    // The LIVE half of the attendance data: events still being captured, plus snapshots that
+    // landed without a monster name.
+    //
+    // Ended events are excluded, whether they were closed by hand or handed off by an ended camp.
+    // They are not live work -- an officer owes them a DKP post, not a scan -- and they now list
+    // under Events Pending DKP Post (BuildClosedAsync with pendingDkpPostOnly). See
+    // ApplyLiveFilter for why status alone was the wrong test.
     public async Task<WindowEventsViewModel> BuildAsync(
         int linkshellId,
         string? linkshellName,
@@ -38,9 +42,8 @@ public sealed class AttendanceSectionsBuilder
         DateTimeZone userZone,
         CancellationToken cancellationToken)
     {
-        var openEvents = await _db.WindowEvents
-            .AsNoTracking()
-            .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Open)
+        var openEvents = await ApplyLiveFilter(
+                _db.WindowEvents.AsNoTracking().Where(e => e.LinkshellId == linkshellId))
             .OrderByDescending(e => e.LastCapturedAtUtc)
             .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
             .Include(e => e.MemberDkpOverrides)
@@ -98,6 +101,34 @@ public sealed class AttendanceSectionsBuilder
         };
     }
 
+    // WHERE AN ATTENDANCE EVENT LIVES, as shared predicates. Here for the same reason
+    // ApplyClosedSearch is: the Event System page and the Activity each run their own copy of
+    // these queries, and a card that drops out of one list has to drop into the other on BOTH
+    // surfaces or it becomes invisible.
+    //
+    // The split is ENDED vs STILL LIVE -- deliberately not Open vs Closed. An HNM camp handed off
+    // by HnmCampReviewHandoffService is Status=Open with CampEndedAtUtc set: a finished camp
+    // waiting on review, not a live one. Keying on status alone filed every ended camp under
+    // Current Field Activity, next to boards that were still being scanned.
+    //
+    // Live work: still being captured, so it belongs in Current Field Activity.
+    public static IQueryable<WindowEvent> ApplyLiveFilter(IQueryable<WindowEvent> source)
+        => source.Where(e => e.Status == WindowEventStatuses.Open && e.CampEndedAtUtc == null);
+
+    // Ended, and nobody has posted the DKP yet -- the "Events Pending DKP Post" section.
+    //
+    // PostedToSheetAt is the gate, because it is the money: WindowEventDkpLedgerService sets it
+    // when the ledger is written, and that is the moment the event stops being something an
+    // officer owes work on. Until then it is deliberately kept OUT of Past Events
+    // (EventController.BuildPastEventsAsync), so the past-event list means "settled" rather than
+    // "over".
+    //
+    // Two ways in, because there are two ways to finish: a camp End Camp stamps CampEndedAtUtc,
+    // and an officer closes a "/lsm now" event by hand.
+    public static IQueryable<WindowEvent> ApplyPendingDkpPostFilter(IQueryable<WindowEvent> source)
+        => source.Where(e => e.PostedToSheetAt == null
+                             && (e.CampEndedAtUtc != null || e.Status == WindowEventStatuses.Closed));
+
     // The archive's search, as a composable filter over closed Window Events. Extracted so the
     // Event System page and the Discord Activity's own window-events endpoint run the SAME match
     // rules: both surfaces list the same cards, so a query that hits on one has to hit on the other.
@@ -131,6 +162,15 @@ public sealed class AttendanceSectionsBuilder
     // its whole snapshot/entry tree and paged the result in memory, which was tolerable on a page
     // nobody visited and is not on /Event: each rendered card carries a combined-member table, one
     // table per snapshot, a dialog and two inline scripts.
+    //
+    // `pendingDkpPostOnly` picks which archive this is:
+    //   true  -- the Event System page's "Events Pending DKP Post": ENDED events still owed a DKP
+    //            post. This is the working queue, so it must not be diluted with settled events.
+    //   false -- the standalone Attendance History page: EVERY closed event, posted or not.
+    //            That page is the only place a posted-and-closed "/lsm now" event is still
+    //            reachable -- those never get an EventHistory (WindowEventDkpLedgerService
+    //            .ResolveCampEventHistory returns null without a camp), so they are not in Past
+    //            Events either. Narrowing it too would make them unreachable.
     public async Task<WindowEventsHistoryViewModel> BuildClosedAsync(
         int linkshellId,
         string? linkshellName,
@@ -139,14 +179,16 @@ public sealed class AttendanceSectionsBuilder
         string? query,
         int page,
         int pageSize,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool pendingDkpPostOnly = false)
     {
         pageSize = Math.Max(1, pageSize);
         var trimmedQuery = string.IsNullOrWhiteSpace(query) ? null : query.Trim();
 
-        var baseQuery = _db.WindowEvents
-            .AsNoTracking()
-            .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Closed);
+        var scoped = _db.WindowEvents.AsNoTracking().Where(e => e.LinkshellId == linkshellId);
+        var baseQuery = pendingDkpPostOnly
+            ? ApplyPendingDkpPostFilter(scoped)
+            : scoped.Where(e => e.Status == WindowEventStatuses.Closed);
 
         baseQuery = ApplyClosedSearch(baseQuery, trimmedQuery);
 

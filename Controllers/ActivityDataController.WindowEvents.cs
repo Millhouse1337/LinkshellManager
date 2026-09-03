@@ -178,9 +178,10 @@ public sealed partial class ActivityDataController
         if (membership is null) return Forbid();
         var canManage = await CanAsync(membership, r => r.CanModerateLiveEvent || r.CanManageEvents, cancellationToken);
 
-        var openEvents = await _dbContext.WindowEvents
-            .AsNoTracking()
-            .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Open)
+        // Live only -- an ended camp is Status=Open but belongs in the pending queue below.
+        // Shares AttendanceSectionsBuilder's predicate with the web so the two agree.
+        var openEvents = await AttendanceSectionsBuilder.ApplyLiveFilter(
+                _dbContext.WindowEvents.AsNoTracking().Where(e => e.LinkshellId == linkshellId))
             .OrderByDescending(e => e.LastCapturedAtUtc)
             .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
             .Include(e => e.MemberDkpOverrides)
@@ -195,9 +196,8 @@ public sealed partial class ActivityDataController
         // query matching a card on the web matches the same card here.
         var closedQuery = string.IsNullOrWhiteSpace(attQ) ? null : attQ.Trim();
         var closedBaseQuery = AttendanceSectionsBuilder.ApplyClosedSearch(
-            _dbContext.WindowEvents
-                .AsNoTracking()
-                .Where(e => e.LinkshellId == linkshellId && e.Status == WindowEventStatuses.Closed),
+            AttendanceSectionsBuilder.ApplyPendingDkpPostFilter(
+                _dbContext.WindowEvents.AsNoTracking().Where(e => e.LinkshellId == linkshellId)),
             closedQuery);
 
         var closedTotalCount = await closedBaseQuery.CountAsync(cancellationToken);

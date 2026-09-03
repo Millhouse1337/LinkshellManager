@@ -218,7 +218,13 @@
                    jump of their own rather than being reachable only by scrolling past the
                    pending-events board. *@
                 <a class="nav-sub-item" asp-controller="Event" asp-action="Index" asp-fragment="unlinked-snapshots">Unlinked Snapshots</a>
-                <a class="nav-sub-item" asp-controller="Event" asp-action="Index" asp-fragment="attendance-archive">Attendance History</a>
+                @* The Event System block is the OUTSTANDING queue; the standalone page is the
+                   full closed archive including already-posted rows, and is the only place a
+                   posted "/lsm now" event is still reachable (those get no EventHistory, so they
+                   never reach Past Events). Both are linked, because they answer different
+                   questions. *@
+                <a class="nav-sub-item" asp-controller="Event" asp-action="Index" asp-fragment="attendance-archive">Pending DKP Post</a>
+                <a class="nav-sub-item @IsSubActive("WindowEvents", "History")" asp-controller="WindowEvents" asp-action="History" asp-route-linkshellId="@activeLinkshellId.Value">Attendance History</a>
                 @if (Allow(p => p.CanManageTods) || Allow(p => p.CanModerateLiveEvent))
                 {
                     <a class="nav-sub-item @IsSubActive("LinkshellPendingSubmissions")" asp-controller="LinkshellPendingSubmissions" asp-action="Index" asp-route-linkshellId="@activeLinkshellId.Value">Pending Submissions</a>

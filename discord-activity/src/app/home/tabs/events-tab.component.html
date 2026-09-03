@@ -1065,14 +1065,18 @@
            for one posted by a member without moderation rights. Its own mount directly under the
            queue rather than buried in the archive below, because an unverified or unfiled capture
            is unpaid attendance waiting on an officer — live work, not leftovers. Matches the web,
-           where it is a top-level section between Pending Events and Attendance Archive. -->
+           where it is a top-level section between Pending Events and Events Pending DKP Post. -->
       <app-attendance-sections section="unlinked" />
 
-      <!-- Attendance Archive: the searchable closed-event history. Below everything because this
-           is finished work. Its own section heading comes from the component. -->
+      <!-- Events Pending DKP Post: ended events nobody has posted the DKP for yet. Sits between
+           live work and Past Events because that is exactly what it is — finished in the field,
+           unfinished on the books. The "archive" section name is the component's internal slot id
+           and is deliberately left alone; its heading comes from the component. -->
       <app-attendance-sections section="archive" />
 
-      <!-- Past events: browse + (officer) edit metadata / DKP / attendees -->
+      <!-- Past events: SETTLED events only. An ended camp is held back until its DKP is posted
+           (ActivityDataController.EventHistory), so it does not appear here and in the pending
+           queue above at the same time. Browse + (officer) edit metadata / DKP / attendees. -->
       <app-event-history-panel [linkshellId]="activity.overview()?.appUser?.primaryLinkshellId ?? 0" />
 
       <!-- Shared ToD dialog, opened in "End Camp" mode from a live HNM camp's End Camp button. -->

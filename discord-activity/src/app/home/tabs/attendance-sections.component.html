@@ -3,16 +3,19 @@
      what every scoped `.we-*` rule below hangs off, so that one stays. -->
 <div class="we-tab">
   @if (data(); as model) {
-    <!-- Heading for the archive block, mirroring the web's Attendance Archive on /Event.
-         Rendered unconditionally (not gated on the list having rows) so the searchable history
-         below is reachable even when this page of it is empty — a search with no hits is exactly
-         when the section must still be on screen. -->
+    <!-- Events Pending DKP Post, mirroring the web's section of the same name on /Event
+         (Views/Event/_AttendanceArchive.cshtml, which carries the full reasoning). Events that
+         have ENDED and whose DKP nobody has posted yet — the officer's work queue.
+
+         Rendered unconditionally (not gated on the list having rows) so the search below is
+         reachable even when this page of it is empty — a search with no hits is exactly when the
+         section must still be on screen. -->
     @if (section() === 'archive') {
       <div class="section-head we-archive-head">
         <div>
-          <div class="section-label">Archive</div>
-          <div class="section-title">Attendance Archive</div>
-          <div class="section-sub">Closed attendance events</div>
+          <div class="section-label">Outstanding</div>
+          <div class="section-title">Events Pending DKP Post</div>
+          <div class="section-sub">Ended events whose DKP has not been posted to the sheet yet</div>
         </div>
       </div>
     }
@@ -71,13 +74,13 @@
       </div>
     }
 
-    <!-- Attendance History: one PAGE of closed events, searched and paged by the server. The count
-         on the title is the whole archive's total, not this page's length. -->
+    <!-- One PAGE of the pending queue, searched and paged by the server. The count on the title
+         is the whole queue's total, not this page's length. -->
     @if (section() === 'archive') {
       <section class="card we-closed-block">
         <div class="card-head">
           <div class="card-title">
-            Attendance History
+            Awaiting DKP Post
             <span class="tag">{{ model.closedTotalCount }}</span>
           </div>
         </div>
@@ -90,7 +93,7 @@
                  [ngModel]="archiveSearchText()" (ngModelChange)="setArchiveSearchText($event)"
                  (keydown.enter)="submitArchiveSearch()"
                  placeholder="Search by event name, poster, or member…"
-                 aria-label="Search closed attendance events" />
+                 aria-label="Search events awaiting a DKP post" />
           <button type="button" class="btn primary sm" [disabled]="windows.busy()"
                   (click)="submitArchiveSearch()">Search</button>
           @if (appliedArchiveQuery()) {
@@ -109,15 +112,24 @@
         @if (model.closedEvents.length === 0) {
           <div class="we-empty">
             @if (appliedArchiveQuery(); as query) {
-              No closed events match “{{ query }}”.
+              No events awaiting a DKP post match “{{ query }}”.
             } @else {
-              Closed events will appear here once an Attendance Event is closed.
+              Nothing is waiting on a DKP post. Ended camps and closed attendance events appear
+              here until someone posts them to the sheet, then move to Past Events.
             }
           </div>
         } @else {
+          <!-- `closed` reflects the event's REAL status rather than being hardcoded true. This
+               list now also holds ENDED CAMPS, which are Status=Open (see
+               HnmCampReviewHandoffService) and whose rosters an officer still has to review before
+               posting — hardcoding it made them read-only and offered a "Reopen" button for a
+               state they were never in.
+
+               It does not gate the Post button either way: that keys on isPosted(event), and
+               every card here is by definition unposted. -->
           <div class="we-closed-list">
             @for (event of model.closedEvents; track event.id) {
-              <ng-container *ngTemplateOutlet="eventCard; context: { event: event, closed: true, model: model }" />
+              <ng-container *ngTemplateOutlet="eventCard; context: { event: event, closed: event.status === 'Closed', model: model }" />
             }
           </div>
 

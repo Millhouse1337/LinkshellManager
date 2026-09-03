@@ -1,8 +1,17 @@
 @model EventSystemPageViewModel
 @{
-    // Section 3a: the attendance archive — unlinked snapshots awaiting triage, then CLOSED
-    // attendance events. Below Pending Events because this is review leftovers, not the live
-    // board; that's exactly where the Activity mounts <app-attendance-sections section="archive">.
+    // Section 3a: EVENTS PENDING DKP POST — events that have ENDED and whose DKP nobody has
+    // posted yet. The officer's work queue, and the reason it sits below Pending Events: it is
+    // what is left to settle, not the live board. The Activity mounts
+    // <app-attendance-sections section="archive"> in the same slot.
+    //
+    // This block used to be the full closed-event archive, which put it in competition with Past
+    // Events: an ended camp archives its EventHistory at End Camp, so the same camp appeared in
+    // both, and neither list said whether anyone had actually been paid. Past Events now means
+    // SETTLED and this means OUTSTANDING. The complete closed archive, posted rows included, is
+    // still on WindowEventsController.History.
+    //
+    // The membership rule lives in AttendanceSectionsBuilder.ApplyPendingDkpPostFilter.
     //
     // Only rendered when Model.Attendance is non-null, so ClosedAttendance is non-null too.
     var closed = Model.ClosedAttendance!;
@@ -12,21 +21,20 @@
 
 <div class="page-head fade d4" id="attendance-archive" style="margin-top:22px;margin-bottom:12px">
     <div>
-        <h2 class="page-title" style="font-size:16px">Attendance Archive</h2>
+        <h2 class="page-title" style="font-size:16px">Events Pending DKP Post</h2>
         <div class="page-sub">
-            <span>Closed attendance events</span>
+            <span>Ended events whose DKP has not been posted to the sheet yet</span>
         </div>
     </div>
 </div>
 
-@* Closed attendance events only. Unlinked snapshots used to render above this block; they are
-   their own section now (Views/Event/_UnlinkedSnapshots.cshtml), since triage of an unpaid
-   capture is live work rather than archive. *@
+@* Unlinked snapshots used to render above this block; they are their own section now
+   (Views/Event/_UnlinkedSnapshots.cshtml), since triage of an unpaid capture is live work. *@
 <div class="card fade d4" style="margin-bottom:14px">
     <div class="card-head">
         @* Titled to match the Activity's closed-events block (attendance-sections.component.html). *@
         <div class="card-title">
-            Attendance History
+            Awaiting DKP Post
             <span class="tag">@closed.TotalCount</span>
         </div>
     </div>
@@ -61,11 +69,14 @@
         <div class="empty" style="padding:16px">
             @if (string.IsNullOrWhiteSpace(closed.Query))
             {
-                <text>Closed events will appear here once an Attendance Event is closed.</text>
+                <text>
+                    Nothing is waiting on a DKP post. Ended camps and closed attendance events
+                    appear here until someone posts them to the sheet, then move to Past Events.
+                </text>
             }
             else
             {
-                <text>No closed events match "<strong>@closed.Query</strong>".</text>
+                <text>No events awaiting a DKP post match "<strong>@closed.Query</strong>".</text>
             }
         </div>
     </div>
@@ -74,13 +85,19 @@ else
 {
     @foreach (var ev in closed.Events)
     {
-        @* IsClosed=true is load-bearing: it makes the roster read-only, which is what keeps an
-           officer from silently desyncing rows already posted to the DKP sheet. *@
+        @* IsClosed reflects the event's REAL status rather than being hardcoded true, because
+           this list now also holds ended camps, which are Status=Open (see
+           HnmCampReviewHandoffService). Hardcoding it offered them a "Reopen" button for a state
+           they were never in, and hid the "Close" one.
+
+           It does NOT control whether the roster can be edited or posted -- _WindowEventCard gates
+           both on PostedToSheetAt, and every card in this section is by definition unposted. That
+           is the point of the section: the "Post to DKP sheet" button is right here. *@
         @await Html.PartialAsync("../WindowEvents/_WindowEventCard", ev, new ViewDataDictionary(ViewData)
         {
             ["LinkshellId"] = closed.LinkshellId,
             ["CanManage"] = closed.CanManage,
-            ["IsClosed"] = true,
+            ["IsClosed"] = ev.Status == WindowEventStatuses.Closed,
         })
     }
 

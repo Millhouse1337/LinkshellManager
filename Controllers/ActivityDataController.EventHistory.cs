@@ -33,10 +33,15 @@ public sealed partial class ActivityDataController
 
         var canManage = await CanAsync(membership, r => r.CanManageEvents, cancellationToken);
 
+        // Settled events only, matching EventController.BuildPastEventsAsync -- an ended camp
+        // archives at End Camp, so without this it appears here while its DKP is still unposted.
+        // Events with no Window Event (every ordinary timed event) are unaffected.
         var histories = await _dbContext.EventHistories
             .AsNoTracking()
             .Include(h => h.AppUserEventHistories)
             .Where(h => h.LinkshellId == linkshellId)
+            .Where(h => !_dbContext.WindowEvents.Any(
+                w => w.CampEventHistoryId == h.Id && w.PostedToSheetAt == null))
             .OrderByDescending(h => h.EndTime ?? h.TimeStamp)
             .Take(100)
             .ToListAsync(cancellationToken);
