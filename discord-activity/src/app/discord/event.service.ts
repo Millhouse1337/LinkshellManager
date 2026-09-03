@@ -695,6 +695,42 @@ export class EventService {
     }
   }
 
+  // Sets this CAMP's kill bonus -- what the Kill tab's "Kill DKP" box edits.
+  //
+  // A separate call from setAttendanceWindowDkp on purpose, because it writes a different column
+  // for a different reason: the kill roster is worth 0 as a WINDOW and pays through the camp's
+  // kill bonus at End Camp, so pricing the window would stack a payment on top of the bonus. The
+  // window route refuses a kill window outright; this one writes Event.HnmKillBonusOverride.
+  //
+  // null clears the override and puts the camp back on the linkshell's kill bonus.
+  async setCampKillBonus(eventId: number, killBonus: number | null): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      const accessToken = this.auth.currentAccessToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      const response = await fetch(`/api/addon/management/events/${eventId}/kill-bonus`, {
+        method: 'PATCH',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ killBonus })
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        try {
+          const payload = JSON.parse(text || '{}') as { error?: string };
+          throw new Error(payload.error || `Update failed (HTTP ${response.status}).`);
+        } catch {
+          throw new Error(text || `Update failed (HTTP ${response.status}).`);
+        }
+      }
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, "Setting the camp's kill bonus failed."));
+      return false;
+    }
+  }
+
   // Marks (or unmarks) ONE posted window as the camp's close — the only thing that decides the
   // close bonus now that it is no longer derived from "the newest window posted".
   //

@@ -1105,13 +1105,30 @@ export class EventsTabComponent {
   protected windowDkpDraft(event: ActivityEvent, window: ActivityAttendanceWindow): string {
     const draft = this.windowDkpDrafts()[window.id];
     if (draft !== undefined) return draft;
+    // A kill roster shows the CAMP'S KILL BONUS, not windowValue -- which returns 0 for one, by
+    // design, because the roster pays through that bonus rather than as a window. The box read
+    // "0" on every camp with a kill bonus configured, which is the one number it could not have
+    // meant. See killDkpLabel / commitWindowDkp for the write side.
+    if (window.isKillWindow) {
+      return EventsTabComponent.trimDkp(this.standardBonus(event, 'kill'));
+    }
     return EventsTabComponent.trimDkp(this.windowValue(event, window));
+  }
+
+  // The Kill tab's box is not "DKP this window" -- it edits the camp's kill bonus, and naming it
+  // for the window would promise a per-window payment that does not exist.
+  protected windowDkpLabel(window: ActivityAttendanceWindow): string {
+    return window.isKillWindow ? 'Kill DKP' : 'DKP this window';
   }
 
   // Hand-set and inherited now look identical, both being a number in the same box, so the tooltip
   // is what tells them apart — and it names the way back to the default, which an empty box used
   // to be the visible sign of.
   protected windowDkpHint(window: ActivityAttendanceWindow): string {
+    if (window.isKillWindow) {
+      return 'What everyone on the kill roster earns at End Camp. This is the camp\'s kill bonus, '
+        + 'not a window price — clear the box to go back to the linkshell default.';
+    }
     return window.dkpAmount == null
       ? 'Camp default for this window — type an amount to price it by hand.'
       : 'Priced by hand — clear the box to go back to the camp default.';
@@ -1125,6 +1142,27 @@ export class EventsTabComponent {
   protected async commitWindowDkp(event: ActivityEvent, window: ActivityAttendanceWindow): Promise<void> {
     const raw = this.windowDkpDraft(event, window).trim();
     const amount = raw === '' ? null : Number(raw);
+
+    // The kill roster's box writes the CAMP'S kill bonus, not this window's price. Split off
+    // before any of the window-specific comparisons below, which all read window.dkpAmount -- a
+    // column a kill window never carries and the server refuses to set.
+    if (window.isKillWindow) {
+      if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
+        this.dropWindowDkpDraft(window);
+        return;
+      }
+      if (this.windowDkpSaving()) return;
+      this.windowDkpSaving.set(true);
+      try {
+        if (await this.activity.setCampKillBonus(event.id, amount)) {
+          this.dropWindowDkpDraft(window);
+          await this.activity.refreshOverview();
+        }
+      } finally {
+        this.windowDkpSaving.set(false);
+      }
+      return;
+    }
 
     // Garbage in the box drops the draft rather than writing it, so the field snaps back to what
     // the server holds instead of sitting there looking saved. With no Apply button there is no

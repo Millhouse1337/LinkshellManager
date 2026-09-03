@@ -378,7 +378,7 @@
                                event is ended and posted to the sheet anyway. -->
                           @if (canManageLinkshell(event.linkshellId) && !isWdCamp(event)) {
                             <span class="window-dkp-edit">
-                              <label [attr.for]="'window-dkp-' + activeWindow.id">DKP this window</label>
+                              <label [attr.for]="'window-dkp-' + activeWindow.id">{{ windowDkpLabel(activeWindow) }}</label>
                               <input type="number" step="0.25" min="0" class="input num"
                                      [id]="'window-dkp-' + activeWindow.id"
                                      [disabled]="windowDkpSaving()"
