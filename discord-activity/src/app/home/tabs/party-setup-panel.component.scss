@@ -78,14 +78,32 @@
 
 .ps-party-grid {
   display: grid;
-  /* 380px is the width at which a slot fits label + 2 dropdowns + Leader + Sign up on ONE
-     row; at 320 the grid would sometimes fit a third column and hand every slot in it a
-     wrapped second line. Dropping to fewer, wider columns is the better trade.
-     min(…, 100%) is what keeps that safe on a narrow Activity panel: below 380 the column
-     becomes the container width rather than overflowing it. */
-  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  /* THREE across. An alliance is three parties and has to read as one row of three.
+     minmax(0, 1fr), not 1fr: a grid track's min-content floor is otherwise set by the widest
+     slot inside it, which is what would push the columns back out and re-wrap the third.
+
+     This replaced `repeat(auto-fit, minmax(min(380px, 100%), 1fr))`. 380px was chosen as the
+     width at which an EDITABLE slot fits its label, two dropdowns, Leader and Sign up on one
+     row -- but auto-fit turns that into a maximum column COUNT, and at the width the panel
+     actually gets it only ever fitted two, so every alliance drew as 2 + 1.
+
+     The 380px concern is real and is kept as the breakpoints below rather than as a column
+     rule: three columns while there is room for them, two when a slot's controls would start
+     wrapping, one on a phone. The difference is that the count is now stated instead of being
+     whatever the container happened to allow. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   align-items: start;
+}
+
+/* ~380px per column is where an editable slot's controls stop fitting on one row (see above),
+   so step down rather than let them wrap. */
+@media (max-width: 1180px) {
+  .ps-party-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 780px) {
+  .ps-party-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 .ps-party {

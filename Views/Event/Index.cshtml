@@ -39,9 +39,16 @@
     .event-ps-alliance-lead {
         font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--fg);
     }
-    .event-ps-party-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+    /* Three across, matching Views/Event/Start.cshtml, which already defines this same class
+       that way. The two disagreed: this copy was a wrapping flex with a 260px floor, so an
+       alliance drew as 2 + 1 here and as one row of three on the camp page.
+       minmax(0, 1fr) stops the widest slot setting a track's min-content floor and re-wrapping. */
+    .event-ps-party-grid {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+    }
+    @@media (max-width: 760px) { .event-ps-party-grid { grid-template-columns: 1fr; } }
     .event-ps-party {
-        flex: 1 1 280px; min-width: 260px;
+        min-width: 0;
         border: 1px solid var(--border); border-radius: var(--r-md);
         padding: 10px; background: var(--surface);
     }
