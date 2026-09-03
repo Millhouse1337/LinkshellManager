@@ -774,15 +774,35 @@ export class EventsTabComponent {
   // Per-camp override first, else the linkshell default — the precedence both finalizers apply.
   // 'window' shares Event.hnmPerWindowOverride with the Manual Check In rate: one column per
   // amount, and the camp's mode picks which linkshell setting it falls back to.
-  private standardBonus(event: ActivityEvent, which: 'window' | 'open' | 'close'): number {
+  private standardBonus(
+    event: ActivityEvent,
+    which: 'window' | 'open' | 'close' | 'claim' | 'kill',
+  ): number {
     const settings = this.linkshellSettingsFor(event.linkshellId);
     let value: number | null | undefined;
     switch (which) {
       case 'window': value = event.hnmPerWindowOverride ?? settings?.hnmStandardWindowBonus; break;
       case 'open': value = event.hnmOpenBonusOverride ?? settings?.hnmStandardOpenBonus; break;
       case 'close': value = event.hnmCloseBonusOverride ?? settings?.hnmStandardCloseBonus; break;
+      // The two OUTCOME bonuses. Read UNGATED here, mirroring HnmCampPricing.OutcomeBonuses: they
+      // are being displayed on a live camp, whose outcome is not known yet, so applying the
+      // claimed/killed gate would print 0 until the mob is dead -- which is the whole reason a
+      // configured kill bonus appeared nowhere on this card.
+      case 'claim': value = event.hnmClaimBonusOverride ?? settings?.hnmStandardClaimBonus; break;
+      case 'kill': value = event.hnmKillBonusOverride ?? settings?.hnmStandardKillBonus; break;
     }
     return Math.max(0, value ?? 0);
+  }
+
+  // The two outcome bonuses as display strings, for the notes under the roster. Public because
+  // the template names the amounts now -- saying a bonus exists without saying what it is worth
+  // is what sent an officer to the linkshell settings to check a number this card already had.
+  protected claimBonusLabel(event: ActivityEvent): string {
+    return EventsTabComponent.trimDkp(this.standardBonus(event, 'claim'));
+  }
+
+  protected killBonusLabel(event: ActivityEvent): string {
+    return EventsTabComponent.trimDkp(this.standardBonus(event, 'kill'));
   }
 
   // What one attendee earned from THIS window, or null when the window carries no credit for
@@ -871,7 +891,14 @@ export class EventsTabComponent {
     }
 
     if (window.isKillWindow) {
-      return 'Post Kill roster — pays no window credit; being on it earns the kill bonus at End Camp';
+      // Names the AMOUNT. "earns the kill bonus" was true and useless: the figure is configured on
+      // the linkshell, resolved server-side, and was printed on no surface at all -- so a camp with
+      // a kill bonus set looked identical to one without.
+      const kill = this.standardBonus(event, 'kill');
+      return kill > 0
+        ? `Post Kill roster — pays no window credit; being on it earns the `
+          + `${EventsTabComponent.trimDkp(kill)} DKP kill bonus at End Camp`
+        : 'Post Kill roster — pays no window credit, and this camp has no kill bonus configured';
     }
 
     // Named for what makes it that amount. Never a sum: one window pays one amount, so there is no

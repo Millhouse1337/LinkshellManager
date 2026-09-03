@@ -59,6 +59,27 @@ public static class HnmCampPricing
             claimed ? Math.Max(0d, ev.HnmClaimBonusOverride ?? linkshell?.WdClaimBonus ?? 0d) : 0d,
             killed ? Math.Max(0d, ev.HnmKillBonusOverride ?? linkshell?.WdKillBonus ?? 0d) : 0d);
 
+    // What the claim and kill bonuses are WORTH on this camp, UNGATED by the outcome.
+    //
+    // StandardBonuses and WdAmounts zero these when the camp was not claimed / not killed, because
+    // they answer "what does this camp PAY" at End Camp, with the outcome already known. A LIVE
+    // camp is being asked a different question -- "what is being played for" -- and its outcome is
+    // not known yet, so gating here would report 0 on every camp that has not died. That is
+    // exactly what made a configured kill bonus invisible in the addon and the Activity: every
+    // surface that could have shown it was reading a number that is 0 until the mob is dead.
+    //
+    // Same override-then-linkshell precedence and same mode branch as the two above, so the amount
+    // displayed is the amount those will later resolve to once the outcome lands.
+    public static (double Claim, double Kill) OutcomeBonuses(Event ev, Linkshell? linkshell)
+    {
+        var isWd = DiscordEventMessageBuilder.IsWd(ev);
+        return (
+            Math.Max(0d, ev.HnmClaimBonusOverride
+                ?? (isWd ? linkshell?.WdClaimBonus : linkshell?.HnmStandardClaimBonus) ?? 0d),
+            Math.Max(0d, ev.HnmKillBonusOverride
+                ?? (isWd ? linkshell?.WdKillBonus : linkshell?.HnmStandardKillBonus) ?? 0d));
+    }
+
     // True when EventAttendanceWindow.DkpAmount is honoured at payout for this camp. ONLY Standard
     // HNM: that is the one path whose finalizer reads the column (HnmStandardCampFinalizer).
     //

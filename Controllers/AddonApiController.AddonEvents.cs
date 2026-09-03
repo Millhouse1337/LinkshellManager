@@ -1,4 +1,4 @@
-﻿using LinkshellManagerDiscordApp.Authorization;
+using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -168,6 +168,21 @@ public sealed partial class AddonApiController
             openedWindowDkp = HnmCampPricing.DefaultWindowValue(
                 evt, linkshell,
                 Math.Clamp(evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt))),
+            // The camp's OUTCOME bonuses, resolved server-side like openedWindowDkp above and for
+            // the same reason -- the addon cannot apply the override-then-linkshell precedence
+            // itself, and a client that re-derives server pricing is what the note at the top of
+            // this method is about.
+            //
+            // Sent because these were previously invisible everywhere. A kill roster pays 0 AS A
+            // WINDOW (HnmStandardCampFinalizer.WindowValue) and earns the kill bonus at End Camp
+            // instead, which is correct -- but it meant a linkshell with a kill bonus configured
+            // saw "0 DKP this window" and an em dash, with the amount printed nowhere at all. The
+            // addon and the Activity now name the figure in the kill roster's own note.
+            //
+            // UNGATED by the outcome (OutcomeBonuses, not StandardBonuses): a live camp has not
+            // been claimed or killed yet, so the gated pair is 0 right up until it stops mattering.
+            claimBonus = HnmCampPricing.OutcomeBonuses(evt, linkshell).Claim,
+            killBonus = HnmCampPricing.OutcomeBonuses(evt, linkshell).Kill,
             // When the next window opens (null on the final window or an untimed monster),
             // so the addon can show the same live countdown the board does.
             nextWindowAt = evt.NextWindowAt,

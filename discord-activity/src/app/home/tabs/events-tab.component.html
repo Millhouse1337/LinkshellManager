@@ -491,7 +491,8 @@
                           <strong>{{ attendanceWindowDkpTotal(event, activeWindow) | number:'1.0-2' }} DKP</strong>
                           this window
                           <br />
-                          Claim and kill bonuses are added at End Camp and aren't included above.
+                          Claim {{ claimBonusLabel(event) }} DKP and kill {{ killBonusLabel(event) }} DKP
+                          are added at End Camp and aren't included above.
                         </p>
                         <div class="attendance-window-pane__meta">
                           Verified {{ activeWindow.attendees[0].verifiedAt | date:'shortTime' }}
@@ -988,7 +989,9 @@
                     · {{ wdOnTimeCount(event) }} checked in at the open
                   }
                   <br />
-                  Open, close, claim and kill bonuses are added at End Camp and aren't included above.
+                  Open, close, claim ({{ claimBonusLabel(event) }} DKP) and kill
+                  ({{ killBonusLabel(event) }} DKP) bonuses are added at End Camp and aren't
+                  included above.
                 </p>
               }
             </section>
