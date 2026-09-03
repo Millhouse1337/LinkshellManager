@@ -834,9 +834,15 @@ export class EventsTabComponent {
     // pricing a window means, and it's the one case where a middle window is worth something.
     if (window.dkpAmount != null) return this.windowValue(event, window);
 
-    // A kill roster pays nothing AS A WINDOW — the kill bonus is what pays it, and that isn't
-    // decided until End Camp. Dash rather than 0, same as any other window that carries no credit.
-    if (window.isKillWindow) return null;
+    // The kill roster's column is the CAMP'S KILL BONUS -- the same number the "Kill DKP" box
+    // above the table now edits, and what everyone listed here actually earns for being on it.
+    //
+    // It used to return null and render as a dash, on the reasoning that a kill roster pays
+    // nothing AS A WINDOW. True of the window, useless to the officer: the column sat empty on
+    // the one roster whose whole purpose is the bonus, directly under a box showing what that
+    // bonus is. The amount still lands at End Camp rather than as window credit -- the note under
+    // the table says so -- but it is the member's, and the table is where members' amounts go.
+    if (window.isKillWindow) return this.standardBonus(event, 'kill');
 
     // Standard: window 1 pays the open bonus, the ticked closing window pays the close bonus, and
     // everything else pays the camp's regular window rate. One amount per window — they don't add.
@@ -891,14 +897,13 @@ export class EventsTabComponent {
     }
 
     if (window.isKillWindow) {
-      // Names the AMOUNT. "earns the kill bonus" was true and useless: the figure is configured on
-      // the linkshell, resolved server-side, and was printed on no surface at all -- so a camp with
-      // a kill bonus set looked identical to one without.
+      // No longer says "pays no window credit" -- the column beside it now shows the bonus, and a
+      // note contradicting the number it sits under is worse than no note.
       const kill = this.standardBonus(event, 'kill');
       return kill > 0
-        ? `Post Kill roster — pays no window credit; being on it earns the `
-          + `${EventsTabComponent.trimDkp(kill)} DKP kill bonus at End Camp`
-        : 'Post Kill roster — pays no window credit, and this camp has no kill bonus configured';
+        ? `Kill roster — ${EventsTabComponent.trimDkp(kill)} DKP each, `
+          + `paid as the camp's kill bonus at End Camp`
+        : 'Kill roster — this camp has no kill bonus configured, so being on it earns nothing';
     }
 
     // Named for what makes it that amount. Never a sum: one window pays one amount, so there is no

@@ -1,4 +1,4 @@
-﻿using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
@@ -169,6 +169,9 @@ public partial class EventController
             // Not the raw override, which on an app-made HNM camp holds the SPAWN count.
             WindowCount = LinkshellManagerDiscordApp.Services.DiscordEventMessageBuilder.AttendancePostCount(eventToStart),
             SupportsBreakRoom = LinkshellManagerDiscordApp.Services.EventBreakPolicy.SupportsBreakRoom(eventToStart),
+            // Resolved once for the Claim Shield section, which pays it per tagger.
+            ClaimBonusAmount = LinkshellManagerDiscordApp.Services.HnmCampPricing
+                .OutcomeBonuses(eventToStart, startLinkshell).Claim,
             AttendanceWindows = eventToStart.AttendanceWindows
                 .OrderBy(window => window.SequenceNumber)
                 .Select(window => new EventAttendanceWindowViewModel
@@ -185,9 +188,22 @@ public partial class EventController
                             window.SequenceNumber,
                             LinkshellManagerDiscordApp.Services.DiscordEventMessageBuilder.AttendancePostCount(eventToStart)),
                     PostedAt = ConvertUtcToUserTimeZone(window.PostedAt, user.TimeZone) ?? window.PostedAt,
-                    DkpAmount = LinkshellManagerDiscordApp.Services.HnmCampPricing.WindowValueFor(
-                        eventToStart, startLinkshell, window.SequenceNumber, startCloseWindow,
-                        window.DkpAmount, window.IsKillWindow),
+                    // A KILL roster's cell is the camp's KILL BONUS, not its window value.
+                    //
+                    // WindowValueFor answers "what does this window pay as a window", and for a
+                    // kill roster that is 0 by design -- being on it earns the kill bonus at End
+                    // Camp instead. Correct, and useless in a column headed "DKP earned": it left
+                    // the one roster whose entire purpose is the bonus showing nothing.
+                    //
+                    // Resolved through OutcomeBonuses so it is the same figure the Kill DKP box
+                    // writes and the addon is sent. Mirrors EventsTabComponent.attendanceWindowDkp;
+                    // the two must move together.
+                    DkpAmount = window.IsKillWindow
+                        ? LinkshellManagerDiscordApp.Services.HnmCampPricing
+                            .OutcomeBonuses(eventToStart, startLinkshell).Kill
+                        : LinkshellManagerDiscordApp.Services.HnmCampPricing.WindowValueFor(
+                            eventToStart, startLinkshell, window.SequenceNumber, startCloseWindow,
+                            window.DkpAmount, window.IsKillWindow),
                     IsClosingWindow = window.IsClosingWindow,
                     IsKillWindow = window.IsKillWindow,
                     Attendees = window.Attendees

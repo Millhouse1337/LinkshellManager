@@ -125,6 +125,15 @@ public class EventViewModel
     // officer reading this section is reading part of the payout.
     public List<ClaimShieldCaptureViewModel> ClaimShieldCaptures { get; set; } = new();
 
+    // What ONE tagger earns from the section above, resolved server-side through
+    // HnmCampPricing.OutcomeBonuses (this camp's override, else the linkshell's setting) so the
+    // page cannot quote a number the finalizer will not pay.
+    //
+    // UNGATED by the outcome, matching the Activity: a live camp has not been claimed yet, and
+    // StandardBonuses reports 0 for the claim until it has -- which is 0 right up until it stops
+    // mattering. 0 here means the camp genuinely pays no claim bonus.
+    public double ClaimBonusAmount { get; set; }
+
     // Whether the viewer may tick a window as the camp's close. Same permission the management
     // endpoint enforces, so the page can't offer a control the server would refuse.
     public bool CanMarkClosingWindow { get; set; }

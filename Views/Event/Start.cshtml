@@ -416,7 +416,9 @@
                                 {
                                     <div style="font-size:12px;color:var(--fg-2);margin-bottom:10px">
                                         @paidNames.Count @(paidNames.Count == 1 ? "member" : "members")
-                                        tagged this camp and will earn the claim bonus when it is ended
+                                        tagged this camp and will earn the claim bonus@(Model.ClaimBonusAmount > 0
+                                            ? $" ({Model.ClaimBonusAmount.ToString("0.##")} DKP each)"
+                                            : string.Empty) when it is ended
                                         and posted — <strong>@string.Join(", ", paidNames)</strong>.
                                     </div>
                                 }
@@ -450,6 +452,19 @@
                                                         @(string.IsNullOrWhiteSpace(member.ActionMessage)
                                                             ? member.CharacterName
                                                             : member.ActionMessage)
+                                                        @* What the tag is WORTH, on the row that earns
+                                                           it. The summary states it once for the camp;
+                                                           an officer reading a name wants it beside the
+                                                           name. Matched only -- an unmatched name
+                                                           resolves to no membership and is paid nothing,
+                                                           and already says so on the next line. *@
+                                                        @if (member.Matched && Model.ClaimBonusAmount > 0)
+                                                        {
+                                                            <span class="tag success num"
+                                                                  title="Claim bonus, paid once per member when the camp is ended and posted — tagging in several lotteries still pays once.">
+                                                                @Model.ClaimBonusAmount.ToString("0.##") DKP
+                                                            </span>
+                                                        }
                                                         @if (!member.Matched)
                                                         {
                                                             <span class="badge">not on roster — not paid</span>

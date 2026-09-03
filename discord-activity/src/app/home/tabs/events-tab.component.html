@@ -491,8 +491,16 @@
                           <strong>{{ attendanceWindowDkpTotal(event, activeWindow) | number:'1.0-2' }} DKP</strong>
                           this window
                           <br />
-                          Claim {{ claimBonusLabel(event) }} DKP and kill {{ killBonusLabel(event) }} DKP
-                          are added at End Camp and aren't included above.
+                          <!-- On the KILL roster the kill bonus IS the column above, so only the
+                               claim is still outstanding. Saying otherwise would contradict the
+                               table on the one tab where the bonus is visible. -->
+                          @if (activeWindow.isKillWindow) {
+                            Claim {{ claimBonusLabel(event) }} DKP is added at End Camp and isn't
+                            included above.
+                          } @else {
+                            Claim {{ claimBonusLabel(event) }} DKP and kill {{ killBonusLabel(event) }} DKP
+                            are added at End Camp and aren't included above.
+                          }
                         </p>
                         <div class="attendance-window-pane__meta">
                           Verified {{ activeWindow.attendees[0].verifiedAt | date:'shortTime' }}
@@ -637,6 +645,20 @@
                                 <span class="claim-shield__action">
                                   {{ member.actionMessage || member.characterName }}
                                 </span>
+                                <!-- What this tag is WORTH to them, on the row that earns it.
+                                     The summary line above states the amount once for the camp;
+                                     an officer reading a name wants it beside the name.
+
+                                     Shown only when they are MATCHED and the camp pays something:
+                                     an unmatched name resolves to no membership and is paid
+                                     nothing (it already carries its own tag saying so), and a
+                                     camp with no claim bonus configured has no figure to give. -->
+                                @if (member.matched && claimBonusAmount(event) > 0) {
+                                  <span class="tag success num"
+                                        title="Claim bonus, paid once per member when the camp is ended and posted — tagging in several lotteries still pays once.">
+                                    {{ claimBonusAmount(event) | number:'1.0-2' }} DKP
+                                  </span>
+                                }
                                 @if (!member.matched) {
                                   <span class="tag default">not on roster</span>
                                 }
