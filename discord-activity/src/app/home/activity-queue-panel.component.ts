@@ -526,17 +526,20 @@ export class ActivityQueuePanelComponent {
   // to (hnmLinkshellBonus below) and what "earning" one means: Standard reads the addon's window
   // scans, Manual Check In reads the member's Check In / Check Out range. One override column per
   // amount, shared across the modes; a camp only ever runs in one of them.
+  // Order is DISPLAY ONLY -- every consumer reads `key`, never the index -- and matches the web
+  // form's bonusFields: the Open, then what a window in between is worth, then the Close and the
+  // two outcome bonuses.
   private static readonly STANDARD_BONUS_FIELDS = [
-    { key: 'hnmPerWindowOverride', label: 'Regular window', suffix: 'per window', hint: 'Every window the member is scanned in, open and close included' },
     { key: 'hnmOpenBonusOverride', label: 'Open', suffix: 'for open', hint: 'On the roster when the camp opens' },
+    { key: 'hnmPerWindowOverride', label: 'Regular window', suffix: 'per window', hint: 'Every window the member is scanned in, open and close included' },
     { key: 'hnmCloseBonusOverride', label: 'Close', suffix: 'for close', hint: 'On the roster when the camp closes' },
     { key: 'hnmClaimBonusOverride', label: 'Claim', suffix: 'for claim', hint: 'Camp claimed, and present at close' },
     { key: 'hnmKillBonusOverride', label: 'Kill', suffix: 'for kill', hint: 'Camp killed, and present at close' }
   ] as const;
 
   private static readonly MANUAL_CHECK_IN_BONUS_FIELDS = [
-    { key: 'hnmPerWindowOverride', label: 'Per window', suffix: 'per window', hint: 'Each window the member is checked in for' },
     { key: 'hnmOpenBonusOverride', label: 'Open', suffix: 'for open', hint: 'Checked in from window 1' },
+    { key: 'hnmPerWindowOverride', label: 'Per window', suffix: 'per window', hint: 'Each window the member is checked in for' },
     { key: 'hnmCloseBonusOverride', label: 'Close', suffix: 'for close', hint: 'Still checked in at the camp\'s last window' },
     { key: 'hnmClaimBonusOverride', label: 'Claim', suffix: 'for claim', hint: 'Paid once when the camp is claimed' },
     { key: 'hnmKillBonusOverride', label: 'Kill', suffix: 'for kill', hint: 'Paid once when the camp is killed' }

@@ -58,17 +58,12 @@
     // MANUAL_CHECK_IN_BONUS_FIELDS pair, whose labels and hints these are.
     var isWdMode = string.Equals(Model.HnmAttendanceMode, LinkshellManagerDiscordApp.Models.HnmAttendanceModes.Wd,
         StringComparison.OrdinalIgnoreCase);
+    // ORDER IS DISPLAY ONLY -- every consumer reads Key, never the index -- and it runs in the
+    // order the camp pays: the Open, then what each window in between is worth, then the Close and
+    // the two outcome bonuses. The per-window rate led the row before, which put the least
+    // headline number first and separated Open from Close.
     var bonusFields = new[]
     {
-        new
-        {
-            Key = "HnmPerWindowOverride",
-            Label = isWdMode ? "Per window" : "Regular window",
-            Suffix = "per window",
-            Hint = isWdMode ? "Each window the member is checked in for" : "Every window the member is scanned in, open and close included",
-            Default = Model.HnmDefaultWindowBonus,
-            Value = Model.Event.HnmPerWindowOverride
-        },
         new
         {
             Key = "HnmOpenBonusOverride",
@@ -77,6 +72,15 @@
             Hint = isWdMode ? "Checked in from window 1" : "On the roster when the camp opens",
             Default = Model.HnmDefaultOpenBonus,
             Value = Model.Event.HnmOpenBonusOverride
+        },
+        new
+        {
+            Key = "HnmPerWindowOverride",
+            Label = isWdMode ? "Per window" : "Regular window",
+            Suffix = "per window",
+            Hint = isWdMode ? "Each window the member is checked in for" : "Every window the member is scanned in, open and close included",
+            Default = Model.HnmDefaultWindowBonus,
+            Value = Model.Event.HnmPerWindowOverride
         },
         new
         {

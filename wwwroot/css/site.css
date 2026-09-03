@@ -1179,13 +1179,28 @@ input[type="number"] {
    page (alliance card -> party columns -> requirement rows) so the two read
    identically; the leader-tag styles below match Details.cshtml. */
 .ps-preview { display: grid; gap: 12px; }
-.ps-preview__parties { display: flex; flex-wrap: wrap; gap: 12px; }
+/* THREE across, on one row. This was `flex: 1 1 220px` with a 220px min-width, which at the
+   event form's width fitted two and wrapped the third onto a row of its own -- an alliance reads
+   as three parties and was being drawn as 2 + 1. A fixed 3-column grid states the intent instead
+   of leaving it to whatever width the container happens to have.
+
+   minmax(0, 1fr) rather than 1fr: a grid track's default min-content floor is set by the widest
+   job row inside it, which would push the columns back out and reintroduce the wrap. */
+.ps-preview__parties {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
 .ps-preview__party {
-  flex: 1 1 220px;
-  min-width: 220px;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   padding: 10px;
+}
+/* Narrow viewports only. Three party columns below this stop being readable, and the form is
+   reachable on a phone. */
+@media (max-width: 720px) {
+  .ps-preview__parties { grid-template-columns: minmax(0, 1fr); }
 }
 .ps-preview__party-name { font-weight: 600; color: var(--fg); margin-bottom: 8px; }
 .ps-leader-row td { background: rgba(245, 197, 24, .08); }
