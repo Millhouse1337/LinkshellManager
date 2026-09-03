@@ -1070,9 +1070,49 @@ public sealed partial class AddonApiController
         return Ok(new { success = true, characterName = membership.CharacterName });
     }
 
-    // Posts one loot row from the addon Loot Pool panel. Still addressed by ToD id -- that is what
-    // the addon knows -- but the row is filed against the EVENT for that monster (see below), so
-    // in-game drops land in the Loot History against a camp rather than as a bare "ToD".
+    // Posts one loot row from the addon Loot Pool panel, addressed by EVENT.
+    //
+    // This is the route the addon uses now, and it is the one that matches what the officer is
+    // doing: they have a camp selected and are handing out its drops. The ToD route below still
+    // works, but it made loot depend on an observation ("Fafnir died at 21:04") that has nothing
+    // to do with who killed it -- and because the server needs a target row either way, the addon
+    // had to either auto-post a ToD nobody asked for or refuse the loot until one existed.
+    [HttpPost("events/{eventId:int}/loot")]
+    [AddonApiAuth]
+    public async Task<IActionResult> PostEventLootAsync(
+        int eventId,
+        [FromBody] AddonPostLootRequest request,
+        [FromServices] ManualLootService manualLoot,
+        CancellationToken cancellationToken)
+    {
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+
+        var eventEntity = await _dbContext.Events
+            .Include(e => e.Linkshell)
+            .FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "Event not found." });
+        }
+        if (eventEntity.LinkshellId != token.LinkshellId)
+        {
+            return Forbid();
+        }
+
+        // A camp that has already ended is a PastEvent target, not a live one -- ManualLootService
+        // files against a different column for each, and handing it a LiveEvent id whose row is
+        // closed would attach loot to a camp the review page no longer shows.
+        var target = eventEntity.EndTime is null
+            ? new ManualLootTarget(ManualLootTargetKind.LiveEvent, eventEntity.Id, null)
+            : ManualLootTarget.None;
+
+        return await AddAddonLootAsync(
+            token, eventEntity.Linkshell, request, target, manualLoot, cancellationToken);
+    }
+
+    // Posts one loot row addressed by ToD id. Kept for compatibility -- the addon posts by event
+    // now -- and still files the row against the EVENT for that monster (see below) so an in-game
+    // drop lands in the Loot History against a camp rather than as a bare "ToD".
     [HttpPost("tod/{todId:int}/loot")]
     [AddonApiAuth]
     public async Task<IActionResult> PostTodLootAsync(
@@ -1081,23 +1121,7 @@ public sealed partial class AddonApiController
         [FromServices] ManualLootService manualLoot,
         CancellationToken cancellationToken)
     {
-        var itemName   = request.ItemName?.Trim();
-        var itemWinner = request.ItemWinner?.Trim();
-        if (string.IsNullOrWhiteSpace(itemName))
-        {
-            return BadRequest(new { error = "Item name is required." });
-        }
-        if (string.IsNullOrWhiteSpace(itemWinner))
-        {
-            return BadRequest(new { error = "Item winner is required." });
-        }
-        if (!request.WinningDkpSpent.HasValue || request.WinningDkpSpent.Value <= 0)
-        {
-            return BadRequest(new { error = "WinningDkpSpent must be a positive number." });
-        }
-
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
-        var nowUtc = DateTime.UtcNow;
 
         var tod = await _dbContext.Tods
             .Include(t => t.Linkshell)
@@ -1110,48 +1134,6 @@ public sealed partial class AddonApiController
         if (tod.LinkshellId != token.LinkshellId)
         {
             return Forbid();
-        }
-
-        var lootStructure = ActivityDataController.NormalizeLootStructure(tod.Linkshell?.LootStructure ?? "Dkp");
-        if (lootStructure == "LootCouncil")
-        {
-            return BadRequest(new { error = "Linkshell uses LootCouncil â€” DKP loot posts are disabled." });
-        }
-        if (lootStructure == "Hybrid" && request.WinningDkpSpent.Value > 100)
-        {
-            return BadRequest(new { error = "Deduction % cannot exceed 100." });
-        }
-
-        // Validate winner is in the linkshell's roster (case-insensitive match
-        // on CharacterName) â€” same guard CreateTodAsync uses.
-        var winnerMembership = await _dbContext.AppUserLinkshells
-            .FirstOrDefaultAsync(link => link.LinkshellId == token.LinkshellId
-                        && link.CharacterName != null
-                        && link.CharacterName.ToLower() == itemWinner.ToLower(),
-                cancellationToken);
-        if (winnerMembership?.CharacterName is null)
-        {
-            return BadRequest(new { error = "Winner must be a current linkshell member." });
-        }
-        var rosterMatch = winnerMembership.CharacterName;
-
-        // DKP-structure linkshells: a loot win cannot exceed the winner's
-        // AVAILABLE DKP (total minus DKP locked by active auction bids).
-        // Hybrid spends a % of current balance so it can't overrun; LootCouncil
-        // already returned above.
-        if (lootStructure == "Dkp" && winnerMembership.AppUserId is { } winnerUserId)
-        {
-            // ToD loot is paid from whichever pool "HNM" maps to — the same default the ToD loot
-            // form uses — so the affordability check has to look at that wallet, not the total.
-            var todPoolMap = await _dkpPools.GetMapAsync(token.LinkshellId, cancellationToken);
-            var todPoolId = todPoolMap.Resolve("HNM");
-            var availableDkp = await AuctionDkpService.ComputePoolAvailableDkpAsync(
-                _dbContext, _dkpPoolBalances, winnerUserId, token.LinkshellId, todPoolId, cancellationToken);
-            if (request.WinningDkpSpent.Value > availableDkp)
-            {
-                var poolLabel = todPoolMap.HasMultiplePools ? $" {todPoolMap.NameFor(todPoolId)}" : string.Empty;
-                return BadRequest(new { error = $"{rosterMatch} only has {availableDkp:0.##} available{poolLabel} DKP (the rest is locked by active auction bids)." });
-            }
         }
 
         // Loot from the addon is filed against the EVENT for this monster, not against the ToD.
@@ -1215,6 +1197,80 @@ public sealed partial class AddonApiController
             : pastEventId is int past
                 ? new ManualLootTarget(ManualLootTargetKind.PastEvent, null, past)
                 : ManualLootTarget.None;
+
+        return await AddAddonLootAsync(
+            token, tod.Linkshell, request, target, manualLoot, cancellationToken);
+    }
+
+    // The shared half of both addon loot routes: validate the request, check the winner can
+    // afford it, and write the row. Only the TARGET differs between the two -- an event id the
+    // addon already knows, or one resolved from a ToD's monster -- and the caller supplies it.
+    //
+    // Extracted rather than duplicated because every rule below is a payout rule. Two copies of
+    // "can this member afford it" is two chances to disagree about someone's balance.
+    private async Task<IActionResult> AddAddonLootAsync(
+        AddonApiToken token,
+        Linkshell? linkshell,
+        AddonPostLootRequest request,
+        ManualLootTarget target,
+        ManualLootService manualLoot,
+        CancellationToken cancellationToken)
+    {
+        var itemName   = request.ItemName?.Trim();
+        var itemWinner = request.ItemWinner?.Trim();
+        if (string.IsNullOrWhiteSpace(itemName))
+        {
+            return BadRequest(new { error = "Item name is required." });
+        }
+        if (string.IsNullOrWhiteSpace(itemWinner))
+        {
+            return BadRequest(new { error = "Item winner is required." });
+        }
+        if (!request.WinningDkpSpent.HasValue || request.WinningDkpSpent.Value <= 0)
+        {
+            return BadRequest(new { error = "WinningDkpSpent must be a positive number." });
+        }
+
+        var lootStructure = ActivityDataController.NormalizeLootStructure(linkshell?.LootStructure ?? "Dkp");
+        if (lootStructure == "LootCouncil")
+        {
+            return BadRequest(new { error = "Linkshell uses LootCouncil - DKP loot posts are disabled." });
+        }
+        if (lootStructure == "Hybrid" && request.WinningDkpSpent.Value > 100)
+        {
+            return BadRequest(new { error = "Deduction % cannot exceed 100." });
+        }
+
+        // Winner must be on the linkshell's roster (case-insensitive on CharacterName) -- the same
+        // guard CreateTodAsync uses.
+        var winnerMembership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(link => link.LinkshellId == token.LinkshellId
+                        && link.CharacterName != null
+                        && link.CharacterName.ToLower() == itemWinner.ToLower(),
+                cancellationToken);
+        if (winnerMembership?.CharacterName is null)
+        {
+            return BadRequest(new { error = "Winner must be a current linkshell member." });
+        }
+        var rosterMatch = winnerMembership.CharacterName;
+
+        // DKP-structure linkshells: a win cannot exceed the winner's AVAILABLE DKP (total minus
+        // whatever is locked by active auction bids). Hybrid spends a % of the current balance so
+        // it cannot overrun; LootCouncil already returned above.
+        if (lootStructure == "Dkp" && winnerMembership.AppUserId is { } winnerUserId)
+        {
+            // Paid from whichever pool "HNM" maps to -- the same default the ToD loot form uses --
+            // so the affordability check has to read that wallet, not the total.
+            var poolMap = await _dkpPools.GetMapAsync(token.LinkshellId, cancellationToken);
+            var poolId = poolMap.Resolve("HNM");
+            var availableDkp = await AuctionDkpService.ComputePoolAvailableDkpAsync(
+                _dbContext, _dkpPoolBalances, winnerUserId, token.LinkshellId, poolId, cancellationToken);
+            if (request.WinningDkpSpent.Value > availableDkp)
+            {
+                var poolLabel = poolMap.HasMultiplePools ? $" {poolMap.NameFor(poolId)}" : string.Empty;
+                return BadRequest(new { error = $"{rosterMatch} only has {availableDkp:0.##} available{poolLabel} DKP (the rest is locked by active auction bids)." });
+            }
+        }
 
         var result = await manualLoot.AddAsync(
             token.LinkshellId,
