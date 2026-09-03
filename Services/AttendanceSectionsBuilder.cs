@@ -318,6 +318,16 @@ public sealed class AttendanceSectionsBuilder
         // — so without this test a misc post on a gridded camp would render "Window 4 of 25"
         // sitting next to its own Misc chip.
         var isMisc = AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind);
+
+        // A CAMP window carries its own name -- Open, Close, Kill -- stamped when the addon posted
+        // it and copied onto the snapshot by HnmCampReviewHandoffService. Prefer it over the
+        // positional "Window N", which is what the card showed for a camp whose tabs read Open /
+        // Close / Kill in game: the same three posts, named one way in the addon and numbered here.
+        //
+        // Only a RECOGNISED label wins. Snapshot.Name is free text on a "/lsm now" capture, so
+        // NormalizeWindowLabel is the gate: it returns null for anything that is not one of the
+        // camp window names, and those fall through to the numbering exactly as before.
+        var campWindowLabel = isMisc ? null : HnmConfig.NormalizeWindowLabel(snapshot.Name);
         var resolvedWindow = isMisc
             ? null
             : snapshot.WindowNumber
@@ -342,16 +352,18 @@ public sealed class AttendanceSectionsBuilder
                 ? FormatPretty(snapshot.VerifiedAtUtc.Value, userZone)
                 : null,
             WindowNumber = resolvedWindow,
-            WindowLabel = resolvedWindow is { } window
-                ? (hasGrid && gridWindows is { } total ? $"Window {window} of {total}" : $"Window {window}")
-                : null,
+            WindowLabel = campWindowLabel
+                ?? (resolvedWindow is { } window
+                    ? (hasGrid && gridWindows is { } total ? $"Window {window} of {total}" : $"Window {window}")
+                    : null),
             SlotKind = AttendanceSnapshotSlotKinds.Resolve(snapshot.SlotKind),
             IsMisc = isMisc,
             SlotLabel = isMisc
                 ? "Misc"
-                : resolvedWindow is { } slotWindow
-                    ? (hasGrid && gridWindows is { } slotTotal ? $"Window {slotWindow} of {slotTotal}" : $"Window {slotWindow}")
-                    : null,
+                : campWindowLabel
+                    ?? (resolvedWindow is { } slotWindow
+                        ? (hasGrid && gridWindows is { } slotTotal ? $"Window {slotWindow} of {slotTotal}" : $"Window {slotWindow}")
+                        : null),
             PrimaryZone = entries
                 .Where(e => !string.IsNullOrWhiteSpace(e.Zone))
                 .GroupBy(e => e.Zone!, StringComparer.OrdinalIgnoreCase)

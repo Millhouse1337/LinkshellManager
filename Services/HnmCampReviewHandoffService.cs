@@ -477,7 +477,42 @@ public sealed class HnmCampReviewHandoffService
         var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
         var popWindow = Math.Clamp(ev.WdPopWindow ?? ev.HnmWindowNumber, 1, effectiveCount);
 
-        await StageHandoffAsync(ev, popWindow, ev.WdClaimed, ev.WdKilled, cancellationToken);
+        // THE CAMP'S OUTCOME, from evidence rather than from the two Manual Check In columns.
+        //
+        // This used to pass ev.WdClaimed / ev.WdKilled straight through, and those are only ever
+        // WRITTEN on a Manual Check In camp -- EventController.HnmBoard sets them inside an
+        // `if (isWd)`. On a STANDARD camp they sat at their `false` defaults, so every camp ended
+        // from this path (the addon's End Event, and the generic End Event actions) handed the
+        // finalizer claimed:false, killed:false. HnmCampPricing.StandardBonuses then zeroed BOTH
+        // outcome bonuses, and a camp that was claimed and killed paid its open and close and
+        // nothing else. The board's own End Camp form was unaffected, which is why this only
+        // showed up in game.
+        //
+        // Both facts are already recorded, so neither needs asking for:
+        //   claimed -- a Claim Shield capture exists for this camp. The addon only files one when
+        //              an action LANDED on the mob, which is the definition of having claimed it.
+        //              (Which MEMBERS get paid is still the capture list's call -- the finalizer
+        //              reads it separately. This decides only whether the bonus applies at all.)
+        //   killed  -- a kill roster was posted, or a ToD was recorded. Defaults to TRUE when
+        //              neither is present, matching `killed ?? true` in the two board End Camp
+        //              paths: a camp is ended because the mob died unless someone says otherwise.
+        var claimed = ev.WdClaimed;
+        var killed = ev.WdKilled;
+        if (!DiscordEventMessageBuilder.IsWd(ev))
+        {
+            claimed = await _db.ClaimShieldCaptures
+                .AnyAsync(capture => capture.EventId == ev.Id, cancellationToken);
+            killed = ev.HnmDefeatedAt is not null
+                || await _db.EventAttendanceWindows
+                    .AnyAsync(w => w.EventId == ev.Id && w.IsKillWindow, cancellationToken);
+            if (!killed && ev.HnmDefeatedAt is null)
+            {
+                // Nothing says it did NOT die, and ending a camp is what you do when it has.
+                killed = true;
+            }
+        }
+
+        await StageHandoffAsync(ev, popWindow, claimed, killed, cancellationToken);
 
         ev.WdFinalizedAt = nowUtc;
         ev.HnmDefeatedAt ??= nowUtc;
