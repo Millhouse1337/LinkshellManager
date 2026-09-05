@@ -528,6 +528,20 @@
               </div>
             }
 
+            <!-- Live countdown to the pop this board is queued for. Sits beside Starts
+                 rather than replacing it: the timestamp answers "when", this answers "how
+                 long", and on a camp people are waiting on the second is the useful half.
+                 Covers re-posted boards for free -- reviving one rewrites startTime. -->
+            @if (startCountdown(event.startTime); as countdown) {
+              <div class="event-detail">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                <div>
+                  <span>Countdown</span>
+                  <strong>{{ countdown }}</strong>
+                </div>
+              </div>
+            }
+
             <div class="event-actions">
               @if (event.partySetupId) {
                 <button type="button" class="evt-btn evt-btn--gold evt-btn--small"

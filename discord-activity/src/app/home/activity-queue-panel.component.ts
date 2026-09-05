@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  DestroyRef,
   ElementRef,
   inject,
   signal,
@@ -65,6 +66,12 @@ interface HnmBonusField {
 })
 export class ActivityQueuePanelComponent {
   protected readonly activity = inject(DiscordActivityService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  // One clock for every card on the panel, ticking once a second. A signal rather than a
+  // per-card setInterval: the cards come and go as the queue refreshes, and a timer owned by a
+  // card outlives it. Same pattern the events tab already uses for its window countdowns.
+  private readonly now = signal(Date.now());
   protected readonly partySetups = inject(PartySetupService);
   private readonly tods = inject(TodService);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -529,6 +536,34 @@ export class ActivityQueuePanelComponent {
   // Order is DISPLAY ONLY -- every consumer reads `key`, never the index -- and matches the web
   // form's bonusFields: the Open, then what a window in between is worth, then the Close and the
   // two outcome bonuses.
+  // "in 2h 14m 09s" for a queued board, counting down to the pop it is queued for.
+  //
+  // startTime is the same field the card already prints as "Starts", so a re-posted board needs
+  // no special case: reviving one rewrites StartTime to the new repop, and this follows it.
+  //
+  // Returns null when there is nothing to count to, so the template can omit the whole block
+  // rather than render an empty one.
+  protected startCountdown(startsAtIso: string | null | undefined): string | null {
+    if (!startsAtIso) return null;
+    const startsAt = new Date(startsAtIso).getTime();
+    if (!Number.isFinite(startsAt)) return null;
+
+    const remainingMs = startsAt - this.now();
+    if (remainingMs <= 0) return 'due now';
+
+    const totalSeconds = Math.floor(remainingMs / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    // Days only when there are any -- a board three hours out should not read "0d".
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return days > 0
+      ? `in ${days}d ${hours}h ${pad(minutes)}m`
+      : `in ${hours}h ${pad(minutes)}m ${pad(seconds)}s`;
+  }
+
   private static readonly STANDARD_BONUS_FIELDS = [
     { key: 'hnmOpenBonusOverride', label: 'Open', suffix: 'for open', hint: 'On the roster when the camp opens' },
     { key: 'hnmPerWindowOverride', label: 'Regular window', suffix: 'per window', hint: 'Every window the member is scanned in, open and close included' },
@@ -906,6 +941,11 @@ export class ActivityQueuePanelComponent {
     if (event.target === this.editDialog()?.nativeElement) {
       this.closeCreateForm();
     }
+  }
+
+  public constructor() {
+    const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
+    this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
   }
 
   protected async submitCreateForm(): Promise<void> {
