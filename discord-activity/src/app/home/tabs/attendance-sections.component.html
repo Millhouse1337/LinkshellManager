@@ -458,9 +458,16 @@
         }
         <!-- What this capture is PAID as — Open, Close, Kill, or the tag roster carrying the claim
              bonus. The window number alone doesn't say which of a camp's captures earned the open
-             and which the close, which is what an officer reviewing the money is looking for. -->
-        @if (snapshot.name) {
-          <span class="tag we-snapshot__role">{{ snapshot.name }}</span>
+             and which the close, which is what an officer reviewing the money is looking for.
+
+             Reads the same value the name INPUT below is bound to, not the saved snapshot.name.
+             The two are the same field, and showing the persisted value here meant the label and
+             the box an officer was typing in disagreed until Save name was pressed — so the tag
+             looked stale, or wrong, at exactly the moment they were reading it to check their
+             edit. attachName seeds itself from snapshot.name, so an untouched capture is
+             unchanged; a typed one updates as it is typed. -->
+        @if (attachName(snapshot); as captureName) {
+          <span class="tag we-snapshot__role">{{ captureName }}</span>
         }
         <strong>{{ formatDate(snapshot.capturedAtUtc) }}</strong>
         <span class="we-snapshot__meta">

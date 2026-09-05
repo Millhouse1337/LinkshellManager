@@ -57,6 +57,8 @@ public sealed class SubmissionApprovalService
             Interval = string.IsNullOrWhiteSpace(input.Interval) ? null : input.Interval.Trim(),
             RepopTime = input.RepopTime,
             ImagePath = input.ImagePath,
+            // Only a positive window is a reading; 0 / negative means the submitter had none.
+            PopWindow = input.PopWindow is { } pw && pw > 0 ? pw : null,
         };
 
         foreach (var loot in input.LootRows ?? Enumerable.Empty<TodSubmissionLootInput>())
@@ -163,6 +165,8 @@ public sealed class SubmissionApprovalService
             TotalTods = 1,
             TotalClaims = pending.Claim == true ? 1 : 0,
             ImagePath = pending.ImagePath,
+            // Recorded when the pop was seen, not when the officer got round to approving it.
+            PopWindow = pending.PopWindow,
         };
         // TodId is stamped after the Tod is saved below; the affordability pre-check doesn't need
         // it, so the rows are built first in order to run that check before anything is persisted.
@@ -453,7 +457,10 @@ public sealed record TodSubmissionInput(
     string? Interval,
     DateTime? RepopTime,
     string? ImagePath,
-    IReadOnlyList<TodSubmissionLootInput>? LootRows);
+    IReadOnlyList<TodSubmissionLootInput>? LootRows,
+    // Which spawn window it popped on. Optional so the surfaces that have no such field (the web
+    // and Activity ToD forms post it directly) keep their existing call shape.
+    int? PopWindow = null);
 
 public sealed record TodSubmissionLootInput(string? ItemName, string? ItemWinner, int? WinningDkpSpent);
 

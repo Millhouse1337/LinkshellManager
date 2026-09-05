@@ -1361,6 +1361,11 @@ public sealed partial class AddonApiController
             ? request.DayNumber
             : null;
 
+        // Only a positive window is a reading; 0 / negative is the addon saying it has none, and
+        // must stay null so "Popped on window" renders as "not recorded" rather than as window 0.
+        // Resolved BEFORE the approval branch below, which needs it too.
+        var popWindow = request.PopWindow is { } pw && pw > 0 ? pw : (int?)null;
+
         if (!canManage)
         {
             var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
@@ -1373,14 +1378,13 @@ public sealed partial class AddonApiController
                 interval,
                 repopTimeUtc,
                 null,
-                Array.Empty<TodSubmissionLootInput>());
+                Array.Empty<TodSubmissionLootInput>(),
+                // Carried into the queue, not dropped: the tracker stamped this when the mob
+                // popped, and it is no less true for the submitter lacking ToD-manage rights.
+                popWindow);
             var submissionId = await approvalSvc.QueueTodAsync(token.LinkshellId, token.IssuedToAppUserId!, input, cancellationToken);
             return Ok(new { pending = true, submissionId, monsterName });
         }
-
-        // Only a positive window is a reading; 0 / negative is the addon saying it has none, and
-        // must stay null so "Popped on window" renders as "not recorded" rather than as window 0.
-        var popWindow = request.PopWindow is { } pw && pw > 0 ? pw : (int?)null;
 
         var tod = new Tod
         {
