@@ -217,6 +217,20 @@ public class EventHistoryWindowArchiveTests
         Assert.Equal("Edicius", archive.Windows[0].Attendees.Single().MainCharacterName);
     }
 
+    // No lotteries, no row — a camp nobody tagged must not render an empty Tag section.
+    [Fact]
+    public async Task ArchivedTags_AreAbsent_WhenNobodyTagged()
+    {
+        using var db = NewDb();
+        var camp = SeedCamp(db);
+        await EventController.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
+
+        var history = await db.EventHistories.SingleAsync();
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        Assert.Null(archive.TagRoster);
+    }
+
     [Fact]
     public async Task WindowCounts_ForTheList_OnlyCoverEventsThatArchivedSome()
     {

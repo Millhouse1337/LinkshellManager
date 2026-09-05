@@ -45,6 +45,12 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "A monster name is required." });
         }
 
+        // Stored as the combined pair name, with Hq carrying which half. See
+        // NormalizeMergePairTod -- this is what makes an Activity-logged ToD match one logged
+        // from the addon or the camp board.
+        var (normalizedMonsterName, normalizedHq) = NormalizeMergePairTod(monsterName, request.Hq);
+        monsterName = normalizedMonsterName;
+
         if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
         {
             return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
@@ -158,7 +164,7 @@ public sealed partial class ActivityDataController
             DayNumber = request.DayNumber,
             PopWindow = NormalizePopWindow(request.PopWindow),
             Claim = request.Claim,
-            Hq = request.Hq,
+            Hq = normalizedHq,
             AdditionalSeconds = additionalSeconds,
             Time = todTimeUtc,
             Cooldown = cooldown,
@@ -204,6 +210,25 @@ public sealed partial class ActivityDataController
             _dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
         return Ok(MapTodDto(tod));
+    }
+
+    // A merge pair is stored under its COMBINED name, with Hq carrying which half it was.
+    //
+    // The addon and the HNM board both write the board's AssignedMonsterName, which on a merge
+    // pair is "Fafnir/Nidhogg". The Activity wrote whatever the picker held -- "Fafnir" -- so the
+    // same kill was recorded under two different names depending on where it was logged, and
+    // every lookup keyed on the name (the tracker, recurring boards, claim stats) had to guess.
+    //
+    // ResolveClaimHalf is what makes this lossless. Picking "Nidhogg" explicitly IS an HQ answer
+    // even if the toggle was never touched, so it returns isHq true and that is written to Hq
+    // before the name collapses -- the half survives in the field built to hold it, which is
+    // exactly what the HQ question is for. Non-pair monsters come back untouched.
+    private static (string Name, bool Hq) NormalizeMergePairTod(string? monsterName, bool hq)
+    {
+        var (_, isHq, hasHqVariant) = HnmConfig.ResolveClaimHalf(monsterName, hq);
+        return hasHqVariant
+            ? (HnmConfig.ClaimGroupName(monsterName), isHq)
+            : (monsterName?.Trim() ?? string.Empty, hq);
     }
 
     [HttpPost("tods/{todId:int}/delete")]
@@ -336,6 +361,12 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "A monster name is required." });
         }
 
+        // Stored as the combined pair name, with Hq carrying which half. See
+        // NormalizeMergePairTod -- this is what makes an Activity-logged ToD match one logged
+        // from the addon or the camp board.
+        var (normalizedMonsterName, normalizedHq) = NormalizeMergePairTod(monsterName, request.Hq);
+        monsterName = normalizedMonsterName;
+
         if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
         {
             return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
@@ -426,7 +457,7 @@ public sealed partial class ActivityDataController
         tod.DayNumber = request.DayNumber;
         tod.PopWindow = NormalizePopWindow(request.PopWindow);
         tod.Claim = request.Claim;
-        tod.Hq = request.Hq;
+        tod.Hq = normalizedHq;
         tod.AdditionalSeconds = Math.Max(0, request.AdditionalSeconds);
         tod.Time = todTimeUtc;
         tod.Cooldown = cooldown;

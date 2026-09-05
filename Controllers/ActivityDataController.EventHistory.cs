@@ -182,7 +182,19 @@ public sealed partial class ActivityDataController
                     zone = attendee.Zone,
                     verifiedAt = attendee.VerifiedAt
                 })
-            })
+            }),
+            // Sent BESIDE the windows, never inside them: a tag is not a roster read, and folding it
+            // into the list would put it into the counts the close path paid on. Null when nobody
+            // tagged this camp.
+            tagRoster = archive.TagRoster is null ? null : new
+            {
+                postedAt = archive.TagRoster.PostedAt,
+                taggers = archive.TagRoster.Taggers.Select(tagger => new
+                {
+                    characterName = tagger.CharacterName,
+                    verifiedAt = tagger.VerifiedAt
+                })
+            }
         });
     }
 

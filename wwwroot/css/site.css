@@ -2716,6 +2716,15 @@ table.themed .num {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* What the capture is PAID as — Open, Close, Kill, or the tag roster carrying the claim bonus.
+   Green, because it answers a different question from the blue window chip beside it: that one says
+   WHEN the capture was taken, this one says what it is worth. */
+.we-snapshot__role {
+  background: rgba(52, 199, 123, 0.16);
+  border-color: rgba(52, 199, 123, 0.45);
+  color: #6fd99b;
+  white-space: nowrap;
+}
 /* Misc capture: at the camp, outside any window. Amber rather than the window chip's blue so the
    two read as different KINDS of thing at a glance, not as two states of one thing. */
 .we-snapshot__misc {

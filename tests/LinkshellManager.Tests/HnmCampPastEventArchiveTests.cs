@@ -41,6 +41,7 @@ public class HnmCampPastEventArchiveTests
         new(db,
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
+            new HnmAutoEventService(db, NullLogger<HnmAutoEventService>.Instance),
             NullLogger<HnmCampReviewHandoffService>.Instance);
 
     private static WindowEventDkpLedgerService NewLedgerService(ApplicationDbContext db)
@@ -159,6 +160,60 @@ public class HnmCampPastEventArchiveTests
         Assert.Equal(
             new[] { "Alpha", "Beta" },
             history.AppUserEventHistories.Select(p => p.CharacterName).OrderBy(n => n).ToArray());
+    }
+
+    // The camp's TAGS read back beside its windows, so Past events can show who earned the tag
+    // bonus. Read from the Claim Shield captures End Camp re-parents onto the history — the same
+    // rows the finalizer paid from, so the page cannot disagree with the payout.
+    [Fact]
+    public async Task EndingACamp_ArchivesItsTagsBesideTheWindows()
+    {
+        using var db = await SeededAsync();
+        // Two lotteries, one person in both: a tag is a tag whether or not the lottery went our
+        // way, and tagging twice is still one tagger.
+        foreach (var (id, minute) in new[] { (1, 30), (2, 45) })
+        {
+            db.ClaimShieldCaptures.Add(new ClaimShieldCapture
+            {
+                Id = id,
+                LinkshellId = LinkshellId,
+                EventId = EventId,
+                MonsterName = "Fafnir/Nidhogg",
+                CapturedAtUtc = CampStart.AddMinutes(minute),
+            });
+            db.ClaimShieldCaptureMembers.Add(new ClaimShieldCaptureMember
+            {
+                Id = id, CaptureId = id, AppUserId = AlphaId, CharacterName = "Alpha",
+            });
+        }
+        await db.SaveChangesAsync();
+
+        await EndCampAsync(db);
+
+        var history = await db.EventHistories.SingleAsync();
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        Assert.NotNull(archive.TagRoster);
+        Assert.Equal("Alpha", Assert.Single(archive.TagRoster!.Taggers).CharacterName);
+        // The camp's FIRST lottery, not its last.
+        Assert.Equal(CampStart.AddMinutes(30), archive.TagRoster.PostedAt);
+        // NOT a window: it must not reach the window list, the count, or the scanned tally.
+        Assert.Single(archive.Windows);
+        Assert.Equal(2, archive.DistinctAttendeeCount);
+    }
+
+    // No lotteries, no row — a camp nobody tagged must not render an empty Tag section.
+    [Fact]
+    public async Task EndingACamp_ArchivesNoTagRoster_WhenNobodyTagged()
+    {
+        using var db = await SeededAsync();
+
+        await EndCampAsync(db);
+
+        var history = await db.EventHistories.SingleAsync();
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        Assert.Null(archive.TagRoster);
     }
 
     // The link is what stops Post filing the camp a second time, and what lets the review's edits
@@ -303,12 +358,11 @@ public class HnmCampPastEventArchiveTests
         using var db = await SeededAsync();
         var windowEvent = await EndCampAsync(db);
 
-        // End Camp already staged one override per member (the camp's proposal), so an officer
-        // raising somebody's amount EDITS that row. Adding a second would not be the same test:
-        // the amount lookup folds duplicates first-wins, so the new row would simply be ignored.
-        var override_ = await db.WindowEventMemberDkps
-            .FirstAsync(o => o.WindowEventId == windowEvent!.Id && o.CharacterName == "Alpha");
-        override_.DkpAmount = 9d;
+        // A camp prices its CAPTURES, so an officer raising somebody's amount re-prices the window
+        // that pays them. This camp posted one, so Alpha's payout is that one capture.
+        var captured = await db.AttendanceSnapshotEntries
+            .FirstAsync(e => e.CharacterName == "Alpha");
+        captured.DkpAmount = 9d;
         await db.SaveChangesAsync();
 
         await PostAsync(db, windowEvent!);

@@ -36,6 +36,7 @@ public class HnmCampPopServiceTests
             db,
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
+            new HnmAutoEventService(db, NullLogger<HnmAutoEventService>.Instance),
             NullLogger<HnmCampReviewHandoffService>.Instance);
         return new HnmCampPopService(db, handoff, new MonsterTimingResolver(db), NullLogger<HnmCampPopService>.Instance);
     }

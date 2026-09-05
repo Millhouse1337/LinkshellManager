@@ -38,12 +38,30 @@ public sealed record ArchivedWindow(
     bool IsKillWindow,
     IReadOnlyList<ArchivedWindowAttendee> Attendees);
 
+// Who tagged the mob on this camp, read off its archived Claim Shield captures.
+//
+// Deliberately NOT an ArchivedWindow. A tag is not a roster read: its evidence is the addon
+// watching an action land on the mob, so a tagger can be recorded having appeared in no window at
+// all, and someone scanned in every window can have tagged nothing. Modelling it as a window would
+// put it into "x of N", into the per-member window counts, and into the credit denominator the
+// close path paid on — a display change that would read as a payout change.
+//
+// PostedAt is the FIRST lottery of the camp; a camp that lost several before winning one records
+// each, and the taggers are unioned across them the same way the finalizer pays them once.
+public sealed record ArchivedTagRoster(
+    DateTime PostedAt,
+    IReadOnlyList<ArchivedWindowAttendee> Taggers);
+
 // A closed event's whole window record. WindowCount is what "Window 3 of N" should read against.
-public sealed record ArchivedWindowSet(int WindowCount, IReadOnlyList<ArchivedWindow> Windows)
+public sealed record ArchivedWindowSet(
+    int WindowCount,
+    IReadOnlyList<ArchivedWindow> Windows,
+    // Null when nobody tagged, or when the camp predates the Claim Shield archive.
+    ArchivedTagRoster? TagRoster = null)
 {
     public static readonly ArchivedWindowSet Empty = new(0, Array.Empty<ArchivedWindow>());
 
-    public bool HasWindows => Windows.Count > 0;
+    public bool HasWindows => Windows.Count > 0 || TagRoster is not null;
 
     // Distinct members seen across every window — the camp's real attendance, which can exceed the
     // history's participant list (an addon scan records people who never joined on the site).
@@ -66,9 +84,15 @@ public static class EventHistoryWindowsReader
             .OrderBy(window => window.SequenceNumber)
             .ToListAsync(cancellationToken);
 
+        var tagRoster = await LoadTagRosterAsync(dbContext, history.Id, cancellationToken);
+
         if (rows.Count == 0)
         {
-            return ArchivedWindowSet.Empty;
+            // A camp can still have tagged something it never posted a window for — the Claim
+            // Shield fires off chat whether or not an officer read a roster.
+            return tagRoster is null
+                ? ArchivedWindowSet.Empty
+                : new ArchivedWindowSet(0, Array.Empty<ArchivedWindow>(), tagRoster);
         }
 
         // The name-based count is the same CREDIT chain the close path used to pay this event, so
@@ -102,7 +126,49 @@ public static class EventHistoryWindowsReader
                     .ToList()))
             .ToList();
 
-        return new ArchivedWindowSet(windowCount, windows);
+        return new ArchivedWindowSet(windowCount, windows, tagRoster);
+    }
+
+    // The camp's taggers, unioned across every lottery it recorded.
+    //
+    // Every capture counts, won or lost: a tag is a tag whether or not the lottery went our way,
+    // which is the same rule HnmStandardCampFinalizer pays the tag bonus on. Names are deduped
+    // because tagging three lotteries is still one person who tagged.
+    private static async Task<ArchivedTagRoster?> LoadTagRosterAsync(
+        ApplicationDbContext dbContext, int historyId, CancellationToken cancellationToken)
+    {
+        var captures = await dbContext.ClaimShieldCaptures
+            .AsNoTracking()
+            .Include(capture => capture.Members)
+            .Where(capture => capture.EventHistoryId == historyId)
+            .OrderBy(capture => capture.CapturedAtUtc)
+            .ToListAsync(cancellationToken);
+        if (captures.Count == 0)
+        {
+            return null;
+        }
+
+        // Paired with their own capture's timestamp here rather than read back off
+        // member.Capture: this query is AsNoTracking, so the inverse navigation is never fixed up
+        // and every tagger would have come out stamped DateTime.MinValue.
+        var taggers = captures
+            .SelectMany(capture => capture.Members.Select(member => new { capture.CapturedAtUtc, member.CharacterName }))
+            .Where(row => !string.IsNullOrWhiteSpace(row.CharacterName))
+            .GroupBy(row => row.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            // Zone and main are not recorded on a tag — the Claim Shield reads a chat line, not a
+            // party list — so those stay null rather than being invented from the roster. The time
+            // is their FIRST tag of the camp.
+            .Select(group => new ArchivedWindowAttendee(
+                group.Key,
+                null,
+                null,
+                group.Min(row => row.CapturedAtUtc)))
+            .ToList();
+
+        return taggers.Count == 0
+            ? null
+            : new ArchivedTagRoster(captures[0].CapturedAtUtc, taggers);
     }
 
     // How many windows each of the given closed events archived. For the Past events LIST, which

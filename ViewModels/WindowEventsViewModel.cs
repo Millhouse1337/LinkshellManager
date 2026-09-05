@@ -9,6 +9,20 @@ public sealed class WindowEventMemberDkpInput
     public double? DkpAmount { get; set; }
 }
 
+// Per-CAPTURE DKP posted with the same forms, on a review row whose captures carry the money
+// (WindowEventRow.PerCaptureDkp). Keyed on the snapshot entry's own id rather than on a character
+// name, because the whole point is that one person has a different amount in each capture — a name
+// identifies the person, not the row being priced.
+//
+// Negative amounts are allowed here, unlike the per-member override. The bonus capture carries
+// whatever the camp's finalizer owed that no window paid, and a linkshell whose bonuses sit off its
+// rounding grid can land that remainder below zero.
+public sealed class WindowEventCaptureDkpInput
+{
+    public int EntryId { get; set; }
+    public double? DkpAmount { get; set; }
+}
+
 public sealed class WindowEventsViewModel
 {
     public int LinkshellId { get; set; }
@@ -89,6 +103,12 @@ public sealed class WindowEventRow
     // numbers to offer (Sky gods, farm NMs) — Misc is still selectable, the number is not.
     public int WindowCount { get; set; }
     public bool HasWindowGrid { get; set; }
+
+    // The CAPTURES carry the money on this row: each one shows what that window pays and is edited
+    // there, and a member's Combined DKP is the sum of them. Set for camps handed off from a
+    // Standard HNM board — see WindowEvent.PerCaptureDkp. False everywhere else, which keeps the
+    // per-member DKP box on each capture row exactly where it was.
+    public bool PerCaptureDkp { get; set; }
     public List<WindowCombinedMemberRow> CombinedMembers { get; set; } = new();
 }
 

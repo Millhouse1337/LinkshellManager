@@ -178,10 +178,10 @@
                             {
                                 <span class="tag accent" title="The window the officer marked as closing the camp out — the one the close bonus paid on.">closing</span>
                             }
-                            @if (window.IsKillWindow)
-                            {
-                                <span class="tag warning" title="The addon's Post Kill roster: who was there when the mob died. Worth nothing as a window; being on it earns the kill bonus.">kill</span>
-                            }
+                            @* No "kill" chip: the row's own Label already reads "Kill", so the chip
+                               said the same word twice. The closing chip above is not the same case
+                               — a closing window is still numbered and named like any other, so
+                               nothing else on the row says it was the one the close bonus paid on. *@
                             @if (window.DkpAmount.HasValue)
                             {
                                 <span class="tag success num">@window.DkpAmount.Value.ToString("0.##") DKP</span>
@@ -211,6 +211,28 @@
                                 }
                             </div>
                         }
+                    </details>
+                }
+                @* The Tag roster, listed with the windows because that is where an officer looks for
+                   "what did this camp record" — but it is NOT one of them, and none of the counts
+                   above include it. A tag is evidence the addon read off chat, not a roster scan,
+                   so a tagger can be here having appeared in no window at all. *@
+                @if (windowArchive.TagRoster is { } tagRoster)
+                {
+                    <details style="border:1px solid var(--border);border-radius:8px;background:var(--surface)">
+                        <summary style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                            <strong>Tag</strong>
+                            <span class="tag" title="Who landed an action on the mob, from this camp's Claim Shield. Earns the tag bonus; not a window, so it counts toward no window total.">not a window</span>
+                            <span style="margin-left:auto;font-size:12px;color:var(--fg-3)">
+                                @tagRoster.Taggers.Count tagged · @tagRoster.PostedAt.ToString("g")
+                            </span>
+                        </summary>
+                        <div style="padding:8px 12px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px">
+                            @foreach (var tagger in tagRoster.Taggers)
+                            {
+                                <span class="tag" title="First tagged @tagger.VerifiedAt.ToString("g")">@tagger.CharacterName</span>
+                            }
+                        </div>
                     </details>
                 }
             </div>

@@ -94,10 +94,16 @@ public class HnmAutoEventReviveTests
         Assert.Single(db.Events);
     }
 
-    // The money test. A live camp is mid-payout; the new pop queues alongside it and ending the old
-    // one stays a deliberate officer action.
+    // The money test, and the duplicate test.
+    //
+    // A live camp is mid-payout, so it is not RECYCLED here — reviving it would wipe a night people
+    // are still being paid for. It is not DOUBLED either: that camp is itself the next pop's board,
+    // and ending it recycles the row onto this very ToD
+    // (HnmCampReviewHandoffService.AdoptSettledTodAsync). Queueing a second row beside it is what
+    // left one kill showing as two events in the addon flow, which settles the ToD in its own call
+    // before it ends the camp.
     [Fact]
-    public async Task NewTod_LeavesALiveCampAlone_AndQueuesTheNewPopSeparately()
+    public async Task NewTod_LeavesALiveCampAlone_AndQueuesNothingBesideIt()
     {
         var live = PreviousCamp("Fafnir", "Fafnir D1");
         live.CommencementStartTime = Now.AddHours(-2);   // started, never ended
@@ -106,13 +112,29 @@ public class HnmAutoEventReviveTests
 
         var id = await NewService(db).CreateAutoEventForTodAsync(1, CancellationToken.None);
 
-        Assert.NotEqual(100, id);
-        Assert.Equal(2, db.Events.Count());
+        Assert.Null(id);
+        Assert.Single(db.Events);
 
         var untouched = db.Events.Single(e => e.Id == 100);
         Assert.Equal(Now.AddHours(-2), untouched.CommencementStartTime);
         Assert.Equal(5, untouched.HnmWindowNumber);
         Assert.Equal(Now.AddDays(-1), untouched.StartTime);
+    }
+
+    // The live-camp stand-down is scoped to the SPAWN, not the linkshell: another monster's camp
+    // being live says nothing about this one, so this ToD still queues its own pop.
+    [Fact]
+    public async Task NewTod_AnotherMonstersLiveCamp_DoesNotStandDown()
+    {
+        var live = PreviousCamp("Behemoth", "Behemoth D1");
+        live.CommencementStartTime = Now.AddHours(-2);
+
+        using var db = await SeededAsync(live, NewTod(1, "Fafnir"));
+
+        var id = await NewService(db).CreateAutoEventForTodAsync(1, CancellationToken.None);
+
+        Assert.NotNull(id);
+        Assert.Equal(2, db.Events.Count());
     }
 
     [Fact]

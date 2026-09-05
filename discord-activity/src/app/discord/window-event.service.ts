@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityAddSnapshotEntryInput,
+  ActivityWindowEventCaptureDkpInput,
   ActivityWindowEventMemberDkpInput,
   ActivityWindowEventsResponse
 } from './discord-activity.types';
@@ -199,26 +200,29 @@ export class WindowEventService {
   // reached a handler.
   async saveDkp(
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
-    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null
+    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null,
+    captureDkp?: ActivityWindowEventCaptureDkpInput[]
   ): Promise<void> {
     await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/save-dkp`,
-      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null }, "DKP details saved.");
+      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null, captureDkp }, "DKP details saved.");
   }
 
   async postToSheet(
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
-    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null
+    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null,
+    captureDkp?: ActivityWindowEventCaptureDkpInput[]
   ): Promise<void> {
     await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/post`,
-      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null }, "Posting to the DKP sheet...");
+      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null, captureDkp }, "Posting to the DKP sheet...");
   }
 
   async editPosted(
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
-    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null
+    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null,
+    captureDkp?: ActivityWindowEventCaptureDkpInput[]
   ): Promise<void> {
     await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/edit-posted`,
-      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null }, "Updating the DKP sheet...");
+      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null, captureDkp }, "Updating the DKP sheet...");
   }
 
   async deleteEvent(windowEventId: number, linkshellId: number): Promise<void> {

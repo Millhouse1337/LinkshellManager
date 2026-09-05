@@ -61,16 +61,27 @@ public sealed partial class ActivityDataController
         // This camp own window grid, for the slot picker. HasWindowGrid false means there are no
         // numbers to offer (Sky gods, farm NMs); Misc is still selectable.
         int WindowCount,
-        bool HasWindowGrid);
+        bool HasWindowGrid,
+        // The CAPTURES carry the money on this card: each one shows what that window pays and is
+        // edited there, and a member's combined amount is the sum of them. Set on camps handed off
+        // from a Standard HNM board — see WindowEvent.PerCaptureDkp.
+        bool PerCaptureDkp);
 
     public sealed record ActivityWindowEventMemberDkpInput(string? CharacterName, double? DkpAmount);
+
+    // Keyed on the snapshot entry, not a character name: the whole point is that one person is
+    // worth a different amount in each capture they appear in.
+    public sealed record ActivityWindowEventCaptureDkpInput(int EntryId, double? DkpAmount);
 
     public sealed record ActivityWindowEventDkpRequest(
         double? DkpAmount,
         string? EntryType,
         IReadOnlyList<ActivityWindowEventMemberDkpInput>? MemberDkp,
         // Null means "misc pays what a window pays", which is the default.
-        double? MiscDkpAmount = null);
+        double? MiscDkpAmount = null,
+        // The per-capture amounts, on a card that prices captures. Mutually exclusive with
+        // MemberDkp by construction — the client sends one shape or the other.
+        IReadOnlyList<ActivityWindowEventCaptureDkpInput>? CaptureDkp = null);
 
     public sealed record ActivityWindowSnapshotDto(
         int Id,
@@ -111,7 +122,10 @@ public sealed partial class ActivityDataController
         string? Zone,
         // Typed in by an officer rather than scanned. Same story as WindowLabel above: the
         // client already styles these rows, but the flag never reached it.
-        bool AddedManually);
+        bool AddedManually,
+        // What THIS capture pays them, on a card that prices captures (see PerCaptureDkp). Null
+        // on every other card, where the money is one amount per member.
+        double? DkpAmount);
 
     public sealed record ActivityWindowCombinedMemberDto(
         string CharacterName,
@@ -293,19 +307,25 @@ public sealed partial class ActivityDataController
         windowEvent.Value.EntryType = WindowEventEntryTypes.Resolve(
             request.EntryType, windowEvent.Value.EntryType, windowEvent.Value.Name);
         ApplyActivityMemberDkpOverrides(windowEvent.Value, resolvedDkp, request.MemberDkp);
+        ApplyActivityCaptureDkp(windowEvent.Value, request.CaptureDkp);
         // Resolved BEFORE the assignment, or the stored-value fallback would read the value we are
         // about to overwrite and a save carrying no misc field would silently reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(
             request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount, resolvedDkp);
         windowEvent.Value.MiscDkpAmount = request.MiscDkpAmount;
-        WindowEventMiscDkp.ApplyMiscOverrides(
-            windowEvent.Value, resolvedDkp, resolvedMisc,
-            WindowEventMiscDkp.SubmittedNames(
-                request.MemberDkp?.Select(m => new ViewModels.WindowEventMemberDkpInput
-                {
-                    CharacterName = m.CharacterName,
-                    DkpAmount = m.DkpAmount,
-                })));
+        // Skipped on a card that prices its captures: the Misc rate materializes itself as
+        // per-member override rows, and those are not what such a card is paid from.
+        if (!windowEvent.Value.PerCaptureDkp)
+        {
+            WindowEventMiscDkp.ApplyMiscOverrides(
+                windowEvent.Value, resolvedDkp, resolvedMisc,
+                WindowEventMiscDkp.SubmittedNames(
+                    request.MemberDkp?.Select(m => new ViewModels.WindowEventMemberDkpInput
+                    {
+                        CharacterName = m.CharacterName,
+                        DkpAmount = m.DkpAmount,
+                    })));
+        }
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -349,19 +369,25 @@ public sealed partial class ActivityDataController
         windowEvent.Value.EntryType = WindowEventEntryTypes.Resolve(
             request.EntryType, windowEvent.Value.EntryType, windowEvent.Value.Name);
         ApplyActivityMemberDkpOverrides(windowEvent.Value, resolvedDkp, request.MemberDkp);
+        ApplyActivityCaptureDkp(windowEvent.Value, request.CaptureDkp);
         // Resolved BEFORE the assignment, or the stored-value fallback would read the value we are
         // about to overwrite and a save carrying no misc field would silently reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(
             request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount, resolvedDkp);
         windowEvent.Value.MiscDkpAmount = request.MiscDkpAmount;
-        WindowEventMiscDkp.ApplyMiscOverrides(
-            windowEvent.Value, resolvedDkp, resolvedMisc,
-            WindowEventMiscDkp.SubmittedNames(
-                request.MemberDkp?.Select(m => new ViewModels.WindowEventMemberDkpInput
-                {
-                    CharacterName = m.CharacterName,
-                    DkpAmount = m.DkpAmount,
-                })));
+        // Skipped on a card that prices its captures: the Misc rate materializes itself as
+        // per-member override rows, and those are not what such a card is paid from.
+        if (!windowEvent.Value.PerCaptureDkp)
+        {
+            WindowEventMiscDkp.ApplyMiscOverrides(
+                windowEvent.Value, resolvedDkp, resolvedMisc,
+                WindowEventMiscDkp.SubmittedNames(
+                    request.MemberDkp?.Select(m => new ViewModels.WindowEventMemberDkpInput
+                    {
+                        CharacterName = m.CharacterName,
+                        DkpAmount = m.DkpAmount,
+                    })));
+        }
         windowEvent.Value.PostedToSheetAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -396,19 +422,25 @@ public sealed partial class ActivityDataController
         windowEvent.Value.EntryType = WindowEventEntryTypes.Resolve(
             request.EntryType, windowEvent.Value.EntryType, windowEvent.Value.Name);
         ApplyActivityMemberDkpOverrides(windowEvent.Value, resolvedDkp, request.MemberDkp);
+        ApplyActivityCaptureDkp(windowEvent.Value, request.CaptureDkp);
         // Resolved BEFORE the assignment, or the stored-value fallback would read the value we are
         // about to overwrite and a save carrying no misc field would silently reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(
             request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount, resolvedDkp);
         windowEvent.Value.MiscDkpAmount = request.MiscDkpAmount;
-        WindowEventMiscDkp.ApplyMiscOverrides(
-            windowEvent.Value, resolvedDkp, resolvedMisc,
-            WindowEventMiscDkp.SubmittedNames(
-                request.MemberDkp?.Select(m => new ViewModels.WindowEventMemberDkpInput
-                {
-                    CharacterName = m.CharacterName,
-                    DkpAmount = m.DkpAmount,
-                })));
+        // Skipped on a card that prices its captures: the Misc rate materializes itself as
+        // per-member override rows, and those are not what such a card is paid from.
+        if (!windowEvent.Value.PerCaptureDkp)
+        {
+            WindowEventMiscDkp.ApplyMiscOverrides(
+                windowEvent.Value, resolvedDkp, resolvedMisc,
+                WindowEventMiscDkp.SubmittedNames(
+                    request.MemberDkp?.Select(m => new ViewModels.WindowEventMemberDkpInput
+                    {
+                        CharacterName = m.CharacterName,
+                        DkpAmount = m.DkpAmount,
+                    })));
+        }
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _windowEventDkpLedger.ReconcilePostedWindowEventLedgerAsync(windowEvent.Value.Id, cancellationToken);
@@ -422,9 +454,21 @@ public sealed partial class ActivityDataController
         int windowEventId,
         CancellationToken cancellationToken)
     {
-        var windowEvent = await LoadManageableWindowEventAsync(windowEventId, cancellationToken);
+        // Snapshots loaded because they are deleted WITH the event — see the note on
+        // WindowEventsController.Delete for why they are no longer left behind as unlinked
+        // captures. The two surfaces delete the same thing or an officer gets a different result
+        // depending on which one they happened to be looking at.
+        var windowEvent = await LoadManageableWindowEventAsync(
+            windowEventId, cancellationToken, includeSnapshots: true);
         if (windowEvent.Result is not null) return windowEvent.Result;
 
+        var snapshots = windowEvent.Value!.Snapshots.ToList();
+        if (snapshots.Count > 0)
+        {
+            _dbContext.AttendanceSnapshotEntries.RemoveRange(
+                snapshots.SelectMany(snapshot => snapshot.Entries));
+            _dbContext.AttendanceSnapshots.RemoveRange(snapshots);
+        }
         _dbContext.WindowEvents.Remove(windowEvent.Value!);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
@@ -548,6 +592,30 @@ public sealed partial class ActivityDataController
             }
         }
         return null;
+    }
+
+    // Mirrors WindowEventsController.ApplyCaptureDkp: the amounts land on the snapshot entries
+    // they were typed against, so one person priced differently in three windows keeps three
+    // different amounts. Refuses on a card that is not paid from its captures, for the reason given
+    // there — numbers the payout ignores are worse than none.
+    private static void ApplyActivityCaptureDkp(
+        WindowEvent windowEvent,
+        IReadOnlyList<ActivityWindowEventCaptureDkpInput>? inputs)
+    {
+        if (!windowEvent.PerCaptureDkp || inputs is null) return;
+
+        var entriesById = windowEvent.Snapshots
+            .SelectMany(snapshot => snapshot.Entries)
+            .GroupBy(entry => entry.Id)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var input in inputs)
+        {
+            if (entriesById.TryGetValue(input.EntryId, out var entry))
+            {
+                entry.DkpAmount = input.DkpAmount;
+            }
+        }
     }
 
     // Mirrors WindowEventsController.ApplyMemberDkpOverrides: characters whose
@@ -861,7 +929,9 @@ public sealed partial class ActivityDataController
     private async Task<(WindowEvent? Value, IActionResult? Result)> LoadManageableWindowEventAsync(
         int windowEventId,
         CancellationToken cancellationToken,
-        bool includeMemberDkpOverrides = false)
+        bool includeMemberDkpOverrides = false,
+        // The captures alone, for the delete path — which has no use for the override rows.
+        bool includeSnapshots = false)
     {
         var query = _dbContext.WindowEvents.AsQueryable();
         if (includeMemberDkpOverrides)
@@ -869,6 +939,10 @@ public sealed partial class ActivityDataController
             query = query.Include(e => e.MemberDkpOverrides);
             // Snapshots too: the misc rate applies to members credited ONLY by Misc captures, and
             // nothing on this path used to care how a capture was filed.
+            query = query.Include(e => e.Snapshots).ThenInclude(s => s.Entries);
+        }
+        else if (includeSnapshots)
+        {
             query = query.Include(e => e.Snapshots).ThenInclude(s => s.Entries);
         }
         var windowEvent = await query.FirstOrDefaultAsync(e => e.Id == windowEventId, cancellationToken);
@@ -904,7 +978,8 @@ public sealed partial class ActivityDataController
             .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
             .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
-        var combined = BuildActivityCombinedMembers(item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount);
+        var combined = BuildActivityCombinedMembers(
+            item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount, item.PerCaptureDkp);
         return new ActivityWindowEventDto(
             item.Id,
             item.LinkshellId,
@@ -935,7 +1010,8 @@ public sealed partial class ActivityDataController
             snapshots.Count(s => s.IsMisc),
             item.MiscDkpAmount,
             WindowEventWindowGrid.WindowCount(item),
-            WindowEventWindowGrid.Minutes(item) > 0);
+            WindowEventWindowGrid.Minutes(item) > 0,
+            item.PerCaptureDkp);
     }
 
     // `windowEvent` supplies the cadence and grid anchor used to name the spawn window, exactly as
@@ -958,7 +1034,8 @@ public sealed partial class ActivityDataController
                 e.SubJob,
                 e.SubJobLevel,
                 e.Zone,
-                e.AddedManually))
+                e.AddedManually,
+                e.DkpAmount))
             .ToList();
 
         // The STORED window number wins — it was pinned against the grid as it stood at capture.
@@ -1015,8 +1092,15 @@ public sealed partial class ActivityDataController
         IEnumerable<AttendanceSnapshot> snapshots,
         IDictionary<string, double>? memberDkpOverrides = null,
         double? defaultDkpAmount = null,
-        double? miscDkpAmount = null)
+        double? miscDkpAmount = null,
+        // The captures carry the money on this card, so a member is owed their sum and neither the
+        // per-member overrides nor the misc rate has anything to say. Same rule as the web builder.
+        bool perCaptureDkp = false)
     {
+        var captureTotals = perCaptureDkp
+            ? WindowEventCaptureDkp.SumByCharacter(snapshots)
+            : null;
+
         return snapshots
             .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
             .SelectMany(s => s.Entries.Select(e => new { Snapshot = s, Entry = e }))
@@ -1053,8 +1137,8 @@ public sealed partial class ActivityDataController
                         .Distinct()
                         .OrderBy(n => n)
                         .ToList(),
-                    overrideAmount,
-                    overrideAmount ?? baseAmount,
+                    captureTotals is null ? overrideAmount : null,
+                    captureTotals is not null ? captureTotals.GetValueOrDefault(g.Key) : overrideAmount ?? baseAmount,
                     creditSource);
             })
             .ToList();

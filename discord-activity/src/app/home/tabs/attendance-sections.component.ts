@@ -8,6 +8,7 @@ import type {
   ActivityEvent,
   ActivityWindowCombinedMember,
   ActivityWindowEvent,
+  ActivityWindowEventCaptureDkpInput,
   ActivityWindowEventMemberDkpInput,
   ActivityWindowSnapshot,
   ActivityWindowSnapshotEntry
@@ -64,6 +65,11 @@ export class AttendanceSectionsComponent {
   // roster changes (handled lazily on read so newly-added/removed people
   // pick up sane defaults).
   protected readonly memberDkpDrafts: Record<number, Record<string, MemberDkpDraft>> = {};
+  // Per-event, per-ENTRY DKP draft, for cards whose captures carry the money. Keyed by snapshot
+  // entry id rather than by character on purpose: the same person is worth the open in one window
+  // and the regular rate in the next, so a per-character draft could only hold one of them — which
+  // is exactly how every capture came to show the same number.
+  protected readonly captureDkpDrafts: Record<number, Record<number, number | null>> = {};
   // Snapshot id -> "add a character by name" input value.
   protected readonly addPersonDrafts: Record<number, string> = {};
   // Two-click confirm state for destructive actions — the Discord iframe
@@ -544,14 +550,65 @@ export class AttendanceSectionsComponent {
     draft.followsDefault = false;
   }
 
+  // ----------------------------------------------------------------- per-capture amounts ---
+  //
+  // On a camp handed off from a Standard board the money belongs to the CAPTURES: window 1 pays
+  // the open, the middle windows pay the regular rate, the marked close pays the close, and the
+  // Post Kill roster pays nothing as a window because the kill bonus covers it. Drafts are keyed
+  // by ENTRY id rather than by character, which is the difference that matters — one person is
+  // worth three different amounts on a three-window camp.
+
+  protected captureDkp(event: ActivityWindowEvent, entry: ActivityWindowSnapshotEntry): number | null {
+    const bucket = (this.captureDkpDrafts[event.id] ??= {});
+    if (!(entry.id in bucket)) {
+      bucket[entry.id] = entry.dkpAmount ?? null;
+    }
+    return bucket[entry.id];
+  }
+
+  protected setCaptureDkp(
+    event: ActivityWindowEvent, entry: ActivityWindowSnapshotEntry, value: number | null): void {
+    (this.captureDkpDrafts[event.id] ??= {})[entry.id] = value;
+  }
+
   // The Combined DKP column shows the live draft so officers see edits
   // (including default-driven cascades) reflected immediately.
+  //
+  // On a priced camp it is a SUM of the capture drafts rather than one member figure, so
+  // re-pricing a single window moves the total on screen the moment it is typed.
   protected combinedDkpDisplay(event: ActivityWindowEvent, member: ActivityWindowCombinedMember): string {
+    if (event.perCaptureDkp) {
+      const name = member.characterName.trim().toLowerCase();
+      let total = 0;
+      for (const snapshot of event.snapshots ?? []) {
+        if (snapshot.snapshotStatus !== "Active") continue;
+        for (const entry of snapshot.entries ?? []) {
+          if (entry.characterName.trim().toLowerCase() !== name) continue;
+          total += this.captureDkp(event, entry) ?? 0;
+        }
+      }
+      return this.formatDkp(total);
+    }
+
     const draft = this.memberDkp(event, member);
     return this.formatDkp(draft.value);
   }
 
+  // The two payloads are mutually exclusive: a priced camp sends its capture amounts and NO member
+  // rows (the server writes none for it, and sending some would only add rows nothing pays), while
+  // every other card sends member rows and no captures.
+  private buildCaptureDkpPayload(event: ActivityWindowEvent): ActivityWindowEventCaptureDkpInput[] | undefined {
+    if (!event.perCaptureDkp) return undefined;
+    const bucket = this.captureDkpDrafts[event.id];
+    if (!bucket) return [];
+    return Object.entries(bucket).map(([entryId, dkpAmount]) => ({
+      entryId: Number(entryId),
+      dkpAmount
+    }));
+  }
+
   private buildMemberDkpPayload(event: ActivityWindowEvent): ActivityWindowEventMemberDkpInput[] {
+    if (event.perCaptureDkp) return [];
     const bucket = this.memberDkpDrafts[event.id];
     if (!bucket) return [];
     // Send every known character so the server can reconcile (rows that
@@ -579,7 +636,7 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.saveDkp(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc);
+    await this.windows.saveDkp(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 
   // No native confirm — the explicit "Post to sheet" / "Update sheet" button
@@ -589,13 +646,13 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.postToSheet(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc);
+    await this.windows.postToSheet(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 
   protected async editPosted(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.editPosted(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc);
+    await this.windows.editPosted(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 }

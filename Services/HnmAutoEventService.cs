@@ -85,6 +85,37 @@ public sealed class HnmAutoEventService
             return existing.Id;
         }
 
+        // Every spelling of the spawn. MonsterMatchNames is symmetric across the merge pair, so a
+        // Fafnir ToD finds the event assigned to Nidhogg and vice versa.
+        var monsterNames = HnmConfig.MonsterMatchNamesLower(monster);
+
+        // A LIVE camp for this monster is ALREADY the next pop's board, so stand down rather than
+        // queue a second one beside it. Ending a camp recycles its row onto the ToD that was
+        // settled for the kill (HnmCampReviewHandoffService.HandOffAndRecycleAsync) instead of
+        // deleting the row the way it once did, and the addon posts that ToD in a separate call
+        // BEFORE the end — from the End Event dialog, or from the ToD Capture panel earlier in the
+        // night. So the camp is still live when we get here, which is exactly why the recycle below
+        // misses it, and one kill was leaving the officer with two queued events: the parked camp
+        // and this auto-event.
+        //
+        // Not folded into that recycle: skipping a live camp there protects a payout still being
+        // accrued (see below), so the answer here has to be "stand down", not "revive it".
+        var liveCamp = await _db.Events
+            .Where(e => e.LinkshellId == tod.LinkshellId
+                        && e.EndTime == null
+                        && e.CommencementStartTime != null
+                        && e.AssignedMonsterName != null
+                        && monsterNames.Contains(e.AssignedMonsterName.ToLower()))
+            .Select(e => (int?)e.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (liveCamp is { } liveCampId)
+        {
+            _logger.LogDebug(
+                "HNM auto-event skip: camp {EventId} ('{Monster}') is still live; ending it recycles that board onto tod {TodId}.",
+                liveCampId, monster, todId);
+            return null;
+        }
+
         // Nothing matched the repop window, so this monster's LAST pop is what's still on the board.
         // Recycle that row for the new pop rather than stacking a second event beside it — otherwise
         // every kill leaves another entry in Queued Events and the old camps pile up until somebody
@@ -92,15 +123,11 @@ public sealed class HnmAutoEventService
         //
         // Deliberately QUEUED ONLY (CommencementStartTime == null). A live camp has attendance and
         // DKP accruing against it, and reviving it would wipe a night people are still being paid
-        // for; that one falls through and the new pop is queued alongside it, which is the officer's
-        // cue to end the old camp. This guard is the difference between recycling a row and
-        // destroying a payout.
+        // for. The guard above turns those away entirely; this one is the difference between
+        // recycling a row and destroying a payout.
         //
-        // Matched on AssignedMonsterName via MonsterMatchNames, not EventName: the name carries a
-        // "D<n>" suffix that changes every pop, which is exactly why the ±10-minute check above
-        // misses. MonsterMatchNames is symmetric across the merge pair, so a Fafnir ToD finds the
-        // event assigned to Nidhogg and vice versa.
-        var monsterNames = HnmConfig.MonsterMatchNamesLower(monster);
+        // Matched on AssignedMonsterName, not EventName: the name carries a "D<n>" suffix that
+        // changes every pop, which is exactly why the ±10-minute check above misses.
         var stale = await _db.Events
             .Where(e => e.LinkshellId == tod.LinkshellId
                         && e.EndTime == null

@@ -79,6 +79,22 @@ public class WindowEvent
     // hazard, because null simply falls through to DkpAmount.
     public double? MiscDkpAmount { get; set; }
 
+    // This review row prices each CAPTURE, not each member: a person's payout is the sum of
+    // AttendanceSnapshotEntry.DkpAmount across every active capture they appear in, and
+    // WindowEventMemberDkp is not consulted at all.
+    //
+    // Set by the camp handoff for a STANDARD HNM camp, and only there. That is the one shape where
+    // the money genuinely varies per capture — one capture per posted window, each priced as the
+    // open, the close, the regular rate or the kill roster (HnmStandardCampFinalizer.WindowValue) —
+    // so a single per-member total could only ever show the same number in every window, which is
+    // what it did. Manual Check In camps are excluded deliberately: their credit comes from the
+    // check-in RANGE, so a member is paid for windows that have no capture at all, and per-capture
+    // amounts would have nothing truthful to say.
+    //
+    // FALSE on every row written before this existed, which is what keeps in-flight camps paying
+    // from their per-member overrides exactly as they were reviewed.
+    public bool PerCaptureDkp { get; set; }
+
     // Entry Type tag the sheet's downstream formulas pivot on. Must be one of the
     // WindowEventEntryTypes constants below; auto-tagged from the monster at creation and
     // preserved by WindowEventEntryTypes.Resolve, for the same reason DkpAmount is.

@@ -232,7 +232,8 @@ public sealed class AttendanceSectionsBuilder
             .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
             .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
-        var combined = BuildCombinedMembers(item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount);
+        var combined = BuildCombinedMembers(
+            item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount, item.PerCaptureDkp);
 
         return new WindowEventRow
         {
@@ -272,6 +273,7 @@ public sealed class AttendanceSectionsBuilder
             MiscDkpAmount = item.MiscDkpAmount,
             WindowCount = WindowEventWindowGrid.WindowCount(item),
             HasWindowGrid = WindowEventWindowGrid.Minutes(item) > 0,
+            PerCaptureDkp = item.PerCaptureDkp,
             CombinedMembers = combined,
         };
     }
@@ -299,6 +301,7 @@ public sealed class AttendanceSectionsBuilder
                 SubJobLevel = e.SubJobLevel,
                 Zone = e.Zone,
                 AddedManually = e.AddedManually,
+                DkpAmount = e.DkpAmount,
             })
             .ToList();
 
@@ -381,8 +384,16 @@ public sealed class AttendanceSectionsBuilder
         double? defaultDkpAmount = null,
         // Null means "misc pays what a window pays". Optional so the existing one-argument callers
         // (and their tests) keep compiling and keep their old behaviour exactly.
-        double? miscDkpAmount = null)
+        double? miscDkpAmount = null,
+        // The captures carry the money on this row (WindowEvent.PerCaptureDkp): a member is owed
+        // the sum of their capture amounts, and neither the per-member overrides nor the event
+        // baseline nor the misc rate has anything to say about it.
+        bool perCaptureDkp = false)
     {
+        var captureTotals = perCaptureDkp
+            ? WindowEventCaptureDkp.SumByCharacter(snapshots)
+            : null;
+
         return snapshots
             .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
             .SelectMany(s => s.Entries.Select(e => new { Snapshot = s, Entry = e }))
@@ -423,8 +434,10 @@ public sealed class AttendanceSectionsBuilder
                         .Distinct()
                         .OrderBy(n => n)
                         .ToList(),
-                    DkpAmountOverride = overrideAmount,
-                    EffectiveDkpAmount = overrideAmount ?? baseAmount,
+                    DkpAmountOverride = captureTotals is null ? overrideAmount : null,
+                    EffectiveDkpAmount = captureTotals is not null
+                        ? captureTotals.GetValueOrDefault(g.Key)
+                        : overrideAmount ?? baseAmount,
                     CreditSource = creditSource,
                 };
             })

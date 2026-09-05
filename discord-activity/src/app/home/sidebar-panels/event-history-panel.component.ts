@@ -10,6 +10,7 @@ import type {
   ActivityEventHistory,
   ActivityEventHistoryAbsentee,
   ActivityEventHistoryParticipant,
+  ActivityEventHistoryTagRoster,
   ActivityEventHistoryWindow,
   ActivityEventHistoryWindowsResponse
 } from '../../discord/discord-activity.types';
@@ -111,7 +112,10 @@ import type {
                   <div class="form-grid">
                     <label>Name<input [(ngModel)]="draft.eventName" [name]="'eName' + h.id" /></label>
                     <label>Type<input [(ngModel)]="draft.eventType" [name]="'eType' + h.id" /></label>
-                    <label>Location<input [(ngModel)]="draft.eventLocation" [name]="'eLoc' + h.id" /></label>
+                    <!-- Starts a new row so it sits directly left of Duration. Location and
+                         Duration are what an officer corrects together — where the camp was and
+                         how long it ran — while Name and Type are what identifies it. -->
+                    <label class="row-start">Location<input [(ngModel)]="draft.eventLocation" [name]="'eLoc' + h.id" /></label>
                     <label>Duration
                       <div class="duration">
                         <input type="number" min="0" [value]="durationPart(draft, 'h')" (change)="setDurationPart(draft, 'h', $any($event.target).value)" [name]="'eDurH' + h.id" /><span>h</span>
@@ -173,9 +177,10 @@ import type {
                             @if (w.isClosingWindow) {
                               <span class="tag accent" title="The window the officer marked as closing the camp out — the one the close bonus paid on.">Closing</span>
                             }
-                            @if (w.isKillWindow) {
-                              <span class="tag warn" title="The addon's Post Kill roster: who was there when the mob died. Worth nothing as a window; being on it earns the kill bonus.">Kill</span>
-                            }
+                            <!-- No "Kill" chip: the row's own label already reads Kill, so the chip
+                                 said the same word twice. Closing above is not the same case — a
+                                 closing window is numbered and named like any other, so nothing
+                                 else on the row says the close bonus paid on it. -->
                             @if (w.dkpAmount != null) {
                               <span class="tag success">{{ w.dkpAmount }} DKP</span>
                             }
@@ -197,6 +202,30 @@ import type {
                                     @if (a.mainCharacterName) { <small>alt of {{ a.mainCharacterName }}</small> }
                                   </span>
                                 }
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                      <!-- The Tag roster, listed with the windows because that is where an officer
+                           looks for "what did this camp record" — but it is NOT one of them, and
+                           none of the counts above include it. -->
+                      @if (tagRosterFor(h.id); as tags) {
+                        <div class="win">
+                          <button type="button" class="win-head" (click)="toggleWindow(h.id, tagRosterRowId)">
+                            <strong>Tag</strong>
+                            <span class="tag" title="Who landed an action on the mob, from this camp's Claim Shield. Earns the tag bonus; not a window, so it counts toward no window total.">not a window</span>
+                            <span class="win-meta">
+                              {{ tags.taggers.length }} tagged · {{ tags.postedAt | date:'MMM d, h:mm a' }}
+                            </span>
+                            <span class="win-chev" [class.is-open]="isWindowOpen(h.id, tagRosterRowId)" aria-hidden="true">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                            </span>
+                          </button>
+                          @if (isWindowOpen(h.id, tagRosterRowId)) {
+                            <div class="win-body">
+                              @for (t of tags.taggers; track t.characterName) {
+                                <span class="win-att">{{ t.characterName }}</span>
                               }
                             </div>
                           }
@@ -546,7 +575,13 @@ import type {
     input[type=checkbox] { width: auto; accent-color: var(--accent); cursor: pointer; }
 
     .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px 20px; align-items: end; }
-    .form-grid .primary { justify-self: end; }
+    /* Breaks the row: auto-placement can't use column 1 of a row that already has a field in it,
+       so this lands on the next one. */
+    .form-grid > .row-start { grid-column: 1; }
+    /* Pinned to the last column rather than merely right-aligned. Without it the button follows
+       whatever field precedes it, so adding or dropping the DKP-per-hour field (which an HNM camp
+       does not render) moved Save into a different column. */
+    .form-grid .primary { grid-column: 3; justify-self: end; }
     .duration { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto; gap: 6px; align-items: center; }
     .duration input { text-align: right; }
     .duration span { color: var(--fg-3); font-size: 12px; }
@@ -691,6 +726,9 @@ import type {
 
     @media (max-width: 860px) {
       .form-grid, .split { grid-template-columns: 1fr; }
+      /* One column, so the two column pins above have nothing to pin to — column 3 of a 1-column
+         grid is an implicit track, which would push Save off to the side of everything else. */
+      .form-grid > .row-start, .form-grid .primary { grid-column: auto; }
       .event-head { flex-wrap: wrap; }
     }
   `]
@@ -837,6 +875,14 @@ export class EventHistoryPanelComponent {
   protected windowsFor(historyId: number): ActivityEventHistoryWindow[] {
     return this.windowArchives()[historyId]?.windows ?? [];
   }
+
+  protected tagRosterFor(historyId: number): ActivityEventHistoryTagRoster | null {
+    return this.windowArchives()[historyId]?.tagRoster ?? null;
+  }
+
+  // The Tag row shares the windows' open/closed map, so it needs an id no real window can hold.
+  // Window ids are database keys and always positive.
+  protected readonly tagRosterRowId = -1;
 
   // The denominator for "3 of 25". Falls back to the archived count while the fetch is still in
   // flight so the attendee column doesn't flash a nonsense "3 of 0".

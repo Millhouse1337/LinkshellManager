@@ -160,6 +160,9 @@ public sealed class WindowEventsController : Controller
         [FromForm] double? miscDkpAmount,
         [FromForm] string? entryType,
         [FromForm(Name = "MemberDkp")] List<WindowEventMemberDkpInput>? memberDkp,
+        // The per-capture amounts, on a row that prices captures. The two are mutually exclusive by
+        // construction — the card emits one shape or the other, never both.
+        [FromForm(Name = "CaptureDkp")] List<WindowEventCaptureDkpInput>? captureDkp,
         CancellationToken cancellationToken)
     {
         if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
@@ -194,12 +197,19 @@ public sealed class WindowEventsController : Controller
         windowEvent.DkpAmount = resolvedDkp;
         windowEvent.EntryType = entryType;
         ApplyMemberDkpOverrides(windowEvent, resolvedDkp, memberDkp);
+        _ = ApplyCaptureDkp(windowEvent, captureDkp);
         // Resolved BEFORE the assignment below, or the stored-value fallback would read the
         // value we are about to overwrite and a save that carries no misc field would reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(miscDkpAmount, windowEvent.MiscDkpAmount, resolvedDkp);
         windowEvent.MiscDkpAmount = miscDkpAmount;
-        WindowEventMiscDkp.ApplyMiscOverrides(
-            windowEvent, resolvedDkp, resolvedMisc, WindowEventMiscDkp.SubmittedNames(memberDkp));
+        // The Misc rate materializes itself as per-member override rows, and a row that prices its
+        // captures never reads those — so here it could only ever write rows nothing pays. Its
+        // captures are Window captures to begin with, so the rate has nobody to apply to either.
+        if (!windowEvent.PerCaptureDkp)
+        {
+            WindowEventMiscDkp.ApplyMiscOverrides(
+                windowEvent, resolvedDkp, resolvedMisc, WindowEventMiscDkp.SubmittedNames(memberDkp));
+        }
         await _db.SaveChangesAsync(cancellationToken);
 
         TempData["WindowEventStatus"] = $"Saved DKP details for \"{windowEvent.Name}\".";
@@ -221,6 +231,9 @@ public sealed class WindowEventsController : Controller
         [FromForm] double? miscDkpAmount,
         [FromForm] string? entryType,
         [FromForm(Name = "MemberDkp")] List<WindowEventMemberDkpInput>? memberDkp,
+        // The per-capture amounts, on a row that prices captures. The two are mutually exclusive by
+        // construction — the card emits one shape or the other, never both.
+        [FromForm(Name = "CaptureDkp")] List<WindowEventCaptureDkpInput>? captureDkp,
         CancellationToken cancellationToken)
     {
         if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
@@ -259,13 +272,17 @@ public sealed class WindowEventsController : Controller
         // silently refusing to credit.
         var typeChanged = !string.Equals(windowEvent.EntryType, entryType, StringComparison.Ordinal);
         var overrideChanged = HasMemberDkpChange(windowEvent, resolvedDkp, memberDkp);
+        // Re-pricing ONE window on a priced camp changes nothing else on the card — not the
+        // baseline, not a per-member override — so without this term the edit would report "No
+        // changes to apply" and the officer's new amount would never reach the ledger.
+        var captureChanged = HasCaptureDkpChange(windowEvent, captureDkp);
         // A misc-rate change moves only misc-only members, so it shows up in neither the default
         // amount nor in a per-member override the form already carried. Without this term an edit
         // that only retunes Misc DKP would report "No changes to apply" and quietly do nothing.
         var miscChanged = windowEvent.MiscDkpAmount.HasValue != miscDkpAmount.HasValue
             || (windowEvent.MiscDkpAmount.HasValue && miscDkpAmount.HasValue
                 && Math.Abs(windowEvent.MiscDkpAmount.Value - miscDkpAmount.Value) > 0.0001);
-        if (!amountChanged && !typeChanged && !overrideChanged && !miscChanged)
+        if (!amountChanged && !typeChanged && !overrideChanged && !miscChanged && !captureChanged)
         {
             TempData["WindowEventStatus"] = "No changes to apply.";
             return RedirectToAction(nameof(Index), new { linkshellId });
@@ -274,12 +291,19 @@ public sealed class WindowEventsController : Controller
         windowEvent.DkpAmount = resolvedDkp;
         windowEvent.EntryType = entryType;
         ApplyMemberDkpOverrides(windowEvent, resolvedDkp, memberDkp);
+        _ = ApplyCaptureDkp(windowEvent, captureDkp);
         // Resolved BEFORE the assignment below, or the stored-value fallback would read the
         // value we are about to overwrite and a save that carries no misc field would reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(miscDkpAmount, windowEvent.MiscDkpAmount, resolvedDkp);
         windowEvent.MiscDkpAmount = miscDkpAmount;
-        WindowEventMiscDkp.ApplyMiscOverrides(
-            windowEvent, resolvedDkp, resolvedMisc, WindowEventMiscDkp.SubmittedNames(memberDkp));
+        // The Misc rate materializes itself as per-member override rows, and a row that prices its
+        // captures never reads those — so here it could only ever write rows nothing pays. Its
+        // captures are Window captures to begin with, so the rate has nobody to apply to either.
+        if (!windowEvent.PerCaptureDkp)
+        {
+            WindowEventMiscDkp.ApplyMiscOverrides(
+                windowEvent, resolvedDkp, resolvedMisc, WindowEventMiscDkp.SubmittedNames(memberDkp));
+        }
         await _db.SaveChangesAsync(cancellationToken);
 
         // Reconcile the already-credited ledger + per-member DKP by the delta.
@@ -303,6 +327,9 @@ public sealed class WindowEventsController : Controller
         [FromForm] double? miscDkpAmount,
         [FromForm] string? entryType,
         [FromForm(Name = "MemberDkp")] List<WindowEventMemberDkpInput>? memberDkp,
+        // The per-capture amounts, on a row that prices captures. The two are mutually exclusive by
+        // construction — the card emits one shape or the other, never both.
+        [FromForm(Name = "CaptureDkp")] List<WindowEventCaptureDkpInput>? captureDkp,
         CancellationToken cancellationToken)
     {
         if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
@@ -348,12 +375,19 @@ public sealed class WindowEventsController : Controller
         windowEvent.DkpAmount = resolvedDkp;
         windowEvent.EntryType = entryType;
         ApplyMemberDkpOverrides(windowEvent, resolvedDkp, memberDkp);
+        _ = ApplyCaptureDkp(windowEvent, captureDkp);
         // Resolved BEFORE the assignment below, or the stored-value fallback would read the
         // value we are about to overwrite and a save that carries no misc field would reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(miscDkpAmount, windowEvent.MiscDkpAmount, resolvedDkp);
         windowEvent.MiscDkpAmount = miscDkpAmount;
-        WindowEventMiscDkp.ApplyMiscOverrides(
-            windowEvent, resolvedDkp, resolvedMisc, WindowEventMiscDkp.SubmittedNames(memberDkp));
+        // The Misc rate materializes itself as per-member override rows, and a row that prices its
+        // captures never reads those — so here it could only ever write rows nothing pays. Its
+        // captures are Window captures to begin with, so the rate has nobody to apply to either.
+        if (!windowEvent.PerCaptureDkp)
+        {
+            WindowEventMiscDkp.ApplyMiscOverrides(
+                windowEvent, resolvedDkp, resolvedMisc, WindowEventMiscDkp.SubmittedNames(memberDkp));
+        }
         windowEvent.PostedToSheetAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -365,10 +399,18 @@ public sealed class WindowEventsController : Controller
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 
-    // Removes the Window Event row. Linked snapshots are unlinked (the FK uses
-    // OnDelete SetNull) rather than destroyed so officers can re-attach or
-    // ignore them from the Unlinked Snapshots list afterwards. Sheet rows that
-    // were already appended remain in the spreadsheet -- AttInput append is a
+    // Removes the Window Event row AND the captures filed under it.
+    //
+    // The FK is OnDelete SetNull, so deleting the row used to leave every capture behind as an
+    // UNLINKED snapshot — the reasoning being that an officer could re-file them. In practice the
+    // captures on a card are that card's: an officer deleting the event is throwing the whole thing
+    // away, and what they got instead was the same rosters reappearing in the triage queue to be
+    // dismissed one at a time. Deleting the event deletes them.
+    //
+    // Entries go with their snapshot (cascade); removed explicitly here for the same reason
+    // DeleteSnapshot does it, so the intent survives a change of convention.
+    //
+    // Sheet rows that were already appended remain in the spreadsheet -- AttInput append is a
     // one-way push, not a mirror.
     [HttpPost("/linkshells/{linkshellId:int}/window-events/{windowEventId:int}/delete")]
     [ValidateAntiForgeryToken]
@@ -377,12 +419,25 @@ public sealed class WindowEventsController : Controller
         if (await RequireOfficerAsync(linkshellId, cancellationToken) is { } reject) return reject;
 
         var windowEvent = await _db.WindowEvents
+            .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
             .FirstOrDefaultAsync(e => e.Id == windowEventId && e.LinkshellId == linkshellId, cancellationToken);
         if (windowEvent is null) return NotFound();
 
+        RemoveSnapshots(_db, windowEvent);
         _db.WindowEvents.Remove(windowEvent);
         await _db.SaveChangesAsync(cancellationToken);
         return RedirectToAction(nameof(Index), new { linkshellId });
+    }
+
+    // The captures filed under an event, staged for deletion along with it. Requires
+    // windowEvent.Snapshots (with Entries) to be loaded.
+    private static void RemoveSnapshots(ApplicationDbContext db, WindowEvent windowEvent)
+    {
+        var snapshots = windowEvent.Snapshots.ToList();
+        if (snapshots.Count == 0) return;
+
+        db.AttendanceSnapshotEntries.RemoveRange(snapshots.SelectMany(snapshot => snapshot.Entries));
+        db.AttendanceSnapshots.RemoveRange(snapshots);
     }
 
     // Files an unlinked snapshot under an attendance event: an existing one when `windowEventId`
@@ -844,6 +899,71 @@ public sealed class WindowEventsController : Controller
         }
         error = string.Empty;
         return true;
+    }
+
+    // Writes the per-capture amounts back onto the snapshot entries they came from, and reports
+    // whether any of them actually moved.
+    //
+    // Keyed on the ENTRY id, so one person priced differently in three windows lands three
+    // different amounts — the whole reason this exists alongside ApplyMemberDkpOverrides rather
+    // than replacing it. Entries the payload doesn't mention are left alone, same as there.
+    //
+    // Refuses outright on a row that doesn't price captures: writing amounts nothing will ever
+    // read is worse than dropping them, because the card would then show numbers the payout
+    // ignores. That is the bug this whole column came from.
+    //
+    // Requires windowEvent.Snapshots (with Entries) to be loaded.
+    private static bool ApplyCaptureDkp(
+        WindowEvent windowEvent, IEnumerable<WindowEventCaptureDkpInput>? inputs)
+    {
+        if (!windowEvent.PerCaptureDkp || inputs is null) return false;
+
+        var entriesById = windowEvent.Snapshots
+            .SelectMany(snapshot => snapshot.Entries)
+            .GroupBy(entry => entry.Id)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var changed = false;
+        foreach (var input in inputs)
+        {
+            if (!entriesById.TryGetValue(input.EntryId, out var entry)) continue;
+
+            var amount = input.DkpAmount;
+            if (entry.DkpAmount.HasValue != amount.HasValue
+                || (amount.HasValue && Math.Abs(entry.DkpAmount!.Value - amount.Value) > 0.0001))
+            {
+                entry.DkpAmount = amount;
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    // Would ApplyCaptureDkp move anything? Asked before the edit path commits, so it must not
+    // write — hence the second pass rather than a flag on the apply.
+    private static bool HasCaptureDkpChange(
+        WindowEvent windowEvent, IEnumerable<WindowEventCaptureDkpInput>? inputs)
+    {
+        if (!windowEvent.PerCaptureDkp || inputs is null) return false;
+
+        var entriesById = windowEvent.Snapshots
+            .SelectMany(snapshot => snapshot.Entries)
+            .GroupBy(entry => entry.Id)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var input in inputs)
+        {
+            if (!entriesById.TryGetValue(input.EntryId, out var entry)) continue;
+            if (entry.DkpAmount.HasValue != input.DkpAmount.HasValue) return true;
+            if (input.DkpAmount.HasValue
+                && Math.Abs(entry.DkpAmount!.Value - input.DkpAmount.Value) > 0.0001)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // Reconciles MemberDkpOverrides with the form payload:

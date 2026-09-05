@@ -34,17 +34,20 @@ public sealed class HnmCampReviewHandoffService
     private readonly ApplicationDbContext _db;
     private readonly WdCampFinalizer _wdFinalizer;
     private readonly HnmStandardCampFinalizer _standardFinalizer;
+    private readonly HnmAutoEventService _autoEvent;
     private readonly ILogger<HnmCampReviewHandoffService> _logger;
 
     public HnmCampReviewHandoffService(
         ApplicationDbContext db,
         WdCampFinalizer wdFinalizer,
         HnmStandardCampFinalizer standardFinalizer,
+        HnmAutoEventService autoEvent,
         ILogger<HnmCampReviewHandoffService> logger)
     {
         _db = db;
         _wdFinalizer = wdFinalizer;
         _standardFinalizer = standardFinalizer;
+        _autoEvent = autoEvent;
         _logger = logger;
     }
 
@@ -176,6 +179,56 @@ public sealed class HnmCampReviewHandoffService
         var rosterByName = byCharacterName.Values.ToDictionary(
             m => m.CharacterName, m => m, StringComparer.OrdinalIgnoreCase);
 
+        // PRICE THE CAPTURES, not just the members.
+        //
+        // A Standard camp's windows are each worth a different thing — the open, the close, the
+        // regular rate — so a single per-member total can only ever render as the same number in
+        // every window, which is exactly what the review card showed. Writing each window's own
+        // value onto its capture is what lets the card say "window 1 paid the open" and lets an
+        // officer re-price ONE window.
+        //
+        // Resolved through the same ResolveCloseWindow and the same HnmCampPricing the finalizer
+        // just used, so these amounts sum back to the totals it computed rather than to a second
+        // opinion about the same camp.
+        //
+        // THE KILL POST is the exception, and deliberately so. WindowValue prices it at 0 as a
+        // window, because it is not a roster read of the camp — it is the record of who was standing
+        // there when the mob died, and the KILL BONUS is what pays for that. So the kill capture
+        // carries that bonus rather than a zero, which is what makes it the kill post's own capture
+        // instead of a row that silently pays nothing. Only the tag bonus is left for the Tags
+        // capture below: the two are separate things earned by separate evidence.
+        //
+        // Manual Check In camps are excluded (HonoursWindowAmount): their credit comes from the
+        // check-in RANGE, so a member is paid for windows that have no capture at all and there is
+        // no honest per-capture number to write. They keep the per-member rows below.
+        var perCapture = HnmCampPricing.HonoursWindowAmount(ev);
+        var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(campWindows, popWindow);
+        var (_, _, _, _, killBonus) = HnmCampPricing.StandardBonuses(ev, linkshell, claimed, killed);
+        var valueBySequence = perCapture
+            ? campWindows.ToDictionary(
+                w => w.SequenceNumber,
+                w => HnmCampPricing.WindowValueFor(
+                    ev, linkshell, w.SequenceNumber, closeWindow, w.DkpAmount, w.IsKillWindow) ?? 0d)
+            : new Dictionary<int, double>();
+        windowEvent.PerCaptureDkp = perCapture;
+
+        // What each member has been priced for so far, so the Tags capture below can carry the rest
+        // of what the finalizer owes them.
+        //
+        // Keyed on the ACCOUNT wherever there is one, because the capture rows are keyed on the
+        // SCANNED character and the roster is keyed on the member's MAIN. Someone caught on an alt
+        // is scanned as "Athmilk" and rostered as "Edicius", and matching those two by name would
+        // read as a member who earned no window at all — handing them a tag row for the whole total
+        // on top of the windows they were actually paid for.
+        static string PriceKey(string? accountId, string characterName)
+            => string.IsNullOrWhiteSpace(accountId) ? $"name:{characterName}" : accountId!;
+        var pricedByKey = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var scannedAccounts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // The kill bonus is earned by being in the Post Kill roster AT ALL. A camp can hold more
+        // than one kill capture — the officer posted, spotted a miss, posted again — and the
+        // finalizer pays for that once, so this pays it on the first one and zero on the rest.
+        var killPaidKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         // Everyone a window actually caught. What is left over is added below, because a roster
         // member with no scan is a REAL case -- a Claim Shield tagger who never appeared in one --
         // and dropping them would delete a payout the finalizer already decided on.
@@ -201,13 +254,20 @@ public sealed class HnmCampReviewHandoffService
                 CapturedAtUtc = window.PostedAt,
                 CreatedAtUtc = nowUtc,
                 SnapshotStatus = AttendanceSnapshotStatuses.Active,
-                // Named for the window: "Open", "Close", "Kill", or "Window N" on a numbered camp.
-                // Label is what the addon and HnmConfig already agreed on at post time.
-                Name = !string.IsNullOrWhiteSpace(window.Label)
-                    ? window.Label
-                    : (isWd
-                        ? $"Check In roster · window {window.SequenceNumber}"
-                        : $"Window {window.SequenceNumber}"),
+                // Named for the ROLE the window is paid as, which is the one thing an officer
+                // reviewing the money needs from it: "Open", "Close", "Kill", or "Window N" for the
+                // ordinary ones in between. Derived from the same three facts WindowValue prices on
+                // — sequence 1, the resolved close, the kill flag — so the name and the amount can
+                // never disagree.
+                //
+                // window.Label only names the two ends on a 2-POST camp (HnmConfig
+                // .GetDefaultWindowLabel returns null for any other count), so a 7-window camp used
+                // to hand off three captures called "Window 1", "Window 2", "Window 3" with nothing
+                // saying which was the open and which the close. It is kept as the fallback for the
+                // middle windows, where it is the addon's own wording.
+                Name = isWd
+                    ? $"Check In roster · window {window.SequenceNumber}"
+                    : WindowRoleLabel(window, closeWindow),
                 // What made every capture render as "Unassigned".
                 WindowNumber = window.SequenceNumber,
                 SlotKind = AttendanceSnapshotSlotKinds.Window,
@@ -228,11 +288,30 @@ public sealed class HnmCampReviewHandoffService
             };
             _db.AttendanceSnapshots.Add(windowSnapshot);
 
+            // One window pays a member ONCE, however many scan rows they have in it — the finalizer
+            // sums over the set of SEQUENCES a member was seen in, not over the rows. An account
+            // holding two participations can produce two rows for one window, and pricing both
+            // would pay that window twice. The duplicate row still renders (it is what was
+            // captured); it just carries nothing.
+            var pricedThisWindow = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var scan in scans)
             {
                 var name = scan.CharacterName!.Trim();
                 scannedNames.Add(name);
                 rosterByName.TryGetValue(name, out var rosterRow);
+                var accountId = scan.AppUserId ?? rosterRow?.AppUserId;
+                if (!string.IsNullOrWhiteSpace(accountId)) scannedAccounts.Add(accountId);
+
+                double? entryAmount = null;
+                if (perCapture && pricedThisWindow.Add(name))
+                {
+                    var priceKey = PriceKey(accountId, name);
+                    entryAmount = window.IsKillWindow
+                        ? (killPaidKeys.Add(priceKey) ? killBonus : 0d)
+                        : valueBySequence.GetValueOrDefault(window.SequenceNumber);
+                    pricedByKey[priceKey] = pricedByKey.GetValueOrDefault(priceKey) + entryAmount.Value;
+                }
 
                 windowSnapshot.Entries.Add(new AttendanceSnapshotEntry
                 {
@@ -246,6 +325,9 @@ public sealed class HnmCampReviewHandoffService
                     // The other blank column. Recorded per scan, so it is where they actually
                     // were for THAT window rather than wherever they ended up.
                     Zone = scan.Zone,
+                    // What THIS window pays them. Null on a Manual Check In camp, which prices
+                    // nothing per capture.
+                    DkpAmount = entryAmount,
                 });
             }
         }
@@ -256,10 +338,45 @@ public sealed class HnmCampReviewHandoffService
         // they would carry a WindowEventMemberDkp override and appear in NO snapshot, which is a
         // row the combined roster never builds -- an officer would post the camp and silently not
         // pay them.
-        var unscanned = byCharacterName.Values
-            .Where(m => !scannedNames.Contains(m.CharacterName))
-            .ToList();
-        if (unscanned.Count > 0)
+        // ...and, on a priced camp, THE TAGS: what a member earned for landing an action on the mob.
+        //
+        // Its own capture because its evidence is its own — the addon's tag list, not a roster
+        // scan — so a tagger can be owed for it having appeared in no window at all, and equally a
+        // member scanned in every window can be owed nothing here. That is the whole reason it
+        // cannot ride on a window, and why it is separate from the kill post, which pays the people
+        // who were standing there when the mob died. Two different questions, two captures.
+        //
+        // Carries the REMAINDER rather than re-reading the tag list: the windows above and the kill
+        // capture have taken their share of what the finalizer computed, and whatever is left is the
+        // tag bonus plus the rounding it snapped the total to. Defined that way it cannot disagree
+        // with the finalizer, and the sum of a member's captures is exactly their payout.
+        var extras = new List<(HnmCampMember Member, double? Amount)>();
+        foreach (var member in byCharacterName.Values)
+        {
+            var scanned = !string.IsNullOrWhiteSpace(member.AppUserId)
+                ? scannedAccounts.Contains(member.AppUserId!)
+                : scannedNames.Contains(member.CharacterName);
+
+            if (!perCapture)
+            {
+                // Manual Check In: the row exists only so an unscanned member still appears on the
+                // roster. It prices nothing — the per-member amounts below are the payout.
+                if (!scanned) extras.Add((member, null));
+                continue;
+            }
+
+            var priced = pricedByKey.GetValueOrDefault(PriceKey(member.AppUserId, member.CharacterName));
+            var remainder = member.Dkp - priced;
+
+            // An unscanned member has to be listed even when they are owed nothing, or the combined
+            // roster — which is built from capture entries — loses them entirely.
+            if (!scanned || Math.Abs(remainder) > 0.0001)
+            {
+                extras.Add((member, remainder));
+            }
+        }
+
+        if (extras.Count > 0)
         {
             var extraSnapshot = new AttendanceSnapshot
             {
@@ -269,13 +386,13 @@ public sealed class HnmCampReviewHandoffService
                 CapturedAtUtc = nowUtc,
                 CreatedAtUtc = nowUtc,
                 SnapshotStatus = AttendanceSnapshotStatuses.Active,
-                Name = "Credited without a window",
+                Name = perCapture ? "Tag" : "Credited without a window",
                 SlotKind = AttendanceSnapshotSlotKinds.Window,
-                EntryCount = unscanned.Count,
+                EntryCount = extras.Count,
             };
             _db.AttendanceSnapshots.Add(extraSnapshot);
 
-            foreach (var member in unscanned)
+            foreach (var (member, amount) in extras)
             {
                 extraSnapshot.Entries.Add(new AttendanceSnapshotEntry
                 {
@@ -284,21 +401,30 @@ public sealed class HnmCampReviewHandoffService
                     AppUserId = member.AppUserId,
                     MainJob = TruncateJob(member.JobName),
                     SubJob = TruncateJob(member.SubJobName),
+                    DkpAmount = amount,
                 });
             }
         }
 
-        // The amounts, one row per roster member. Unchanged, and deliberately built from the
-        // ROSTER rather than from the snapshots above: what a member is owed is the finalizer's
-        // answer, not a function of how many windows they turned up in.
-        foreach (var member in byCharacterName.Values)
+        // The amounts, one row per roster member — on a camp whose captures are NOT priced. There
+        // the finalizer's answer is all there is, and it is deliberately built from the ROSTER
+        // rather than from the snapshots: what a member is owed is not a function of how many
+        // windows they turned up in.
+        //
+        // A priced camp writes none of these on purpose. Its payout is the sum of the capture
+        // amounts above, so a per-member row could only be a second, stale copy of the same money —
+        // and the one an officer never edits is exactly the one that would go stale.
+        if (!perCapture)
         {
-            windowEvent.MemberDkpOverrides.Add(new WindowEventMemberDkp
+            foreach (var member in byCharacterName.Values)
             {
-                WindowEvent = windowEvent,
-                CharacterName = member.CharacterName,
-                DkpAmount = member.Dkp,
-            });
+                windowEvent.MemberDkpOverrides.Add(new WindowEventMemberDkp
+                {
+                    WindowEvent = windowEvent,
+                    CharacterName = member.CharacterName,
+                    DkpAmount = member.Dkp,
+                });
+            }
         }
 
         // THE PAST EVENT, written HERE — at End Camp — rather than at Post.
@@ -534,7 +660,98 @@ public sealed class HnmCampReviewHandoffService
         // query reads the pre-save database rows and EF hands back the same tracked instances.
 
         await _db.SaveChangesAsync(cancellationToken);
+
+        // The board is parked now, so hand it the ToD that was settled for this kill. Must run
+        // AFTER the save above: it reads the parked row back out of the database.
+        //
+        // Failures here must not bubble up. The camp is handed off and the roster is torn down by
+        // the line above — that is this method's contract, and it is already committed. Re-pointing
+        // the board at the new pop is a downstream convenience the poller and the ToD tracker's own
+        // sync can still put right, so reporting the end as failed would be a lie about the part
+        // that mattered.
+        try
+        {
+            await AdoptSettledTodAsync(ev, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Re-pointing camp {EventId} at its settled ToD failed.", ev.Id);
+        }
         return true;
+    }
+
+    // Point the recycled board at the kill's Time of Death.
+    //
+    // The addon posts that ToD in its OWN call, before this one — from the End Event dialog, or
+    // from the ToD Capture panel earlier in the night — so by the time the board parks, a ToD newer
+    // than the one it was created from can already exist. The board's own End Camp form has always
+    // re-pointed StartTime / SourceTodId / HnmRepostAt at the ToD it logs (HnmCampPopService); until
+    // this ran, a camp ended from the addon skipped all of it and sat there advertising the PREVIOUS
+    // pop's repop time with no re-post scheduled at all.
+    //
+    // Two outcomes, because two different things can own the next pop:
+    //
+    //   * A standing Repeat-on-ToD board owns it. The poller re-posts LeadHours before the pop,
+    //     which is what the officer asked for by enabling it, so the board STAYS parked and only its
+    //     advertised times move onto the new cycle — via the same shared sync the ToD tracker uses
+    //     when a ToD is corrected. Stamping SourceTodId is also what lets the poller recognise this
+    //     row as the new cycle's board instead of posting a second one beside it.
+    //
+    //   * Nothing does, so re-queue it right now: the streamlined addon workflow's "the next pop is
+    //     already on the board" behaviour, which is what the ToD post itself used to provide.
+    //     Handed to HnmAutoEventService because the camp is parked (queued) by this point, so its
+    //     own recycle finds THIS row and revives it with the composed name, next day and next
+    //     monster it would otherwise have given a brand new event.
+    //
+    // Either way the officer is left with ONE row. No newer ToD — a camp ended without one, and the
+    // web / Activity End Event actions, which post none — leaves the board exactly as it was.
+    private async Task AdoptSettledTodAsync(Event ev, CancellationToken cancellationToken)
+    {
+        var monster = ev.AssignedMonsterName?.Trim();
+        if (string.IsNullOrWhiteSpace(monster))
+        {
+            return;
+        }
+
+        var latestTodId = await HnmRecurringBoardService.LatestTodIdAsync(
+            _db, ev.LinkshellId, monster, cancellationToken);
+        if (latestTodId is not { } todId || todId <= (ev.SourceTodId ?? 0))
+        {
+            return;
+        }
+
+        var board = await HnmRecurringBoardService.FindAsync(_db, ev.LinkshellId, monster, cancellationToken);
+        if (board?.Enabled == true)
+        {
+            ev.SourceTodId = todId;
+            await _db.SaveChangesAsync(cancellationToken);
+            await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
+                _db, ev.LinkshellId, monster, cancellationToken);
+            _logger.LogInformation(
+                "HNM camp {EventId} ('{Monster}') parked on tod {TodId}; its Repeat-on-ToD board re-posts before the pop.",
+                ev.Id, monster, todId);
+            return;
+        }
+
+        await _autoEvent.CreateAutoEventForTodAsync(todId, cancellationToken);
+    }
+
+    // What this window is PAID as, said in one word. The three roles are exactly the branches of
+    // HnmStandardCampFinalizer.WindowValue, tested in its order: the kill roster first (it is not a
+    // roster read of the camp at all), then sequence 1, which is the open by definition, then the
+    // resolved close.
+    //
+    // Anything else is an ordinary window and keeps whatever the addon called it, falling back to
+    // its number. NormalizeWindowLabel maps the two pre-rename labels ("On Time", "Claim/Kill") so
+    // a camp that spans the rename doesn't name half its captures the old way.
+    private static string WindowRoleLabel(EventAttendanceWindow window, int closeWindow)
+    {
+        if (window.IsKillWindow) return HnmConfig.KillWindowLabel;
+        if (window.SequenceNumber == 1) return HnmConfig.OpenWindowLabel;
+        if (closeWindow > 0 && window.SequenceNumber == closeWindow) return HnmConfig.CloseWindowLabel;
+
+        var label = HnmConfig.NormalizeWindowLabel(window.Label);
+        return string.IsNullOrWhiteSpace(label) ? $"Window {window.SequenceNumber}" : label;
     }
 
     // AttendanceSnapshotEntry.MainJob/SubJob are the addon's 3-letter codes (MaxLength 8), but

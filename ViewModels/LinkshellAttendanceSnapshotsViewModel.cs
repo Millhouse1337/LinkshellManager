@@ -66,4 +66,9 @@ public sealed class AttendanceSnapshotEntryRow
     // Typed in by an officer rather than scanned by the addon. Sorts to the bottom of the snapshot
     // and tints the row, so a hand-asserted name never reads as captured evidence.
     public bool AddedManually { get; set; }
+
+    // What THIS capture pays them, on a row whose captures carry the money
+    // (WindowEventRow.PerCaptureDkp). Null everywhere else, and on a row an officer added during
+    // review — see AttendanceSnapshotEntry.DkpAmount.
+    public double? DkpAmount { get; set; }
 }

@@ -1168,6 +1168,13 @@ export interface ActivityWindowEventMemberDkpInput {
   dkpAmount: number | null;
 }
 
+// Keyed on the snapshot ENTRY, not a character name: the point is that one person is worth a
+// different amount in each capture they appear in.
+export interface ActivityWindowEventCaptureDkpInput {
+  entryId: number;
+  dkpAmount: number | null;
+}
+
 export interface ActivityWindowEventDkpPayload {
   dkpAmount: number;
   entryType: string;
@@ -1175,6 +1182,9 @@ export interface ActivityWindowEventDkpPayload {
   // DKP for members credited ONLY by Misc posts. Null means they are paid the same as a window
   // attendee, which is the default.
   miscDkpAmount?: number | null;
+  // The per-capture amounts, on a card that prices its captures. Sent INSTEAD of memberDkp, never
+  // alongside it.
+  captureDkp?: ActivityWindowEventCaptureDkpInput[];
 }
 
 export interface ActivityAddSnapshotEntryInput {
@@ -1220,6 +1230,11 @@ export interface ActivityWindowEvent {
   miscDkpAmount?: number | null;
   windowCount: number;
   hasWindowGrid: boolean;
+  // The CAPTURES carry the money on this card: each shows what that window pays and is edited
+  // there, and a member's combined amount is the sum of them. Set on camps handed off from a
+  // Standard HNM board, where one window is the open, another the close, and another the kill
+  // roster — one amount per member could only ever show the same number in all of them.
+  perCaptureDkp?: boolean;
 }
 
 export interface ActivityWindowSnapshot {
@@ -1267,6 +1282,9 @@ export interface ActivityWindowSnapshotEntry {
   // bottom of the snapshot server-side, and tinted here so an asserted name never reads as
   // captured evidence.
   addedManually?: boolean;
+  // What THIS capture pays them, on a card that prices its captures (see perCaptureDkp). Null
+  // everywhere else, where the money is one amount per member.
+  dkpAmount?: number | null;
 }
 
 export interface ActivityWindowCombinedMember {
@@ -1857,6 +1875,16 @@ export interface ActivityEventHistoryWindowsResponse {
   // who was standing there, not who joined on the site.
   distinctAttendeeCount: number;
   windows: ActivityEventHistoryWindow[];
+  // Who tagged the mob, from the camp's archived Claim Shield. Beside the windows rather than in
+  // them: a tag is read off chat, not off a party list, so a tagger can be here having appeared in
+  // no window at all — and none of the window counts include it. Null when nobody tagged.
+  tagRoster?: ActivityEventHistoryTagRoster | null;
+}
+
+export interface ActivityEventHistoryTagRoster {
+  // The camp's first lottery.
+  postedAt: string;
+  taggers: { characterName: string; verifiedAt: string }[];
 }
 
 // Post-event discussion comment (author shows "Anonymous" when posted anonymously).

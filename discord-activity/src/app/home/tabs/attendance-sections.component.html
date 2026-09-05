@@ -239,8 +239,13 @@
             </button>
           }
           @if (confirmDeleteEventId() === event.id) {
+            <!-- Names the captures: they are deleted with the event rather than surviving as
+                 unlinked snapshots, and the iframe blocks confirm() so this button is the only
+                 place that can say so. -->
             <button type="button" class="btn sm danger-outline"
-              (click)="deleteEvent(event)" [disabled]="windows.busy()">Confirm delete</button>
+              (click)="deleteEvent(event)" [disabled]="windows.busy()"
+              [title]="'Deletes this event and its ' + event.snapshotCount + ' capture(s). This cannot be undone.'">
+              Delete + {{ event.snapshotCount }} capture{{ event.snapshotCount === 1 ? '' : 's' }}</button>
             <button type="button" class="btn sm ghost"
               (click)="confirmDeleteEventId.set(null)">Cancel</button>
           } @else {
@@ -451,6 +456,12 @@
         } @else if (snapshot.windowLabel) {
           <span class="tag we-snapshot__window">{{ snapshot.windowLabel }}</span>
         }
+        <!-- What this capture is PAID as — Open, Close, Kill, or the tag roster carrying the claim
+             bonus. The window number alone doesn't say which of a camp's captures earned the open
+             and which the close, which is what an officer reviewing the money is looking for. -->
+        @if (snapshot.name) {
+          <span class="tag we-snapshot__role">{{ snapshot.name }}</span>
+        }
         <strong>{{ formatDate(snapshot.capturedAtUtc) }}</strong>
         <span class="we-snapshot__meta">
           · posted by <strong>{{ snapshot.capturedByCharacterName || '-' }}</strong>
@@ -471,7 +482,10 @@
                       [ngModelOptions]="{ standalone: true }"
                       (ngModelChange)="setSnapshotSlot(snapshot, $event, snapshot.windowNumber ?? null)"
                       aria-label="Slot kind">
-                <option [value]="slotWindow">{{ windowGroupTitle(event) }}</option>
+                <!-- Named for THIS capture rather than for the group it sits in: "Captures" told an
+                     officer nothing the heading above didn't, while "Open" says which one they are
+                     about to move. -->
+                <option [value]="slotWindow">{{ snapshot.name || windowGroupTitle(event) }}</option>
                 <option [value]="slotMisc">Misc</option>
               </select>
               @if (event.hasWindowGrid && !snapshot.isMisc) {
@@ -736,12 +750,23 @@
 
 <!-- ===== Per-row DKP input (combined-member draft) ===== -->
 <ng-template #memberDkpCell let-event="event" let-entry="entry">
-  @for (member of event.combinedMembers; track member.characterName) {
-    @if (member.characterName.trim().toLowerCase() === entry.characterName.trim().toLowerCase()) {
-      <input class="input we-dkp-input" type="number" min="0" step="0.25"
-        [ngModel]="memberDkp(event, member).value"
-        (ngModelChange)="setMemberDkp(event, member, $event)"
-        title="Defaults to the event's Default DKP. Edit to override for this character." />
+  @if (event.perCaptureDkp) {
+    <!-- What THIS capture pays them. Bound to the entry, so re-pricing one window lands on the row
+         the officer is looking at instead of being overwritten by the untouched copy of it in the
+         next capture. No min: the bonus capture carries whatever the camp owed that no window
+         pays, and a linkshell whose bonuses sit off its rounding grid can leave that below zero. -->
+    <input class="input we-dkp-input" type="number" step="0.25"
+      [ngModel]="captureDkp(event, entry)"
+      (ngModelChange)="setCaptureDkp(event, entry, $event)"
+      title="What this capture pays. Their total is the sum of every capture they appear in." />
+  } @else {
+    @for (member of event.combinedMembers; track member.characterName) {
+      @if (member.characterName.trim().toLowerCase() === entry.characterName.trim().toLowerCase()) {
+        <input class="input we-dkp-input" type="number" min="0" step="0.25"
+          [ngModel]="memberDkp(event, member).value"
+          (ngModelChange)="setMemberDkp(event, member, $event)"
+          title="Defaults to the event's Default DKP. Edit to override for this character." />
+      }
     }
   }
 </ng-template>

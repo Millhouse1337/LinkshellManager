@@ -50,4 +50,20 @@ public class AttendanceSnapshotEntry
     // False for every addon-captured entry, and for rows created before this column existed —
     // those were captured, since manual adds are recent.
     public bool AddedManually { get; set; }
+
+    // What THIS capture pays this person, on a review row that prices captures individually
+    // (WindowEvent.PerCaptureDkp). A Standard HNM camp hands off one capture per posted window, and
+    // a window is priced as the open, the close, the regular rate or the kill roster — so the one
+    // number a member is owed is a sum of several different amounts, and it is the windows that
+    // carry them. Their payout is the sum of these across every active capture they appear in.
+    //
+    // NULL means "this capture prices nothing for them", and it is the state of every row written
+    // before this column existed. Those review rows keep paying from WindowEventMemberDkp exactly
+    // as they did, so nothing already pending re-prices itself — see WindowEvent.PerCaptureDkp,
+    // which is the flag that decides which of the two a card reads.
+    //
+    // A person an officer adds during review lands here at null and pays 0 until they type an
+    // amount. Same rule as WindowEvent.DkpAmount being seeded to 0 on a camp: an accidental add
+    // must not silently pay.
+    public double? DkpAmount { get; set; }
 }

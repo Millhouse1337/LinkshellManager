@@ -118,10 +118,16 @@ public sealed class WindowEventDkpLedgerService
         // The per-character amounts the review settled on. Hoisted above the ledger work because
         // the archive reconcile below needs the same numbers.
         var defaultAmount = windowEvent.DkpAmount.Value;
-        var overridesByName = windowEvent.MemberDkpOverrides
-            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
-            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+        // A priced camp is paid from its CAPTURES: a member is owed the sum of what each window
+        // they were scanned in pays, plus the bonus capture that carries what no window does. The
+        // per-member override rows are not consulted at all there — the handoff writes none, and
+        // the officer edits the captures.
+        var overridesByName = windowEvent.PerCaptureDkp
+            ? WindowEventCaptureDkp.SumByCharacter(windowEvent.Snapshots)
+            : windowEvent.MemberDkpOverrides
+                .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+                .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
 
         double AmountForCharacter(string? characterName)
             => !string.IsNullOrWhiteSpace(characterName) &&
@@ -236,6 +242,9 @@ public sealed class WindowEventDkpLedgerService
     {
         var windowEvent = await _db.WindowEvents
             .Include(w => w.MemberDkpOverrides)
+            // The captures carry the money on a priced camp, so an edit to one of them is exactly
+            // what this method exists to reconcile.
+            .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
             .FirstOrDefaultAsync(w => w.Id == windowEventId, cancellationToken);
 
         if (windowEvent is null ||
@@ -248,10 +257,16 @@ public sealed class WindowEventDkpLedgerService
 
         var defaultAmount = windowEvent.DkpAmount.Value;
         var newEntryType = windowEvent.EntryType!;
-        var overridesByName = windowEvent.MemberDkpOverrides
-            .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
-            .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+        // The per-character amounts, from whichever of the two shapes this row prices in: the sum
+        // of a member's capture amounts on a priced camp, their per-member override otherwise. Same
+        // dictionary either way, so the alt-name fallback below applies to both — a camp scanned
+        // someone on an alt just as readily as a "/lsm now" capture did.
+        var overridesByName = windowEvent.PerCaptureDkp
+            ? WindowEventCaptureDkp.SumByCharacter(windowEvent.Snapshots)
+            : windowEvent.MemberDkpOverrides
+                .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+                .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
 
         var ledgerEntries = await _db.DkpLedgerEntries
             .Where(entry => entry.SourceWindowEventId == windowEventId && entry.AppUserId != null)

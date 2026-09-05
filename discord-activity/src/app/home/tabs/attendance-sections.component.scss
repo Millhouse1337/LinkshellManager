@@ -310,6 +310,12 @@
   background: rgba(79, 124, 255, 0.16); color: #9db4ff;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+/* What the capture is PAID as — Open, Close, Kill, or the tag roster carrying the claim bonus.
+   Green, because it answers a different question from the blue window chip beside it: that one says
+   WHEN the capture was taken, this one says what it is worth. */
+.we-snapshot__role {
+  background: rgba(52, 199, 123, 0.16); color: #6fd99b; white-space: nowrap;
+}
 .we-snapshot__actions { margin-left: auto; display: flex; gap: 6px; }
 .we-snapshot-actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 2px 14px 12px; }
 .we-unlinked-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
