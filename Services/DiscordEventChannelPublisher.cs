@@ -83,6 +83,21 @@ public sealed class DiscordEventChannelPublisher
                 await _hnmBoardNotice.PostDefeatedNoticeAsync(
                     ev, useV2, cancellationToken,
                     await ResolveCampArchiveIdAsync(ev.Id, cancellationToken));
+
+                // SAVE. The notice DELETES a wide board's extra messages from Discord (the note
+                // replaces the first; the rest have to go, buttons and all) and clears
+                // DiscordExtraMessageIds to match -- but it only stages that clear, and this was
+                // returning without saving. So Discord and the database disagreed: the messages
+                // were gone while the event still listed their ids, which is the state a live
+                // camp was found in.
+                //
+                // Everything downstream reads those ids. SendWideAsync heals on the next re-post
+                // (an edit to a deleted message falls through to a fresh post), but it heals by
+                // POSTING, so the alliances it re-creates land at the bottom of the channel
+                // instead of beside the board -- and any path that only edits finds nothing there
+                // at all.
+                await _db.SaveChangesAsync(cancellationToken);
+
                 _logger.LogInformation("Event {EventId} board set to defeated note (message {MessageId}).",
                     eventId, ev.DiscordMessageId);
                 return;

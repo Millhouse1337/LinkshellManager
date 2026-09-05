@@ -324,7 +324,13 @@ public sealed partial class AddonApiController : ControllerBase
         // Aspidochelone). The addon's launcher captures this via
         // state.eventPresetDayInputs. Null/0 for non-day-tracked monsters
         // and for HNMs where the officer left the day input blank.
-        int? DayNumber);
+        int? DayNumber,
+        // Which spawn window the mob popped on, stamped by the addon's ToD Tracker at the
+        // moment it attributed the pop signal rather than derived afterwards — by the time a
+        // ToD is posted the row has usually cycled on, so a later reading would name the wrong
+        // window. Null when the tracker was not running, missed the pop, or the monster has no
+        // window grid; the ToD form's "Popped on window" box is then the officer's to fill.
+        int? PopWindow = null);
 
     public sealed record AddonUpdateTodClaimRequest(bool? Claim);
 

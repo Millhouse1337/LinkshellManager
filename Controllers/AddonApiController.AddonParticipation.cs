@@ -1378,12 +1378,17 @@ public sealed partial class AddonApiController
             return Ok(new { pending = true, submissionId, monsterName });
         }
 
+        // Only a positive window is a reading; 0 / negative is the addon saying it has none, and
+        // must stay null so "Popped on window" renders as "not recorded" rather than as window 0.
+        var popWindow = request.PopWindow is { } pw && pw > 0 ? pw : (int?)null;
+
         var tod = new Tod
         {
             LinkshellId = token.LinkshellId,
             MonsterName = monsterName,
             DayNumber = dayNumber,
             Claim = claimed,
+            PopWindow = popWindow,
             Time = defeatedAtUtc,
             Cooldown = cooldown,
             RepopTime = repopTimeUtc,
