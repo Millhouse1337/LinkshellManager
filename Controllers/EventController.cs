@@ -218,6 +218,30 @@ public partial class EventController : Controller
                || await _adminOverride.IsActiveForAsync(membership.AppUserId, HttpContext.RequestAborted);
     }
 
+    // The "manage events" PERMISSION rather than the rank above, for the endpoints whose
+    // Activity twin already checks it (ActivityDataController: CanManageEvents). Mirrors
+    // that method's order exactly — membership, then override, then Leader-always-wins,
+    // then the role row — so the two surfaces can never disagree about who may act.
+    //
+    // Leader short-circuits because a role row seeded before a permission existed must
+    // never lock the owner out of their own linkshell.
+    private async Task<bool> CanManageEventsAsync(AppUserLinkshell? membership)
+    {
+        if (membership is null) return false;
+        if (await _adminOverride.IsActiveForAsync(membership.AppUserId, HttpContext.RequestAborted)) return true;
+        if (LinkshellRanks.IsLeader(membership.Rank)) return true;
+
+        var rankName = string.IsNullOrWhiteSpace(membership.Rank)
+            ? LinkshellRanks.Member
+            : membership.Rank.Trim();
+        var role = await _context.LinkshellRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                r => r.LinkshellId == membership.LinkshellId && r.Name == rankName,
+                HttpContext.RequestAborted);
+        return role?.CanManageEvents == true;
+    }
+
     internal static double CalculateAccumulatedDurationHours(AppUserEvent participation, DateTime referenceUtc, DateTime? eventStartUtc)
     {
         var accumulatedHours = Math.Max(0, participation.Duration ?? 0);

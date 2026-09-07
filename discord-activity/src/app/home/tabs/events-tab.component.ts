@@ -35,6 +35,7 @@ import {
 } from '../event-job-options';
 import {
   breakSessionInfo,
+  canManageEventsIn,
   canManageLinkshellIn,
   formatBreakDuration,
   formatDkp,
@@ -208,6 +209,13 @@ export class EventsTabComponent {
 
   protected canManageLinkshell(linkshellId: number): boolean {
     return canManageLinkshellIn(this.activity.overview(), linkshellId);
+  }
+
+  // End Camp specifically, which the server gates on the Manage events PERMISSION
+  // rather than the Leader/Officer rank — see canManageEventsIn(). Kept separate
+  // from canManageLinkshell so the two never quietly drift back together.
+  protected canEndCamp(linkshellId: number): boolean {
+    return canManageEventsIn(this.activity.overview(), linkshellId);
   }
 
   // ----- Event lists -----

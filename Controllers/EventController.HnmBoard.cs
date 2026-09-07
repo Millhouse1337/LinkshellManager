@@ -57,9 +57,12 @@ public partial class EventController
         }
 
         var membership = await GetMembershipAsync(user.Id, eventEntity.LinkshellId);
-        if (!await CanManageLinkshellAsync(membership))
+        // The "Manage events" permission, NOT the Leader/Officer rank: the Activity's twin of
+        // this endpoint has always checked CanManageEvents, so gating the web board on rank
+        // meant the same role could end a camp in the Activity and not here.
+        if (!await CanManageEventsAsync(membership))
         {
-            TempData["PartySetupMessage"] = "Leader or officer access is required to log a Time of Death.";
+            TempData["PartySetupMessage"] = "The \"Manage events\" permission is required to log a Time of Death.";
             return SafeLocalRedirect(returnUrl);
         }
 

@@ -238,6 +238,24 @@ export function canManageLinkshellIn(
   return rank === 'leader' || rank === 'officer';
 }
 
+// The "manage events" PERMISSION, not the rank — the gate the server's event
+// lifecycle endpoints actually apply (ActivityDataController: CanManageEvents).
+// Use this, not canManageLinkshellIn(), for anything that ends up calling one of
+// them; gating a button on rank while the endpoint checks a permission is what let
+// a custom role with Manage events on call End Camp but never see its button.
+//
+// Same membership-first rule as above, and no adminOverrideActive read is needed:
+// the server already sends `permissions` all-true when the override is carried.
+export function canManageEventsIn(
+  overview: ActivityOverview | null | undefined,
+  linkshellId: number | null | undefined
+): boolean {
+  if (linkshellId == null) return false;
+  const membership = (overview?.linkshells ?? []).find(link => link.id === linkshellId);
+  if (!membership) return false;
+  return membership.permissions?.canManageEvents === true;
+}
+
 // Leader-tier gates (rank editing, removing members, transferring ownership).
 // Same membership-first rule as above.
 export function isLeaderTierIn(

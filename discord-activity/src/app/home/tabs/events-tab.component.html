@@ -73,7 +73,7 @@
                     {{ event.dkpPerHour ?? 0 }} DKP/hour
                   </span>
                 }
-                @if (isHnmEvent(event) && canManageLinkshell(event.linkshellId)) {
+                @if (isHnmEvent(event) && canEndCamp(event.linkshellId)) {
                   <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
                     [disabled]="activity.busyEventId() === event.id"
                     (click)="openEndCamp(event)">

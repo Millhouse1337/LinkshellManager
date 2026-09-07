@@ -1500,9 +1500,9 @@ public sealed class DiscordInteractionsController : ControllerBase
                 ? null
                 : await _db.AppUserLinkshells.FirstOrDefaultAsync(
                     m => m.AppUserId == officerAppUserId && m.LinkshellId == ev.LinkshellId, cancellationToken);
-            if (!await CanManageLinkshellAsync(officer, cancellationToken))
+            if (!await CanManageEventsAsync(officer, cancellationToken))
             {
-                return Ephemeral("Only officers can end the camp.");
+                return Ephemeral("You need the **Manage events** permission to end the camp.");
             }
 
             // NQ/HQ only exists for the three merge-pair families, and it's asked even when we didn't
@@ -2089,9 +2089,9 @@ public sealed class DiscordInteractionsController : ControllerBase
             ? null
             : await _db.AppUserLinkshells.FirstOrDefaultAsync(
                 m => m.AppUserId == appUserId && m.LinkshellId == ev.LinkshellId, cancellationToken);
-        if (!await CanManageLinkshellAsync(membership, cancellationToken))
+        if (!await CanManageEventsAsync(membership, cancellationToken))
         {
-            return Ephemeral("Only officers can end the camp.");
+            return Ephemeral("You need the **Manage events** permission to end the camp.");
         }
         if (ev.WdFinalizedAt is not null)
         {
@@ -2536,6 +2536,38 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
         return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
                || await _adminOverride.IsActiveForAsync(membership.AppUserId, cancellationToken);
+    }
+
+    // The "manage events" PERMISSION rather than the rank above, for the buttons whose Activity
+    // twin already checks it (ActivityDataController: CanManageEvents). Mirrors that method's
+    // order exactly — membership, then override, then Leader-always-wins, then the role row —
+    // so a linkshell cannot end up with a role that may end a camp on one surface and not the
+    // other. Leader short-circuits because a role row seeded before a permission existed must
+    // never lock the owner out of their own linkshell.
+    private async Task<bool> CanManageEventsAsync(
+        AppUserLinkshell? membership, CancellationToken cancellationToken)
+    {
+        if (membership is null)
+        {
+            return false;
+        }
+        if (await _adminOverride.IsActiveForAsync(membership.AppUserId, cancellationToken))
+        {
+            return true;
+        }
+        if (LinkshellRanks.IsLeader(membership.Rank))
+        {
+            return true;
+        }
+
+        var rankName = string.IsNullOrWhiteSpace(membership.Rank)
+            ? LinkshellRanks.Member
+            : membership.Rank.Trim();
+        var role = await _db.LinkshellRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                r => r.LinkshellId == membership.LinkshellId && r.Name == rankName, cancellationToken);
+        return role?.CanManageEvents == true;
     }
 
     // "➕ Add Member (officers)" → officers only: an ephemeral select of roster members who
