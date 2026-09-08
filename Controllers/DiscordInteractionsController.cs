@@ -1595,7 +1595,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             var officerTimeZone = string.IsNullOrEmpty(officerAppUserId)
                 ? null
                 : await _db.Users.Where(u => u.Id == officerAppUserId).Select(u => u.TimeZone).FirstOrDefaultAsync(cancellationToken);
-            if (!TryParseCampTod(ExtractModalValue(data, WdPopTodFieldId), officerTimeZone, out var todUtc, out var todError))
+            if (!TryParseCampTod(_timeZones, ExtractModalValue(data, WdPopTodFieldId), officerTimeZone, out var todUtc, out var todError))
             {
                 return Ephemeral(todError!);
             }
@@ -2227,10 +2227,22 @@ public sealed class DiscordInteractionsController : ControllerBase
 
         var fields = new List<object>
         {
-            // The placeholder shows only the two clock forms. "now" and blank still parse — blank is
-            // already spelled out in the label, and a placeholder that lists every accepted spelling
+            // A DATE is allowed in front of the time, and the label is where that gets said. Discord
+            // caps a modal at 5 rows and an HQ family fills all five (ToD, HQ, Outcome, window,
+            // re-post lead), so a separate Date row is not available to spend — every HQ family is a
+            // 7-window king/dragon, which makes the camps that most need one exactly the full ones.
+            //
+            // It has to be discoverable, because the case it exists for is the one where nobody is
+            // reading carefully: the mob died overnight and is being logged the next morning. A bare
+            // time still rolls back a day on its own (see TryParseCampTod), but that only reaches
+            // yesterday — a Friday kill entered on Monday needs the date typed, and an officer who
+            // does not know it is accepted will round to a time that is simply wrong.
+            //
+            // "now" and blank still parse and are deliberately NOT in the placeholder: blank is
+            // spelled out in the label already, and a placeholder listing every accepted spelling
             // reads as a syntax reference rather than as an example of what to type.
-            TextRow(WdPopTodFieldId, "Time of Death (blank = not entered)", "Example:    9:05:15 PM, or 21:05:15", false, 25),
+            TextRow(WdPopTodFieldId, "Time of Death (blank = not entered)",
+                "9:05 PM  ·  9/5 9:05 PM  ·  yesterday 9:05 PM", false, 32),
         };
         if (HnmConfig.HasHqVariant(ev.AssignedMonsterName))
         {
@@ -2316,13 +2328,29 @@ public sealed class DiscordInteractionsController : ControllerBase
     }
 
     // Parses the Pop / End Camp modal's free-text Time of Death in the officer's local zone.
-    // Accepts: blank (→ todUtc = null, meaning NOT ENTERED — the camp ended without anyone seeing
-    // it die, so no time and no repop get recorded); "now" (→ this moment, the explicit shortcut);
-    // a bare clock time in either 24-hour ("21:05:15") or 12-hour ("9:05:15 PM") form (today local,
-    // rolled to yesterday if that's still in the future); or a full "yyyy-MM-dd" date with either
-    // time form. Returns false with a user-facing message on unparseable input — a ToD is never
-    // silently guessed.
-    private bool TryParseCampTod(string? raw, string? timeZoneId, out DateTime? todUtc, out string? error)
+    //
+    // Accepts, in the order tried:
+    //   blank              → todUtc = null, meaning NOT ENTERED (the camp ended without anyone
+    //                        seeing it die, so no time and no repop get recorded)
+    //   "now"              → this moment, the explicit shortcut
+    //   "yesterday 9:05 PM" → the bare time below, dated one local day back
+    //   "21:05:15" / "9:05:15 PM" → today local, rolled to yesterday if that's still in the future
+    //   "9/5 9:05 PM"      → year-less date, resolved to its most recent occurrence at or before now
+    //   "9/5/2026 9:05 PM" → explicit year
+    //   "2026-09-05 21:05" → the ISO form, unchanged
+    //
+    // The date-carrying forms are the whole point of the field being free text: a mob that died
+    // overnight gets logged the next morning, and a bare time can only ever reach yesterday.
+    //
+    // Returns false with a user-facing message on unparseable input — a ToD is never silently
+    // guessed.
+    // Static, and internal so the accepted spellings can be pinned directly in tests. The zone
+    // service is passed in rather than read off the controller for the same reason: every branch
+    // below turns on the officer's LOCAL clock, so a test that cannot choose the zone cannot
+    // actually test the rolling-back rules.
+    internal static bool TryParseCampTod(
+        TimeZoneConversionService timeZones,
+        string? raw, string? timeZoneId, out DateTime? todUtc, out string? error)
     {
         todUtc = null;
         error = null;
@@ -2341,6 +2369,21 @@ public sealed class DiscordInteractionsController : ControllerBase
         // can type it however they like; a 24-hour entry passes through untouched.
         s = NormalizeMeridiem(s);
 
+        // "yesterday 9:05 PM" — the shape the overnight case actually reaches for. Stripped to the
+        // bare time here and dated a day back below, so it inherits the clock-format list rather
+        // than duplicating it. The offset is applied to the officer's LOCAL day, which is the only
+        // day "yesterday" can mean to the person typing it.
+        var daysBack = 0;
+        foreach (var prefix in new[] { "yesterday", "yday" })
+        {
+            if (s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                daysBack = 1;
+                s = s[prefix.Length..].TrimStart();
+                break;
+            }
+        }
+
         // A bare clock time → today's date in the officer's zone at that wall-clock time.
         if (TimeOnly.TryParseExact(
                 s,
@@ -2348,14 +2391,60 @@ public sealed class DiscordInteractionsController : ControllerBase
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out var timeOnly))
         {
-            var localNow = _timeZones.ToUserTime(DateTime.UtcNow, timeZoneId) ?? DateTime.UtcNow;
+            var localNow = timeZones.ToUserTime(DateTime.UtcNow, timeZoneId) ?? DateTime.UtcNow;
             var localDt = new DateTime(localNow.Year, localNow.Month, localNow.Day,
-                timeOnly.Hour, timeOnly.Minute, timeOnly.Second, DateTimeKind.Unspecified);
-            if (localDt > localNow)
+                timeOnly.Hour, timeOnly.Minute, timeOnly.Second, DateTimeKind.Unspecified)
+                .AddDays(-daysBack);
+            // Only for a BARE time. An explicit "yesterday" has already been honoured above, and
+            // rolling it back again would land the day before the one that was asked for.
+            if (daysBack == 0 && localDt > localNow)
             {
                 localDt = localDt.AddDays(-1); // a ToD later than "now" today must mean yesterday
             }
-            todUtc = _timeZones.ToUtc(localDt, timeZoneId);
+            todUtc = timeZones.ToUtc(localDt, timeZoneId);
+            return todUtc.HasValue;
+        }
+
+        // "9/5 9:05 PM" and "9/5/2026 9:05 PM" — the way a date gets typed in a hurry, and the
+        // reason the yyyy-MM-dd list below is not enough on its own.
+        //
+        // A year-less date resolves to its MOST RECENT occurrence at or before now, which is what
+        // makes it work across New Year: "12/31 11:00 PM" entered on January 1st means five days
+        // ago, not eleven months away. It is the same rule the bare clock time above already
+        // follows, and for the same reason — a Time of Death cannot be in the future.
+        if (DateTime.TryParseExact(
+                s,
+                new[]
+                {
+                    "M/d H:mm", "M/d HH:mm", "M/d H:mm:ss", "M/d HH:mm:ss",
+                    "M/d h:mm tt", "M/d h:mm:ss tt",
+                },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var dayMonth))
+        {
+            var localNow = timeZones.ToUserTime(DateTime.UtcNow, timeZoneId) ?? DateTime.UtcNow;
+            // TryParseExact defaults a missing year to the CURRENT one, so this only has to step
+            // back when that lands ahead of the officer's own clock.
+            var resolved = dayMonth.AddYears(localNow.Year - dayMonth.Year);
+            if (resolved > localNow)
+            {
+                resolved = resolved.AddYears(-1);
+            }
+            todUtc = timeZones.ToUtc(DateTime.SpecifyKind(resolved, DateTimeKind.Unspecified), timeZoneId);
+            return todUtc.HasValue;
+        }
+
+        if (DateTime.TryParseExact(
+                s,
+                new[]
+                {
+                    "M/d/yyyy H:mm", "M/d/yyyy HH:mm", "M/d/yyyy H:mm:ss", "M/d/yyyy HH:mm:ss",
+                    "M/d/yyyy h:mm tt", "M/d/yyyy h:mm:ss tt",
+                },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var slashed))
+        {
+            todUtc = timeZones.ToUtc(DateTime.SpecifyKind(slashed, DateTimeKind.Unspecified), timeZoneId);
             return todUtc.HasValue;
         }
 
@@ -2370,11 +2459,15 @@ public sealed class DiscordInteractionsController : ControllerBase
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out var parsed))
         {
-            todUtc = _timeZones.ToUtc(DateTime.SpecifyKind(parsed, DateTimeKind.Unspecified), timeZoneId);
+            todUtc = timeZones.ToUtc(DateTime.SpecifyKind(parsed, DateTimeKind.Unspecified), timeZoneId);
             return todUtc.HasValue;
         }
 
-        error = "Enter a valid Time of Death — blank for now, `9:05:15 PM`, `21:05:15`, or `2026-07-23 9:05 PM`.";
+        // Leads with the date-carrying forms: someone who mistyped is far more often reaching for
+        // "it died last night" than for a plain clock time, and the message is the only place the
+        // longer spellings are spelled out in full.
+        error = "Enter a valid Time of Death — blank if nobody saw it, `9:05:15 PM`, `21:05:15`, "
+              + "`yesterday 9:05 PM`, `9/5 9:05 PM`, or `2026-09-05 21:05`.";
         return false;
     }
 
