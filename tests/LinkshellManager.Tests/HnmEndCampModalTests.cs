@@ -61,14 +61,16 @@ public class HnmEndCampModalTests
     }
 
     // The HQ families are the tight case: they're the only camps carrying all five rows, which is
-    // exactly why Claimed and Killed had to fold back into one Outcome field to fit pop window and
-    // the re-post lead. If this ever reads six, the merge got undone.
+    // why Claimed and Killed folded back into one Outcome field, and why the pop-window picker had
+    // to go when the Date box arrived. If this ever reads six, something got un-merged.
     [Fact]
     public void HqFamily_FillsAllFiveRows_InOrder()
     {
         var fields = FieldIds(Camp("Behemoth/King Behemoth")).ToList();
 
-        Assert.Equal(new[] { "wdpop_tod", "wdpop_hq", "wdpop_outcome", "wdpop_window", "wdpop_repost" }, fields);
+        Assert.Equal(
+            new[] { "wdpop_tod_date", "wdpop_tod", "wdpop_hq", "wdpop_outcome", "wdpop_repost" },
+            fields);
     }
 
     // A wyrm has no HQ half, so it spends four rows and leaves one spare.
@@ -77,7 +79,7 @@ public class HnmEndCampModalTests
     {
         var fields = FieldIds(Camp("Tiamat")).ToList();
 
-        Assert.Equal(new[] { "wdpop_tod", "wdpop_outcome", "wdpop_window", "wdpop_repost" }, fields);
+        Assert.Equal(new[] { "wdpop_tod_date", "wdpop_tod", "wdpop_outcome", "wdpop_repost" }, fields);
     }
 
     // The outcome values have to be the ones ParseCampOutcome reads, or every camp silently records
@@ -95,96 +97,16 @@ public class HnmEndCampModalTests
         Assert.True(Options(outcome)[0].GetProperty("default").GetBoolean());
     }
 
-    // The window picker opens EMPTY and has to be answered. It used to pre-select the window the
-    // board was on, which meant an officer submitting without looking recorded the board's
-    // clock-driven counter — and that counter runs ahead of the pop by however long the kill, the
-    // loot and the rebuff took. No option may carry `default`, or the old behaviour is back.
-    [Fact]
-    public void PopWindow_OpensEmptyAndIsRequired()
-    {
-        var camp = Camp("Tiamat", windowNumber: 9);
+    // (Every PopWindow_* test lived here: the picker opened empty and required, kept the board's
+    // counter as a placeholder hint, offered "I don't know" first, and slid a 24-window pane to fit
+    // Discord's 25-option cap.
+    //
+    // The picker is gone. Discord caps a modal at 5 rows, the Date box needed one, and an HQ family
+    // was already using all five — so on a king or a dragon a date and a window picker could not both
+    // exist. The window comes from the ToD tracker's capture instead; until that is wired through,
+    // the pop service falls back to the board's counter exactly as the picker's "I don't know"
+    // answer already did. EndCampTodDateEntryTests pins that the modal no longer asks.)
 
-        var select = Fields(camp).EnumerateArray()
-            .Single(f => FieldId(f) == "wdpop_window").GetProperty("component");
-
-        Assert.True(select.GetProperty("required").GetBoolean());
-        Assert.Equal(1, select.GetProperty("min_values").GetInt32());
-        Assert.DoesNotContain(
-            select.GetProperty("options").EnumerateArray(),
-            o => o.TryGetProperty("default", out var d) && d.GetBoolean());
-    }
-
-    // The board's counter isn't thrown away — it is demoted to the placeholder, so the officer
-    // still sees where the board thought it was while having to choose for themselves.
-    [Fact]
-    public void PopWindow_KeepsTheBoardsCounterAsAHint()
-    {
-        var camp = Camp("Tiamat", windowNumber: 9);
-        var expected = $"{DiscordEventMessageBuilder.FocusWindow(camp)}";
-
-        var placeholder = Fields(camp).EnumerateArray()
-            .Single(f => FieldId(f) == "wdpop_window")
-            .GetProperty("component").GetProperty("placeholder").GetString()!;
-
-        Assert.Contains(expected, placeholder, StringComparison.Ordinal);
-        Assert.InRange(placeholder.Length, 1, 150); // Discord's placeholder cap
-    }
-
-    // "I don't know" is the first option on every multi-window camp — an officer who didn't see the
-    // pop has to be able to say so instead of picking a plausible window, and has to see it without
-    // scrolling. Its value is what the submit side reads as "fall back to the board's counter".
-    [Theory]
-    [InlineData("Tiamat")]
-    [InlineData("Behemoth/King Behemoth")]
-    [InlineData("Cerberus")]
-    [InlineData("Goblin Furrier")]
-    public void PopWindow_OffersIDontKnowFirst(string monster)
-    {
-        var window = Fields(Camp(monster)).EnumerateArray().Single(f => FieldId(f) == "wdpop_window");
-        var options = Options(window).EnumerateArray().ToList();
-
-        Assert.Equal("unknown", options[0].GetProperty("value").GetString());
-        Assert.StartsWith("I don't know", options[0].GetProperty("label").GetString(), StringComparison.Ordinal);
-        // And exactly once — a second escape hatch would mean two ways to record the same thing.
-        Assert.Single(options, o => o.GetProperty("value").GetString() == "unknown");
-    }
-
-    // A select is capped at 25 options and the wyrms' 25 windows filled it EXACTLY, so the "I don't
-    // know" row is paid for out of the window list: a wyrm shows 24 windows, everything shorter
-    // still shows every window it has. Breaching the cap is a 400 from Discord — an officer clicking
-    // End Camp and getting nothing at all.
-    [Theory]
-    [InlineData("Tiamat", 24)]                      // 25-window wyrm, trimmed by one
-    [InlineData("Behemoth/King Behemoth", 7)]       // king/dragon band, untouched
-    [InlineData("Cerberus", 5)]                     // the ToAU three, untouched
-    [InlineData("Goblin Furrier", 2)]               // 2-post camp, untouched
-    public void PopWindow_FitsTheOptionCap_WithTheIDontKnowRow(string monster, int expectedWindows)
-    {
-        var window = Fields(Camp(monster)).EnumerateArray().Single(f => FieldId(f) == "wdpop_window");
-        var options = Options(window).EnumerateArray().ToList();
-
-        Assert.InRange(options.Count, 1, 25);
-        Assert.Equal(expectedWindows + 1, options.Count); // + the "I don't know" row
-        Assert.Equal(Math.Min(HnmConfig.EffectiveWindowCount(monster), 24), expectedWindows);
-    }
-
-    // The 24-window pane slides so it always ENDS on the window the board is on: the pop has already
-    // happened, so a window past the board's counter hasn't opened yet, while the window the board
-    // IS on is the single most likely answer and can never be the one that drops off.
-    [Theory]
-    [InlineData(1, "Window 1", "Window 24")]
-    [InlineData(25, "Window 2", "Window 25")]
-    public void PopWindow_PaneEndsOnTheBoardsWindow(int boardWindow, string firstLabel, string lastLabel)
-    {
-        var window = Fields(Camp("Tiamat", windowNumber: boardWindow)).EnumerateArray()
-            .Single(f => FieldId(f) == "wdpop_window");
-        var labels = Options(window).EnumerateArray()
-            .Skip(1) // the "I don't know" row
-            .Select(o => o.GetProperty("label").GetString()).ToList();
-
-        Assert.Equal(firstLabel, labels[0]);
-        Assert.Equal(lastLabel, labels[^1]);
-    }
 
     private static JsonElement RepostInput(Event ev, double? lead) =>
         Fields(ev, lead).EnumerateArray().Single(f => FieldId(f) == "wdpop_repost")
@@ -248,16 +170,22 @@ public class HnmEndCampModalTests
         }
     }
 
-    // A 2-post camp names its windows Open/Close, so the picker says so rather than asking "which
-    // of the two?" — the same labels the board and the addon use.
-    [Fact]
-    public void PopWindow_UsesTheNamedLabels_OnATwoPostCamp()
-    {
-        var window = Fields(Camp("Goblin Furrier")).EnumerateArray().Single(f => FieldId(f) == "wdpop_window");
-        var labels = Options(window).EnumerateArray()
-            .Skip(1) // the "I don't know" row
-            .Select(o => o.GetProperty("label").GetString()).ToList();
+    // (PopWindow_UsesTheNamedLabels_OnATwoPostCamp lived here, pinning that a 2-post camp's picker
+    // said "Open (window 1)" / "Close (window 2)" rather than asking "which of the two?". Those
+    // labels are still HnmConfig.GetDefaultWindowLabel's and still used by the board and the addon
+    // — there is simply no picker on this modal to render them any more.)
 
-        Assert.Equal(new[] { "Open (window 1)", "Close (window 2)" }, labels);
+    // Not one camp still asks for the pop window. A single survivor would mean an officer sees the
+    // question on some monsters and not others, and the row budget it was spending is the Date
+    // box's now.
+    [Theory]
+    [InlineData("Tiamat")]
+    [InlineData("Behemoth/King Behemoth")]
+    [InlineData("Cerberus")]
+    [InlineData("Goblin Furrier")]
+    [InlineData("Bune")]
+    public void NoCamp_StillAsksForThePopWindow(string monster)
+    {
+        Assert.DoesNotContain("wdpop_window", FieldIds(Camp(monster)));
     }
 }

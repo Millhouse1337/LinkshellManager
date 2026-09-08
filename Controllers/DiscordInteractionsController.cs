@@ -73,15 +73,16 @@ public sealed class DiscordInteractionsController : ControllerBase
     // boards posted before this stopped being Manual Check In-only keep working.
     private const string WdPopModalPrefix = "evt:wdpopmodal:";
     private const string WdPopTodFieldId = "wdpop_tod";
+    // The Date half of the Time of Death. Its own box so a kill that is not from today can be
+    // entered without the officer having to know that the time box would have taken a date too.
+    private const string WdPopTodDateFieldId = "wdpop_tod_date";
     private const string WdPopHqFieldId = "wdpop_hq";
     private const string WdPopOutcomeFieldId = "wdpop_outcome";
+    // Retired as a QUESTION — the Date box took its row — but still read on submit, so a modal
+    // opened before the picker was removed still records the window its officer actually picked.
+    // (WdPopWindowUnknownValue went with it: "unknown" and absent both read as null here, and null
+    // is now the ordinary path rather than an opt-in.)
     private const string WdPopWindowFieldId = "wdpop_window";
-    // The pop-window picker's escape hatch. A required field with no default forces an ANSWER, and
-    // "I didn't see which window it popped on" is a true one — without a way to say it the officer
-    // has to invent a window, and an invented window silently caps somebody's credit at it. Reads
-    // as null on the submit side, which is what the pop service already treats as "use the board's
-    // own counter" — the best guess available, and what the field did before it became required.
-    private const string WdPopWindowUnknownValue = "unknown";
     private const string WdPopRepostFieldId = "wdpop_repost";
     // Retired — no longer rendered, but still READ, so a modal opened before the field changed and
     // submitted afterwards is still recorded correctly instead of silently taking a default. A
@@ -1512,33 +1513,19 @@ public sealed class DiscordInteractionsController : ControllerBase
                 ? ParseCampOutcome(ExtractModalValue(data, WdPopOutcomeFieldId))
                 : (ParseYesNo(claimRaw, defaultValue: true), ParseYesNo(killRaw, defaultValue: true));
 
-            // The window it popped on, capping credit. It is a REQUIRED field on every multi-window
-            // camp and it carries an explicit "I don't know", so there are three cases here — and
-            // two of them are null:
+            // The window it popped on, capping credit. The modal no longer ASKS — the Date box took
+            // its row — so this is normally null and the pop service falls back to the board's own
+            // counter, which is exactly what the picker's "I don't know" answer already did.
             //
-            //   a window  → that window, clamped to the camp
-            //   "unknown" → null, the officer SAYING they didn't see it. The pop service falls back
-            //               to the board's own counter, the best guess available.
-            //   nothing   → null, but nobody answered: a modal opened before the field became
-            //               required, or a client that skipped it. Bail rather than record that
-            //               same fallback silently — an unanswered guess is the thing the
-            //               requirement exists to stop, and "I don't know" is how an officer opts
-            //               into the fallback deliberately, on the record.
-            //
-            // A single-window camp is never shown the field at all; null there is the ordinary path.
+            // Still READ, because a modal opened before the picker was removed can be submitted
+            // afterwards, and an officer who did pick a window deserves to have that answer kept
+            // rather than quietly replaced by the fallback. "unknown" and absent both mean null,
+            // which is the same thing here.
             var effectiveWindows = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
             var popWindowRaw = ExtractModalValue(data, WdPopWindowFieldId)?.Trim();
-            var popWindowUnknown = string.Equals(
-                popWindowRaw, WdPopWindowUnknownValue, StringComparison.OrdinalIgnoreCase);
             int? popWindow = int.TryParse(popWindowRaw, out var pw) && pw >= 1
                 ? Math.Clamp(pw, 1, effectiveWindows)
                 : (int?)null;
-            if (effectiveWindows > 1 && popWindow is null && !popWindowUnknown)
-            {
-                return Ephemeral(
-                    "**Which window did it pop on?** has to be answered — credit stops at that window. "
-                    + "Nothing was saved; hit **End Camp** again and pick a window, or **I don't know**.");
-            }
 
             // Day number is still not asked — it only finds a value when a modal opened before its
             // removal is submitted afterwards. Absent (the normal path) leaves the board's day alone.
@@ -1595,7 +1582,11 @@ public sealed class DiscordInteractionsController : ControllerBase
             var officerTimeZone = string.IsNullOrEmpty(officerAppUserId)
                 ? null
                 : await _db.Users.Where(u => u.Id == officerAppUserId).Select(u => u.TimeZone).FirstOrDefaultAsync(cancellationToken);
-            if (!TryParseCampTod(_timeZones, ExtractModalValue(data, WdPopTodFieldId), officerTimeZone, out var todUtc, out var todError))
+            if (!TryParseCampTod(
+                    _timeZones,
+                    ExtractModalValue(data, WdPopTodDateFieldId),
+                    ExtractModalValue(data, WdPopTodFieldId),
+                    officerTimeZone, out var todUtc, out var todError))
             {
                 return Ephemeral(todError!);
             }
@@ -2191,58 +2182,32 @@ public sealed class DiscordInteractionsController : ControllerBase
             };
         }
 
-        // The pop-window picker: the one REQUIRED field on the form, and the only select that
-        // opens with nothing chosen. It used to pre-select the window the board was showing, which
-        // made the board's clock-driven counter the recorded answer whenever an officer submitted
-        // without looking — and that counter runs ahead of the pop by however long the kill, the
-        // loot and the rebuff took. No default plus `required` turns it into a question the officer
-        // has to answer; the counter survives as a hint in the placeholder.
-        static object WindowSelectRow(string fieldId, string label, string description,
-            string placeholder, IEnumerable<(string Value, string Label)> options)
-        {
-            var select = new Dictionary<string, object?>
-            {
-                ["type"] = 3, // string select
-                ["custom_id"] = fieldId,
-                ["placeholder"] = placeholder,
-                ["required"] = true,
-                ["min_values"] = 1,
-                ["max_values"] = 1,
-                ["options"] = options
-                    .Select(option => new Dictionary<string, object?>
-                    {
-                        ["label"] = option.Label,
-                        ["value"] = option.Value,
-                    })
-                    .ToArray(),
-            };
-            return new Dictionary<string, object?>
-            {
-                ["type"] = 18, // label
-                ["label"] = label,
-                ["description"] = description,
-                ["component"] = select,
-            };
-        }
+        // (WindowSelectRow lived here: the pop-window picker's builder — a required select with no
+        // default, so the officer had to answer rather than let the board's clock-driven counter be
+        // recorded by a submit-without-looking. Nothing renders a required select on this modal any
+        // more; SelectRow above covers the optional ones that remain.)
 
         var fields = new List<object>
         {
-            // A DATE is allowed in front of the time, and the label is where that gets said. Discord
-            // caps a modal at 5 rows and an HQ family fills all five (ToD, HQ, Outcome, window,
-            // re-post lead), so a separate Date row is not available to spend — every HQ family is a
-            // 7-window king/dragon, which makes the camps that most need one exactly the full ones.
+            // DATE and TIME are two boxes, and the Date one is why the pop-window picker is gone:
+            // Discord caps a modal at 5 rows, an HQ family fills all five, and every HQ family is a
+            // 7-window king/dragon — so the camps that most need a date field were exactly the ones
+            // with no room. The window is recovered from the ToD tracker's own capture instead.
             //
-            // It has to be discoverable, because the case it exists for is the one where nobody is
-            // reading carefully: the mob died overnight and is being logged the next morning. A bare
-            // time still rolls back a day on its own (see TryParseCampTod), but that only reaches
-            // yesterday — a Friday kill entered on Monday needs the date typed, and an officer who
-            // does not know it is accepted will round to a time that is simply wrong.
+            // A date has to be VISIBLE, not merely accepted, because the case it exists for is the
+            // one where nobody is reading carefully: the mob died overnight and is logged the next
+            // morning, or on Monday. A bare time still rolls back a day on its own (see
+            // TryParseCampTod), but that only ever reaches yesterday, and an officer who does not
+            // know a date can be typed will round to a time that is simply wrong.
             //
-            // "now" and blank still parse and are deliberately NOT in the placeholder: blank is
+            // Blank Date = today, which is the ordinary path and stays a one-box form in practice.
+            TextRow(WdPopTodDateFieldId, "Date (blank = today)",
+                "9/5  ·  9/5/2026  ·  yesterday", false, 12),
+            // "now" and blank parse too, and are deliberately NOT in the placeholder: blank is
             // spelled out in the label already, and a placeholder listing every accepted spelling
             // reads as a syntax reference rather than as an example of what to type.
             TextRow(WdPopTodFieldId, "Time of Death (blank = not entered)",
-                "9:05 PM  ·  9/5 9:05 PM  ·  yesterday 9:05 PM", false, 32),
+                "9:05:15 PM, or 21:05:15", false, 16),
         };
         if (HnmConfig.HasHqVariant(ev.AssignedMonsterName))
         {
@@ -2261,46 +2226,16 @@ public sealed class DiscordInteractionsController : ControllerBase
             ("claimed", "Yes, we claimed, but did not kill"),
             ("missed", "No, we did not claim")));
 
-        // Which window it actually popped on. The board's own counter is only ever a good GUESS
-        // here: it marches on the clock, so a camp that killed the mob at 10 past the hour and
-        // spent forty minutes on loot and a rebuff ends with the counter a window or two ahead of
-        // the pop. Credit stops at whatever goes in here, so the counter is demoted to a HINT in
-        // the placeholder: the field opens EMPTY and is required, and the officer answers it for
-        // themselves. Omitted on a single-window camp — there's nothing to choose.
-        var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
-        if (effectiveCount > 1)
-        {
-            // Discord caps a select at 25 options and EffectiveWindowCount is clamped to
-            // HnmConfig.MaxWindow (25), so a wyrm's window list filled it EXACTLY — the "I don't
-            // know" row can only be paid for out of the windows themselves. It is bought with a
-            // sliding 24-window pane that always ENDS at the window the board is on: the pop has
-            // already happened, so anything past the board's counter is a window that hasn't opened
-            // yet, and the only camp that loses a real option is a wyrm that has run the full 25
-            // hours — where what drops off is window 1, a pop nobody logged for a day, which is the
-            // "I don't know" case anyway. Every shorter camp (the kings, the ToAU three, the 2-post
-            // NMs) is nowhere near the cap and still lists every window it has.
-            const int selectOptionCap = 25;
-            var shownWindows = Math.Min(effectiveCount, selectOptionCap - 1);
-            var firstWindow = Math.Clamp(
-                DiscordEventMessageBuilder.FocusWindow(ev) - shownWindows + 1,
-                1, effectiveCount - shownWindows + 1);
-            var windowOptions = new[]
-            {
-                // First, not last: an officer who doesn't know has to SEE this without scrolling a
-                // 24-row list, or they will pick a plausible-looking window instead — which is the
-                // wrong data this option exists to stop being entered.
-                (Value: WdPopWindowUnknownValue, Label: "I don't know — use the board's window"),
-            }.Concat(Enumerable.Range(firstWindow, shownWindows).Select(n => (
-                Value: $"{n}",
-                Label: HnmConfig.GetDefaultWindowLabel(ev.AssignedMonsterName ?? ev.EventName, n, effectiveCount)
-                    is { Length: > 0 } named
-                        ? $"{named} (window {n})"   // the 2-post camps name their windows Open/Close
-                        : $"Window {n}")));
-            fields.Add(WindowSelectRow(WdPopWindowFieldId, "Which window did it pop on?",
-                "Credit stops here. Pick the window, or “I don’t know” — never a guess.",
-                $"Choose a window (the board is on window {DiscordEventMessageBuilder.FocusWindow(ev)})",
-                windowOptions));
-        }
+        // (The "Which window did it pop on?" picker lived here. It was the fifth row, and the Date
+        // box above needed one — Discord caps a modal at 5 rows and an HQ family fills every one of
+        // them, so a date and a window picker could not both exist on a king or a dragon, which are
+        // the camps that have windows in the first place.
+        //
+        // The window is not lost, it just stops being typed: the ToD tracker captures the pop window
+        // at the moment of the pop, which is a better answer than an officer reconstructing it from
+        // memory an hour later. Until that capture is wired through, the pop service falls back to
+        // the board's own counter exactly as it already does for the "I don't know" answer this
+        // picker offered — see HnmCampPopService, `request.PopWindow ?? FocusWindow(ev)`.)
 
         // The auto-re-post lead. Free text rather than a dropdown because the useful values run
         // from "half an hour" to "two days" depending on the monster, and because BLANK has to mean
@@ -2327,147 +2262,154 @@ public sealed class DiscordInteractionsController : ControllerBase
         return fields.ToArray();
     }
 
-    // Parses the Pop / End Camp modal's free-text Time of Death in the officer's local zone.
+    // Parses the End Camp modal's Time of Death from its TWO boxes — Date and Time — in the
+    // officer's local zone.
     //
-    // Accepts, in the order tried:
-    //   blank              → todUtc = null, meaning NOT ENTERED (the camp ended without anyone
-    //                        seeing it die, so no time and no repop get recorded)
-    //   "now"              → this moment, the explicit shortcut
-    //   "yesterday 9:05 PM" → the bare time below, dated one local day back
-    //   "21:05:15" / "9:05:15 PM" → today local, rolled to yesterday if that's still in the future
-    //   "9/5 9:05 PM"      → year-less date, resolved to its most recent occurrence at or before now
-    //   "9/5/2026 9:05 PM" → explicit year
-    //   "2026-09-05 21:05" → the ISO form, unchanged
+    // Two fields rather than one because the case this exists for is a mob that died overnight and
+    // gets logged the next morning, or a Friday kill entered on Monday. A single box could carry a
+    // date and did, but nothing about it said so: an officer who does not know a date is accepted
+    // types a bare time, and a bare time silently means today.
     //
-    // The date-carrying forms are the whole point of the field being free text: a mob that died
-    // overnight gets logged the next morning, and a bare time can only ever reach yesterday.
+    // Date accepts: blank (today), "today", "yesterday", "9/5", "9/5/2026", "2026-09-05".
+    // Time accepts: blank (see below), "21:05", "21:05:15", "9:05 PM", "9:05:15 PM", "now".
+    //
+    //   both blank → todUtc = null, meaning NOT ENTERED: the camp ended without anyone seeing it
+    //                die, so no time and no repop get recorded.
+    //   date only  → an error. A date is not a Time of Death, and choosing a time on the officer's
+    //                behalf would invent the number the whole repop clock is counted from.
+    //   time only  → today in the officer's zone, rolled back a day when that is still in the
+    //                future. Kept from the single-box version because it is right for the 2am kill
+    //                being logged at 9am, which is the commonest entry there is.
     //
     // Returns false with a user-facing message on unparseable input — a ToD is never silently
     // guessed.
+    //
     // Static, and internal so the accepted spellings can be pinned directly in tests. The zone
     // service is passed in rather than read off the controller for the same reason: every branch
-    // below turns on the officer's LOCAL clock, so a test that cannot choose the zone cannot
+    // here turns on the officer's LOCAL clock, so a test that cannot choose the zone cannot
     // actually test the rolling-back rules.
     internal static bool TryParseCampTod(
         TimeZoneConversionService timeZones,
-        string? raw, string? timeZoneId, out DateTime? todUtc, out string? error)
+        string? rawDate, string? rawTime, string? timeZoneId,
+        out DateTime? todUtc, out string? error)
     {
         todUtc = null;
         error = null;
-        var s = raw?.Trim();
-        if (string.IsNullOrEmpty(s))
+        var datePart = rawDate?.Trim() ?? string.Empty;
+        var timePart = rawTime?.Trim() ?? string.Empty;
+
+        if (datePart.Length == 0 && timePart.Length == 0)
         {
             return true; // null → "Not entered"; the pop service leaves Time + RepopTime unset
         }
-        if (s.Equals("now", StringComparison.OrdinalIgnoreCase))
+
+        var localNow = timeZones.ToUserTime(DateTime.UtcNow, timeZoneId) ?? DateTime.UtcNow;
+
+        // "now" carries its own date, so a Date beside it is a contradiction rather than extra
+        // information — better to say so than to silently pick one of the two.
+        if (timePart.Equals("now", StringComparison.OrdinalIgnoreCase))
         {
+            if (datePart.Length > 0)
+            {
+                error = "Leave **Date** blank when the time is `now` — `now` already carries its own date.";
+                return false;
+            }
             todUtc = DateTime.UtcNow;
             return true;
         }
 
-        // Fold any AM/PM spelling down to the " AM"/" PM" the "tt" specifier wants, so the officer
-        // can type it however they like; a 24-hour entry passes through untouched.
-        s = NormalizeMeridiem(s);
-
-        // "yesterday 9:05 PM" — the shape the overnight case actually reaches for. Stripped to the
-        // bare time here and dated a day back below, so it inherits the clock-format list rather
-        // than duplicating it. The offset is applied to the officer's LOCAL day, which is the only
-        // day "yesterday" can mean to the person typing it.
-        var daysBack = 0;
-        foreach (var prefix in new[] { "yesterday", "yday" })
+        // A date with no time. Blank/blank above is the deliberate "nobody saw it die"; this is a
+        // half-filled form, and guessing midnight would look like a real answer forever after.
+        if (timePart.Length == 0)
         {
-            if (s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                daysBack = 1;
-                s = s[prefix.Length..].TrimStart();
-                break;
-            }
+            error = "Enter a **Time of Death** to go with the date — the repop clock is counted from it. "
+                  + "Leave BOTH boxes blank if nobody saw it die.";
+            return false;
         }
 
-        // A bare clock time → today's date in the officer's zone at that wall-clock time.
-        if (TimeOnly.TryParseExact(
-                s,
+        // NormalizeMeridiem folds any AM/PM spelling down to the " AM"/" PM" the "tt" specifier
+        // wants, so the officer can type it however they like; a 24-hour entry passes through.
+        if (!TimeOnly.TryParseExact(
+                NormalizeMeridiem(timePart),
                 new[] { "H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss", "h:mm tt", "h:mm:ss tt" },
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out var timeOnly))
         {
-            var localNow = timeZones.ToUserTime(DateTime.UtcNow, timeZoneId) ?? DateTime.UtcNow;
-            var localDt = new DateTime(localNow.Year, localNow.Month, localNow.Day,
-                timeOnly.Hour, timeOnly.Minute, timeOnly.Second, DateTimeKind.Unspecified)
-                .AddDays(-daysBack);
-            // Only for a BARE time. An explicit "yesterday" has already been honoured above, and
-            // rolling it back again would land the day before the one that was asked for.
-            if (daysBack == 0 && localDt > localNow)
-            {
-                localDt = localDt.AddDays(-1); // a ToD later than "now" today must mean yesterday
-            }
-            todUtc = timeZones.ToUtc(localDt, timeZoneId);
-            return todUtc.HasValue;
+            error = "Enter a valid **Time of Death** — `9:05 PM`, `9:05:15 PM`, `21:05`, or `now`.";
+            return false;
         }
 
-        // "9/5 9:05 PM" and "9/5/2026 9:05 PM" — the way a date gets typed in a hurry, and the
-        // reason the yyyy-MM-dd list below is not enough on its own.
-        //
-        // A year-less date resolves to its MOST RECENT occurrence at or before now, which is what
-        // makes it work across New Year: "12/31 11:00 PM" entered on January 1st means five days
-        // ago, not eleven months away. It is the same rule the bare clock time above already
-        // follows, and for the same reason — a Time of Death cannot be in the future.
-        if (DateTime.TryParseExact(
-                s,
-                new[]
-                {
-                    "M/d H:mm", "M/d HH:mm", "M/d H:mm:ss", "M/d HH:mm:ss",
-                    "M/d h:mm tt", "M/d h:mm:ss tt",
-                },
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out var dayMonth))
+        if (!TryResolveCampTodDate(datePart, localNow, out var localDate, out var dateError))
         {
-            var localNow = timeZones.ToUserTime(DateTime.UtcNow, timeZoneId) ?? DateTime.UtcNow;
-            // TryParseExact defaults a missing year to the CURRENT one, so this only has to step
-            // back when that lands ahead of the officer's own clock.
-            var resolved = dayMonth.AddYears(localNow.Year - dayMonth.Year);
-            if (resolved > localNow)
+            error = dateError;
+            return false;
+        }
+
+        var localDt = localDate.ToDateTime(timeOnly, DateTimeKind.Unspecified);
+        // Only when NO date was typed. An explicit date is an instruction; second-guessing it would
+        // move an officer's deliberate answer by a day.
+        if (datePart.Length == 0 && localDt > localNow)
+        {
+            localDt = localDt.AddDays(-1); // a ToD later than "now" today must mean last night
+        }
+
+        todUtc = timeZones.ToUtc(localDt, timeZoneId);
+        return todUtc.HasValue;
+    }
+
+    // The Date box → a local calendar day. Blank is today.
+    //
+    // A year-less "9/5" resolves to its MOST RECENT occurrence at or before today, which is what
+    // carries it across New Year: "12/31" entered on January 1st is a few days ago, not eleven
+    // months away. An explicit year is taken exactly as typed, because the officer said it.
+    private static bool TryResolveCampTodDate(
+        string datePart, DateTime localNow, out DateOnly localDate, out string? error)
+    {
+        var today = DateOnly.FromDateTime(localNow);
+        localDate = today;
+        error = null;
+
+        if (datePart.Length == 0 || datePart.Equals("today", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        if (datePart.Equals("yesterday", StringComparison.OrdinalIgnoreCase)
+            || datePart.Equals("yday", StringComparison.OrdinalIgnoreCase))
+        {
+            localDate = today.AddDays(-1);
+            return true;
+        }
+
+        // Explicit year FIRST: "9/5/2026" would otherwise never be reached, and the year the
+        // officer typed would be silently replaced by the most-recent-occurrence rule below.
+        if (DateOnly.TryParseExact(
+                datePart,
+                new[] { "M/d/yyyy", "M-d-yyyy", "yyyy-MM-dd", "yyyy/M/d" },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var exact))
+        {
+            localDate = exact;
+            return true;
+        }
+
+        if (DateOnly.TryParseExact(
+                datePart,
+                new[] { "M/d", "M-d" },
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var yearless))
+        {
+            // TryParseExact defaults a missing year to the CURRENT one, so this only steps back
+            // when that lands ahead of the officer's own day.
+            var resolved = yearless.AddYears(today.Year - yearless.Year);
+            if (resolved > today)
             {
                 resolved = resolved.AddYears(-1);
             }
-            todUtc = timeZones.ToUtc(DateTime.SpecifyKind(resolved, DateTimeKind.Unspecified), timeZoneId);
-            return todUtc.HasValue;
+            localDate = resolved;
+            return true;
         }
 
-        if (DateTime.TryParseExact(
-                s,
-                new[]
-                {
-                    "M/d/yyyy H:mm", "M/d/yyyy HH:mm", "M/d/yyyy H:mm:ss", "M/d/yyyy HH:mm:ss",
-                    "M/d/yyyy h:mm tt", "M/d/yyyy h:mm:ss tt",
-                },
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out var slashed))
-        {
-            todUtc = timeZones.ToUtc(DateTime.SpecifyKind(slashed, DateTimeKind.Unspecified), timeZoneId);
-            return todUtc.HasValue;
-        }
-
-        // Full date-time: a space or 'T' separator, with or without seconds, 24-hour or AM/PM.
-        if (DateTime.TryParseExact(
-                s,
-                new[]
-                {
-                    "yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss",
-                    "yyyy-MM-dd h:mm tt", "yyyy-MM-dd h:mm:ss tt", "yyyy-MM-ddTh:mm tt", "yyyy-MM-ddTh:mm:ss tt",
-                },
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out var parsed))
-        {
-            todUtc = timeZones.ToUtc(DateTime.SpecifyKind(parsed, DateTimeKind.Unspecified), timeZoneId);
-            return todUtc.HasValue;
-        }
-
-        // Leads with the date-carrying forms: someone who mistyped is far more often reaching for
-        // "it died last night" than for a plain clock time, and the message is the only place the
-        // longer spellings are spelled out in full.
-        error = "Enter a valid Time of Death — blank if nobody saw it, `9:05:15 PM`, `21:05:15`, "
-              + "`yesterday 9:05 PM`, `9/5 9:05 PM`, or `2026-09-05 21:05`.";
+        error = "Enter a valid **Date** — blank for today, `yesterday`, `9/5`, `9/5/2026`, or `2026-09-05`.";
         return false;
     }
 
