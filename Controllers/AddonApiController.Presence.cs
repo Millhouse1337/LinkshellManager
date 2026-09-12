@@ -75,8 +75,11 @@ public sealed partial class AddonApiController
             256);
         var allianceNumber = AttendanceSnapshotAlliances.Resolve(request.AllianceNumber);
 
-        // Only names this linkshell already knows are stored, plus the reporter. Without this the
-        // table fills with every pick-up player who happened to be in somebody's alliance.
+        // The roster decides which rows get an account behind them. Names it does not know are
+        // stored too, with AppUserId null: the Lobby shows an alliance-mate who never registered
+        // as a tagged row rather than silently dropping them, because "who here is not in LSM" is
+        // a question officers actually ask. The table stays bounded regardless -- at most 18 rows
+        // per reporter, aged out like every other row.
         var roster = await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(link => link.LinkshellId == token.LinkshellId && link.AppUserId != null)
@@ -109,7 +112,7 @@ public sealed partial class AddonApiController
         // rather than letting one roster carry two crowns.
         var leaderTaken = false;
         var accepted = 0;
-        var skipped = 0;
+        var unregistered = 0;
 
         var existing = await _dbContext.LinkshellPresences
             .Where(item => item.LinkshellId == token.LinkshellId)
@@ -121,13 +124,8 @@ public sealed partial class AddonApiController
         foreach (var member in reported)
         {
             var name = TruncateString(member.CharacterName!.Trim(), 256)!;
-            var isSelf = selfName is not null
-                && string.Equals(name, selfName, StringComparison.OrdinalIgnoreCase);
-            if (!knownByName.TryGetValue(name, out var known) && !isSelf)
-            {
-                skipped++;
-                continue;
-            }
+            var isKnown = knownByName.TryGetValue(name, out var known);
+            if (!isKnown) unregistered++;
 
             var isLeader = member.IsAllianceLeader && !leaderTaken;
             if (isLeader) leaderTaken = true;
@@ -139,8 +137,8 @@ public sealed partial class AddonApiController
                 existingByName[name] = row;
             }
 
-            row.AppUserId = known.AppUserId;
-            row.MainCharacterName = known.Main;
+            row.AppUserId = isKnown ? known.AppUserId : null;
+            row.MainCharacterName = isKnown ? known.Main : null;
             row.ZoneId = member.ZoneId;
             row.AllianceNumber = allianceNumber;
             row.AllianceKey = allianceKey;
@@ -173,7 +171,7 @@ public sealed partial class AddonApiController
         return Ok(new
         {
             accepted,
-            skipped,
+            unregistered,
             freshSeconds = LinkshellPresenceWindow.FreshSeconds,
             serverNowUtc = nowUtc,
             members,
@@ -217,6 +215,8 @@ public sealed partial class AddonApiController
         {
             characterName = item.CharacterName,
             mainCharacterName = item.MainCharacterName,
+            // False for a name the roster does not know -- listed so the Lobby can tag them.
+            isRegistered = item.AppUserId != null,
             zoneId = item.ZoneId,
             allianceNumber = item.AllianceNumber,
             allianceKey = item.AllianceKey,

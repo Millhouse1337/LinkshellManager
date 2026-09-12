@@ -33,7 +33,8 @@ public class LinkshellPresence
     public string CharacterName { get; set; } = string.Empty;
 
     // The account behind that character, when the name resolves to one on the roster. Null for a
-    // name the linkshell does not know, which is filtered out before it ever gets here.
+    // name the linkshell does not know: somebody in a member's alliance who never registered.
+    // Stored rather than dropped so the addon's Lobby can show them tagged "[not in LSM]".
     [MaxLength(450)]
     public string? AppUserId { get; set; }
 
