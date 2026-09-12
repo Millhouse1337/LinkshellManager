@@ -181,6 +181,9 @@ public sealed class WindowEventLinkService
             .Where(item =>
                 item.LinkshellId == linkshellId &&
                 item.WindowEventId == null &&
+                // A capture an officer has already filed against a live camp is not unlinked, and
+                // a fresh post must not fold into it -- see IsUnlinked.
+                item.LinkedEventId == null &&
                 item.SnapshotStatus == snapshotStatus &&
                 item.AllianceKey != null &&
                 item.CapturedAtUtc >= fromUtc &&
@@ -195,6 +198,46 @@ public sealed class WindowEventLinkService
             string.Equals(AllianceIdentityService.NormalizeKey(item.AllianceKey), normalized,
                 StringComparison.Ordinal));
     }
+
+    // Files a snapshot against a LIVE CAMP -- the Event row itself -- with no Window Event.
+    //
+    // This is what "attach to a camp" from the Activity does now. It used to mint a Window Event
+    // named after the camp and file the capture there, which left the camp with TWO cards (the
+    // live board, and a second attendance card of the same name underneath it), and End Camp --
+    // which builds the camp's real review card from its posted windows -- never looked at the
+    // second one. So a misc post filed against a live camp never reached Events Pending DKP Post.
+    //
+    // Parked on the camp instead, the capture is picked up by HnmCampReviewHandoffService at End
+    // Camp and lands on the camp's own review card, in the slot the officer chose here. Until
+    // then it shows on the live camp's card (ActivityDataController.Overview reads LinkedEventId).
+    //
+    // The clamp mirrors ApplySlot, against the camp's own window count. No number means
+    // "unassigned" rather than a guess: there is no anchored grid to derive one from, and a wrong
+    // window is worse than none.
+    public static void ApplyCampSlot(
+        AttendanceSnapshot snapshot,
+        int campWindowCount,
+        string? slotKind,
+        int? windowNumber)
+    {
+        snapshot.WindowEventId = null;
+        if (AttendanceSnapshotSlotKinds.IsMisc(slotKind))
+        {
+            snapshot.SlotKind = AttendanceSnapshotSlotKinds.Misc;
+            snapshot.WindowNumber = null;
+            return;
+        }
+        snapshot.SlotKind = AttendanceSnapshotSlotKinds.Window;
+        snapshot.WindowNumber = windowNumber is int chosen
+            ? Math.Clamp(chosen, 1, Math.Max(1, campWindowCount))
+            : null;
+    }
+
+    // "Unlinked" -- the officer's to-do: filed against neither a Window Event nor a live camp.
+    // One definition, because five queries used to spell it as WindowEventId == null alone, and a
+    // capture filed against a camp then kept showing up as work still to be done.
+    public static bool IsUnlinked(AttendanceSnapshot snapshot)
+        => snapshot.WindowEventId == null && snapshot.LinkedEventId == null;
 
     // Files a snapshot into a slot on its Window Event: either a numbered window, or Misc.
     //

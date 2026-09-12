@@ -237,12 +237,12 @@ public sealed partial class ActivityDataController
         var unlinkedTotalCount = await _dbContext.AttendanceSnapshots
             .AsNoTracking()
             .CountAsync(
-                s => s.LinkshellId == linkshellId && s.WindowEventId == null && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored,
+                s => s.LinkshellId == linkshellId && s.WindowEventId == null && s.LinkedEventId == null && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored,
                 cancellationToken);
 
         var unlinkedSnapshots = await _dbContext.AttendanceSnapshots
             .AsNoTracking()
-            .Where(s => s.LinkshellId == linkshellId && s.WindowEventId == null && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
+            .Where(s => s.LinkshellId == linkshellId && s.WindowEventId == null && s.LinkedEventId == null && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
             .OrderByDescending(s => s.CapturedAtUtc)
             .ThenBy(s => s.AllianceNumber)
             .Take(unlinkedDisplayCap)
@@ -722,6 +722,43 @@ public sealed partial class ActivityDataController
 
         var manageResult = await RequireWindowEventManagerAsync(snapshot.LinkshellId, cancellationToken);
         if (manageResult is not null) return manageResult;
+
+        // A LIVE CAMP as the target: file the capture on the camp itself and mint nothing.
+        //
+        // This used to go through the name path below, which created a Window Event named after
+        // the camp -- a second card under the live board -- and End Camp, which builds the camp's
+        // real review card from its posted windows, never picked that second card up. Parked on
+        // the Event row instead, the capture rides onto the review card at End Camp in the slot
+        // chosen here. See WindowEventLinkService.ApplyCampSlot.
+        if (!request.WindowEventId.HasValue && request.LinkedEventId is int campId && campId > 0)
+        {
+            var camp = await _dbContext.Events
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == campId && e.LinkshellId == snapshot.LinkshellId, cancellationToken);
+            if (camp is null)
+            {
+                return NotFound(new { error = "That camp is no longer open." });
+            }
+            // A parked board (ended, waiting for the next pop) is not a camp anyone is standing at.
+            // Filing against it would hand the capture to the NEXT pop's End Camp.
+            if (camp.EndTime is not null || camp.CommencementStartTime is null)
+            {
+                return BadRequest(new
+                {
+                    error = "That camp has ended. File this capture on its review card under "
+                            + "Events Pending DKP Post instead.",
+                });
+            }
+
+            snapshot.LinkedEventId = camp.Id;
+            WindowEventLinkService.ApplyCampSlot(
+                snapshot,
+                DiscordEventMessageBuilder.EffectiveWindowCount(camp),
+                request.SlotKind,
+                request.WindowNumber);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Ok(new { success = true, filedAgainstCamp = true });
+        }
 
         WindowEvent? windowEvent = null;
         if (request.WindowEventId.HasValue)

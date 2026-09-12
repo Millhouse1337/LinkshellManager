@@ -388,15 +388,15 @@ export class AttendanceSectionsComponent {
 
   // One dropdown, two kinds of target, so the option value carries which kind:
   //   "we:<id>"   an open attendance event -> attach to it directly
-  //   "camp:<id>" a live camp -> attach BY THAT CAMP'S NAME
+  //   "camp:<id>" a live camp -> file it ON THE CAMP, with no attendance event
   //
-  // The camp case goes through the name path on purpose. A snapshot belongs to a
-  // WindowEvent, and the server groups snapshots into one by name within 24h --
-  // which is how the addon's own posts for that camp are already filed. Attaching
-  // by name therefore drops this snapshot into the SAME bucket its siblings went
-  // to, whereas minting a fresh WindowEvent would split one camp's payroll in two.
-  // It also means picking the camp is exactly equivalent to typing its name, just
-  // without the chance of a typo.
+  // The camp case mints nothing. It used to go through the name path, which created
+  // an attendance event named after the camp -- a second card under the live board --
+  // and End Camp, which builds the camp's real review card from its posted windows,
+  // never picked that second card up, so a misc post filed this way never reached
+  // Events Pending DKP Post. The server now parks the capture on the camp itself
+  // (it shows on the camp's card in Current Field Activity) and End Camp carries it
+  // onto the review card in the slot chosen here.
   protected async attachToSelection(snapshot: ActivityWindowSnapshot, selection: string): Promise<void> {
     const linkshellId = this.primaryLinkshellId();
     if (!linkshellId || !selection) return;
@@ -412,14 +412,10 @@ export class AttendanceSectionsComponent {
 
     if (selection.startsWith('camp:')) {
       const campId = Number(selection.slice(5));
-      const camp = this.liveHnmCamps().find(event => event.id === campId);
-      const name = camp?.name?.trim();
-      if (!name) return;
-      // Both at once: the name files it for payroll the way the addon's own posts
-      // for this camp are filed, and linkedEventId makes it show on the camp's card.
+      if (!campId) return;
       const slot = this.attachSlot(snapshot);
       await this.windows.attachSnapshot(snapshot.id, linkshellId,
-        { name, linkedEventId: campId, slotKind: slot.kind, windowNumber: slot.window });
+        { linkedEventId: campId, slotKind: slot.kind, windowNumber: slot.window });
       // The camp card reads from the overview, not the window-events payload, so it
       // needs its own refresh or the snapshot won't appear until the next poll.
       await this.activity.refreshOverview();

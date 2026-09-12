@@ -276,6 +276,7 @@ public sealed partial class AddonApiController
             .OrderByDescending(s => s.CapturedAtUtc)
             .Take(take)
             .Include(s => s.WindowEvent)
+            .Include(s => s.LinkedEvent)
             .ToListAsync(cancellationToken);
 
         var snapshots = rows.Select(s =>
@@ -305,9 +306,12 @@ public sealed partial class AddonApiController
                     : window is int n ? (total is int t ? $"Window {n} of {t}" : $"Window {n}") : null,
                 windowEventId = s.WindowEventId,
                 windowEventName = s.WindowEvent?.Name,
+                // Filed against a LIVE camp, before End Camp moves it onto the camp's review card.
+                linkedEventId = s.LinkedEventId,
+                linkedEventName = s.LinkedEvent?.EventName,
                 // The addon groups on this: an unfiled capture is the officer's to-do, and the
                 // poster is usually the person who needs reminding it is still sitting there.
-                isUnlinked = s.WindowEventId == null,
+                isUnlinked = WindowEventLinkService.IsUnlinked(s),
                 awaitingVerification = s.SnapshotStatus == AttendanceSnapshotStatuses.Pending,
             };
         }).ToList();

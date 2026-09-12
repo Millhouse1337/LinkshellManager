@@ -527,4 +527,107 @@ public class HnmCampPastEventArchiveTests
         Assert.Equal(2, history.AppUserEventHistories.Count);
         Assert.Equal(history.Id, windowEvent.CampEventHistoryId);
     }
+
+    // ------------------------------------------- captures filed against the camp while live ---
+
+    // A `/lsm now` capture an officer filed against the LIVE camp (Misc, or a window) sits on the
+    // Event row with no Window Event until End Camp, which has to bring it onto the camp's own
+    // review card. It used to be filed onto a second card minted from the camp's name, which End
+    // Camp never looked at -- so it never reached Events Pending DKP Post.
+    private static AttendanceSnapshot FiledCapture(int id, string slotKind, int? windowNumber = null)
+    {
+        var snapshot = new AttendanceSnapshot
+        {
+            Id = id,
+            LinkshellId = LinkshellId,
+            LinkedEventId = EventId,
+            WindowEventId = null,
+            Name = "testing",
+            SlotKind = slotKind,
+            WindowNumber = windowNumber,
+            CapturedAtUtc = CampStart.AddMinutes(30),
+            CreatedAtUtc = CampStart.AddMinutes(30),
+            SnapshotStatus = AttendanceSnapshotStatuses.Active,
+            EntryCount = 1,
+        };
+        snapshot.Entries.Add(new AttendanceSnapshotEntry { CharacterName = "Gamma" });
+        return snapshot;
+    }
+
+    [Fact]
+    public async Task EndingACamp_BringsAMiscCaptureFiledAgainstItOntoItsReviewCard()
+    {
+        using var db = await SeededAsync();
+        db.AttendanceSnapshots.Add(FiledCapture(id: 900, AttendanceSnapshotSlotKinds.Misc));
+        await db.SaveChangesAsync();
+
+        var windowEvent = await EndCampAsync(db);
+
+        Assert.NotNull(windowEvent);
+        var filed = await db.AttendanceSnapshots.SingleAsync(s => s.Id == 900);
+        Assert.Equal(windowEvent!.Id, filed.WindowEventId);
+        Assert.Equal(AttendanceSnapshotSlotKinds.Misc, filed.SlotKind);
+        Assert.Null(filed.WindowNumber);
+        // And it is the camp's ONE review card: nothing was minted from the camp's name.
+        Assert.Single(await db.WindowEvents.ToListAsync());
+    }
+
+    [Fact]
+    public async Task EndingACamp_KeepsAFiledWindowCaptureInTheWindowTheOfficerChose()
+    {
+        using var db = await SeededAsync();
+        db.AttendanceSnapshots.Add(FiledCapture(id: 901, AttendanceSnapshotSlotKinds.Window, windowNumber: 2));
+        await db.SaveChangesAsync();
+
+        var windowEvent = await EndCampAsync(db);
+
+        var filed = await db.AttendanceSnapshots.SingleAsync(s => s.Id == 901);
+        Assert.Equal(windowEvent!.Id, filed.WindowEventId);
+        Assert.Equal(AttendanceSnapshotSlotKinds.Window, filed.SlotKind);
+        Assert.Equal(2, filed.WindowNumber);
+    }
+
+    // Nobody on the roster means no review card, so the capture cannot ride onto one. It goes
+    // back to the unlinked queue rather than staying on the recycled board, where the NEXT pop's
+    // End Camp would have collected it.
+    [Fact]
+    public async Task EndingACampNobodyAttended_ReturnsAFiledCaptureToTheQueue()
+    {
+        using var db = await SeededAsync(scans: new Dictionary<string, string>());
+        db.AttendanceSnapshots.Add(FiledCapture(id: 902, AttendanceSnapshotSlotKinds.Misc));
+        await db.SaveChangesAsync();
+
+        var windowEvent = await EndCampAsync(db);
+
+        Assert.Null(windowEvent);
+        var filed = await db.AttendanceSnapshots.SingleAsync(s => s.Id == 902);
+        Assert.Null(filed.LinkedEventId);
+        Assert.Null(filed.WindowEventId);
+    }
+
+    // The slot an officer picks when filing against a live camp, with no Window Event to clamp
+    // against: Misc nulls the number, a window is clamped to the camp's own count, and no choice
+    // stays unassigned rather than guessed.
+    [Fact]
+    public void FilingAgainstACamp_KeepsTheSlotAndMintsNothing()
+    {
+        var misc = FiledCapture(id: 1, AttendanceSnapshotSlotKinds.Window, windowNumber: 3);
+        WindowEventLinkService.ApplyCampSlot(misc, campWindowCount: 7, AttendanceSnapshotSlotKinds.Misc, windowNumber: 3);
+        Assert.Equal(AttendanceSnapshotSlotKinds.Misc, misc.SlotKind);
+        Assert.Null(misc.WindowNumber);
+        Assert.Null(misc.WindowEventId);
+
+        var clamped = FiledCapture(id: 2, AttendanceSnapshotSlotKinds.Misc);
+        WindowEventLinkService.ApplyCampSlot(clamped, campWindowCount: 7, AttendanceSnapshotSlotKinds.Window, windowNumber: 12);
+        Assert.Equal(AttendanceSnapshotSlotKinds.Window, clamped.SlotKind);
+        Assert.Equal(7, clamped.WindowNumber);
+
+        var unassigned = FiledCapture(id: 3, AttendanceSnapshotSlotKinds.Misc);
+        WindowEventLinkService.ApplyCampSlot(unassigned, campWindowCount: 7, AttendanceSnapshotSlotKinds.Window, windowNumber: null);
+        Assert.Null(unassigned.WindowNumber);
+
+        Assert.False(WindowEventLinkService.IsUnlinked(misc));      // filed against the camp
+        misc.LinkedEventId = null;
+        Assert.True(WindowEventLinkService.IsUnlinked(misc));
+    }
 }

@@ -57,6 +57,7 @@ public sealed class AttendanceSectionsBuilder
             .CountAsync(
                 s => s.LinkshellId == linkshellId
                      && s.WindowEventId == null
+                     && s.LinkedEventId == null   // filed against a live camp = not unlinked
                      && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored,
                 cancellationToken);
 
@@ -66,6 +67,7 @@ public sealed class AttendanceSectionsBuilder
             .AsNoTracking()
             .Where(s => s.LinkshellId == linkshellId
                         && s.WindowEventId == null
+                        && s.LinkedEventId == null
                         && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
             .OrderByDescending(s => s.CapturedAtUtc)
             .ThenBy(s => s.AllianceNumber)

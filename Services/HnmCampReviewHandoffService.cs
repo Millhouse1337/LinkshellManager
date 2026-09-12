@@ -108,6 +108,12 @@ public sealed class HnmCampReviewHandoffService
             // follow the board into the next pop. Detached and left as linkshell-level records,
             // which is where a capture taken with no camp open already lives.
             foreach (var capture in captures) capture.EventId = null;
+            // Same for any `/lsm now` capture an officer filed against this camp: back to the
+            // unlinked queue, rather than riding into the next pop's handoff on the recycled board.
+            foreach (var filed in await LoadCampFiledCapturesAsync(ev.Id, cancellationToken))
+            {
+                filed.LinkedEventId = null;
+            }
             _logger.LogInformation(
                 "HNM camp handoff skipped: event {EventId} ended with nobody on the roster.", ev.Id);
             return null;
@@ -427,6 +433,28 @@ public sealed class HnmCampReviewHandoffService
             }
         }
 
+        // CAPTURES FILED AGAINST THE CAMP while it was live: a `/lsm now` an officer filed as Misc
+        // (or into a window) from the Activity. They were parked on the Event row with no Window
+        // Event precisely so they would land HERE -- on the camp's own review card, beside its
+        // windows -- in the slot the officer chose. They used to be filed onto a second card minted
+        // from the camp's name, which this method never looked at, so a misc post never reached
+        // Events Pending DKP Post at all.
+        //
+        // Every status moves, Ignored included: anything left pointing at the recycled board would
+        // be collected again by the NEXT pop's End Camp.
+        foreach (var filed in await LoadCampFiledCapturesAsync(ev.Id, cancellationToken))
+        {
+            filed.WindowEvent = windowEvent;
+            if (filed.CapturedAtUtc < windowEvent.FirstCapturedAtUtc)
+            {
+                windowEvent.FirstCapturedAtUtc = filed.CapturedAtUtc;
+            }
+            if (filed.CapturedAtUtc > windowEvent.LastCapturedAtUtc)
+            {
+                windowEvent.LastCapturedAtUtc = filed.CapturedAtUtc;
+            }
+        }
+
         // THE PAST EVENT, written HERE — at End Camp — rather than at Post.
         //
         // Ending a camp is what makes it past, and for these camps nothing else records that it
@@ -478,6 +506,14 @@ public sealed class HnmCampReviewHandoffService
 
         return windowEvent;
     }
+
+    // Captures an officer filed against this camp while it was live (ActivityDataController's
+    // attach with a camp target): on the Event row, on no Window Event yet. Tracked, because the
+    // caller re-parents or unlinks these same instances.
+    private Task<List<AttendanceSnapshot>> LoadCampFiledCapturesAsync(int eventId, CancellationToken cancellationToken)
+        => _db.AttendanceSnapshots
+            .Where(s => s.LinkedEventId == eventId && s.WindowEventId == null)
+            .ToListAsync(cancellationToken);
 
     // The camp's Past Event row, staged (not saved) with one participant per member.
     //
