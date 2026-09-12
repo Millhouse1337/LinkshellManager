@@ -1283,8 +1283,10 @@ public sealed class DiscordInteractionsController : ControllerBase
     // title/labels; the main field is prefilled with their Discord display name.)
     private IActionResult OutsideOnboardModal(string tail, string? eventName)
     {
-        var prefill = string.IsNullOrWhiteSpace(_discordDisplayName) ? string.Empty : _discordDisplayName!.Trim();
-        if (prefill.Length > 64) prefill = prefill[..64];
+        // The Discord display name is only a hint: "Mill House 🎮" is not a character name and
+        // would fail the field's own limits below, which Discord enforces before submit. Keep
+        // the letters that could be one, or start the box empty.
+        var prefill = CharacterNameFormat.SuggestFrom(_discordDisplayName);
 
         static object NameRow(string fieldId, string label, bool required, string value, string placeholder)
         {
@@ -1293,14 +1295,18 @@ public sealed class DiscordInteractionsController : ControllerBase
             // empty default value ("") together with min_length >= 1 (the default would
             // be shorter than the minimum). An absent value is the normal "starts empty"
             // state and is unambiguously valid — keys mirror the Discord field names 1:1.
+            //
+            // Lengths are the game's own (CharacterNameFormat): Discord refuses the submit
+            // client-side outside them, so the letters-only rule is the only one left for the
+            // server to explain.
             var input = new Dictionary<string, object?>
             {
                 ["type"] = 4, // text input
                 ["custom_id"] = fieldId,
                 ["label"] = label,
                 ["style"] = 1, // short
-                ["min_length"] = required ? 1 : 0,
-                ["max_length"] = 64,
+                ["min_length"] = required ? CharacterNameFormat.MinLength : 0,
+                ["max_length"] = CharacterNameFormat.MaxLength,
                 ["required"] = required,
                 ["placeholder"] = placeholder,
             };
@@ -1324,9 +1330,9 @@ public sealed class DiscordInteractionsController : ControllerBase
                 title = "Not synced — register yourself", // 45-char cap
                 components = new object[]
                 {
-                    NameRow(OutsideNameFieldId, "Your MAIN FFXI character name", true, prefill, "e.g. Millhouse"),
-                    NameRow(OutsideAlt1FieldId, "Alt 1 character name (optional)", false, string.Empty, "e.g. Millhouse2401"),
-                    NameRow(OutsideAlt2FieldId, "Alt 2 character name (optional)", false, string.Empty, "e.g. Millhouse2402"),
+                    NameRow(OutsideNameFieldId, "Your MAIN FFXI character name", true, prefill, "Enter your in game character name"),
+                    NameRow(OutsideAlt1FieldId, "Alt 1 character name (optional)", false, string.Empty, "Enter your alt 1 character name"),
+                    NameRow(OutsideAlt2FieldId, "Alt 2 character name (optional)", false, string.Empty, "Enter your alt 2 character name"),
                 }
             }
         });
@@ -1673,12 +1679,31 @@ public sealed class DiscordInteractionsController : ControllerBase
                     : "Outside signups aren't enabled for this event.");
             }
 
-            var main = ExtractModalValue(data, OutsideNameFieldId)?.Trim();
+            // Every name goes through CharacterNameFormat: letters only, 3-15 of them, and the
+            // game's casing applied for the person. A name the game could never issue would sit
+            // on the roster unmatched forever, so it is bounced here with a reason. The main is
+            // required; an alt is checked only when something was typed in it.
+            if (!CharacterNameFormat.TryNormalize(ExtractModalValue(data, OutsideNameFieldId), out var main, out var mainError))
+            {
+                return Ephemeral($"Main character name: {mainError}");
+            }
             var alt1 = ExtractModalValue(data, OutsideAlt1FieldId)?.Trim();
             var alt2 = ExtractModalValue(data, OutsideAlt2FieldId)?.Trim();
-            if (string.IsNullOrWhiteSpace(main))
+            if (!string.IsNullOrEmpty(alt1))
             {
-                return Ephemeral("Enter your main character name to register.");
+                if (!CharacterNameFormat.TryNormalize(alt1, out var alt1Clean, out var alt1Error))
+                {
+                    return Ephemeral($"Alt 1 character name: {alt1Error}");
+                }
+                alt1 = alt1Clean;
+            }
+            if (!string.IsNullOrEmpty(alt2))
+            {
+                if (!CharacterNameFormat.TryNormalize(alt2, out var alt2Clean, out var alt2Error))
+                {
+                    return Ephemeral($"Alt 2 character name: {alt2Error}");
+                }
+                alt2 = alt2Clean;
             }
 
             var result = await _manualMembers.FindOrCreateForOutsideAsync(
