@@ -564,14 +564,15 @@
           <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
             <p class="muted" style="font-size:12px;margin:0">
               What each monster's camp runs on: how many spawn <strong>windows</strong> it sits
-              through, how far apart those windows open (<strong>cadence</strong>), and how long
-              after a kill it repops (<strong>cooldown</strong>). These drive the monster list on
-              the event and ToD forms, and a camp captures them when it is created — editing here
-              never changes a camp that is already running.
+              through, how far apart those windows open (<strong>interval</strong>), how long
+              after a kill it repops (<strong>cooldown</strong>), and any <strong>additional
+              seconds</strong> its repop runs past that. These drive the monster list on the event
+              and ToD forms and set every ToD's repop, and a camp captures them when it is
+              created — editing here never changes a camp that is already running.
             </p>
             <p class="muted" style="font-size:12px;margin:0">
               Leave <strong>windows</strong> blank for a monster with no spawn-window cycle; its
-              cadence is then just how often the ToD form suggests re-checking.
+              interval is then just how often to re-check.
             </p>
 
             <!-- (A "Claim Shield is switched off server-wide" notice sat here. While the switch is
@@ -595,8 +596,10 @@
                   <div class="monster-setups__row-head">
                     <div class="monster-setups__col-name">Monster</div>
                     <div class="monster-setups__col-windows">Windows</div>
-                    <div class="monster-setups__col-duration">Cadence</div>
+                    <div class="monster-setups__col-duration">Interval</div>
                     <div class="monster-setups__col-duration">Cooldown</div>
+                    <div class="monster-setups__col-seconds"
+                      title="Seconds added on top of the cooldown when a ToD's repop is calculated.">Additional seconds</div>
                     @if (!claimShieldGloballyDisabled()) {
                       <div class="monster-setups__col-claim"
                         title="Record who tagged this monster during a claim-shield lottery. Off for monsters you don't contest.">Claim Shield</div>
@@ -648,6 +651,14 @@
                           <option [value]="unit">{{ unit }}</option>
                         }
                       </select>
+                    </div>
+                    <div class="monster-setups__col-seconds">
+                      <!-- The fine offset the Log ToD form used to ask for per kill. It belongs to
+                           the monster, so it lives here and every ToD picks it up. -->
+                      <input type="number" min="0" step="1"
+                        [(ngModel)]="row.additionalSeconds" (ngModelChange)="markMonsterTimingsDirty()"
+                        [name]="'monsterAdditionalSeconds_' + $index" placeholder="0"
+                        title="Seconds added on top of the cooldown when a ToD's repop is calculated." />
                     </div>
                     <!-- Hidden entirely while an admin has Claim Shield off server-wide: there is
                          nothing useful to set. row.claimShieldEnabled is untouched by this and is

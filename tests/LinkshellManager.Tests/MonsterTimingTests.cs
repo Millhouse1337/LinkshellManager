@@ -501,4 +501,53 @@ public class MonsterTimingTests
         var saved = await db.LinkshellMonsterTimings.SingleAsync(r => r.MonsterName == "Cerberus");
         Assert.Equal(48 * 60, saved.CooldownMinutes);
     }
+
+    // The seconds offset on top of the cooldown lives on the monster now -- it used to be typed on
+    // every Log ToD form and forgotten. The editor stores it, the resolver hands it to every ToD
+    // path, a client that does not send it leaves it alone, and a sent 0 clears it.
+    [Fact]
+    public async Task Editor_StoresTheAdditionalSecondsOffset()
+    {
+        await using var db = await SeededAsync();
+        var editor = NewEditor(db);
+
+        var edits = await CurrentEditsAsync(db);
+        var index = edits.FindIndex(e => e.MonsterName == "Cerberus");
+        edits[index] = edits[index] with { AdditionalSeconds = 45 };
+        Assert.Null(await editor.SaveAsync(LinkshellId, edits, CancellationToken.None));
+        Assert.Equal(45, (await db.LinkshellMonsterTimings.SingleAsync(r => r.MonsterName == "Cerberus")).AdditionalSeconds);
+
+        var timing = await new MonsterTimingResolver(db).ResolveAsync(LinkshellId, "Cerberus", CancellationToken.None);
+        Assert.Equal(45, timing.AdditionalSeconds);
+
+        // Not sent: untouched.
+        Assert.Null(await editor.SaveAsync(LinkshellId, await CurrentEditsAsync(db), CancellationToken.None));
+        Assert.Equal(45, (await db.LinkshellMonsterTimings.SingleAsync(r => r.MonsterName == "Cerberus")).AdditionalSeconds);
+
+        // Sent as 0: cleared.
+        var cleared = await CurrentEditsAsync(db);
+        index = cleared.FindIndex(e => e.MonsterName == "Cerberus");
+        cleared[index] = cleared[index] with { AdditionalSeconds = 0 };
+        Assert.Null(await editor.SaveAsync(LinkshellId, cleared, CancellationToken.None));
+        Assert.Equal(0, (await db.LinkshellMonsterTimings.SingleAsync(r => r.MonsterName == "Cerberus")).AdditionalSeconds);
+    }
+
+    [Fact]
+    public async Task Editor_ClampsTheAdditionalSecondsOffset()
+    {
+        await using var db = await SeededAsync();
+        var editor = NewEditor(db);
+
+        var edits = await CurrentEditsAsync(db);
+        var index = edits.FindIndex(e => e.MonsterName == "Cerberus");
+        edits[index] = edits[index] with { AdditionalSeconds = -5 };
+        Assert.Null(await editor.SaveAsync(LinkshellId, edits, CancellationToken.None));
+        Assert.Equal(0, (await db.LinkshellMonsterTimings.SingleAsync(r => r.MonsterName == "Cerberus")).AdditionalSeconds);
+
+        edits = await CurrentEditsAsync(db);
+        index = edits.FindIndex(e => e.MonsterName == "Cerberus");
+        edits[index] = edits[index] with { AdditionalSeconds = 999_999 };
+        Assert.Null(await editor.SaveAsync(LinkshellId, edits, CancellationToken.None));
+        Assert.Equal(24 * 60 * 60, (await db.LinkshellMonsterTimings.SingleAsync(r => r.MonsterName == "Cerberus")).AdditionalSeconds);
+    }
 }

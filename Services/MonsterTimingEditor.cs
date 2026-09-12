@@ -19,7 +19,10 @@ public sealed record MonsterTimingEdit(
     string? CooldownUnit,
     string? Category,
     // Null = leave the stored value as it is. See ActivityMonsterTimingInput.
-    bool? ClaimShieldEnabled = null);
+    bool? ClaimShieldEnabled = null,
+    // Seconds on top of the cooldown. Null = leave the stored value as it is, for the same reason
+    // as ClaimShieldEnabled: an older client omits it, and a full-replace save must not zero it.
+    int? AdditionalSeconds = null);
 
 // Shared save logic for a linkshell's monster setups: full replace with validation, used by both
 // the Activity API and the web Customize page so there is exactly one implementation of "save the
@@ -35,6 +38,9 @@ public sealed class MonsterTimingEditor
     // 100 days. Generous enough for anything in the game, tight enough that a stray keypress in
     // the minutes unit can't push a repop past the end of the ToD tracker.
     private const int MaxCooldownMinutes = 100 * 24 * 60;
+    // A day. The offset exists for a repop that runs a few seconds or minutes past the round
+    // cooldown; anything longer belongs in the cooldown itself.
+    private const int MaxAdditionalSeconds = 24 * 60 * 60;
 
     public MonsterTimingEditor(
         ApplicationDbContext db,
@@ -142,6 +148,10 @@ public sealed class MonsterTimingEditor
             if (edit.ClaimShieldEnabled is { } claimShield)
             {
                 row.ClaimShieldEnabled = claimShield;
+            }
+            if (edit.AdditionalSeconds is { } additionalSeconds)
+            {
+                row.AdditionalSeconds = Math.Clamp(additionalSeconds, 0, MaxAdditionalSeconds);
             }
             row.SortOrder = sortOrder++;
             row.UpdatedAtUtc = now;

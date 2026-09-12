@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Utils;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
@@ -56,8 +57,12 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
         }
 
+        // The LINKSHELL'S Monster setups own the cooldown, the interval and the seconds offset now:
+        // the Log ToD form no longer asks for them. A value that still arrives (an older client)
+        // is honoured; anything blank comes from the setup for this monster.
+        var timing = await _monsterTimings.ResolveAsync(request.LinkshellId, monsterName, cancellationToken);
         var cooldown = string.IsNullOrWhiteSpace(request.Cooldown)
-            ? GetDefaultTodCooldown(monsterName)
+            ? TodDurationFormat.Format(timing.CooldownMinutes)
             : request.Cooldown.Trim();
         if (!IsAcceptableTodCooldown(cooldown))
         {
@@ -67,12 +72,15 @@ public sealed partial class ActivityDataController
         var interval = request.Interval?.Trim();
         if (string.IsNullOrWhiteSpace(interval))
         {
-            interval = null;
+            interval = timing.HasSpawnGrid ? TodDurationFormat.Format(timing.TodIntervalMinutes) : null;
         }
         else if (!IsAcceptableTodInterval(interval))
         {
             return BadRequest(new { error = "Select a valid interval." });
         }
+        var requestedAdditionalSeconds = request.AdditionalSeconds > 0
+            ? request.AdditionalSeconds
+            : timing.AdditionalSeconds;
 
         var linkshellEntity = await _dbContext.Linkshells
             .AsNoTracking()
@@ -147,7 +155,7 @@ public sealed partial class ActivityDataController
                 todTimeUtc,
                 cooldown,
                 interval,
-                todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(Math.Max(0, request.AdditionalSeconds)),
+                todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(Math.Max(0, requestedAdditionalSeconds)),
                 SanitizeUploadedImagePath(request.ImagePath),
                 normalizedLootDetails
                     .Select(l => new TodSubmissionLootInput(l.ItemName, l.ItemWinner, l.WinningDkpSpent))
@@ -156,7 +164,7 @@ public sealed partial class ActivityDataController
             return Ok(new { pending = true, submissionId });
         }
 
-        var additionalSeconds = Math.Max(0, request.AdditionalSeconds);
+        var additionalSeconds = Math.Max(0, requestedAdditionalSeconds);
         var tod = new Tod
         {
             LinkshellId = request.LinkshellId,

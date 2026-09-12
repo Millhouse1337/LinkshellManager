@@ -110,7 +110,8 @@
             </select>
           </label>
         </div>
-        <!-- Time of death, Cooldown (auto-filled from the monster's configured setup) -->
+        <!-- Time of death. The cooldown, interval and seconds offset it is measured with come from
+             the linkshell's Monster setups (Configurations tab), not from this form. -->
         <div class="tod-form__row tod-form__row--pair">
           <!-- Optional on End Camp: leaving it blank records "Not entered" (no time, no repop)
                for a camp where nobody saw the mob die, instead of stamping the closing moment. -->
@@ -120,39 +121,6 @@
               (ngModelChange)="onTodTimeLocalChange($event)" name="todTimeLocal"
               type="datetime-local" step="1" [required]="!boardEndCamp"
               title="Leave blank if nobody saw it die — the tracker shows Not entered and the board won't auto-re-post." />
-          </label>
-          <label class="field">
-            <span class="form-label">Cooldown</span>
-            <div class="tod-form__duration">
-              <input class="form-input" [(ngModel)]="todCooldownValue"
-                (ngModelChange)="onTodCooldownChange()" name="todCooldownValue"
-                type="number" min="1" step="1" required
-                title="Pre-filled from this monster's configured cooldown. Change it for this ToD only." />
-              <select class="form-select" [(ngModel)]="todCooldownUnit"
-                (ngModelChange)="onTodCooldownChange()" name="todCooldownUnit">
-                @for (unit of todDurationUnits; track unit) { <option [value]="unit">{{ unit }}</option> }
-              </select>
-            </div>
-          </label>
-        </div>
-        <!-- Interval, Additional seconds -->
-        <div class="tod-form__row tod-form__row--pair">
-          <label class="field">
-            <span class="form-label">Interval</span>
-            <div class="tod-form__duration">
-              <input class="form-input" [(ngModel)]="todIntervalValue" name="todIntervalValue"
-                type="number" min="1" step="1" placeholder="Not specified"
-                title="Pre-filled from this monster's configured cadence. Leave blank to record no interval." />
-              <select class="form-select" [(ngModel)]="todIntervalUnit" name="todIntervalUnit">
-                @for (unit of todDurationUnits; track unit) { <option [value]="unit">{{ unit }}</option> }
-              </select>
-            </div>
-          </label>
-          <label class="field">
-            <span class="form-label">Additional seconds</span>
-            <input class="form-input" [ngModel]="todDraft.additionalSeconds"
-              (ngModelChange)="onTodAdditionalSecondsChange($event)" name="todAdditionalSeconds"
-              type="number" min="0" step="1" placeholder="0" title="Extra seconds added on top of the cooldown when calculating the repop time" />
           </label>
         </div>
         <!-- Calculated repop summary, with the read-only repop time filling the space on the right -->
@@ -190,46 +158,14 @@
             </select>
           </label>
         </div>
-        <!-- Time of death, Cooldown (auto-filled from the monster's configured setup) -->
+        <!-- Time of death. The cooldown, interval and seconds offset it is measured with come from
+             the linkshell's Monster setups (Configurations tab), not from this form. -->
         <div class="tod-form__row tod-form__row--pair">
           <label class="field">
             <span class="form-label">Time of death</span>
             <input class="form-input" [ngModel]="todTimeLocalValue"
               (ngModelChange)="onTodTimeLocalChange($event)" name="todTimeLocal"
               type="datetime-local" step="1" required />
-          </label>
-          <label class="field">
-            <span class="form-label">Cooldown</span>
-            <div class="tod-form__duration">
-              <input class="form-input" [(ngModel)]="todCooldownValue"
-                (ngModelChange)="onTodCooldownChange()" name="todCooldownValue"
-                type="number" min="1" step="1" required
-                title="Pre-filled from this monster's configured cooldown. Change it for this ToD only." />
-              <select class="form-select" [(ngModel)]="todCooldownUnit"
-                (ngModelChange)="onTodCooldownChange()" name="todCooldownUnit">
-                @for (unit of todDurationUnits; track unit) { <option [value]="unit">{{ unit }}</option> }
-              </select>
-            </div>
-          </label>
-        </div>
-        <!-- Interval, Additional seconds -->
-        <div class="tod-form__row tod-form__row--pair">
-          <label class="field">
-            <span class="form-label">Interval</span>
-            <div class="tod-form__duration">
-              <input class="form-input" [(ngModel)]="todIntervalValue" name="todIntervalValue"
-                type="number" min="1" step="1" placeholder="Not specified"
-                title="Pre-filled from this monster's configured cadence. Leave blank to record no interval." />
-              <select class="form-select" [(ngModel)]="todIntervalUnit" name="todIntervalUnit">
-                @for (unit of todDurationUnits; track unit) { <option [value]="unit">{{ unit }}</option> }
-              </select>
-            </div>
-          </label>
-          <label class="field">
-            <span class="form-label">Additional seconds</span>
-            <input class="form-input" [ngModel]="todDraft.additionalSeconds"
-              (ngModelChange)="onTodAdditionalSecondsChange($event)" name="todAdditionalSeconds"
-              type="number" min="0" step="1" placeholder="0" title="Extra seconds added on top of the cooldown when calculating the repop time" />
           </label>
         </div>
         <!-- Calculated repop summary, with the read-only repop time filling the space on the right -->

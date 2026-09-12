@@ -119,7 +119,10 @@ public sealed record ActivityMonsterTimingDto(
     int DefaultCooldownMinutes,
     // Whether the addon captures claim-shield lotteries for this monster. Defaults on; off is for
     // monsters the linkshell doesn't contest, whose rolls would otherwise be noise.
-    bool ClaimShieldEnabled);
+    bool ClaimShieldEnabled,
+    // Seconds on top of the cooldown when a ToD's repop is computed. Moved here from the Log ToD
+    // form, where it was typed per kill and forgotten.
+    int AdditionalSeconds = 0);
 
 // The COMPACT form carried on the polled overview: only what the ToD form and the create-event
 // picker need (the option list, plus the values they auto-fill from). The editor's own GET returns
@@ -143,7 +146,10 @@ public sealed record ActivityMonsterSetupDto(
     // a DISABLED board's stored lead is stale bookkeeping, and surfacing it would re-apply it the
     // moment the toggle was flipped back on. Appended last (with a default) so the overview's
     // other constructions of this record need no edit.
-    double? RepeatLeadHours = null);
+    double? RepeatLeadHours = null,
+    // Seconds on top of the cooldown, so the Log ToD form's repop preview matches what the server
+    // will store without an input for it.
+    int AdditionalSeconds = 0);
 
 public sealed record ActivityMonsterTimingsDto(
     IReadOnlyList<ActivityMonsterTimingDto> Rows,
@@ -161,7 +167,9 @@ public sealed record ActivityMonsterTimingInput(
     string? Category,
     // Nullable so a client that predates the column leaves the stored value alone rather than
     // silently switching every monster off on its next save.
-    bool? ClaimShieldEnabled);
+    bool? ClaimShieldEnabled,
+    // Same contract: null = leave the stored value alone.
+    int? AdditionalSeconds = null);
 
 public sealed record ActivitySaveMonsterTimingsRequest(
     IReadOnlyList<ActivityMonsterTimingInput>? Rows);

@@ -1,6 +1,7 @@
 using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Utils;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -85,13 +86,16 @@ public sealed class HnmCampPopService
         // Both the time and the repop stay null rather than being invented from "now" — every
         // surface renders that as "Not entered". Only an actual observation writes a timestamp.
         var todTimeUtc = request.TodTimeUtc;
-        var additionalSeconds = Math.Max(0, request.AdditionalSeconds);
         // The LINKSHELL'S configured cooldown for this monster, not a global default. The Discord
         // "Pop / End Camp" button lands here, and before per-monster setups were server-resident it
-        // ignored the configuration outright.
+        // ignored the configuration outright. The seconds offset comes from the same setup: no End
+        // Camp surface asks for it any more, so a 0 from the request means "use the monster's".
+        var timing = await _monsterTimings.ResolveAsync(ev.LinkshellId, monster, cancellationToken);
+        var additionalSeconds = request.AdditionalSeconds > 0
+            ? request.AdditionalSeconds
+            : Math.Max(0, timing.AdditionalSeconds);
         var cooldown = string.IsNullOrWhiteSpace(request.Cooldown)
-            ? await ActivityDataController.GetDefaultTodCooldownAsync(
-                _monsterTimings, ev.LinkshellId, monster, cancellationToken)
+            ? TodDurationFormat.Format(timing.CooldownMinutes)
             : request.Cooldown.Trim();
         var repopUtc = todTimeUtc
             ?.AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown))

@@ -40,10 +40,11 @@ export class TodFormComponent {
   // viewChild resolves immediately.
   private readonly logTodDialog = viewChild<ElementRef<HTMLDialogElement>>('logTodDialog');
 
-  // Cooldown and interval are entered as a number plus a unit rather than picked from a fixed
-  // list: each monster carries its own configured value now, and a preset list can only express
-  // the handful of durations that happened to be curated.
-  protected readonly todDurationUnits = ['hours', 'mins'] as const;
+  // The cooldown, interval and seconds offset are no longer typed on this form. They are set once
+  // per monster under Monster setups and applied here the moment a monster is picked (see
+  // onTodMonsterChange), so the repop preview and the saved ToD both come from that one place.
+  // The value + unit state below is what the server still receives, kept so an edited ToD echoes
+  // back whatever it was saved with.
   protected readonly todDraft: ActivityCreateTodInput = {
     linkshellId: 0,
     monsterName: '',
@@ -334,6 +335,7 @@ export class TodFormComponent {
       if (configured) {
         this.applyCooldownMinutes(configured.cooldownMinutes);
         this.applyIntervalMinutes(configured.cadenceMinutes);
+        this.todDraft.additionalSeconds = Math.max(0, Math.floor(Number(configured.additionalSeconds) || 0));
       }
     }
     this.updateTodRepopTime();
@@ -382,10 +384,6 @@ export class TodFormComponent {
 
   protected todIntervalLabel(): string | null {
     return this.formatDurationLabel(this.todIntervalValue, this.todIntervalUnit);
-  }
-
-  protected onTodCooldownChange(): void {
-    this.updateTodRepopTime();
   }
 
   // Reads a stored "22 Hour" / "45 Min" / "1 Hour 30 Min" label back into the number + unit the
@@ -570,18 +568,12 @@ export class TodFormComponent {
       return;
     }
     todLocalTime.setHours(todLocalTime.getHours() + cooldownHours);
-    // Fine repop offset: add the "Additional seconds" the officer entered.
+    // Fine repop offset: the monster's configured "Additional seconds" (Monster setups).
     const extraSeconds = Math.max(0, Math.floor(Number(this.todDraft.additionalSeconds) || 0));
     if (extraSeconds > 0) {
       todLocalTime.setSeconds(todLocalTime.getSeconds() + extraSeconds);
     }
     this.todRepopLocalValue = toDateTimeLocalValue(todLocalTime);
-  }
-
-  // The "Additional seconds" input changed → normalize + recompute the repop preview.
-  protected onTodAdditionalSecondsChange(value: number | null): void {
-    this.todDraft.additionalSeconds = Math.max(0, Math.floor(Number(value) || 0));
-    this.updateTodRepopTime();
   }
 
   protected todRepopSummary(): string {

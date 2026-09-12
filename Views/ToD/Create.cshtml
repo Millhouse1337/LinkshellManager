@@ -10,19 +10,9 @@
     var pageHeading = isEditMode ? "Edit ToD" : "Add ToD";
     var formHeader = isEditMode ? "Update ToD" : "Submit ToD";
     var formAction = isEditMode ? "Edit" : "Create";
-    // Tod.Cooldown / Tod.Interval are stored as labels ("22 Hour", "45 Min"); the form edits them
-    // as a number + a unit. Split them here with the same rule TodDurationFormat.Split uses, so a
-    // value never echoes back in a different unit than it was saved in.
-    var cooldownMinutes = LinkshellManagerDiscordApp.Utils.TodDurationFormat.TryParseMinutes(
-        Model.Tod?.Cooldown, LinkshellManagerDiscordApp.Utils.TodDurationFormat.HoursUnit, out var parsedCooldown)
-        ? parsedCooldown
-        : 22 * 60;
-    var (cooldownValue, cooldownUnit) = LinkshellManagerDiscordApp.Utils.TodDurationFormat.Split(cooldownMinutes);
-    var hasInterval = LinkshellManagerDiscordApp.Utils.TodDurationFormat.TryParseMinutes(
-        Model.Tod?.Interval, LinkshellManagerDiscordApp.Utils.TodDurationFormat.MinutesUnit, out var parsedInterval);
-    var (intervalValue, intervalUnit) = hasInterval
-        ? LinkshellManagerDiscordApp.Utils.TodDurationFormat.Split(parsedInterval)
-        : (0, LinkshellManagerDiscordApp.Utils.TodDurationFormat.MinutesUnit);
+    // (The cooldown / interval split for the form's number + unit boxes lived here. Those boxes
+    // are gone: the durations come from the linkshell's Monster setups, on the page via
+    // data-monster-timings and on the server via TodController.ApplyPostedDurationsAsync.)
     ViewData["Title"] = pageHeading;
     ViewData["BodyClass"] = "lsm-page";
     var selectedLinkshellName = Model.Linkshells.FirstOrDefault(item => item.Id == Model.LinkshellId)?.LinkshellName ?? "Selected Linkshell";
@@ -176,53 +166,16 @@ else
                 </label>
             </div>
 
-            @* Time of death, and the cooldown it is measured from. *@
+            @* Time of death. The cooldown, interval and seconds offset it is measured with come from
+               the linkshell's Monster setups (Customize page), not from this form -- the page
+               script reads them off data-monster-timings for the repop preview, and the server
+               stamps the same values on save (TodController.ApplyPostedDurationsAsync). *@
             <div class="create-form__row create-form__row--pair">
                 <label>
                     <span>Time of death</span>
                     <input asp-for="Tod.Time" type="datetime-local" step="1" id="tod-time"
                            value="@Model.Tod.Time?.ToString("yyyy-MM-ddTHH:mm:ss")" />
                     <span asp-validation-for="Tod.Time" class="create-form__error"></span>
-                </label>
-
-                <label>
-                    <span>Cooldown</span>
-                    <span class="create-form__duration">
-                        <input asp-for="CooldownValue" id="cooldown-value" type="number" min="1" step="1"
-                               value="@cooldownValue" required
-                               title="Pre-filled from this monster's configured cooldown. Change it for this ToD only." />
-                        <select asp-for="CooldownUnit" id="cooldown-unit">
-                            <option value="hours" selected="@(cooldownUnit == "hours" ? "selected" : null)">hours</option>
-                            <option value="mins" selected="@(cooldownUnit == "mins" ? "selected" : null)">mins</option>
-                        </select>
-                    </span>
-                    <span asp-validation-for="Tod.Cooldown" class="create-form__error"></span>
-                </label>
-            </div>
-
-            @* The check cadence, and the fine seconds offset on top of the cooldown. *@
-            <div class="create-form__row create-form__row--pair">
-                <label>
-                    <span>Interval</span>
-                    <span class="create-form__duration">
-                        @* Blank rather than a literal 0 when nothing is recorded, so the field
-                           reads as its "Not specified" placeholder the way the Activity's does. *@
-                        <input asp-for="IntervalValue" id="interval-value" type="number" min="1" step="1"
-                               value="@(hasInterval ? intervalValue.ToString() : string.Empty)" placeholder="Not specified"
-                               title="Pre-filled from this monster's configured cadence. Leave blank to record no interval." />
-                        <select asp-for="IntervalUnit" id="interval-unit">
-                            <option value="hours" selected="@(intervalUnit == "hours" ? "selected" : null)">hours</option>
-                            <option value="mins" selected="@(intervalUnit == "mins" ? "selected" : null)">mins</option>
-                        </select>
-                    </span>
-                    <span asp-validation-for="Tod.Interval" class="create-form__error"></span>
-                </label>
-
-                <label>
-                    <span>Additional seconds</span>
-                    <input asp-for="AdditionalSeconds" id="additional-seconds" type="number" min="0" step="1"
-                           value="@Model.Tod.AdditionalSeconds" placeholder="0"
-                           title="Extra seconds added on top of the cooldown when calculating the repop time" />
                 </label>
             </div>
 

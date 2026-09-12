@@ -238,6 +238,10 @@ public class MonsterTimingInput
     // semantics wanted here, unlike the Activity's nullable input.
     public bool ClaimShieldEnabled { get; set; }
 
+    // Seconds on top of the cooldown when a repop is computed. Nullable so a blank box leaves the
+    // stored value alone (MonsterTimingEditor); a typed 0 clears it.
+    public int? AdditionalSeconds { get; set; }
+
     public static MonsterTimingInput From(LinkshellMonsterTiming row)
     {
         var (cooldownValue, cooldownUnit) = TodDurationFormat.Split(row.CooldownMinutes);
@@ -257,6 +261,7 @@ public class MonsterTimingInput
             Category = MonsterTimingDefaults.NormalizeCategory(row.Category),
             IsCustom = row.IsCustom,
             ClaimShieldEnabled = row.ClaimShieldEnabled,
+            AdditionalSeconds = Math.Max(0, row.AdditionalSeconds),
         };
     }
 }

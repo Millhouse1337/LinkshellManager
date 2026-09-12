@@ -20,7 +20,10 @@ public readonly record struct MonsterTiming(
     int? WindowCount,
     int? WindowCadenceMinutes,
     int TodIntervalMinutes,
-    int CooldownMinutes)
+    int CooldownMinutes,
+    // Seconds on top of the cooldown when a repop is computed. Defaulted so the built-in
+    // fallback and every existing construction read as "no offset".
+    int AdditionalSeconds = 0)
 {
     public bool HasSpawnGrid => WindowCount is > 0 && WindowCadenceMinutes is > 0;
 }
@@ -135,7 +138,8 @@ public sealed class MonsterTimingMap
                 : MonsterTimingDefaults.DefaultIntervalMinutes(row.MonsterName),
             row.CooldownMinutes > 0
                 ? row.CooldownMinutes
-                : MonsterTimingDefaults.DefaultCooldownMinutes(row.MonsterName));
+                : MonsterTimingDefaults.DefaultCooldownMinutes(row.MonsterName),
+            Math.Max(0, row.AdditionalSeconds));
     }
 }
 

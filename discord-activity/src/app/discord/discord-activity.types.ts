@@ -139,6 +139,9 @@ export interface ActivityMonsterSetup {
   // The create-event form reads it the moment a monster is picked, so its recurrence toggle and
   // lead open on what that monster is already configured for rather than on a blank choice.
   repeatLeadHours?: number | null;
+  // Seconds on top of the cooldown when a ToD's repop is computed. Optional only so a payload
+  // from an older server still type-checks; read it as 0 when absent.
+  additionalSeconds?: number;
 }
 
 // The fuller row the Monster Setups editor loads: adds the row id, the built-in defaults (shown as
@@ -164,6 +167,8 @@ export interface ActivityMonsterTiming {
   // it off for monsters the linkshell doesn't contest, whose rolls are just noise in the capture
   // panel. Overridden by the server-wide Claim Shield switch, which a super admin owns.
   claimShieldEnabled: boolean;
+  // Seconds on top of the cooldown when a ToD's repop is computed. 0 = none.
+  additionalSeconds: number;
 }
 
 export interface ActivityMonsterTimingsResponse {
@@ -182,6 +187,8 @@ export interface ActivityMonsterTimingInput {
   cooldownUnit: string | null;
   category: string;
   claimShieldEnabled: boolean;
+  // null = leave the stored value alone (an older client omits it entirely).
+  additionalSeconds: number | null;
 }
 
 export interface ActivityLinkshellSettings {

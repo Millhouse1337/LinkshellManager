@@ -910,7 +910,8 @@ public class TodController : Controller
                 timing.CooldownMinutes,
                 timing.WindowCadenceMinutes,
                 HnmConfig.HasHqVariant(option),
-                timing.HasSpawnGrid));
+                timing.HasSpawnGrid,
+                timing.AdditionalSeconds));
         }
         return hints;
     }
@@ -921,11 +922,13 @@ public class TodController : Controller
     private static DateTime? ResolveRepopTime(DateTime? todTimeUtc, string? cooldown, int additionalSeconds) =>
         todTimeUtc?.AddHours(ResolveCooldownHours(cooldown)).AddSeconds(Math.Max(0, additionalSeconds));
 
-    // Composes the posted number + unit into the label form Tod.Cooldown / Tod.Interval store, and
-    // falls back to the LINKSHELL'S configured value for the monster — not a hardcoded 22h/72h
-    // split, which is what this used to do and which ignored the configuration entirely.
+    // Stamps the monster's configured durations onto the Tod: cooldown, interval and the seconds
+    // offset all come from the linkshell's Monster setups, which is where they are managed. The
+    // Log ToD form no longer asks for any of them.
     //
-    // Also folds the posted "Additional seconds" onto the Tod.
+    // The posted number + unit branches survive for a caller that still sends them (an old tab, a
+    // scripted post); with nothing posted, the setup is the answer — never a hardcoded 22h/72h
+    // split, which is what this used to fall back to.
     //
     // Runs before ValidateTodSubmission, so what gets validated is what gets saved.
     private async Task ApplyPostedDurationsAsync(TodManagerViewModel model, CancellationToken cancellationToken)
@@ -953,6 +956,6 @@ public class TodController : Controller
                 ? TodDurationFormat.Format(timing.TodIntervalMinutes)
                 : model.Tod.Interval.Trim());
 
-        model.Tod.AdditionalSeconds = Math.Max(0, model.AdditionalSeconds ?? 0);
+        model.Tod.AdditionalSeconds = Math.Max(0, model.AdditionalSeconds ?? timing.AdditionalSeconds);
     }
 }

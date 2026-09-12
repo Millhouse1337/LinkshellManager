@@ -1207,6 +1207,9 @@
 .monster-setups__col-duration { flex: 0 0 168px; display: flex; gap: 6px; min-width: 0; }
 .monster-setups__col-duration input { flex: 0 0 68px; min-width: 0; }
 .monster-setups__col-duration select { flex: 1 1 auto; min-width: 0; }
+/* The seconds offset on top of the cooldown: a bare number, no unit. */
+.monster-setups__col-seconds { flex: 0 0 112px; }
+.monster-setups__col-seconds input { width: 100%; min-width: 0; }
 /* Claim Shield on/off. A labelled checkbox rather than a bare one so the row still reads at a
    glance once the header scrolls out of view on a long list. */
 .monster-setups__col-claim { flex: 0 0 96px; display: flex; align-items: center; }

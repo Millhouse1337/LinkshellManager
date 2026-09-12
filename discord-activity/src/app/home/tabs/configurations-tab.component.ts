@@ -928,7 +928,8 @@ export class ConfigurationsTabComponent {
       defaultCooldownMinutes: 22 * 60,
       // On by default, matching the column's server-side default: someone adding a monster is
       // adding one they camp.
-      claimShieldEnabled: true
+      claimShieldEnabled: true,
+      additionalSeconds: 0
     });
     this.markMonsterTimingsDirty();
   }
@@ -948,6 +949,8 @@ export class ConfigurationsTabComponent {
     row.cadenceUnit = cadence === null ? null : this.durationUnit(cadence);
     row.cooldownValue = this.durationValue(row.defaultCooldownMinutes);
     row.cooldownUnit = this.durationUnit(row.defaultCooldownMinutes);
+    // No built-in carries an offset: the round cooldown is the default.
+    row.additionalSeconds = 0;
     this.markMonsterTimingsDirty();
   }
 
@@ -957,7 +960,8 @@ export class ConfigurationsTabComponent {
     return row.windows !== row.defaultWindows
       || row.cadenceValue !== (cadence === null ? null : this.durationValue(cadence))
       || row.cooldownValue !== this.durationValue(row.defaultCooldownMinutes)
-      || row.cooldownUnit !== this.durationUnit(row.defaultCooldownMinutes);
+      || row.cooldownUnit !== this.durationUnit(row.defaultCooldownMinutes)
+      || (Number(row.additionalSeconds) || 0) !== 0;
   }
 
   // Mirrors the server's TodDurationFormat.Split: whole hours read as hours, everything else as
@@ -991,7 +995,9 @@ export class ConfigurationsTabComponent {
         category: row.category,
         // Sent explicitly. The server treats a missing value as "leave it alone", which is what
         // keeps an older client from switching every monster off on a full-replace save.
-        claimShieldEnabled: row.claimShieldEnabled !== false
+        claimShieldEnabled: row.claimShieldEnabled !== false,
+        // Likewise explicit: a blank box is 0, which clears any stored offset.
+        additionalSeconds: Math.max(0, Math.floor(Number(row.additionalSeconds) || 0))
       }));
 
     const saved = await this.activity.saveMonsterTimings(id, rows);

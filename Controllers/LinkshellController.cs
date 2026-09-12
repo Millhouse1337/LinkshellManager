@@ -1299,7 +1299,10 @@ public class LinkshellController : Controller
                 row.Category,
                 // The web form posts a real checkbox for every row, so a bound false here means
                 // "unticked" rather than "not sent" — pass it through as an explicit value.
-                row.ClaimShieldEnabled))
+                row.ClaimShieldEnabled,
+                // Likewise a real number box on every row: blank binds null and the stored value
+                // stays; a typed 0 clears it.
+                row.AdditionalSeconds))
             .ToList();
 
         var error = await _monsterTimingEditor.SaveAsync(linkshellId, edits, HttpContext.RequestAborted);

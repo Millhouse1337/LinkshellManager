@@ -36,9 +36,12 @@ public class TodFormPrefillTests
     private static readonly string[] HintPropertiesTheScriptReads =
     {
         "cooldownMinutes",
-        "cadenceMinutes",
+        // (cadenceMinutes still rides on the hint, but the script stopped reading it when the
+        // Interval box left the form: the interval is stamped server-side from the monster setup.)
         "hasHqVariant",
-        "hasSpawnGrid"
+        "hasSpawnGrid",
+        // The seconds offset moved onto the monster setup; the script adds it to the repop preview.
+        "additionalSeconds"
     };
 
     /// <summary>

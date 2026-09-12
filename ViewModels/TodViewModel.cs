@@ -206,4 +206,6 @@ public sealed record TodMonsterTimingHint(
     int CooldownMinutes,
     int? CadenceMinutes,
     bool HasHqVariant,
-    bool HasSpawnGrid);
+    bool HasSpawnGrid,
+    // Seconds on top of the cooldown, so the page's repop preview lands where the server will.
+    int AdditionalSeconds = 0);

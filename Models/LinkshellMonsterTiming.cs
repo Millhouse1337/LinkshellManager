@@ -48,6 +48,12 @@ public class LinkshellMonsterTiming
     // Repop cooldown after a kill. Required: every monster on the ToD tracker has one.
     public int CooldownMinutes { get; set; }
 
+    // Seconds added on top of the cooldown when a ToD's repop is computed — the fine offset for a
+    // monster whose real repop runs a little past the round number. Lived on the Log ToD form as
+    // "Additional seconds" until it moved here with the cooldown and interval: it is a property of
+    // the monster, not of one kill, and typing it per ToD is how it got forgotten.
+    public int AdditionalSeconds { get; set; }
+
     // "HNMs" / "Sky NMs" / "Other NMs" — the heading this row sorts under in the editor. Free-form
     // so a stale category from a retired group still renders (it falls back to "Other NMs").
     [MaxLength(32)]

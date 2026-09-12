@@ -254,14 +254,15 @@
         <div style="padding:12px 16px;display:flex;flex-direction:column;gap:12px">
             <div style="font-size:12px;color:var(--fg-3)">
                 What each monster's camp runs on: how many spawn <strong>windows</strong> it sits
-                through, how far apart those windows open (<strong>cadence</strong>), and how long
-                after a kill it repops (<strong>cooldown</strong>). These drive the monster list on
-                the event and ToD forms, and a camp captures them when it is created — editing here
-                never changes a camp that is already running.
+                through, how far apart those windows open (<strong>interval</strong>), how long
+                after a kill it repops (<strong>cooldown</strong>), and any <strong>additional
+                seconds</strong> its repop runs past that. These drive the monster list on the event
+                and ToD forms and set every ToD's repop, and a camp captures them when it is
+                created — editing here never changes a camp that is already running.
             </div>
             <div style="font-size:12px;color:var(--fg-3)">
                 Leave <strong>windows</strong> blank for a monster with no spawn-window cycle; its
-                cadence is then just how often the ToD form suggests re-checking.
+                interval is then just how often to re-check.
             </div>
 
             @{
@@ -306,8 +307,9 @@
                         <div class="monster-setup-row monster-setup-row--head" hidden="@(groupRows.Count == 0)">
                             <div class="monster-setup-name">Monster</div>
                             <div class="monster-setup-windows">Windows</div>
-                            <div class="monster-setup-duration">Cadence</div>
+                            <div class="monster-setup-duration">Interval</div>
                             <div class="monster-setup-duration">Cooldown</div>
+                            <div class="monster-setup-seconds" title="Seconds added on top of the cooldown when a ToD's repop is calculated.">Additional seconds</div>
                             @if (!Model.ClaimShieldGloballyDisabled)
                             {
                                 <div class="monster-setup-claim" title="Record who tagged this monster during a claim-shield lottery. Off for monsters you don't contest.">Claim Shield</div>
@@ -359,6 +361,13 @@
                                         <option value="hours" selected="@(row.CooldownUnit == "hours")">hours</option>
                                         <option value="mins" selected="@(row.CooldownUnit != "hours")">mins</option>
                                     </select>
+                                </div>
+                                <div class="monster-setup-seconds">
+                                    @* The fine offset the Log ToD form used to ask for per kill. It belongs to
+                                       the monster, so it lives here and every ToD picks it up. *@
+                                    <input type="number" name="monsterTimings[@i].AdditionalSeconds" value="@row.AdditionalSeconds"
+                                           min="0" step="1" placeholder="0"
+                                           title="Seconds added on top of the cooldown when a ToD's repop is calculated." />
                                 </div>
                                 @if (Model.ClaimShieldGloballyDisabled)
                                 {
@@ -434,6 +443,10 @@
                             <option value="hours" selected>hours</option>
                             <option value="mins">mins</option>
                         </select>
+                    </div>
+                    <div class="monster-setup-seconds">
+                        <input type="number" name="monsterTimings[0].AdditionalSeconds" min="0" step="1" placeholder="0"
+                               title="Seconds added on top of the cooldown when a ToD's repop is calculated." />
                     </div>
                     @if (Model.ClaimShieldGloballyDisabled)
                     {

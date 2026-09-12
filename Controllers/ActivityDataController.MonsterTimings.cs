@@ -94,7 +94,8 @@ public sealed partial class ActivityDataController
             defaults.WindowCount,
             defaults.WindowCadenceMinutes,
             defaults.CooldownMinutes,
-            row.ClaimShieldEnabled);
+            row.ClaimShieldEnabled,
+            Math.Max(0, row.AdditionalSeconds));
     }
 
     private static List<MonsterTimingEdit> ToMonsterTimingEdits(ActivitySaveMonsterTimingsRequest request) =>
@@ -108,6 +109,7 @@ public sealed partial class ActivityDataController
                 row.CooldownValue,
                 row.CooldownUnit,
                 row.Category,
-                row.ClaimShieldEnabled))
+                row.ClaimShieldEnabled,
+                row.AdditionalSeconds))
             .ToList();
 }

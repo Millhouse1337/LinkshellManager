@@ -145,21 +145,17 @@
         const qs = (sel) => todForm.querySelector(sel);
         const todTimeInput = qs('[name="Tod.Time"]');
         const monsterSelect = qs('[name="Tod.MonsterName"]');
-        const cooldownValueInput = qs('[name="CooldownValue"]');
-        const cooldownUnitSelect = qs('[name="CooldownUnit"]');
         const repopTimeInput = qs('[name="Tod.RepopTime"]');
-        const intervalValueInput = qs('[name="IntervalValue"]');
-        const intervalUnitSelect = qs('[name="IntervalUnit"]');
-        const additionalSecondsInput = qs('[name="AdditionalSeconds"]');
         const repopSummary = document.getElementById('repop-summary');
         // The two fields only SOME monsters can answer: Day (a pop cycle, which only the three
         // NQ/HQ families have) and Popped on window (a monster with a spawn grid).
         const dayNumberWrap = document.getElementById('day-number-wrap');
         const popWindowWrap = document.getElementById('pop-window-wrap');
 
-        // Per-monster cooldown / cadence for THIS linkshell, in canonical minutes, stamped on the
-        // form by the server. Replaced two hardcoded monster sets that were a copy of the old global
-        // defaults and knew nothing about what the linkshell had actually configured.
+        // Per-monster cooldown / interval / seconds offset for THIS linkshell, in canonical
+        // minutes, stamped on the form by the server. The form has no boxes for these any more:
+        // they are set once under Monster setups, this reads them for the repop preview, and the
+        // server stamps the same values on save (TodController.ApplyPostedDurationsAsync).
         let monsterTimings = {};
         try {
             monsterTimings = JSON.parse(todForm.dataset.monsterTimings || '{}') || {};
@@ -172,44 +168,28 @@
             const key = Object.keys(monsterTimings).find(k => k.trim().toLowerCase() === wanted);
             return key ? monsterTimings[key] : null;
         };
-        // Mirrors TodDurationFormat.Split: whole hours read as hours, everything else as minutes.
-        const applyDuration = (valueInput, unitSelect, minutes) => {
-            if (!valueInput || !unitSelect) { return; }
-            if (minutes === null || minutes === undefined || !(minutes > 0)) {
-                valueInput.value = '';
-                unitSelect.value = 'mins';
-                return;
-            }
-            const whole = minutes % 60 === 0;
-            valueInput.value = String(whole ? minutes / 60 : minutes);
-            unitSelect.value = whole ? 'hours' : 'mins';
-        };
-
         function toDateTimeLocalValue(date) {
             const pad = (v) => String(v).padStart(2, '0');
             return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
                 + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
         }
 
+        // The picked monster's setup, or null for a free-text "Other" name -- which the server
+        // resolves to its built-in default on save, so the preview simply says so.
+        function currentTiming() {
+            return monsterSelect ? timingFor(monsterSelect.value) : null;
+        }
+
         function getCooldownHours() {
-            const amount = parseFloat(cooldownValueInput && cooldownValueInput.value);
-            if (!isFinite(amount) || amount <= 0) return 0;
-            return (cooldownUnitSelect && cooldownUnitSelect.value === 'hours') ? amount : amount / 60;
+            const timing = currentTiming();
+            const minutes = timing ? Number(timing.cooldownMinutes) : 0;
+            return isFinite(minutes) && minutes > 0 ? minutes / 60 : 0;
         }
 
         function getAdditionalSeconds() {
-            const amount = parseInt(additionalSecondsInput && additionalSecondsInput.value, 10);
-            return isFinite(amount) && amount > 0 ? Math.floor(amount) : 0;
-        }
-
-        // Pre-fill from what this linkshell configured for the picked monster. Unknown monsters
-        // (the free-text "Other" option) keep whatever is already in the fields.
-        function applyMonsterDefaults() {
-            if (!monsterSelect || !monsterSelect.value) return;
-            const timing = timingFor(monsterSelect.value);
-            if (!timing) return;
-            applyDuration(cooldownValueInput, cooldownUnitSelect, timing.cooldownMinutes);
-            applyDuration(intervalValueInput, intervalUnitSelect, timing.cadenceMinutes);
+            const timing = currentTiming();
+            const seconds = timing ? parseInt(timing.additionalSeconds, 10) : 0;
+            return isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
         }
 
         // Show Day / Popped on window only for a monster that can answer them, the same rule the
@@ -244,9 +224,9 @@
             const todTime = new Date(normalised);
             if (Number.isNaN(todTime.getTime())) { clear('Pick a date and time to calculate the next repop window.'); return; }
             const cooldownHours = getCooldownHours();
-            if (cooldownHours <= 0) { clear('Enter a positive cooldown to calculate the next repop window.'); return; }
-            // Cooldown, then the officer's fine "Additional seconds" offset — the same sum the
-            // server stores (TodController.ResolveRepopTime) and the Activity previews.
+            if (cooldownHours <= 0) { clear("The repop is calculated from this monster's setup when the ToD is saved."); return; }
+            // Cooldown, then the monster's configured seconds offset — the same sum the server
+            // stores (TodController.ResolveRepopTime) and the Activity previews.
             const repopTime = new Date(
                 todTime.getTime() + (cooldownHours * 60 * 60 * 1000) + (getAdditionalSeconds() * 1000));
             repopTimeInput.value = toDateTimeLocalValue(repopTime);
@@ -260,7 +240,6 @@
 
         if (monsterSelect) {
             monsterSelect.addEventListener('change', () => {
-                applyMonsterDefaults();
                 applyMonsterFieldVisibility();
                 updateRepopTime();
             });
@@ -270,20 +249,9 @@
             todTimeInput.addEventListener('input', updateRepopTime);
             todTimeInput.addEventListener('blur', updateRepopTime);
         }
-        if (cooldownValueInput) {
-            cooldownValueInput.addEventListener('change', updateRepopTime);
-            cooldownValueInput.addEventListener('input', updateRepopTime);
-        }
-        if (cooldownUnitSelect) cooldownUnitSelect.addEventListener('change', updateRepopTime);
-        if (additionalSecondsInput) {
-            additionalSecondsInput.addEventListener('change', updateRepopTime);
-            additionalSecondsInput.addEventListener('input', updateRepopTime);
-        }
 
-        // Deliberately NOT applyMonsterDefaults() on load: the server already pre-filled the
-        // durations for the drafted monster, and on the Edit form the fields hold the values that
-        // were SAVED — re-applying the monster's configured defaults here would quietly overwrite
-        // a cooldown an officer had adjusted for that particular pop.
+        // On load too: the durations come off the monster's setup, so the preview is right for the
+        // drafted monster and for an edited ToD alike.
         updateRepopTime();
         // Loot is recorded in the dedicated Loot section now, so the loot-row
         // / claim-toggle wiring that used to live here was removed.
