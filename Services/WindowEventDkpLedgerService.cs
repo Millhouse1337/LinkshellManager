@@ -417,6 +417,12 @@ public sealed class WindowEventDkpLedgerService
     // below is the BACKFILL for review rows staged before that was true — without it, every camp
     // sitting unposted at deploy time would post with no archive at all.
     //
+    // It is ONLY that. A posted card whose archive an officer deleted must not come back through
+    // here, and cannot: EventHistoryEditService.DeleteEventAsync deletes the posted card together
+    // with the Past Event, so the sweep never sees it again. (It did once — seven deleted test
+    // camps were rebuilt, re-paid, and re-announced to Discord the next time the DKP page loaded.)
+    // An unposted card survives the delete and files the camp afresh when Posted, on purpose.
+    //
     // Everything comes off the WindowEvent's Camp* columns rather than SourceEvent: the camp row
     // is RECYCLED for the next pop, so by post time its StartTime points at a future repop and
     // CommencementStartTime is null. SourceEventId can also be null already if the camp was

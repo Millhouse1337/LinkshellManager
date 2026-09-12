@@ -332,6 +332,31 @@ public sealed class EventHistoryEditService
             .ToListAsync(cancellationToken);
         _db.EventLootDetails.RemoveRange(lootDetails);
 
+        // The Window Event this camp was handed off as (HnmCampReviewHandoffService), if it has
+        // been POSTED. Its DKP is the ledger rows reversed above -- every one carries this
+        // history's id -- so the card is the last thing saying the camp was paid. It cannot be
+        // left standing: WindowEventDkpLedgerService's per-linkshell sweep reads "posted, no
+        // archive" as a row from before archives existed and REBUILDS this Past Event from the
+        // card's own Camp* copy, re-credits it, and queues an "event ended" summary to Discord
+        // for a camp that ended days ago. Deleting the Past Event then never sticks.
+        //
+        // Deleted the way DeleteWindowEventAsync deletes a card: with its snapshots. Member DKP
+        // overrides cascade in the database.
+        //
+        // An UNPOSTED card is deliberately left alone -- the FK is SetNull for exactly that case.
+        // Its DKP has not been paid, so the officer must still be able to review and Post it, and
+        // that Post files the camp afresh on purpose.
+        var postedCards = await _db.WindowEvents
+            .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
+            .Where(w => w.CampEventHistoryId == historyId && w.PostedToSheetAt != null)
+            .ToListAsync(cancellationToken);
+        foreach (var card in postedCards)
+        {
+            _db.AttendanceSnapshotEntries.RemoveRange(card.Snapshots.SelectMany(s => s.Entries));
+            _db.AttendanceSnapshots.RemoveRange(card.Snapshots);
+            _db.WindowEvents.Remove(card);
+        }
+
         _db.RemoveRange(history.AppUserEventHistories);
         _db.EventHistories.Remove(history);
         await _db.SaveChangesAsync(cancellationToken);
