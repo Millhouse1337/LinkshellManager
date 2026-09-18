@@ -220,6 +220,7 @@ builder.Services.AddSingleton(sp =>
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     return new DataAdminCatalog(db.Model, DataAdminPolicy.Default);
 });
+builder.Services.AddScoped<DataAdminSelectionService>();
 builder.Services.AddScoped<JobsRosterService>();
 builder.Services.AddScoped<HnmClaimStatsService>();
 builder.Services.AddScoped<HnmWindowStatsService>();

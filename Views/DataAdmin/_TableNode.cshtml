@@ -1,0 +1,49 @@
+@model DataAdminTableNode
+@* One row of the chooser tree, then its children as the following rows (indent is layout only). *@
+<div class="da-row" data-da-path="@Model.Path" style="display:flex;align-items:flex-start;gap:10px;padding:8px 16px 8px @(16 + Model.Depth * 18)px;border-bottom:1px solid var(--border)">
+    <input type="checkbox" id="show-@Model.ClrName" name="show" value="@Model.ClrName" @(Model.Selected ? "checked" : "") style="margin-top:3px" />
+    <div style="flex:1;min-width:0">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+            <label for="show-@Model.ClrName" style="font-weight:500;margin:0;cursor:pointer">@Model.DisplayName</label>
+            <span class="muted" style="font-size:11px">@Model.TableName</span>
+            @if (Model.ReadOnly)
+            {
+                <span class="tag">Read-only</span>
+            }
+            else
+            {
+                if (Model.NoCreate) { <span class="tag">No create</span> }
+                if (Model.NoDelete) { <span class="tag warning">No delete</span> }
+            }
+            @if (Model.DiscordSideEffect is not null)
+            {
+                <span class="tag accent" title="@Model.DiscordSideEffect">Discord</span>
+            }
+            @if (Model.RowCount is long rows)
+            {
+                <span class="tag">@rows.ToString("N0") rows</span>
+            }
+            @if (Model.Children.Count > 0)
+            {
+                <button type="button" class="btn ghost sm" data-da-group="@Model.Path">Tick group</button>
+            }
+        </div>
+        @if (Model.AlsoDeletedWith.Count > 0)
+        {
+            <div style="color:var(--fg-3);font-size:11px;margin-top:2px">Also deleted with: @string.Join(", ", Model.AlsoDeletedWith)</div>
+        }
+        @if (Model.CascadeDescendants.Count > 0)
+        {
+            <details style="margin-top:2px">
+                <summary style="color:var(--fg-3);font-size:11px;cursor:pointer">
+                    Deleting one @Model.DisplayName also deletes rows in @Model.CascadeDescendants.Count table@(Model.CascadeDescendants.Count == 1 ? "" : "s")
+                </summary>
+                <div style="color:var(--fg-3);font-size:11px;padding:4px 0 0 12px">@string.Join(", ", Model.CascadeDescendants)</div>
+            </details>
+        }
+    </div>
+</div>
+@foreach (var child in Model.Children)
+{
+    <partial name="~/Views/DataAdmin/_TableNode.cshtml" model="child" />
+}

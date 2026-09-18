@@ -101,6 +101,9 @@
     // account (badge on every row of the switcher, which lists only memberships).
     ViewData["IsAppAdminHere"] = isAppAdminHere;
     ViewData["IsAppAdmin"] = isAppAdmin;
+    // The RAW super-admin flag, independent of the admin.override toggle (IsAppAdmin above is the
+    // toggle). It gates only the Data Admin sidebar link; DataAdminController re-checks server-side.
+    ViewData["IsSuperAdmin"] = currentUser?.IsSuperAdmin ?? false;
 
     // All of the signed-in user's memberships, for the sidebar linkshell
     // switcher (name + rank per linkshell).

@@ -1,0 +1,9 @@
+@* Flash line for the Data Admin pages. Per-feature TempData keys are the house convention. *@
+@if (TempData["DataAdminMessage"] is string message)
+{
+    <div class="alert alert-success fade d1" style="margin:0 0 14px">@message</div>
+}
+@if (TempData["DataAdminError"] is string error)
+{
+    <div class="alert alert-danger fade d1" style="margin:0 0 14px">@error</div>
+}

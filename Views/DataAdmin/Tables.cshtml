@@ -1,0 +1,60 @@
+@model DataAdminTablesViewModel
+@{
+    ViewData["Title"] = "Choose tables";
+    ViewData["BodyClass"] = "lsm-page";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <div class="page-eyebrow"><a asp-action="Index">Data Admin</a></div>
+        <h1 class="page-title">Choose tables</h1>
+        <div class="page-sub">
+            <span><span class="num">@Model.SelectedCount</span> of @Model.TotalCount selected</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        @if (Model.ShowCounts)
+        {
+            <a class="btn ghost" asp-action="Tables">Hide row counts</a>
+        }
+        else
+        {
+            <a class="btn ghost" asp-action="Tables" asp-route-counts="true">Show row counts</a>
+        }
+        <a class="btn ghost" asp-action="Index">Back</a>
+    </div>
+</div>
+
+<partial name="~/Views/DataAdmin/_Flash.cshtml" />
+
+<form method="post" asp-action="Tables">
+    <div class="card fade d2">
+        <div class="card-head">
+            <div>
+                <div class="card-title">Tables, grouped by cascade delete</div>
+                <div style="color:var(--fg-3);font-size:12px;margin-top:4px">
+                    A table sits under the table whose deletion also deletes its rows. Tick a table to show it in Data Admin;
+                    "Tick group" selects a table together with everything under it.
+                </div>
+            </div>
+            <div style="display:flex;gap:6px">
+                <button type="button" class="btn ghost sm" data-da-all="on">Tick all</button>
+                <button type="button" class="btn ghost sm" data-da-all="off">Clear all</button>
+            </div>
+        </div>
+        <div>
+            @foreach (var root in Model.Roots)
+            {
+                <partial name="~/Views/DataAdmin/_TableNode.cshtml" model="root" />
+            }
+        </div>
+        <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border)">
+            <button type="submit" class="btn primary">Save</button>
+            <a class="btn ghost" asp-action="Index">Cancel</a>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+    <script src="~/js/data-admin.js" asp-append-version="true" defer></script>
+}
