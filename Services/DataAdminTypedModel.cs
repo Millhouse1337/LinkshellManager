@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq.Expressions;
+using System.Reflection;
 using LinkshellManagerDiscordApp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -145,6 +146,94 @@ public sealed class DataAdminModel<TEntity, TKey> : DataAdminModel
             : Expression.AndAlso(Expression.Property(member, nameof(Nullable<int>.HasValue)), contains);
         return Expression.Lambda<Func<TEntity, bool>>(body, Row);
     }
+
+    public override async Task<DataAdminPageResult> QueryPageAsync(ApplicationDbContext db, DataAdminListQuery query, bool useILike, int pageSize, CancellationToken ct)
+    {
+        IQueryable<TEntity> rows = db.Set<TEntity>().AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(query.Search) && SearchColumns.Count > 0)
+        {
+            rows = rows.Where(BuildSearch(query.Search.Trim(), useILike));
+        }
+        foreach (var (name, raw) in query.Filters)
+        {
+            // Unknown columns and unparsable values are ignored, not errors: a stale bookmark
+            // should still open the page.
+            var column = FilterColumns.FirstOrDefault(c => c.Name == name);
+            if (column is null || !DataAdminValues.TryConvert(raw, column, out var value, out _) || value is null)
+            {
+                continue;
+            }
+            rows = rows.Where(BuildEquals(column, value));
+        }
+
+        var total = await rows.LongCountAsync(ct);
+        // An unknown sort column behaves like no sort at all: newest (highest key) first.
+        var sortColumn = query.Sort is null ? null : DetailColumns.FirstOrDefault(c => c.Name == query.Sort);
+        var descending = sortColumn is null || query.Descending;
+        sortColumn ??= Key;
+        var totalPages = Math.Max(1, (int)Math.Ceiling(total / (double)Math.Max(1, pageSize)));
+        var page = Math.Clamp(query.Page, 1, totalPages);
+
+        var entities = await ApplySort(rows, sortColumn, descending)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+        return new DataAdminPageResult(entities.Cast<object>().ToList(), total, page, totalPages, sortColumn, descending);
+    }
+
+    // ORDER BY column [DESC], then by the key so paging is stable when the column repeats.
+    private IQueryable<TEntity> ApplySort(IQueryable<TEntity> rows, DataAdminColumn column, bool descending)
+    {
+        var ordered = OrderBy(rows, column, descending ? nameof(Queryable.OrderByDescending) : nameof(Queryable.OrderBy));
+        return column.IsKey
+            ? ordered
+            : OrderBy(ordered, Key, descending ? nameof(Queryable.ThenByDescending) : nameof(Queryable.ThenBy));
+    }
+
+    // The same call tree Queryable.OrderBy<TSource, TKey> builds for itself, with the key type
+    // taken from the column, so both providers see a perfectly ordinary OrderBy.
+    private static IQueryable<TEntity> OrderBy(IQueryable<TEntity> rows, DataAdminColumn column, string method)
+    {
+        var body = Expression.Property(Row, column.Property);
+        var lambda = Expression.Lambda(body, Row);
+        return rows.Provider.CreateQuery<TEntity>(Expression.Call(
+            typeof(Queryable), method, new[] { typeof(TEntity), body.Type }, rows.Expression, Expression.Quote(lambda)));
+    }
+
+    // e => ILIKE(e.Col1, @pattern) OR ILIKE(e.Col2, @pattern) ... on Npgsql (the tree the C#
+    // compiler emits for EF.Functions.ILike), or e.Col1 != null && e.Col1.ToLower().Contains(@term)
+    // where ILike cannot run (the InMemory provider evaluates client-side and ILike would throw).
+    internal Expression<Func<TEntity, bool>> BuildSearch(string term, bool useILike)
+    {
+        var pattern = DataAdminParameters.Value("%" + DataAdminValues.EscapeLike(term) + "%", typeof(string));
+        var lowered = DataAdminParameters.Value(term.ToLowerInvariant(), typeof(string));
+        Expression? body = null;
+        foreach (var column in SearchColumns)
+        {
+            var member = Expression.Property(Row, column.Property);
+            Expression clause = useILike
+                ? Expression.Call(ILikeMethod, EfFunctions, member, pattern)
+                : Expression.AndAlso(
+                    Expression.NotEqual(member, Expression.Constant(null, typeof(string))),
+                    Expression.Call(Expression.Call(member, ToLowerMethod), ContainsMethod, lowered));
+            body = body is null ? clause : Expression.OrElse(body, clause);
+        }
+        return Expression.Lambda<Func<TEntity, bool>>(body ?? Expression.Constant(false), Row);
+    }
+
+    private static readonly MethodInfo ILikeMethod =
+        typeof(NpgsqlDbFunctionsExtensions).GetMethod(nameof(NpgsqlDbFunctionsExtensions.ILike), new[] { typeof(DbFunctions), typeof(string), typeof(string) })
+        ?? throw new InvalidOperationException("EF.Functions.ILike(DbFunctions, string, string) not found.");
+
+    private static readonly Expression EfFunctions =
+        Expression.Property(null, typeof(EF).GetProperty(nameof(EF.Functions)) ?? throw new InvalidOperationException("EF.Functions not found."));
+
+    private static readonly MethodInfo ToLowerMethod =
+        typeof(string).GetMethod(nameof(string.ToLower), Type.EmptyTypes) ?? throw new InvalidOperationException("string.ToLower() not found.");
+
+    private static readonly MethodInfo ContainsMethod =
+        typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) }) ?? throw new InvalidOperationException("string.Contains(string) not found.");
 
     private Expression LabelBody()
     {

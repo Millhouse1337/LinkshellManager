@@ -1,3 +1,5 @@
+using LinkshellManagerDiscordApp.Services;
+
 namespace LinkshellManagerDiscordApp.ViewModels;
 
 // View models for the Data Admin pages. Views bind to these, never to the engine's own types, so
@@ -56,4 +58,70 @@ public sealed class DataAdminTableNode
     public IReadOnlyList<string> AlsoDeletedWith { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> CascadeDescendants { get; init; } = Array.Empty<string>();
     public List<DataAdminTableNode> Children { get; } = new();
+}
+
+// One list page. The route helpers re-emit the whole query (search, sort, filters) so no link
+// ever drops a filter -- the house rule from Views/ManageTeam/Index.cshtml, generalised.
+public sealed class DataAdminListViewModel
+{
+    public required string Slug { get; init; }
+    public required string DisplayName { get; init; }
+    public required string TableName { get; init; }
+    public required DataAdminListQuery Query { get; init; }
+    public List<DataAdminListColumn> Columns { get; } = new();
+    public List<DataAdminListRow> Rows { get; } = new();
+    public List<DataAdminActiveFilter> ActiveFilters { get; } = new();
+    public long Total { get; init; }
+    public int Page { get; init; }
+    public int TotalPages { get; init; }
+    public int PageSize { get; init; }
+    public required string SortColumn { get; init; }
+    public bool Descending { get; init; }
+    // "RuleTitle, RuleDetails, Category" for the search box placeholder; empty when nothing is searchable.
+    public string SearchHint { get; init; } = string.Empty;
+    public bool CanCreate { get; init; }
+    public bool CanEdit { get; init; }
+    public bool CanDelete { get; init; }
+
+    public long FirstRowNumber => Total == 0 ? 0 : (long)(Page - 1) * PageSize + 1;
+    public long LastRowNumber => Math.Min(Total, (long)Page * PageSize);
+
+    public Dictionary<string, string> PageRoute(int page) => Query.WithPage(page).ToRouteValues();
+    public Dictionary<string, string> SortRoute(string column) => Query.WithSort(column).ToRouteValues();
+    public Dictionary<string, string> RemoveFilterRoute(string column) => Query.WithoutFilter(column).ToRouteValues();
+}
+
+public sealed class DataAdminListColumn
+{
+    public required string Name { get; init; }
+    public required string DisplayName { get; init; }
+    public bool IsKey { get; init; }
+    public bool IsNumeric { get; init; }
+}
+
+public sealed class DataAdminListRow
+{
+    public required string Key { get; init; }
+    public required string Label { get; init; }
+    public List<DataAdminListCell> Cells { get; } = new();
+}
+
+public sealed class DataAdminListCell
+{
+    public object? Raw { get; init; }
+    public string Text { get; set; } = string.Empty;
+    public bool IsEmpty { get; init; }
+    public bool IsNumeric { get; init; }
+    // Set when the cell is a foreign key to a table that is currently shown.
+    public string? LinkSlug { get; set; }
+    public Dictionary<string, string>? LinkRoute { get; set; }
+}
+
+// A chip on the list page: "Linkshell: Kraken LS" for ?f.LinkshellId=5.
+public sealed class DataAdminActiveFilter
+{
+    public required string Column { get; init; }
+    public required string DisplayName { get; init; }
+    public required string Value { get; init; }
+    public required string Label { get; init; }
 }

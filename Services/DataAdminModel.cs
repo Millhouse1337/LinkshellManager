@@ -269,6 +269,9 @@ public abstract class DataAdminModel
     public abstract Task<long> CountWhereAsync(ApplicationDbContext db, DataAdminColumn column, object value, CancellationToken ct);
     public abstract Task<long> CountReferencingAsync(ApplicationDbContext db, DataAdminColumn foreignKeyColumn, IReadOnlyList<object> principalKeys, CancellationToken ct);
     public abstract Task<IReadOnlyList<object>> KeysReferencingAsync(ApplicationDbContext db, DataAdminColumn foreignKeyColumn, IReadOnlyList<object> principalKeys, CancellationToken ct);
+    // One list page: search over SearchColumns, equality filters on FilterColumns, sort, then Skip/Take.
+    // useILike selects the Postgres case-insensitive search; the InMemory test provider gets ToLower().Contains.
+    public abstract Task<DataAdminPageResult> QueryPageAsync(ApplicationDbContext db, DataAdminListQuery query, bool useILike, int pageSize, CancellationToken ct);
 
     // Called by the catalog once every model exists: FK targets and referencing tables are only
     // meaningful when both ends are catalog tables (Identity's claim/login/token tables are not).

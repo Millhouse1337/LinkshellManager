@@ -20,17 +20,20 @@ public sealed partial class DataAdminController : Controller
     private readonly ApplicationDbContext _db;
     private readonly DataAdminCatalog _catalog;
     private readonly DataAdminSelectionService _selection;
+    private readonly DataAdminQueryService _queries;
     private readonly ILogger<DataAdminController> _logger;
 
     public DataAdminController(
         ApplicationDbContext db,
         DataAdminCatalog catalog,
         DataAdminSelectionService selection,
+        DataAdminQueryService queries,
         ILogger<DataAdminController> logger)
     {
         _db = db;
         _catalog = catalog;
         _selection = selection;
+        _queries = queries;
         _logger = logger;
     }
 

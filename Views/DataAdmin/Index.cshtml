@@ -51,7 +51,7 @@ else
                     @foreach (var card in group.Cards)
                     {
                         <tr>
-                            <td style="font-weight:500">@card.DisplayName</td>
+                            <td style="font-weight:500"><a asp-action="List" asp-route-slug="@card.Slug">@card.DisplayName</a></td>
                             <td class="muted" style="font-size:12px">@card.TableName</td>
                             <td>
                                 <div style="display:flex;flex-wrap:wrap;gap:4px">

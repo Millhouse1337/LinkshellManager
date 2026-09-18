@@ -1,0 +1,33 @@
+@model DataAdminListViewModel
+@* Pager on the existing .pagination-bar component (wwwroot/css/site.css). Every link re-emits the
+   whole query (search, sort, filters) through Model.PageRoute so paging never drops a filter. *@
+@if (Model.TotalPages > 1)
+{
+    <div class="pagination-bar">
+        <div class="pagination-bar__summary">
+            Showing @Model.FirstRowNumber&ndash;@Model.LastRowNumber of @Model.Total.ToString("N0") &middot; Page @Model.Page of @Model.TotalPages
+        </div>
+        <div class="pagination-bar__actions">
+            @if (Model.Page > 1)
+            {
+                <a class="btn sm ghost" asp-action="List" asp-route-slug="@Model.Slug" asp-all-route-data="@Model.PageRoute(1)">First</a>
+                <a class="btn sm" asp-action="List" asp-route-slug="@Model.Slug" asp-all-route-data="@Model.PageRoute(Model.Page - 1)">Prev</a>
+            }
+            else
+            {
+                <span class="btn sm ghost disabled">First</span>
+                <span class="btn sm disabled">Prev</span>
+            }
+            @if (Model.Page < Model.TotalPages)
+            {
+                <a class="btn sm" asp-action="List" asp-route-slug="@Model.Slug" asp-all-route-data="@Model.PageRoute(Model.Page + 1)">Next</a>
+                <a class="btn sm ghost" asp-action="List" asp-route-slug="@Model.Slug" asp-all-route-data="@Model.PageRoute(Model.TotalPages)">Last</a>
+            }
+            else
+            {
+                <span class="btn sm disabled">Next</span>
+                <span class="btn sm ghost disabled">Last</span>
+            }
+        </div>
+    </div>
+}

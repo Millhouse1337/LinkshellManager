@@ -221,6 +221,7 @@ builder.Services.AddSingleton(sp =>
     return new DataAdminCatalog(db.Model, DataAdminPolicy.Default);
 });
 builder.Services.AddScoped<DataAdminSelectionService>();
+builder.Services.AddScoped<DataAdminQueryService>();
 builder.Services.AddScoped<JobsRosterService>();
 builder.Services.AddScoped<HnmClaimStatsService>();
 builder.Services.AddScoped<HnmWindowStatsService>();
