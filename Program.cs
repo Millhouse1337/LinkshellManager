@@ -209,6 +209,17 @@ builder.Services.AddScoped<AppUserProfileService>();
 builder.Services.AddScoped<AddonApiAuthService>();
 builder.Services.AddScoped<GlobalSettingsService>();
 builder.Services.AddScoped<AdminOverrideService>();
+
+// Data Admin: the super-admin table browser. The catalog is built ONCE from the EF model (itself a
+// process singleton) plus the code-side DataAdminPolicy, then only read. Which tables are SHOWN is
+// a separate runtime choice stored in AppSettings (DataAdminSelectionService), so the catalog can
+// never expose a table the policy hides.
+builder.Services.AddSingleton(sp =>
+{
+    using var scope = sp.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    return new DataAdminCatalog(db.Model, DataAdminPolicy.Default);
+});
 builder.Services.AddScoped<JobsRosterService>();
 builder.Services.AddScoped<HnmClaimStatsService>();
 builder.Services.AddScoped<HnmWindowStatsService>();
@@ -515,6 +526,10 @@ builder.Services.AddRateLimiter(options =>
 });
 
 var app = builder.Build();
+
+// Build the Data Admin catalog now rather than on the first /data-admin request, so a bad policy
+// entry (a misspelled column, an unsupported key type) fails the boot instead of one page.
+_ = app.Services.GetRequiredService<DataAdminCatalog>();
 
 if (!app.Environment.IsDevelopment())
 {
