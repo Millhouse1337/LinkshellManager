@@ -3,7 +3,10 @@ using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Controllers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -55,5 +58,32 @@ public class DataAdminControllerShapeTests
     public void EveryAction_HasAnHttpMethodRoute()
     {
         Assert.All(Actions(), action => Assert.NotEmpty(action.GetCustomAttributes<HttpMethodAttribute>()));
+    }
+
+    // Builds MVC's action table for this controller the way the app does at startup. A route
+    // template MVC cannot parse (a regex constraint with square brackets reads as a [token]
+    // replacement) throws here instead of taking the whole site down on deploy, which happened once.
+    [Fact]
+    public void RouteTemplates_ParseAndCoverEveryPage()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddControllers().AddApplicationPart(Controller.Assembly);
+        using var provider = services.BuildServiceProvider();
+
+        var templates = provider.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items
+            .OfType<ControllerActionDescriptor>()
+            .Where(descriptor => descriptor.ControllerTypeInfo == Controller)
+            .Select(descriptor => descriptor.AttributeRouteInfo?.Template)
+            .ToList();
+
+        Assert.Contains("data-admin", templates);
+        Assert.Contains("data-admin/tables", templates);
+        Assert.Contains("data-admin/{slug}", templates);
+        Assert.Contains("data-admin/{slug}/{id}", templates);
+        Assert.Contains("data-admin/{slug}/create", templates);
+        Assert.Contains("data-admin/{slug}/{id}/edit", templates);
+        Assert.Contains("data-admin/{slug}/{id}/delete", templates);
+        Assert.All(templates, template => Assert.False(string.IsNullOrEmpty(template)));
     }
 }

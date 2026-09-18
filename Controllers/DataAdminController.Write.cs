@@ -9,7 +9,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // are hidden when a policy forbids an action, but the check here is the one that counts).
 public sealed partial class DataAdminController
 {
-    [HttpGet("{slug:regex(^[a-z0-9-]+$)}/create")]
+    [HttpGet("{slug}/create")]
     public async Task<IActionResult> Create(string slug, CancellationToken ct)
     {
         var table = await ResolveShownAsync(slug, ct);
@@ -26,7 +26,7 @@ public sealed partial class DataAdminController
         return View("Edit", model);
     }
 
-    [HttpPost("{slug:regex(^[a-z0-9-]+$)}/create")]
+    [HttpPost("{slug}/create")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(string slug, [FromForm] Dictionary<string, string?> values, CancellationToken ct)
     {
@@ -51,7 +51,7 @@ public sealed partial class DataAdminController
         return View("Edit", model);
     }
 
-    [HttpGet("{slug:regex(^[a-z0-9-]+$)}/{id}/edit")]
+    [HttpGet("{slug}/{id}/edit")]
     public async Task<IActionResult> Edit(string slug, string id, CancellationToken ct)
     {
         var table = await ResolveShownAsync(slug, ct);
@@ -73,7 +73,7 @@ public sealed partial class DataAdminController
         return View(model);
     }
 
-    [HttpPost("{slug:regex(^[a-z0-9-]+$)}/{id}/edit")]
+    [HttpPost("{slug}/{id}/edit")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(string slug, string id, [FromForm] Dictionary<string, string?> values, CancellationToken ct)
     {
@@ -103,7 +103,7 @@ public sealed partial class DataAdminController
     }
 
     // The confirmation page: the cascade-impact tree for this row.
-    [HttpGet("{slug:regex(^[a-z0-9-]+$)}/{id}/delete")]
+    [HttpGet("{slug}/{id}/delete")]
     public async Task<IActionResult> Delete(string slug, string id, CancellationToken ct)
     {
         var table = await ResolveShownAsync(slug, ct);
@@ -127,7 +127,7 @@ public sealed partial class DataAdminController
 
     // The editor recomputes the impact and refuses a delete the database would refuse, so a
     // page left open while the data changed cannot slip past the preview.
-    [HttpPost("{slug:regex(^[a-z0-9-]+$)}/{id}/delete")]
+    [HttpPost("{slug}/{id}/delete")]
     [ActionName("Delete")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteConfirmed(string slug, string id, CancellationToken ct)
