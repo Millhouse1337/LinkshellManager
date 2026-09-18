@@ -13,6 +13,11 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class ActivityDataController
 {
+    // How long after a create a second, byte-identical create is read as a retry rather than as a
+    // second event somebody meant. Wide enough to cover a proxy retry of a slow request, far short
+    // of the time it takes a human to fill the form in again with the same name and the same start.
+    private const int DuplicateCreateWindowSeconds = 60;
+
     [HttpPost("events")]
     public async Task<IActionResult> CreateEventAsync([FromBody] ActivityCreateEventRequest request, CancellationToken cancellationToken)
     {
@@ -69,10 +74,33 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Selected party setup does not belong to this linkshell." });
         }
 
+        // Double-submit guard. The create form disables its button while the POST is in flight, so
+        // the duplicate that keeps landing in Queued Events is a duplicate REQUEST, not a duplicate
+        // click: the Activity is proxied (Discord -> Cloudflare -> origin), and a retried POST reaches
+        // this action a second time with the same body, which used to insert a second identical row.
+        // Same linkshell, same name, same start, same creator, stamped seconds ago = that retry, so
+        // hand back the first row's id and let the caller treat it as the success it already was.
+        // Deliberately ahead of every Add/stage below, so the early return leaves nothing tracked.
+        var duplicateCutoff = DateTime.UtcNow.AddSeconds(-DuplicateCreateWindowSeconds);
+        var eventName = request.EventName.Trim();
+        var duplicateId = await _dbContext.Events
+            .Where(e => e.LinkshellId == request.LinkshellId
+                        && e.CreatorUserId == appUser.Id
+                        && e.EventName == eventName
+                        && e.StartTime == startTimeUtc
+                        && e.TimeStamp != null
+                        && e.TimeStamp >= duplicateCutoff)
+            .Select(e => (int?)e.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (duplicateId is { } existingEventId)
+        {
+            return Ok(new { success = true, eventId = existingEventId });
+        }
+
         var eventEntity = new Event
         {
             LinkshellId = request.LinkshellId,
-            EventName = request.EventName.Trim(),
+            EventName = eventName,
             EventType = request.EventType?.Trim(),
             EventLocation = request.EventLocation?.Trim(),
             CreatorUserId = appUser.Id,

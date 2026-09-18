@@ -351,7 +351,7 @@ public sealed class AttendanceSectionsBuilder
             CapturedByCharacterName = snapshot.CapturedByCharacterName,
             EntryCount = snapshot.EntryCount,
             AllianceNumber = snapshot.AllianceNumber,
-            AllianceLabel = AttendanceSnapshotAlliances.Label(snapshot.AllianceNumber, snapshot.AllianceKey, snapshot.AllianceLeaderName),
+            AllianceLabel = AttendanceSnapshotAlliances.LabelFor(snapshot),
             IsPending = snapshot.SnapshotStatus == AttendanceSnapshotStatuses.Pending,
             VerifiedAtDisplay = snapshot.VerifiedAtUtc.HasValue
                 ? FormatPretty(snapshot.VerifiedAtUtc.Value, userZone)

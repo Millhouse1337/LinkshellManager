@@ -112,6 +112,57 @@ public sealed class HnmCampPopService
         {
             tod = await _db.Tods.FirstOrDefaultAsync(t => t.Id == sourceTodId, cancellationToken);
         }
+
+        // ADOPT a ToD the addon already filed for this kill, instead of logging a second one.
+        //
+        // The in-game ToD Tracker posts straight to /api/addon/tod, which writes a Tod row and
+        // knows nothing about the camp it happened at. So a camp whose ToD was posted in-game and
+        // then ended from the app wrote a SECOND row for the same death -- two entries for one
+        // spawn in Tracked Windows, each with its own repop, and only one of them attached to the
+        // board. Ending from the app instead of from the addon is a choice about where you are
+        // sitting, and it must not change what gets recorded.
+        //
+        // Bounded to this camp: the same monster (merge-pair aware, so a Fafnir kill is adopted by
+        // a Nidhogg board), and STAMPED since the camp went live, so last cycle's ToD -- including
+        // the very one this board was created from -- can never be overwritten. SourceTodId is
+        // excluded outright for that reason; on a live camp it points at the PREVIOUS kill.
+        //
+        // Newest first: if the tracker posted twice during one camp, the later post is the one the
+        // officer left standing.
+        var adoptedPostedTod = false;
+        if (tod is null && ev.CommencementStartTime is { } liveSince)
+        {
+            var campMonsterNames = HnmConfig.MonsterMatchNamesLower(monster);
+            tod = await _db.Tods
+                .Where(t => t.LinkshellId == ev.LinkshellId
+                            && t.Id != (ev.SourceTodId ?? 0)
+                            && t.MonsterName != null
+                            && campMonsterNames.Contains(t.MonsterName.ToLower())
+                            && t.TimeStamp != null
+                            && t.TimeStamp >= liveSince)
+                .OrderByDescending(t => t.TimeStamp)
+                .ThenByDescending(t => t.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            adoptedPostedTod = tod is not null;
+        }
+
+        // An adopted ToD KEEPS the time it was posted with when this request brings none.
+        //
+        // Blank on this form means "nobody saw it die" -- true of a camp ended with no ToD at all,
+        // and false of one whose death the addon already recorded. The Activity prefills the box
+        // from that post, but only for its primary linkshell's ToDs, and the Discord End Camp
+        // button has no box to prefill. Without this, ending such a camp would write null over a
+        // real time of death and drop the repop every board keys off. The SourceTodId edit path
+        // above is deliberately NOT covered: there the officer is editing their own ToD, and
+        // clearing it is a choice they are allowed to make.
+        if (adoptedPostedTod && todTimeUtc is null && tod!.Time is { } postedTimeUtc)
+        {
+            todTimeUtc = postedTimeUtc;
+            repopUtc = postedTimeUtc
+                .AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown))
+                .AddSeconds(additionalSeconds);
+        }
+
         if (tod is null)
         {
             tod = new Tod { LinkshellId = ev.LinkshellId, TotalTods = 1 };

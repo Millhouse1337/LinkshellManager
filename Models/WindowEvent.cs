@@ -332,6 +332,27 @@ public static class AttendanceSnapshotAlliances
             : null;
         return named is null ? Label(allianceNumber) : $"{named}'s alliance";
     }
+
+    // The name given to the claim-shield roster HnmCampReviewHandoffService stages at End Camp.
+    // Here rather than only in that service because the chip below has to recognise it, and two
+    // copies of the string would drift.
+    public const string ClaimShieldCaptureName = "Tag";
+
+    // The alliance chip for one capture.
+    //
+    // Identical to Label(...) except for the claim-shield tag roster, which has no alliance by
+    // nature: it is the lottery's members, gathered from across the whole camp rather than read
+    // off one party. Label had nothing to say about that and fell to "Unassigned", which reports
+    // only that something is missing -- so the row read "Unassigned  Tag" and looked like a
+    // capture somebody had failed to file. Naming what it IS makes it "Claim Shield  Tag".
+    //
+    // Guarded on the missing alliance as well as the name, so an ordinary capture an officer
+    // happened to name "Tag" keeps the alliance it was actually read from.
+    public static string LabelFor(AttendanceSnapshot snapshot)
+        => snapshot.AllianceNumber is null
+           && string.Equals(snapshot.Name, ClaimShieldCaptureName, StringComparison.Ordinal)
+            ? "Claim Shield"
+            : Label(snapshot.AllianceNumber, snapshot.AllianceKey, snapshot.AllianceLeaderName);
 }
 
 // Whether a snapshot was filed against a numbered window or as a miscellaneous post.

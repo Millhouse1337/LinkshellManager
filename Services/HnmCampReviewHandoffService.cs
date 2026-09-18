@@ -392,7 +392,7 @@ public sealed class HnmCampReviewHandoffService
                 CapturedAtUtc = nowUtc,
                 CreatedAtUtc = nowUtc,
                 SnapshotStatus = AttendanceSnapshotStatuses.Active,
-                Name = perCapture ? "Tag" : "Credited without a window",
+                Name = perCapture ? AttendanceSnapshotAlliances.ClaimShieldCaptureName : "Credited without a window",
                 SlotKind = AttendanceSnapshotSlotKinds.Window,
                 EntryCount = extras.Count,
             };

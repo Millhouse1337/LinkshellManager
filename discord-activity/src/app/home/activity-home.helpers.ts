@@ -151,6 +151,43 @@ export function todSortKey(tod: { time?: string | null; timeStamp?: string | nul
   return parseDate(tod.time) ?? parseDate(tod.timeStamp) ?? 0;
 }
 
+// Base monster -> stronger counterpart. Mirrors HnmConfig.MonsterMergePairs on the server and
+// constants.MONSTER_MERGE_PAIRS in the addon. The two halves share ONE spawn: killing Nidhogg
+// means the next pop is Fafnir.
+const MONSTER_MERGE_PAIRS: readonly (readonly [string, string])[] = [
+  ['Adamantoise', 'Aspidochelone'],
+  ['Behemoth', 'King Behemoth'],
+  ['Fafnir', 'Nidhogg']
+];
+
+// The name a spawn is GROUPED and LABELLED under: the combined "Base/Stronger" form for either
+// half (or for the combined label itself), and the trimmed name unchanged for anything else.
+//
+// The ToD feed returns the newest ToD per monster NAME, and a merge pair has two names, so one
+// dragon arrives as two rows -- which rendered as a "Fafnir/Nidhogg" card sitting on top of a
+// "Fafnir" card, each with its own countdown to a different repop. Both describe the same spawn
+// at different points in its cycle, and a camper reading them cannot tell which clock is real.
+//
+// Grouping on this collapses them; labelling from it stops the survivor being captioned with
+// whichever half happened to win. It is DISPLAY ONLY -- a ToD is stored under the exact half that
+// died, so anything writing back to the server keeps sending tod.monsterName.
+export function mergedMonsterName(name?: string | null): string {
+  const trimmed = (name ?? '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  const lower = trimmed.toLowerCase();
+  for (const [base, stronger] of MONSTER_MERGE_PAIRS) {
+    const combined = `${base}/${stronger}`;
+    if (lower === base.toLowerCase()
+        || lower === stronger.toLowerCase()
+        || lower === combined.toLowerCase()) {
+      return combined;
+    }
+  }
+  return trimmed;
+}
+
 export function formatDkp(totalMilliseconds: number, dkpPerHour?: number | null): string {
   const rate = dkpPerHour ?? 0;
   return ((totalMilliseconds / 3600000) * rate).toFixed(2);

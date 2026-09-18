@@ -17,6 +17,7 @@ import {
   memberAvatarClass,
   memberInitials,
   memberStatusClass,
+  mergedMonsterName,
   parseDate,
   todCountdownLabel,
   todSortKey
@@ -771,18 +772,32 @@ export class DashboardTabComponent {
 
   protected readonly expandedTodGroups = signal<Set<string>>(new Set());
 
-  protected groupedDashboardTods(): { key: string; latest: ActivityTodEntry; history: ActivityTodEntry[] }[] {
+  protected groupedDashboardTods(): { key: string; displayName: string; latest: ActivityTodEntry; history: ActivityTodEntry[] }[] {
+    // Keyed on the MERGED spawn name, not the raw monster name. The feed returns the newest ToD
+    // per name and a merge pair has two of them, so Fafnir and Fafnir/Nidhogg used to open two
+    // cards for one dragon, each counting down to a different repop. Whichever a camper read
+    // first, the other was telling them something else.
     const groups = new Map<string, ActivityTodEntry[]>();
     for (const tod of this.selectedDashboardTods()) {
-      const key = (tod.monsterName ?? '').trim().toLowerCase() || `__${tod.id}`;
+      const key = mergedMonsterName(tod.monsterName).toLowerCase() || `__${tod.id}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(tod);
     }
-    const result = Array.from(groups.entries()).map(([key, entries]) => ({
-      key,
-      latest: entries[0],
-      history: entries.slice(1, 10)
-    }));
+    const result = Array.from(groups.entries()).map(([key, entries]) => {
+      // Re-sorted because a merged group is two server lists spliced together: each arrived
+      // newest-first for ITS OWN name, so entries[0] was simply whichever half the feed listed
+      // first, not the kill that actually happened last. todSortKey is the same "which ToD is
+      // this monster's most recent" rule the rest of the tracker sorts on.
+      const ordered = [...entries].sort((a, b) => todSortKey(b) - todSortKey(a));
+      return {
+        key,
+        // Captioned from the key rather than from the surviving row, so the card does not read
+        // 'Fafnir' on a group that also holds tonight's Nidhogg.
+        displayName: mergedMonsterName(ordered[0]?.monsterName),
+        latest: ordered[0],
+        history: ordered.slice(1, 10)
+      };
+    });
     // Order the Tracked Windows list by next repop ascending so the mob
     // closest to popping (or already Ready, since their repop time is in
     // the past) sits at the top. ToDs without a repop time fall to the

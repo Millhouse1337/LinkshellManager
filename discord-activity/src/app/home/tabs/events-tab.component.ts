@@ -18,6 +18,7 @@ import {
   ActivityEvent,
   ActivityLinkedSnapshot,
   ActivityPartySetupSlot,
+  ActivityTodEntry,
   ActivityWindowEvent,
 } from '../../discord/discord-activity.types';
 import { ActivityQueuePanelComponent } from '../activity-queue-panel.component';
@@ -38,6 +39,7 @@ import {
   formatBreakDuration,
   formatDkp,
   formatElapsed,
+  mergedMonsterName,
   parseDate
 } from '../activity-home.helpers';
 
@@ -303,6 +305,12 @@ export class EventsTabComponent {
   // no window schedule at all — so a run that had just started, with nothing posted yet,
   // announced itself as being on its last window.
   //
+  // Every state here says ROSTER, because that is the only thing this line has ever been about:
+  // whether the attendance snapshot for the window named directly above it has landed. It used to
+  // read a bare "posted", sitting in a large slot under "WINDOW 4 OF 7" on a card whose main
+  // button says "End Camp/Post ToD" -- so it was read as the ToD having been posted, which it
+  // never means. The ToD is filed at End Camp and this camp is still live.
+  //
   // A camp on a real cadence only runs out of nextWindowAt on its final window. So a null
   // countdown BELOW the last window means there is no cadence to count, not that the camp
   // is finishing — and for those the useful thing to say is whether the current window's
@@ -312,7 +320,7 @@ export class EventsTabComponent {
     // a cadence that has a next window scheduled, and "next window 4:12" on a camp that
     // accepts no more posts is the same lie in a different sentence.
     if (this.campClosePosted(event)) {
-      return 'posted';
+      return 'close roster posted';
     }
     const countdown = this.campNextWindowCountdown(event);
     if (countdown) {
@@ -323,8 +331,8 @@ export class EventsTabComponent {
       return 'final window';
     }
     return this.attendanceWindowsFor(event).some(w => w.sequenceNumber === focus)
-      ? 'posted'
-      : 'not posted yet';
+      ? 'roster posted'
+      : 'roster not posted';
   }
 
   // Two-click confirm for deleting a live HNM camp outright (no ToD). The Discord iframe blocks the
@@ -347,7 +355,34 @@ export class EventsTabComponent {
     }
     this.todForm()?.openForBoard(
       event.linkshellId, monster, event.id, event.dayNumber ?? null, event.hnmWindowNumber ?? 1,
-      event.repeatOnTod ?? false, event.repeatLeadHours ?? null);
+      event.repeatOnTod ?? false, event.repeatLeadHours ?? null, this.postedTodFor(event, monster));
+  }
+
+  // The ToD already logged for this camp's kill -- normally by the in-game ToD Tracker -- so End
+  // Camp opens on it instead of asking for the time of death a second time.
+  //
+  // The SAME rule HnmCampPopService uses to adopt that row, and it has to be: if the form showed
+  // one ToD and the server adopted another, the officer would confirm a time that was not the one
+  // being written. Same linkshell, same spawn (merge-pair aware), not the ToD this board was
+  // CREATED from (SourceTodId -- on a live camp that is the previous kill), and stamped since the
+  // camp went live. Newest first.
+  //
+  // recentTods only covers the primary linkshell, so a camp elsewhere finds nothing here and opens
+  // blank. The server keeps the posted time on a blank submit, so that case is still safe.
+  private postedTodFor(event: ActivityEvent, monster: string): ActivityTodEntry | null {
+    const liveSince = parseDate(event.commencementStartTime);
+    if (liveSince == null) {
+      return null;
+    }
+    const spawn = mergedMonsterName(monster).toLowerCase();
+    const candidates = (this.activity.overview()?.recentTods ?? []).filter(tod =>
+      tod.linkshellId === event.linkshellId
+      && tod.id !== event.sourceTodId
+      && mergedMonsterName(tod.monsterName).toLowerCase() === spawn
+      && (parseDate(tod.timeStamp) ?? 0) >= liveSince);
+    candidates.sort((a, b) =>
+      ((parseDate(b.timeStamp) ?? 0) - (parseDate(a.timeStamp) ?? 0)) || (b.id - a.id));
+    return candidates[0] ?? null;
   }
 
   // An HNM camp that has popped is no longer "running": a Standard defeat un-commences the board
@@ -1006,6 +1041,40 @@ export class EventsTabComponent {
   // edited on the attendance event.
   protected linkedSnapshotsFor(event: { linkedSnapshots?: ActivityLinkedSnapshot[] }): ActivityLinkedSnapshot[] {
     return event.linkedSnapshots ?? [];
+  }
+
+  // Linked snapshots render as TABS, the same strip the Attendance Windows card uses above them.
+  //
+  // They used to stack, every roster table open at once, each captioned only by its slot chip
+  // ("Misc") and a timestamp. Two misc posts on one camp were two identical-looking blocks told
+  // apart by the minute they were taken, and the post's NAME -- the one thing an officer typed to
+  // say what the read was for -- appeared nowhere. As tabs, the name IS the label, one roster is
+  // open at a time, and the section reads like the windows card it sits under.
+  //
+  // Chronological left to right, like the window tabs. Opens on the NEWEST, which is the one an
+  // officer who just took a read is coming here to check.
+  protected readonly activeLinkedSnapshotByEvent = signal<Record<number, number>>({});
+
+  protected linkedSnapshotTabs(event: { linkedSnapshots?: ActivityLinkedSnapshot[] }): ActivityLinkedSnapshot[] {
+    return [...this.linkedSnapshotsFor(event)].sort((a, b) =>
+      ((parseDate(a.capturedAtUtc) ?? 0) - (parseDate(b.capturedAtUtc) ?? 0)) || (a.id - b.id));
+  }
+
+  protected activeLinkedSnapshot(event: ActivityEvent): ActivityLinkedSnapshot | null {
+    const tabs = this.linkedSnapshotTabs(event);
+    if (tabs.length === 0) return null;
+    const wanted = this.activeLinkedSnapshotByEvent()[event.id];
+    return tabs.find(s => s.id === wanted) ?? tabs[tabs.length - 1];
+  }
+
+  protected setActiveLinkedSnapshot(eventId: number, snapshotId: number): void {
+    this.activeLinkedSnapshotByEvent.update(map => ({ ...map, [eventId]: snapshotId }));
+  }
+
+  // The post's own name first -- "test", "test2" -- then the slot ("Open", "Window 3") for a
+  // capture nobody named, then a neutral word rather than an empty tab.
+  protected linkedSnapshotTabLabel(snapshot: ActivityLinkedSnapshot): string {
+    return snapshot.name?.trim() || snapshot.windowLabel?.trim() || 'Snapshot';
   }
 
   // ----- Claim shield -----

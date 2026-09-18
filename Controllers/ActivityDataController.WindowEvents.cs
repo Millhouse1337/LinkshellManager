@@ -1110,7 +1110,7 @@ public sealed partial class ActivityDataController
             snapshot.EntryCount,
             entries,
             snapshot.AllianceNumber,
-            AttendanceSnapshotAlliances.Label(snapshot.AllianceNumber, snapshot.AllianceKey, snapshot.AllianceLeaderName),
+            AttendanceSnapshotAlliances.LabelFor(snapshot),
             snapshot.SnapshotStatus == AttendanceSnapshotStatuses.Pending,
             resolvedWindow,
             resolvedWindow is { } window

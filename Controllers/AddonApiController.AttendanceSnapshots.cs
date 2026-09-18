@@ -48,7 +48,18 @@ public sealed partial class AddonApiController
         // Set ONLY when the game actually reported a leader. Null for a solo player or a party
         // with no alliance formed -- and that null is why the UI shows no leader marker instead of
         // guessing at one.
-        string? AllianceLeaderName = null);
+        string? AllianceLeaderName = null,
+        // The LIVE camp this capture is filed against, chosen by the officer at post time.
+        //
+        // `/lsm now` never sends it and never should: that command is a bare roster read with no
+        // camp in mind, and guessing one for it is exactly what this endpoint stopped doing. The
+        // launcher's "Create Misc Post" button does send it -- there the officer is standing at a
+        // camp they have selected and has said so, which is a different act with a different name.
+        //
+        // Null keeps the old behaviour exactly: the capture lands unlinked for triage.
+        int? LinkedEventId = null,
+        // "Misc" or "Window", for a capture that names its camp. Ignored without LinkedEventId.
+        string? SlotKind = null);
 
     [HttpPost("attendance-snapshots")]
     [AddonApiAuth]
@@ -141,8 +152,38 @@ public sealed partial class AddonApiController
         // So the server stops guessing. An officer files the capture against an explicit event and
         // an explicit slot — a numbered window, or Misc — on the Event System page or in the
         // Activity. Unlinked is now the INTENDED outcome of /lsm now, not a fallback.
-        var mergeTarget = await _windowEventLinks.FindUnlinkedMergeTargetAsync(
-            token.LinkshellId, capturedAt, allianceKey, landingStatus, cancellationToken);
+        //
+        // The ONE exception is a capture that arrives naming its camp (LinkedEventId): the officer
+        // said which camp at post time, so there is nothing to guess. Verified against the token's
+        // own linkshell because it comes from the client, and required to be LIVE -- filing onto a
+        // parked board would hand the capture to the next pop's End Camp.
+        Event? filedCamp = null;
+        if (request.LinkedEventId is int campId && campId > 0)
+        {
+            filedCamp = await _dbContext.Events
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == campId && e.LinkshellId == token.LinkshellId, cancellationToken);
+            if (filedCamp is null)
+            {
+                return NotFound(new { error = "That camp is no longer open." });
+            }
+            if (filedCamp.EndTime is not null || filedCamp.CommencementStartTime is null)
+            {
+                return BadRequest(new
+                {
+                    error = "That camp has ended. File this capture on its review card under "
+                            + "Events Pending DKP Post instead.",
+                });
+            }
+        }
+
+        // A capture that names its camp never folds into an unlinked one: the fold exists to join
+        // two officers' simultaneous reads of the SAME unfiled roster, and this one is already
+        // filed somewhere those are not.
+        var mergeTarget = filedCamp is not null
+            ? null
+            : await _windowEventLinks.FindUnlinkedMergeTargetAsync(
+                token.LinkshellId, capturedAt, allianceKey, landingStatus, cancellationToken);
 
         var snapshot = mergeTarget ?? new AttendanceSnapshot
         {
@@ -166,6 +207,20 @@ public sealed partial class AddonApiController
             VerifiedAtUtc = canModerate ? nowUtc : null,
             VerifiedByAppUserId = canModerate ? token.IssuedToAppUserId : null,
         };
+
+        // Park it on the camp, in the slot the officer named. End Camp carries it from there onto
+        // the camp's review card beside its windows -- see HnmCampReviewHandoffService. Nothing is
+        // minted here: a Window Event named after the camp would be a second card the handoff
+        // never looks at.
+        if (filedCamp is not null)
+        {
+            snapshot.LinkedEventId = filedCamp.Id;
+            WindowEventLinkService.ApplyCampSlot(
+                snapshot,
+                DiscordEventMessageBuilder.EffectiveWindowCount(filedCamp),
+                request.SlotKind,
+                request.WindowNumber);
+        }
 
         // On a fold the target's own CapturedAtUtc is deliberately NOT moved forward. It anchors the
         // merge window, so a steady drip of posts every 2 minutes eventually starts a fresh snapshot
@@ -217,7 +272,21 @@ public sealed partial class AddonApiController
         // no webhook URL is configured). Enqueued after the snapshot is
         // committed so the background worker can reload it; never blocks or
         // fails this addon request if Discord is slow/unreachable.
-        await _discordWebhook.EnqueueSnapshotAsync(snapshot.Id, cancellationToken);
+        //
+        // A MISC capture is not announced. The channel post exists to tell the linkshell a
+        // window's roster was read -- it is the public record of who was credited for that
+        // window. A Misc post is the opposite kind of thing: an off-window read an officer takes
+        // for their own bookkeeping, filed against a camp that has not been priced or sent to the
+        // DKP sheet yet. Broadcasting it published a roster nobody had reviewed and put an embed
+        // in the channel for every stray read taken during a camp.
+        //
+        // Checked on the SAVED SlotKind rather than on request.SlotKind, so a fold into an
+        // existing Misc snapshot is silent too -- otherwise a second read against the same Misc
+        // slot would announce the row the first read already kept out of the channel.
+        if (!AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind))
+        {
+            await _discordWebhook.EnqueueSnapshotAsync(snapshot.Id, cancellationToken);
+        }
 
         // Sheet sync is officer-initiated on the Event System page (Post to DKP
         // Sheet button) so the officer can review the combined roster and set
@@ -227,11 +296,14 @@ public sealed partial class AddonApiController
             snapshotId = snapshot.Id,
             entryCount = snapshot.EntryCount,
             capturedAtUtc = snapshot.CapturedAtUtc,
-            linkedEventId = (int?)null,
-            // Always null now — filing is an officer action in the app. Kept on the wire because
-            // addons in the wild branch on them; both branches are simply never taken any more.
+            // The camp it was filed against, when the caller named one. Null for /lsm now, which
+            // still lands unlinked for triage.
+            linkedEventId = snapshot.LinkedEventId,
+            slotKind = AttendanceSnapshotSlotKinds.Resolve(snapshot.SlotKind),
+            // Always null — a Window Event is minted by an officer filing in the app, or by End
+            // Camp. Kept on the wire because addons in the wild branch on them.
             windowEventId = (int?)null,
-            windowNumber = (int?)null,
+            windowNumber = snapshot.WindowNumber,
             snapshotStatus = snapshot.SnapshotStatus,
             // Echoed so the addon can name the alliance back to the poster — the one field it
             // cannot verify for itself, and the one most likely to be set wrong.

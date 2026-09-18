@@ -168,4 +168,89 @@ public class HnmCampPopServiceTests
         var saved = await db.Events.SingleAsync(e => e.Id == EventId);
         Assert.Equal(observedTod.AddHours(22), saved.StartTime);
     }
+    // ===== Adopting the ToD the addon already posted =====
+    //
+    // The in-game ToD Tracker posts to /api/addon/tod, which writes a Tod row with no idea which
+    // camp it belongs to. Ending that camp from the app used to write a SECOND row for the same
+    // death, and ending it with a blank box erased nothing only because it never touched the
+    // first. PopAsync now adopts the posted row, so both of those need pinning down.
+
+    /// <summary>A ToD the addon filed for this camp's monster, stamped `minutesIntoCamp` after it went live.</summary>
+    private static Tod PostedFromAddon(string monster, int minutesIntoCamp, DateTime? timeUtc) => new()
+    {
+        LinkshellId = LinkshellId,
+        MonsterName = monster,
+        Time = timeUtc,
+        TimeStamp = Now.AddHours(-1).AddMinutes(minutesIntoCamp),
+        Cooldown = "22 Hour",
+        TotalTods = 1,
+    };
+
+    [Fact]
+    public async Task PopAsync_AdoptsTheToDTheAddonPostedDuringTheCamp_InsteadOfWritingASecond()
+    {
+        using var db = await SeededAsync(LiveCamp());
+        // Filed under the base half: a merge pair is one spawn, so it still belongs to the
+        // Adamantoise/Aspidochelone board.
+        var posted = PostedFromAddon("Adamantoise", minutesIntoCamp: 40, timeUtc: Now.AddMinutes(-20));
+        db.Tods.Add(posted);
+        await db.SaveChangesAsync();
+
+        var result = await NewService(db).PopAsync(PopRequest(Now.AddMinutes(-20)), CancellationToken.None);
+
+        Assert.True(result.Success);
+        var tod = await db.Tods.SingleAsync();
+        Assert.Equal(posted.Id, tod.Id);
+        var saved = await db.Events.SingleAsync(e => e.Id == EventId);
+        Assert.Equal(posted.Id, saved.SourceTodId);
+    }
+
+    [Fact]
+    public async Task PopAsync_BlankTime_KeepsTheAdoptedToDsTimeAndRepop()
+    {
+        using var db = await SeededAsync(LiveCamp());
+        var observed = Now.AddMinutes(-20);
+        db.Tods.Add(PostedFromAddon("Adamantoise/Aspidochelone", minutesIntoCamp: 40, timeUtc: observed));
+        await db.SaveChangesAsync();
+
+        // What the Discord End Camp button sends, and what the Activity sends for a camp outside
+        // the primary linkshell: no time at all.
+        var result = await NewService(db).PopAsync(PopRequest(null), CancellationToken.None);
+
+        Assert.True(result.Success);
+        var tod = await db.Tods.SingleAsync();
+        Assert.Equal(observed, tod.Time);
+        Assert.NotNull(tod.RepopTime);
+        Assert.Equal(tod.RepopTime, result.RepopTimeUtc);
+    }
+
+    [Fact]
+    public async Task PopAsync_DoesNotAdoptAToDLoggedBeforeTheCampWentLive()
+    {
+        using var db = await SeededAsync(LiveCamp());
+        // Last cycle's kill -- stamped before this camp commenced. Adopting it would overwrite the
+        // previous pop's record with tonight's.
+        var lastCycle = PostedFromAddon("Adamantoise/Aspidochelone", minutesIntoCamp: -90, timeUtc: Now.AddDays(-1));
+        db.Tods.Add(lastCycle);
+        await db.SaveChangesAsync();
+
+        await NewService(db).PopAsync(PopRequest(Now.AddMinutes(-5)), CancellationToken.None);
+
+        Assert.Equal(2, await db.Tods.CountAsync());
+        var untouched = await db.Tods.SingleAsync(t => t.Id == lastCycle.Id);
+        Assert.Equal(Now.AddDays(-1), untouched.Time);
+    }
+
+    [Fact]
+    public async Task PopAsync_DoesNotAdoptAToDForADifferentMonster()
+    {
+        using var db = await SeededAsync(LiveCamp());
+        db.Tods.Add(PostedFromAddon("Tiamat", minutesIntoCamp: 40, timeUtc: Now.AddMinutes(-20)));
+        await db.SaveChangesAsync();
+
+        await NewService(db).PopAsync(PopRequest(Now.AddMinutes(-5)), CancellationToken.None);
+
+        Assert.Equal(2, await db.Tods.CountAsync());
+        Assert.Equal("Tiamat", (await db.Tods.OrderBy(t => t.Id).FirstAsync()).MonsterName);
+    }
 }

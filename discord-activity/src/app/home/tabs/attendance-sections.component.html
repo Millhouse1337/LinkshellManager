@@ -491,9 +491,17 @@
                       aria-label="Slot kind">
                 <!-- Named for THIS capture rather than for the group it sits in: "Captures" told an
                      officer nothing the heading above didn't, while "Open" says which one they are
-                     about to move. -->
-                <option [value]="slotWindow">{{ snapshot.name || windowGroupTitle(event) }}</option>
-                <option [value]="slotMisc">Misc</option>
+                     about to move.
+
+                     Each option carries the capture's own name only for the slot it CURRENTLY
+                     occupies, and the generic slot word for the other. A misc post named "test2"
+                     used to sit in a box reading "Misc" -- the one word shared by every misc
+                     capture on the camp, so two of them were indistinguishable here even though
+                     the chip beside them already said which was which. Naming both options from
+                     snapshot.name instead would be its own bug: the dropdown would offer "test2"
+                     twice and say nothing about where either choice puts the capture. -->
+                <option [value]="slotWindow">{{ (!snapshot.isMisc && snapshot.name) || windowGroupTitle(event) }}</option>
+                <option [value]="slotMisc">{{ (snapshot.isMisc && snapshot.name) || 'Misc' }}</option>
               </select>
               @if (event.hasWindowGrid && !snapshot.isMisc) {
                 <select class="form-select we-slot-picker__window" [ngModel]="snapshot.windowNumber"
@@ -720,18 +728,21 @@
                    scrollable, filtered list ourselves. Blur is delayed so a
                    suggestion click registers before the menu closes. -->
               <div class="we-typeahead">
-                <input type="text" placeholder="Add a character by name…" maxlength="256"
+                <input #addPersonInput type="text" placeholder="Add a character by name…" maxlength="256"
                   autocomplete="off"
                   [ngModel]="addPersonDraft(snapshot)"
                   (ngModelChange)="setAddPersonDraft(snapshot.id, $event)"
-                  (focus)="openTypeahead(snapshot.id)"
+                  (focus)="openTypeahead(snapshot.id, addPersonInput)"
                   (blur)="closeTypeahead()"
                   (keydown.enter)="addPerson(snapshot)"
                   (keydown.escape)="closeTypeahead()" />
                 @if (openAddTypeahead() === snapshot.id) {
                   @if (filteredRoster(snapshot); as matches) {
                     @if (matches.length > 0) {
-                      <ul class="we-typeahead-menu" role="listbox">
+                      <ul class="we-typeahead-menu" role="listbox"
+                          [style.left.px]="typeaheadAnchor()?.left"
+                          [style.top.px]="typeaheadAnchor()?.top"
+                          [style.width.px]="typeaheadAnchor()?.width">
                         @for (name of matches; track name) {
                           <li role="option">
                             <button type="button" class="we-typeahead-option"

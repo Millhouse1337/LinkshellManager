@@ -38,7 +38,7 @@
                   <span class="tag success">Live</span>
                 </div>
                 <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}</p>
-                @if (activity.formatDateTime(isHnmEvent(event) ? (event.startTime || event.commencementStartTime) : (event.commencementStartTime || event.startTime)); as liveStart) {
+                @if (activity.formatDateTimeWithSeconds(isHnmEvent(event) ? (event.startTime || event.commencementStartTime) : (event.commencementStartTime || event.startTime)); as liveStart) {
                   <p class="event-card__when">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                     Started {{ liveStart }}
@@ -522,7 +522,24 @@
                       <h4>Linked Snapshots</h4>
                       <span class="tag default num">{{ linkedSnapshotsFor(event).length }}</span>
                     </div>
-                    @for (snapshot of linkedSnapshotsFor(event); track snapshot.id) {
+                    <!-- One tab per linked snapshot, named for the POST (see linkedSnapshotTabLabel).
+                         Same strip and classes as the Attendance Windows tabs above, on purpose:
+                         they are the same kind of thing -- a roster read -- and reading them the
+                         same way is the point. -->
+                    <ul class="attendance-window-tabs">
+                      @for (tab of linkedSnapshotTabs(event); track tab.id) {
+                        <li>
+                          <button type="button"
+                                  class="attendance-window-tab"
+                                  [class.is-active]="activeLinkedSnapshot(event)?.id === tab.id"
+                                  (click)="setActiveLinkedSnapshot(event.id, tab.id)">
+                            {{ linkedSnapshotTabLabel(tab) }}
+                            <span class="tag default num">{{ tab.entries.length }}</span>
+                          </button>
+                        </li>
+                      }
+                    </ul>
+                    @if (activeLinkedSnapshot(event); as snapshot) {
                       <div class="linked-snapshots__item">
                         <div class="linked-snapshots__meta">
                           @if (snapshot.windowLabel) {

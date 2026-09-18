@@ -131,8 +131,16 @@ export class TodFormComponent {
   // ties the ToD to the event so submit can drive the board (handled server-side).
   // endCampWindow, when provided, opens this as an "End Camp" for a still-live camp: it shows the
   // pop-window (pre-filled to the current window) + killed inputs. null/omitted = a plain Post ToD.
+  //
+  // postedTod, when given, is a ToD already logged for this camp's monster since it went live --
+  // in practice the one the in-game ToD Tracker filed. The camp is ended from whichever surface
+  // the officer happens to be sitting at, so the form opens on what is already recorded rather
+  // than asking for it a second time. It matters beyond convenience: the server now ADOPTS that
+  // row instead of writing a second one (HnmCampPopService), so submitting this form with an
+  // empty box would overwrite a real time of death with "not entered".
   public openForBoard(linkshellId: number, monster: string, eventId: number, dayNumber: number | null = null,
-    endCampWindow: number | null = null, repeatOnTod = false, repeatLeadHours: number | null = null): void {
+    endCampWindow: number | null = null, repeatOnTod = false, repeatLeadHours: number | null = null,
+    postedTod: { time?: string | null; claim?: boolean | null; hq?: boolean; popWindow?: number | null } | null = null): void {
     this.boardMode = true;
     this.boardEventId = eventId;
     this.boardDayNumber = dayNumber;
@@ -152,6 +160,29 @@ export class TodFormComponent {
     } else {
       this.todDraft.monsterName = 'Other';
       this.todCustomMonsterName = m;
+      this.updateTodRepopTime();
+    }
+    // Seeded AFTER the monster, because picking a monster recomputes the repop off the form's
+    // current time -- so the time has to land last or it is calculated from a blank box.
+    if (postedTod) {
+      const posted = postedTod.time ? new Date(postedTod.time) : null;
+      if (posted && !Number.isNaN(posted.getTime())) {
+        this.todTimeLocalValue = toDateTimeLocalValue(posted);
+        this.todDraft.timeLocal = this.todTimeLocalValue;
+      }
+      // Claim and HQ come from the same post as the time and are the same facts this form asks
+      // for. Leaving them on their defaults beside a prefilled ToD would put the form at odds
+      // with the record it just read -- and CLAIM is what the claim bonus is paid on.
+      if (typeof postedTod.claim === 'boolean') {
+        this.todDraft.claim = postedTod.claim;
+        this.todClaimChoice = postedTod.claim ? 'Yes' : 'No';
+      }
+      this.todDraft.hq = !!postedTod.hq;
+      // Only when the tracker actually recorded one: End Camp already opened on the camp's
+      // CURRENT window above, which is the better answer than overwriting it with a null.
+      if (postedTod.popWindow != null) {
+        this.todPopWindow = postedTod.popWindow;
+      }
       this.updateTodRepopTime();
     }
     this.openLogTodDialog();

@@ -451,8 +451,22 @@ export class AttendanceSectionsComponent {
   // DOM list; the input filters it down quickly anyway.
   private static readonly MAX_TYPEAHEAD_RESULTS = 50;
 
-  protected openTypeahead(snapshotId: number): void {
+  // Where the open menu is drawn, in VIEWPORT coordinates.
+  //
+  // The input sits in the last row of a snapshot table, and that table lives in a horizontal
+  // scroll box (.we-table__scroll, overflow-x: auto) so it can stay 520px wide inside a narrow
+  // Discord panel. A scroll box clips on both axes -- CSS cannot scroll one and not clip the
+  // other -- so the menu, which opens UPWARD over the rows, had its top sliced off by the table's
+  // own edge. Positioning it against the viewport takes it out of that box entirely.
+  //
+  // Measured once, on open. The menu closes on blur, so there is no window in which the page
+  // scrolls under an open menu and leaves it behind.
+  protected readonly typeaheadAnchor = signal<{ left: number; top: number; width: number } | null>(null);
+
+  protected openTypeahead(snapshotId: number, input?: HTMLElement): void {
     this.openAddTypeahead.set(snapshotId);
+    const rect = input?.getBoundingClientRect();
+    this.typeaheadAnchor.set(rect ? { left: rect.left, top: rect.top, width: rect.width } : null);
   }
 
   protected closeTypeahead(): void {

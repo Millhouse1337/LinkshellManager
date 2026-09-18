@@ -229,12 +229,14 @@
   box-shadow: 0 0 0 2px var(--accent-weak);
 }
 
+/* Fixed, not absolute: the input lives inside the snapshot table's horizontal scroll box, which
+   clips on both axes, and an absolutely-positioned menu opening upward over the rows had its top
+   cut off by it. left / top / width are set from the input on open (typeaheadAnchor in the .ts);
+   the translate lifts the menu by its own height so its bottom edge sits 4px above the input. */
 .we-typeahead-menu {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 20;
+  position: fixed;
+  transform: translateY(calc(-100% - 4px));
+  z-index: 1000;
   margin: 0;
   padding: 4px;
   list-style: none;

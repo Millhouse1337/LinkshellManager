@@ -434,7 +434,7 @@
               <div class="tod-entry" [class.window-open]="isTodReady(group.latest)">
                 <div class="tod-head">
                   <div class="tod-head-left">
-                    <div class="tod-mob-name">{{ group.latest.monsterName }}</div>
+                    <div class="tod-mob-name">{{ group.displayName }}</div>
                     <span class="tag" [class.success]="group.latest.claim === true" [class.default]="group.latest.claim !== true">{{ group.latest.claim === true ? 'Claimed' : (group.latest.claim === false ? 'Unclaimed' : 'Not Specified') }}</span>
                     <!-- The window it popped on, matching the ToDs tab's card. Was a bare ToD
                          count, which read as belonging to the Claimed tag beside it. -->
