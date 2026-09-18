@@ -1,0 +1,77 @@
+@model DataAdminEditViewModel
+@{
+    var title = Model.IsCreate ? $"New {Model.DisplayName}" : $"Edit {Model.Label}";
+    ViewData["Title"] = title;
+    ViewData["BodyClass"] = "lsm-page";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <div class="page-eyebrow">
+            <a asp-action="Index">Data Admin</a> &rsaquo; <a asp-action="List" asp-route-slug="@Model.Slug">@Model.DisplayName</a>
+            @if (!Model.IsCreate)
+            {
+                <text>&rsaquo; </text><a asp-action="Details" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">@Model.Label</a>
+            }
+        </div>
+        <h1 class="page-title">@title</h1>
+        @if (!Model.IsCreate)
+        {
+            <div class="page-sub"><span>@Model.DisplayName #@Model.Key</span></div>
+        }
+    </div>
+    <div class="page-actions">
+        @if (Model.IsCreate)
+        {
+            <a class="btn ghost" asp-action="List" asp-route-slug="@Model.Slug">Cancel</a>
+        }
+        else
+        {
+            <a class="btn ghost" asp-action="Details" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">Cancel</a>
+        }
+    </div>
+</div>
+
+@if (Model.DiscordSideEffect is not null)
+{
+    <div class="alert alert-danger fade d1" style="margin:0 0 14px">@Model.DiscordSideEffect</div>
+}
+@foreach (var error in Model.FormErrors)
+{
+    <div class="alert alert-danger fade d1" style="margin:0 0 14px">@error</div>
+}
+
+<div class="card fade d2" style="padding:20px">
+    @if (Model.IsCreate)
+    {
+        <form method="post" asp-action="Create" asp-route-slug="@Model.Slug">
+            @Html.AntiForgeryToken()
+            <div class="form-grid">
+                @foreach (var field in Model.Fields)
+                {
+                    <partial name="~/Views/DataAdmin/_FieldEditor.cshtml" model="field" />
+                }
+            </div>
+            <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+                <button type="submit" class="btn primary">Create @Model.DisplayName</button>
+                <a class="btn ghost" asp-action="List" asp-route-slug="@Model.Slug">Cancel</a>
+            </div>
+        </form>
+    }
+    else
+    {
+        <form method="post" asp-action="Edit" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">
+            @Html.AntiForgeryToken()
+            <div class="form-grid">
+                @foreach (var field in Model.Fields)
+                {
+                    <partial name="~/Views/DataAdmin/_FieldEditor.cshtml" model="field" />
+                }
+            </div>
+            <div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+                <button type="submit" class="btn primary">Save changes</button>
+                <a class="btn ghost" asp-action="Details" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">Cancel</a>
+            </div>
+        </form>
+    }
+</div>

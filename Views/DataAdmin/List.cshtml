@@ -14,6 +14,10 @@
         </div>
     </div>
     <div class="page-actions">
+        @if (Model.CanCreate)
+        {
+            <a class="btn primary" asp-action="Create" asp-route-slug="@Model.Slug">+ New @Model.DisplayName</a>
+        }
         <a class="btn ghost" asp-action="Index">Back</a>
     </div>
 </div>
@@ -95,6 +99,10 @@
                             <td style="text-align:right">
                                 <div style="display:flex;justify-content:flex-end;gap:4px">
                                     <a class="btn ghost sm" asp-action="Details" asp-route-slug="@Model.Slug" asp-route-id="@row.Key">View</a>
+                                    @if (Model.CanEdit)
+                                    {
+                                        <a class="btn ghost sm" asp-action="Edit" asp-route-slug="@Model.Slug" asp-route-id="@row.Key">Edit</a>
+                                    }
                                 </div>
                             </td>
                         </tr>

@@ -273,6 +273,8 @@ public abstract class DataAdminModel
     public abstract Task<object?> FindAsync(ApplicationDbContext db, object key, bool track, CancellationToken ct);
     // Key text -> label for every row whose key is in `keys`; rows without a label fall back to the key.
     public abstract Task<IReadOnlyDictionary<string, string>> LoadLabelsAsync(ApplicationDbContext db, IReadOnlyCollection<object> keys, CancellationToken ct);
+    // The first `take` rows as (key text, label) ordered by label, for a foreign-key dropdown.
+    public abstract Task<IReadOnlyList<KeyValuePair<string, string>>> ListLabelsAsync(ApplicationDbContext db, int take, CancellationToken ct);
     public abstract Task<long> CountWhereAsync(ApplicationDbContext db, DataAdminColumn column, object value, CancellationToken ct);
     public abstract Task<long> CountReferencingAsync(ApplicationDbContext db, DataAdminColumn foreignKeyColumn, IReadOnlyList<object> principalKeys, CancellationToken ct);
     public abstract Task<IReadOnlyList<object>> KeysReferencingAsync(ApplicationDbContext db, DataAdminColumn foreignKeyColumn, IReadOnlyList<object> principalKeys, CancellationToken ct);

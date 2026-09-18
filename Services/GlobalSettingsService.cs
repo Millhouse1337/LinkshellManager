@@ -84,6 +84,10 @@ public sealed class GlobalSettingsService
     public Task SetLauncherDownloadUrlAsync(string? url, CancellationToken cancellationToken = default)
         => SetStringAsync(LauncherDownloadUrlKey, url, cancellationToken);
 
+    // Drop one cached value so a row written by something other than this service (the Data
+    // Admin editor) is read fresh on the next call instead of after the TTL.
+    public void Invalidate(string key) => _cache.Remove(CachePrefix + key);
+
     // A missing row reads as false, so a setting that has never been toggled is off.
     private async Task<bool> GetBoolAsync(string key, CancellationToken cancellationToken)
     {

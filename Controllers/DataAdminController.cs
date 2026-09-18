@@ -22,6 +22,7 @@ public sealed partial class DataAdminController : Controller
     private readonly DataAdminCatalog _catalog;
     private readonly DataAdminSelectionService _selection;
     private readonly DataAdminQueryService _queries;
+    private readonly DataAdminEditor _editor;
     private readonly ILogger<DataAdminController> _logger;
 
     public DataAdminController(
@@ -29,12 +30,14 @@ public sealed partial class DataAdminController : Controller
         DataAdminCatalog catalog,
         DataAdminSelectionService selection,
         DataAdminQueryService queries,
+        DataAdminEditor editor,
         ILogger<DataAdminController> logger)
     {
         _db = db;
         _catalog = catalog;
         _selection = selection;
         _queries = queries;
+        _editor = editor;
         _logger = logger;
     }
 

@@ -91,6 +91,23 @@ public sealed class DataAdminModel<TEntity, TKey> : DataAdminModel
         return labels;
     }
 
+    public override async Task<IReadOnlyList<KeyValuePair<string, string>>> ListLabelsAsync(ApplicationDbContext db, int take, CancellationToken ct)
+    {
+        var rows = await db.Set<TEntity>().AsNoTracking()
+            .Select(_labelProjection)
+            .OrderBy(row => row.Label)
+            .ThenBy(row => row.Key)
+            .Take(take)
+            .ToListAsync(ct);
+        return rows
+            .Select(row =>
+            {
+                var keyText = KeyToString(row.Key);
+                return new KeyValuePair<string, string>(keyText, string.IsNullOrWhiteSpace(row.Label) ? keyText : row.Label);
+            })
+            .ToList();
+    }
+
     public override Task<long> CountWhereAsync(ApplicationDbContext db, DataAdminColumn column, object value, CancellationToken ct) =>
         db.Set<TEntity>().AsNoTracking().Where(BuildEquals(column, value)).LongCountAsync(ct);
 

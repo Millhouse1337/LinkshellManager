@@ -1,0 +1,70 @@
+@model DataAdminFieldViewModel
+@* One form field, posted as values[<Name>]. A checkbox is followed by a hidden "false" of the
+   same name so an unticked box still posts; the binder keeps the first value. *@
+@{
+    var name = $"values[{Model.Name}]";
+    var id = $"field-{Model.Name}";
+    var wide = Model.InputType == "textarea";
+}
+<div class="field" style="@(wide ? "grid-column:1/-1" : "")">
+    <label class="field-label" for="@id">
+        @Model.DisplayName
+        @if (Model.IsRequired && Model.InputType != "checkbox")
+        {
+            <span title="Required">*</span>
+        }
+        @if (Model.IsKey)
+        {
+            <span class="tag" style="margin-left:6px">key</span>
+        }
+    </label>
+    @switch (Model.InputType)
+    {
+        case "checkbox":
+            <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="@id" name="@name" value="true" @(string.Equals(Model.Value, "true", StringComparison.OrdinalIgnoreCase) ? "checked" : "") />
+                <input type="hidden" name="@name" value="false" />
+                <span style="color:var(--fg-3);font-size:12px">Yes when ticked</span>
+            </div>
+            break;
+        case "select":
+            <select id="@id" name="@name" class="form-select">
+                @if (!Model.IsRequired)
+                {
+                    <option value="" selected="@(Model.Value.Length == 0)">&mdash;</option>
+                }
+                @if (Model.Options is not null)
+                {
+                    foreach (var option in Model.Options)
+                    {
+                        <option value="@option.Value" selected="@(option.Value == Model.Value)">@option.Text</option>
+                    }
+                }
+            </select>
+            break;
+        case "textarea":
+            <textarea id="@id" name="@name" class="form-control" rows="5" maxlength="@(Model.MaxLength?.ToString() ?? "")">@Model.Value</textarea>
+            break;
+        case "number":
+            <input type="number" id="@id" name="@name" class="form-control" value="@Model.Value" step="any" />
+            break;
+        case "datetime-local":
+            <input type="datetime-local" id="@id" name="@name" class="form-control" value="@Model.Value" />
+            break;
+        default:
+            <input type="text" id="@id" name="@name" class="form-control" value="@Model.Value" maxlength="@(Model.MaxLength?.ToString() ?? "")" autocomplete="off" />
+            break;
+    }
+    @if (Model.InputType == "datetime-local")
+    {
+        <span class="field-hint">UTC</span>
+    }
+    @if (Model.Hint is not null)
+    {
+        <span class="field-hint">@Model.Hint</span>
+    }
+    @if (Model.Error is not null)
+    {
+        <span class="field-error">@Model.Error</span>
+    }
+</div>

@@ -145,6 +145,37 @@ public sealed class DataAdminDetailField
     public string? LinkKey { get; set; }
 }
 
+// The create/edit form: one field per editable column, posted back as values[<Name>].
+public sealed class DataAdminEditViewModel
+{
+    public required string Slug { get; init; }
+    public required string DisplayName { get; init; }
+    public bool IsCreate { get; init; }
+    public string? Key { get; init; }
+    public string? Label { get; init; }
+    public List<DataAdminFieldViewModel> Fields { get; } = new();
+    // Errors not tied to one field (a database refusal).
+    public List<string> FormErrors { get; } = new();
+    public string? DiscordSideEffect { get; init; }
+}
+
+public sealed class DataAdminFieldViewModel
+{
+    public required string Name { get; init; }
+    public required string DisplayName { get; init; }
+    public string Value { get; init; } = string.Empty;
+    // text | textarea | number | checkbox | datetime-local | select
+    public string InputType { get; set; } = "text";
+    public bool IsRequired { get; init; }
+    public int? MaxLength { get; init; }
+    public bool IsKey { get; init; }
+    public string? Hint { get; set; }
+    public string? Error { get; init; }
+    public IReadOnlyList<DataAdminSelectOption>? Options { get; set; }
+}
+
+public sealed record DataAdminSelectOption(string Value, string Text);
+
 // A table with a foreign key into the row being shown, with how many of its rows point here.
 public sealed class DataAdminRelatedTable
 {
