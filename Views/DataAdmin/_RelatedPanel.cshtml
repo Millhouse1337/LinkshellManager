@@ -1,0 +1,46 @@
+@model DataAdminDetailsViewModel
+@* The tables whose rows point at this row, with counts. A dependent that is shown links to its
+   own list narrowed to this row; one that is not shown is still named and counted. *@
+@if (Model.Related.Count > 0)
+{
+    <div class="card fade d3">
+        <div class="card-head">
+            <div class="card-title">Related rows</div>
+            <span class="tag">@Model.Related.Count table@(Model.Related.Count == 1 ? "" : "s")</span>
+        </div>
+        <table class="table themed">
+            <thead>
+                <tr>
+                    <th>Table</th>
+                    <th>Via</th>
+                    <th style="text-align:right">Rows</th>
+                    <th>When this row is deleted</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var related in Model.Related)
+                {
+                    <tr>
+                        <td style="font-weight:500">
+                            @if (related.IsShown && related.Count > 0)
+                            {
+                                <a asp-action="List" asp-route-slug="@related.Slug" asp-all-route-data="@related.FilterRoute">@related.DisplayName</a>
+                            }
+                            else
+                            {
+                                @related.DisplayName
+                                if (!related.IsShown)
+                                {
+                                    <span class="tag" style="margin-left:6px">not shown</span>
+                                }
+                            }
+                        </td>
+                        <td style="color:var(--fg-3);font-size:12px">@related.ForeignKeyDisplayName</td>
+                        <td class="num" style="text-align:right">@related.Count.ToString("N0")</td>
+                        <td style="color:var(--fg-3);font-size:12px">@related.OnDelete</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

@@ -1,0 +1,59 @@
+@model DataAdminDetailsViewModel
+@{
+    ViewData["Title"] = Model.Label;
+    ViewData["BodyClass"] = "lsm-page";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <div class="page-eyebrow">
+            <a asp-action="Index">Data Admin</a> &rsaquo; <a asp-action="List" asp-route-slug="@Model.Slug">@Model.DisplayName</a>
+        </div>
+        <h1 class="page-title">@Model.Label</h1>
+        <div class="page-sub">
+            <span>@Model.DisplayName #@Model.Key</span>
+            <span style="color:var(--fg-3)">@Model.TableName</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="List" asp-route-slug="@Model.Slug">Back to list</a>
+    </div>
+</div>
+
+<partial name="~/Views/DataAdmin/_Flash.cshtml" />
+
+<div class="card fade d2" style="margin-bottom:16px">
+    <div class="card-head">
+        <div class="card-title">Fields</div>
+    </div>
+    <table class="table themed">
+        <tbody>
+            @foreach (var field in Model.Fields)
+            {
+                <tr>
+                    <td style="width:240px;white-space:nowrap;vertical-align:top;font-weight:500">@field.DisplayName</td>
+                    <td style="@(field.IsLongText ? "white-space:pre-wrap;" : "")vertical-align:top">
+                        @if (field.LinkSlug is not null && field.LinkKey is not null)
+                        {
+                            <a asp-action="Details" asp-route-slug="@field.LinkSlug" asp-route-id="@field.LinkKey">@field.Text</a>
+                        }
+                        else if (field.IsEmpty)
+                        {
+                            <span style="color:var(--fg-3)">@field.Text</span>
+                        }
+                        else
+                        {
+                            @field.Text
+                        }
+                        @if (field.Note is not null)
+                        {
+                            <span style="color:var(--fg-3);font-size:11px;margin-left:8px">@field.Note</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<partial name="~/Views/DataAdmin/_RelatedPanel.cshtml" model="Model" />

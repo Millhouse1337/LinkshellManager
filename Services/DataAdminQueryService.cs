@@ -102,14 +102,93 @@ public sealed class DataAdminQueryService
                 if (linkable)
                 {
                     cell.LinkSlug = principal.Slug;
-                    cell.LinkRoute = new Dictionary<string, string>(StringComparer.Ordinal)
-                    {
-                        [DataAdminListQuery.FilterPrefix + principal.Key.Name] = keyText,
-                    };
+                    cell.LinkKey = keyText;
                 }
             }
         }
     }
+
+    // One row: every visible column (foreign keys resolved to the principal's label and linked to
+    // its details when that table is shown), then a count per table whose rows point at this row.
+    // Null when the key does not exist.
+    public async Task<DataAdminDetailsViewModel?> DetailsAsync(DataAdminModel table, object key, IReadOnlySet<string> shownTables, CancellationToken ct)
+    {
+        var entity = await table.FindAsync(_db, key, track: false, ct);
+        if (entity is null)
+        {
+            return null;
+        }
+
+        var keyText = table.KeyToString(key);
+        var model = new DataAdminDetailsViewModel
+        {
+            Slug = table.Slug,
+            DisplayName = table.DisplayName,
+            TableName = table.TableName,
+            Key = keyText,
+            Label = table.LabelOf(entity),
+            CanEdit = table.CanEdit,
+            CanDelete = table.CanDelete,
+            DiscordSideEffect = table.Policy.DiscordSideEffect,
+        };
+
+        foreach (var column in table.DetailColumns)
+        {
+            var raw = column.Property.GetValue(entity);
+            var field = new DataAdminDetailField
+            {
+                Name = column.Name,
+                DisplayName = column.DisplayName,
+                Text = DataAdminFormat.Display(raw),
+                IsEmpty = raw is null,
+                IsLongText = raw is string text && (text.Length > DataAdminDefaults.ListCellMaxLength || text.Contains('\n')),
+            };
+            if (raw is not null && column.ForeignKeyTo is { } principal)
+            {
+                var principalKey = principal.KeyToString(raw);
+                var labels = await principal.LoadLabelsAsync(_db, new[] { raw }, ct);
+                field.Text = labels.TryGetValue(principalKey, out var label) ? label : principalKey;
+                field.Note = $"{principal.DisplayName} #{principalKey}";
+                if (shownTables.Contains(principal.ClrName))
+                {
+                    field.LinkSlug = principal.Slug;
+                    field.LinkKey = principalKey;
+                }
+            }
+            model.Fields.Add(field);
+        }
+
+        foreach (var relation in table.ReverseRelations)
+        {
+            var count = await relation.Dependent.CountWhereAsync(_db, relation.ForeignKeyColumn, key, ct);
+            model.Related.Add(new DataAdminRelatedTable
+            {
+                Slug = relation.Dependent.Slug,
+                DisplayName = relation.Dependent.DisplayName,
+                ForeignKeyColumn = relation.ForeignKeyColumn.Name,
+                ForeignKeyDisplayName = relation.ForeignKeyColumn.DisplayName,
+                Count = count,
+                OnDelete = DescribeDeleteBehavior(relation.DeleteBehavior),
+                IsShown = shownTables.Contains(relation.Dependent.ClrName),
+                FilterRoute = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [DataAdminListQuery.FilterPrefix + relation.ForeignKeyColumn.Name] = keyText,
+                },
+            });
+        }
+
+        return model;
+    }
+
+    // Postgres semantics for a delete that tracks only the one row: Cascade and SetNull are DB
+    // actions; everything else (Restrict, NoAction, EF's client-side behaviours) is a constraint
+    // the database will refuse to break.
+    public static string DescribeDeleteBehavior(DeleteBehavior behavior) => behavior switch
+    {
+        DeleteBehavior.Cascade => "Deleted together with this row",
+        DeleteBehavior.SetNull => "Kept, but unlinked, when this row is deleted",
+        _ => "Blocks deleting this row while any exist",
+    };
 
     // The filter chips: "Linkshell: Kraken LS" rather than "LinkshellId: 5" when the principal is known.
     private async Task AddActiveFiltersAsync(DataAdminModel table, DataAdminListQuery query, DataAdminListViewModel model, CancellationToken ct)

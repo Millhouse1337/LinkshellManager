@@ -112,9 +112,52 @@ public sealed class DataAdminListCell
     public string Text { get; set; } = string.Empty;
     public bool IsEmpty { get; init; }
     public bool IsNumeric { get; init; }
-    // Set when the cell is a foreign key to a table that is currently shown.
+    // Set when the cell is a foreign key to a table that is currently shown: the principal row's details page.
     public string? LinkSlug { get; set; }
-    public Dictionary<string, string>? LinkRoute { get; set; }
+    public string? LinkKey { get; set; }
+}
+
+// One row's details page: every visible column, then the tables whose rows point at this row.
+public sealed class DataAdminDetailsViewModel
+{
+    public required string Slug { get; init; }
+    public required string DisplayName { get; init; }
+    public required string TableName { get; init; }
+    public required string Key { get; init; }
+    public required string Label { get; init; }
+    public List<DataAdminDetailField> Fields { get; } = new();
+    public List<DataAdminRelatedTable> Related { get; } = new();
+    public bool CanEdit { get; init; }
+    public bool CanDelete { get; init; }
+    public string? DiscordSideEffect { get; init; }
+}
+
+public sealed class DataAdminDetailField
+{
+    public required string Name { get; init; }
+    public required string DisplayName { get; init; }
+    public string Text { get; set; } = string.Empty;
+    public bool IsEmpty { get; init; }
+    public bool IsLongText { get; init; }
+    // "Linkshell #5" beside a foreign key's label, so the raw key stays visible.
+    public string? Note { get; set; }
+    public string? LinkSlug { get; set; }
+    public string? LinkKey { get; set; }
+}
+
+// A table with a foreign key into the row being shown, with how many of its rows point here.
+public sealed class DataAdminRelatedTable
+{
+    public required string Slug { get; init; }
+    public required string DisplayName { get; init; }
+    public required string ForeignKeyColumn { get; init; }
+    public required string ForeignKeyDisplayName { get; init; }
+    public long Count { get; init; }
+    // What happens to those rows when this row is deleted, in words.
+    public required string OnDelete { get; init; }
+    public bool IsShown { get; init; }
+    // ?f.<ForeignKeyColumn>=<key> for the dependent's list page.
+    public required Dictionary<string, string> FilterRoute { get; init; }
 }
 
 // A chip on the list page: "Linkshell: Kraken LS" for ?f.LinkshellId=5.

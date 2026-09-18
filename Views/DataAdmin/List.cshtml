@@ -68,6 +68,7 @@
                                 </a>
                             </th>
                         }
+                        <th style="text-align:right">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -77,9 +78,9 @@
                             @foreach (var cell in row.Cells)
                             {
                                 <td class="@(cell.IsNumeric ? "num" : "")" style="@(cell.IsNumeric ? "text-align:right" : "")">
-                                    @if (cell.LinkSlug is not null && cell.LinkRoute is not null)
+                                    @if (cell.LinkSlug is not null && cell.LinkKey is not null)
                                     {
-                                        <a asp-action="List" asp-route-slug="@cell.LinkSlug" asp-all-route-data="@cell.LinkRoute">@cell.Text</a>
+                                        <a asp-action="Details" asp-route-slug="@cell.LinkSlug" asp-route-id="@cell.LinkKey">@cell.Text</a>
                                     }
                                     else if (cell.IsEmpty)
                                     {
@@ -91,6 +92,11 @@
                                     }
                                 </td>
                             }
+                            <td style="text-align:right">
+                                <div style="display:flex;justify-content:flex-end;gap:4px">
+                                    <a class="btn ghost sm" asp-action="Details" asp-route-slug="@Model.Slug" asp-route-id="@row.Key">View</a>
+                                </div>
+                            </td>
                         </tr>
                     }
                 </tbody>

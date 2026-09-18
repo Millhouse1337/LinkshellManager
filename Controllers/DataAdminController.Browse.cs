@@ -22,4 +22,19 @@ public sealed partial class DataAdminController
         var model = await _queries.ListAsync(table, query, shown, ct);
         return View(model);
     }
+
+    // /data-admin/{slug}/{id}: the id is parsed by the table's key type, so "abc" on an int key is a 404.
+    [HttpGet("{slug:regex(^[a-z0-9-]+$)}/{id}")]
+    public async Task<IActionResult> Details(string slug, string id, CancellationToken ct)
+    {
+        var table = await ResolveShownAsync(slug, ct);
+        if (table is null || !table.TryParseKey(id, out var key))
+        {
+            return NotFound();
+        }
+
+        var shown = await _selection.GetShownClrNamesAsync(ct);
+        var model = await _queries.DetailsAsync(table, key, shown, ct);
+        return model is null ? NotFound() : View(model);
+    }
 }

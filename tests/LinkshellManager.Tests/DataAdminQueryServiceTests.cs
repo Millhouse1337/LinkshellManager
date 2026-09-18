@@ -180,7 +180,7 @@ public class DataAdminQueryServiceTests
         var cell = linked.Rows.Single(r => r.Key == "1").Cells[linkshellColumn];
         Assert.Equal("Kraken LS", cell.Text);
         Assert.Equal("linkshell", cell.LinkSlug);
-        Assert.Equal("1", cell.LinkRoute?["f.Id"]);
+        Assert.Equal("1", cell.LinkKey);
         var orphan = linked.Rows.Single(r => r.Key == "9").Cells[linkshellColumn];
         Assert.Equal("999", orphan.Text);
 
