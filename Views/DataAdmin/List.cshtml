@@ -103,6 +103,10 @@
                                     {
                                         <a class="btn ghost sm" asp-action="Edit" asp-route-slug="@Model.Slug" asp-route-id="@row.Key">Edit</a>
                                     }
+                                    @if (Model.CanDelete)
+                                    {
+                                        <a class="btn ghost sm" asp-action="Delete" asp-route-slug="@Model.Slug" asp-route-id="@row.Key">Delete</a>
+                                    }
                                 </div>
                             </td>
                         </tr>

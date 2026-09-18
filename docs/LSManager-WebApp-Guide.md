@@ -87,6 +87,16 @@ against the treasury in the same transaction.
 - **Profile** — character name, alts, time zone, profile image, primary linkshell.
 - **Messages** — internal messaging.
 
+### Data Admin *(super admin only)*
+A browser over the database for the one account marked super admin. It shows nothing until you pick
+tables on **Choose tables**, where every table is listed as a tree grouped by what deletes it (a table
+sits under the table whose deletion also deletes its rows). Each shown table gets a list page with
+search, sort, filters and paging, a details page whose foreign keys link to the row they point at and
+which lists every table with rows pointing back, and, where the table allows it, add/edit/delete pages.
+The delete page shows what else goes with the row (deleted, unlinked, or blocking the delete) before
+you confirm. Ledgers and history tables are read-only, credentials and images are never shown, and
+`Linkshell` and `App User` can never be deleted from here.
+
 ## Customize Linkshell (the control panel)
 `Configurations → Customize Linkshell` (officer only):
 

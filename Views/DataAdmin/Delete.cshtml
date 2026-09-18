@@ -1,0 +1,85 @@
+@model DataAdminDeleteViewModel
+@{
+    ViewData["Title"] = $"Delete {Model.Label}";
+    ViewData["BodyClass"] = "lsm-page";
+    var confirmText = $"Delete {Model.DisplayName} #{Model.Key} \"{Model.Label}\"?" + (Model.DeletedRows > 0 ? $"\n\nThis also deletes {Model.DeletedRows:N0} row(s) in other tables." : "") + "\n\nThis cannot be undone.";
+}
+
+<div class="page-head fade d1">
+    <div>
+        <div class="page-eyebrow">
+            <a asp-action="Index">Data Admin</a> &rsaquo; <a asp-action="List" asp-route-slug="@Model.Slug">@Model.DisplayName</a> &rsaquo;
+            <a asp-action="Details" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">@Model.Label</a>
+        </div>
+        <h1 class="page-title">Delete @Model.Label</h1>
+        <div class="page-sub"><span>@Model.DisplayName #@Model.Key</span></div>
+    </div>
+    <div class="page-actions">
+        <a class="btn ghost" asp-action="Details" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">Cancel</a>
+    </div>
+</div>
+
+<partial name="~/Views/DataAdmin/_Flash.cshtml" />
+
+<div class="card fade d2" style="padding:20px;max-width:860px;border-color:var(--danger)">
+    @if (Model.IsBlocked)
+    {
+        <div class="alert alert-warning" style="margin-bottom:16px">
+            Other rows still point at this row, and the database will not delete it while they do. The blocked rows are marked below;
+            delete or re-point them first.
+        </div>
+    }
+    else if (Model.DeletedRows > 0)
+    {
+        <div class="alert alert-danger" style="margin-bottom:16px">
+            Deleting <strong>@Model.Label</strong> also deletes <strong>@Model.DeletedRows.ToString("N0")</strong> row@(Model.DeletedRows == 1 ? "" : "s")
+            in @Model.Totals.Count other table@(Model.Totals.Count == 1 ? "" : "s"). This cannot be undone.
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-danger" style="margin-bottom:16px">
+            This removes <strong>@Model.Label</strong>. No other table loses rows. This cannot be undone.
+        </div>
+    }
+    @if (Model.DiscordSideEffect is not null)
+    {
+        <div class="alert alert-danger" style="margin-bottom:16px">@Model.DiscordSideEffect</div>
+    }
+
+    @if (Model.Children.Count > 0)
+    {
+        <div style="margin-bottom:16px">
+            <div style="font-weight:500;margin-bottom:6px">What happens to the rows that point here</div>
+            <ul style="margin:0;padding-left:18px">
+                @foreach (var child in Model.Children)
+                {
+                    <partial name="~/Views/DataAdmin/_CascadeImpact.cshtml" model="child" />
+                }
+            </ul>
+            @if (Model.IsTruncated)
+            {
+                <div style="color:var(--fg-3);font-size:11px;margin-top:6px">
+                    Some branches were not fully expanded (too many rows or too deep); the database still deletes everything beneath them.
+                </div>
+            }
+        </div>
+    }
+    @if (Model.Totals.Count > 0)
+    {
+        <div style="margin-bottom:16px;color:var(--fg-3);font-size:12px">
+            Rows deleted per table:
+            @string.Join("; ", Model.Totals.Select(t => $"{t.DisplayName} {t.Rows:N0}"))
+        </div>
+    }
+
+    <form method="post" asp-action="Delete" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key" style="display:flex;gap:8px" data-confirm="@confirmText">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn danger" disabled="@Model.IsBlocked">Delete @Model.DisplayName</button>
+        <a class="btn ghost" asp-action="Details" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">Cancel</a>
+    </form>
+</div>
+
+@section Scripts {
+    <script src="~/js/data-admin.js" asp-append-version="true" defer></script>
+}

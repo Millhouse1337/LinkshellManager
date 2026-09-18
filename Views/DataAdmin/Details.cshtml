@@ -20,6 +20,10 @@
         {
             <a class="btn primary" asp-action="Edit" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">Edit</a>
         }
+        @if (Model.CanDelete)
+        {
+            <a class="btn danger" asp-action="Delete" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">Delete</a>
+        }
         <a class="btn ghost" asp-action="List" asp-route-slug="@Model.Slug">Back to list</a>
     </div>
 </div>

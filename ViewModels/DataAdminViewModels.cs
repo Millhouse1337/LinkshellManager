@@ -176,6 +176,37 @@ public sealed class DataAdminFieldViewModel
 
 public sealed record DataAdminSelectOption(string Value, string Text);
 
+// The delete confirmation: what else goes, what is unlinked, and what blocks the delete.
+public sealed class DataAdminDeleteViewModel
+{
+    public required string Slug { get; init; }
+    public required string DisplayName { get; init; }
+    public required string Key { get; init; }
+    public required string Label { get; init; }
+    public bool IsBlocked { get; init; }
+    public bool IsTruncated { get; init; }
+    public long DeletedRows { get; init; }
+    public string? DiscordSideEffect { get; init; }
+    public List<DataAdminImpactNode> Children { get; } = new();
+    public List<DataAdminImpactTotal> Totals { get; } = new();
+}
+
+public sealed class DataAdminImpactNode
+{
+    public required string DisplayName { get; init; }
+    public required string Slug { get; init; }
+    public required string ForeignKeyDisplayName { get; init; }
+    // deleted | unlinked | blocked
+    public required string Effect { get; init; }
+    public long Count { get; init; }
+    public long AlreadyCounted { get; init; }
+    public bool Overflow { get; init; }
+    public bool DepthCapped { get; init; }
+    public List<DataAdminImpactNode> Children { get; } = new();
+}
+
+public sealed record DataAdminImpactTotal(string DisplayName, long Rows);
+
 // A table with a foreign key into the row being shown, with how many of its rows point here.
 public sealed class DataAdminRelatedTable
 {

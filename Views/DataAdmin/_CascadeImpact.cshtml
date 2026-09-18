@@ -1,0 +1,29 @@
+@model DataAdminImpactNode
+@* One branch of the cascade-impact tree, then its children nested beneath it. *@
+@{
+    var tagClass = Model.Effect switch { "deleted" => "danger", "unlinked" => "warning", _ => "accent" };
+    var verb = Model.Effect switch { "deleted" => "deleted", "unlinked" => "unlinked (set to empty)", _ => "BLOCK the delete" };
+    var count = Model.Count.ToString("N0") + (Model.Overflow ? "+" : "");
+}
+<li style="margin:4px 0">
+    <span class="tag @tagClass">@verb</span>
+    <strong>@count</strong> @Model.DisplayName row@(Model.Count == 1 ? "" : "s")
+    <span style="color:var(--fg-3);font-size:11px">via @Model.ForeignKeyDisplayName</span>
+    @if (Model.AlreadyCounted > 0)
+    {
+        <span style="color:var(--fg-3);font-size:11px">(+@Model.AlreadyCounted.ToString("N0") already listed under another table)</span>
+    }
+    @if (Model.DepthCapped)
+    {
+        <span style="color:var(--fg-3);font-size:11px">(not expanded further)</span>
+    }
+    @if (Model.Children.Count > 0)
+    {
+        <ul style="margin:2px 0 0;padding-left:18px">
+            @foreach (var child in Model.Children)
+            {
+                <partial name="~/Views/DataAdmin/_CascadeImpact.cshtml" model="child" />
+            }
+        </ul>
+    }
+</li>

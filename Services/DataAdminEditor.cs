@@ -87,6 +87,33 @@ public sealed class DataAdminEditor
         return await SaveAsync(table, entity, result, actor, "updated", changed, ct);
     }
 
+    // Deletes the one row (no Includes, so nothing runs client-side and the database's own
+    // cascade / set-null / refuse rules apply). Recomputes the impact first: a delete the
+    // database would refuse is reported instead of attempted.
+    public async Task<DataAdminEditResult> DeleteAsync(DataAdminModel table, object key, AppUser actor, CancellationToken ct)
+    {
+        if (!table.CanDelete)
+        {
+            return new DataAdminEditResult { Forbidden = true };
+        }
+        var entity = await table.FindAsync(_db, key, track: true, ct);
+        if (entity is null)
+        {
+            return new DataAdminEditResult { NotFound = true };
+        }
+
+        var result = new DataAdminEditResult { Entity = entity };
+        var impact = await DataAdminCascadePreview.ComputeAsync(_db, table, entity, ct);
+        if (impact.IsBlocked)
+        {
+            result.Errors.Add(new DataAdminFieldError(string.Empty, "Other rows still reference this row, so the database will not delete it."));
+            return result;
+        }
+
+        _db.Remove(entity);
+        return await SaveAsync(table, entity, result, actor, "deleted", Array.Empty<string>(), ct);
+    }
+
     // The form for a table: one field per create/edit column, prefilled from the entity (edit) or
     // from the posted values (a re-render after errors). Foreign keys become a <select> of the
     // principal's labels while that table is small enough; beyond that, the raw key is typed in.
