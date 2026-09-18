@@ -164,6 +164,61 @@ public class DataAdminEditorTests
         Assert.Equal(new DateTimeOffset(2026, 9, 18, 10, 30, 0, TimeSpan.Zero), seen);
     }
 
+    // The form re-posts every field. A timestamp comes back at second precision; if it is what
+    // the form was shown, it is not a change and the stored sub-second value must survive.
+    [Fact]
+    public async Task ReposingAnUnchangedTimestamp_KeepsItsFullPrecision()
+    {
+        using var db = await SeededAsync();
+        var (catalog, editor, _) = Harness(db);
+        var precise = new DateTime(2026, 1, 2, 10, 30, 45, 123, DateTimeKind.Utc);
+        var rule = await db.Rules.SingleAsync(r => r.Id == 1);
+        rule.CreatedAt = precise;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var form = await editor.BuildFormAsync(Table(catalog, typeof(Rule)), await db.Rules.AsNoTracking().SingleAsync(r => r.Id == 1), posted: null, Array.Empty<DataAdminFieldError>(), CancellationToken.None);
+        var posted = form.Fields.ToDictionary(f => f.Name, f => (string?)f.Value, StringComparer.Ordinal);
+        Assert.Equal("2026-01-02T10:30:45", posted["CreatedAt"]);
+        posted["RuleTitle"] = "Renamed";
+
+        var result = await editor.UpdateAsync(Table(catalog, typeof(Rule)), 1, posted, Actor, CancellationToken.None);
+
+        Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(e => e.Message)));
+        var saved = await db.Rules.AsNoTracking().SingleAsync(r => r.Id == 1);
+        Assert.Equal("Renamed", saved.RuleTitle);
+        Assert.Equal(precise, saved.CreatedAt);
+    }
+
+    // Tod.Claim / Killed are three-state: null means "not recorded". Saving an unrelated field
+    // must not turn that null into false.
+    [Fact]
+    public async Task NullableBool_StaysNull_WhenNotChosen_AndIsADropdown()
+    {
+        using var db = await SeededAsync();
+        db.Tods.Add(new Tod { Id = 1, LinkshellId = 1 });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var (catalog, editor, _) = Harness(db);
+        var tods = Table(catalog, typeof(Tod));
+
+        var form = await editor.BuildFormAsync(tods, await db.Tods.AsNoTracking().SingleAsync(), posted: null, Array.Empty<DataAdminFieldError>(), CancellationToken.None);
+        var claim = Assert.Single(form.Fields, f => f.Name == nameof(Tod.Claim));
+        Assert.Equal("select", claim.InputType);
+        Assert.False(claim.IsRequired);
+        Assert.Equal(new[] { "true", "false" }, claim.Options?.Select(o => o.Value));
+        Assert.Equal(string.Empty, claim.Value);
+
+        var posted = form.Fields.ToDictionary(f => f.Name, f => (string?)f.Value, StringComparer.Ordinal);
+        var result = await editor.UpdateAsync(tods, 1, posted, Actor, CancellationToken.None);
+        Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(e => e.Message)));
+        Assert.Null((await db.Tods.AsNoTracking().SingleAsync()).Claim);
+
+        posted[nameof(Tod.Claim)] = "true";
+        Assert.True((await editor.UpdateAsync(tods, 1, posted, Actor, CancellationToken.None)).Succeeded);
+        Assert.True((await db.Tods.AsNoTracking().SingleAsync()).Claim);
+    }
+
     [Fact]
     public async Task Capabilities_AreEnforcedServerSide()
     {

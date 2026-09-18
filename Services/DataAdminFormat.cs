@@ -30,13 +30,14 @@ public static class DataAdminFormat
         return text;
     }
 
-    // Value for an <input>: dates in the datetime-local shape (always UTC), everything else invariant text.
+    // Value for an <input>: dates in the datetime-local shape with seconds (always UTC), everything
+    // else invariant text. The editor compares a posted value against this to detect "unchanged".
     public static string ToInputValue(object? value) => value switch
     {
         null => string.Empty,
         bool flag => flag ? "true" : "false",
-        DateTime when_ => (when_.Kind == DateTimeKind.Local ? when_.ToUniversalTime() : when_).ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture),
-        DateTimeOffset offset => offset.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture),
+        DateTime when_ => (when_.Kind == DateTimeKind.Local ? when_.ToUniversalTime() : when_).ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture),
+        DateTimeOffset offset => offset.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture),
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty,
         _ => value.ToString() ?? string.Empty,
     };

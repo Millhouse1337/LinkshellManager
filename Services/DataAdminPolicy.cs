@@ -134,7 +134,11 @@ public sealed class DataAdminPolicy
                 // The DKP epoch watermark is stamped on insert (ApplicationDbContext), so rows are born in the app.
                 Flags = DataAdminPolicyFlags.NoCreate,
                 Options = Opts((nameof(AppUserLinkshell.Rank), DataAdminOptions.FromConsts(typeof(LinkshellRanks)))),
-                DiscordSideEffect = "Changing a member's DKP reposts the linkshell's DKP sheet to Discord.",
+                // The balance and its ledger watermarks are only ever moved by DkpLedgerWriter, which keeps
+                // them in step with the ledger (INV-1 in ApplicationDbContext); shown here, never edited.
+                ReadOnlyColumns = Names(
+                    nameof(AppUserLinkshell.LinkshellDkp), nameof(AppUserLinkshell.SeededDkpEarned), nameof(AppUserLinkshell.SeededDkpSpent),
+                    nameof(AppUserLinkshell.DkpSeedLedgerId), nameof(AppUserLinkshell.DkpPoolLedgerFromId)),
             },
             [typeof(DiscordActivityUser)] = new()
             {

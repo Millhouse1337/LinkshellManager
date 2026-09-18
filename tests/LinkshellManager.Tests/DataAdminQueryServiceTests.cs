@@ -107,6 +107,9 @@ public class DataAdminQueryServiceTests
         Assert.Equal(new[] { 1, 2, 4 }, (await IdsAsync(db, Query(("f.LinkshellId", "1")))).OrderBy(id => id));
         Assert.Equal(new[] { 3, 5 }, (await IdsAsync(db, Query(("f.LinkshellId", "2")))).OrderBy(id => id));
         Assert.Equal(5, (await IdsAsync(db, Query(("f.NoSuchColumn", "1")))).Length);
+        // ...and an unknown filter is dropped from the links too, rather than following every page.
+        var stale = await new DataAdminQueryService(db).ListAsync(Rules(db), Query(("f.NoSuchColumn", "1"), ("f.LinkshellId", "1")), ShowRulesOnly, CancellationToken.None);
+        Assert.Equal(new[] { "f.LinkshellId" }, stale.PageRoute(1).Keys);
         Assert.Equal(5, (await IdsAsync(db, Query(("f.LinkshellId", "abc")))).Length);
         // Only key and foreign-key columns are filterable; a text column is not.
         Assert.Equal(5, (await IdsAsync(db, Query(("f.Category", "Loot")))).Length);
@@ -117,8 +120,10 @@ public class DataAdminQueryServiceTests
     {
         using var db = await SeededAsync();
 
+        // attendance, Bidding, Discord..., Loot rules, Loot split: the InMemory provider sorts strings
+        // culture-aware (case-insensitive); on Postgres the column's collation decides.
         var byTitle = await IdsAsync(db, Query(("sort", "RuleTitle")));
-        Assert.Equal(new[] { 2, 5, 4, 1, 3 }, byTitle); // attendance, Bidding, Discord..., Loot rules, Loot split (ordinal)
+        Assert.Equal(new[] { 2, 5, 4, 1, 3 }, byTitle);
         var byTitleDesc = await IdsAsync(db, Query(("sort", "RuleTitle"), ("desc", "true")));
         Assert.Equal(byTitle.Reverse(), byTitleDesc);
 

@@ -182,10 +182,30 @@ public class DataAdminPolicyTests
     {
         var catalog = NewCatalog();
 
-        foreach (var watched in new[] { typeof(Tod), typeof(DkpPool), typeof(DkpPoolEventType), typeof(AppUserLinkshell), typeof(Event), typeof(EventHistory), typeof(Auction), typeof(Bid), typeof(TodLootDetail), typeof(EventLootDetail) })
+        foreach (var watched in new[] { typeof(Tod), typeof(DkpPool), typeof(DkpPoolEventType), typeof(Event), typeof(EventHistory), typeof(Auction), typeof(Bid), typeof(TodLootDetail), typeof(EventLootDetail) })
         {
             Assert.False(string.IsNullOrWhiteSpace(Table(catalog, watched).Policy.DiscordSideEffect), $"{watched.Name} needs a Discord side-effect note.");
         }
+    }
+
+    // A membership's DKP balance and ledger watermarks are only ever moved by DkpLedgerWriter,
+    // which keeps them in step with the ledger; a raw edit here would desync them.
+    [Fact]
+    public void MembershipDkpColumns_AreShownButNeverEditable()
+    {
+        var table = Table(NewCatalog(), typeof(AppUserLinkshell));
+        var locked = new[]
+        {
+            nameof(AppUserLinkshell.LinkshellDkp), nameof(AppUserLinkshell.SeededDkpEarned), nameof(AppUserLinkshell.SeededDkpSpent),
+            nameof(AppUserLinkshell.DkpSeedLedgerId), nameof(AppUserLinkshell.DkpPoolLedgerFromId),
+        };
+
+        foreach (var name in locked)
+        {
+            Assert.Contains(table.DetailColumns, c => c.Name == name);
+            Assert.DoesNotContain(table.EditableColumns, c => c.Name == name);
+        }
+        Assert.Contains(table.EditableColumns, c => c.Name == nameof(AppUserLinkshell.Rank));
     }
 
     [Fact]

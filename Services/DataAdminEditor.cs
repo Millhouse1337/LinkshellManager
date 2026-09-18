@@ -158,6 +158,7 @@ public sealed class DataAdminEditor
                 Value = value,
                 InputType = InputTypeFor(column),
                 IsRequired = !column.IsNullable,
+                IsInteger = column.UnderlyingType == typeof(int) || column.UnderlyingType == typeof(long),
                 MaxLength = column.MaxLength,
                 IsKey = column.IsKey,
                 Error = errors.FirstOrDefault(e => e.Field == column.Name)?.Message,
@@ -167,6 +168,14 @@ public sealed class DataAdminEditor
             {
                 field.InputType = "select";
                 field.Options = options.Select(o => new DataAdminSelectOption(o, o)).ToList();
+            }
+            else if (column.IsBool && column.IsNullable)
+            {
+                // A nullable bool is a three-state value ("not recorded" is meaningful: Tod.Claim,
+                // AppUserEvent.IsVerified), so it gets a dropdown with a blank, never a checkbox
+                // whose unticked state would turn null into false on every save.
+                field.InputType = "select";
+                field.Options = new[] { new DataAdminSelectOption("true", "Yes"), new DataAdminSelectOption("false", "No") };
             }
             else if (column.ForeignKeyTo is { } principal)
             {
@@ -220,6 +229,14 @@ public sealed class DataAdminEditor
             if (!DataAdminValues.TryConvert(raw, column, out var value, out var error))
             {
                 result.Errors.Add(new DataAdminFieldError(column.Name, error));
+                continue;
+            }
+            // The form re-posts every field it was shown. A value that comes back exactly as it
+            // was rendered is not a change, and must not be written: a timestamp would otherwise
+            // lose the sub-second part the input cannot carry, on every save of the row.
+            var current = column.Property.GetValue(entity);
+            if (string.Equals(raw?.Trim() ?? string.Empty, DataAdminFormat.ToInputValue(current), StringComparison.Ordinal))
+            {
                 continue;
             }
             column.Property.SetValue(entity, value);

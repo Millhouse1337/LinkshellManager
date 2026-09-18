@@ -167,6 +167,8 @@ public sealed class DataAdminFieldViewModel
     // text | textarea | number | checkbox | datetime-local | select
     public string InputType { get; set; } = "text";
     public bool IsRequired { get; init; }
+    // Whole-number column: the number input steps by 1 instead of accepting decimals.
+    public bool IsInteger { get; init; }
     public int? MaxLength { get; init; }
     public bool IsKey { get; init; }
     public string? Hint { get; set; }

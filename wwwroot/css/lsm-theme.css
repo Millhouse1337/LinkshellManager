@@ -97,11 +97,13 @@
 .lsm-page .tag.accent { background: rgba(79, 124, 255, .18); color: #cdd9ff; border-color: rgba(79, 124, 255, .45); }
 .lsm-page .tag.success { background: rgba(67, 209, 122, .14); color: var(--green-main); border-color: rgba(67, 209, 122, .35); }
 .lsm-page .tag.warning { background: rgba(245, 158, 11, .14); color: #f5c451; border-color: rgba(245, 158, 11, .4); }
+.lsm-page .tag.danger { background: rgba(255, 107, 107, .14); color: #ffb4b4; border-color: rgba(255, 107, 107, .4); }
 
 /* ---------- Alerts ---------- */
 .lsm-page .alert { border-radius: 10px; padding: 10px 14px; font-size: 13px; border: 1px solid var(--border-soft); background: var(--bg-panel); color: var(--text-main); }
 .lsm-page .alert-danger { background: rgba(255, 107, 107, .10); border-color: rgba(255, 107, 107, .4); color: #ffb4b4; }
 .lsm-page .alert-success { background: rgba(67, 209, 122, .12); border-color: rgba(67, 209, 122, .4); color: #a7e9c4; }
+.lsm-page .alert-warning { background: rgba(245, 158, 11, .12); border-color: rgba(245, 158, 11, .4); color: #f5c451; }
 
 /* ---------- Command chip ---------- */
 .lsm-page code {

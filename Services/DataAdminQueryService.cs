@@ -22,12 +22,17 @@ public sealed class DataAdminQueryService
         // ILike is Postgres-only; the InMemory provider used by the tests would throw on it.
         var page = await table.QueryPageAsync(_db, query, _db.Database.IsNpgsql(), DataAdminDefaults.PageSize, ct);
 
+        // Links re-emit only the filters this table can apply, so a stale ?f.X from a bookmark
+        // does not follow every pager and sort link around invisibly.
+        var applicable = query.Filters
+            .Where(pair => table.FilterColumns.Any(column => column.Name == pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         var model = new DataAdminListViewModel
         {
             Slug = table.Slug,
             DisplayName = table.DisplayName,
             TableName = table.TableName,
-            Query = query with { Page = page.Page },
+            Query = query with { Page = page.Page, Filters = applicable },
             Total = page.Total,
             Page = page.Page,
             TotalPages = page.TotalPages,

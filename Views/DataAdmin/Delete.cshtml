@@ -60,7 +60,8 @@
             @if (Model.IsTruncated)
             {
                 <div style="color:var(--fg-3);font-size:11px;margin-top:6px">
-                    Some branches were not fully expanded (too many rows or too deep); the database still deletes everything beneath them.
+                    Some branches were not fully expanded (too many rows or too deep). The database still deletes everything beneath them,
+                    and if a blocking row hides there it refuses the whole delete, which is reported here after you confirm.
                 </div>
             }
         </div>

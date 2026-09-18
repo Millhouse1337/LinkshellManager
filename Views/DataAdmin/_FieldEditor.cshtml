@@ -43,16 +43,16 @@
             </select>
             break;
         case "textarea":
-            <textarea id="@id" name="@name" class="form-control" rows="5" maxlength="@(Model.MaxLength?.ToString() ?? "")">@Model.Value</textarea>
+            <textarea id="@id" name="@name" class="form-control" rows="5" maxlength="@Model.MaxLength">@Model.Value</textarea>
             break;
         case "number":
-            <input type="number" id="@id" name="@name" class="form-control" value="@Model.Value" step="any" />
+            <input type="number" id="@id" name="@name" class="form-control" value="@Model.Value" step="@(Model.IsInteger ? "1" : "any")" />
             break;
         case "datetime-local":
-            <input type="datetime-local" id="@id" name="@name" class="form-control" value="@Model.Value" />
+            <input type="datetime-local" id="@id" name="@name" class="form-control" value="@Model.Value" step="1" />
             break;
         default:
-            <input type="text" id="@id" name="@name" class="form-control" value="@Model.Value" maxlength="@(Model.MaxLength?.ToString() ?? "")" autocomplete="off" />
+            <input type="text" id="@id" name="@name" class="form-control" value="@Model.Value" maxlength="@Model.MaxLength" autocomplete="off" />
             break;
     }
     @if (Model.InputType == "datetime-local")
