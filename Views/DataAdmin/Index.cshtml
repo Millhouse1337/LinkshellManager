@@ -52,7 +52,7 @@ else
                     {
                         <tr>
                             <td style="font-weight:500"><a asp-action="List" asp-route-slug="@card.Slug">@card.DisplayName</a></td>
-                            <td class="muted" style="font-size:12px">@card.TableName</td>
+                            <td style="color:var(--fg-3);font-size:12px">@card.TableName</td>
                             <td>
                                 <div style="display:flex;flex-wrap:wrap;gap:4px">
                                     @if (!card.CanCreate && !card.CanEdit && !card.CanDelete)

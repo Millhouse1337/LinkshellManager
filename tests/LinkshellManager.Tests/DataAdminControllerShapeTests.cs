@@ -17,10 +17,11 @@ public class DataAdminControllerShapeTests
 {
     private static readonly Type Controller = typeof(DataAdminController);
 
+    // Every public instance method MVC would treat as an action -- the return type is irrelevant
+    // to MVC, so filtering on it would let a Task<RedirectToActionResult> action slip past.
     private static IEnumerable<MethodInfo> Actions() =>
         Controller.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-            .Where(method => typeof(IActionResult).IsAssignableFrom(method.ReturnType)
-                             || typeof(Task<IActionResult>).IsAssignableFrom(method.ReturnType));
+            .Where(method => !method.IsSpecialName && method.GetCustomAttribute<NonActionAttribute>() is null);
 
     [Fact]
     public void Controller_IsGatedAtClassLevel()

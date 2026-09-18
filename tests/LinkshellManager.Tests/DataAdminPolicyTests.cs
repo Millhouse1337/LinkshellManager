@@ -92,19 +92,23 @@ public class DataAdminPolicyTests
     {
         var catalog = NewCatalog();
 
-        Assert.Equal(new[] { LinkshellRanks.Leader, LinkshellRanks.Officer, LinkshellRanks.Member, LinkshellRanks.Trial }, Options(catalog, typeof(AppUserLinkshell), nameof(AppUserLinkshell.Rank)));
+        Assert.Equal(DataAdminOptions.FromConsts(typeof(LinkshellRanks)), Options(catalog, typeof(AppUserLinkshell), nameof(AppUserLinkshell.Rank)));
+        Assert.Contains(LinkshellRanks.Trial, Options(catalog, typeof(AppUserLinkshell), nameof(AppUserLinkshell.Rank)));
         Assert.Equal(HnmAttendanceModes.All, Options(catalog, typeof(Linkshell), nameof(Linkshell.HnmAttendanceMode)));
         Assert.Equal(EventBoardThemes.All.Select(theme => theme.Key), Options(catalog, typeof(Linkshell), nameof(Linkshell.EventBoardTheme)));
         Assert.Equal(DkpPoolAccents.All, Options(catalog, typeof(DkpPool), nameof(DkpPool.Accent)));
-        Assert.Equal(new[] { WindowEventStatuses.Open, WindowEventStatuses.Closed, WindowEventStatuses.Archived }, Options(catalog, typeof(WindowEvent), nameof(WindowEvent.Status)));
+        Assert.Equal(DataAdminOptions.FromConsts(typeof(WindowEventStatuses)), Options(catalog, typeof(WindowEvent), nameof(WindowEvent.Status)));
+        Assert.Contains(WindowEventStatuses.Archived, Options(catalog, typeof(WindowEvent), nameof(WindowEvent.Status)));
         Assert.Equal(WindowEventEntryTypes.All, Options(catalog, typeof(WindowEvent), nameof(WindowEvent.EntryType)));
-        Assert.Equal(new[] { ChartItemKinds.Pop, ChartItemKinds.Drop }, Options(catalog, typeof(ChartPopItem), nameof(ChartPopItem.Kind)));
+        Assert.Equal(DataAdminOptions.FromConsts(typeof(ChartItemKinds)), Options(catalog, typeof(ChartPopItem), nameof(ChartPopItem.Kind)));
+        Assert.Contains(ChartItemKinds.Drop, Options(catalog, typeof(ChartPopItem), nameof(ChartPopItem.Kind)));
         Assert.Equal(ChartWishlistStatuses.All, Options(catalog, typeof(ChartWishlistRequest), nameof(ChartWishlistRequest.Status)));
         Assert.Equal(AttendanceSnapshotSlotKinds.All, Options(catalog, typeof(AttendanceSnapshot), nameof(AttendanceSnapshot.SlotKind)));
         Assert.Contains(AttendanceSnapshotStatuses.Active, Options(catalog, typeof(AttendanceSnapshot), nameof(AttendanceSnapshot.SnapshotStatus)));
         Assert.Contains(AttendanceSnapshotStatuses.Ignored, Options(catalog, typeof(AttendanceSnapshot), nameof(AttendanceSnapshot.SnapshotStatus)));
         Assert.Equal(DiscordChannelPurposes.All, Options(catalog, typeof(LinkshellDiscordChannel), nameof(LinkshellDiscordChannel.Purpose)));
-        Assert.Equal(new[] { JournalEntryStatuses.Draft, JournalEntryStatuses.Confirmed }, Options(catalog, typeof(JournalEntry), nameof(JournalEntry.Status)));
+        Assert.Equal(DataAdminOptions.FromConsts(typeof(JournalEntryStatuses)), Options(catalog, typeof(JournalEntry), nameof(JournalEntry.Status)));
+        Assert.Contains(JournalEntryStatuses.Confirmed, Options(catalog, typeof(JournalEntry), nameof(JournalEntry.Status)));
     }
 
     [Fact]

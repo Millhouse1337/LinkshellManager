@@ -34,7 +34,7 @@ public class DataAdminGateTests
     public void OnlyTheCatalog_EnumeratesTheModel()
     {
         var offenders = new List<string>();
-        foreach (var folder in new[] { "Controllers", "Services", "ViewModels", "Views", "Authorization", "Utils" })
+        foreach (var folder in new[] { "Controllers", "Services", "ViewModels", "Views", "Authorization", "Utils", "Data" })
         {
             foreach (var file in Directory.GetFiles(FindRepoPath(folder), "*.*", SearchOption.AllDirectories))
             {
@@ -50,6 +50,13 @@ public class DataAdminGateTests
                     offenders.Add(Path.GetFileName(file));
                 }
             }
+        }
+
+        var repoRoot = Directory.GetParent(FindRepoPath("Data"))?.FullName
+            ?? throw new DirectoryNotFoundException("Could not locate the repo root.");
+        if (File.ReadAllText(Path.Combine(repoRoot, "Program.cs")).Contains("GetEntityTypes(", StringComparison.Ordinal))
+        {
+            offenders.Add("Program.cs");
         }
 
         Assert.Empty(offenders);

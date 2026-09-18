@@ -5,7 +5,7 @@
     <div style="flex:1;min-width:0">
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">
             <label for="show-@Model.ClrName" style="font-weight:500;margin:0;cursor:pointer">@Model.DisplayName</label>
-            <span class="muted" style="font-size:11px">@Model.TableName</span>
+            <span style="color:var(--fg-3);font-size:11px">@Model.TableName</span>
             @if (Model.ReadOnly)
             {
                 <span class="tag">Read-only</span>

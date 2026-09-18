@@ -206,9 +206,18 @@ public class DataAdminCatalogTests
         Assert.Equal("No ninja looting", Table(catalog, typeof(Rule)).LabelOf(rule));
         Assert.Equal("7", Table(catalog, typeof(Rule)).KeyToString(Table(catalog, typeof(Rule)).KeyOf(rule)));
 
-        // A table with no label column labels rows by their key rather than by nothing.
+        // A blank label falls back to the key rather than to nothing.
         var blank = new Rule { Id = 9, LinkshellId = 1, RuleTitle = " ", RuleDetails = "..." };
         Assert.Equal("9", Table(catalog, typeof(Rule)).LabelOf(blank));
+
+        // So does a table with no label column at all (its label projection is a null constant).
+        var unlabelled = catalog.Models.FirstOrDefault(m => m.LabelColumns.Count == 0 && m.KeyType == typeof(int));
+        if (unlabelled is not null)
+        {
+            var row = unlabelled.CreateInstance();
+            unlabelled.Key.Property.SetValue(row, 42);
+            Assert.Equal("42", unlabelled.LabelOf(row));
+        }
     }
 
     [Fact]

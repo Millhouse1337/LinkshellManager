@@ -161,7 +161,9 @@ public abstract class DataAdminModel
                 IsNullable = property.IsNullable,
                 MaxLength = property.GetMaxLength(),
                 IsKey = property.IsPrimaryKey(),
-                IsGenerated = property.ValueGenerated != ValueGenerated.Never,
+                // Only meaningful for keys: non-key value generation (HasDefaultValue) is reported
+                // differently by the InMemory and Npgsql providers, so nothing may depend on it.
+                IsGenerated = property.IsPrimaryKey() && property.ValueGenerated != ValueGenerated.Never,
                 IsProtected = DataAdminPolicy.IsProtected(entityType.ClrType, info, policy),
                 IsReadOnly = policy.ReadOnlyColumns.Contains(property.Name),
                 Property = info,
@@ -170,8 +172,13 @@ public abstract class DataAdminModel
                 ForeignKey = property.GetContainingForeignKeys().FirstOrDefault(fk => fk.Properties.Count == 1),
             });
         }
-        // Declaration order, so list pages read like the model file does.
-        columns.Sort((a, b) => a.Property.MetadataToken.CompareTo(b.Property.MetadataToken));
+        // Declaration order, so list pages read like the model file does: base-class columns first
+        // (AppUser inherits IdentityUser's), then by metadata token, which only orders within one assembly.
+        columns.Sort((a, b) =>
+        {
+            var byDepth = InheritanceDepth(a.Property.DeclaringType).CompareTo(InheritanceDepth(b.Property.DeclaringType));
+            return byDepth != 0 ? byDepth : a.Property.MetadataToken.CompareTo(b.Property.MetadataToken);
+        });
         AllColumns = columns;
 
         var keys = columns.Where(column => column.IsKey).ToList();
@@ -376,6 +383,16 @@ public abstract class DataAdminModel
         Check(policy.Options.Keys, "Options");
         Check(policy.SyncedCopies.Select(copy => copy.TargetColumn), "SyncedCopies.TargetColumn");
         Check(policy.SyncedCopies.Select(copy => copy.ViaForeignKey), "SyncedCopies.ViaForeignKey");
+    }
+
+    private static int InheritanceDepth(Type? type)
+    {
+        var depth = 0;
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            depth++;
+        }
+        return depth;
     }
 
     private static string ToKebabCase(string name)

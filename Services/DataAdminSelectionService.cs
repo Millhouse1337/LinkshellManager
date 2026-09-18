@@ -39,15 +39,20 @@ public sealed class DataAdminSelectionService
             return cached;
         }
 
-        var keys = await _db.AppSettings.AsNoTracking()
-            .Where(setting => setting.Key.StartsWith(KeyPrefix) && setting.Value == "true")
-            .Select(setting => setting.Key)
+        var rows = await _db.AppSettings.AsNoTracking()
+            .Where(setting => setting.Key.StartsWith(KeyPrefix))
+            .Select(setting => new { setting.Key, setting.Value })
             .ToListAsync(ct);
 
         var shown = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var key in keys)
+        foreach (var row in rows)
         {
-            var clrName = key[KeyPrefix.Length..];
+            // "true" however it was capitalised, the way GlobalSettingsService reads its bools.
+            if (!string.Equals(row.Value, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            var clrName = row.Key[KeyPrefix.Length..];
             if (_catalog.FindByClrName(clrName) is { IsHidden: false })
             {
                 shown.Add(clrName);

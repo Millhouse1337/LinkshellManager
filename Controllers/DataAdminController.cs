@@ -4,6 +4,7 @@ using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -84,7 +85,7 @@ public sealed partial class DataAdminController : Controller
         };
         foreach (var root in _catalog.Forest.Roots)
         {
-            model.Roots.AddRange(await BuildNodesAsync(root, "", shown, counts, ct));
+            model.Roots.AddRange(await BuildNodesAsync(root, "", 0, shown, counts, ct));
         }
         return View(model);
     }
@@ -93,14 +94,27 @@ public sealed partial class DataAdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Tables(string[]? show, CancellationToken ct)
     {
-        var wanted = show ?? Array.Empty<string>();
-        await _selection.SetShownAsync(wanted, ct);
+        var actor = SuperAdminOnlyAttribute.GetUser(HttpContext);
+        var before = await _selection.GetShownClrNamesAsync(ct);
+        try
+        {
+            await _selection.SetShownAsync(show ?? Array.Empty<string>(), ct);
+        }
+        catch (DbUpdateException)
+        {
+            // A double-clicked Save, or a second super admin saving at the same moment: the rows
+            // this request read were already added or removed. Whatever won is the selection now.
+            TempData["DataAdminError"] = "The selection was changed by another request at the same time. Please review it and save again.";
+            return RedirectToAction(nameof(Tables));
+        }
         var shown = await _selection.GetShownClrNamesAsync(ct);
 
-        var actor = SuperAdminOnlyAttribute.GetUser(HttpContext);
         _logger.LogWarning(
-            "Data Admin: {Actor} set the shown tables to [{Tables}]",
+            "Data Admin: {Actor} ({ActorId}) changed the shown tables. Added [{Added}], removed [{Removed}], now [{Tables}]",
             actor.UserName,
+            actor.Id,
+            string.Join(", ", shown.Except(before).OrderBy(name => name, StringComparer.Ordinal)),
+            string.Join(", ", before.Except(shown).OrderBy(name => name, StringComparer.Ordinal)),
             string.Join(", ", shown.OrderBy(name => name, StringComparer.Ordinal)));
 
         TempData["DataAdminMessage"] = shown.Count == 0
@@ -117,21 +131,30 @@ public sealed partial class DataAdminController : Controller
         return table is not null && await _selection.IsShownAsync(table, ct) ? table : null;
     }
 
+    // The root of the table's cascade tree, skipping Hidden ancestors so an index group is never
+    // headed by a table the page cannot show.
     private DataAdminModel RootOf(DataAdminModel table)
     {
         var node = _catalog.Forest.ByItem[table];
+        var root = node.Item;
         while (node.Parent is not null)
         {
             node = node.Parent;
+            if (!node.Item.IsHidden)
+            {
+                root = node.Item;
+            }
         }
-        return node.Item;
+        return root;
     }
 
     // A Hidden table is not rendered; its children (none today) are hoisted to its level so they
-    // stay reachable on the page.
+    // stay reachable on the page. `depth` is the rendered indent, which is why it is passed down
+    // rather than read from the forest (a hoisted child must not indent for its hidden parent).
     private async Task<List<DataAdminTableNode>> BuildNodesAsync(
         DataAdminCascadeForest<DataAdminModel>.Node node,
         string parentPath,
+        int depth,
         IReadOnlySet<string> shown,
         bool counts,
         CancellationToken ct)
@@ -142,7 +165,7 @@ public sealed partial class DataAdminController : Controller
             var hoisted = new List<DataAdminTableNode>();
             foreach (var child in node.Children)
             {
-                hoisted.AddRange(await BuildNodesAsync(child, parentPath, shown, counts, ct));
+                hoisted.AddRange(await BuildNodesAsync(child, parentPath, depth, shown, counts, ct));
             }
             return hoisted;
         }
@@ -155,7 +178,7 @@ public sealed partial class DataAdminController : Controller
             TableName = table.TableName,
             Slug = table.Slug,
             Path = path,
-            Depth = node.Depth,
+            Depth = depth,
             Selected = shown.Contains(table.ClrName),
             ReadOnly = table.IsReadOnly,
             NoCreate = !table.CanCreate,
@@ -167,7 +190,7 @@ public sealed partial class DataAdminController : Controller
         };
         foreach (var child in node.Children)
         {
-            built.Children.AddRange(await BuildNodesAsync(child, path, shown, counts, ct));
+            built.Children.AddRange(await BuildNodesAsync(child, path, depth + 1, shown, counts, ct));
         }
         return new List<DataAdminTableNode> { built };
     }

@@ -10,7 +10,7 @@
         <h1 class="page-title">@Model.DisplayName</h1>
         <div class="page-sub">
             <span><span class="num">@Model.Total.ToString("N0")</span> row@(Model.Total == 1 ? "" : "s")</span>
-            <span class="muted">@Model.TableName</span>
+            <span style="color:var(--fg-3)">@Model.TableName</span>
         </div>
     </div>
     <div class="page-actions">
@@ -25,7 +25,7 @@
         <div style="flex:1;min-width:220px">
             @if (string.IsNullOrEmpty(Model.SearchHint))
             {
-                <span class="muted" style="font-size:12px">No text columns to search.</span>
+                <span style="color:var(--fg-3);font-size:12px">No text columns to search.</span>
             }
             else
             {
@@ -83,7 +83,7 @@
                                     }
                                     else if (cell.IsEmpty)
                                     {
-                                        <span class="muted">@cell.Text</span>
+                                        <span style="color:var(--fg-3)">@cell.Text</span>
                                     }
                                     else
                                     {
