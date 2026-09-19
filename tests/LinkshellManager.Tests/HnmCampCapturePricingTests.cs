@@ -464,4 +464,138 @@ public class HnmCampCapturePricingTests
             await db.AttendanceSnapshotEntries.ToListAsync(),
             entry => Assert.Null(entry.DkpAmount));
     }
+
+    // ------------------------------------------------------------------------- misc posts ---
+
+    // A `/lsm now` an officer filed against the LIVE camp as Misc: on the Event row, on no Window
+    // Event, until End Camp adopts and prices it.
+    private static AttendanceSnapshot MiscPost(int id, params string[] characterNames)
+    {
+        var snapshot = new AttendanceSnapshot
+        {
+            Id = id,
+            LinkshellId = LinkshellId,
+            LinkedEventId = EventId,
+            WindowEventId = null,
+            Name = "Runs to the zone",
+            SlotKind = AttendanceSnapshotSlotKinds.Misc,
+            CapturedAtUtc = CampStart.AddMinutes(30),
+            CreatedAtUtc = CampStart.AddMinutes(30),
+            SnapshotStatus = AttendanceSnapshotStatuses.Active,
+            EntryCount = characterNames.Length,
+        };
+        foreach (var name in characterNames)
+        {
+            snapshot.Entries.Add(new AttendanceSnapshotEntry { CharacterName = name });
+        }
+        return snapshot;
+    }
+
+    // The linkshell's "Regular window" amount and nothing else -- no open, no close, no bonus. A
+    // read taken at the camp is worth a window, which is the whole rule.
+    [Fact]
+    public async Task AMiscPost_IsPricedAtTheRegularWindowRate()
+    {
+        using var db = await SeededAsync();
+        db.AttendanceSnapshots.Add(MiscPost(900, "Beta"));
+        await db.SaveChangesAsync();
+
+        await EndCampAsync(db);
+
+        var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
+        Assert.Equal(0.5d, misc.Entries.Single().DkpAmount);
+    }
+
+    // ITS OWN money. Beta stood one regular window (0.5) and is on one misc post (0.5), and the
+    // card owes them both -- the same way two windows pay twice. This is what used to be worth
+    // nothing at all: the post arrived unpriced, and on a per-capture card the captures ARE the
+    // money.
+    [Fact]
+    public async Task AMiscPost_PaysOnTopOfTheWindowsAMemberStood()
+    {
+        using var db = await SeededAsync();
+        db.AttendanceSnapshots.Add(MiscPost(900, "Beta"));
+        await db.SaveChangesAsync();
+
+        var windowEvent = await EndCampAsync(db);
+
+        var loaded = await db.WindowEvents
+            .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
+            .Include(w => w.MemberDkpOverrides)
+            .FirstAsync(w => w.Id == windowEvent!.Id);
+        var beta = AttendanceSectionsBuilder
+            .MapWindowEvent(loaded, NodaTime.DateTimeZone.Utc)
+            .CombinedMembers
+            .Single(m => m.CharacterName == "Beta");
+
+        Assert.Equal(1.0d, beta.EffectiveDkpAmount);   // window 2 (0.5) + misc (0.5)
+    }
+
+    // Somebody who was never scanned in a window is paid for the post alone.
+    [Fact]
+    public async Task AMiscOnlyMember_IsPaidForThePost()
+    {
+        using var db = await SeededAsync();
+        db.AttendanceSnapshots.Add(MiscPost(900, "Gamma"));
+        await db.SaveChangesAsync();
+
+        var windowEvent = await EndCampAsync(db);
+
+        var loaded = await db.WindowEvents
+            .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
+            .Include(w => w.MemberDkpOverrides)
+            .FirstAsync(w => w.Id == windowEvent!.Id);
+        var gamma = AttendanceSectionsBuilder
+            .MapWindowEvent(loaded, NodaTime.DateTimeZone.Utc)
+            .CombinedMembers
+            .Single(m => m.CharacterName == "Gamma");
+
+        Assert.Equal(0.5d, gamma.EffectiveDkpAmount);
+    }
+
+    // One body standing there once. A name listed twice in the same capture is a scan artefact,
+    // not two people -- exactly the rule the window captures already apply.
+    [Fact]
+    public async Task AMiscPost_PaysEachPersonOnceEvenIfTheyAreListedTwice()
+    {
+        using var db = await SeededAsync();
+        db.AttendanceSnapshots.Add(MiscPost(900, "Beta", "Beta"));
+        await db.SaveChangesAsync();
+
+        await EndCampAsync(db);
+
+        var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
+        Assert.Equal(new double?[] { 0.5d, 0d }, misc.Entries.Select(e => e.DkpAmount).ToArray());
+    }
+
+    // The camp's OWN per-window override wins over the linkshell default, so a camp priced for the
+    // night prices its misc posts for the night too.
+    [Fact]
+    public async Task AMiscPost_FollowsTheCampsPerWindowOverride()
+    {
+        using var db = await SeededAsync();
+        (await db.Events.FirstAsync(e => e.Id == EventId)).HnmPerWindowOverride = 3d;
+        db.AttendanceSnapshots.Add(MiscPost(900, "Beta"));
+        await db.SaveChangesAsync();
+
+        await EndCampAsync(db);
+
+        var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
+        Assert.Equal(3d, misc.Entries.Single().DkpAmount);
+    }
+
+    // Manual Check In prices no capture at all, misc ones included: credit there comes from the
+    // check-in range and a number written here would be paid by nothing.
+    [Fact]
+    public async Task AManualCheckInCamp_DoesNotPriceMiscPosts()
+    {
+        using var db = await SeededAsync(attendanceMode: HnmAttendanceModes.Wd);
+        db.AttendanceSnapshots.Add(MiscPost(900, "Beta"));
+        await db.SaveChangesAsync();
+
+        await EndCampAsync(db);
+
+        var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
+        Assert.Null(misc.Entries.Single().DkpAmount);
+    }
 }

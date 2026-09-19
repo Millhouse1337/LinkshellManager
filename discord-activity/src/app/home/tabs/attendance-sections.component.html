@@ -392,9 +392,15 @@
             <span class="we-snapshots__group-title">Miscellaneous Posts</span>
             <span class="we-snapshots__group-count">{{ miscSnapshots(event).length }}</span>
             <span class="we-snapshots__group-help">At the camp, outside any window.</span>
-            @if (model.canManage && !closed) {
+            @if (model.canManage && !closed && !event.perCaptureDkp) {
               <!-- Blank means misc-only members are paid exactly what a window attendee is, which
-                   is the default. Carried by Save / Post / Update like every other value. -->
+                   is the default. Carried by Save / Post / Update like every other value.
+
+                   HIDDEN on a card that prices its captures. There the money rides on each
+                   capture row -- every misc post already arrives priced at the camp's regular
+                   window rate, editable per person right below this -- and all three save paths
+                   skip ApplyMiscOverrides for such a card. The box could only ever have shown
+                   this card's 0 baseline and changed nothing when typed in. -->
               <label class="we-misc-dkp">
                 <span>Misc DKP</span>
                 <input class="input we-dkp-input" type="number" step="0.25" min="0"

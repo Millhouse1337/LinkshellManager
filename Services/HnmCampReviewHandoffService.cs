@@ -442,9 +442,33 @@ public sealed class HnmCampReviewHandoffService
         //
         // Every status moves, Ignored included: anything left pointing at the recycled board would
         // be collected again by the NEXT pop's End Camp.
+        //
+        // They are also PRICED on the way in, at the camp's regular window rate. Until now they
+        // arrived carrying no amount at all, and on a per-capture card the money IS the capture
+        // amounts -- so a misc post reached the review card worth exactly nothing, and the Misc
+        // DKP box beside it fell back to this card's 0 baseline and said so.
+        //
+        // NOT added to pricedByKey, and that is why this sits after the Tags block rather than
+        // inside it: that dictionary answers "how much of the FINALIZER's total has been handed
+        // out", and the finalizer never counted misc posts. Feeding them in would drive the Tags
+        // remainder negative and take the money straight back off the member.
+        var miscValue = HnmCampPricing.MiscValueFor(ev, linkshell) ?? 0d;
         foreach (var filed in await LoadCampFiledCapturesAsync(ev.Id, cancellationToken))
         {
             filed.WindowEvent = windowEvent;
+            if (perCapture && AttendanceSnapshotSlotKinds.IsMisc(filed.SlotKind))
+            {
+                // One payment per person per post: the same name listed twice in one capture is
+                // one body standing there once. Priced whatever the capture's status -- an
+                // Ignored row pays nothing regardless, and a Pending one an officer later
+                // approves must not land on the card still worth zero.
+                var paidHere = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in filed.Entries)
+                {
+                    if (string.IsNullOrWhiteSpace(entry.CharacterName)) continue;
+                    entry.DkpAmount = paidHere.Add(entry.CharacterName.Trim()) ? miscValue : 0d;
+                }
+            }
             if (filed.CapturedAtUtc < windowEvent.FirstCapturedAtUtc)
             {
                 windowEvent.FirstCapturedAtUtc = filed.CapturedAtUtc;
@@ -509,9 +533,13 @@ public sealed class HnmCampReviewHandoffService
 
     // Captures an officer filed against this camp while it was live (ActivityDataController's
     // attach with a camp target): on the Event row, on no Window Event yet. Tracked, because the
-    // caller re-parents or unlinks these same instances.
+    // caller re-parents, re-prices and unlinks these same instances.
+    //
+    // Entries are included because the caller prices the misc ones per person. One Include, once
+    // per camp -- End Camp is not a poll.
     private Task<List<AttendanceSnapshot>> LoadCampFiledCapturesAsync(int eventId, CancellationToken cancellationToken)
         => _db.AttendanceSnapshots
+            .Include(s => s.Entries)
             .Where(s => s.LinkedEventId == eventId && s.WindowEventId == null)
             .ToListAsync(cancellationToken);
 

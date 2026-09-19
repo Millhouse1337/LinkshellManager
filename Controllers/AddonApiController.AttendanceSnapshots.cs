@@ -351,6 +351,16 @@ public sealed partial class AddonApiController
             .Include(s => s.LinkedEvent)
             .ToListAsync(cancellationToken);
 
+        // What a misc capture pays each person on it, so the addon's panel can print the DKP on
+        // the row instead of sending an officer to the app to find out. Resolved against the LIVE
+        // camp the capture was filed on, through the same helper End Camp prices it with, so the
+        // number the addon shows is the number the review card will carry.
+        //
+        // One row, read once for the page rather than per snapshot.
+        var linkshell = await _dbContext.Linkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == token.LinkshellId, cancellationToken);
+
         var snapshots = rows.Select(s =>
         {
             var isMisc = AttendanceSnapshotSlotKinds.IsMisc(s.SlotKind);
@@ -385,6 +395,10 @@ public sealed partial class AddonApiController
                 // poster is usually the person who needs reminding it is still sitting there.
                 isUnlinked = WindowEventLinkService.IsUnlinked(s),
                 awaitingVerification = s.SnapshotStatus == AttendanceSnapshotStatuses.Pending,
+                // Per person on the post, not a total. Null once the camp has ended and the
+                // capture has moved off the live event -- the review card owns the amount from
+                // then on, and guessing one here could disagree with what an officer has edited.
+                dkpAmount = isMisc ? HnmCampPricing.MiscValueFor(s.LinkedEvent, linkshell) : null,
             };
         }).ToList();
 

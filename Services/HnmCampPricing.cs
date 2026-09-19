@@ -135,4 +135,22 @@ public static class HnmCampPricing
     // moves: what is quoted is what is paid.
     public static double? DefaultWindowValue(Event ev, Linkshell? linkshell, int sequence)
         => WindowValueFor(ev, linkshell, sequence, closeWindow: 0, explicitAmount: null);
+
+    // What a MISC post pays each person on it: the camp's REGULAR window rate.
+    //
+    // A misc post is its own piece of DKP, not a share of somebody else's. Someone who stood two
+    // windows and also appears on a misc post earns all three, exactly the way two windows earn
+    // twice -- a read taken at the camp is worth a window, which is the whole rule.
+    //
+    // Deliberately NOT a setting of its own. It resolves through StandardBonuses, so it follows
+    // the camp's own per-window override when there is one and the linkshell's "Regular window"
+    // amount otherwise, and cannot drift from the scoring an officer configured.
+    //
+    // Null when the camp does not price captures at all -- Manual Check In credits the check-in
+    // range, and a non-HNM event has no window rate -- matching WindowValueFor's contract, where
+    // null means "nothing" and never 0.
+    public static double? MiscValueFor(Event? ev, Linkshell? linkshell)
+        => ev is not null && HonoursWindowAmount(ev)
+            ? StandardBonuses(ev, linkshell, claimed: false, killed: false).Window
+            : null;
 }
