@@ -41,7 +41,6 @@ public class HnmCampPastEventArchiveTests
         new(db,
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
-            new HnmAutoEventService(db, NullLogger<HnmAutoEventService>.Instance),
             NullLogger<HnmCampReviewHandoffService>.Instance);
 
     private static WindowEventDkpLedgerService NewLedgerService(ApplicationDbContext db)

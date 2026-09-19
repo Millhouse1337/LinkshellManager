@@ -34,20 +34,17 @@ public sealed class HnmCampReviewHandoffService
     private readonly ApplicationDbContext _db;
     private readonly WdCampFinalizer _wdFinalizer;
     private readonly HnmStandardCampFinalizer _standardFinalizer;
-    private readonly HnmAutoEventService _autoEvent;
     private readonly ILogger<HnmCampReviewHandoffService> _logger;
 
     public HnmCampReviewHandoffService(
         ApplicationDbContext db,
         WdCampFinalizer wdFinalizer,
         HnmStandardCampFinalizer standardFinalizer,
-        HnmAutoEventService autoEvent,
         ILogger<HnmCampReviewHandoffService> logger)
     {
         _db = db;
         _wdFinalizer = wdFinalizer;
         _standardFinalizer = standardFinalizer;
-        _autoEvent = autoEvent;
         _logger = logger;
     }
 
@@ -731,6 +728,30 @@ public sealed class HnmCampReviewHandoffService
 
         await _db.SaveChangesAsync(cancellationToken);
 
+        // WHETHER THE BOARD COMES BACK is the create form's call, and nothing else's: "Repeat post
+        // when ToD is updated", and how many hours before the pop. That switch is stored as the
+        // monster's HnmRecurringBoard, so it is read from there.
+        //
+        //   * On: the board stays parked as the "defeated" note and re-posts LeadHours before the
+        //     next pop -- AdoptSettledTodAsync points it at the ToD that was settled for this kill.
+        //   * Off: nobody asked for it back, so it goes. The row is deleted, and the save hook takes
+        //     every one of its Discord messages down with it (CollectDeletedEventBoards). The camp
+        //     itself is untouched: its review card, Past Event, windows and captures were all moved
+        //     off this row above, and every reference still pointing at it is SetNull.
+        //
+        // Off used to fall through to HnmAutoEventService, which revived the board for the next pop
+        // on the spot. That put a fresh board straight back into the channel for a camp whose
+        // officer had said not to repeat it.
+        if (!await RepeatsOnTodAsync(ev, cancellationToken))
+        {
+            _db.Events.Remove(ev);
+            await _db.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation(
+                "HNM camp {EventId} ('{Monster}') ended with Repeat-on-ToD off; its board was removed.",
+                ev.Id, ev.AssignedMonsterName);
+            return true;
+        }
+
         // The board is parked now, so hand it the ToD that was settled for this kill. Must run
         // AFTER the save above: it reads the parked row back out of the database.
         //
@@ -750,7 +771,22 @@ public sealed class HnmCampReviewHandoffService
         return true;
     }
 
-    // Point the recycled board at the kill's Time of Death.
+    // Did the officer ask for this monster's board to come back? The create form's "Repeat post
+    // when ToD is updated" switch, stored as the monster's HnmRecurringBoard. A camp with no
+    // monster cannot repeat: recurrence keys on the monster the next ToD records.
+    private async Task<bool> RepeatsOnTodAsync(Event ev, CancellationToken cancellationToken)
+    {
+        var monster = ev.AssignedMonsterName?.Trim();
+        if (string.IsNullOrWhiteSpace(monster))
+        {
+            return false;
+        }
+        var board = await HnmRecurringBoardService.FindAsync(_db, ev.LinkshellId, monster, cancellationToken);
+        return board?.Enabled == true;
+    }
+
+    // Point a REPEATING board at the kill's Time of Death. Only ever called for one -- a board that
+    // does not repeat has already been removed by the time this would run.
     //
     // The addon posts that ToD in its OWN call, before this one — from the End Event dialog, or
     // from the ToD Capture panel earlier in the night — so by the time the board parks, a ToD newer
@@ -759,29 +795,17 @@ public sealed class HnmCampReviewHandoffService
     // this ran, a camp ended from the addon skipped all of it and sat there advertising the PREVIOUS
     // pop's repop time with no re-post scheduled at all.
     //
-    // Two outcomes, because two different things can own the next pop:
+    // The poller re-posts LeadHours before the pop, which is what the officer asked for by enabling
+    // the switch, so the board STAYS parked and only its advertised times move onto the new cycle —
+    // via the same shared sync the ToD tracker uses when a ToD is corrected. Stamping SourceTodId is
+    // also what lets the poller recognise this row as the new cycle's board instead of posting a
+    // second one beside it.
     //
-    //   * A standing Repeat-on-ToD board owns it. The poller re-posts LeadHours before the pop,
-    //     which is what the officer asked for by enabling it, so the board STAYS parked and only its
-    //     advertised times move onto the new cycle — via the same shared sync the ToD tracker uses
-    //     when a ToD is corrected. Stamping SourceTodId is also what lets the poller recognise this
-    //     row as the new cycle's board instead of posting a second one beside it.
-    //
-    //   * Nothing does, so re-queue it right now: the streamlined addon workflow's "the next pop is
-    //     already on the board" behaviour, which is what the ToD post itself used to provide.
-    //     Handed to HnmAutoEventService because the camp is parked (queued) by this point, so its
-    //     own recycle finds THIS row and revives it with the composed name, next day and next
-    //     monster it would otherwise have given a brand new event.
-    //
-    // Either way the officer is left with ONE row. No newer ToD — a camp ended without one, and the
-    // web / Activity End Event actions, which post none — leaves the board exactly as it was.
+    // No newer ToD — a camp ended without one, and the web / Activity End Event actions, which post
+    // none — leaves the parked board exactly as it was.
     private async Task AdoptSettledTodAsync(Event ev, CancellationToken cancellationToken)
     {
-        var monster = ev.AssignedMonsterName?.Trim();
-        if (string.IsNullOrWhiteSpace(monster))
-        {
-            return;
-        }
+        var monster = ev.AssignedMonsterName!.Trim();
 
         var latestTodId = await HnmRecurringBoardService.LatestTodIdAsync(
             _db, ev.LinkshellId, monster, cancellationToken);
@@ -790,20 +814,13 @@ public sealed class HnmCampReviewHandoffService
             return;
         }
 
-        var board = await HnmRecurringBoardService.FindAsync(_db, ev.LinkshellId, monster, cancellationToken);
-        if (board?.Enabled == true)
-        {
-            ev.SourceTodId = todId;
-            await _db.SaveChangesAsync(cancellationToken);
-            await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
-                _db, ev.LinkshellId, monster, cancellationToken);
-            _logger.LogInformation(
-                "HNM camp {EventId} ('{Monster}') parked on tod {TodId}; its Repeat-on-ToD board re-posts before the pop.",
-                ev.Id, monster, todId);
-            return;
-        }
-
-        await _autoEvent.CreateAutoEventForTodAsync(todId, cancellationToken);
+        ev.SourceTodId = todId;
+        await _db.SaveChangesAsync(cancellationToken);
+        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
+            _db, ev.LinkshellId, monster, cancellationToken);
+        _logger.LogInformation(
+            "HNM camp {EventId} ('{Monster}') parked on tod {TodId}; its Repeat-on-ToD board re-posts before the pop.",
+            ev.Id, monster, todId);
     }
 
     // What this window is PAID as, said in one word. The three roles are exactly the branches of

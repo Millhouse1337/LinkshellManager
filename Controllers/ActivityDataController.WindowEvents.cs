@@ -49,9 +49,9 @@ public sealed partial class ActivityDataController
         double? DkpAmount,
         string? EntryType,
         DateTime? PostedToSheetUtc,
-        // Non-null when this row came from ending an HNM camp rather than an addon "/lsm now"
-        // capture. Drives the "Camp" tag so officers can tell the two apart — a camp row already
-        // carries per-member amounts, a snapshot row does not.
+        // The camp board this row was handed off from, while that board still exists. Null once
+        // it is gone -- a camp that does not repeat has its board removed at End Event -- so it
+        // is NOT what says "this is a camp"; IsCamp is.
         int? SourceEventId,
         // The captures filed as Misc, and how many. Split server-side so the two clients cannot
         // disagree about what counts as Misc.
@@ -65,7 +65,11 @@ public sealed partial class ActivityDataController
         // The CAPTURES carry the money on this card: each one shows what that window pays and is
         // edited there, and a member's combined amount is the sum of them. Set on camps handed off
         // from a Standard HNM board — see WindowEvent.PerCaptureDkp.
-        bool PerCaptureDkp);
+        bool PerCaptureDkp,
+        // True when this row came from ending an HNM camp rather than an addon "/lsm now" capture.
+        // Drives the "Camp" tag. Read off CampEndedAtUtc, which only End Camp writes and which
+        // outlives the camp's board -- SourceEventId went null with it and took the tag along.
+        bool IsCamp = false);
 
     public sealed record ActivityWindowEventMemberDkpInput(string? CharacterName, double? DkpAmount);
 
@@ -1048,7 +1052,8 @@ public sealed partial class ActivityDataController
             item.MiscDkpAmount,
             WindowEventWindowGrid.WindowCount(item),
             WindowEventWindowGrid.Minutes(item) > 0,
-            item.PerCaptureDkp);
+            item.PerCaptureDkp,
+            item.CampEndedAtUtc is not null || item.SourceEventId is not null);
     }
 
     // `windowEvent` supplies the cadence and grid anchor used to name the spawn window, exactly as

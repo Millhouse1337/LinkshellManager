@@ -1230,6 +1230,9 @@ export interface ActivityWindowEvent {
   // Camp rows arrive with every member's DKP already computed from the camp's scoring; snapshot
   // rows don't. Drives the "Camp" tag on the card header.
   sourceEventId?: number | null;
+  // True for a row handed off from an ended HNM camp. Outlives the camp's board, which a camp
+  // that does not repeat has removed at End Event -- sourceEventId goes null with it.
+  isCamp?: boolean;
   // How many of this camp captures were filed as Misc, plus the rate they are paid at and the
   // camp own window grid for the slot picker. hasWindowGrid false means there are no window
   // numbers to offer (Sky gods, farm NMs); Misc is still selectable.

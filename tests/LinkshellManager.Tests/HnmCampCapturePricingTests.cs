@@ -42,7 +42,6 @@ public class HnmCampCapturePricingTests
         new(db,
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
-            new HnmAutoEventService(db, NullLogger<HnmAutoEventService>.Instance),
             NullLogger<HnmCampReviewHandoffService>.Instance);
 
     private static WindowEventDkpLedgerService NewLedgerService(ApplicationDbContext db)
@@ -582,6 +581,32 @@ public class HnmCampCapturePricingTests
 
         var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
         Assert.Equal(3d, misc.Entries.Single().DkpAmount);
+    }
+
+    // ----------------------------------------------------------- a camp that does not repeat ---
+
+    // End Event removes the board of a camp with Repeat-on-ToD off. Everything that RECORDS the camp
+    // was moved off that row first, so deleting it must leave the review card, the Past Event and the
+    // priced captures exactly as they were -- the card still postable, still marked as a camp.
+    [Fact]
+    public async Task RemovingANonRepeatingCampsBoard_KeepsEverythingThatRecordsTheCamp()
+    {
+        using var db = await SeededAsync();
+
+        var ended = await NewHandoff(db).HandOffAndRecycleAsync(EventId, CancellationToken.None);
+
+        Assert.True(ended);
+        Assert.Empty(await db.Events.ToListAsync());
+
+        var card = await db.WindowEvents.SingleAsync();
+        Assert.NotNull(card.CampEventHistoryId);          // the Past Event it files into
+        Assert.NotNull(card.CampEndedAtUtc);              // what marks it as a camp now
+        Assert.Null(card.SourceEventId);                  // the board is gone, and says so
+        Assert.True(card.PerCaptureDkp);
+
+        var alpha = await AmountsByWindowAsync(db, "Alpha");
+        Assert.Equal(1d, alpha["Open"]);                  // the money is still on the captures
+        Assert.NotNull(await db.EventHistories.SingleAsync(h => h.Id == card.CampEventHistoryId));
     }
 
     // ----------------------------------------------------------------------- the past event ---

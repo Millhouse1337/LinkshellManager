@@ -41,7 +41,6 @@ public class HnmCampEndTodAdoptionTests
         new(db,
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
-            new HnmAutoEventService(db, NullLogger<HnmAutoEventService>.Instance),
             NullLogger<HnmCampReviewHandoffService>.Instance);
 
     private static HnmAutoEventService NewAutoEvent(ApplicationDbContext db) =>
@@ -166,25 +165,42 @@ public class HnmCampEndTodAdoptionTests
         Assert.Equal(1, db.HnmRecurringBoards.Single().LastSourceTodId);
     }
 
-    // With no standing board nothing else owns the next pop, so the row is re-queued on the spot —
-    // the streamlined addon workflow's "the next pop is already on the board", which is what the ToD
-    // post itself used to provide before it started standing down for a live camp.
+    // Repeat-on-ToD OFF on the create form: nobody asked for this board back, so End Event removes
+    // it rather than re-queueing it for the next pop. It used to be revived on the spot, which put a
+    // fresh board straight back into the channel for a camp the officer had said not to repeat.
     [Fact]
-    public async Task PostTodThenEnd_WithoutARepeatingBoard_ReQueuesTheSameRowForTheNextPop()
+    public async Task PostTodThenEnd_WithoutARepeatingBoard_RemovesTheBoard()
     {
         using var db = await SeededAsync(repeatOnTod: false);
 
         await PostTodThenEndAsync(db);
 
-        var requeued = db.Events.Single();
-        Assert.Equal(EventId, requeued.Id);
-        Assert.Null(requeued.HnmDefeatedAt);                 // back up, not parked
-        Assert.Null(requeued.WdFinalizedAt);
-        Assert.Null(requeued.CommencementStartTime);         // queued, not live
-        Assert.Equal(NewRepop, requeued.StartTime);
-        Assert.Equal(2, requeued.SourceTodId);
-        Assert.Equal(2, requeued.DayNumber);                 // the next pop is day 2
-        Assert.Equal(1, requeued.HnmWindowNumber);
+        Assert.Empty(db.Events);
+    }
+
+    // Same with no ToD settled at all: there is nothing for it to come back FOR, and no switch
+    // asking it to.
+    [Fact]
+    public async Task EndWithNoNewTod_WithoutARepeatingBoard_RemovesTheBoard()
+    {
+        using var db = await SeededAsync(repeatOnTod: false);
+
+        await NewHandoff(db).HandOffAndRecycleAsync(EventId, CancellationToken.None);
+
+        Assert.Empty(db.Events);
+    }
+
+    // Turned off after being on: a disabled template is "off", not "on with a stale setting".
+    [Fact]
+    public async Task PostTodThenEnd_WithADisabledRepeatingBoard_RemovesTheBoard()
+    {
+        using var db = await SeededAsync(repeatOnTod: true);
+        db.HnmRecurringBoards.Single().Enabled = false;
+        await db.SaveChangesAsync();
+
+        await PostTodThenEndAsync(db);
+
+        Assert.Empty(db.Events);
     }
 
     // The other order the addon can produce: the officer hit Post in the ToD Capture panel and the

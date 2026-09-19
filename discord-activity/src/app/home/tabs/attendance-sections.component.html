@@ -174,7 +174,7 @@
           </svg>
           {{ formatDate(event.firstCapturedAtUtc) }}
         </span>
-        @if (event.sourceEventId) {
+        @if (event.isCamp || event.sourceEventId) {
           <span class="tag accent" title="Created by ending an HNM camp — each member's DKP is already filled in from the camp's scoring. Review it, then Post to pay.">Camp</span>
         }
         @if (event.allianceNumbers.length > 1) {
