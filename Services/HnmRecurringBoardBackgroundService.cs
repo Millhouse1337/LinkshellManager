@@ -99,7 +99,8 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         }
     }
 
-    private async Task ProcessBoardAsync(
+    // internal so HnmRecurringBoardDuplicateTests can drive one board against a fixed clock.
+    internal async Task ProcessBoardAsync(
         ApplicationDbContext db, HnmRecurringBoard board, DateTime nowUtc, CancellationToken cancellationToken)
     {
         var monster = board.MonsterName.Trim();
@@ -149,17 +150,27 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         var nextDay = HnmConfig.NextDayNumber(tod.DayNumber, tod.Hq);
         var nextMonster = tod.Hq ? HnmConfig.BaseMonsterName(monster)! : monster;
 
-        // Idempotency / addon coexistence: reuse an existing not-yet-ended event that
-        // was created from this exact ToD, or a same-named event within ±10 min of the
-        // pop (covers the addon's auto-event, whose composed name may differ).
+        // Idempotency / addon coexistence: reuse an existing not-yet-ended event that was created
+        // from this exact ToD, or ANY board for this monster within ±10 min of the pop.
+        //
+        // It used to match that second case on the event NAME -- the template's name -- which only
+        // catches a board this poller posted itself. An officer who had already put up their own
+        // board for the pop, under their own name, was invisible to it: it posted the template's
+        // board beside theirs, both scheduled to the same second off the same ToD, and both went
+        // live together at the pop. HnmAutoEventService, the addon's copy of this job, has matched
+        // on the monster for exactly this reason; the two creators now agree.
+        //
+        // Same-named is kept for a board whose AssignedMonsterName was never set.
         var existing = await db.Events.FirstOrDefaultAsync(e =>
             e.LinkshellId == board.LinkshellId
             && e.EndTime == null
             && (e.SourceTodId == tod.Id
-                || (e.EventName == eventName
-                    && e.StartTime != null
+                || (e.StartTime != null
                     && e.StartTime >= windowStart
-                    && e.StartTime <= windowEnd)),
+                    && e.StartTime <= windowEnd
+                    && (e.EventName == eventName
+                        || (e.AssignedMonsterName != null
+                            && names.Contains(e.AssignedMonsterName.ToLower()))))),
             cancellationToken);
 
         if (existing is null)
