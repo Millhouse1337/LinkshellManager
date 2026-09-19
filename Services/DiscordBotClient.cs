@@ -221,31 +221,24 @@ public sealed class DiscordBotClient
             return null;
         }
 
-        try
-        {
-            using var client = CreateClient();
-            using var content = new StringContent(
-                JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
-            using var response = await client.PostAsync(
-                $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages", content, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning(
-                    "Discord post to channel {ChannelId} failed: {Status} {Body}.",
-                    channelId, response.StatusCode, Truncate(body, 300));
-                return null;
-            }
-
-            var message = await response.Content.ReadFromJsonAsync<DiscordMessagePayload>(
-                cancellationToken: cancellationToken);
-            return message?.Id;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex, "Unable to post to channel {ChannelId}.", channelId);
-            return null;
-        }
+        // Through SendClassifiedAsync for its one rate-limit retry, which edits have always had and
+        // posts did not. A post is exactly what gets limited: the bursts that exhaust a channel's
+        // budget are the multi-message ones, and a wide board re-posting its alliances right after
+        // an End Event lost every one of them to a single 429. SendWideAsync then kept the one that
+        // did post, and the board sat there as its first alliance alone -- no Sign Up buttons,
+        // because those ride on the LAST message and that message never arrived.
+        //
+        // Safe to retry: Discord refuses a 429 before processing it, so this cannot double-post.
+        var outcome = await SendClassifiedAsync(
+            HttpMethod.Post,
+            $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages",
+            () => new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json"),
+            returnNewId: true,
+            existingMessageId: null,
+            channelId,
+            "post",
+            cancellationToken);
+        return outcome.Result == DiscordEditResult.Edited ? outcome.MessageId : null;
     }
 
     // Posts a message with a PNG attachment (the rendered event-board image) via
@@ -538,17 +531,33 @@ public sealed class DiscordBotClient
         try
         {
             using var client = CreateClient();
-            using var response = await client.DeleteAsync(
-                $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages/{Uri.EscapeDataString(messageId)}",
-                cancellationToken);
-            if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            var url = $"{ApiBase}/channels/{Uri.EscapeDataString(channelId)}/messages/{Uri.EscapeDataString(messageId)}";
+            for (var attempt = 0; ; attempt++)
             {
-                return true;
+                using var response = await client.DeleteAsync(url, cancellationToken);
+                if (response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return true;
+                }
+
+                // Same single rate-limit retry the posts and edits get. A wide board's teardown is
+                // a run of deletes against one channel, and a delete dropped to a 429 leaves an
+                // alliance of the board behind, live-looking and with its buttons.
+                if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt == 0)
+                {
+                    var delay = ResolveRetryAfter(response);
+                    _logger.LogWarning(
+                        "Discord delete of message {MessageId} in channel {ChannelId} was rate-limited (429); retrying once after {Delay}.",
+                        messageId, channelId, delay);
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
+
+                _logger.LogWarning(
+                    "Discord delete of message {MessageId} in channel {ChannelId} failed: {Status}.",
+                    messageId, channelId, response.StatusCode);
+                return false;
             }
-            _logger.LogWarning(
-                "Discord delete of message {MessageId} in channel {ChannelId} failed: {Status}.",
-                messageId, channelId, response.StatusCode);
-            return false;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
