@@ -60,5 +60,18 @@ public class EventHistory
     // archive existed — that data was cascaded away and cannot be recovered.
     public ICollection<EventAttendanceWindow> AttendanceWindows { get; set; } = new List<EventAttendanceWindow>();
 
+    // The spawn window the monster popped on, and how many windows that camp cycled ("4 of 7").
+    //
+    // Stamped at End Camp by HnmCampReviewHandoffService, because nothing else keeps it: the board
+    // is recycled for the next pop, and the Tod only carries it when the board's own End Camp form
+    // wrote it there -- the addon's End Event never does. It is the value that camp PRICED on (the
+    // close is resolved against it), so Past Events cannot show a different pop window than the
+    // one the money was computed from.
+    //
+    // Null on a timed event, and on every camp archived before this existed.
+    public int? PopWindow { get; set; }
+
+    public int? PopWindowCount { get; set; }
+
     public DateTime? TimeStamp { get; set; }
 }

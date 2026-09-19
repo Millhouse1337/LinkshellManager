@@ -159,9 +159,8 @@ import type {
                     }
                   </div>
                   <p class="hint" style="margin-bottom:12px">
-                    What this camp actually posted, kept from before the event closed. A DKP figure
-                    shows only where an officer priced that window explicitly — the camp's own
-                    open/close bonuses aren't recoverable once the board is gone.
+                    What this camp actually posted, kept from before the event closed, and what each
+                    window paid per person. Camps ended before per-window pricing show no figure.
                   </p>
                   @if (windowsLoading() === h.id) {
                     <p class="hint">Loading windows…</p>
@@ -181,7 +180,13 @@ import type {
                                  said the same word twice. Closing above is not the same case — a
                                  closing window is numbered and named like any other, so nothing
                                  else on the row says the close bonus paid on it. -->
-                            @if (w.dkpAmount != null) {
+                            <!-- What the window PAID, off the review card. The officer's explicit
+                                 price is only the fallback: on a priced camp it is already folded
+                                 into the paid figure, and on its own it says nothing about the
+                                 open / close / kill bonus the window actually carried. -->
+                            @if (paidLabel(w.paidDkpMin, w.paidDkpMax); as paid) {
+                              <span class="tag success" title="What this window paid each person on the camp's DKP post.">{{ paid }}</span>
+                            } @else if (w.dkpAmount != null) {
                               <span class="tag success">{{ w.dkpAmount }} DKP</span>
                             }
                             <span class="win-meta">
@@ -215,6 +220,9 @@ import type {
                           <button type="button" class="win-head" (click)="toggleWindow(h.id, tagRosterRowId)">
                             <strong>Tag</strong>
                             <span class="tag" title="Who landed an action on the mob, from this camp's Claim Shield. Earns the tag bonus; not a window, so it counts toward no window total.">not a window</span>
+                            @if (paidLabel(tags.paidDkpMin, tags.paidDkpMax); as paid) {
+                              <span class="tag success" title="The tag bonus as it was paid to each tagger.">{{ paid }}</span>
+                            }
                             <span class="win-meta">
                               {{ tags.taggers.length }} tagged · {{ tags.postedAt | date:'MMM d, h:mm a' }}
                             </span>
@@ -269,7 +277,7 @@ import type {
                             <th>Attendee</th>
                             <th>Job</th>
                             @if (showWindowsColumn(h)) {
-                              <th class="ctr" title="Attendance windows this member was scanned in. On a windowed camp this — not the duration — is what their DKP was computed from.">Windows</th>
+                              <th class="ctr" title="Attendance windows this member was scanned in, where the camp counted them. On an HNM camp priced per window, the spawn window the monster popped on.">Windows</th>
                             }
                             <th class="ctr">Active Credit</th>
                             <th class="ctr">Absent</th>
@@ -293,6 +301,13 @@ import type {
                                 <td class="ctr">
                                   @if (p.windowsAttended != null) {
                                     <span class="win-count">{{ p.windowsAttended }} of {{ windowCountFor(h.id) }}</span>
+                                  } @else if (h.popWindow != null) {
+                                    <!-- A camp priced per window keeps no per-member tally (the money
+                                         is on the captures above), so the column carries the one
+                                         window fact that camp has: where the monster came out. -->
+                                    <span class="win-count" title="The spawn window the monster popped on.">
+                                      Popped {{ h.popWindow }}@if (h.popWindowCount) { of {{ h.popWindowCount }}}
+                                    </span>
                                   } @else {
                                     <span class="muted">—</span>
                                   }
@@ -896,7 +911,18 @@ export class EventHistoryPanelComponent {
   // off any one attendee: a member who was scanned in zero windows still needs the cell, or the
   // row would come up short a column.
   protected showWindowsColumn(h: ActivityEventHistory): boolean {
-    return (h.archivedWindowCount ?? 0) > 0 || h.participants.some(p => p.windowsAttended != null);
+    return (h.archivedWindowCount ?? 0) > 0
+      || h.popWindow != null
+      || h.participants.some(p => p.windowsAttended != null);
+  }
+
+  // "1 DKP", or "0.5–1 DKP" when an officer re-priced somebody in that window during review.
+  // Null when nothing priced it, so the template can fall back instead of printing "0 DKP" for
+  // a window that simply has no record.
+  protected paidLabel(min?: number | null, max?: number | null): string | null {
+    if (min == null || max == null) return null;
+    const fmt = (n: number) => String(Math.round(n * 100) / 100);
+    return Math.abs(max - min) < 0.0001 ? `${fmt(min)} DKP` : `${fmt(min)}–${fmt(max)} DKP`;
   }
 
   protected isWindowOpen(historyId: number, windowId: number): boolean {

@@ -495,6 +495,12 @@ public sealed class HnmCampReviewHandoffService
             ev, byCharacterName.Values, nowUtc, cancellationToken);
         windowEvent.CampEventHistory = archive;
 
+        // The pop window, onto the archive -- see EventHistory.PopWindow for why nothing else can
+        // answer this later. The count is the camp's EFFECTIVE one, so a board with a window-count
+        // override reads "4 of 5", not the monster's default.
+        archive.PopWindow = popWindow;
+        archive.PopWindowCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+
         // The camp's lotteries move onto the archive with it. See ClaimShieldCapture.EventHistoryId
         // for why leaving them on the recycled board was paying the claim bonus over and over.
         foreach (var capture in captures)

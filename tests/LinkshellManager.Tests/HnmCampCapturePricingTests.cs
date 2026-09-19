@@ -584,6 +584,86 @@ public class HnmCampCapturePricingTests
         Assert.Equal(3d, misc.Entries.Single().DkpAmount);
     }
 
+    // ----------------------------------------------------------------------- the past event ---
+
+    // The pop window has nowhere else to live once the board is recycled, so End Camp writes it
+    // onto the archive -- the value the camp priced on, against the camp's own window count.
+    [Fact]
+    public async Task EndingACamp_RecordsThePopWindowOnThePastEvent()
+    {
+        using var db = await SeededAsync();
+
+        var windowEvent = await EndCampAsync(db);   // popWindow: 3
+
+        var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
+        Assert.Equal(3, history.PopWindow);
+        Assert.Equal(7, history.PopWindowCount);   // the camp's WindowCountOverride
+    }
+
+    // What each window PAID, read back off the review card: the open, a regular window and the
+    // close, each at its own rate. This is the figure the old reader said could not be recovered.
+    [Fact]
+    public async Task APastEvent_ReportsWhatEachWindowPaid()
+    {
+        using var db = await SeededAsync();
+        var windowEvent = await EndCampAsync(db);
+
+        var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        var paid = archive.Windows.ToDictionary(w => w.SequenceNumber, w => w.Paid);
+        Assert.Equal(new DkpRange(1d, 1d), paid[1]);       // open
+        Assert.Equal(new DkpRange(0.5d, 0.5d), paid[2]);   // regular -- Alpha and Beta both
+        Assert.Equal(new DkpRange(2d, 2d), paid[3]);       // close
+    }
+
+    // An officer who re-prices one person during review changes what the window paid, and the
+    // past event has to show the spread rather than one of the two numbers.
+    [Fact]
+    public async Task APastEvent_ShowsARepricedWindowAsARange()
+    {
+        using var db = await SeededAsync();
+        var windowEvent = await EndCampAsync(db);
+
+        var middle = await db.AttendanceSnapshots
+            .Include(s => s.Entries)
+            .SingleAsync(s => s.WindowEventId == windowEvent!.Id && s.WindowNumber == 2);
+        middle.Entries.Single(e => e.CharacterName == "Beta").DkpAmount = 1d;
+        await db.SaveChangesAsync();
+
+        var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        Assert.Equal(new DkpRange(0.5d, 1d), archive.Windows.Single(w => w.SequenceNumber == 2).Paid);
+    }
+
+    // A second scan of the same person in one window is one payment of X, not a spread of 0 to X.
+    [Fact]
+    public async Task APastEvent_DoesNotReadADuplicateScanAsAZeroPayment()
+    {
+        using var db = await SeededAsync(duplicateAlphaInWindowOne: true);
+        var windowEvent = await EndCampAsync(db);
+
+        var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        Assert.Equal(new DkpRange(1d, 1d), archive.Windows.Single(w => w.SequenceNumber == 1).Paid);
+    }
+
+    // Manual Check In writes no capture amounts, so there is nothing to read back -- no figure,
+    // rather than a 0 that would read as "this window paid nothing".
+    [Fact]
+    public async Task AManualCheckInPastEvent_ReportsNoWindowPayment()
+    {
+        using var db = await SeededAsync(attendanceMode: HnmAttendanceModes.Wd);
+        var windowEvent = await EndCampAsync(db);
+
+        var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        Assert.All(archive.Windows, w => Assert.Null(w.Paid));
+    }
+
     // Manual Check In prices no capture at all, misc ones included: credit there comes from the
     // check-in range and a number written here would be paid by nothing.
     [Fact]

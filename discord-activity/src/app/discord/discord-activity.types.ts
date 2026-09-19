@@ -1842,6 +1842,10 @@ export interface ActivityEventHistory {
   // load separately (see ActivityEventHistoryWindowsResponse). Always 0 on a timed event, and on
   // anything closed before the archive existed: those windows were deleted with the camp.
   archivedWindowCount?: number;
+  // The spawn window the monster popped on, and how many the camp cycled ("4 of 7"). Recorded at
+  // End Camp; null on a timed event and on any camp archived before that existed.
+  popWindow?: number | null;
+  popWindowCount?: number | null;
 }
 
 export interface ActivityEventHistoryResponse {
@@ -1870,6 +1874,11 @@ export interface ActivityEventHistoryWindow {
   // Only ever the amount an officer priced THIS window at. The camp's own open/close bonuses are
   // not recoverable after close, so a null here means "not explicitly priced", not "worth 0".
   dkpAmount?: number | null;
+  // What this window actually PAID each person, read back off the camp's review card -- open,
+  // close, kill, or the regular rate, including anything an officer re-priced. Min === Max on an
+  // ordinary window. Null when nothing priced it (Manual Check In, or an older camp).
+  paidDkpMin?: number | null;
+  paidDkpMax?: number | null;
   isClosingWindow?: boolean;
   isKillWindow?: boolean;
   attendees: ActivityEventHistoryWindowAttendee[];
@@ -1891,6 +1900,9 @@ export interface ActivityEventHistoryWindowsResponse {
 export interface ActivityEventHistoryTagRoster {
   // The camp's first lottery.
   postedAt: string;
+  // The tag bonus as it was paid, same shape as a window's.
+  paidDkpMin?: number | null;
+  paidDkpMax?: number | null;
   taggers: { characterName: string; verifiedAt: string }[];
 }
 

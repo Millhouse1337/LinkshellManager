@@ -17,6 +17,14 @@ namespace LinkshellManagerDiscordApp.Services;
 // is gone by the time anything here runs. So DkpAmount below is only ever the amount an officer
 // EXPLICITLY set on that window. Re-deriving a bonus from today's linkshell settings would quote a
 // number the event never actually paid, which is worse than quoting none.
+//
+// What it CAN recover is what each window PAID -- see Paid, and LoadPaidAsync for where it comes
+// from. That is a record, not a re-derivation, so it is safe to show.
+// What one window paid per person, low and high. Min == Max on the ordinary window, where everyone
+// in it was paid the same; they differ only when an officer re-priced somebody during review, and
+// then the spread is exactly what they need to see.
+public sealed record DkpRange(double Min, double Max);
+
 public sealed record ArchivedWindowAttendee(
     string CharacterName,
     // The member's roster main, set only when CharacterName is one of their alts — so a row can
@@ -36,7 +44,10 @@ public sealed record ArchivedWindow(
     double? DkpAmount,
     bool IsClosingWindow,
     bool IsKillWindow,
-    IReadOnlyList<ArchivedWindowAttendee> Attendees);
+    IReadOnlyList<ArchivedWindowAttendee> Attendees,
+    // What this window actually paid each person, off the camp's review card. Null when nothing
+    // priced it -- see LoadPaidAsync.
+    DkpRange? Paid = null);
 
 // Who tagged the mob on this camp, read off its archived Claim Shield captures.
 //
@@ -50,7 +61,9 @@ public sealed record ArchivedWindow(
 // each, and the taggers are unioned across them the same way the finalizer pays them once.
 public sealed record ArchivedTagRoster(
     DateTime PostedAt,
-    IReadOnlyList<ArchivedWindowAttendee> Taggers);
+    IReadOnlyList<ArchivedWindowAttendee> Taggers,
+    // The tag bonus as it was paid, off the review card's Tag capture.
+    DkpRange? Paid = null);
 
 // A closed event's whole window record. WindowCount is what "Window 3 of N" should read against.
 public sealed record ArchivedWindowSet(
@@ -84,7 +97,12 @@ public static class EventHistoryWindowsReader
             .OrderBy(window => window.SequenceNumber)
             .ToListAsync(cancellationToken);
 
+        var (paidByWindow, paidTags) = await LoadPaidAsync(dbContext, history.Id, cancellationToken);
         var tagRoster = await LoadTagRosterAsync(dbContext, history.Id, cancellationToken);
+        if (tagRoster is not null && paidTags is not null)
+        {
+            tagRoster = tagRoster with { Paid = paidTags };
+        }
 
         if (rows.Count == 0)
         {
@@ -123,10 +141,77 @@ public static class EventHistoryWindowsReader
                         string.IsNullOrWhiteSpace(attendee.MainCharacterName) ? null : attendee.MainCharacterName.Trim(),
                         string.IsNullOrWhiteSpace(attendee.Zone) ? null : attendee.Zone.Trim(),
                         attendee.VerifiedAt))
-                    .ToList()))
+                    .ToList(),
+                paidByWindow.GetValueOrDefault(window.SequenceNumber)))
             .ToList();
 
         return new ArchivedWindowSet(windowCount, windows, tagRoster);
+    }
+
+    // What each window of this camp actually paid, read back off its review card.
+    //
+    // This is what makes a camp's own open / close / kill / tag amounts recoverable after all. The
+    // board that carried the bonuses is recycled, but End Camp priced every capture on the review
+    // card it staged -- one snapshot per posted window, keyed on the window's sequence -- and Post
+    // pays exactly the sum of those. So the amounts come from there, including anything an officer
+    // re-priced during review, rather than being re-derived from today's settings.
+    //
+    // Summed per character within a window before ranging. A member caught twice in one window has
+    // a priced row and a zero row (the handoff pays a window once), and that is one payment of X,
+    // not a spread of 0 to X.
+    //
+    // Only a card that prices its captures answers. A Manual Check In camp credits the check-in
+    // range and writes no capture amounts, and a camp archived before capture pricing existed has
+    // none either -- both come back empty, and the window shows no figure rather than a wrong one.
+    private static async Task<(Dictionary<int, DkpRange> ByWindow, DkpRange? Tags)> LoadPaidAsync(
+        ApplicationDbContext dbContext, int historyId, CancellationToken cancellationToken)
+    {
+        var cardId = await dbContext.WindowEvents
+            .AsNoTracking()
+            .Where(card => card.CampEventHistoryId == historyId && card.PerCaptureDkp)
+            .Select(card => (int?)card.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (cardId is null)
+        {
+            return (new Dictionary<int, DkpRange>(), null);
+        }
+
+        var captures = await dbContext.AttendanceSnapshots
+            .AsNoTracking()
+            .Include(capture => capture.Entries)
+            .Where(capture => capture.WindowEventId == cardId
+                && capture.SnapshotStatus == AttendanceSnapshotStatuses.Active
+                && capture.SlotKind != AttendanceSnapshotSlotKinds.Misc)
+            .ToListAsync(cancellationToken);
+
+        var byWindow = captures
+            .Where(capture => capture.WindowNumber.HasValue)
+            .GroupBy(capture => capture.WindowNumber!.Value)
+            .Select(group => (Window: group.Key, Paid: RangeOf(group, includeZero: true)))
+            .Where(row => row.Paid is not null)
+            .ToDictionary(row => row.Window, row => row.Paid!);
+
+        // The Tag capture also lists anyone the finalizer rostered that no window caught, at 0 --
+        // they have to appear somewhere or Post would not pay them. Those rows are not what the
+        // tag bonus paid, so the range is taken over the people it actually paid.
+        var tags = RangeOf(
+            captures.Where(capture => !capture.WindowNumber.HasValue
+                && capture.Name == AttendanceSnapshotAlliances.ClaimShieldCaptureName),
+            includeZero: false);
+
+        return (byWindow, tags);
+    }
+
+    private static DkpRange? RangeOf(IEnumerable<AttendanceSnapshot> captures, bool includeZero)
+    {
+        var perCharacter = captures
+            .SelectMany(capture => capture.Entries)
+            .Where(entry => entry.DkpAmount.HasValue && !string.IsNullOrWhiteSpace(entry.CharacterName))
+            .GroupBy(entry => entry.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Sum(entry => entry.DkpAmount!.Value))
+            .Where(amount => includeZero || Math.Abs(amount) > 0.0001)
+            .ToList();
+        return perCharacter.Count == 0 ? null : new DkpRange(perCharacter.Min(), perCharacter.Max());
     }
 
     // The camp's taggers, unioned across every lottery it recorded.

@@ -106,6 +106,10 @@ public sealed partial class ActivityDataController
                 // which is what the card branches on to offer its Attendance Windows section.
                 // Always 0 for events closed before the archive existed.
                 archivedWindowCount = archivedWindowCounts.GetValueOrDefault(h.Id, 0),
+                // The spawn window the monster popped on. Null on a timed event and on any camp
+                // archived before End Camp recorded it -- see EventHistory.PopWindow.
+                popWindow = h.PopWindow,
+                popWindowCount = h.PopWindowCount,
                 participants = h.AppUserEventHistories
                     .OrderBy(p => p.CharacterName)
                     .Select(p => new
@@ -173,6 +177,10 @@ public sealed partial class ActivityDataController
                 postedAt = window.PostedAt,
                 postedBySource = window.PostedBySource,
                 dkpAmount = window.DkpAmount,
+                // What the window actually PAID each person, off the camp's review card. Null when
+                // nothing priced it; see EventHistoryWindowsReader.LoadPaidAsync.
+                paidDkpMin = window.Paid?.Min,
+                paidDkpMax = window.Paid?.Max,
                 isClosingWindow = window.IsClosingWindow,
                 isKillWindow = window.IsKillWindow,
                 attendees = window.Attendees.Select(attendee => new
@@ -189,6 +197,8 @@ public sealed partial class ActivityDataController
             tagRoster = archive.TagRoster is null ? null : new
             {
                 postedAt = archive.TagRoster.PostedAt,
+                paidDkpMin = archive.TagRoster.Paid?.Min,
+                paidDkpMax = archive.TagRoster.Paid?.Max,
                 taggers = archive.TagRoster.Taggers.Select(tagger => new
                 {
                     characterName = tagger.CharacterName,
