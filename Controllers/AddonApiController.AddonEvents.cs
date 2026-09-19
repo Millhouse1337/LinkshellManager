@@ -478,6 +478,8 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Live events cannot be canceled. End the event instead." });
         }
 
+        // Removing a board stops it repeating -- see StopRepeatingForRemovedBoardAsync.
+        await HnmRecurringBoardService.StopRepeatingForRemovedBoardAsync(_dbContext, eventToDelete, cancellationToken);
         _dbContext.AppUserEvents.RemoveRange(eventToDelete.AppUserEvents);
         _dbContext.EventLootDetails.RemoveRange(eventToDelete.EventLootDetails);
         _dbContext.Events.Remove(eventToDelete);

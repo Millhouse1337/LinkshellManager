@@ -285,6 +285,57 @@ public static class HnmRecurringBoardService
 
     // Turn the template off (keep the row + its last-seen ToD stamp) when an officer
     // re-creates the board with the repeat option unchecked.
+    // Switches the monster's Repeat-on-ToD template OFF when an officer removes its board -- Cancel,
+    // or Delete Camp -- unless another open board for the same spawn is still up.
+    //
+    // The template outlives its event on purpose: it is keyed on the monster, so the next ToD can
+    // find it. That is exactly why removing the event used to leave it armed. The next ToD for the
+    // monster had the poller post a brand-new board from it, under the removed event's name, party
+    // setup and location, with nobody having asked -- a camp that "created itself". Repeat is a
+    // setting of the board an officer made; removing that board is them saying it is not coming
+    // back.
+    //
+    // Another open board for the spawn keeps it on: the template is shared per monster, and that
+    // board is still counting on it.
+    //
+    // STAGES the change and does not save. Callers commit it in the same SaveChanges as the delete,
+    // so a delete that fails cannot leave the repeat switched off behind it, or the reverse.
+    public static async Task StopRepeatingForRemovedBoardAsync(
+        ApplicationDbContext db, Event removed, CancellationToken cancellationToken)
+    {
+        if (!DiscordEventMessageBuilder.IsHnm(removed))
+        {
+            return;
+        }
+        var monster = removed.AssignedMonsterName?.Trim();
+        if (string.IsNullOrWhiteSpace(monster))
+        {
+            return;
+        }
+
+        var board = await FindAsync(db, removed.LinkshellId, monster, cancellationToken);
+        if (board is null || !board.Enabled)
+        {
+            return;
+        }
+
+        var names = HnmConfig.MonsterMatchNamesLower(monster);
+        var anotherBoardUp = await db.Events.AnyAsync(e =>
+                e.LinkshellId == removed.LinkshellId
+                && e.Id != removed.Id
+                && e.EndTime == null
+                && e.AssignedMonsterName != null
+                && names.Contains(e.AssignedMonsterName.ToLower()),
+            cancellationToken);
+        if (anotherBoardUp)
+        {
+            return;
+        }
+
+        board.Enabled = false;
+        board.UpdatedAt = DateTime.UtcNow;
+    }
+
     public static async Task DisableAsync(
         ApplicationDbContext db, int linkshellId, string? monsterName, CancellationToken cancellationToken)
     {

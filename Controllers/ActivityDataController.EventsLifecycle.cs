@@ -837,6 +837,9 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Live events cannot be canceled. End the event instead." });
         }
 
+        // Removing a board stops it repeating -- see StopRepeatingForRemovedBoardAsync. Staged here
+        // and committed by the save below, with the delete.
+        await HnmRecurringBoardService.StopRepeatingForRemovedBoardAsync(_dbContext, eventEntity, cancellationToken);
         _dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
         _dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
         _dbContext.Events.Remove(eventEntity);
@@ -888,6 +891,9 @@ public sealed partial class ActivityDataController
             });
         }
 
+        // Removing a board stops it repeating -- see StopRepeatingForRemovedBoardAsync. Staged here
+        // and committed by the save below, with the delete.
+        await HnmRecurringBoardService.StopRepeatingForRemovedBoardAsync(_dbContext, eventEntity, cancellationToken);
         _dbContext.AppUserEvents.RemoveRange(eventEntity.AppUserEvents);
         _dbContext.EventLootDetails.RemoveRange(eventEntity.EventLootDetails);
         _dbContext.Events.Remove(eventEntity);

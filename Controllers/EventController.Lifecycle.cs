@@ -1030,6 +1030,8 @@ public partial class EventController
             return BadRequest("Live events cannot be canceled. End the event instead.");
         }
 
+        // Removing a board stops it repeating -- see StopRepeatingForRemovedBoardAsync.
+        await HnmRecurringBoardService.StopRepeatingForRemovedBoardAsync(_context, eventToDelete, HttpContext.RequestAborted);
         _context.AppUserEvents.RemoveRange(eventToDelete.AppUserEvents);
         _context.EventLootDetails.RemoveRange(eventToDelete.EventLootDetails);
         _context.Events.Remove(eventToDelete);
