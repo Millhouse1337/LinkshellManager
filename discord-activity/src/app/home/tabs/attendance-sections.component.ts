@@ -21,6 +21,10 @@ const FALLBACK_DKP = 1.5;
 // every capture means until an officer says otherwise.
 const SLOT_WINDOW = "Window";
 const SLOT_MISC = "Misc";
+// No type chosen yet. The slot dropdown opens here so it can show what it is FOR ("Snapshot
+// type") instead of defaulting to Window and reading as a decision nobody made -- filing a
+// capture is the one thing ingest deliberately does not guess, so the officer picks it.
+const SLOT_UNSET = "";
 
 interface MemberDkpDraft {
   value: number | null;
@@ -250,22 +254,23 @@ export class AttendanceSectionsComponent {
   }
 
   protected attachSlot(snapshot: ActivityWindowSnapshot): { kind: string; window: number | null } {
-    this.attachSlots[snapshot.id] ??= { kind: SLOT_WINDOW, window: null };
+    this.attachSlots[snapshot.id] ??= { kind: SLOT_UNSET, window: null };
     return this.attachSlots[snapshot.id];
   }
 
   protected setAttachSlotKind(snapshotId: number, kind: string): void {
-    const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_WINDOW, window: null });
+    const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_UNSET, window: null });
     slot.kind = kind;
   }
 
   protected setAttachSlotWindow(snapshotId: number, value: number | null): void {
-    const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_WINDOW, window: null });
+    const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_UNSET, window: null });
     slot.window = value;
   }
 
   protected readonly slotWindow = SLOT_WINDOW;
   protected readonly slotMisc = SLOT_MISC;
+  protected readonly slotUnset = SLOT_UNSET;
 
   // The two groups a card renders its captures in. Split server-side and mirrored here so the
   // Activity and the web cannot disagree about what counts as Misc.

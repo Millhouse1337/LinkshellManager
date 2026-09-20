@@ -593,12 +593,18 @@
                     [ngModel]="attachSlot(snapshot).kind"
                     [ngModelOptions]="{ standalone: true }"
                     (ngModelChange)="setAttachSlotKind(snapshot.id, $event)"
-                    aria-label="Slot">
+                    aria-label="Snapshot type">
+              <!-- Named like its neighbour above: a select showing "Window" said nothing about
+                   what it decides, and Window was a default nobody had chosen. Attach waits for
+                   a real answer. -->
+              <option [value]="slotUnset" disabled>Snapshot type</option>
               <option [value]="slotWindow">Window</option>
               <option [value]="slotMisc">Misc</option>
             </select>
             @if (attachSlot(snapshot).kind === slotWindow) {
-              <input class="input we-unlinked-window" type="number" min="1" placeholder="auto"
+              <!-- No placeholder: "auto" in the box read as a value that had been entered. Blank
+                   IS auto, and the tooltip says so. -->
+              <input class="input we-unlinked-window" type="number" min="1"
                      [ngModel]="attachSlot(snapshot).window"
                      [ngModelOptions]="{ standalone: true }"
                      (ngModelChange)="setAttachSlotWindow(snapshot.id, $event)"
@@ -606,7 +612,7 @@
                      title="Leave blank to place it by capture time." />
             }
             <button type="button" class="btn sm"
-              [disabled]="!attachTarget.value || windows.busy()"
+              [disabled]="!attachTarget.value || !attachSlot(snapshot).kind || windows.busy()"
               (click)="attachToSelection(snapshot, attachTarget.value)">Attach</button>
             <span class="we-unlinked-sep" aria-hidden="true"></span>
           }
