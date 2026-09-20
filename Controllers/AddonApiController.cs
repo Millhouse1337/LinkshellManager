@@ -21,7 +21,6 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly UserManager<AppUser> _userManager;
     private readonly DiscordIdentityService _discordIdentityService;
     private readonly IHostEnvironment _environment;
-    private readonly HnmAutoEventService _hnmAutoEvent;
     private readonly DiscordWebhookQueue _discordWebhook;
     private readonly DiscordEventChannelQueue _eventQueue;
     private readonly GlobalSettingsService _globalSettings;
@@ -38,7 +37,6 @@ public sealed partial class AddonApiController : ControllerBase
         UserManager<AppUser> userManager,
         DiscordIdentityService discordIdentityService,
         IHostEnvironment environment,
-        HnmAutoEventService hnmAutoEvent,
         DiscordWebhookQueue discordWebhook,
         DiscordEventChannelQueue eventQueue,
         GlobalSettingsService globalSettings,
@@ -54,7 +52,6 @@ public sealed partial class AddonApiController : ControllerBase
         _userManager = userManager;
         _discordIdentityService = discordIdentityService;
         _environment = environment;
-        _hnmAutoEvent = hnmAutoEvent;
         _discordWebhook = discordWebhook;
         _eventQueue = eventQueue;
         _globalSettings = globalSettings;

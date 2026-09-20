@@ -20,7 +20,6 @@ namespace LinkshellManagerDiscordApp.Services;
 public sealed class SubmissionApprovalService
 {
     private readonly ApplicationDbContext _db;
-    private readonly HnmAutoEventService _hnmAutoEvent;
     private readonly ILogger<SubmissionApprovalService> _logger;
 
     private readonly DkpLedgerWriter _dkpLedger;
@@ -28,13 +27,11 @@ public sealed class SubmissionApprovalService
 
     public SubmissionApprovalService(
         ApplicationDbContext db,
-        HnmAutoEventService hnmAutoEvent,
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools,
         ILogger<SubmissionApprovalService> logger)
     {
         _db = db;
-        _hnmAutoEvent = hnmAutoEvent;
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
         _logger = logger;
@@ -217,19 +214,8 @@ public sealed class SubmissionApprovalService
         // this monster (the old roster is for the pop that just happened).
         await PartySetupController.ClearSignupsForMonsterAsync(_db, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
-        // Streamlined HNM workflow: mirror the immediate-addon path so an
-        // approved member-submitted ToD also kicks off auto-event creation
-        // when the captured monster is a tracked HNM. Failures here are
-        // logged but don't roll back the approval -- the materialized Tod
-        // is the contract of this method.
-        try
-        {
-            await _hnmAutoEvent.CreateAutoEventForTodAsync(tod.Id, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "HNM auto-event creation failed for approved tod {TodId}.", tod.Id);
-        }
+        // Approving a member's ToD puts no board up either, for the same reason the addon's own
+        // post doesn't: a board comes back only through Repeat-on-ToD, at its lead.
 
         return ApprovalResult.Approved;
     }

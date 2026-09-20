@@ -10,12 +10,14 @@ namespace LinkshellManagerDiscordApp.Services;
 // (which the DbContext save-hook auto-posts to Discord) and advances LastSourceTodId
 // so each ToD fires at most once. Mirrors EventAutoStartBackgroundService.
 //
-// Coexistence with the addon auto-event path (HnmAutoEventService): the idempotency
-// check matches on SourceTodId OR same-name-within-±10min, so on addon linkshells the
-// poller reuses the event the addon already created (no duplicate) and just stamps the
-// template. On web/Activity-only linkshells the poller is the sole creator — and it
-// does NOT require EnableHnmSection / IsTrueHnm, so it works for the full signup-board
-// monster list, gated instead by the template's existence + Enabled flag.
+// THE ONLY THING THAT PUTS A BOARD UP FOR A NEW POP. Posting a Time of Death used to create one
+// too, straight away, through HnmAutoEventService -- so a ToD entered for a monster nobody had
+// asked to repeat still queued a camp, and a ToD entered while its camp was still live queued a
+// second one beside it. That path is gone. A board now comes back only because an officer asked
+// for it on the create form, and only at the lead they set there.
+//
+// It does NOT require EnableHnmSection / IsTrueHnm, so it works for the full signup-board monster
+// list, gated instead by the template's existence + Enabled flag.
 public sealed class HnmRecurringBoardBackgroundService : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
@@ -173,6 +175,56 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
                             && names.Contains(e.AssignedMonsterName.ToLower()))))),
             cancellationToken);
 
+        // A camp for this spawn is LIVE: that board IS this pop's board -- an officer is standing
+        // at it -- so stand down rather than queue a second one beside it.
+        //
+        // This is the second board the report showed. The addon settles the ToD while the camp is
+        // still live, so nothing owns the new pop yet, and the live camp's own StartTime is the
+        // PREVIOUS repop, well outside the ±10 minutes above. LastSourceTodId is deliberately NOT
+        // stamped: ending the camp parks it on this same ToD (HnmCampReviewHandoffService
+        // .AdoptSettledTodAsync), and the SourceTodId check above finds it on a later tick.
+        if (existing is null)
+        {
+            var liveCamp = await db.Events
+                .Where(e => e.LinkshellId == board.LinkshellId
+                    && e.EndTime == null
+                    && e.CommencementStartTime != null
+                    && e.AssignedMonsterName != null
+                    && names.Contains(e.AssignedMonsterName.ToLower()))
+                .Select(e => (int?)e.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (liveCamp is { } liveCampId)
+            {
+                _logger.LogDebug(
+                    "HNM recurring board stand-down: camp {EventId} ('{Monster}') is still live, so it is this pop's board.",
+                    liveCampId, monster);
+                return;
+            }
+        }
+
+        // The monster's last board, still QUEUED from a previous pop: recycle that row onto the new
+        // pop instead of stacking another beside it, or every kill leaves one more entry in Queued
+        // Events. Queued only -- a live camp was turned away above, and reviving one would wipe a
+        // night people are still being paid for.
+        //
+        // Ported from the ToD path this replaced, including its tie-break: newest first, and only
+        // ever one, because two rows for one monster is already a mistake and rewriting both from a
+        // single ToD would compound it.
+        existing ??= await db.Events
+            .Where(e => e.LinkshellId == board.LinkshellId
+                && e.EndTime == null
+                && e.CommencementStartTime == null
+                && e.AssignedMonsterName != null
+                && names.Contains(e.AssignedMonsterName.ToLower())
+                // An EARLIER pop's leftover only. A board scheduled for a pop AFTER this one is
+                // somebody's plan for that pop, not a stale row, and dragging it backwards onto
+                // this repop would throw away what they set it up for.
+                && e.StartTime != null
+                && e.StartTime < windowStart)
+            .OrderByDescending(e => e.StartTime)
+            .ThenByDescending(e => e.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
         if (existing is null)
         {
             var creatorUserId = await db.Linkshells
@@ -214,16 +266,18 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
             {
                 existing.SourceTodId = tod.Id;
             }
-            // A manually-posted ToD parks the board in a "defeated / awaiting re-post" state
-            // (signups wiped, StartTime = repop, Discord message replaced with a note). Now
-            // that we're inside the lead window, bring THAT same board back to life instead
-            // of creating a new event: clearing the flag re-renders a fresh, empty board.
-            // The DbContext save-hook re-posts it to Discord (it edits the existing message,
-            // since the event keeps its message id), the same way new boards are posted.
+            // Bring the board back for this pop -- whether it is parked "defeated / awaiting
+            // re-post" after its camp ended, or simply a row left queued on the PREVIOUS pop.
+            // Reviving clears the flag, wipes the signups and re-points it at the new repop, day
+            // and monster; the DbContext save-hook re-posts it to Discord by editing the message
+            // it already owns, so the board comes back where it was rather than at the bottom of
+            // the channel.
             //
-            // The reset itself is shared with HnmAutoEventService, so a board revived by the
-            // addon's ToD post and one revived here come out identical.
-            if (existing.HnmDefeatedAt != null)
+            // A board already sitting on THIS pop is left alone -- it is an officer's own board for
+            // the pop, and rewriting it would throw away whatever they set on it.
+            var alreadyOnThisPop = existing.StartTime is { } startUtc
+                && startUtc >= windowStart && startUtc <= windowEnd;
+            if (existing.HnmDefeatedAt != null || !alreadyOnThisPop)
             {
                 await HnmEventSeeder.ReviveForNewPopAsync(
                     db, existing, repopUtc, nextDay, nextMonster, tod.Id, cancellationToken);

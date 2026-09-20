@@ -315,7 +315,6 @@ builder.Services.AddScoped<WindowEventDkpLedgerService>();
 builder.Services.AddScoped<AttendanceSectionsBuilder>();
 builder.Services.AddScoped<WindowEventLinkService>();
 builder.Services.AddScoped<MemberActivityService>();
-builder.Services.AddScoped<HnmAutoEventService>();
 // The two HNM earn formulas — "what did this camp owe?", per attendance mode. Neither pays any
 // more: End Camp hands the roster to HnmCampReviewHandoffService, which stages it as a pending row
 // in the Event System page's attendance sections, and an officer's Post is what credits DKP. The old

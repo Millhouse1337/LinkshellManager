@@ -1410,19 +1410,11 @@ public sealed partial class AddonApiController
         // this monster (the old roster is for the pop that just happened).
         await PartySetupController.ClearSignupsForMonsterAsync(_dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
-        // Streamlined HNM workflow: queue the next-repop event automatically
-        // when the captured monster is a tracked HNM. Failures here must not
-        // bubble up -- the ToD itself is the contract of this endpoint, the
-        // auto-event is a downstream convenience.
-        int? autoEventId = null;
-        try
-        {
-            autoEventId = await _hnmAutoEvent.CreateAutoEventForTodAsync(tod.Id, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "HNM auto-event creation failed for tod {TodId}.", tod.Id);
-        }
+        // Recording a Time of Death does NOT put a board up. It used to queue the next pop's camp
+        // on the spot, for any tracked HNM, which meant entering a ToD created an event nobody had
+        // asked for -- and, when the camp it belonged to was still live, a second one beside it.
+        // A board comes back only through Repeat-on-ToD, at the lead the create form set
+        // (HnmRecurringBoardBackgroundService).
 
         return Ok(new
         {
@@ -1432,8 +1424,7 @@ public sealed partial class AddonApiController
             repopTimeUtc = tod.RepopTime,
             cooldown = tod.Cooldown,
             interval = tod.Interval,
-            claim = tod.Claim,
-            autoEventId
+            claim = tod.Claim
         });
     }
 

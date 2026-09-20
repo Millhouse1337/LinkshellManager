@@ -43,9 +43,6 @@ public class HnmCampEndTodAdoptionTests
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
             NullLogger<HnmCampReviewHandoffService>.Instance);
 
-    private static HnmAutoEventService NewAutoEvent(ApplicationDbContext db) =>
-        new(db, NullLogger<HnmAutoEventService>.Instance);
-
     // The camp the officer is standing at: live, created from the PREVIOUS pop's ToD (id 1).
     private static Event LiveCamp() => new()
     {
@@ -118,7 +115,6 @@ public class HnmCampEndTodAdoptionTests
     {
         db.Tods.Add(SettledTod());
         await db.SaveChangesAsync();
-        await NewAutoEvent(db).CreateAutoEventForTodAsync(2, CancellationToken.None);
         await NewHandoff(db).HandOffAndRecycleAsync(EventId, CancellationToken.None);
     }
 
@@ -213,7 +209,6 @@ public class HnmCampEndTodAdoptionTests
         await NewHandoff(db).HandOffAndRecycleAsync(EventId, CancellationToken.None);
         db.Tods.Add(SettledTod());
         await db.SaveChangesAsync();
-        await NewAutoEvent(db).CreateAutoEventForTodAsync(2, CancellationToken.None);
 
         Assert.Equal(EventId, db.Events.Single().Id);
     }

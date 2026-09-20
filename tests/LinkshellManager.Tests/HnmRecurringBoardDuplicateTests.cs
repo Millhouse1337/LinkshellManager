@@ -39,7 +39,7 @@ public class HnmRecurringBoardDuplicateTests
         db.Linkshells.Add(new Linkshell { Id = LinkshellId, LinkshellName = "Test" });
         db.Tods.Add(new Tod
         {
-            Id = 50, LinkshellId = LinkshellId, MonsterName = "Fafnir",
+            Id = 50, LinkshellId = LinkshellId, MonsterName = "Fafnir", DayNumber = 1,
             Time = Repop.AddHours(-22), RepopTime = Repop,
         });
         var board = new HnmRecurringBoard
@@ -52,9 +52,9 @@ public class HnmRecurringBoardDuplicateTests
         return (db, board);
     }
 
-    private static Event OfficersBoard(string monster, DateTime startUtc) => new()
+    private static Event OfficersBoard(int id, string monster, DateTime startUtc) => new()
     {
-        Id = 100, LinkshellId = LinkshellId, EventName = "ada", EventType = "HNM",
+        Id = id, LinkshellId = LinkshellId, EventName = "ada", EventType = "HNM",
         EventLocation = "Qufim Island", AssignedMonsterName = monster, StartTime = startUtc,
     };
 
@@ -62,7 +62,7 @@ public class HnmRecurringBoardDuplicateTests
     public async Task ABoardAlreadyUpForThePop_IsReusedRatherThanDuplicated()
     {
         var (db, board) = await SeededAsync();
-        db.Events.Add(OfficersBoard("Fafnir", Repop));
+        db.Events.Add(OfficersBoard(100, "Fafnir", Repop));
         await db.SaveChangesAsync();
 
         await NewPoller().ProcessBoardAsync(db, board, Repop.AddMinutes(-5), CancellationToken.None);
@@ -78,7 +78,7 @@ public class HnmRecurringBoardDuplicateTests
     public async Task ABoardForTheOtherHalfOfTheSpawn_CountsAsTheSameBoard()
     {
         var (db, board) = await SeededAsync();
-        db.Events.Add(OfficersBoard("Nidhogg", Repop.AddMinutes(3)));
+        db.Events.Add(OfficersBoard(100, "Nidhogg", Repop.AddMinutes(3)));
         await db.SaveChangesAsync();
 
         await NewPoller().ProcessBoardAsync(db, board, Repop.AddMinutes(-5), CancellationToken.None);
@@ -92,7 +92,7 @@ public class HnmRecurringBoardDuplicateTests
     public async Task ABoardForAnotherPop_DoesNotStopThisOne()
     {
         var (db, board) = await SeededAsync();
-        db.Events.Add(OfficersBoard("Fafnir", Repop.AddHours(22)));
+        db.Events.Add(OfficersBoard(100, "Fafnir", Repop.AddHours(22)));
         await db.SaveChangesAsync();
 
         await NewPoller().ProcessBoardAsync(db, board, Repop.AddMinutes(-5), CancellationToken.None);
@@ -107,7 +107,7 @@ public class HnmRecurringBoardDuplicateTests
     public async Task ABoardForAnotherMonster_DoesNotStopThisOne()
     {
         var (db, board) = await SeededAsync();
-        db.Events.Add(OfficersBoard("Behemoth", Repop));
+        db.Events.Add(OfficersBoard(100, "Behemoth", Repop));
         await db.SaveChangesAsync();
 
         await NewPoller().ProcessBoardAsync(db, board, Repop.AddMinutes(-5), CancellationToken.None);
@@ -127,5 +127,102 @@ public class HnmRecurringBoardDuplicateTests
         Assert.Equal("`test", posted.EventName);
         Assert.Equal("aaa", posted.EventLocation);
         Assert.Equal(Repop, posted.StartTime);
+    }
+
+    // ------------------------------------------------- a camp is still being fought ---
+
+    private static Event LiveCamp(string monster, DateTime startUtc)
+    {
+        var camp = OfficersBoard(200, monster, startUtc);
+        camp.CommencementStartTime = startUtc;   // live: an officer is standing at it
+        return camp;
+    }
+
+    // THE SECOND BOARD IN THE REPORT. The addon settles the ToD while the camp is still live, so
+    // nothing owns the new pop yet and the live camp's own start is the PREVIOUS repop -- outside
+    // the ±10 minutes that would have matched it. The poller posted a second board beside the camp
+    // being fought.
+    [Fact]
+    public async Task WhileACampForTheSpawnIsLive_NothingIsPosted()
+    {
+        var (db, board) = await SeededAsync();
+        db.Events.Add(LiveCamp("Fafnir", Repop.AddHours(-22)));
+        await db.SaveChangesAsync();
+
+        await NewPoller().ProcessBoardAsync(db, board, Repop.AddMinutes(-5), CancellationToken.None);
+
+        var live = Assert.Single(await db.Events.ToListAsync());
+        Assert.Equal(200, live.Id);
+        Assert.NotNull(live.CommencementStartTime);          // left alone, mid-camp
+        // NOT marked handled: ending the camp parks it on this ToD, and a later tick finds it.
+        Assert.Null(board.LastSourceTodId);
+    }
+
+    // A different monster's camp is somebody else's night.
+    [Fact]
+    public async Task WhileAnotherMonstersCampIsLive_ThisBoardIsStillPosted()
+    {
+        var (db, board) = await SeededAsync();
+        db.Events.Add(LiveCamp("Behemoth", Repop.AddHours(-22)));
+        await db.SaveChangesAsync();
+
+        await NewPoller().ProcessBoardAsync(db, board, Repop.AddMinutes(-5), CancellationToken.None);
+
+        Assert.Equal(2, await db.Events.CountAsync());
+    }
+
+    // --------------------------------------------- a leftover row from the last pop ---
+
+    // Recycled onto the new pop rather than left beside a fresh one, or every kill adds another
+    // entry to Queued Events.
+    [Fact]
+    public async Task APreviousPopsQueuedBoard_IsRecycledOntoTheNewPop()
+    {
+        var (db, board) = await SeededAsync();
+        var lastPop = OfficersBoard(100, "Fafnir", Repop.AddHours(-22));
+        lastPop.DayNumber = 1;
+        lastPop.HnmWindowNumber = 5;
+        db.Events.Add(lastPop);
+        await db.SaveChangesAsync();
+
+        await NewPoller().ProcessBoardAsync(db, board, Repop.AddMinutes(-5), CancellationToken.None);
+
+        var recycled = Assert.Single(await db.Events.ToListAsync());
+        Assert.Equal(100, recycled.Id);                      // the same row, moved on
+        Assert.Equal(Repop, recycled.StartTime);
+        Assert.Equal(50, recycled.SourceTodId);
+        Assert.Equal(2, recycled.DayNumber);                 // the next pop is day 2
+        Assert.Equal(1, recycled.HnmWindowNumber);           // a new cycle starts at window 1
+        Assert.Null(recycled.CommencementStartTime);         // queued, not live
+    }
+
+    // Fafnir and Nidhogg are one spawn, so either half's leftover is this board's row.
+    [Fact]
+    public async Task ThePreviousPopsBoardIsRecycled_AcrossTheMergePair()
+    {
+        var (db, board) = await SeededAsync();
+        db.Events.Add(OfficersBoard(100, "Nidhogg", Repop.AddHours(-22)));
+        await db.SaveChangesAsync();
+
+        await NewPoller().ProcessBoardAsync(db, board, Repop.AddMinutes(-5), CancellationToken.None);
+
+        Assert.Equal(Repop, Assert.Single(await db.Events.ToListAsync()).StartTime);
+    }
+
+    // A camp that has ENDED is history; it is not a row to recycle.
+    [Fact]
+    public async Task AnEndedCamp_IsNotRecycled()
+    {
+        var (db, board) = await SeededAsync();
+        var ended = OfficersBoard(100, "Fafnir", Repop.AddHours(-22));
+        ended.EndTime = Repop.AddHours(-1);
+        db.Events.Add(ended);
+        await db.SaveChangesAsync();
+
+        await NewPoller().ProcessBoardAsync(db, board, Repop.AddMinutes(-5), CancellationToken.None);
+
+        var events = await db.Events.OrderBy(e => e.Id).ToListAsync();
+        Assert.Equal(2, events.Count);
+        Assert.Equal("`test", events[1].EventName);           // a fresh board, the ended one intact
     }
 }
