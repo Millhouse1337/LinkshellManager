@@ -176,7 +176,8 @@ public sealed partial class ActivityDataController
             role.CanCustomizeLinkshell,
             role.CanManageParties,
             role.CanManageInvites,
-            role.CanBid);
+            role.CanBid,
+            role.CanUseAddon);
     }
 
     private static ActivityLinkshellRoleDto MapLinkshellRoleDto(LinkshellRole role)
@@ -203,7 +204,8 @@ public sealed partial class ActivityDataController
             role.CanCustomizeLinkshell,
             role.CanManageParties,
             role.CanManageInvites,
-            role.CanBid);
+            role.CanBid,
+            role.CanUseAddon);
     }
 
     private static IReadOnlyList<ActivityHnmClaimSliceDto> MapHnmClaimSlices(IReadOnlyList<HnmClaimSlice> slices) =>

@@ -283,7 +283,8 @@ public sealed record ActivityPermissionsDto(
     bool CanCustomizeLinkshell,
     bool CanManageParties,
     bool CanManageInvites,
-    bool CanBid);
+    bool CanBid,
+    bool CanUseAddon);
 
 public static class ActivityPermissions
 {
@@ -308,7 +309,8 @@ public static class ActivityPermissions
         CanCustomizeLinkshell: true,
         CanManageParties: true,
         CanManageInvites: true,
-        CanBid: true);
+        CanBid: true,
+        CanUseAddon: true);
 }
 
 public sealed record ActivityPrimaryLinkshellDto(
@@ -1020,9 +1022,12 @@ public sealed record ActivityLinkshellRolePermissions(
     bool CanCustomizeLinkshell,
     bool CanManageParties,
     bool CanManageInvites,
-    // Keep CanBid last: it is the only defaulted parameter, and a positional parameter without a
-    // default cannot follow one that has it (CS1737). New permissions go ABOVE this line.
-    bool CanBid = true);
+    // Defaulted, and so is CanUseAddon below it: a positional parameter without a default cannot
+    // follow one that has it (CS1737), so every new permission from here on carries one. They
+    // default to TRUE, which is what an older client that doesn't send the field should mean --
+    // a save from it must not quietly take a permission away.
+    bool CanBid = true,
+    bool CanUseAddon = true);
 
 public sealed record ActivityLinkshellRoleDto(
     int Id,
@@ -1046,7 +1051,8 @@ public sealed record ActivityLinkshellRoleDto(
     bool CanCustomizeLinkshell,
     bool CanManageParties,
     bool CanManageInvites,
-    bool CanBid);
+    bool CanBid,
+    bool CanUseAddon);
 
 public sealed record ActivityLinkshellRolesResponse(
     int LinkshellId,

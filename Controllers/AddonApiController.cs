@@ -225,6 +225,39 @@ public sealed partial class AddonApiController : ControllerBase
         return LinkshellRanks.IsLeaderOrOfficer(membership?.Rank);
     }
 
+    // Can this member pair and use the game addon?
+    //
+    // Its own permission (LinkshellRole.CanUseAddon), granted to every default role. It used to be
+    // the Leader/Officer RANK, which meant a linkshell that wanted an ordinary member scanning
+    // rosters in game had to promote them -- and in the Activity the same card was gated on
+    // "Customize linkshell settings", so handing someone the addon handed them the linkshell's
+    // configuration with it.
+    //
+    // The leader is never locked out by a stale role row, matching ActivityDataController.CanAsync.
+    // A linkshell whose default roles were never seeded has no row to read, and falls back to the
+    // old rank test -- so this can only widen access, never take it from an officer who had it.
+    private async Task<bool> CanUseAddonAsync(
+        AppUserLinkshell? membership, CancellationToken cancellationToken)
+    {
+        if (membership is null) return false;
+        if (LinkshellRanks.IsLeader(membership.Rank)) return true;
+
+        var rank = string.IsNullOrWhiteSpace(membership.Rank)
+            ? LinkshellRanks.Member
+            : membership.Rank.Trim();
+        var role = await _dbContext.LinkshellRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                r => r.LinkshellId == membership.LinkshellId && r.Name == rank, cancellationToken)
+            ?? await _dbContext.LinkshellRoles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    r => r.LinkshellId == membership.LinkshellId && r.Name == LinkshellRanks.Member,
+                    cancellationToken);
+
+        return role?.CanUseAddon ?? LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+    }
+
     // ---------------------------------------------------------------------
     // DTOs
     // ---------------------------------------------------------------------

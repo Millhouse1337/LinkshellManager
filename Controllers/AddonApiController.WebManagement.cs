@@ -65,7 +65,7 @@ public sealed partial class AddonApiController
                 m => m.AppUserId == appUser.Id && m.LinkshellId == request.LinkshellId,
                 cancellationToken);
 
-        if (!CanManageLinkshell(membership))
+        if (!await CanUseAddonAsync(membership, cancellationToken))
         {
             return Forbid();
         }
@@ -108,7 +108,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(
                 m => m.AppUserId == appUser.Id && m.LinkshellId == linkshellId,
                 cancellationToken);
-        if (!CanManageLinkshell(membership)) return Forbid();
+        if (!await CanUseAddonAsync(membership, cancellationToken)) return Forbid();
 
         var normalized = code.Trim().ToUpperInvariant();
         var pairing = await _dbContext.AddonPairingCodes
@@ -147,7 +147,7 @@ public sealed partial class AddonApiController
                 m => m.AppUserId == appUser.Id && m.LinkshellId == linkshellId,
                 cancellationToken);
 
-        if (!CanManageLinkshell(membership))
+        if (!await CanUseAddonAsync(membership, cancellationToken))
         {
             return Forbid();
         }
@@ -222,7 +222,7 @@ public sealed partial class AddonApiController
                     m => m.AppUserId == appUser.Id && m.LinkshellId == token.LinkshellId,
                     cancellationToken);
 
-            if (!CanManageLinkshell(membership))
+            if (!await CanUseAddonAsync(membership, cancellationToken))
             {
                 return Forbid();
             }

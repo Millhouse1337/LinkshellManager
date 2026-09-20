@@ -276,7 +276,8 @@ export class ConfigurationsTabComponent {
     { key: 'canCustomizeLinkshell', label: 'Customize linkshell settings' },
     { key: 'canManageParties', label: 'Manage party setups' },
     { key: 'canManageInvites', label: 'Manage invites' },
-    { key: 'canBid', label: 'Place bids on auctions' }
+    { key: 'canBid', label: 'Place bids on auctions' },
+    { key: 'canUseAddon', label: 'Use the LSM game addon' }
   ] as const;
 
   protected readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
@@ -363,7 +364,8 @@ export class ConfigurationsTabComponent {
       canCustomizeLinkshell: !!this.roleDraft.permissions['canCustomizeLinkshell'],
       canManageParties: !!this.roleDraft.permissions['canManageParties'],
       canManageInvites: !!this.roleDraft.permissions['canManageInvites'],
-      canBid: !!this.roleDraft.permissions['canBid']
+      canBid: !!this.roleDraft.permissions['canBid'],
+      canUseAddon: !!this.roleDraft.permissions['canUseAddon']
     };
 
     const ok = this.editingRoleId !== null
@@ -1116,7 +1118,9 @@ export class ConfigurationsTabComponent {
   private addonCountdownTimer: ReturnType<typeof setInterval> | null = null;
 
   protected canManageAddonTokens(): boolean {
-    return this.canCustomizeSelectedLinkshell();
+    const id = this.customizeTargetLinkshellId();
+    const link = this.dashboardLinkshells().find(l => l.id === id);
+    return !!link?.permissions?.canUseAddon;
   }
 
   // True when a super admin has globally disabled the addon — the whole Game

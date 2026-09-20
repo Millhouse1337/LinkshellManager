@@ -66,4 +66,12 @@ public class LinkshellRole
     // Permission to place bids on auctions. On for everyone by default; the built-in
     // "Trial" role has it off so trial members can attend/earn but not bid yet.
     public bool CanBid { get; set; }
+
+    // Pair and use the LSM game addon: generate a pairing code, and manage the codes you own.
+    //
+    // Its OWN permission, and on for every default role, because running the addon is not a
+    // management action -- it is how an ordinary member posts the roster they are standing in.
+    // It used to ride on "Customize linkshell settings", which is the linkshell's settings pages,
+    // so handing a member the addon meant handing them the configuration of the whole linkshell.
+    public bool CanUseAddon { get; set; }
 }

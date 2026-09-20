@@ -293,6 +293,9 @@ export interface ActivityLinkshellPermissions {
   canManageAuctions: boolean;
   canLockAuctions: boolean;
   canCustomizeLinkshell: boolean;
+  // Pair and use the LSM game addon. Its own permission, on for every default role -- running the
+  // addon is how a member posts the roster they are standing in, not a management action.
+  canUseAddon: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
   canBid: boolean;
@@ -318,6 +321,9 @@ export interface ActivityLinkshellRole {
   canManageAuctions: boolean;
   canLockAuctions: boolean;
   canCustomizeLinkshell: boolean;
+  // Pair and use the LSM game addon. Its own permission, on for every default role -- running the
+  // addon is how a member posts the roster they are standing in, not a management action.
+  canUseAddon: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
   canBid: boolean;
@@ -345,6 +351,9 @@ export interface ActivityLinkshellRolePermissionsInput {
   canManageAuctions: boolean;
   canLockAuctions: boolean;
   canCustomizeLinkshell: boolean;
+  // Pair and use the LSM game addon. Its own permission, on for every default role -- running the
+  // addon is how a member posts the roster they are standing in, not a management action.
+  canUseAddon: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
   canBid: boolean;

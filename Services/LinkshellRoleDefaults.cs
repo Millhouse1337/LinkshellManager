@@ -35,7 +35,8 @@ public static class LinkshellRoleDefaults
         CanSubmitAttendanceForApproval = true,
         CanManageParties = true,
         CanManageInvites = true,
-        CanBid = true
+        CanBid = true,
+        CanUseAddon = true
     };
 
     // Label for the synthetic full-access role above. Not a rank anyone can be
@@ -69,7 +70,8 @@ public static class LinkshellRoleDefaults
             CanSubmitAttendanceForApproval = true,
             CanManageParties = true,
             CanManageInvites = true,
-            CanBid = true
+            CanBid = true,
+            CanUseAddon = true
         };
 
         yield return new LinkshellRole
@@ -99,7 +101,8 @@ public static class LinkshellRoleDefaults
             CanSubmitAttendanceForApproval = true,
             CanManageParties = true,
             CanManageInvites = true,
-            CanBid = true
+            CanBid = true,
+            CanUseAddon = true
         };
 
         yield return new LinkshellRole
@@ -108,8 +111,11 @@ public static class LinkshellRoleDefaults
             Name = LinkshellRanks.Member,
             IsSystem = true,
             SortOrder = 2,
-            // Regular members can bid; all management permissions stay off.
-            CanBid = true
+            // Regular members can bid; all management permissions stay off. The addon is not a
+            // management permission -- a member scanning the roster they are standing in is the
+            // whole point of it.
+            CanBid = true,
+            CanUseAddon = true
         };
 
         // Probationary rank: same (lack of) management access as Member, but no
@@ -121,7 +127,10 @@ public static class LinkshellRoleDefaults
             Name = LinkshellRanks.Trial,
             IsSystem = true,
             SortOrder = 3,
-            CanBid = false
+            CanBid = false,
+            // On even here: a trial member is still at the camp, and their scans are how they are
+            // credited for it.
+            CanUseAddon = true
         };
     }
 }
