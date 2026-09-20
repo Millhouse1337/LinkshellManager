@@ -491,8 +491,37 @@ public sealed partial class AddonApiController
         // they keep reporting it.
         var paysPerWindow = !(string.Equals(eventEntity.EventType, "HNM", StringComparison.OrdinalIgnoreCase)
                               && !DiscordEventMessageBuilder.IsWd(eventEntity));
-        double? perWindowDkp = attendanceWindow?.DkpAmount
-            ?? (attendanceWindow is not null && paysPerWindow ? eventEntity.DkpPerHour : null);
+        double? perWindowDkp = null;
+        if (attendanceWindow is not null)
+        {
+            if (HnmCampPricing.HonoursWindowAmount(eventEntity))
+            {
+                // A Standard HNM camp pays this window by its ROLE -- the open bonus on window 1,
+                // the close bonus on the window that closes the camp out, the regular rate in
+                // between -- so resolve it through the same pricing the finalizer will use.
+                //
+                // It used to report DkpPerHour, which such a camp does not pay, so the expression
+                // fell through to null. That is what left the addon's Open tab showing the regular
+                // window rate: with no figure for the window itself, it fell back to the camp-level
+                // quote for the next post.
+                var campWindows = await _dbContext.EventAttendanceWindows
+                    .AsNoTracking()
+                    .Where(w => w.EventId == eventEntity.Id)
+                    .ToListAsync(cancellationToken);
+                var campLinkshell = await _dbContext.Linkshells
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(l => l.Id == eventEntity.LinkshellId, cancellationToken);
+                perWindowDkp = HnmCampPricing.WindowValueFor(
+                    eventEntity, campLinkshell, attendanceWindow.SequenceNumber,
+                    HnmStandardCampFinalizer.ResolveCloseWindow(campWindows, eventEntity.HnmWindowNumber),
+                    attendanceWindow.DkpAmount, attendanceWindow.IsKillWindow);
+            }
+            else
+            {
+                perWindowDkp = attendanceWindow.DkpAmount
+                    ?? (paysPerWindow ? eventEntity.DkpPerHour : null);
+            }
+        }
 
         var matched = 0;
         var alreadyVerified = 0;

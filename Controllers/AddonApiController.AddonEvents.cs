@@ -39,6 +39,47 @@ public sealed partial class AddonApiController
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == linkshellId, cancellationToken);
 
+        // Which sequences each camp has already posted. One query for the whole page, and only
+        // NextPostDkp below reads it: on a 2-post camp the next post is a role, and which role it
+        // is depends on whether the Open is already filed.
+        var pageEventIds = raw.Select(evt => evt.Id).ToList();
+        var postedSequences = (await _dbContext.EventAttendanceWindows
+                .AsNoTracking()
+                .Where(w => w.EventId != null && pageEventIds.Contains(w.EventId.Value) && !w.IsKillWindow)
+                .Select(w => new { EventId = w.EventId!.Value, w.SequenceNumber })
+                .ToListAsync(cancellationToken))
+            .GroupBy(w => w.EventId)
+            .ToDictionary(g => g.Key, g => g.Select(w => w.SequenceNumber).ToHashSet());
+
+        // What the NEXT attendance post is worth per attendee -- what the addon seeds its "Dkp
+        // this window" box from.
+        //
+        // On a 2-POST camp (the kings and dragons: an Open and a Close, across seven spawn
+        // windows) the next post is a ROLE, not a clock reading -- the Open until it is filed, the
+        // Close after -- and the two are priced differently. This used to quote HnmWindowNumber,
+        // the SPAWN window counter, which reads 3 on a dragon sitting in its third window: neither
+        // window 1 nor the close, so both posts were quoted the REGULAR window rate and an Open
+        // worth the open bonus was offered at 0.5.
+        //
+        // The close is window 2 by that camp's shape, which is what ResolveCloseWindow settles on
+        // for it at End Camp -- so quoting it that way is quoting what will actually be paid.
+        //
+        // A numbered camp is unchanged: there the opened window IS the role.
+        double? NextPostDkp(Event evt)
+        {
+            var opened = Math.Clamp(
+                evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt));
+            if (DiscordEventMessageBuilder.AttendancePostCount(evt) != 2)
+            {
+                return HnmCampPricing.DefaultWindowValue(evt, linkshell, opened);
+            }
+
+            var openFiled = postedSequences.TryGetValue(evt.Id, out var filed) && filed.Contains(1);
+            return openFiled
+                ? HnmCampPricing.WindowValueFor(evt, linkshell, sequence: 2, closeWindow: 2, explicitAmount: null)
+                : HnmCampPricing.WindowValueFor(evt, linkshell, sequence: 1, closeWindow: 0, explicitAmount: null);
+        }
+
         // This linkshell's ENABLED Repeat-on-ToD leads, keyed by lower-cased monster, so each camp
         // below can report whether ending it is supposed to be followed by a re-posted board.
         //
@@ -165,9 +206,7 @@ public sealed partial class AddonApiController
             // explicit price, every window kept the close bonus it had briefly been quoted. The
             // close is an officer's checkbox now, so this quotes the open on window 1 and the
             // regular window rate everywhere else, and what is quoted is what is paid.
-            openedWindowDkp = HnmCampPricing.DefaultWindowValue(
-                evt, linkshell,
-                Math.Clamp(evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt))),
+            openedWindowDkp = NextPostDkp(evt),
             // The camp's OUTCOME bonuses, resolved server-side like openedWindowDkp above and for
             // the same reason -- the addon cannot apply the override-then-linkshell precedence
             // itself, and a client that re-derives server pricing is what the note at the top of
