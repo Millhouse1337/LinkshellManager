@@ -887,7 +887,10 @@ export class ActivitySidebarPanelComponent {
       case 'EventEarned':
         return 'Event Earned';
       case 'SnapshotEarned':
-        return 'Snapshot Earned';
+        // What these entries ARE: a camp, posted from its review card. "Snapshot Earned" named
+        // the plumbing -- the addon's roster capture -- rather than the night that was paid for.
+        // The stored EntryType is untouched; it is a key, and every filter reads it.
+        return 'HNM Event';
       case 'AuctionSpent':
         return 'Auction Spent';
       case 'AuditAdjustment':

@@ -120,7 +120,9 @@
     function entryTypeLabel(entryType) {
         switch (entryType) {
             case 'EventEarned': return 'Event Earned';
-            case 'SnapshotEarned': return 'Snapshot Earned';
+            // Named for the camp it paid, not for the roster capture behind it. Matches the
+            // Activity's own label; the stored EntryType is unchanged.
+            case 'SnapshotEarned': return 'HNM Event';
             case 'LootSpent': return 'Loot Spent';
             case 'LootRefund': return 'Loot Refund';
             case 'LootEditRefund': return 'Loot Edit Refund';
