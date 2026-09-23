@@ -137,8 +137,15 @@ else
                                     : (e.MainJobLevel.HasValue ? $"{e.MainJob}{e.MainJobLevel}" : e.MainJob!);
                                 var sub  = string.IsNullOrWhiteSpace(e.SubJob)  ? "—"
                                     : (e.SubJobLevel.HasValue  ? $"{e.SubJob}{e.SubJobLevel}"  : e.SubJob!);
-                                <tr style="border-top:1px solid var(--border,#222)">
-                                    <td style="padding:6px 10px"><strong>@e.CharacterName</strong></td>
+                                <tr class="@(e.IsRegistered ? null : "we-row--unregistered")" style="border-top:1px solid var(--border,#222)">
+                                    <td style="padding:6px 10px">
+                                        <strong>@e.CharacterName</strong>
+                                        @if (!e.IsRegistered)
+                                        {
+                                            <span class="tag we-unregistered-chip"
+                                                  title="@e.CharacterName is not on the linkshell roster, so no DKP can be paid to them.">Not registered</span>
+                                        }
+                                    </td>
                                     <td style="padding:6px 10px">@main</td>
                                     <td style="padding:6px 10px">@sub</td>
                                     <td style="padding:6px 10px">@(string.IsNullOrWhiteSpace(e.Zone) ? "—" : e.Zone)</td>

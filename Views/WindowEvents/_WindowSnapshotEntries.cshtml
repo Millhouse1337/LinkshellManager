@@ -74,8 +74,18 @@
         {
             @* Hand-added people sit in a block at the bottom and are tinted, so a name an officer
                asserted never reads as one the addon actually scanned. *@
-            <tr class="@(entry.AddedManually ? "we-row--manual" : null)">
-                <td><strong>@entry.CharacterName</strong></td>
+            @* Two independent tints, and a row can carry both. Manual says an officer ASSERTED the
+               name; unregistered says the linkshell has no member behind it, so nothing will pay
+               them whatever this row's DKP box reads. *@
+            <tr class="@(entry.AddedManually ? "we-row--manual" : null) @(entry.IsRegistered ? null : "we-row--unregistered")">
+                <td>
+                    <strong>@entry.CharacterName</strong>
+                    @if (!entry.IsRegistered)
+                    {
+                        <span class="tag we-unregistered-chip"
+                              title="@entry.CharacterName is not on the linkshell roster, so no DKP can be paid to them. They need to sign up on an event board once, or join from the LSM app by accepting the linkshell invite.">Not registered</span>
+                    }
+                </td>
                 <td>
                     @if (!string.IsNullOrWhiteSpace(entry.MainJob))
                     {

@@ -2583,6 +2583,24 @@ table.themed .num {
 .we-table tbody tr.we-row--manual td:first-child {
   box-shadow: inset 3px 0 0 rgba(245, 158, 11, 0.55);
 }
+/* Someone the capture read who is NOT on the linkshell roster. Red rather than the hand-added
+   amber because this is not a provenance note: nothing will pay this row, whatever its DKP column
+   says, so it has to read as an exclusion and not as a shade of evidence. A row can be both
+   (an officer typed in a stranger), and the two tints stack without fighting — this one wins on
+   background because it is the one with a consequence.
+
+   Deliberately NOT scoped under .we-table, unlike the amber rule above: the standalone Attendance
+   Snapshots page builds its own table with inline layout styles, and a name the shell cannot pay
+   has to read the same way wherever a capture is listed. */
+tr.we-row--unregistered > td {
+  background: var(--danger-weak);
+}
+tr.we-row--unregistered:hover > td {
+  background: rgba(248, 113, 113, 0.18);
+}
+tr.we-row--unregistered > td:first-child {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
 .we-table tbody tr:hover td {
   background: var(--surface);
 }
@@ -2833,6 +2851,25 @@ table.themed .num {
   background: var(--success-weak);
   border-color: transparent;
   color: var(--success);
+}
+
+/* "Not registered": this character has no membership behind them, so no DKP path can place them.
+   Sits beside the name rather than in a column of its own — it is a fact about WHO the row is,
+   and an officer scanning the table should not have to travel to the far edge to find it. */
+.we-unregistered-chip {
+  background: var(--danger-weak);
+  border-color: transparent;
+  color: var(--danger);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+/* The same fact on the collapsed camp header, next to the member count it qualifies. */
+.we-count--unregistered {
+  color: var(--danger);
 }
 .we-snapshot__actions {
   display: inline-flex;
