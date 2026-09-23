@@ -71,4 +71,17 @@ public sealed class AttendanceSnapshotEntryRow
     // (WindowEventRow.PerCaptureDkp). Null everywhere else, and on a row an officer added during
     // review — see AttendanceSnapshotEntry.DkpAmount.
     public double? DkpAmount { get; set; }
+
+    // Whether this character is on the linkshell roster at all (RosterNameSet — an accepted invite
+    // or a sign-up board self-registration, matched on the main or either alt).
+    //
+    // A capture reads the WHOLE alliance, so another linkshell standing at the same camp lands in
+    // it. Those names were never going to be credited — every DKP path resolves a membership first
+    // and silently skips one it cannot place — so listing them unmarked beside the people who ARE
+    // being paid is exactly the confusion this flags.
+    //
+    // Computed at READ time, never stored: someone who registers mid-camp becomes creditable the
+    // moment they do, and a flag stamped at capture time would go on calling them a stranger while
+    // the ledger paid them. Defaults true, so a mapper with no roster in hand tags nobody.
+    public bool IsRegistered { get; set; } = true;
 }

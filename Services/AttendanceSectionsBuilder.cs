@@ -89,14 +89,18 @@ public sealed class AttendanceSectionsBuilder
                 .ToListAsync(cancellationToken)
             : new List<string>();
 
+        // Who the shell actually knows, so every name a capture read can be marked as creditable or
+        // not. One query for the whole page — the mappers below take the set, never the DbContext.
+        var roster = await LinkshellRosterNames.LoadAsync(_db, linkshellId, cancellationToken);
+
         return new WindowEventsViewModel
         {
             LinkshellId = linkshellId,
             LinkshellName = linkshellName,
             CanManage = canManage,
-            OpenEvents = openEvents.Select(e => MapWindowEvent(e, userZone)).ToList(),
+            OpenEvents = openEvents.Select(e => MapWindowEvent(e, userZone, roster)).ToList(),
             ClosedEvents = new(),
-            UnlinkedSnapshots = unlinked.Select(s => MapSnapshot(s, userZone)).ToList(),
+            UnlinkedSnapshots = unlinked.Select(s => MapSnapshot(s, userZone, null, roster)).ToList(),
             UnlinkedTotalCount = unlinkedTotal,
             UnlinkedDisplayCap = MaxUnlinkedSnapshots,
             RosterCharacterNames = rosterNames,
@@ -208,6 +212,8 @@ public sealed class AttendanceSectionsBuilder
             .Include(e => e.MemberDkpOverrides)
             .ToListAsync(cancellationToken);
 
+        var roster = await LinkshellRosterNames.LoadAsync(_db, linkshellId, cancellationToken);
+
         return new WindowEventsHistoryViewModel
         {
             LinkshellId = linkshellId,
@@ -217,25 +223,29 @@ public sealed class AttendanceSectionsBuilder
             Page = pageNumber,
             PageSize = pageSize,
             TotalCount = totalCount,
-            Events = closed.Select(e => MapWindowEvent(e, userZone)).ToList(),
+            Events = closed.Select(e => MapWindowEvent(e, userZone, roster)).ToList(),
         };
     }
 
-    public static WindowEventRow MapWindowEvent(WindowEvent item, DateTimeZone userZone)
+    public static WindowEventRow MapWindowEvent(
+        WindowEvent item, DateTimeZone userZone, RosterNameSet? roster = null)
     {
+        var rosterNames = roster ?? RosterNameSet.Unknown;
+
         // Pass the event itself: each snapshot needs its cadence (for "of 25") and its grid anchor
         // (to name the window of a capture taken before window numbering existed).
         var snapshots = item.Snapshots
             .OrderByDescending(s => s.CapturedAtUtc)
             .ThenBy(s => s.AllianceNumber)
-            .Select(s => MapSnapshot(s, userZone, item))
+            .Select(s => MapSnapshot(s, userZone, item, rosterNames))
             .ToList();
         var overrides = item.MemberDkpOverrides
             .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
             .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
         var combined = BuildCombinedMembers(
-            item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount, item.PerCaptureDkp);
+            item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount, item.PerCaptureDkp,
+            rosterNames);
 
         return new WindowEventRow
         {
@@ -261,6 +271,7 @@ public sealed class AttendanceSectionsBuilder
                 .OrderBy(n => n)
                 .ToList(),
             CombinedMemberCount = combined.Count,
+            UnregisteredMemberCount = combined.Count(m => !m.IsRegistered),
             DkpAmount = item.DkpAmount,
             EntryType = item.EntryType,
             PostedToSheetAt = item.PostedToSheetAt,
@@ -283,9 +294,14 @@ public sealed class AttendanceSectionsBuilder
     // `windowEvent` is the camp this snapshot belongs to; it supplies the cadence and the grid
     // anchor used to name the window. Omitted for an UNLINKED snapshot — one with no Window Event,
     // so no camp and no grid — which then shows no window at all.
+    // `roster` decides which scanned names the linkshell actually knows. Optional and last, so a
+    // caller with no linkshell in hand keeps the old behaviour exactly: RosterNameSet.Unknown
+    // accepts everyone and no row is marked.
     public static WindowSnapshotRow MapSnapshot(
-        AttendanceSnapshot snapshot, DateTimeZone userZone, WindowEvent? windowEvent = null)
+        AttendanceSnapshot snapshot, DateTimeZone userZone, WindowEvent? windowEvent = null,
+        RosterNameSet? roster = null)
     {
+        var rosterNames = roster ?? RosterNameSet.Unknown;
         // Scanned names first, alphabetically — that block is the addon's evidence and stays intact.
         // Hand-added people go underneath in the order an officer entered them (by Id, not by name)
         // so a newly typed row appears where the eye already is: at the bottom, next to the input.
@@ -304,6 +320,7 @@ public sealed class AttendanceSectionsBuilder
                 Zone = e.Zone,
                 AddedManually = e.AddedManually,
                 DkpAmount = e.DkpAmount,
+                IsRegistered = rosterNames.Contains(e.CharacterName),
             })
             .ToList();
 
@@ -380,6 +397,8 @@ public sealed class AttendanceSectionsBuilder
         };
     }
 
+    // `roster` is optional and last for the same reason it is on MapSnapshot: a caller without one
+    // marks nobody rather than marking everybody.
     public static List<WindowCombinedMemberRow> BuildCombinedMembers(
         IEnumerable<AttendanceSnapshot> snapshots,
         IDictionary<string, double>? memberDkpOverrides = null,
@@ -390,11 +409,13 @@ public sealed class AttendanceSectionsBuilder
         // The captures carry the money on this row (WindowEvent.PerCaptureDkp): a member is owed
         // the sum of their capture amounts, and neither the per-member overrides nor the event
         // baseline nor the misc rate has anything to say about it.
-        bool perCaptureDkp = false)
+        bool perCaptureDkp = false,
+        RosterNameSet? roster = null)
     {
         var captureTotals = perCaptureDkp
             ? WindowEventCaptureDkp.SumByCharacter(snapshots)
             : null;
+        var rosterNames = roster ?? RosterNameSet.Unknown;
 
         return snapshots
             .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
@@ -441,6 +462,7 @@ public sealed class AttendanceSectionsBuilder
                         ? captureTotals.GetValueOrDefault(g.Key)
                         : overrideAmount ?? baseAmount,
                     CreditSource = creditSource,
+                    IsRegistered = rosterNames.Contains(g.Key),
                 };
             })
             .ToList();

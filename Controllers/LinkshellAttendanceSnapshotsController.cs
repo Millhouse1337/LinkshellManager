@@ -87,6 +87,10 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
         var userZone = _timeZones.Resolve(userTimeZoneId);
         var isUserZoneUtc = ReferenceEquals(userZone, DateTimeZone.Utc);
 
+        // Who the shell actually knows, so a capture that read another linkshell's people at the
+        // same camp says so instead of listing them as though they were about to be paid.
+        var roster = await LinkshellRosterNames.LoadAsync(_db, linkshellId, cancellationToken);
+
         var rows = snapshots.Select(s =>
         {
             var entries = s.Entries
@@ -99,6 +103,7 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
                     SubJob = e.SubJob,
                     SubJobLevel = e.SubJobLevel,
                     Zone = e.Zone,
+                    IsRegistered = roster.Contains(e.CharacterName),
                 })
                 .ToList();
 

@@ -82,6 +82,13 @@ public sealed class WindowEventRow
     public List<int> AllianceNumbers { get; set; } = new();
 
     public int CombinedMemberCount { get; set; }
+
+    // How many of CombinedMemberCount are NOT on the roster. Counted rather than subtracted,
+    // because CombinedMemberCount still describes the table below it — every name is listed, the
+    // unregistered ones are marked — and an officer reading "12 members" deserves to be told that
+    // two of those twelve cannot be paid before they press Post.
+    public int UnregisteredMemberCount { get; set; }
+
     public double? DkpAmount { get; set; }
     public string? EntryType { get; set; }
     public DateTime? PostedToSheetAt { get; set; }
@@ -180,4 +187,9 @@ public sealed class WindowCombinedMemberRow
     // Where this member's credit came from: "Window", "Misc", or "Both". It is what tells an
     // officer why one person on the roster is priced differently from the person above them.
     public string CreditSource { get; set; } = string.Empty;
+
+    // On the linkshell roster, so the DKP paths can actually place them. False means the capture
+    // read someone the shell does not know — see AttendanceSnapshotEntryRow.IsRegistered for why
+    // that happens and why it is computed at read time.
+    public bool IsRegistered { get; set; } = true;
 }

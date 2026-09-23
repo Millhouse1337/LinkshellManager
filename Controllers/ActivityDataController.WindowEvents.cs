@@ -69,7 +69,11 @@ public sealed partial class ActivityDataController
         // True when this row came from ending an HNM camp rather than an addon "/lsm now" capture.
         // Drives the "Camp" tag. Read off CampEndedAtUtc, which only End Camp writes and which
         // outlives the camp's board -- SourceEventId went null with it and took the tag along.
-        bool IsCamp = false);
+        bool IsCamp = false,
+        // How many of CombinedMemberCount are NOT on the roster. Counted rather than subtracted:
+        // every name stays listed, the unregistered ones are marked, and the officer is told how
+        // many of the people they are about to Post for cannot be paid.
+        int UnregisteredMemberCount = 0);
 
     public sealed record ActivityWindowEventMemberDkpInput(string? CharacterName, double? DkpAmount);
 
@@ -129,7 +133,11 @@ public sealed partial class ActivityDataController
         bool AddedManually,
         // What THIS capture pays them, on a card that prices captures (see PerCaptureDkp). Null
         // on every other card, where the money is one amount per member.
-        double? DkpAmount);
+        double? DkpAmount,
+        // On the linkshell roster, so a DKP path can place them. False means the capture read
+        // someone the shell does not know — see AttendanceSnapshotEntryRow.IsRegistered on the web
+        // for why a capture contains such names and why this is computed at read time.
+        bool IsRegistered = true);
 
     public sealed record ActivityWindowCombinedMemberDto(
         string CharacterName,
@@ -144,7 +152,10 @@ public sealed partial class ActivityDataController
         double? DkpAmountOverride,
         double? EffectiveDkpAmount,
         // "Window", "Misc" or "Both" — why this member is priced the way they are.
-        string CreditSource);
+        string CreditSource,
+        // On the linkshell roster. False means nothing will pay them no matter what amount this
+        // row shows, which is what the client has to say out loud.
+        bool IsRegistered = true);
 
     // WindowEventId attaches to an existing attendance event; Name find-or-creates one.
     // LinkedEventId is orthogonal to both: it records WHICH CAMP the snapshot belongs to,
@@ -268,12 +279,16 @@ public sealed partial class ActivityDataController
                 .ToListAsync(cancellationToken)
             : new List<string>();
 
+        // Who the shell actually knows, so every name a capture read can be marked as creditable or
+        // not. One query for the whole response — the mappers take the set, never the DbContext.
+        var roster = await LinkshellRosterNames.LoadAsync(_dbContext, linkshellId, cancellationToken);
+
         return Ok(new ActivityWindowEventsResponse(
-            openEvents.Select(MapActivityWindowEvent).ToList(),
-            closedEvents.Select(MapActivityWindowEvent).ToList(),
+            openEvents.Select(e => MapActivityWindowEvent(e, roster)).ToList(),
+            closedEvents.Select(e => MapActivityWindowEvent(e, roster)).ToList(),
             // No parent event, so no window grid and no window label — deliberately, exactly as
             // AttendanceSectionsBuilder.MapSnapshot does for an unlinked snapshot on the web.
-            unlinkedSnapshots.Select(s => MapActivityWindowSnapshot(s)).ToList(),
+            unlinkedSnapshots.Select(s => MapActivityWindowSnapshot(s, null, roster)).ToList(),
             canManage,
             WindowEventEntryTypes.All,
             rosterCharacterNames,
@@ -1006,21 +1021,25 @@ public sealed partial class ActivityDataController
         return null;
     }
 
-    private static ActivityWindowEventDto MapActivityWindowEvent(WindowEvent item)
+    private static ActivityWindowEventDto MapActivityWindowEvent(
+        WindowEvent item, RosterNameSet? roster = null)
     {
+        var rosterNames = roster ?? RosterNameSet.Unknown;
+
         // Pass the event itself: each snapshot needs its cadence (for "of 25") and its grid anchor
         // (to name the window of a capture taken before window numbering existed).
         var snapshots = item.Snapshots
             .OrderByDescending(s => s.CapturedAtUtc)
             .ThenBy(s => s.AllianceNumber)
-            .Select(s => MapActivityWindowSnapshot(s, item))
+            .Select(s => MapActivityWindowSnapshot(s, item, rosterNames))
             .ToList();
         var overrides = item.MemberDkpOverrides
             .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
             .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
         var combined = BuildActivityCombinedMembers(
-            item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount, item.PerCaptureDkp);
+            item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount, item.PerCaptureDkp,
+            rosterNames);
         return new ActivityWindowEventDto(
             item.Id,
             item.LinkshellId,
@@ -1053,15 +1072,18 @@ public sealed partial class ActivityDataController
             WindowEventWindowGrid.WindowCount(item),
             WindowEventWindowGrid.Minutes(item) > 0,
             item.PerCaptureDkp,
-            item.CampEndedAtUtc is not null || item.SourceEventId is not null);
+            item.CampEndedAtUtc is not null || item.SourceEventId is not null,
+            combined.Count(m => !m.IsRegistered));
     }
 
     // `windowEvent` supplies the cadence and grid anchor used to name the spawn window, exactly as
     // AttendanceSectionsBuilder.MapSnapshot does for the web. Omitted for an UNLINKED snapshot,
     // which has no camp and therefore no window.
     private static ActivityWindowSnapshotDto MapActivityWindowSnapshot(
-        AttendanceSnapshot snapshot, WindowEvent? windowEvent = null)
+        AttendanceSnapshot snapshot, WindowEvent? windowEvent = null, RosterNameSet? roster = null)
     {
+        var rosterNames = roster ?? RosterNameSet.Unknown;
+
         // Scanned names first, alphabetically; hand-added people underneath in the order an officer
         // entered them. Mirrors the web ordering so the two surfaces list a roster identically.
         var entries = snapshot.Entries
@@ -1077,7 +1099,8 @@ public sealed partial class ActivityDataController
                 e.SubJobLevel,
                 e.Zone,
                 e.AddedManually,
-                e.DkpAmount))
+                e.DkpAmount,
+                rosterNames.Contains(e.CharacterName)))
             .ToList();
 
         // The STORED window number wins — it was pinned against the grid as it stood at capture.
@@ -1137,11 +1160,13 @@ public sealed partial class ActivityDataController
         double? miscDkpAmount = null,
         // The captures carry the money on this card, so a member is owed their sum and neither the
         // per-member overrides nor the misc rate has anything to say. Same rule as the web builder.
-        bool perCaptureDkp = false)
+        bool perCaptureDkp = false,
+        RosterNameSet? roster = null)
     {
         var captureTotals = perCaptureDkp
             ? WindowEventCaptureDkp.SumByCharacter(snapshots)
             : null;
+        var rosterNames = roster ?? RosterNameSet.Unknown;
 
         return snapshots
             .Where(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Active)
@@ -1181,7 +1206,8 @@ public sealed partial class ActivityDataController
                         .ToList(),
                     captureTotals is null ? overrideAmount : null,
                     captureTotals is not null ? captureTotals.GetValueOrDefault(g.Key) : overrideAmount ?? baseAmount,
-                    creditSource);
+                    creditSource,
+                    rosterNames.Contains(g.Key));
             })
             .ToList();
     }
