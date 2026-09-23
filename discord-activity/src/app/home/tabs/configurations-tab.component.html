@@ -1286,12 +1286,10 @@
                     <td><code>{{ token.prefix }}…</code></td>
                     <!-- One code pairs several linkshells, so name the ones it
                          covers instead of implying the selected one. -->
-                    <td>
-                      {{ formatAddonTokenLinkshells(token) }}
-                      @if (token.mine === false) {
-                        <span class="tag">another member</span>
-                      }
-                    </td>
+                    <!-- No "another member" tag: the listing is your own pairings only now
+                         (AddonApiAuthService.ListForUserAsync), so there is no other kind of row
+                         left for it to mark. -->
+                    <td>{{ formatAddonTokenLinkshells(token) }}</td>
                     <td>{{ formatAddonTokenDate(token.createdAt) }}</td>
                     <td>{{ formatAddonTokenDate(token.lastUsedAt) }}</td>
                     <td class="num">

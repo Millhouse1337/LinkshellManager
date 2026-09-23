@@ -278,23 +278,29 @@ public sealed class AddonApiAuthService
         return true;
     }
 
-    // Every active token the Game Addon page should show a viewer: the ones
-    // bound to the linkshell they're looking at (so a leader can still see and
-    // revoke someone else's pairing on their own linkshell) plus every token
-    // issued to the viewer, whichever linkshell it landed on.
+    // THE VIEWER'S OWN active pairings, and nobody else's.
     //
-    // That second half is the point: one pairing code mints a token for every
-    // linkshell the user belongs to, so the card must not read "no active
-    // tokens" just because a different linkshell happens to be selected.
-    public Task<List<AddonApiToken>> ListVisibleAsync(
-        int linkshellId,
+    // A pairing is a personal credential: it belongs to one member's game client, and the Game
+    // Addon card is where that member manages theirs. This used to also return every token bound
+    // to the linkshell being viewed, so a leader could revoke somebody else's pairing from the same
+    // table -- which meant opening your own settings page listed other people's devices back at
+    // you, tagged "another member". Nobody asked their linkshell's settings page who else has the
+    // addon installed.
+    //
+    // Revoking someone else's is untouched as a CAPABILITY: RevokeTokenAsync still allows it with
+    // manage rights on that token's linkshell. It simply is not something this page volunteers.
+    //
+    // Not scoped to one linkshell, deliberately: one pairing code mints a token for every linkshell
+    // the user belongs to, so the card must not read "no active tokens" merely because a different
+    // linkshell happens to be selected. ListTokensAsync collapses the batch back into the single
+    // pairing the user actually performed.
+    public Task<List<AddonApiToken>> ListForUserAsync(
         string appUserId,
         CancellationToken cancellationToken = default)
     {
         return _dbContext.AddonApiTokens
             .Include(t => t.Linkshell)
-            .Where(t => t.RevokedAt == null
-                        && (t.LinkshellId == linkshellId || t.IssuedToAppUserId == appUserId))
+            .Where(t => t.RevokedAt == null && t.IssuedToAppUserId == appUserId)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
     }

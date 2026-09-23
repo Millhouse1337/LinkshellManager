@@ -152,7 +152,10 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
-        var tokens = await _auth.ListVisibleAsync(linkshellId, appUser.Id, cancellationToken);
+        // The viewer's own pairings only. `linkshellId` above still gates ACCESS to the card (you
+        // must be able to use the addon on the linkshell you are viewing), it just no longer widens
+        // the listing to everyone else's pairings on it -- see ListForUserAsync.
+        var tokens = await _auth.ListForUserAsync(appUser.Id, cancellationToken);
 
         // A pairing code mints one token per linkshell, so collapse each batch
         // back into the single pairing the user actually performed -- otherwise
@@ -176,8 +179,9 @@ public sealed partial class AddonApiController
                     createdAt = group.Min(t => t.CreatedAt),
                     lastUsedAt = group.Max(t => t.LastUsedAt),
                     issuedToAppUserId = representative.IssuedToAppUserId,
-                    // Lets the UI separate "your pairing" (shown on every one of
-                    // your linkshells) from another member's pairing on this one.
+                    // Always true now that the listing is the viewer's own pairings only. Kept on
+                    // the wire because both clients read it, and an older one that lost the field
+                    // would read the absence as "somebody else's" and tag every row.
                     mine = representative.IssuedToAppUserId == appUser.Id,
                     linkshells = group
                         .Select(t => t.Linkshell?.LinkshellName ?? $"#{t.LinkshellId}")
