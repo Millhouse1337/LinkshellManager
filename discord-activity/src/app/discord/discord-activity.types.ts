@@ -1104,6 +1104,10 @@ export interface ActivityLinkedSnapshot {
   windowLabel?: string | null;
   snapshotStatus: string;
   entries: ActivityLinkedSnapshotEntry[];
+  // What this capture pays EACH person on it, from the same helpers the payout uses. Null or
+  // absent means the camp does not price captures at all — a Manual Check In camp credits the
+  // check-in range instead — and must render as nothing rather than as 0.
+  dkpPerMember?: number | null;
 }
 
 export interface ActivityLinkedSnapshotEntry {

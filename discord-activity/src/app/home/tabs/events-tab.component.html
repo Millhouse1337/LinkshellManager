@@ -554,6 +554,17 @@
                           @if (snapshot.snapshotStatus !== 'Active') {
                             <span class="tag warning">{{ snapshot.snapshotStatus }}</span>
                           }
+                          <!-- What the capture is WORTH, per person on it. The card listed who was
+                               on a capture and said nothing about what it pays, so the one question
+                               an officer has about a filed capture could only be answered by
+                               opening the camp's scoring settings.
+
+                               Absent, not zero, when the camp does not price captures: a Manual
+                               Check In camp credits the check-in range instead. Saying "0 DKP"
+                               there would be a different claim, and a wrong one. -->
+                          @if (snapshot.dkpPerMember != null) {
+                            <span class="tag success">+{{ snapshot.dkpPerMember }} DKP each</span>
+                          }
                         </div>
                         <div class="roster-table__scroll">
                           <table class="roster-table">

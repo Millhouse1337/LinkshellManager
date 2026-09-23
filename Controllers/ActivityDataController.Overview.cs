@@ -327,7 +327,26 @@ public sealed partial class ActivityDataController
                         entry.SubJobLevel,
                         entry.Zone,
                         entry.AddedManually))
-                    .ToList()))
+                    .ToList(),
+                // WHAT THIS CAPTURE PAYS EACH PERSON ON IT. The card listed who was on a capture
+                // and said nothing about what it was worth, so the one question an officer has
+                // about a filed capture -- is this going to pay them? -- could only be answered by
+                // opening the camp's scoring settings.
+                //
+                // Resolved through the same helpers the payout uses, so the figure quoted here is
+                // the figure End Camp will carry: a Misc post is worth the camp's regular window
+                // rate (MiscValueFor), and a numbered slot is worth whatever that window pays
+                // (DefaultWindowValue -- the quote form, with no close bonus and no officer
+                // override applied yet).
+                //
+                // Null is a REAL answer and the client renders it as nothing rather than 0: a
+                // Manual Check In camp credits the check-in range instead, and a non-HNM event has
+                // no window rate at all.
+                AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind)
+                    ? HnmCampPricing.MiscValueFor(evt, primaryLinkshell)
+                    : snapshot.WindowNumber is { } pricedWindow
+                        ? HnmCampPricing.DefaultWindowValue(evt, primaryLinkshell, pricedWindow)
+                        : null))
                 .ToList();
         }
 

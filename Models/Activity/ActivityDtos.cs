@@ -854,7 +854,12 @@ public sealed record ActivityLinkedSnapshotDto(
     // ("Open" / "Close" / "Window 3"). Null when the camp runs no window grid.
     string? WindowLabel,
     string SnapshotStatus,
-    IReadOnlyList<ActivityLinkedSnapshotEntryDto> Entries);
+    IReadOnlyList<ActivityLinkedSnapshotEntryDto> Entries,
+    // What this capture pays EACH person on it, resolved through the same helpers the payout uses
+    // so the quote and the credit cannot disagree. Null means the camp does not price captures at
+    // all — a Manual Check In camp credits the check-in range instead, and a non-HNM event has no
+    // window rate — and the client must render that as nothing rather than as 0.
+    double? DkpPerMember = null);
 
 public sealed record ActivityLinkedSnapshotEntryDto(
     int Id,

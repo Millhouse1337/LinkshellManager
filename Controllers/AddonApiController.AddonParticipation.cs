@@ -866,6 +866,103 @@ public sealed partial class AddonApiController
         return Ok(new { removedId = attendee.Id });
     }
 
+    // UNDO A WHOLE WINDOW POST. The attendee-at-a-time removal above fixes a roster; this is for
+    // the post that should never have happened -- the wrong camp, the wrong window, the Post
+    // pressed twice while the officer was still gathering.
+    //
+    // Deletes the window and everything the post wrote for it: the per-attendee rows and the
+    // "Verify" ledger entries that recorded them, exactly as RemoveWindowAttendeeRowAsync does one
+    // at a time, so a re-post lands as cleanly as a first post.
+    //
+    // WHAT IT DELIBERATELY LEAVES. The participations (AppUserEvent). A post CREATES one for
+    // anyone who had none, but it does not own them -- a member who signed up on the Discord board
+    // has had one since before the camp started, and there is no way to tell the two apart after
+    // the fact. They are also harmless: on a windowed camp every payout is computed from the
+    // windows a member was scanned in, so a participation with no windows left earns nothing.
+    // Removing them would be the one irreversible part of an "undo".
+    //
+    // The camp's start time stays too. Auto-commence happened because an officer posted at a camp
+    // that was running; that it was the wrong window does not mean the camp never started.
+    [HttpDelete("events/{eventId:int}/windows/{sequence:int}")]
+    [AddonApiAuth]
+    public async Task<IActionResult> UndoWindowPostAsync(
+        int eventId, int sequence, CancellationToken cancellationToken)
+    {
+        var token = AddonApiAuthAttribute.GetToken(HttpContext);
+
+        var attendanceWindow = await _dbContext.EventAttendanceWindows
+            .Include(w => w.Event)
+            .Include(w => w.Attendees)
+            .FirstOrDefaultAsync(
+                w => w.EventId == eventId && w.SequenceNumber == sequence,
+                cancellationToken);
+
+        if (attendanceWindow is null) return NotFound(new { error = "That window has no post to undo." });
+        if (attendanceWindow.Event is null || attendanceWindow.Event.LinkshellId != token.LinkshellId)
+        {
+            return Forbid();
+        }
+        // Same bar as posting one immediately: undoing a post is the same authority as making it.
+        // A member who can only submit for approval has nothing to undo here -- their post is a
+        // PendingAttendanceWindowSubmission, which an officer rejects instead.
+        if (!await TokenIssuerCanModerateAsync(token, attendanceWindow.Event.LinkshellId, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        // An ENDED camp has already handed its windows to a review card (HnmCampReviewHandoffService)
+        // and its DKP is computed from that copy. Deleting the live row would change nothing an
+        // officer can see and everything they cannot, so the correction belongs on the review card.
+        if (attendanceWindow.Event.EndTime is not null)
+        {
+            return BadRequest(new
+            {
+                error = "This camp has ended. Fix its roster on the review card under "
+                      + "Events Pending DKP Post instead.",
+            });
+        }
+
+        // UNWIND IN ORDER ON AN OPEN/CLOSE CAMP. Posting is one-way there: once a Close exists the
+        // post endpoint refuses to create any further window, so undoing the Open underneath one
+        // would leave a camp that cannot be repaired from the addon at all -- no Open, and no way
+        // to post a new one. Undo the Close first and both come back.
+        //
+        // Only on a 2-post camp, which is the only shape that guard applies to; a numbered camp
+        // re-posts any window freely, so it may be undone in any order.
+        if (DiscordEventMessageBuilder.AttendancePostCount(attendanceWindow.Event) == 2
+            && !attendanceWindow.IsKillWindow
+            && await _dbContext.EventAttendanceWindows.AnyAsync(
+                w => w.EventId == eventId && w.SequenceNumber > sequence && !w.IsKillWindow,
+                cancellationToken))
+        {
+            return BadRequest(new
+            {
+                error = "Undo the Close first — this camp will not accept a new Open while the "
+                      + "Close is filed.",
+            });
+        }
+
+        var windowId = attendanceWindow.Id;
+        var removed = attendanceWindow.Attendees.Count;
+
+        // The Verify rows the post wrote. Matched on the WINDOW alone rather than per attendee:
+        // the participation a row pointed at may since have been cleared away (the wyrm camps clear
+        // every window), and a ledger row orphaned by that would otherwise survive its own window.
+        var ledgerEntries = await _dbContext.AppUserEventStatusLedgers
+            .Where(l => l.EventAttendanceWindowId == windowId && l.ActionType == "Verify")
+            .ToListAsync(cancellationToken);
+        if (ledgerEntries.Count > 0)
+        {
+            _dbContext.AppUserEventStatusLedgers.RemoveRange(ledgerEntries);
+        }
+
+        _dbContext.AppUserEventWindows.RemoveRange(attendanceWindow.Attendees);
+        _dbContext.EventAttendanceWindows.Remove(attendanceWindow);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { undone = true, sequence, removedAttendees = removed });
+    }
+
     // Late-join: lets a regular member self-attach to an already-commenced
     // timed event from the addon, without needing an officer to scan and
     // post them. Mirrors the activity's ActivityDataController.QuickJoinAsync
