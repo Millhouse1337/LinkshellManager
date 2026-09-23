@@ -268,6 +268,24 @@ public sealed partial class AddonApiController
         }
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // WHO ON THIS CAPTURE THE SHELL CANNOT PAY, named back to the poster.
+        //
+        // The capture keeps them -- an officer standing at camp asked for a roster, not a filtered
+        // one, and a name that silently vanished would only move the question ("who was that
+        // seventh person?") somewhere nobody is looking. What changes is that nothing pretends
+        // they are owed anything: the app marks the row, and this tells the officer at the moment
+        // they can still act on it, which is while everyone is still standing there.
+        //
+        // Computed over the WHOLE snapshot rather than just this post's entries, so a fold into an
+        // earlier capture reports the stranger the first post brought in as well.
+        var roster = await LinkshellRosterNames.LoadAsync(_dbContext, token.LinkshellId, cancellationToken);
+        var unregistered = snapshot.Entries
+            .Where(e => !roster.Contains(e.CharacterName))
+            .Select(e => e.CharacterName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         // Fire-and-forget post to the linkshell's Discord channel (no-op if
         // no webhook URL is configured). Enqueued after the snapshot is
         // committed so the background worker can reload it; never blocks or
@@ -314,6 +332,10 @@ public sealed partial class AddonApiController
             // True when this post was absorbed into another capture from the same alliance taken
             // moments earlier, rather than creating a row of its own.
             merged = mergeTarget is not null,
+            // Characters on this capture with no linkshell membership behind them. They stay ON the
+            // capture and are marked in the app; no DKP path can place them, so the addon says so
+            // while the officer is still at camp. Same contract as the window post's `unmatched`.
+            unregistered,
         });
     }
 

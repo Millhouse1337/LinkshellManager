@@ -70,7 +70,12 @@ public sealed class DiscordSnapshotPublisher
             .Select(l => l.LinkshellName)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var payload = BuildPayload(snapshot, linkshellName);
+        // Who the shell actually knows. This embed is the PUBLIC record of a window's roster — the
+        // thing members read to check they were counted — so a name with no membership behind it
+        // has to be marked here too, or the channel keeps promising DKP the ledger will not pay.
+        var roster = await LinkshellRosterNames.LoadAsync(_db, snapshot.LinkshellId, cancellationToken);
+
+        var payload = BuildPayload(snapshot, linkshellName, roster);
         var messageId = await _bot.PostMessageAsync(channelId, payload, cancellationToken);
         if (string.IsNullOrEmpty(messageId))
         {
@@ -81,8 +86,12 @@ public sealed class DiscordSnapshotPublisher
         }
     }
 
-    private static object BuildPayload(Models.AttendanceSnapshot snapshot, string? linkshellName)
+    private static object BuildPayload(
+        Models.AttendanceSnapshot snapshot, string? linkshellName, RosterNameSet? roster = null)
     {
+        var rosterNames = roster ?? RosterNameSet.Unknown;
+        var unregistered = 0;
+
         // Entry insertion order = capture (alliance) order. Id is identity, so
         // ordering by it is the stable proxy for the in-game member order.
         var orderedEntries = snapshot.Entries.OrderBy(e => e.Id).ToList();
@@ -108,6 +117,14 @@ public sealed class DiscordSnapshotPublisher
                 if (!string.IsNullOrEmpty(job))
                 {
                     sb.Append(" — `").Append(job).Append('`');
+                }
+                // Marked in the line itself rather than listed at the bottom: this embed is read
+                // by the people ON it, and the person who needs to know is the one whose own name
+                // carries the mark.
+                if (!rosterNames.Contains(m.CharacterName))
+                {
+                    unregistered++;
+                    sb.Append(" ⚠️ *not registered*");
                 }
                 sb.Append('\n');
             }
@@ -140,6 +157,17 @@ public sealed class DiscordSnapshotPublisher
         if (snapshot.SnapshotStatus == AttendanceSnapshotStatuses.Pending)
         {
             description += "\n⏳ Awaiting officer confirmation — not counted yet.";
+        }
+        // The summary line, so nobody has to scan three party fields to find the warnings. Says
+        // what to DO about it, because the fix belongs to the player, not the officer: nothing an
+        // officer can press will make an unregistered name payable.
+        if (unregistered > 0)
+        {
+            description += unregistered == 1
+                ? "\n⚠️ 1 character here is not on the linkshell roster and earns no DKP. "
+                  + "Sign up on an event board once, or join from the LSM app, to be counted."
+                : $"\n⚠️ {unregistered} characters here are not on the linkshell roster and earn no DKP. "
+                  + "Sign up on an event board once, or join from the LSM app, to be counted.";
         }
 
         return new
