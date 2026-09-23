@@ -149,15 +149,13 @@
                             <code>/addon load lsm</code>.</p>
                     </div>
                 </li>
+                @* "Set the server" was step 2. The addon ships pointed at this server
+                   (constants.DEFAULT_SERVER_URL) because there is only one, so the step was a line
+                   of typing with a single correct answer whose typos read as "the addon is broken".
+                   /lsm server still exists for anyone self-hosting, and moved to the command list
+                   below rather than sitting in the path everybody walks. *@
                 <li>
                     <span class="addon-steps__num">2</span>
-                    <div>
-                        <h4>Set the server</h4>
-                        <p>Run <code>/lsm server https://linkshellmanager.com</code></p>
-                    </div>
-                </li>
-                <li>
-                    <span class="addon-steps__num">3</span>
                     <div>
                         <h4>Pair the addon (once)</h4>
                         <p>Generate a pairing code below, then run
@@ -169,7 +167,7 @@
                     </div>
                 </li>
                 <li>
-                    <span class="addon-steps__num">4</span>
+                    <span class="addon-steps__num">3</span>
                     <div>
                         <h4>Use it</h4>
                         <p>Open attendance with <code>/attend</code>, take a snapshot with <code>/lsm now</code>,
@@ -190,6 +188,10 @@
                 <div class="addon-cmd"><code>/attend</code><p>Open or close the attendance window.</p></div>
                 <div class="addon-cmd"><code>/tod</code><p>Open or close the Time-of-Death tracker.</p></div>
                 <div class="addon-cmd"><code>/lsm status</code><p>Show the server URL and pairing status.</p></div>
+                @* Dropped out of the setup steps when the addon started shipping pointed here, so
+                   this is now its only mention. Kept, and described by the case it is FOR: nobody
+                   on linkshellmanager.com should ever need it. *@
+                <div class="addon-cmd"><code>/lsm server &lt;url&gt;</code><p>Point the addon at a different LSManager &mdash; only needed if you self-host.</p></div>
                 <div class="addon-cmd"><code>/lsm help</code><p>Print the full in-game command list.</p></div>
             </div>
         </section>

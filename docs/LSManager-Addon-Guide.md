@@ -22,22 +22,16 @@ You generate **pairing codes** from either the web app or the Discord Activity; 
    ```
 
 ## Pair the addon to your linkshell — one time
-The pairing flow is two short commands. You only run the *server* command on first install (or when the host URL changes).
+Pairing is one command. The addon ships pointed at `https://linkshellmanager.com`, so there is no server to set up first.
 
-**Step 1 — point the addon at your LSManager server**
-```
-/lsm server https://your-lsmanager-host
-```
-The addon probes the URL right away. You'll see one of:
-- `Server OK (HTTP 401). Use /lsm link <code> [1|2] to pair.` — good, ready to pair.
-- `Probe FAILED: ...` — URL is wrong or unreachable; check spelling and that the site is up.
+> **Self-hosting?** Run `/lsm server https://your-lsmanager-host` before pairing. The addon probes the URL right away: `Server OK (HTTP 401)` means it's reachable and ready to pair, `Probe FAILED: ...` means the URL is wrong or the site is down. Your value is saved and survives updates.
 
-**Step 2 — generate a pairing code on the website or Discord Activity**
+**Step 1 — generate a pairing code on the website or Discord Activity**
 - **Web:** Configurations → Customize Linkshell → Addon pairing → *Generate pairing code*.
 - **Discord:** Configurations tab → Game Addon (lsm) → *+ Get Code*.
 - Codes expire in a few minutes. Copy the 8-character code shown.
 
-**Step 3 — link the addon to a pearl slot**
+**Step 2 — link the addon to a pearl slot**
 ```
 /lsm link <code>           (defaults to LS1)
 /lsm link <code> 1         (LS pearl slot 1 — main linkshell)
@@ -159,7 +153,7 @@ Once paired, the addon listens to chat for "X was defeated by ..." lines from kn
 ---
 
 ## Quick reference
-- **Pair:** `/addon load att` → `/lsm server <url>` → generate a code on web/Discord → `/lsm link <code> [1|2]`.
+- **Pair:** `/addon load att` → generate a code on web/Discord → `/lsm link <code> [1|2]`. (`/lsm server <url>` first only if you self-host.)
 - **Open the launcher:** `/attend`.
 - **Set your alliance:** `/lsm alliance <1-6>` — one poster per alliance, every time.
 - **Take attendance:** `/lsm <event>` or `/lsm here`.

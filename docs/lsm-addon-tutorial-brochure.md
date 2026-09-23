@@ -25,16 +25,16 @@
 
 ## Panel 1 - First-Time Setup
 
-Run this once per Ashita install, or again when the LSManager host changes.
+Run this once per Ashita install.
 
 ```text
 /addon load lsm
-/lsm server https://your-lsmanager-host
 ```
 
-The addon saves the server URL and probes it immediately. Any real HTTP
-response means the route is reachable; a probe failure usually means a typo or
-the site is down.
+The addon ships pointed at `https://linkshellmanager.com`, so there is no server
+to set. If you self-host, run `/lsm server https://your-lsmanager-host` first —
+it saves the URL and probes it immediately. Any real HTTP response means the
+route is reachable; a probe failure usually means a typo or the site is down.
 
 Next, generate a pairing code from the web app or Discord Activity:
 
@@ -293,7 +293,7 @@ After camp:
 | Command | Purpose |
 |---|---|
 | `/addon load lsm` | Load the addon. |
-| `/lsm server <url>` | Set the LSManager server URL. |
+| `/lsm server <url>` | Point at a different LSManager. Only needed if you self-host. |
 | `/lsm link <code> [1\|2]` | Pair the addon to LS1 or LS2. |
 | `/lsm unlink [1\|2\|all]` | Remove a pairing. |
 | `/lsm status` | Show server and pairings; auto-drops revoked tokens. |

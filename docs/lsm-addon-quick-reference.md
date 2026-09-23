@@ -21,7 +21,7 @@
 
 | Command | What it does |
 |---|---|
-| `/lsm server <url>` | Set the LSManager web server URL. |
+| `/lsm server <url>` | Point at a different LSManager. Only needed if you self-host — the addon ships pointed at `https://linkshellmanager.com`. |
 | `/lsm link <code> [1\|2]` | Redeem a pairing code on slot 1 or 2 (default 1). |
 | `/lsm unlink [1\|2\|all]` | Drop a slot pairing (or all). |
 | `/lsm status` | Show server + pairings. Auto-drops revoked tokens. |
@@ -65,7 +65,7 @@ an officer confirms it on the web or in the Discord Activity.
 |---|---|
 | `/lsm help` | Print the full command list + quick-start in chat. Also runs as the fallback for bare `/lsm` or an unrecognized subcommand. |
 
-> 💡 **Quick start:** `/lsm server <url>` → `/lsm link <code>` → `/attend`.
+> 💡 **Quick start:** `/lsm link <code>` → `/attend`.
 
 ---
 

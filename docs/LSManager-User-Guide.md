@@ -31,7 +31,7 @@ All three share the **same database** — anything done on one surface shows up 
 
 **Web** — `https://your-host/` → Login with Discord → use the sidebar. See the [Web App Guide](LSManager-WebApp-Guide.md).
 **Discord** — voice channel → Activities → LinkshellManager → tabs along the top. See the [Discord Activity Guide](LSManager-DiscordActivity-Guide.md).
-**Addon** — `/addon load att` → `/lsm server <url>` → generate code on web/Discord → `/lsm link <code> [1|2]` → `/attend`. See the [Addon Guide](LSManager-Addon-Guide.md).
+**Addon** — `/addon load att` → generate code on web/Discord → `/lsm link <code> [1|2]` → `/attend`. The addon ships pointed at `https://linkshellmanager.com`, so there is no server to set. See the [Addon Guide](LSManager-Addon-Guide.md).
 
 **Most-used in-game commands:**
 - `/attend` — open the launcher
