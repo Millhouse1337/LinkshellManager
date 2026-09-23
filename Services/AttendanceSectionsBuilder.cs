@@ -121,6 +121,37 @@ public sealed class AttendanceSectionsBuilder
     public static IQueryable<WindowEvent> ApplyLiveFilter(IQueryable<WindowEvent> source)
         => source.Where(e => e.Status == WindowEventStatuses.Open && e.CampEndedAtUtc == null);
 
+    // THE CAPTURES THE ADDON'S MISC POSTS PANEL IS STILL RESPONSIBLE FOR.
+    //
+    // That panel is a live to-do list, not an archive: what you have captured at the camp you are
+    // standing at, and whether an officer has filed it yet. Once the camp ends, every capture on it
+    // moves onto a review card and the app owns it from then on -- there is nothing the addon can
+    // do with the row, and nothing it can say about it that the review card does not say better.
+    //
+    // Leaving them in was worse than useless. The list is capped at the most recent 50, so last
+    // week's finished camps sat on top of tonight's captures and pushed the unfiled ones -- the
+    // only rows that ARE somebody's work -- off the bottom.
+    //
+    // The addon had its own answer: End Camp moved a local cutoff and the rows hid. That cutoff
+    // lives in addon memory only, so a /addon reload or a game restart brought every one of them
+    // back. This is the same rule, decided where it survives.
+    //
+    // Live means the same thing it does in ApplyLiveFilter directly above, and it is spelled out
+    // rather than reused because it is being asked of the snapshot's event, not of the event
+    // itself -- the two must not drift.
+    //
+    // Three ways to still be live work:
+    //   * on no event at all -- unfiled, which is the officer's to-do by definition;
+    //   * on a Window Event still being captured;
+    //   * on a live camp (the Event row), which End Event deletes -- and the FK sets LinkedEventId
+    //     null when it does, so a null here is a camp that is gone rather than one still running.
+    public static IQueryable<AttendanceSnapshot> ApplyLiveCaptureFilter(
+        IQueryable<AttendanceSnapshot> source)
+        => source.Where(s =>
+            (s.WindowEvent == null
+             || (s.WindowEvent.Status == WindowEventStatuses.Open && s.WindowEvent.CampEndedAtUtc == null))
+            && (s.LinkedEvent == null || s.LinkedEvent.EndTime == null));
+
     // Ended, and nobody has posted the DKP yet -- the "Events Pending DKP Post" section.
     //
     // PostedToSheetAt is the gate, because it is the money: WindowEventDkpLedgerService sets it

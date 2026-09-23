@@ -362,8 +362,13 @@ public sealed partial class AddonApiController
         // Filtering here rather than in the addon matters because `take` is applied BEFORE the
         // caller could filter: on a busy camp the window posts alone fill the page, and the misc
         // captures the panel exists to show get pushed off it entirely.
-        var rows = await _dbContext.AttendanceSnapshots
-            .AsNoTracking()
+        // Captures whose camp has ENDED are dropped here, for the same reason miscOnly is: `take`
+        // is applied next, so a week of finished camps would fill the page and push the unfiled
+        // captures -- the only rows that are anybody's work -- clean off the bottom of it. See
+        // AttendanceSectionsBuilder.ApplyLiveCaptureFilter for why the panel stops at the end of
+        // the camp, and why deciding it here rather than in the addon is the point.
+        var rows = await AttendanceSectionsBuilder.ApplyLiveCaptureFilter(
+                _dbContext.AttendanceSnapshots.AsNoTracking())
             .Where(s => s.LinkshellId == token.LinkshellId
                         && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored
                         && (!miscOnly || s.SlotKind == AttendanceSnapshotSlotKinds.Misc))
