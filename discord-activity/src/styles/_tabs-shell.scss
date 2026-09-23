@@ -409,12 +409,25 @@ body {
 .panel-tab .tag.num { font-family: var(--font-mono); }
 
 /* ===== Buttons (mockup extensions) ===== */
+/* A button is a fixed-height inline-flex box, so a label that wraps does not make it taller --
+   the second line spills out and prints over the first and over the border. That is what "+ Get
+   Code" did in a narrow card head: flex let the button shrink to its min-content width, which for
+   text is the longest WORD, so the label broke after "+ Get".
+
+   Both properties are needed and neither is cosmetic. nowrap keeps the label on one line; without
+   flex-shrink it would then be clipped instead of overlapping, which is no better. A button is the
+   one thing in a row that must keep its size -- whatever shares the row with it is prose, and prose
+   is what should give way. Fixed in the base layer rather than on the one button, because every
+   button here has the same fixed height and the same bug waiting behind a longer label or a
+   narrower screen. */
 .panel-tab .btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   height: 30px;
   padding: 0 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
