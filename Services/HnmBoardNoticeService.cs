@@ -95,8 +95,23 @@ public sealed class HnmBoardNoticeService
         if (!ok)
         {
             _logger.LogWarning(
-                "Failed to edit HNM board message {MessageId} to a defeated note for event {EventId}.",
+                "Failed to edit HNM board message {MessageId} to a defeated note for event {EventId}; "
+                + "deleting the board instead so a dead camp cannot keep live sign-up buttons.",
                 ev.DiscordMessageId, ev.Id);
+
+            // A FAILED EDIT USED TO END HERE, and what it left behind is the worst of the three
+            // possible outcomes: the full sign-up board, untouched, still carrying Sign Up buttons
+            // for a monster that is already down. The camp is over either way -- the only question
+            // is what the channel shows -- so if it cannot be turned into the note, it goes.
+            //
+            // Clearing DiscordMessageId is what makes that recoverable rather than merely tidy:
+            // the publisher POSTS when there is no message id and edits when there is, so the
+            // recurring board comes back as a fresh message at its re-post time instead of trying
+            // to edit one that is gone.
+            if (await _bot.DeleteMessageAsync(ev.DiscordChannelId!, ev.DiscordMessageId!, cancellationToken))
+            {
+                ev.DiscordMessageId = null;
+            }
         }
 
         // A wide board is one message per alliance. The note replaces the FIRST; the rest have to

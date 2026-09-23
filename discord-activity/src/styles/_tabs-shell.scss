@@ -211,15 +211,32 @@ body {
   justify-content: center;
   justify-content: safe center;
   gap: 10px;
-  height: 44px;
-  padding: 0 6px;
+  // 50 rather than 44: the extra 6 is the scrollbar's lane, reserved by the bottom padding
+  // below, so the tab labels still sit in a 44px band (box-sizing: border-box, above) and the
+  // strip's height is unchanged from the labels' point of view.
+  height: 50px;
+  padding: 0 6px 6px;
   background: rgba(13, 17, 23, 0.85);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
-  scrollbar-width: none;
+  // A VISIBLE slider. The strip has always scrolled -- the tabs never shrink (.tab is
+  // flex-shrink: 0) -- but the scrollbar was hidden on both engines, so on a laptop, where
+  // there is no touch to drag with and no rubber-banding to hint at more, the last tabs were
+  // simply cut off at the edge with nothing to say they were reachable.
+  //
+  // Thin and dim on purpose: it is an affordance for the few widths that need it, not a
+  // permanent rail. It disappears entirely once the tabs fit.
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hot) transparent;
 }
-.tabs::-webkit-scrollbar { display: none; }
+.tabs::-webkit-scrollbar { height: 6px; }
+.tabs::-webkit-scrollbar-track { background: transparent; }
+.tabs::-webkit-scrollbar-thumb {
+  background: var(--border-hot);
+  border-radius: 999px;
+}
+.tabs::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 .tab {
   padding: 6px 10px;
   font-family: var(--font-sans);
