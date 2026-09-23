@@ -103,7 +103,7 @@ public sealed class LinkshellAttendanceSnapshotsController : Controller
                     SubJob = e.SubJob,
                     SubJobLevel = e.SubJobLevel,
                     Zone = e.Zone,
-                    IsRegistered = roster.Contains(e.CharacterName),
+                    IsRegistered = roster.Knows(e.CharacterName, e.AppUserId),
                 })
                 .ToList();
 

@@ -320,7 +320,7 @@ public sealed class AttendanceSectionsBuilder
                 Zone = e.Zone,
                 AddedManually = e.AddedManually,
                 DkpAmount = e.DkpAmount,
-                IsRegistered = rosterNames.Contains(e.CharacterName),
+                IsRegistered = rosterNames.Knows(e.CharacterName, e.AppUserId),
             })
             .ToList();
 
@@ -462,7 +462,7 @@ public sealed class AttendanceSectionsBuilder
                         ? captureTotals.GetValueOrDefault(g.Key)
                         : overrideAmount ?? baseAmount,
                     CreditSource = creditSource,
-                    IsRegistered = rosterNames.Contains(g.Key),
+                    IsRegistered = g.Any(x => rosterNames.Knows(x.Entry.CharacterName, x.Entry.AppUserId)),
                 };
             })
             .ToList();

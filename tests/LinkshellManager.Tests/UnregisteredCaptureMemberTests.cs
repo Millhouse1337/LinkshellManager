@@ -141,6 +141,54 @@ public class UnregisteredCaptureMemberTests
         Assert.False(row.Entries.Single(e => e.CharacterName == "Randomguy").IsRegistered);
     }
 
+    // ---- the account a capture recorded ----
+
+    // THE ONE THAT WOULD HAVE LIED. A camp handoff stamps AppUserId onto the entry, and
+    // WindowEventDkpLedgerService prefers it over the name lookup precisely so a member standing on
+    // a character that is none of their four indexed names still gets paid. Judging that row by
+    // name alone would mark it "not registered" on a camp about to pay it.
+    [Fact]
+    public void AnEntryCarryingAKnownAccount_IsRegistered_EvenWhenTheNameIsNot()
+    {
+        var roster = RosterNameSet.From(new[]
+        {
+            new RosterNameCandidate("Edicius", null, null, null, AppUserId: "user-1"),
+        });
+
+        var capture = Capture();
+        capture.Entries.Add(new AttendanceSnapshotEntry
+        {
+            CharacterName = "Someothercharacter",
+            AppUserId = "user-1",
+        });
+
+        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(new[] { capture }, roster: roster);
+
+        Assert.True(Assert.Single(combined).IsRegistered);
+    }
+
+    // An account the shell does not have a membership for is no better than an unknown name — a
+    // kicked member's old capture must not read as payable.
+    [Fact]
+    public void AnEntryCarryingAnUnknownAccount_IsStillUnregistered()
+    {
+        var roster = RosterNameSet.From(new[]
+        {
+            new RosterNameCandidate("Edicius", null, null, null, AppUserId: "user-1"),
+        });
+
+        var capture = Capture();
+        capture.Entries.Add(new AttendanceSnapshotEntry
+        {
+            CharacterName = "Randomguy",
+            AppUserId = "user-999",
+        });
+
+        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(new[] { capture }, roster: roster);
+
+        Assert.False(Assert.Single(combined).IsRegistered);
+    }
+
     // ---- the card header ----
 
     // The count an officer reads before pressing Post. CombinedMemberCount still describes the

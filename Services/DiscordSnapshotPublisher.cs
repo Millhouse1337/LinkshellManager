@@ -121,7 +121,7 @@ public sealed class DiscordSnapshotPublisher
                 // Marked in the line itself rather than listed at the bottom: this embed is read
                 // by the people ON it, and the person who needs to know is the one whose own name
                 // carries the mark.
-                if (!rosterNames.Contains(m.CharacterName))
+                if (!rosterNames.Knows(m.CharacterName, m.AppUserId))
                 {
                     unregistered++;
                     sb.Append(" ⚠️ *not registered*");

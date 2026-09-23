@@ -102,4 +102,40 @@ public class RosterNameSetTests
         Assert.True(Roster(Member("Edicius")).IsKnown);
         Assert.True(Roster().IsKnown);
     }
+
+    // ---- Knows: the account first, then the name ----
+    //
+    // The order matters and is not cosmetic: it is the order WindowEventDkpLedgerService resolves a
+    // capture entry in. A camp handoff stamps the account onto the entry so credit does not depend
+    // on the character name matching one of the four indexed above, and anything that reports on
+    // who will be paid has to ask the same question the same way.
+
+    private static RosterNameSet RosterWithAccount(string name, string appUserId)
+        => RosterNameSet.From(new[] { new RosterNameCandidate(name, null, null, null, appUserId) });
+
+    [Fact]
+    public void Knows_AcceptsAKnownAccount_EvenWhenTheNameIsUnknown()
+    {
+        Assert.True(RosterWithAccount("Edicius", "user-1").Knows("Someothercharacter", "user-1"));
+    }
+
+    [Fact]
+    public void Knows_AcceptsAKnownName_WhenNoAccountWasRecorded()
+    {
+        Assert.True(RosterWithAccount("Edicius", "user-1").Knows("Edicius", null));
+    }
+
+    // A kicked member's old capture still carries their account. It must not read as payable.
+    [Fact]
+    public void Knows_RejectsAnUnknownAccountAndAnUnknownName()
+    {
+        Assert.False(RosterWithAccount("Edicius", "user-1").Knows("Randomguy", "user-999"));
+    }
+
+    [Fact]
+    public void Knows_WithNoRoster_AcceptsEverything()
+    {
+        Assert.True(RosterNameSet.Unknown.Knows("Randomguy", "user-999"));
+        Assert.True(RosterNameSet.Unknown.Knows(null, null));
+    }
 }

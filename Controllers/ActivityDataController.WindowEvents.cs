@@ -1100,7 +1100,7 @@ public sealed partial class ActivityDataController
                 e.Zone,
                 e.AddedManually,
                 e.DkpAmount,
-                rosterNames.Contains(e.CharacterName)))
+                rosterNames.Knows(e.CharacterName, e.AppUserId)))
             .ToList();
 
         // The STORED window number wins — it was pinned against the grid as it stood at capture.
@@ -1207,7 +1207,7 @@ public sealed partial class ActivityDataController
                     captureTotals is null ? overrideAmount : null,
                     captureTotals is not null ? captureTotals.GetValueOrDefault(g.Key) : overrideAmount ?? baseAmount,
                     creditSource,
-                    rosterNames.Contains(g.Key));
+                    g.Any(x => rosterNames.Knows(x.Entry.CharacterName, x.Entry.AppUserId)));
             })
             .ToList();
     }

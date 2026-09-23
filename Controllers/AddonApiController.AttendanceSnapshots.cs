@@ -280,7 +280,7 @@ public sealed partial class AddonApiController
         // earlier capture reports the stranger the first post brought in as well.
         var roster = await LinkshellRosterNames.LoadAsync(_dbContext, token.LinkshellId, cancellationToken);
         var unregistered = snapshot.Entries
-            .Where(e => !roster.Contains(e.CharacterName))
+            .Where(e => !roster.Knows(e.CharacterName, e.AppUserId))
             .Select(e => e.CharacterName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
