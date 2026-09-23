@@ -204,6 +204,14 @@
           </svg>
           {{ event.combinedMemberCount }} {{ event.combinedMemberCount === 1 ? 'member' : 'members' }}
         </span>
+        <!-- Said on the collapsed header, because that is where an officer decides whether a card
+             needs opening at all. The roster inside marks which ones. -->
+        @if ((event.unregisteredMemberCount ?? 0) > 0) {
+          <span class="we-count we-count--unregistered"
+                title="These characters are not on the linkshell roster, so posting this camp pays them nothing.">
+            {{ event.unregisteredMemberCount }} not registered
+          </span>
+        }
         <span class="we-count we-count--snapshots">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
             <rect x="3" y="5" width="18" height="14" rx="2"/>
@@ -272,11 +280,18 @@
           <line x1="4" y1="17" x2="20" y2="17"/>
         </svg>
         <span class="we-roster__subtitle-main">Combined roster</span>
-        <!-- Distinct people across every counted snapshot — the row count of the table below, and
-             so the number of members this event will actually pay. -->
+        <!-- Distinct people across every counted snapshot — the row count of the table below. NOT
+             the number this event will pay: the ones the shell has no member for are listed and
+             marked, and counted out separately beside it. -->
         <span class="we-roster__subtitle-help">
           {{ event.combinedMemberCount }} {{ event.combinedMemberCount === 1 ? 'member' : 'members' }}
         </span>
+        @if ((event.unregisteredMemberCount ?? 0) > 0) {
+          <span class="we-roster__subtitle-help we-count--unregistered"
+                title="Not on the linkshell roster, so posting pays them nothing.">
+            {{ event.unregisteredMemberCount }} not registered
+          </span>
+        }
       </div>
       <div class="we-table__scroll">
         <table class="we-table">
@@ -295,8 +310,16 @@
           </thead>
           <tbody>
             @for (member of event.combinedMembers; track member.characterName) {
-              <tr>
-                <td><strong>{{ member.characterName }}</strong></td>
+              <tr [class.we-row--unregistered]="member.isRegistered === false">
+                <td>
+                  <strong>{{ member.characterName }}</strong>
+                  <!-- The linkshell has no member behind this name, so posting pays them nothing
+                       no matter what the DKP column says. -->
+                  @if (member.isRegistered === false) {
+                    <span class="tag we-unregistered-chip"
+                          [title]="member.characterName + ' is not on the linkshell roster, so posting this camp will pay them nothing. They need to sign up on an event board once, or join from the LSM app by accepting the linkshell invite.'">Not registered</span>
+                  }
+                </td>
                 <td>
                   <ng-container *ngTemplateOutlet="jobPills; context: { row: member }" />
                 </td>
@@ -323,7 +346,11 @@
                 </td>
                 <td class="num">{{ member.snapshotCount }}</td>
                 <td class="num">
-                  @if (model.canManage) {
+                  <!-- An amount here would be a promise nothing keeps: the ledger resolves a
+                       membership per name and skips the ones it cannot place. -->
+                  @if (member.isRegistered === false) {
+                    <span class="we-muted" title="Not on the roster — this camp pays them nothing.">—</span>
+                  } @else if (model.canManage) {
                     {{ combinedDkpDisplay(event, member) }}
                   } @else {
                     {{ formatDkp(member.effectiveDkpAmount) }}
@@ -672,9 +699,17 @@
       <tbody>
         @for (entry of snapshot.entries; track entry.id) {
           <!-- Hand-added people sit in a block at the bottom and are tinted, so a name an officer
-               asserted never reads as one the addon actually scanned. -->
-          <tr [class.we-row--manual]="entry.addedManually">
-            <td><strong>{{ entry.characterName }}</strong></td>
+               asserted never reads as one the addon actually scanned. The red tint is a different
+               fact: the shell has no member behind that name, so nothing will pay them. -->
+          <tr [class.we-row--manual]="entry.addedManually"
+              [class.we-row--unregistered]="entry.isRegistered === false">
+            <td>
+              <strong>{{ entry.characterName }}</strong>
+              @if (entry.isRegistered === false) {
+                <span class="tag we-unregistered-chip"
+                      [title]="entry.characterName + ' is not on the linkshell roster, so no DKP can be paid to them.'">Not registered</span>
+              }
+            </td>
             <td>
               <ng-container *ngTemplateOutlet="jobPills; context: { row: entry }" />
             </td>
@@ -704,8 +739,15 @@
       <tbody>
         @for (entry of snapshot.entries; track entry.id) {
           <!-- Tinted + sorted last: see the read-only table above. -->
-          <tr [class.we-row--manual]="entry.addedManually">
-            <td><strong>{{ entry.characterName }}</strong></td>
+          <tr [class.we-row--manual]="entry.addedManually"
+              [class.we-row--unregistered]="entry.isRegistered === false">
+            <td>
+              <strong>{{ entry.characterName }}</strong>
+              @if (entry.isRegistered === false) {
+                <span class="tag we-unregistered-chip"
+                      [title]="entry.characterName + ' is not on the linkshell roster, so no DKP can be paid to them.'">Not registered</span>
+              }
+            </td>
             <td>
               <ng-container *ngTemplateOutlet="jobPills; context: { row: entry }" />
             </td>

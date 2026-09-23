@@ -1230,6 +1230,10 @@ export interface ActivityWindowEvent {
   // shape for a big camp — it means each alliance fielded its own poster.
   allianceNumbers: number[];
   combinedMemberCount: number;
+  // How many of combinedMemberCount the linkshell has no member for. Counted rather than
+  // subtracted: every name stays on the roster table, the unregistered ones are marked, and the
+  // officer is told how many of the people they are about to Post for cannot be paid.
+  unregisteredMemberCount?: number;
   snapshots: ActivityWindowSnapshot[];
   combinedMembers: ActivityWindowCombinedMember[];
   dkpAmount?: number | null;
@@ -1304,6 +1308,15 @@ export interface ActivityWindowSnapshotEntry {
   // What THIS capture pays them, on a card that prices its captures (see perCaptureDkp). Null
   // everywhere else, where the money is one amount per member.
   dkpAmount?: number | null;
+  // Whether the linkshell has a member behind this character at all — an accepted invite, or a
+  // sign-up board self-registration, matched on the main or either alt.
+  //
+  // A capture reads the WHOLE alliance, so another shell standing at the same camp lands in it.
+  // Those names were never going to be credited (every DKP path resolves a membership first and
+  // skips what it cannot place), so listing them unmarked beside the people who ARE being paid is
+  // what misleads an officer. Optional: an older server omits it, and undefined must read as
+  // registered so nobody is accused by a missing field.
+  isRegistered?: boolean;
 }
 
 export interface ActivityWindowCombinedMember {
@@ -1325,6 +1338,9 @@ export interface ActivityWindowCombinedMember {
   effectiveDkpAmount?: number | null;
   // "Window", "Misc" or "Both" — why this member is priced the way they are.
   creditSource: string;
+  // On the linkshell roster, so a DKP path can place them. False means nothing will pay this row
+  // whatever amount it shows. Optional for the same reason as on the entry above.
+  isRegistered?: boolean;
 }
 
 export interface ActivityParticipation {

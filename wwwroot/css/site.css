@@ -2596,7 +2596,7 @@ tr.we-row--unregistered > td {
   background: var(--danger-weak);
 }
 tr.we-row--unregistered:hover > td {
-  background: rgba(248, 113, 113, 0.18);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
 }
 tr.we-row--unregistered > td:first-child {
   box-shadow: inset 3px 0 0 var(--danger);

@@ -186,6 +186,13 @@
 .we-tab .we-table tbody tr.we-row--manual td { background: rgba(245, 158, 11, 0.07); }
 .we-tab .we-table tbody tr.we-row--manual:hover td { background: rgba(245, 158, 11, 0.13); }
 .we-tab .we-table tbody tr.we-row--manual td:first-child { border-left-color: rgba(245, 158, 11, 0.55); }
+/* Someone the capture read who is NOT on the linkshell roster. Red rather than the hand-added
+   amber because this is not a provenance note: nothing will pay this row, whatever its DKP column
+   says, so it has to read as an exclusion and not as a shade of evidence. A row can carry both
+   (an officer typed in a stranger); this one wins on background, being the one with a consequence. */
+.we-tab .we-table tbody tr.we-row--unregistered td { background: var(--danger-weak); }
+.we-tab .we-table tbody tr.we-row--unregistered:hover td { background: color-mix(in srgb, var(--danger) 18%, transparent); }
+.we-tab .we-table tbody tr.we-row--unregistered td:first-child { border-left-color: var(--danger); }
 .we-tab .we-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .we-roster .we-table:not(.we-table--snapshot) tbody td.num:last-child { color: var(--we-gold); font-weight: 700; }
 
@@ -458,3 +465,16 @@
   &--misc { border-color: var(--warning-weak); color: var(--warning); }
   &--both { border-color: var(--success-weak); color: var(--success); }
 }
+
+/* "Not registered": the linkshell has no member behind this character, so no DKP path can place
+   them. Sits beside the name rather than in a column of its own — it is a fact about WHO the row
+   is, and an officer scanning the table should not have to travel to the far edge to find it. */
+.we-unregistered-chip {
+  font-size: 10px; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap;
+  margin-left: 8px;
+  background: var(--danger-weak); border-color: transparent; color: var(--danger);
+}
+
+/* The same fact on the collapsed camp header and the roster subtitle, beside the count it
+   qualifies. */
+.we-count--unregistered { color: var(--danger); }
