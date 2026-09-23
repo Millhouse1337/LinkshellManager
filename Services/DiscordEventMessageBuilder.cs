@@ -517,6 +517,11 @@ public static class DiscordEventMessageBuilder
 
     private static IEnumerable<(int NameWidth, int Gutter, int NameGap, bool Readiness)> GridAttempts()
     {
+        // Readiness stays the OUTER loop. Reordering it to put names first looks right and does
+        // nothing: the fitter accepts the first candidate that fits the 2000-character budget, and
+        // the widest attempt always does, so no later attempt is ever reached. What actually
+        // decides the name column is the DISPLAY clamp inside BuildRosterGridBlocks, which is
+        // where the icons-versus-name trade is settled.
         foreach (var readiness in new[] { true, false })
         {
             for (var width = GridMaxNameWidth; width >= GridMinNameWidth; width--)
@@ -616,7 +621,27 @@ public static class DiscordEventMessageBuilder
             // display budget handed names 8 characters and "Bartholomewxyz" arrived as
             // "Bartholo", while the padding it lost them sat there doing nothing.
             var width = Math.Min(nameWidth, GridNameWidthByDisplay(perRow, jobWidth, readySlots.Count, GridMinNameGap));
-            var gap = Math.Clamp(GapToFill(perRow, jobWidth, readySlots.Count, width, nameGap), GridMinNameGap, nameGap);
+
+            // READINESS ICONS ARE DECORATION; A NAME IS NOT. They cost an emoji in EVERY cell —
+            // about 2.3 display cells each, times three columns — and on a tight board that is
+            // paid for out of the name column, which is how "Millhouse" came back as "Millhous".
+            //
+            // So they are dropped whenever keeping them is what costs a character of name. Not
+            // whenever the board is tight: if the name column is already as wide as it asked for,
+            // the icons are free and they stay. GridAttempts cannot make this call -- it settles
+            // for the first candidate that fits the 2000-character budget, and the widest attempt
+            // always does -- so it is made here, where the display clamp actually bites.
+            var readyIcons = readySlots;
+            if (readyIcons.Count > 0)
+            {
+                var bareWidth = Math.Min(nameWidth, GridNameWidthByDisplay(perRow, jobWidth, 0, GridMinNameGap));
+                if (bareWidth > width)
+                {
+                    readyIcons = Array.Empty<EventReadinessTag>();
+                    width = bareWidth;
+                }
+            }
+            var gap = Math.Clamp(GapToFill(perRow, jobWidth, readyIcons.Count, width, nameGap), GridMinNameGap, nameGap);
 
             // Cells carry their PLAIN text and their DECORATED text separately. ANSI escapes are
             // zero-width on screen but very much not zero-length in a string, so every width
@@ -642,11 +667,11 @@ public static class DiscordEventMessageBuilder
                     icons.Append(crown ? StateLeader
                         : (signup?.StayNextWindow ?? false) ? StateStaying
                         : StateNone);
-                    if (readySlots.Count > 0)
+                    if (readyIcons.Count > 0)
                     {
                         icons.Append(EventReadiness.PaddedMarkers(
                             signup?.EnfeebReady ?? false, signup?.ResistReady ?? false,
-                            signup?.RelicWeapon ?? false, StateNone, readySlots));
+                            signup?.RelicWeapon ?? false, StateNone, readyIcons));
                     }
 
                     // JOB first, then the name. The job is the fixed, scannable half — every row
@@ -677,7 +702,7 @@ public static class DiscordEventMessageBuilder
             // standing over proportional icons — the closest monospace can get to lining up with
             // them. The column is then widened if a party NAME is longer than its slots, or
             // "Party 1 (0/6)" gets hard-trimmed to "Party 1 (0/6" on a board with no names.
-            var iconCount = 2 + readySlots.Count;
+            var iconCount = 2 + readyIcons.Count;
             var iconPad = 2 * iconCount;
             var textWidth = Math.Max(
                 columns.SelectMany(c => c.Cells).Select(c => c.Text.Length).DefaultIfEmpty(0).Max(),
@@ -889,15 +914,27 @@ public static class DiscordEventMessageBuilder
     // has to be constant rather than the width padded.
     private const int EmojiCellsX10 = 23;
 
-    // How wide the grid may get, in display cells. Measured at ~112 with a 140-char ruler, and
-    // deliberately set BELOW that: the block's real width follows the reader's window, so 112 is
-    // the ceiling on ONE screen and an overflow on a narrower one — and an overflow doesn't
-    // clip, it wraps, folding the last column's name onto its own line.
+    // How wide the grid may get, in display cells. Measured at ~112 with a 140-char ruler on a
+    // maximised window, and set far BELOW that on purpose.
     //
-    // Sitting under the measurement costs nothing now that each alliance has its own message and
-    // is only half full. Before the split every spare character was contested, which is why this
-    // was pinned to the maximum and kept overflowing.
-    private const int GridDisplayCap = 100;
+    // THE BLOCK'S REAL WIDTH FOLLOWS THE READER'S WINDOW, and the board is rendered once for
+    // every reader. So this is not a measurement of the block — it is a bet on the NARROWEST
+    // window anyone will read it in, and losing that bet does not clip, it WRAPS: the last
+    // column's name folds onto a line of its own and a 6-slot party becomes 12 ragged rows.
+    //
+    // 100 was still a maximised-window number. A three-party alliance renders close to the cap
+    // by construction (GutterToFill deliberately spends the leftover on gutters so the last
+    // column reaches the right edge), so at 100 the line came out ~99 cells and wrapped on a
+    // laptop the moment a signup widened the name column.
+    //
+    // 76 is sized for a laptop-width code block — measured off a board that wrapped its third
+    // column at roughly 78 cells. Wide windows now show some dead space to the right of the last
+    // party, which is the trade: dead space is ugly on one screen, a wrapped row is unreadable on
+    // another, and it takes the whole party with it rather than one name.
+    //
+    // Everything else prices itself against this: names first (GridNameWidthByDisplay), then the
+    // job→name gap (GapToFill), then the gutter (GutterToFill). Raising it raises all three.
+    private const int GridDisplayCap = 76;
 
     // Discord's hard cap on a message's `content` — the other ceiling, and the one that binds
     // on a big board. Everything in the roster comes out of this single budget.

@@ -516,9 +516,22 @@ public class ComponentsV2BoardTests
             }
         }
 
-        // Measured in CHARACTERS, which UNDERCOUNTS the emoji — so a row already near the cap by
-        // this measure is certainly filling the block.
-        Assert.True(widest >= 90, $"columns should spread toward the block's edge; widest row was {widest}");
+        // TWO BOUNDS, and the upper one is the one that matters.
+        //
+        // This used to assert `>= 90` alone, against a 100-cell budget sized for a maximised
+        // window. The board is rendered ONCE for every reader, so that budget was a bet on the
+        // widest window rather than the narrowest, and losing it does not clip — it WRAPS, folding
+        // the last column's name onto a line of its own and turning a 6-slot party into 12 ragged
+        // rows on a laptop.
+        //
+        // So the ceiling is now the real guarantee: no row may grow wide enough to wrap. The floor
+        // survives to keep the old property honest — columns should still reach toward the edge
+        // rather than bunch left with dead space beside them.
+        //
+        // Measured in CHARACTERS, which UNDERCOUNTS the emoji, so the true cell width sits above
+        // this number and the ceiling is the conservative side to be wrong on.
+        Assert.True(widest >= 60, $"columns should spread toward the block's edge; widest row was {widest}");
+        Assert.True(widest <= 80, $"a row this wide will wrap on a laptop; widest row was {widest}");
     }
 
     // Columns are SPREAD to the edge of the code block, not left bunched with dead space to the
@@ -558,11 +571,14 @@ public class ComponentsV2BoardTests
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(payload, Wire));
         var content = doc.RootElement.GetProperty("content").GetString() ?? string.Empty;
 
-        // One empty alliance is nowhere near the cap, so nothing stops the columns reaching the
-        // right-hand edge. Measured in CHARACTERS, which undercounts the emoji — so a row that
-        // is already at the cap by this measure is certainly filling the block.
+        // One empty alliance is nowhere near the 2000-character cap, so nothing but the DISPLAY
+        // budget stops the columns reaching the right-hand edge — which is the point of the upper
+        // bound. See the sibling assertion on the big board for why the ceiling replaced a bare
+        // "spread as far as you can": the board is rendered once for every reader, and a row that
+        // overruns a narrow window wraps rather than clips.
         var widest = GridRows(content).Select(r => r.Length).DefaultIfEmpty(0).Max();
-        Assert.True(widest >= 88, $"columns should spread toward the block's edge; widest row was {widest}");
+        Assert.True(widest >= 60, $"columns should spread toward the block's edge; widest row was {widest}");
+        Assert.True(widest <= 80, $"a row this wide will wrap on a laptop; widest row was {widest}");
         Assert.True(content.Length <= 2000);
     }
 

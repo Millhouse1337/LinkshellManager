@@ -95,23 +95,29 @@ public sealed class HnmBoardNoticeService
         if (!ok)
         {
             _logger.LogWarning(
-                "Failed to edit HNM board message {MessageId} to a defeated note for event {EventId}; "
-                + "deleting the board instead so a dead camp cannot keep live sign-up buttons.",
+                "Could not edit HNM board message {MessageId} into a defeated note for event {EventId}; "
+                + "replacing it with a freshly posted note instead.",
                 ev.DiscordMessageId, ev.Id);
 
-            // A FAILED EDIT USED TO END HERE, and what it left behind is the worst of the three
-            // possible outcomes: the full sign-up board, untouched, still carrying Sign Up buttons
-            // for a monster that is already down. The camp is over either way -- the only question
-            // is what the channel shows -- so if it cannot be turned into the note, it goes.
+            // A FAILED EDIT USED TO END HERE, and what it left behind was the worst of the
+            // available outcomes: the full sign-up board, untouched, still carrying live Sign Up
+            // buttons for a monster already down -- while the wide board's OTHER messages were
+            // deleted below, so the camp ended as one orphaned board with its alliances missing.
             //
-            // Clearing DiscordMessageId is what makes that recoverable rather than merely tidy:
-            // the publisher POSTS when there is no message id and edits when there is, so the
-            // recurring board comes back as a fresh message at its re-post time instead of trying
-            // to edit one that is gone.
-            if (await _bot.DeleteMessageAsync(ev.DiscordChannelId!, ev.DiscordMessageId!, cancellationToken))
-            {
-                ev.DiscordMessageId = null;
-            }
+            // Discord rejects this edit for reasons the API answer knows and we do not, and a
+            // board that will not convert is not a reason to leave a dead camp advertising itself.
+            // So the note stops depending on the edit: delete the message and POST the note. The
+            // outcome is what matters -- a small note where a board used to be -- not which verb
+            // achieved it.
+            //
+            // The new id is stored, so the cycle survives: the recurring poller edits THIS message
+            // back into the next pop's board exactly as it would have the original. A post that
+            // fails leaves DiscordMessageId null, and the publisher posts a fresh board when it
+            // next renders, which is the same recovery it already uses for a deleted board.
+            await _bot.DeleteMessageAsync(ev.DiscordChannelId!, ev.DiscordMessageId!, cancellationToken);
+            var replacementId = await _bot.PostMessageAsync(ev.DiscordChannelId!, payload, cancellationToken);
+            ev.DiscordMessageId = string.IsNullOrWhiteSpace(replacementId) ? null : replacementId;
+            ok = !string.IsNullOrWhiteSpace(replacementId);
         }
 
         // A wide board is one message per alliance. The note replaces the FIRST; the rest have to
