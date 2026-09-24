@@ -153,4 +153,34 @@ public static class HnmCampPricing
         => ev is not null && HonoursWindowAmount(ev)
             ? StandardBonuses(ev, linkshell, claimed: false, killed: false).Window
             : null;
+
+    // What a capture LINKED to this camp is worth per person on it, priced by what the capture
+    // is: Misc at the regular rate, and a numbered one by the post it names. On a 2-post camp
+    // those are named (HnmConfig.GetDefaultWindowLabel), so each gets its own linkshell amount:
+    // Open the open bonus, Close the close bonus, Kill the kill bonus (ungated, because a live
+    // camp's outcome is not known yet -- see OutcomeBonuses). Everything else is DefaultWindowValue.
+    //
+    // DefaultWindowValue alone priced Close and Kill at the regular rate, since it cannot know
+    // which post is the close. A named label settles that, so the card can quote the real amount.
+    public static double? LinkedCaptureValueFor(
+        Event ev, Linkshell? linkshell, string? slotKind, int? windowNumber)
+    {
+        if (AttendanceSnapshotSlotKinds.IsMisc(slotKind)) return MiscValueFor(ev, linkshell);
+        if (windowNumber is not { } window) return null;
+
+        if (HonoursWindowAmount(ev))
+        {
+            var label = HnmConfig.GetDefaultWindowLabel(
+                ev.EventName, window, DiscordEventMessageBuilder.AttendancePostCount(ev));
+            var (_, open, close, _, _) = StandardBonuses(ev, linkshell, claimed: false, killed: false);
+            switch (label)
+            {
+                case HnmConfig.OpenWindowLabel: return open;
+                case HnmConfig.CloseWindowLabel: return close;
+                case HnmConfig.KillWindowLabel: return OutcomeBonuses(ev, linkshell).Kill;
+            }
+        }
+
+        return DefaultWindowValue(ev, linkshell, window);
+    }
 }

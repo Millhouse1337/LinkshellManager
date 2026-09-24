@@ -572,6 +572,7 @@
                               <tr>
                                 <th>Character</th>
                                 <th>Jobs</th>
+                                <th class="num">DKP</th>
                                 <th>Zone</th>
                               </tr>
                             </thead>
@@ -590,6 +591,16 @@
                                     }
                                     @if (!entry.mainJob && !entry.subJob && !entry.addedManually) {
                                       <span class="roster-muted">Anon</span>
+                                    }
+                                  </td>
+                                  <!-- The capture's per-person value, from the linkshell's
+                                       scoring. A dash, not 0, when the camp does not price
+                                       captures (see dkpPerMember). -->
+                                  <td class="num">
+                                    @if (snapshot.dkpPerMember != null) {
+                                      {{ snapshot.dkpPerMember }}
+                                    } @else {
+                                      <span class="roster-muted">-</span>
                                     }
                                   </td>
                                   <td>

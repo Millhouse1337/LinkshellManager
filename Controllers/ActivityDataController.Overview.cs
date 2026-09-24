@@ -335,18 +335,14 @@ public sealed partial class ActivityDataController
                 //
                 // Resolved through the same helpers the payout uses, so the figure quoted here is
                 // the figure End Camp will carry: a Misc post is worth the camp's regular window
-                // rate (MiscValueFor), and a numbered slot is worth whatever that window pays
-                // (DefaultWindowValue -- the quote form, with no close bonus and no officer
-                // override applied yet).
+                // rate, a named Open / Close / Kill post its own linkshell bonus, and any other
+                // numbered slot whatever that window pays. See LinkedCaptureValueFor.
                 //
                 // Null is a REAL answer and the client renders it as nothing rather than 0: a
                 // Manual Check In camp credits the check-in range instead, and a non-HNM event has
                 // no window rate at all.
-                AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind)
-                    ? HnmCampPricing.MiscValueFor(evt, primaryLinkshell)
-                    : snapshot.WindowNumber is { } pricedWindow
-                        ? HnmCampPricing.DefaultWindowValue(evt, primaryLinkshell, pricedWindow)
-                        : null))
+                HnmCampPricing.LinkedCaptureValueFor(
+                    evt, primaryLinkshell, snapshot.SlotKind, snapshot.WindowNumber)))
                 .ToList();
         }
 

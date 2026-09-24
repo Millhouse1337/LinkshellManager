@@ -248,4 +248,28 @@ public class HnmCampPricingTests
         Assert.Equal(1.0, open, precision: 3);
         Assert.Equal(0.5, close, precision: 3);
     }
+
+    // A linked capture on a 2-post camp is priced by the post it names: Open, Close and Kill each
+    // quote their own linkshell amount rather than all reading as a regular window.
+    [Fact]
+    public void LinkedCaptureValueFor_TwoPostCamp_PricesOpenCloseAndKillByName()
+    {
+        var ls = Ls();
+        ls.HnmStandardWindowBonus = 0.25;
+        ls.HnmStandardKillBonus = 2;
+        var ev = StandardCamp();
+
+        Assert.Equal(0.5, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Window, 1)!.Value, precision: 3);
+        Assert.Equal(1.5, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Window, 2)!.Value, precision: 3);
+        Assert.Equal(2.0, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Window, 3)!.Value, precision: 3);
+        Assert.Equal(0.25, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Misc, null)!.Value, precision: 3);
+    }
+
+    // Manual Check In pays from the check-in range, so a linked capture quotes nothing there.
+    [Fact]
+    public void LinkedCaptureValueFor_WdCamp_IsNull()
+    {
+        Assert.Null(HnmCampPricing.LinkedCaptureValueFor(WdCamp(), Ls(), AttendanceSnapshotSlotKinds.Window, 2));
+        Assert.Null(HnmCampPricing.LinkedCaptureValueFor(WdCamp(), Ls(), AttendanceSnapshotSlotKinds.Misc, null));
+    }
 }
