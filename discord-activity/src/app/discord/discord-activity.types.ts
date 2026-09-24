@@ -259,6 +259,9 @@ export interface ActivityLinkshellSettings {
   // What a REGULAR (in-between) window pays each attendee scanned in it on a Standard camp — the
   // base rate the open / close bonuses ride on top of. 0 = the old open/close-only payout.
   hnmStandardWindowBonus?: number;
+  // What a MISC post (a read taken at the camp outside any window) pays each person on it on a
+  // Standard camp. Its own rate; an officer can still re-price one post from the addon.
+  hnmStandardMiscBonus?: number;
   // Automatic per-window attendance snapshots (both modes). When on, an officer running the LSM
   // addon can ARM a live camp and the addon posts THEIR ALLIANCE as that window's snapshot
   // ~hnmAutoSnapshotDelaySeconds after each window opens. Arming stays an explicit per-officer,

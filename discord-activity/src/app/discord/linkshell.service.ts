@@ -126,6 +126,7 @@ export class LinkshellService {
       hnmStandardClaimBonus?: number | null;
       hnmStandardKillBonus?: number | null;
       hnmStandardWindowBonus?: number | null;
+      hnmStandardMiscBonus?: number | null;
       // Automatic per-window attendance snapshots (both modes; null = leave unchanged).
       hnmAutoSnapshotEnabled?: boolean | null;
       hnmAutoSnapshotDelaySeconds?: number | null;
@@ -169,6 +170,7 @@ export class LinkshellService {
         hnmStandardClaimBonus: input.hnmStandardClaimBonus ?? null,
         hnmStandardKillBonus: input.hnmStandardKillBonus ?? null,
         hnmStandardWindowBonus: input.hnmStandardWindowBonus ?? null,
+        hnmStandardMiscBonus: input.hnmStandardMiscBonus ?? null,
         hnmAutoSnapshotEnabled: input.hnmAutoSnapshotEnabled ?? null,
         hnmAutoSnapshotDelaySeconds: input.hnmAutoSnapshotDelaySeconds ?? null
       });

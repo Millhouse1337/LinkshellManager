@@ -538,6 +538,7 @@ export class ConfigurationsTabComponent {
     hnmStandardKillBonus: number;
     // What a REGULAR (in-between) window pays each attendee — the base the open / close ride on.
     hnmStandardWindowBonus: number;
+    hnmStandardMiscBonus: number;
     // Automatic per-window snapshots — applies to BOTH attendance modes.
     hnmAutoSnapshotEnabled: boolean;
     hnmAutoSnapshotDelaySeconds: number;
@@ -570,6 +571,7 @@ export class ConfigurationsTabComponent {
     hnmStandardClaimBonus: 0,
     hnmStandardKillBonus: 0,
     hnmStandardWindowBonus: 0,
+    hnmStandardMiscBonus: 0,
     hnmAutoSnapshotEnabled: false,
     hnmAutoSnapshotDelaySeconds: 20
   };
@@ -1047,6 +1049,7 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.hnmStandardClaimBonus = settings.hnmStandardClaimBonus ?? 0;
     this.customizeDraft.hnmStandardKillBonus = settings.hnmStandardKillBonus ?? 0;
     this.customizeDraft.hnmStandardWindowBonus = settings.hnmStandardWindowBonus ?? 0;
+    this.customizeDraft.hnmStandardMiscBonus = settings.hnmStandardMiscBonus ?? 0;
     this.customizeDraft.hnmAutoSnapshotEnabled = settings.hnmAutoSnapshotEnabled ?? false;
     this.customizeDraft.hnmAutoSnapshotDelaySeconds = settings.hnmAutoSnapshotDelaySeconds ?? 20;
     this.customizeDirty = false;
@@ -1096,6 +1099,7 @@ export class ConfigurationsTabComponent {
         hnmStandardClaimBonus: this.customizeDraft.hnmStandardClaimBonus,
         hnmStandardKillBonus: this.customizeDraft.hnmStandardKillBonus,
         hnmStandardWindowBonus: this.customizeDraft.hnmStandardWindowBonus,
+        hnmStandardMiscBonus: this.customizeDraft.hnmStandardMiscBonus,
         hnmAutoSnapshotEnabled: this.customizeDraft.hnmAutoSnapshotEnabled,
         hnmAutoSnapshotDelaySeconds: this.customizeDraft.hnmAutoSnapshotDelaySeconds
         // The Discord server is set via the dedicated "Discord server" card

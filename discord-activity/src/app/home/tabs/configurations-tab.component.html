@@ -452,7 +452,7 @@
                       <p class="muted">
                         Specify what each camp window offers
                       </p>
-                      <!-- Centred so the WRAPPED line reads as part of the same block: five fields
+                      <!-- Centred so the WRAPPED line reads as part of the same block: six fields
                            over three columns leaves the last two hanging off the left edge, which
                            looks like a different group rather than the tail of this one. A full
                            line has no slack to centre, so this only ever moves the short one. -->
@@ -468,6 +468,14 @@
                           <input type="number" min="0" step="0.05" name="hnmStandardWindowBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardWindowBonus"
                             (ngModelChange)="customizeDraft.hnmStandardWindowBonus = $event; onCustomizeFieldChange()" />
+                        </label>
+                        <!-- Its own rate, not the regular window's: a read taken at the camp outside
+                             any window. One post can still be re-priced from the addon. -->
+                        <label class="customize-form__field" style="flex:0 0 120px">
+                          <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Misc post</span>
+                          <input type="number" min="0" step="0.05" name="hnmStandardMiscBonusDraft"
+                            [ngModel]="customizeDraft.hnmStandardMiscBonus"
+                            (ngModelChange)="customizeDraft.hnmStandardMiscBonus = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field" style="flex:0 0 120px">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Close bonus</span>
