@@ -232,11 +232,19 @@ public sealed class HnmStandardCampFinalizer
     // fallback landing on the opening window costs nobody anything. It used to pay open + close.
     //
     // 0 when the camp has no snapshots at all — then nobody is at the open or the close.
+    //
+    // `attendancePostCount` is DiscordEventMessageBuilder.AttendancePostCount for the camp. On a
+    // 2-POST camp (Open then Close) the posts are roles, not spawn windows, so popWindow -- the
+    // spawn counter -- says nothing about which post is the close. Matching it anyway picked the
+    // Open whenever the Close was posted during spawn window 1, and the Close then paid the regular
+    // rate. There the close is simply the latest post, which is also what the Activity shows.
     public static int ResolveCloseWindow(
-        IReadOnlyCollection<int> postedWindows, int popWindow, int? markedCloseWindow = null)
+        IReadOnlyCollection<int> postedWindows, int popWindow, int? markedCloseWindow = null,
+        int attendancePostCount = 0)
     {
         if (markedCloseWindow is > 0) return markedCloseWindow.Value;
         if (postedWindows.Count == 0) return 0;
+        if (attendancePostCount == 2) return postedWindows.Max();
         return postedWindows.Contains(popWindow) ? popWindow : postedWindows.Max();
     }
 
@@ -246,14 +254,16 @@ public sealed class HnmStandardCampFinalizer
     // windows — are applied in one place instead of at each call site. They were open-coded nowhere
     // before this because neither concept existed; adding two flags and trusting three callers to
     // remember both is how the addon's window number and the board's drifted apart the last time.
-    public static int ResolveCloseWindow(IEnumerable<EventAttendanceWindow> windows, int popWindow)
+    public static int ResolveCloseWindow(
+        IEnumerable<EventAttendanceWindow> windows, int popWindow, int attendancePostCount = 0)
     {
         var rows = windows as IReadOnlyCollection<EventAttendanceWindow> ?? windows.ToList();
         var marked = rows.FirstOrDefault(w => w.IsClosingWindow && !w.IsKillWindow);
         return ResolveCloseWindow(
             rows.Where(w => !w.IsKillWindow).Select(w => w.SequenceNumber).Distinct().ToList(),
             popWindow,
-            marked?.SequenceNumber);
+            marked?.SequenceNumber,
+            attendancePostCount);
     }
 
     // Who this camp owes and how much, read off the addon's window scans. Read-only: stages
@@ -315,7 +325,8 @@ public sealed class HnmStandardCampFinalizer
         var closeWindow = ResolveCloseWindow(
             scans.Where(s => !s.IsKillWindow).Select(s => s.SequenceNumber).Distinct().ToList(),
             popWindow,
-            markedCloseWindow);
+            markedCloseWindow,
+            DiscordEventMessageBuilder.AttendancePostCount(ev));
 
         // Price every posted window ONCE, up front. The amount is a property of the window, so
         // resolving it per member would be the same lookup N times over.

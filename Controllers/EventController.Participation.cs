@@ -97,7 +97,8 @@ public partial class EventController
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == eventToStart.LinkshellId);
         var startCloseWindow = LinkshellManagerDiscordApp.Services.HnmStandardCampFinalizer.ResolveCloseWindow(
-            eventToStart.AttendanceWindows, eventToStart.HnmWindowNumber);
+            eventToStart.AttendanceWindows, eventToStart.HnmWindowNumber,
+            LinkshellManagerDiscordApp.Services.DiscordEventMessageBuilder.AttendancePostCount(eventToStart));
 
         var model = new EventViewModel
         {

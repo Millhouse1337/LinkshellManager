@@ -513,7 +513,9 @@ public sealed partial class AddonApiController
                     .FirstOrDefaultAsync(l => l.Id == eventEntity.LinkshellId, cancellationToken);
                 perWindowDkp = HnmCampPricing.WindowValueFor(
                     eventEntity, campLinkshell, attendanceWindow.SequenceNumber,
-                    HnmStandardCampFinalizer.ResolveCloseWindow(campWindows, eventEntity.HnmWindowNumber),
+                    HnmStandardCampFinalizer.ResolveCloseWindow(
+                        campWindows, eventEntity.HnmWindowNumber,
+                        DiscordEventMessageBuilder.AttendancePostCount(eventEntity)),
                     attendanceWindow.DkpAmount, attendanceWindow.IsKillWindow);
             }
             else

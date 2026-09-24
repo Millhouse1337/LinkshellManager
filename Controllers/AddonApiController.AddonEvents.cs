@@ -705,7 +705,8 @@ public sealed partial class AddonApiController
         // server's own numbers instead of re-deriving them from Event.DkpPerHour — the column the
         // addon itself used to write and then read back as if it were a payout.
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
-            eventEntity.AttendanceWindows, eventEntity.HnmWindowNumber);
+            eventEntity.AttendanceWindows, eventEntity.HnmWindowNumber,
+            DiscordEventMessageBuilder.AttendancePostCount(eventEntity));
 
         return Ok(new
         {

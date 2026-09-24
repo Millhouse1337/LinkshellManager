@@ -86,6 +86,16 @@ public class HnmStandardCloseWindowTests
     }
 
     [Fact]
+    public void ResolveCloseWindow_TwoPostCamp_IgnoresTheSpawnCounter()
+    {
+        // Open and Close posted while the dragon was still in spawn window 1. The Close is post 2,
+        // not whichever post happens to share the spawn counter's number.
+        var posted = new[] { 1, 2 };
+        Assert.Equal(2, HnmStandardCampFinalizer.ResolveCloseWindow(
+            posted, popWindow: 1, markedCloseWindow: null, attendancePostCount: 2));
+    }
+
+    [Fact]
     public void ResolveCloseWindow_PopWindowNotScanned_FallsBackToLastScan()
     {
         // Scanning stopped at window 3 but the monster popped on 7 — window 3 is the close.
