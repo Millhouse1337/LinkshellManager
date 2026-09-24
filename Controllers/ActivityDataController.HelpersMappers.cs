@@ -62,7 +62,8 @@ public sealed partial class ActivityDataController
             linkshell.HnmAutoSnapshotDelaySeconds,
             linkshell.HnmStandardWindowBonus,
             linkshell.WdOpenBonus,
-            linkshell.WdCloseBonus);
+            linkshell.WdCloseBonus,
+            linkshell.HnmStandardMiscBonus);
     }
 
     // Splits the pipe-separated storage form into a clean list of names

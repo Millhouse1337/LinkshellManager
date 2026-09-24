@@ -256,13 +256,16 @@ public class HnmCampPricingTests
     {
         var ls = Ls();
         ls.HnmStandardWindowBonus = 0.25;
+        ls.HnmStandardMiscBonus = 0.75;
         ls.HnmStandardKillBonus = 2;
         var ev = StandardCamp();
 
         Assert.Equal(0.5, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Window, 1)!.Value, precision: 3);
         Assert.Equal(1.5, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Window, 2)!.Value, precision: 3);
         Assert.Equal(2.0, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Window, 3)!.Value, precision: 3);
-        Assert.Equal(0.25, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Misc, null)!.Value, precision: 3);
+        Assert.Equal(0.75, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Misc, null)!.Value, precision: 3);
+        // A misc post's own price wins over the linkshell's misc rate.
+        Assert.Equal(3.0, HnmCampPricing.LinkedCaptureValueFor(ev, ls, AttendanceSnapshotSlotKinds.Misc, null, miscAmount: 3)!.Value, precision: 3);
     }
 
     // Manual Check In pays from the check-in range, so a linked capture quotes nothing there.

@@ -54,8 +54,8 @@ public class HnmCampCapturePricingTests
             NullLogger<WindowEventDkpLedgerService>.Instance);
     }
 
-    // Open 1, regular window 0.5, close 2, claim 3, kill 4 — five distinct numbers, so a capture
-    // seeded from the wrong one is unmistakable.
+    // Open 1, regular window 0.5, misc 0.75, close 2, claim 3, kill 4 — six distinct numbers, so a
+    // capture seeded from the wrong one is unmistakable.
     private static Linkshell TestLinkshell() => new()
     {
         Id = LinkshellId,
@@ -63,6 +63,7 @@ public class HnmCampCapturePricingTests
         EnableHnmSection = true,
         HnmStandardOpenBonus = 1,
         HnmStandardWindowBonus = 0.5,
+        HnmStandardMiscBonus = 0.75,
         HnmStandardCloseBonus = 2,
         HnmStandardClaimBonus = 3,
         HnmStandardKillBonus = 4,
@@ -490,10 +491,10 @@ public class HnmCampCapturePricingTests
         return snapshot;
     }
 
-    // The linkshell's "Regular window" amount and nothing else -- no open, no close, no bonus. A
-    // read taken at the camp is worth a window, which is the whole rule.
+    // The linkshell's "Misc post" amount and nothing else -- not the regular window rate it used to
+    // borrow, no open, no close, no bonus.
     [Fact]
-    public async Task AMiscPost_IsPricedAtTheRegularWindowRate()
+    public async Task AMiscPost_IsPricedAtTheLinkshellsMiscRate()
     {
         using var db = await SeededAsync();
         db.AttendanceSnapshots.Add(MiscPost(900, "Beta"));
@@ -502,10 +503,26 @@ public class HnmCampCapturePricingTests
         await EndCampAsync(db);
 
         var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
-        Assert.Equal(0.5d, misc.Entries.Single().DkpAmount);
+        Assert.Equal(0.75d, misc.Entries.Single().DkpAmount);
     }
 
-    // ITS OWN money. Beta stood one regular window (0.5) and is on one misc post (0.5), and the
+    // An officer's price for ONE post, set from the addon, replaces the linkshell rate for it.
+    [Fact]
+    public async Task AMiscPost_PricedByAnOfficer_PaysThatPrice()
+    {
+        using var db = await SeededAsync();
+        var post = MiscPost(900, "Beta");
+        post.DkpAmount = 2d;
+        db.AttendanceSnapshots.Add(post);
+        await db.SaveChangesAsync();
+
+        await EndCampAsync(db);
+
+        var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
+        Assert.Equal(2d, misc.Entries.Single().DkpAmount);
+    }
+
+    // ITS OWN money. Beta stood one regular window (0.5) and is on one misc post (0.75), and the
     // card owes them both -- the same way two windows pay twice. This is what used to be worth
     // nothing at all: the post arrived unpriced, and on a per-capture card the captures ARE the
     // money.
@@ -527,7 +544,7 @@ public class HnmCampCapturePricingTests
             .CombinedMembers
             .Single(m => m.CharacterName == "Beta");
 
-        Assert.Equal(1.0d, beta.EffectiveDkpAmount);   // window 2 (0.5) + misc (0.5)
+        Assert.Equal(1.25d, beta.EffectiveDkpAmount);   // window 2 (0.5) + misc (0.75)
     }
 
     // Somebody who was never scanned in a window is paid for the post alone.
@@ -549,7 +566,7 @@ public class HnmCampCapturePricingTests
             .CombinedMembers
             .Single(m => m.CharacterName == "Gamma");
 
-        Assert.Equal(0.5d, gamma.EffectiveDkpAmount);
+        Assert.Equal(0.75d, gamma.EffectiveDkpAmount);
     }
 
     // One body standing there once. A name listed twice in the same capture is a scan artefact,
@@ -564,13 +581,13 @@ public class HnmCampCapturePricingTests
         await EndCampAsync(db);
 
         var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
-        Assert.Equal(new double?[] { 0.5d, 0d }, misc.Entries.Select(e => e.DkpAmount).ToArray());
+        Assert.Equal(new double?[] { 0.75d, 0d }, misc.Entries.Select(e => e.DkpAmount).ToArray());
     }
 
-    // The camp's OWN per-window override wins over the linkshell default, so a camp priced for the
-    // night prices its misc posts for the night too.
+    // The camp's per-WINDOW override prices windows, not misc posts. Misc has its own rate now, and
+    // a single post is re-priced on the post itself (see AMiscPost_PricedByAnOfficer_PaysThatPrice).
     [Fact]
-    public async Task AMiscPost_FollowsTheCampsPerWindowOverride()
+    public async Task AMiscPost_IgnoresTheCampsPerWindowOverride()
     {
         using var db = await SeededAsync();
         (await db.Events.FirstAsync(e => e.Id == EventId)).HnmPerWindowOverride = 3d;
@@ -580,7 +597,7 @@ public class HnmCampCapturePricingTests
         await EndCampAsync(db);
 
         var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
-        Assert.Equal(3d, misc.Entries.Single().DkpAmount);
+        Assert.Equal(0.75d, misc.Entries.Single().DkpAmount);
     }
 
     // ----------------------------------------------------------- a camp that does not repeat ---

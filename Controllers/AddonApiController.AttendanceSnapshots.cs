@@ -425,7 +425,10 @@ public sealed partial class AddonApiController
                 // Per person on the post, not a total. Null once the camp has ended and the
                 // capture has moved off the live event -- the review card owns the amount from
                 // then on, and guessing one here could disagree with what an officer has edited.
-                dkpAmount = isMisc ? HnmCampPricing.MiscValueFor(s.LinkedEvent, linkshell) : null,
+                dkpAmount = isMisc ? HnmCampPricing.MiscValueFor(s.LinkedEvent, linkshell, s.DkpAmount) : null,
+                // The officer's price for this one post, or null when it pays the linkshell's Misc
+                // post rate. Lets the addon's edit box tell "inherited" apart from "set".
+                dkpOverride = isMisc ? s.DkpAmount : null,
             };
         }).ToList();
 

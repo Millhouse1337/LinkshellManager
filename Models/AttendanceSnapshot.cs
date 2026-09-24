@@ -74,6 +74,12 @@ public class AttendanceSnapshot
     [MaxLength(16)]
     public string SlotKind { get; set; } = AttendanceSnapshotSlotKinds.Window;
 
+    // What an officer says THIS misc post pays each person on it, replacing the linkshell's Misc
+    // post rate (Linkshell.HnmStandardMiscBonus). Null = no override, the linkshell rate applies.
+    // Only ever set on a Misc capture filed against a live Standard camp -- the same rule
+    // EventAttendanceWindow.DkpAmount follows for a window. End Camp carries it onto each entry.
+    public double? DkpAmount { get; set; }
+
     // Which alliance this capture came from. The FFXI client can only see your OWN alliance
     // (party memory slots 0-17), so two alliances at one camp are completely invisible to each
     // other.

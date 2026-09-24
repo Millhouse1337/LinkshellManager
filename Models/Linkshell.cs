@@ -118,6 +118,14 @@ public class Linkshell
     // that one window — see HnmStandardCampFinalizer.WindowValue.
     public double HnmStandardWindowBonus { get; set; } = 0d;
 
+    // What a MISC post pays each person on it on a Standard camp -- a read taken at the camp but
+    // outside any window. Its own setting rather than the regular window rate it used to borrow,
+    // so a linkshell can price "stayed in zone in case the other group wiped" differently from
+    // sitting a window. An officer can still re-price one post from the addon
+    // (AttendanceSnapshot.DkpAmount). The migration that added it copied each linkshell's regular
+    // window rate in, so nothing re-priced itself on the day it appeared.
+    public double HnmStandardMiscBonus { get; set; } = 0d;
+
     // Automatic per-window attendance snapshots. When enabled, an officer running the LSM addon
     // can ARM auto-posting on a live camp; the addon then captures THEIR ALLIANCE and posts it as
     // that window's snapshot ~HnmAutoSnapshotDelaySeconds after each window opens. One toggle

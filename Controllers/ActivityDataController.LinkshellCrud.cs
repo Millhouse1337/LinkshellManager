@@ -366,6 +366,7 @@ public sealed partial class ActivityDataController
         if (request.HnmStandardClaimBonus.HasValue) linkshell.HnmStandardClaimBonus = Math.Max(0d, request.HnmStandardClaimBonus.Value);
         if (request.HnmStandardKillBonus.HasValue) linkshell.HnmStandardKillBonus = Math.Max(0d, request.HnmStandardKillBonus.Value);
         if (request.HnmStandardWindowBonus.HasValue) linkshell.HnmStandardWindowBonus = Math.Max(0d, request.HnmStandardWindowBonus.Value);
+        if (request.HnmStandardMiscBonus.HasValue) linkshell.HnmStandardMiscBonus = Math.Max(0d, request.HnmStandardMiscBonus.Value);
 
         // Automatic per-window snapshots (null = leave unchanged). The delay is clamped rather
         // than just floored: under 5s the armed addon races the server's own 30s window-advance

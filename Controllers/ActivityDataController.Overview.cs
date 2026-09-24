@@ -342,7 +342,7 @@ public sealed partial class ActivityDataController
                 // Manual Check In camp credits the check-in range instead, and a non-HNM event has
                 // no window rate at all.
                 HnmCampPricing.LinkedCaptureValueFor(
-                    evt, primaryLinkshell, snapshot.SlotKind, snapshot.WindowNumber)))
+                    evt, primaryLinkshell, snapshot.SlotKind, snapshot.WindowNumber, snapshot.DkpAmount)))
                 .ToList();
         }
 

@@ -136,36 +136,39 @@ public static class HnmCampPricing
     public static double? DefaultWindowValue(Event ev, Linkshell? linkshell, int sequence)
         => WindowValueFor(ev, linkshell, sequence, closeWindow: 0, explicitAmount: null);
 
-    // What a MISC post pays each person on it: the camp's REGULAR window rate.
+    // What a MISC post pays each person on it: the linkshell's "Misc post" rate
+    // (Linkshell.HnmStandardMiscBonus), or the officer's price for that one post when they set one.
     //
     // A misc post is its own piece of DKP, not a share of somebody else's. Someone who stood two
-    // windows and also appears on a misc post earns all three, exactly the way two windows earn
-    // twice -- a read taken at the camp is worth a window, which is the whole rule.
+    // windows and also appears on a misc post earns all three.
     //
-    // Deliberately NOT a setting of its own. It resolves through StandardBonuses, so it follows
-    // the camp's own per-window override when there is one and the linkshell's "Regular window"
-    // amount otherwise, and cannot drift from the scoring an officer configured.
+    // It used to borrow the regular window rate. It has its own setting now, because being in zone
+    // outside a window is not the same thing as sitting one, and a linkshell may price it lower (or
+    // higher). The camp's per-window override does NOT reach it for the same reason; a single post
+    // is re-priced with `explicitAmount` (AttendanceSnapshot.DkpAmount) instead.
     //
     // Null when the camp does not price captures at all -- Manual Check In credits the check-in
     // range, and a non-HNM event has no window rate -- matching WindowValueFor's contract, where
-    // null means "nothing" and never 0.
-    public static double? MiscValueFor(Event? ev, Linkshell? linkshell)
+    // null means "nothing" and never 0. An explicit amount does not change that.
+    public static double? MiscValueFor(Event? ev, Linkshell? linkshell, double? explicitAmount = null)
         => ev is not null && HonoursWindowAmount(ev)
-            ? StandardBonuses(ev, linkshell, claimed: false, killed: false).Window
+            ? Math.Max(0d, explicitAmount ?? linkshell?.HnmStandardMiscBonus ?? 0d)
             : null;
 
     // What a capture LINKED to this camp is worth per person on it, priced by what the capture
-    // is: Misc at the regular rate, and a numbered one by the post it names. On a 2-post camp
+    // is: Misc at the misc rate, and a numbered one by the post it names. On a 2-post camp
     // those are named (HnmConfig.GetDefaultWindowLabel), so each gets its own linkshell amount:
     // Open the open bonus, Close the close bonus, Kill the kill bonus (ungated, because a live
     // camp's outcome is not known yet -- see OutcomeBonuses). Everything else is DefaultWindowValue.
     //
     // DefaultWindowValue alone priced Close and Kill at the regular rate, since it cannot know
     // which post is the close. A named label settles that, so the card can quote the real amount.
+    //
+    // `miscAmount` is the post's own AttendanceSnapshot.DkpAmount; only a Misc capture reads it.
     public static double? LinkedCaptureValueFor(
-        Event ev, Linkshell? linkshell, string? slotKind, int? windowNumber)
+        Event ev, Linkshell? linkshell, string? slotKind, int? windowNumber, double? miscAmount = null)
     {
-        if (AttendanceSnapshotSlotKinds.IsMisc(slotKind)) return MiscValueFor(ev, linkshell);
+        if (AttendanceSnapshotSlotKinds.IsMisc(slotKind)) return MiscValueFor(ev, linkshell, miscAmount);
         if (windowNumber is not { } window) return null;
 
         if (HonoursWindowAmount(ev))

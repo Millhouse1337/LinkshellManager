@@ -441,7 +441,8 @@ public sealed class HnmCampReviewHandoffService
         // Every status moves, Ignored included: anything left pointing at the recycled board would
         // be collected again by the NEXT pop's End Camp.
         //
-        // They are also PRICED on the way in, at the camp's regular window rate. Until now they
+        // They are also PRICED on the way in, at the post's own price if an officer set one and
+        // the linkshell's Misc post rate otherwise (HnmCampPricing.MiscValueFor). Until now they
         // arrived carrying no amount at all, and on a per-capture card the money IS the capture
         // amounts -- so a misc post reached the review card worth exactly nothing, and the Misc
         // DKP box beside it fell back to this card's 0 baseline and said so.
@@ -450,12 +451,12 @@ public sealed class HnmCampReviewHandoffService
         // inside it: that dictionary answers "how much of the FINALIZER's total has been handed
         // out", and the finalizer never counted misc posts. Feeding them in would drive the Tags
         // remainder negative and take the money straight back off the member.
-        var miscValue = HnmCampPricing.MiscValueFor(ev, linkshell) ?? 0d;
         foreach (var filed in await LoadCampFiledCapturesAsync(ev.Id, cancellationToken))
         {
             filed.WindowEvent = windowEvent;
             if (perCapture && AttendanceSnapshotSlotKinds.IsMisc(filed.SlotKind))
             {
+                var miscValue = HnmCampPricing.MiscValueFor(ev, linkshell, filed.DkpAmount) ?? 0d;
                 // One payment per person per post: the same name listed twice in one capture is
                 // one body standing there once. Priced whatever the capture's status -- an
                 // Ignored row pays nothing regardless, and a Pending one an officer later

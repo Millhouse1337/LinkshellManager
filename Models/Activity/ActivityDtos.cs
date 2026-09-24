@@ -257,7 +257,9 @@ public sealed record ActivityLinkshellSettingsDto(
     // `linkshell is null` early-return in HelpersMappers passes only the leading positional
     // arguments and relies on defaults for the rest, so appending here needs no edit there.
     double WdOpenBonus = 0,
-    double WdCloseBonus = 0);
+    double WdCloseBonus = 0,
+    // What a MISC post pays per person on a Standard camp (Linkshell.HnmStandardMiscBonus).
+    double HnmStandardMiscBonus = 0);
 
 // LOCKSTEP: a permission added here must ALSO be added to the two records below, to the three
 // matching interfaces in discord-activity/src/app/discord/discord-activity.types.ts, to BOTH the
@@ -1470,7 +1472,9 @@ public sealed record ActivityUpdateLinkshellRequest(
     // (null = leave unchanged; clamped to >= 0).
     double? HnmStandardWindowBonus = null,
     double? WdOpenBonus = null,
-    double? WdCloseBonus = null);
+    double? WdCloseBonus = null,
+    // Misc post rate (null = leave unchanged; clamped to >= 0).
+    double? HnmStandardMiscBonus = null);
 
 // Set/clear the post-event discussion mirror channel. ChannelId blank = clear
 // (discussion stays in-app); a non-empty value must be a numeric Discord channel id.
