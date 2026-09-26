@@ -262,19 +262,29 @@
   flex-direction: column;
   min-height: 0;
 }
-.panel-tab .card--tod-fixed .tod-scroll {
+.panel-tab .card--tod-fixed .tod-scroll,
+.panel-tab .dash-row--equal > .card .winfreq {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
-.panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar {
+/* The window chart grows a row per HNM, so in the fixed-height row it scrolls like the ToD list.
+   align-content keeps a short list packed at the top instead of stretched down the card. */
+.panel-tab .dash-row--equal > .card .winfreq {
+  align-content: start;
+  padding-right: 4px;
+}
+.panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar,
+.panel-tab .dash-row--equal > .card .winfreq::-webkit-scrollbar {
   width: 8px;
 }
-.panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar-thumb {
+.panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar-thumb,
+.panel-tab .dash-row--equal > .card .winfreq::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 4px;
 }
-.panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar-thumb:hover {
+.panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar-thumb:hover,
+.panel-tab .dash-row--equal > .card .winfreq::-webkit-scrollbar-thumb:hover {
   background: var(--border-2);
 }
 .panel-tab .dash-row--equal > .card .donut-wrap {
