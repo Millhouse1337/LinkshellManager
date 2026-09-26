@@ -299,6 +299,39 @@ public class ComponentsV2BoardTests
         Assert.Contains("Party 1 (0/1)", content);
     }
 
+    // An event with no monster (Sky, Dynamis, a custom event) has no "🪟 Monster" heading, so the
+    // title line is the only place its name appears. Without it the board had no name at all.
+    [Fact]
+    public void WideBoard_WithoutAMonster_LeadsWithTheEventName()
+    {
+        var (ev, setup, signups) = BuildBoard();
+
+        var content = FirstMessageContent(ev, setup, signups);
+
+        Assert.StartsWith("## ⚔️ Sky: Kirin", content);
+    }
+
+    // A camp with a monster already leads with it, so it carries no title line.
+    [Fact]
+    public void WideBoard_WithAMonster_DoesNotRepeatTheName()
+    {
+        var (ev, setup, signups) = BigBoard();
+
+        var content = FirstMessageContent(ev, setup, signups);
+
+        Assert.StartsWith("## 🪟 Adamantoise", content);
+        Assert.DoesNotContain("⚔️", content);
+    }
+
+    private static string FirstMessageContent(
+        Event ev, PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> signups)
+    {
+        var first = DiscordEventMessageBuilder.BuildWideBoardMessages(
+            ev, Array.Empty<EventSignupLine>(), setup, signups)[0];
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(first, Wire));
+        return doc.RootElement.GetProperty("content").GetString() ?? string.Empty;
+    }
+
     // Every message the board occupies stays inside Discord's 2000-character cap. That used to
     // be a squeeze on ONE message — names shed, spacing collapsed, icons dropped — and is now
     // simply true, because each alliance has its own message and uses about half of it.

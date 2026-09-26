@@ -836,10 +836,21 @@ public static class DiscordEventMessageBuilder
     // plus the event title on its own line. Mirrors the classic board's content+embed title.
     private static string BuildV2Heading(Event ev, IReadOnlyDictionary<int, EventPartySlotSignup> slotSignups)
     {
-        // Just the start/window heading. The "⚔️ HNM: name" title line that used to sit under it
-        // is gone: on the wide board it repeated what the heading above already says, and every
-        // character it took came out of the roster's 2000.
-        return BuildStartHeading(ev, slotSignups.Values.Count(s => s.StayNextWindow));
+        // A camp with a monster leads with "🪟 Monster", so it gets no title line: that line
+        // only repeated the name, and every character it took came out of the roster's 2000.
+        //
+        // An event WITHOUT a monster (Sky, Dynamis, a custom event) has no such heading, and
+        // dropping the title left its board with no name at all. It keeps the title.
+        var heading = BuildStartHeading(ev, slotSignups.Values.Count(s => s.StayNextWindow));
+        if (!string.IsNullOrEmpty(HnmConfig.DisplayMonsterName(ev.AssignedMonsterName, ev.DayNumber)?.Trim()))
+        {
+            return heading;
+        }
+
+        var typePrefix = string.IsNullOrWhiteSpace(ev.EventType) ? string.Empty : $"{ev.EventType!.Trim()}: ";
+        var name = string.IsNullOrWhiteSpace(ev.EventName) ? $"Event #{ev.Id}" : ev.EventName!.Trim();
+        var title = $"## ⚔️ {Escape(typePrefix + name)}";
+        return string.IsNullOrEmpty(heading) ? title : $"{title}\n{heading}";
     }
 
     // The grid's key. The colour key is the same one the embed prints; the marker key exists
