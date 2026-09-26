@@ -88,16 +88,25 @@ public sealed class HnmWindowStatsService
 
         foreach (var group in byMonster)
         {
-            var total = group.Count();
-            var counts = group
+            // The configured band is the chart's width, and pops recorded past the end of it are
+            // left out rather than stretching the row to fit them. The ToAU three are why: they ran
+            // the wyrms' 25 hourly windows before moving to 5 six-hour ones, so their old ToDs
+            // carry window numbers up to 25 that the server can no longer spawn them on. Only a
+            // monster with no configured band falls back to the highest window recorded.
+            var configured = timings.For(group.Key).WindowCount ?? 0;
+            var windowCount = configured > 0 ? configured : group.Max(pop => pop.Window);
+
+            var inBand = group.Where(pop => pop.Window <= windowCount).ToList();
+            if (inBand.Count == 0)
+            {
+                continue;
+            }
+
+            // Percentages are a share of the pops that fit the band, so a row still sums to 100.
+            var total = inBand.Count;
+            var counts = inBand
                 .GroupBy(pop => pop.Window)
                 .ToDictionary(windowGroup => windowGroup.Key, windowGroup => windowGroup.Count());
-
-            // The configured band, widened if history holds a pop past the end of it — a grid an
-            // officer shortened afterwards must not silently drop the pops recorded under the old
-            // one, which would leave the percentages summing to less than 100.
-            var configured = timings.For(group.Key).WindowCount ?? 0;
-            var windowCount = Math.Max(configured, counts.Keys.Max());
 
             var bars = Enumerable.Range(1, windowCount)
                 .Select(window =>

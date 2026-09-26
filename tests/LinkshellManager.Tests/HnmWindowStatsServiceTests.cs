@@ -134,7 +134,7 @@ public class HnmWindowStatsServiceTests
     }
 
     [Fact]
-    public async Task KeepsPopsRecordedPastAShortenedBand()
+    public async Task LeavesOutPopsRecordedPastAShortenedBand()
     {
         using var db = NewInMemoryContext();
         db.LinkshellMonsterTimings.Add(new LinkshellMonsterTiming
@@ -152,12 +152,48 @@ public class HnmWindowStatsServiceTests
 
         var stats = await NewService(db).BuildAsync(10);
 
-        // An officer shortening the grid afterwards must not silently drop history recorded under
-        // the old one, or the percentages would sum to less than 100.
+        // The row is as wide as the configured band. The window-9 pop was recorded under an older,
+        // longer grid, so it is left out, and the percentages are a share of the pops that fit.
         var monster = Assert.Single(stats.Monsters);
-        Assert.Equal(9, monster.WindowCount);
-        Assert.Equal(50, monster.Bars.Single(bar => bar.Window == 9).Percent);
+        Assert.Equal(5, monster.WindowCount);
+        Assert.Equal(1, monster.TotalPops);
+        Assert.Equal(100, monster.Bars.Single(bar => bar.Window == 3).Percent);
         Assert.Equal(100, monster.Bars.Sum(bar => bar.Percent));
+    }
+
+    [Fact]
+    public async Task ToauHnms_ChartOutOfFiveWindows_EvenWithOldHourlyPops()
+    {
+        using var db = NewInMemoryContext();
+        // Cerberus once ran the wyrms' 25 hourly windows, so its old ToDs hold numbers like 13
+        // and 25. Its band is now 5 six-hour windows, and the chart must stay out of 5.
+        db.Tods.Add(Pop(1, 10, "Cerberus", 2));
+        db.Tods.Add(Pop(2, 10, "Cerberus", 5));
+        db.Tods.Add(Pop(3, 10, "Cerberus", 13));
+        db.Tods.Add(Pop(4, 10, "Cerberus", 25));
+        await db.SaveChangesAsync();
+
+        var stats = await NewService(db).BuildAsync(10);
+
+        var monster = Assert.Single(stats.Monsters);
+        Assert.Equal(5, monster.WindowCount);
+        Assert.Equal(Enumerable.Range(1, 5), monster.Bars.Select(bar => bar.Window));
+        Assert.Equal(2, monster.TotalPops);
+    }
+
+    [Fact]
+    public async Task MonsterWithOnlyOutOfBandPops_IsLeftOffTheChart()
+    {
+        using var db = NewInMemoryContext();
+        db.Tods.Add(Pop(1, 10, "Hydra", 13));
+        db.Tods.Add(Pop(2, 10, "Tiamat", 4));
+        await db.SaveChangesAsync();
+
+        var stats = await NewService(db).BuildAsync(10);
+
+        // Nothing Hydra recorded fits its 5-window band, so it has no row rather than an empty one.
+        var monster = Assert.Single(stats.Monsters);
+        Assert.Equal("Tiamat", monster.MonsterName);
     }
 
     [Fact]
