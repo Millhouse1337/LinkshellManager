@@ -113,8 +113,13 @@ public static class LinkshellRosterNames
     // anyone "registered" no matter what name it carries.
     public static async Task<RosterNameSet> LoadAsync(
         ApplicationDbContext db, int linkshellId, CancellationToken cancellationToken)
-    {
-        var rows = await db.AppUserLinkshells
+        => RosterNameSet.From(await LoadCandidatesAsync(db, linkshellId, cancellationToken));
+
+    // The same four-name rows, one per member, for callers that need to know WHICH member a name
+    // belongs to rather than only whether anyone has it (RosterMemberSearch).
+    public static Task<List<RosterNameCandidate>> LoadCandidatesAsync(
+        ApplicationDbContext db, int linkshellId, CancellationToken cancellationToken)
+        => db.AppUserLinkshells
             .AsNoTracking()
             .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
             .Join(db.Users.AsNoTracking(),
@@ -127,7 +132,4 @@ public static class LinkshellRosterNames
                       user.AltCharacterName2,
                       link.AppUserId))
             .ToListAsync(cancellationToken);
-
-        return RosterNameSet.From(rows);
-    }
 }

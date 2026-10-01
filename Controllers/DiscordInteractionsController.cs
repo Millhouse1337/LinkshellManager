@@ -1717,12 +1717,14 @@ public sealed class DiscordInteractionsController : ControllerBase
             return await ResumeSignupFlowAsync(token, nameEventId, appUserId: null, job, cancellationToken);
         }
 
-        // Officer-only "add a new player" modal → find-or-create the named member (no Discord
-        // link — the officer is seating someone else), cache them as the add target, and show
-        // the slot picker. Re-checks the officer here since a modal submit is its own request.
-        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerAddNewModalPrefix, StringComparison.Ordinal))
+        // Officer-only "find a member by name" modal → look the typed name up among the people
+        // ALREADY on this linkshell's roster and seat the one meant. Nobody is created here: a
+        // player joins the roster by signing up from the board themselves. One match goes
+        // straight to the slot picker; several show a picker of just those. Re-checks the
+        // officer here since a modal submit is its own request.
+        if (customId.StartsWith(DiscordEventMessageBuilder.OfficerAddFindModalPrefix, StringComparison.Ordinal))
         {
-            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.OfficerAddNewModalPrefix);
+            var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.OfficerAddFindModalPrefix);
             if (eventId <= 0)
             {
                 return Ephemeral("That event isn't recognized.");
@@ -1742,26 +1744,48 @@ public sealed class DiscordInteractionsController : ControllerBase
                 return Ephemeral("Only officers can add members to the board.");
             }
 
-            var name = ExtractModalValue(data, DiscordEventMessageBuilder.OfficerAddNewNameFieldId)?.Trim();
-            if (string.IsNullOrWhiteSpace(name))
+            var typed = ExtractModalValue(data, DiscordEventMessageBuilder.OfficerAddFindNameFieldId)?.Trim();
+            if (string.IsNullOrWhiteSpace(typed))
             {
-                return Ephemeral("Enter a character name to add.");
+                return Ephemeral("Enter a character name to look for.");
             }
 
-            var addResult = await _manualMembers.FindOrCreateByNameAsync(ev.LinkshellId, name, cancellationToken);
-            if (!addResult.Success || string.IsNullOrEmpty(addResult.AppUserId))
+            var roster = await LinkshellRosterNames.LoadCandidatesAsync(_db, ev.LinkshellId, cancellationToken);
+            var matches = RosterMemberSearch.Find(roster, typed);
+            if (matches.Count == 0)
             {
-                return Ephemeral(addResult.Error ?? "Couldn't add that player.");
+                return Ephemeral(
+                    $"Nobody on the roster matches \"{typed}\". Add Member only seats people already on the roster — a new player joins by signing up from the board themselves.");
             }
-            // Use the member's canonical name (a pre-existing match may differ in case) and
-            // carry any Discord link so a placeholder can still self-withdraw from the board.
-            var membership = await _db.AppUserLinkshells
-                .FirstOrDefaultAsync(m => m.LinkshellId == ev.LinkshellId && m.AppUserId == addResult.AppUserId, cancellationToken);
-            var targetName = membership?.CharacterName?.Trim() is { Length: > 0 } cn ? cn : name!;
-            _officerAddTargets.Set(discordUserId, eventId,
-                new OfficerAddTargetCache.Target(addResult.AppUserId!, targetName, membership?.DiscordUserId));
+            if (matches.Count == 1)
+            {
+                return await SetOfficerAddTargetAsync(ev, discordUserId, matches[0].AppUserId, cancellationToken);
+            }
 
-            return await ShowOfficerAddSlotPickerAsync(ev, targetName, cancellationToken);
+            // Several matches: a picker of just those, alts shown so two similar names can be told
+            // apart. The pick lands on the normal member-picker handler.
+            var options = matches
+                .Select(match => new
+                {
+                    Name = (match.MembershipCharacterName ?? match.AccountCharacterName ?? "Member").Trim(),
+                    Alts = string.Join(", ", new[] { match.AltCharacterName1, match.AltCharacterName2 }
+                        .Where(alt => !string.IsNullOrWhiteSpace(alt)).Select(alt => alt!.Trim())),
+                    match.AppUserId,
+                })
+                .OrderBy(match => match.Name, StringComparer.OrdinalIgnoreCase)
+                .Take(25)
+                .Select(match =>
+                {
+                    var label = match.Alts.Length > 0 ? $"{match.Name} (alts: {match.Alts})" : match.Name;
+                    return (object)new { label = label.Length > 100 ? label[..100] : label, value = match.AppUserId };
+                })
+                .ToArray();
+            var heading = matches.Count > 25
+                ? $"{matches.Count} members match \"{typed}\" — showing 25, type more of the name to narrow it. Pick who to seat:"
+                : $"{matches.Count} members match \"{typed}\" — pick who to seat:";
+            return PickerResponse(
+                EventHeading(ev.EventName, heading),
+                SelectRow(DiscordEventMessageBuilder.OfficerAddMemberPickPrefix, eventId.ToString(), "Pick a member", options));
         }
 
         var account = await _db.DiscordActivityUsers
@@ -2571,10 +2595,9 @@ public sealed class DiscordInteractionsController : ControllerBase
     }
 
     // "➕ Add Member (officers)" → officers only: an ephemeral select of roster members who
-    // aren't already on this board, plus an "add a new player" option (opens a name modal).
+    // aren't already on this board, plus a "find a member by name" option (opens a name modal).
     // The select is capped at Discord's 25-option limit; rosters past that are reachable via
-    // the "add a new player" path, which find-or-creates by name (so an over-the-cap member
-    // typed exactly is matched, not duplicated).
+    // the find, which only ever matches people already on the roster (RosterMemberSearch).
     private async Task<IActionResult> HandleOfficerAddStartAsync(
         int eventId, string? appUserId, CancellationToken cancellationToken)
     {
@@ -2609,21 +2632,28 @@ public sealed class DiscordInteractionsController : ControllerBase
             .Select(m => new { m.AppUserId, m.CharacterName })
             .ToListAsync(cancellationToken);
 
-        var options = members
+        var eligible = members
             .Where(m => !onBoard.Contains(m.AppUserId!))
             .OrderBy(m => m.CharacterName, StringComparer.OrdinalIgnoreCase)
-            .Take(24) // 25-option cap, less one reserved for "add a new player"
+            .ToList();
+        var options = eligible
+            .Take(24) // 25-option cap, less one reserved for "find a member by name"
             .Select(m => (object)new { label = m.CharacterName!.Trim(), value = m.AppUserId })
-            .Append((object)new { label = "➕ Add a new player…", value = DiscordEventMessageBuilder.OfficerAddNewSentinel })
+            .Append((object)new { label = "🔎 Find a member by name…", value = DiscordEventMessageBuilder.OfficerAddFindSentinel })
             .ToArray();
 
+        // Say when the list is cut short. Not knowing the rest are reachable is what used to send
+        // officers to type a name that then created a duplicate of someone already on the roster.
+        var heading = eligible.Count > 24
+            ? $"Add a member to the board — pick who to seat (showing 24 of {eligible.Count}; use 🔎 Find for anyone else):"
+            : "Add a member to the board — pick who to seat:";
         return PickerResponse(
-            EventHeading(ev.EventName, "Add a member to the board — pick who to seat:"),
+            EventHeading(ev.EventName, heading),
             SelectRow(DiscordEventMessageBuilder.OfficerAddMemberPickPrefix, eventId.ToString(), "Pick a member", options));
     }
 
-    // Officer-add member picker select → either open the "add a new player" name modal, or
-    // (an existing member) cache them as the add target and show the slot picker.
+    // Officer-add member picker select → either open the "find a member by name" modal, or
+    // (a listed member) cache them as the add target and show the slot picker.
     private async Task<IActionResult> HandleOfficerAddMemberPickedAsync(
         int eventId, string? appUserId, string? value, CancellationToken cancellationToken)
     {
@@ -2645,39 +2675,47 @@ public sealed class DiscordInteractionsController : ControllerBase
             return Ephemeral("Couldn't read your Discord account from that click.");
         }
 
-        if (string.Equals(value, DiscordEventMessageBuilder.OfficerAddNewSentinel, StringComparison.Ordinal))
+        if (string.Equals(value, DiscordEventMessageBuilder.OfficerAddFindSentinel, StringComparison.Ordinal))
         {
-            return OfficerAddNewModal(eventId);
+            return OfficerAddFindModal(eventId);
         }
 
-        var membership = string.IsNullOrEmpty(value)
+        return await SetOfficerAddTargetAsync(ev, _discordUserId, value, cancellationToken);
+    }
+
+    // The chosen roster member becomes the officer-add target (cached per officer + event), and
+    // the slot picker shows. Shared by a pick from the member list and by the find modal.
+    private async Task<IActionResult> SetOfficerAddTargetAsync(
+        Event ev, string officerDiscordUserId, string? targetAppUserId, CancellationToken cancellationToken)
+    {
+        var membership = string.IsNullOrEmpty(targetAppUserId)
             ? null
             : await _db.AppUserLinkshells
-                .FirstOrDefaultAsync(m => m.LinkshellId == ev.LinkshellId && m.AppUserId == value, cancellationToken);
+                .FirstOrDefaultAsync(m => m.LinkshellId == ev.LinkshellId && m.AppUserId == targetAppUserId, cancellationToken);
         if (membership?.AppUserId is null)
         {
             return Ephemeral("That member isn't in this linkshell anymore.");
         }
 
         var targetName = membership.CharacterName?.Trim() is { Length: > 0 } cn ? cn : "Member";
-        _officerAddTargets.Set(_discordUserId, eventId,
+        _officerAddTargets.Set(officerDiscordUserId, ev.Id,
             new OfficerAddTargetCache.Target(membership.AppUserId, targetName, membership.DiscordUserId));
 
         return await ShowOfficerAddSlotPickerAsync(ev, targetName, cancellationToken);
     }
 
-    // The "add a new player" modal: the officer types a character name. On submit
-    // (HandleModalSubmitAsync) it's find-or-created in the linkshell (no Discord link) and
-    // becomes the add target. A single text field — Discord modals are text-only.
-    private IActionResult OfficerAddNewModal(int eventId)
+    // The "find a member by name" modal: the officer types a name (main or alt, or part of
+    // one). On submit (HandleModalSubmitAsync) it's looked up among the people already on the
+    // roster. A single text field — Discord modals are text-only.
+    private IActionResult OfficerAddFindModal(int eventId)
     {
         return Ok(new
         {
             type = ResponseModal,
             data = new
             {
-                custom_id = $"{DiscordEventMessageBuilder.OfficerAddNewModalPrefix}{eventId}",
-                title = "Add a new player",
+                custom_id = $"{DiscordEventMessageBuilder.OfficerAddFindModalPrefix}{eventId}",
+                title = "Find a member",
                 components = new object[]
                 {
                     new
@@ -2688,8 +2726,8 @@ public sealed class DiscordInteractionsController : ControllerBase
                             new
                             {
                                 type = 4, // text input
-                                custom_id = DiscordEventMessageBuilder.OfficerAddNewNameFieldId,
-                                label = "Character name",
+                                custom_id = DiscordEventMessageBuilder.OfficerAddFindNameFieldId,
+                                label = "Character name (main or alt)",
                                 style = 1, // short
                                 min_length = 1,
                                 max_length = ManualMemberService.MaxCharacterNameLength,

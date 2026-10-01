@@ -101,20 +101,16 @@ public sealed class ManualMemberService
         return new CreateResult(true, null, placeholder.Id);
     }
 
-    // Officer-initiated path (the Discord board's "Add Member"): find-or-create a roster
-    // member by MAIN name with NO Discord link — the officer is seating someone else, so we
-    // must not attach the officer's Discord id. Matches an existing member of that name
-    // (synced OR unsynced) and otherwise creates an unsynced placeholder so the AppUserId-
-    // keyed DKP / history system can track them. Unlike FindOrCreateForOutsideAsync this
-    // never rejects a synced match — the officer legitimately wants to seat a real member
-    // who simply didn't sign up themselves.
-    public Task<CreateResult> FindOrCreateByNameAsync(
-        int linkshellId, string? mainName, CancellationToken cancellationToken)
-        => FindOrCreateByNameAsync(linkshellId, mainName, null, null, cancellationToken);
-
-    // Overload that also carries optional alt names — used by the DKP import (a migrating
-    // linkshell's sheet has Alt 1 / Alt 2 columns). On a name match, fills only alts that
-    // are currently empty (never clobbers existing data); on create, seeds them.
+    // Officer-initiated path (the DKP import — a migrating linkshell's sheet, with Alt 1 / Alt 2
+    // columns): find-or-create a roster member by MAIN name with NO Discord link — the officer
+    // is bringing in other people, so we must not attach the officer's Discord id. Matches an
+    // existing member of that name (synced OR unsynced) and otherwise creates an unsynced
+    // placeholder so the AppUserId-keyed DKP / history system can track them. Unlike
+    // FindOrCreateForOutsideAsync this never rejects a synced match. On a name match, fills only
+    // alts that are currently empty (never clobbers existing data); on create, seeds them.
+    //
+    // The board's officer "Add Member" no longer comes here: it only FINDS existing members
+    // (RosterMemberSearch), because a typed name that missed by a symbol created a duplicate.
     public async Task<CreateResult> FindOrCreateByNameAsync(
         int linkshellId, string? mainName, string? alt1, string? alt2, CancellationToken cancellationToken)
     {

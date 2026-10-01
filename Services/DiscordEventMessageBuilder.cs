@@ -264,29 +264,32 @@ public static class DiscordEventMessageBuilder
     public const string ReadinessButtonPrefix = "evt:ready:";
     public const string ReadinessPickPrefix = "evt:readypick:";
 
-    // Officer-only "Add Member" — manually seat a roster member (or a brand-new placeholder)
-    // into a slot on behalf of someone who didn't sign up themselves. The button is shared
+    // Officer-only "Add Member" — manually seat an EXISTING roster member into a slot on
+    // behalf of someone who didn't sign up themselves. It never creates a member: a player
+    // joins the roster by signing up from the board themselves. The button is shared
     // by every viewer (Discord can't per-user gate one), so the click handler enforces the
     // officer check and the label says "(officers)". The flow: button → ephemeral member
-    // picker → (an existing member, or "add a new player" via a name modal) → the normal
-    // slot picker + job wizard, but routed through the officer-add variants below so the
-    // claim is attributed to the chosen TARGET (held in OfficerAddTargetCache) rather than
-    // the clicking officer.
+    // picker → (a listed member, or "find a member by name" via a name modal for the rest of
+    // a roster past Discord's 25 options) → the normal slot picker + job wizard, but routed
+    // through the officer-add variants below so the claim is attributed to the chosen TARGET
+    // (held in OfficerAddTargetCache) rather than the clicking officer.
     //   evt:oadd:{eventId}                          — "Add Member" button
     //   evt:oaddpick:{eventId}                       — member-picker select (AppUserId | "__new__")
-    //   evt:oaddnew:{eventId}                        — "add a new player" name modal
+    //   evt:oaddnew:{eventId}                        — "find a member by name" modal
     //   evt:oaclaim:{eventId}                        — officer-add slot-picker select → claim
     //   evt:oawr / oawm / oaws:{eventId}:{slotId}…   — officer-add job wizard (role → main → sub)
+    // The find modal's wire values ("evt:oaddnew:", "__new__") are kept from when it created
+    // players, so a picker or modal already open on someone's screen still lands on the find.
     public const string OfficerAddButtonPrefix = "evt:oadd:";
     public const string OfficerAddMemberPickPrefix = "evt:oaddpick:";
-    public const string OfficerAddNewModalPrefix = "evt:oaddnew:";
-    public const string OfficerAddNewNameFieldId = "oadd_name";
+    public const string OfficerAddFindModalPrefix = "evt:oaddnew:";
+    public const string OfficerAddFindNameFieldId = "oadd_name";
     public const string OfficerAddSlotClaimPrefix = "evt:oaclaim:";
     public const string OfficerAddWizardRolePrefix = "evt:oawr:";
     public const string OfficerAddWizardMainPrefix = "evt:oawm:";
     public const string OfficerAddWizardSubPrefix = "evt:oaws:";
-    // Member-picker sentinel value selecting "add a new player" (opens the name modal).
-    public const string OfficerAddNewSentinel = "__new__";
+    // Member-picker sentinel value selecting "find a member by name" (opens the name modal).
+    public const string OfficerAddFindSentinel = "__new__";
 
     // Officer-only member-management controls (mirror the Add-Member flow). Each is a
     // shared board button gated in the handler. The chosen member rides in the picker
