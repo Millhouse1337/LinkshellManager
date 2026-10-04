@@ -77,5 +77,6 @@ operations unless you pass the connected database name as confirmation — never
 
 ```bash
 dotnet test                          # backend unit/integration tests
+node --test tests/js/data-admin-schema-layout.test.js   # website JS tests (Node 20+, nothing to install)
 cd discord-activity && npm test      # Angular tests
 ```
