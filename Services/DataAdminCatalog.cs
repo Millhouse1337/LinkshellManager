@@ -13,14 +13,21 @@ public sealed class DataAdminCatalog
     private readonly Dictionary<string, DataAdminModel> _bySlug;
     private readonly Dictionary<string, DataAdminModel> _byClrName;
     private readonly Dictionary<Type, DataAdminModel> _byType;
+    private readonly Lazy<DataAdminSchemaGraph> _schema;
 
     public DataAdminCatalog(IModel model, DataAdminPolicy policy)
     {
         var models = new List<DataAdminModel>();
+        // Real tables that are never catalog tables. Only the schema diagram uses them (see Schema).
+        var structureOnly = new List<IEntityType>();
         foreach (var entityType in model.GetEntityTypes())
         {
             if (entityType.IsOwned() || entityType.HasSharedClrType || IsIdentityFrameworkType(entityType.ClrType))
             {
+                if (!entityType.IsOwned())
+                {
+                    structureOnly.Add(entityType);
+                }
                 continue;
             }
             models.Add(DataAdminModel.Create(entityType, policy.For(entityType.ClrType)));
@@ -48,12 +55,21 @@ public sealed class DataAdminCatalog
             Models.SelectMany(m => m.CascadePrincipals.Select(principal => (Dependent: m, Principal: principal))),
             m => m.DisplayName,
             m => m.ClrType == typeof(Linkshell));
+
+        _schema = new Lazy<DataAdminSchemaGraph>(() => DataAdminSchemaGraph.Build(Models, structureOnly));
     }
 
     public IReadOnlyList<DataAdminModel> Models { get; }
 
     // Cascade-delete grouping for the chooser and the index page.
     public DataAdminCascadeForest<DataAdminModel> Forest { get; }
+
+    // The whole database as a picture, for the schema diagram. Lazy on purpose, and NOT read in the
+    // constructor: the catalog is built at boot (Program.cs), and a bug in the graph builder must
+    // only ever break the schema page, never startup. The graph also draws the tables the loop
+    // above skips (the Identity framework tables). Those are structure only: they are drawn, but
+    // they get no model and no slug, so they are never a route to rows.
+    public DataAdminSchemaGraph Schema => _schema.Value;
 
     public DataAdminModel? Find(string? slug) =>
         slug is not null && _bySlug.TryGetValue(slug, out var model) ? model : null;

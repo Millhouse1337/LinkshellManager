@@ -46,9 +46,14 @@ public static class DataAdminDefaults
         "AccessFailedCount", "EmailConfirmed",
     };
 
+    // A table with at least this many foreign keys pointing at it is a "hub" (Linkshell, AppUser).
+    // The schema diagram draws the lines into a hub faintly; drawn like the rest they would bury
+    // every other line.
+    public const int SchemaHubMinInbound = 15;
+
     // Literal route segments under /data-admin. A table slug must never collide with one.
     public static readonly IReadOnlySet<string> ReservedSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "tables", "create", "edit", "delete",
+        "tables", "schema", "create", "edit", "delete",
     };
 }

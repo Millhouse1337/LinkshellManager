@@ -412,7 +412,7 @@ public abstract class DataAdminModel
         return builder.ToString();
     }
 
-    private static string Humanize(string name)
+    internal static string Humanize(string name)
     {
         var builder = new StringBuilder(name.Length + 4);
         for (var i = 0; i < name.Length; i++)
