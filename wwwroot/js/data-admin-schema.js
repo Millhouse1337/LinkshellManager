@@ -45,6 +45,20 @@
     };
     if (Object.keys(side).some((key) => !side[key])) { return; }
 
+    // The View section's controls (segmented buttons for density and line style, switches for
+    // the rest) and the bar's Panel button. Static markup: the script only reads and marks them.
+    const viewSection = panel.querySelector('[data-erd-view]');
+    const panelToggle = root.querySelector('[data-erd-panel-toggle]');
+    if (!viewSection || !panelToggle) { return; }
+    const controls = {
+        density: viewSection.querySelector('[data-erd-opt="density"]'),
+        edges: viewSection.querySelector('[data-erd-opt="edges"]'),
+        types: viewSection.querySelector('[data-erd-opt="types"]'),
+        hubs: viewSection.querySelector('[data-erd-opt="hubs"]'),
+        framework: viewSection.querySelector('[data-erd-opt="framework"]')
+    };
+    if (Object.keys(controls).some((key) => !controls[key])) { return; }
+
     const M = L.METRICS;
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const STORAGE_KEY = 'lsm.dataAdmin.schema.v1';
@@ -121,13 +135,20 @@
     // Moved cards are remembered per density because a card's height, and so the whole layout,
     // differs between them. Pan and zoom are never stored: a fresh visit starts with the overview.
 
+    // A known option holding one of its listed choices, or a plain true / false: the same rule
+    // for a stored value and for a value read off a control. The key is checked first, so a
+    // stray data-erd-opt in the markup can never be written to storage.
+    const validOption = (key, value) => {
+        if (own(OPTION_DEFAULTS, key) === undefined) { return false; }
+        const choices = own(OPTION_CHOICES, key);
+        return choices ? choices.indexOf(value) >= 0 : typeof value === 'boolean';
+    };
+
     function cleanOptions(raw) {
         const options = {};
         Object.keys(OPTION_DEFAULTS).forEach((key) => {
             const value = isObject(raw) ? own(raw, key) : undefined;
-            const choices = own(OPTION_CHOICES, key);
-            const valid = choices ? choices.indexOf(value) >= 0 : typeof value === 'boolean';
-            options[key] = valid ? value : OPTION_DEFAULTS[key];
+            options[key] = validOption(key, value) ? value : OPTION_DEFAULTS[key];
         });
         return options;
     }
@@ -326,11 +347,13 @@
         card.style.top = at.y + 'px';
     }
 
-    // Rebuilds every card for the current density and set of visible tables.
+    // Rebuilds every card for the current density and set of visible tables. Whatever was lit is
+    // forgotten with the old elements; the caller lights the new ones (applyHighlight).
     function renderCards() {
         const fragment = document.createDocumentFragment();
         cardEls.clear();
         rowEls.clear();
+        resetLit();
         index.tables.forEach((table) => {
             if (!isDrawn(table.id)) { return; }
             const rows = new Map();
@@ -441,6 +464,21 @@
         pinnedRels: new Set(),
         dim: new Set()                  // tables greyed out by the search
     };
+
+    // Forgets what is lit. The elements it named have just been thrown away with the cards, so
+    // the next applyHighlight starts from nothing and marks the new elements; the copies in the
+    // top SVG go the same way and are drawn again for whatever is still lit.
+    function resetLit() {
+        lit.rels = [];
+        lit.relIds.clear();
+        lit.related.clear();
+        lit.rows.clear();
+        lit.active = null;
+        lit.selected = null;
+        lit.pinnedRels.clear();
+        lit.dim.clear();
+        topSvg.textContent = '';
+    }
 
     // Calls change(id, true) for what joins the set and change(id, false) for what leaves it,
     // then makes `current` the new set. Returns whether anything changed.
@@ -578,30 +616,64 @@
         renderRels();
         applyHighlight();
         restoreFocus(had);
+        if (pinned.table !== null) { revealListed(pinned.table); }
     }
 
-    // Where the keyboard focus is when it sits in a part of the panel that a pin rebuilds: a
-    // relationship card (remembered by id), or the Selected section (its Clear button or a
-    // "select table" button). null anywhere else.
+    // Scrolls one box just far enough to show an item, and nothing else. Not scrollIntoView:
+    // that moves every scrollable ancestor as well, so on a short window pinning a table from
+    // the diagram would scroll the whole panel and take the search box out of view.
+    function revealIn(box, item) {
+        const at = item.getBoundingClientRect();
+        const top = at.top - box.getBoundingClientRect().top + box.scrollTop;
+        const bottom = top + at.height;
+        if (top < box.scrollTop) {
+            box.scrollTop = top;
+        } else if (bottom > box.scrollTop + box.clientHeight) {
+            box.scrollTop = bottom - box.clientHeight;
+        }
+    }
+
+    // A table pinned from the diagram or the search box may be anywhere in the Tables list, so
+    // its item is brought into view there: only as far as the list must scroll, never the panel.
+    function revealListed(id) {
+        const item = listEls.get(id);
+        if (item) { revealIn(side.tables, item); }
+    }
+
+    // The panel's lists, for putting the keyboard focus back after a rebuild: each knows its
+    // items by id, the attribute that carries the id, and its heading (the last resort).
+    const LISTS = {
+        tables: { els: listEls, box: side.tables, attr: 'data-table' },
+        rels: { els: relEls, box: side.rels, attr: 'data-rel' },
+        junctions: { els: junctionEls, box: side.junctions, attr: 'data-via' }
+    };
+    Object.keys(LISTS).forEach((part) => {
+        LISTS[part].summary = LISTS[part].box.parentNode.querySelector('summary');
+    });
+    const clearButton = side.selected.querySelector('[data-erd-clear]');
+
+    // Where the keyboard focus is when it sits in a part of the panel that a rebuild replaces:
+    // one of the lists (with the focused item's table, relationship or via id), or the Selected
+    // section (its Clear button or a "select table" button). null anywhere else.
     function focusedPanelPart() {
         const active = document.activeElement;
         if (!(active instanceof Element)) { return null; }
-        if (side.rels.contains(active)) {
-            const card = active.closest('.erd-rel');
-            return { part: 'rels', rel: card ? card.getAttribute('data-rel') : null };
+        const part = Object.keys(LISTS).find((name) => LISTS[name].box.contains(active));
+        if (part) {
+            const item = active.closest('[' + LISTS[part].attr + ']');
+            return { part: part, id: item ? item.getAttribute(LISTS[part].attr) : null };
         }
-        return side.selected.contains(active) ? { part: 'selected' } : null;
+        return side.selected.contains(active) ? { part: 'selected', id: null } : null;
     }
 
     // Re-rendering removes the focused element (or hides its section), and the browser then
     // drops the focus to the body: the next Tab would start again from the top of the page. So
-    // the focus is put back on the nearest thing that still makes sense: the card of the same
-    // relationship (a pinned relationship is always in the full list), else the first card or
-    // the list's heading; the Clear button of the Selected section; or, when that section has
-    // just gone, the search box above it. preventScroll keeps the panel where it was; only the
-    // relationship list scrolls, and only as far as it must to show the card.
-    const relsSummary = side.rels.parentNode.querySelector('summary');
-    const clearButton = side.selected.querySelector('[data-erd-clear]');
+    // the focus is put back on the nearest thing that still makes sense: the item of the same
+    // table or relationship in the rebuilt list, else that list's first item or its heading;
+    // the Clear button of the Selected section; or, when that section has just gone, the search
+    // box above it. A keyboard user must be able to see the focus, so a list item is then
+    // brought into view: first its list scrolls, then the panel, each only as far as it must
+    // (preventScroll: the page and the canvas never move).
     function restoreFocus(was) {
         if (!was) { return; }
         const active = document.activeElement;
@@ -609,16 +681,20 @@
             !active.closest('[hidden]')) {
             return;
         }
+        const list = own(LISTS, was.part);
         let target = null;
-        if (was.part === 'rels') {
-            target = (was.rel !== null && relEls.get(was.rel)) ||
-                side.rels.querySelector('.erd-rel') || relsSummary;
+        if (list) {
+            target = (was.id !== null && list.els.get(was.id)) ||
+                list.box.querySelector('[' + list.attr + ']') || list.summary;
         } else {
             target = side.selected.hidden ? side.search : clearButton;
         }
         if (!target) { return; }
         target.focus({ preventScroll: true });
-        if (was.part === 'rels') { target.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+        if (list && target !== list.summary) {
+            revealIn(list.box, target);
+            revealIn(panel, target);
+        }
     }
 
     const pinTable = (id) => { setPinned({ table: id, rels: null }); };
@@ -1030,8 +1106,14 @@
         }
     }
 
+    // What was clicked is what the pointer is over, whatever a scroll had put there before, so
+    // the hover is brought in line before the click acts (and then frozen there, see above).
+    // Only when the click names something: a keyboard activation arrives as a click too
+    // (detail 0, no position), and Enter on a View control must leave the mouse hover alone.
     function onPanelClick(e) {
-        panelClickAt = { x: e.clientX, y: e.clientY };
+        if (e.detail !== 0) { panelClickAt = { x: e.clientX, y: e.clientY }; }
+        const at = panelFocusAt(e.target);
+        if (hoverAllowed(e) && (at.table !== null || at.rels)) { setHover(at); }
         activatePanelItem(e.target);
     }
 
@@ -1155,14 +1237,97 @@
         applyView();
     }
 
+    // Every line again, from where the cards are now and in the current line style.
+    function reshapeEdges() {
+        updateEdges(Array.from(cardEls.keys()));
+        renderTopEdges();
+    }
+
     function resetLayout() {
         saved[options.density] = {};
         computePositions();
         cardEls.forEach((card, id) => { placeCard(id); });
-        updateEdges(Array.from(cardEls.keys()));
-        renderTopEdges();
+        reshapeEdges();
         fit();
         saveStored();
+    }
+
+    // Whether everything a hover or a pin names is drawn.
+    const focusDrawn = (focus) =>
+        (focus.table === null || isDrawn(focus.table)) &&
+        (focus.rels || []).every((id) => {
+            const rel = own(index.relsById, id);
+            return !!rel && isDrawnRel(rel);
+        });
+
+    // Draws the page again from the options: the cards for the density and the visible tables,
+    // every line, the panel's lists, and the highlight on the new elements. A hover or a pin on
+    // something that is no longer drawn is dropped first; a keyboard focus in the panel's lists
+    // is put back afterwards (the rebuild would otherwise drop it to the body).
+    function redraw() {
+        const had = focusedPanelPart();
+        computePositions();
+        if (!focusDrawn(hover)) { hover = NOTHING; }
+        if (!focusDrawn(pinned)) { pinned = NOTHING; }
+        renderCards();
+        renderEdges();
+        renderPanel();
+        applyHighlight();
+        applyDim();
+        restoreFocus(had);
+    }
+
+    // ---- View options --------------------------------------------------------------------------
+    // Every option takes effect at once and is remembered. Column types, hub lines and the panel
+    // are a class on #erd that the stylesheet reads; the line style is new paths for the same
+    // lines; density and the Identity tables change which cards exist and how tall they are, so
+    // they draw everything again and fit the result.
+
+    // Writes the options to the page: the controls show them and #erd carries their classes.
+    function applyOptions() {
+        ['density', 'edges'].forEach((key) => {
+            controls[key].querySelectorAll('[data-value]').forEach((button) => {
+                const on = button.getAttribute('data-value') === options[key];
+                button.classList.toggle('is-active', on);
+                button.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+        });
+        ['types', 'hubs', 'framework'].forEach((key) => { controls[key].checked = options[key]; });
+        root.classList.toggle('no-types', !options.types);
+        root.classList.toggle('hide-hubs', !options.hubs);
+        root.classList.toggle('is-panel-closed', !options.panel);
+        panelToggle.setAttribute('aria-expanded', options.panel ? 'true' : 'false');
+    }
+
+    function setOption(key, value) {
+        if (!validOption(key, value) || options[key] === value) { return; }
+        options[key] = value;
+        applyOptions();
+        if (key === 'density' || key === 'framework') {
+            redraw();
+            fit();
+        } else if (key === 'edges') {
+            reshapeEdges();
+        } else if (key === 'panel' && !touched) {
+            // The canvas has just changed width; the overview is still the viewer's view.
+            fit();
+        }
+        saveStored();
+    }
+
+    // A segmented button: its group's option takes the button's value.
+    function onViewClick(e) {
+        const button = e.target instanceof Element ? e.target.closest('[data-value]') : null;
+        const group = button ? button.closest('[data-erd-opt]') : null;
+        if (group) { setOption(group.getAttribute('data-erd-opt'), button.getAttribute('data-value')); }
+    }
+
+    // A switch: its option is its checked state.
+    function onViewChange(e) {
+        const input = e.target;
+        if (input instanceof HTMLInputElement && input.hasAttribute('data-erd-opt')) {
+            setOption(input.getAttribute('data-erd-opt'), input.checked);
+        }
     }
 
     // ---- Pointer: pan, or drag one card --------------------------------------------------------
@@ -1288,11 +1453,10 @@
     root.style.setProperty('--erd-head-h', M.headH + 'px');
     root.style.setProperty('--erd-row-h', M.rowH + 'px');
 
-    computePositions();
-    renderCards();
-    renderEdges();
+    // The options first: a closed panel gives the canvas its full width before the first fit.
+    applyOptions();
     renderLegend();
-    renderPanel();
+    redraw();
     fit();
 
     canvas.addEventListener('pointerdown', onPointerDown);
@@ -1314,6 +1478,9 @@
     panel.addEventListener('keydown', onPanelKey);
     side.search.addEventListener('input', onSearchInput);
     side.search.addEventListener('keydown', onSearchKey);
+    viewSection.addEventListener('click', onViewClick);
+    viewSection.addEventListener('change', onViewChange);
+    panelToggle.addEventListener('click', () => { setOption('panel', !options.panel); });
 
     onClick('[data-erd-zoom-in]', () => { zoomBy(BUTTON_ZOOM); });
     onClick('[data-erd-zoom-out]', () => { zoomBy(1 / BUTTON_ZOOM); });

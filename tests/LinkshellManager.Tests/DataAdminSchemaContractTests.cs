@@ -105,6 +105,10 @@ public class DataAdminSchemaContractTests
         "data-erd-clear", "data-erd-tables", "data-erd-rels", "data-erd-rels-title", "data-erd-junctions",
         "data-erd-legend", "data-erd-count=\"tables\"", "data-erd-count=\"relationships\"",
         "data-erd-count=\"junctions\"",
+        // The View section and the Panel button. Each option control is one hook with its value:
+        // a control the script cannot find leaves that option stuck at whatever was stored.
+        "data-erd-view", "data-erd-opt=\"density\"", "data-erd-opt=\"edges\"", "data-erd-opt=\"types\"",
+        "data-erd-opt=\"hubs\"", "data-erd-opt=\"framework\"", "data-erd-panel-toggle",
     };
 
     private static ApplicationDbContext NewInMemoryContext() =>

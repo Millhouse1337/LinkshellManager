@@ -2034,6 +2034,13 @@
     .lsm-page .erd { grid-template-columns: minmax(0, 1fr); }
     .lsm-page .erd > .erd-side { display: none; }
 }
+/* The same when the Panel button has closed it. */
+.lsm-page .erd.is-panel-closed { grid-template-columns: minmax(0, 1fr); }
+.lsm-page .erd.is-panel-closed > .erd-side { display: none; }
+/* View options the stylesheet carries out: the types column goes (the name gets the room); hub
+   lines go from the base SVG only, so a lit one still shows its copy on top. */
+.erd.no-types .erd-row__type { display: none; }
+.erd.hide-hubs .erd-edges:not(.erd-edges--top) .erd-edge.is-hub { display: none; }
 
 /* ---- The bar ---- */
 .erd-bar {
@@ -2082,6 +2089,17 @@
 /* The site's .btn has no focus style of its own; this covers the bar and the panel ("Browse rows"). */
 .lsm-page .erd .btn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
 .lsm-page .erd-side .btn { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, filter .15s ease; }
+/* The Panel button reads as pressed while the panel is open: tinted text, fill and border, so
+   it is told apart from a merely hovered neighbour. It outranks the site's .btn:hover, so the
+   hover answer is restated here or the open button would give none. */
+.lsm-page .erd-bar [data-erd-panel-toggle][aria-expanded="true"] {
+    color: color-mix(in srgb, var(--blue-main) 40%, var(--text-main));
+    background: color-mix(in srgb, var(--blue-main) 24%, var(--bg-card));
+    border-color: color-mix(in srgb, var(--blue-main) 65%, var(--border-soft));
+}
+.lsm-page .erd-bar [data-erd-panel-toggle][aria-expanded="true"]:hover {
+    background: color-mix(in srgb, var(--blue-main) 32%, var(--bg-card-hover));
+}
 .erd-bar__zoom {
     width: 44px;
     text-align: center;
@@ -2402,6 +2420,39 @@ details[open] > summary.erd-sec__title::before { transform: rotate(90deg); }
 summary.erd-sec__title:hover { color: var(--text-main); }
 summary.erd-sec__title:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 3px; border-radius: 3px; }
 .erd-sec > :not(summary):not(.erd-sec__head) { margin-top: 10px; }
+.erd-sec > .erd-sec__title:first-child { margin-top: 0; }
+
+/* ---- View options ----
+   One row per option: its name on the left, the control on the right. The segmented buttons are
+   the site's .hnm-chart-tabs and the switches its .switch, in this panel's colours (the site's
+   defaults are for its own surfaces and would nearly vanish on the panel). The site also styles
+   a bare <label> as a small muted caption with a margin; here the label is the whole row. */
+.erd-opt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    /* One height for every row: a segmented control is 29px tall and a switch 22px, and
+       without this the rows would step unevenly down the section. */
+    min-height: 30px;
+    margin: 10px 0 0;
+    font-size: 12.5px;
+    color: var(--text-main);
+}
+.erd-opt--switch { cursor: pointer; }
+.erd-opt__label { min-width: 0; overflow-wrap: anywhere; }
+.lsm-page .erd-opt .hnm-chart-tabs { flex: none; background: var(--bg-main); border-color: var(--border-soft); }
+.lsm-page .erd-opt .hnm-chart-tab { padding: 3px 10px; font-size: 11.5px; color: var(--text-muted); }
+.lsm-page .erd-opt .hnm-chart-tab:hover { color: var(--text-main); }
+.lsm-page .erd-opt .hnm-chart-tab.is-active {
+    background: color-mix(in srgb, var(--blue-main) 24%, transparent);
+    color: var(--text-main);
+}
+.lsm-page .erd-opt .hnm-chart-tab:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 1px; }
+.lsm-page .erd-opt .switch { background: var(--bg-main); border-color: var(--border-soft); }
+.lsm-page .erd-opt .switch:checked { background: var(--blue-main); border-color: var(--blue-main); }
+.lsm-page .erd-opt .switch:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
 
 /* A button that reads as a link (Clear, select a table). */
 .erd-linkbtn {
@@ -2552,6 +2603,9 @@ summary.erd-sec__title:focus-visible { outline: 2px solid var(--blue-main); outl
     .erd-rel,
     summary.erd-sec__title::before,
     .lsm-page .erd-bar .btn,
-    .lsm-page .erd-side .btn { transition: none; }
+    .lsm-page .erd-side .btn,
+    .lsm-page .erd-opt .hnm-chart-tab,
+    .lsm-page .erd-opt .switch,
+    .lsm-page .erd-opt .switch::before { transition: none; }
 }
 /* ===== end Data Admin: schema diagram ===== */

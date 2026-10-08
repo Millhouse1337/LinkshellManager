@@ -24,6 +24,7 @@
             <button type="button" class="btn sm erd-bar__step" data-erd-zoom-in title="Zoom in" aria-label="Zoom in">+</button>
             <button type="button" class="btn sm" data-erd-fit title="Fit the whole diagram">Fit</button>
             <button type="button" class="btn sm" data-erd-reset title="Forget moved tables and lay them out again">Reset layout</button>
+            <button type="button" class="btn sm" data-erd-panel-toggle aria-controls="erd-panel" aria-expanded="true" title="Show or hide the side panel">Panel</button>
         </div>
     </header>
     <div class="erd-canvas" data-erd-canvas tabindex="0" aria-label="Database schema diagram">
@@ -42,6 +43,32 @@
     <aside class="erd-side" id="erd-panel" data-erd-panel aria-label="Schema details">
         <input type="search" class="input erd-search" data-erd-search placeholder="Find a table or column"
                aria-label="Find a table or column" autocomplete="off" spellcheck="false" />
+        @* View options. The markup shows the defaults; the script sets the controls from what the
+           browser remembered, and saves every change under the same key as the moved tables. *@
+        <section class="erd-sec" data-erd-view>
+            <h2 class="erd-sec__title">View</h2>
+            <div class="erd-opt">
+                <span class="erd-opt__label" id="erd-opt-density">Columns</span>
+                <div class="hnm-chart-tabs" role="group" aria-labelledby="erd-opt-density" data-erd-opt="density">
+                    <button type="button" class="hnm-chart-tab is-active" data-value="all" aria-pressed="true">All</button>
+                    <button type="button" class="hnm-chart-tab" data-value="keys" aria-pressed="false">Keys</button>
+                    <button type="button" class="hnm-chart-tab" data-value="names" aria-pressed="false">Names</button>
+                </div>
+            </div>
+            <div class="erd-opt">
+                <span class="erd-opt__label" id="erd-opt-edges">Lines</span>
+                <div class="hnm-chart-tabs" role="group" aria-labelledby="erd-opt-edges" data-erd-opt="edges">
+                    <button type="button" class="hnm-chart-tab is-active" data-value="curved" aria-pressed="true">Curved</button>
+                    <button type="button" class="hnm-chart-tab" data-value="orthogonal" aria-pressed="false">Square</button>
+                </div>
+            </div>
+            <label class="erd-opt erd-opt--switch"><span class="erd-opt__label">Column types</span>
+                <input type="checkbox" class="switch" data-erd-opt="types" checked /></label>
+            <label class="erd-opt erd-opt--switch"><span class="erd-opt__label">Lines into hub tables</span>
+                <input type="checkbox" class="switch" data-erd-opt="hubs" checked /></label>
+            <label class="erd-opt erd-opt--switch"><span class="erd-opt__label">Login (Identity) tables</span>
+                <input type="checkbox" class="switch" data-erd-opt="framework" checked /></label>
+        </section>
         <section class="erd-sec" data-erd-selected hidden>
             <div class="erd-sec__head">
                 <h2 class="erd-sec__title">Selected</h2>
