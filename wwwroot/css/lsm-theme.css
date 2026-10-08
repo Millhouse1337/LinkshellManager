@@ -2025,9 +2025,14 @@
 
     display: grid;
     grid-template-rows: 56px minmax(0, 1fr);
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 300px;
     min-width: 0;
     color: var(--text-main);
+}
+/* Too narrow for both: the picture wins and the panel goes. */
+@media (max-width: 899px) {
+    .lsm-page .erd { grid-template-columns: minmax(0, 1fr); }
+    .lsm-page .erd > .erd-side { display: none; }
 }
 
 /* ---- The bar ---- */
@@ -2074,7 +2079,9 @@
 /* Not the site's "transition: all": that would animate the focus ring from its browser default. */
 .lsm-page .erd-bar .btn { height: 32px; padding: 0 12px; transition: background-color .15s ease, border-color .15s ease; }
 .lsm-page .erd-bar .erd-bar__step { min-width: 32px; padding: 0; font-family: var(--font-mono); font-size: 14px; }
-.lsm-page .erd-bar .btn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
+/* The site's .btn has no focus style of its own; this covers the bar and the panel ("Browse rows"). */
+.lsm-page .erd .btn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
+.lsm-page .erd-side .btn { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, filter .15s ease; }
 .erd-bar__zoom {
     width: 44px;
     text-align: center;
@@ -2282,9 +2289,269 @@
    not hover targets. */
 .erd-edge.is-hub { opacity: .16; }
 .erd-edge.is-hub .erd-edge__hit { pointer-events: none; }
+.erd-edge__hit { cursor: pointer; }
+.erd-row[data-rel] { cursor: pointer; }
+
+/* ---- Highlighting ----
+   While something is hovered or pinned (the layer has has-focus) everything unrelated steps back:
+   unrelated cards fade, base lines fade further. The lit lines are drawn again in the top SVG in
+   the accent colour, over the cards. A search greys out the cards that do not match (is-dim). */
+.erd-layer.has-focus .erd-card:not(.is-rel),
+.erd-card.is-dim { opacity: .35; }
+.erd-layer.has-focus .erd-card.is-rel { opacity: 1; }
+.erd-layer.has-focus .erd-edges:not(.erd-edges--top) .erd-edge { opacity: .15; }
+.erd-layer.has-focus .erd-edges:not(.erd-edges--top) .erd-edge.is-hub { opacity: .06; }
+.erd-card.is-selected { box-shadow: 0 0 0 calc(2 * var(--erd-hair)) var(--erd-accent); }
+.erd-card.is-active {
+    z-index: 1;
+    box-shadow:
+        0 0 0 calc(2 * var(--erd-hair)) var(--erd-accent),
+        0 calc(8 * var(--erd-hair)) calc(24 * var(--erd-hair)) color-mix(in srgb, var(--bg-main) 70%, transparent);
+}
+.erd-card.is-framework.is-selected,
+.erd-card.is-framework.is-active { outline-color: var(--erd-accent); }
+.erd-row.is-active { background: color-mix(in srgb, var(--erd-accent) 16%, transparent); }
+
+/* Above every card, the active (z-index 1) and the dragged (2) one included: the paint order is
+   base lines, cards, lit lines. The top SVG takes no pointer events, so nothing is covered. */
+.erd-edges--top { z-index: 3; }
+.erd-edges--top .erd-edge { opacity: 1; }
+.erd-edges--top .erd-edge__line,
+.erd-edges--top .erd-edge__mark {
+    stroke: var(--erd-accent);
+    stroke-width: calc(2px / var(--erd-zoom, 1));
+}
+/* The cardinality pill: drawn around (0, 0), moved to the line's middle and scaled back by the
+   zoom so that it reads at the same size whatever the zoom. */
+.erd-edge-pill {
+    transform: translate(var(--erd-pill-x, 0px), var(--erd-pill-y, 0px)) scale(calc(1 / var(--erd-zoom, 1)));
+}
+.erd-edge-pill__box { fill: var(--erd-accent); }
+.erd-edge-pill__text {
+    fill: var(--bg-main);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-anchor: middle;
+}
+
+/* ---- The side panel ----
+   Scrolls inside itself; the two long lists also scroll inside themselves so that the sections
+   below them stay within reach. */
+.erd-side {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 20px;
+    border-left: 1px solid var(--border-soft);
+    background: var(--bg-panel);
+    font-size: 13px;
+}
+.lsm-page .erd-side .erd-search {
+    flex: none;
+    width: 100%;
+    box-sizing: border-box;
+    height: 34px;
+    padding: 0 12px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+}
+.erd-sec { flex: none; min-width: 0; }
+.erd-sec__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.erd-sec__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.erd-sec__n { flex: none; font-weight: 500; letter-spacing: 0; }
+.erd-sec__n:empty { display: none; }
+/* "Relationships of <table>": a long name is cut with an ellipsis (the tooltip has all of it)
+   so that the count stays beside it and the heading never pushes past the panel's edge. */
+summary.erd-sec__title > [data-erd-rels-title] {
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* A collapsible section: the title is its summary, with a small turning arrow in front. */
+summary.erd-sec__title { list-style: none; cursor: pointer; user-select: none; }
+summary.erd-sec__title::-webkit-details-marker { display: none; }
+summary.erd-sec__title::before {
+    content: "\25B8";
+    width: 10px;
+    flex: none;
+    font-size: 12px;
+    line-height: 1;
+    transition: transform .15s ease;
+}
+details[open] > summary.erd-sec__title::before { transform: rotate(90deg); }
+summary.erd-sec__title:hover { color: var(--text-main); }
+summary.erd-sec__title:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 3px; border-radius: 3px; }
+.erd-sec > :not(summary):not(.erd-sec__head) { margin-top: 10px; }
+
+/* A button that reads as a link (Clear, select a table). */
+.erd-linkbtn {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--blue-main);
+    cursor: pointer;
+}
+.erd-linkbtn:hover { text-decoration: underline; }
+.erd-linkbtn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; border-radius: 3px; }
+
+/* The Tables list. An item is a two-column grid (name, count) so that only the name gives way:
+   in a wrapping flex row a long name would push the count onto a second line instead. */
+.erd-list { max-height: 264px; overflow-y: auto; overscroll-behavior: contain; }
+.erd-list__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    row-gap: 2px;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-main);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.erd-list__item:hover,
+.erd-list__item.is-active { background: color-mix(in srgb, var(--erd-accent) 14%, transparent); }
+.erd-list__item.is-selected { box-shadow: inset 0 0 0 1px var(--erd-accent); }
+.erd-list__item:focus-visible { outline: 2px solid var(--blue-main); outline-offset: -2px; }
+.erd-list__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+}
+.erd-list__meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+}
+/* The column a search matched: its own line under the name, in the search's accent. */
+.erd-list__col {
+    grid-column: 1 / -1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--erd-accent);
+}
+.erd-list__empty { padding: 6px 8px; font-size: 12px; color: var(--text-muted); }
+
+/* The Relationships and Many-to-many lists: the mock's cards. */
+.erd-rels { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; overscroll-behavior: contain; }
+.erd-rels.is-pinned { max-height: none; overflow: visible; }
+.erd-rels__group {
+    margin: 6px 0 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.erd-rels__group:first-child { margin-top: 0; }
+.erd-rel {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background: var(--bg-panel-light);
+    cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease;
+}
+.erd-rel:hover,
+.erd-rel.is-active {
+    border-color: var(--erd-accent);
+    background: color-mix(in srgb, var(--erd-accent) 12%, var(--bg-panel-light));
+}
+.erd-rel.is-selected { box-shadow: 0 0 0 1px var(--erd-accent); border-color: var(--erd-accent); }
+/* The ring is drawn inside the card: the list clips anything outside its box. */
+.erd-rel:focus-visible { outline: 2px solid var(--blue-main); outline-offset: -2px; }
+.erd-rel--junction { border-style: dashed; }
+.erd-rel__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+.erd-rel__name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.erd-pill {
+    flex: none;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--text-main);
+    color: var(--bg-main);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.erd-pill--accent { background: var(--erd-accent); }
+.erd-rel__detail { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* The Selected section. */
+.erd-selected { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.erd-selected__name { font-family: var(--font-mono); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.erd-selected__name--rel { font-size: 12.5px; }
+.erd-selected__meta { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.erd-selected__tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.erd-selected__uq { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
+.erd-selected__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 6px; }
+.erd-selected__note { margin: 0; font-size: 12px; color: var(--text-muted); }
+.erd-selected__link { color: var(--blue-main); }
+.erd-selected__link:hover { text-decoration: underline; }
+
+/* The legend: each line sample is drawn with the diagram's own classes and marker geometry.
+   The crow's-foot ring is filled with the panel colour here, not the canvas colour. */
+.erd-legend { display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 12px; }
+.erd-legend__row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.erd-legend__svg { flex: none; width: 64px; height: 22px; overflow: visible; }
+.erd-legend .erd-edge__mark { fill: var(--bg-panel); }
+.erd-legend__key { flex: none; width: 64px; text-align: center; }
+.erd-legend__null { font-weight: 600; color: var(--text-muted); }
+.erd-legend__text { min-width: 0; overflow-wrap: anywhere; color: var(--text-main); }
 
 @media (prefers-reduced-motion: reduce) {
     .erd-card,
-    .lsm-page .erd-bar .btn { transition: none; }
+    .erd-rel,
+    summary.erd-sec__title::before,
+    .lsm-page .erd-bar .btn,
+    .lsm-page .erd-side .btn { transition: none; }
 }
 /* ===== end Data Admin: schema diagram ===== */

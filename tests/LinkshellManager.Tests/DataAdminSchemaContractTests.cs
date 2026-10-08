@@ -48,9 +48,7 @@ public class DataAdminSchemaContractTests
         string Kind, string Name, bool Layout, bool Page, bool Always, string? Receiver = null);
 
     // Kept as literals: the point is to fail when the wire name changes, which is exactly what
-    // nameof() would hide. Properties no script reads yet (slug, uniques, efDelete,
-    // leftRelationship, rightRelationship) are deliberately absent: add them here in the commit
-    // whose script starts reading them.
+    // nameof() would hide. Every property the graph serializes is read by some script now.
     private static readonly Wire[] WireNames =
     {
         new("root", "tables", Layout: true, Page: false, Always: true),
@@ -60,7 +58,9 @@ public class DataAdminSchemaContractTests
         new("table", "id", Layout: true, Page: true, Always: true),
         new("table", "name", Layout: false, Page: true, Always: true),
         new("table", "label", Layout: false, Page: true, Always: true),
+        new("table", "slug", Layout: false, Page: true, Always: false),
         new("table", "columns", Layout: true, Page: true, Always: true),
+        new("table", "uniques", Layout: false, Page: true, Always: true),
         new("table", "parent", Layout: true, Page: false, Always: false),
         new("table", "hub", Layout: true, Page: true, Always: false),
         new("table", "framework", Layout: false, Page: true, Always: false),
@@ -74,18 +74,37 @@ public class DataAdminSchemaContractTests
         new("column", "nullable", Layout: false, Page: true, Always: false),
         new("column", "protected", Layout: false, Page: true, Always: false),
 
+        // "unique.filter": a bare ".filter" is also Array.prototype.filter, all over both scripts.
+        new("unique", "columns", Layout: false, Page: true, Always: true, Receiver: "unique"),
+        new("unique", "filter", Layout: false, Page: true, Always: false, Receiver: "unique"),
+
         new("relationship", "id", Layout: true, Page: true, Always: true),
         new("relationship", "from", Layout: true, Page: true, Always: true, Receiver: "rel"),
         new("relationship", "to", Layout: true, Page: true, Always: true, Receiver: "rel"),
         new("relationship", "fromColumns", Layout: false, Page: true, Always: true),
         new("relationship", "toColumns", Layout: false, Page: true, Always: true),
         new("relationship", "onDelete", Layout: false, Page: true, Always: true),
-        new("relationship", "required", Layout: true, Page: false, Always: false),
+        new("relationship", "efDelete", Layout: false, Page: true, Always: true),
+        new("relationship", "required", Layout: true, Page: true, Always: false),
         new("relationship", "unique", Layout: true, Page: false, Always: false),
 
-        new("junction", "via", Layout: true, Page: false, Always: true),
-        new("junction", "left", Layout: true, Page: false, Always: true),
-        new("junction", "right", Layout: true, Page: false, Always: true),
+        new("junction", "via", Layout: true, Page: true, Always: true),
+        new("junction", "left", Layout: true, Page: true, Always: true),
+        new("junction", "right", Layout: true, Page: true, Always: true),
+        new("junction", "leftRelationship", Layout: false, Page: true, Always: true),
+        new("junction", "rightRelationship", Layout: false, Page: true, Always: true),
+    };
+
+    // The data-erd-* hooks the page script fills or listens to. A hook missing from the view is
+    // silent: the script either returns before drawing anything or skips that feature.
+    private static readonly string[] ViewHooks =
+    {
+        "data-erd-canvas", "data-erd-layer", "data-erd-edges", "data-erd-edges-top", "data-erd-cards",
+        "data-erd-empty", "data-erd-zoom-label", "data-erd-zoom-in", "data-erd-zoom-out", "data-erd-fit",
+        "data-erd-reset", "data-erd-panel", "data-erd-search", "data-erd-selected", "data-erd-selected-body",
+        "data-erd-clear", "data-erd-tables", "data-erd-rels", "data-erd-rels-title", "data-erd-junctions",
+        "data-erd-legend", "data-erd-count=\"tables\"", "data-erd-count=\"relationships\"",
+        "data-erd-count=\"junctions\"",
     };
 
     private static ApplicationDbContext NewInMemoryContext() =>
@@ -112,6 +131,7 @@ public class DataAdminSchemaContractTests
             ["root"] = new List<JsonElement> { root },
             ["table"] = tables,
             ["column"] = tables.SelectMany(table => Items(table, "columns")).ToList(),
+            ["unique"] = tables.SelectMany(table => Items(table, "uniques")).ToList(),
             ["relationship"] = Items(root, "relationships"),
             ["junction"] = Items(root, "junctions"),
         };
@@ -177,6 +197,25 @@ public class DataAdminSchemaContractTests
         Assert.True(
             view.IndexOf(layoutTag, StringComparison.Ordinal) < view.IndexOf(pageTag, StringComparison.Ordinal),
             $"{LayoutScript} must be loaded before {PageScript}: the page script needs window.LsmSchemaLayout.");
+    }
+
+    /// <summary>
+    /// Hand-off (2), the panel and the controls: every hook the page script looks up is in the view
+    /// exactly once, and the script really does look it up (so a hook nobody reads cannot linger).
+    /// </summary>
+    [Fact]
+    public void ViewCarriesEveryHookThePageScriptUses()
+    {
+        var view = ReadView();
+        var page = StripLineComments(
+            File.ReadAllText(Path.Combine(FindRepoDirectory("wwwroot"), "js", PageScript)));
+
+        foreach (var hook in ViewHooks)
+        {
+            var inView = Regex.Matches(view, @"\s" + Regex.Escape(hook) + @"(?=[\s>/])").Count;
+            Assert.True(inView == 1, $"Schema.cshtml must carry '{hook}' exactly once; found {inView}.");
+            Assert.Contains("[" + hook + "]", page, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

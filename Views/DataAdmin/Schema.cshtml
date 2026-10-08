@@ -37,6 +37,35 @@
         <div class="empty erd-empty" data-erd-empty hidden>The schema could not be drawn.</div>
         <noscript><div class="empty erd-empty">The schema diagram needs JavaScript.</div></noscript>
     </div>
+    @* The side panel is only a skeleton: the script fills every data-erd-* container from the same
+       JSON block, so the lists can never disagree with the picture. *@
+    <aside class="erd-side" id="erd-panel" data-erd-panel aria-label="Schema details">
+        <input type="search" class="input erd-search" data-erd-search placeholder="Find a table or column"
+               aria-label="Find a table or column" autocomplete="off" spellcheck="false" />
+        <section class="erd-sec" data-erd-selected hidden>
+            <div class="erd-sec__head">
+                <h2 class="erd-sec__title">Selected</h2>
+                <button type="button" class="erd-linkbtn" data-erd-clear>Clear</button>
+            </div>
+            <div class="erd-selected" data-erd-selected-body></div>
+        </section>
+        <details class="erd-sec" data-erd-sec="tables" open>
+            <summary class="erd-sec__title">Tables <span class="erd-sec__n" data-erd-count="tables"></span></summary>
+            <div class="erd-list" data-erd-tables></div>
+        </details>
+        <details class="erd-sec" data-erd-sec="relationships" open>
+            <summary class="erd-sec__title"><span data-erd-rels-title>Relationships</span> <span class="erd-sec__n" data-erd-count="relationships"></span></summary>
+            <div class="erd-rels" data-erd-rels></div>
+        </details>
+        <details class="erd-sec" data-erd-sec="junctions" open>
+            <summary class="erd-sec__title">Many-to-many <span class="erd-sec__n" data-erd-count="junctions"></span></summary>
+            <div class="erd-rels" data-erd-junctions></div>
+        </details>
+        <details class="erd-sec" data-erd-sec="legend" open>
+            <summary class="erd-sec__title">Legend</summary>
+            <div class="erd-legend" data-erd-legend></div>
+        </details>
+    </aside>
 </div>
 
 <script type="application/json" id="erd-data" nonce="@Html.CspNonce()">@Html.Raw(Model.DiagramJson)</script>
