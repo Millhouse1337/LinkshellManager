@@ -1987,3 +1987,304 @@
 .lsm-page .chart-keyitems__static { opacity: .75; }
 /* The viewer's own row, so the one line they can edit is findable in a roster of forty. */
 .lsm-page .chart-keyitems tr.is-you { background: var(--bg-card-hover); }
+
+/* ===== Data Admin: schema diagram (.erd) =====
+   The /data-admin/schema page: the whole database drawn as cards (tables) and lines (foreign keys).
+   data-admin-schema.js builds the cards and lines; data-admin-schema-layout.js works out every
+   position from fixed numbers (card width, header height, row height) and never measures the page.
+   So the job of this block is to make those numbers TRUE: a card is exactly --erd-card-w wide and
+   --erd-head-h + rows * --erd-row-h tall. That is why outlines are box-shadows and not borders.
+   Colours are site tokens only. Every class is erd- prefixed (Bootstrap owns .row, .card, .col). */
+
+/* The page fills the window under the 48px top bar instead of scrolling like every other page. */
+.lsm-page.da-schema {
+    max-width: none;
+    padding: 0;
+    height: calc(100vh - 48px);
+    height: calc(100dvh - 48px);
+    min-height: 420px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.lsm-page.da-schema > #dkp-claim-mount { flex: 0 0 auto; }
+.lsm-page.da-schema > #dkp-claim-mount:not(:empty) { padding: 12px 16px 0; }
+.lsm-page.da-schema > .erd { flex: 1 1 auto; min-height: 0; }
+
+.lsm-page .erd {
+    --erd-accent: var(--orange-main);
+    --erd-pk: var(--gold-main);
+    --erd-fk: var(--cyan-main);
+    --erd-uq: var(--violet-main);
+    --erd-line: var(--text-muted);
+    --erd-canvas: var(--bg-main);
+    /* The script overwrites these three from the layout module's METRICS. */
+    --erd-card-w: 280px;
+    --erd-head-h: 44px;
+    --erd-row-h: 30px;
+
+    display: grid;
+    grid-template-rows: 56px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    color: var(--text-main);
+}
+
+/* ---- The bar ---- */
+.erd-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-panel);
+}
+.erd-bar__back {
+    flex: none;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: none;
+}
+.erd-bar__back::after { content: "/"; margin-left: 16px; color: var(--border-soft); }
+.erd-bar__back:hover { color: var(--text-main); }
+.erd-bar__back:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 3px; border-radius: 4px; }
+/* The name and the counts give way (ellipsis) before the buttons do. */
+.erd-bar__db,
+.erd-bar__counts {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+}
+.erd-bar__db {
+    flex: 0 1 auto;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0;
+    color: var(--text-main);
+}
+.erd-bar__counts { flex: 0 4 auto; font-size: 12px; color: var(--text-muted); }
+.erd-bar__spacer { flex: 1 1 0; }
+.erd-bar__tools { flex: none; display: flex; align-items: center; gap: 6px; }
+/* Not the site's "transition: all": that would animate the focus ring from its browser default. */
+.lsm-page .erd-bar .btn { height: 32px; padding: 0 12px; transition: background-color .15s ease, border-color .15s ease; }
+.lsm-page .erd-bar .erd-bar__step { min-width: 32px; padding: 0; font-family: var(--font-mono); font-size: 14px; }
+.lsm-page .erd-bar .btn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
+.erd-bar__zoom {
+    width: 44px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-feature-settings: "tnum";
+}
+
+/* ---- The canvas ----
+   overflow: clip, not just hidden: a hidden box can still be scrolled by the browser (focusing a
+   card that is off screen does it), and a scrolled canvas would shift the whole diagram away from
+   where the script thinks it is. */
+.erd-canvas {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    overflow: clip;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+    background-color: var(--erd-canvas);
+    /* The dot grid. The script sets its size and position from pan and zoom. */
+    background-image: radial-gradient(var(--border-soft) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+.erd-canvas.is-grabbing,
+.erd-canvas.is-grabbing .erd-card__head { cursor: grabbing; }
+.erd-canvas:focus-visible { outline: 2px solid var(--blue-main); outline-offset: -2px; }
+
+/* Everything that pans and zooms sits in this zero-sized box; the script writes its transform. */
+.erd-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.erd-cards { position: absolute; left: 0; top: 0; }
+.erd-edges { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+
+.erd-hint {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    pointer-events: none;
+    /* Cards slide underneath it, so it carries its own backing to stay readable. */
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+    box-shadow: 0 0 0 1px var(--border-soft);
+}
+.erd-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.erd-empty[hidden] { display: none; }
+
+/* ---- Cards ----
+   --erd-hair is one pixel ON SCREEN when zoomed out (a 1px outline scaled to 25% would vanish)
+   and one layer pixel when zoomed in. */
+.erd-card {
+    --erd-hair: max(1px, calc(1px / var(--erd-zoom, 1)));
+    position: absolute;
+    box-sizing: border-box;
+    width: var(--erd-card-w);
+    border: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-panel);
+    box-shadow: 0 0 0 var(--erd-hair) var(--border-soft);
+    transition: box-shadow .15s ease;
+}
+.erd-card.is-dragging {
+    z-index: 2;
+    box-shadow: 0 0 0 calc(2 * var(--erd-hair)) var(--erd-accent);
+}
+
+.erd-card__head {
+    box-sizing: border-box;
+    height: var(--erd-head-h);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    background: var(--bg-card-hover);
+    color: var(--text-main);
+    cursor: grab;
+}
+.erd-card__head:focus-visible { outline: 2px solid var(--blue-main); outline-offset: -2px; border-radius: 8px 8px 0 0; }
+/* The script picks the font size (headerFont) so that a long name fits without being cut. */
+.erd-card__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.3;
+}
+.erd-card__count {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+/* A hub is a table nearly everything points at (Linkshells, AspNetUsers). */
+.erd-card.is-hub .erd-card__head { box-shadow: inset 4px 0 0 var(--blue-main); }
+.erd-card.is-hub { box-shadow: 0 0 0 var(--erd-hair) color-mix(in srgb, var(--blue-main) 60%, var(--border-soft)); }
+
+/* Identity (login framework) tables are structure only, so they look secondary on purpose:
+   a dashed outline and a slightly darker, still opaque body (lines pass behind these cards). */
+.erd-card.is-framework {
+    box-shadow: none;
+    outline: var(--erd-hair) dashed var(--text-muted);
+    background: color-mix(in srgb, var(--bg-panel) 80%, var(--bg-main));
+}
+.erd-card.is-framework .erd-card__head { background: var(--bg-panel-light); color: var(--text-muted); }
+.erd-card.is-framework .erd-card__far { color: var(--text-muted); }
+
+.erd-row {
+    box-sizing: border-box;
+    height: var(--erd-row-h);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    /* The divider is drawn inside the box so that a row stays exactly --erd-row-h tall. */
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--border-soft) 70%, transparent);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+/* 22px holds one badge; a card with a two-badge column (PK + FK) sets --erd-key-w to 46px. */
+.erd-row__keys { flex: none; width: var(--erd-key-w, 22px); display: flex; gap: 4px; }
+.erd-key { font-size: 10px; font-weight: 600; letter-spacing: .02em; }
+.erd-key--pk { color: var(--erd-pk); }
+.erd-key--fk { color: var(--erd-fk); }
+.erd-key--uq { color: var(--erd-uq); }
+/* The name gives way (ellipsis, full text in the title); the type keeps its width. */
+.erd-row__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.erd-row__type { flex: none; font-size: 11.5px; color: var(--text-muted); }
+.erd-row.is-pk .erd-row__name { font-weight: 600; }
+/* Protected: Data Admin never shows this column's values (password hashes, tokens). */
+.erd-row.is-protected .erd-row__name { color: var(--text-muted); font-style: italic; }
+
+/* ---- Far zoom ----
+   Below 60% the rows cannot be read, so they are hidden and each card shows its name at a
+   constant size on screen (12px), capped by --erd-far-max (set per card by the script) so that
+   it never outgrows its card. It ignores the pointer: it covers the header, which is the drag handle. */
+.erd-card__far {
+    display: none;
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    padding: 0 14px;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: min(var(--erd-far-max, 12px), calc(12px / var(--erd-zoom, 1)));
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    color: var(--text-main);
+    pointer-events: none;
+}
+.erd-layer.is-far .erd-card__far { display: flex; }
+.erd-layer.is-far .erd-row,
+.erd-layer.is-far .erd-card__head > * { visibility: hidden; }
+/* With the name written across it, the header band is only a faint hint of where to grab. */
+.erd-layer.is-far .erd-card__head { background: color-mix(in srgb, var(--bg-card-hover) 45%, transparent); }
+.erd-layer.is-far .erd-card.is-framework .erd-card__head { background: transparent; }
+
+/* ---- Relationship lines ----
+   Widths and dashes are divided by the zoom so they keep their size on screen: the whole diagram
+   is usually seen at about 25%, where a 1.5px line would be a third of a pixel. (vector-effect
+   does not help here: the scale is on an HTML ancestor, not inside the SVG.) */
+.erd-edge { opacity: .7; }
+.erd-edge__hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: calc(14px / var(--erd-zoom, 1));
+    pointer-events: stroke;
+}
+.erd-edge__line,
+.erd-edge__mark {
+    stroke: var(--erd-line);
+    stroke-width: calc(1.5px / var(--erd-zoom, 1));
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.erd-edge__line { fill: none; }
+/* The crow's-foot circle is filled with the canvas colour so the line does not show through it. */
+.erd-edge__mark { fill: var(--erd-canvas); }
+/* ON DELETE: cascade is solid, set null is dashed, blocked (restrict) is dotted. */
+.erd-edge.is-set-null .erd-edge__line {
+    stroke-dasharray: calc(7px / var(--erd-zoom, 1)) calc(5px / var(--erd-zoom, 1));
+    stroke-linecap: butt;
+}
+.erd-edge.is-restrict .erd-edge__line {
+    stroke-dasharray: calc(0.1px / var(--erd-zoom, 1)) calc(4.5px / var(--erd-zoom, 1));
+}
+/* Lines into a hub would bury the picture (over half of all lines), so they are faint and are
+   not hover targets. */
+.erd-edge.is-hub { opacity: .16; }
+.erd-edge.is-hub .erd-edge__hit { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    .erd-card,
+    .lsm-page .erd-bar .btn { transition: none; }
+}
+/* ===== end Data Admin: schema diagram ===== */

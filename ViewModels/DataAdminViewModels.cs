@@ -232,3 +232,17 @@ public sealed class DataAdminActiveFilter
     public required string Value { get; init; }
     public required string Label { get; init; }
 }
+
+// The schema diagram page: the header's numbers plus the graph as one JSON block. The diagram
+// itself is drawn in the browser (wwwroot/js/data-admin-schema.js) from DiagramJson.
+public sealed class DataAdminSchemaViewModel
+{
+    public required string DatabaseName { get; init; }
+    public required int TableCount { get; init; }
+    public required int ColumnCount { get; init; }
+    public required int RelationshipCount { get; init; }
+    // Ids of the tables that currently have a rows page, so the diagram only links to those.
+    public required IReadOnlyList<string> ShownTableIds { get; init; }
+    // DataAdminSchemaGraph.Json: already serialized and safe inside a <script> data block.
+    public required string DiagramJson { get; init; }
+}

@@ -1,6 +1,7 @@
 using System.Reflection;
 using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Controllers;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
@@ -66,24 +67,52 @@ public class DataAdminControllerShapeTests
     [Fact]
     public void RouteTemplates_ParseAndCoverEveryPage()
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddControllers().AddApplicationPart(Controller.Assembly);
-        using var provider = services.BuildServiceProvider();
-
-        var templates = provider.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items
-            .OfType<ControllerActionDescriptor>()
-            .Where(descriptor => descriptor.ControllerTypeInfo == Controller)
-            .Select(descriptor => descriptor.AttributeRouteInfo?.Template)
-            .ToList();
+        var templates = RouteTemplates();
 
         Assert.Contains("data-admin", templates);
         Assert.Contains("data-admin/tables", templates);
+        Assert.Contains("data-admin/schema", templates);
         Assert.Contains("data-admin/{slug}", templates);
         Assert.Contains("data-admin/{slug}/{id}", templates);
         Assert.Contains("data-admin/{slug}/create", templates);
         Assert.Contains("data-admin/{slug}/{id}/edit", templates);
         Assert.Contains("data-admin/{slug}/{id}/delete", templates);
         Assert.All(templates, template => Assert.False(string.IsNullOrEmpty(template)));
+    }
+
+    // /data-admin/tables and /data-admin/schema sit where a table's slug goes (/data-admin/{slug}),
+    // and a literal segment wins over a parameter. A table whose slug equalled one of them would be
+    // unreachable, so the catalog refuses the reserved slugs. This keeps the two lists in step: a
+    // new page added here without reserving its name fails the build, not a table in production.
+    [Fact]
+    public void EveryLiteralFirstSegment_IsAReservedSlug()
+    {
+        var literals = RouteTemplates()
+            .Select(template => template!.Split('/'))
+            .Where(segments => segments.Length > 1 && !segments[1].StartsWith('{'))
+            .Select(segments => segments[1])
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Contains("tables", literals);
+        Assert.Contains("schema", literals);
+        Assert.All(literals, literal => Assert.True(
+            DataAdminDefaults.ReservedSlugs.Contains(literal),
+            $"/data-admin/{literal} is a page, but '{literal}' is not in DataAdminDefaults.ReservedSlugs."));
+    }
+
+    // MVC's action table for this controller, built the way the app builds it at startup.
+    private static List<string?> RouteTemplates()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddControllers().AddApplicationPart(Controller.Assembly);
+        using var provider = services.BuildServiceProvider();
+
+        return provider.GetRequiredService<IActionDescriptorCollectionProvider>().ActionDescriptors.Items
+            .OfType<ControllerActionDescriptor>()
+            .Where(descriptor => descriptor.ControllerTypeInfo == Controller)
+            .Select(descriptor => descriptor.AttributeRouteInfo?.Template)
+            .ToList();
     }
 }
