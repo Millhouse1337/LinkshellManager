@@ -111,6 +111,8 @@ public class DataAdminSchemaContractTests
         "data-erd-opt=\"hubs\"", "data-erd-opt=\"framework\"", "data-erd-panel-toggle",
         // Focus mode: the bar's Focus button and the chip (its name slot and its leave button).
         "data-erd-focus", "data-erd-focus-chip", "data-erd-focus-name", "data-erd-focus-exit",
+        // The bar's View records link; the script writes its href and its disabled state.
+        "data-erd-records",
     };
 
     private static ApplicationDbContext NewInMemoryContext() =>
@@ -262,6 +264,64 @@ public class DataAdminSchemaContractTests
 
         Assert.DoesNotMatch(@"(?i)\son[a-z]+\s*=", view);
         Assert.DoesNotMatch(@"(?i)\sstyle\s*=", view);
+    }
+
+    /// <summary>
+    /// The bar's View records link ships disabled: no href (an anchor without one cannot take the
+    /// keyboard focus, so it leaves the tab order as a disabled button would), aria-disabled, and
+    /// role="link" so it is still announced as a link. The script enables it by writing the href
+    /// and disables it again by removing it. A view that shipped an href would be a dead link until
+    /// a table is selected; a script that only toggled aria-disabled would leave a live one.
+    /// </summary>
+    [Fact]
+    public void ViewRecordsLinkStartsDisabledWithoutAnHref()
+    {
+        var view = ReadView();
+        var page = StripLineComments(
+            File.ReadAllText(Path.Combine(FindRepoDirectory("wwwroot"), "js", PageScript)));
+
+        var link = Assert.Single(
+            Regex.Matches(view, @"<a\b[^>]*>").Select(match => match.Value),
+            tag => Regex.IsMatch(tag, @"\sdata-erd-records(?=[\s>/])"));
+        Assert.Contains("aria-disabled=\"true\"", link, StringComparison.Ordinal);
+        Assert.Contains("role=\"link\"", link, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"\shref\s*=", link);
+
+        Assert.Contains("removeAttribute('href')", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Back from a records page returns to the diagram with the same table selected: every link to
+    /// Index in the four records views carries the table as a fragment (#table=slug), and the page
+    /// script reads it from location.hash. Either side alone fails silently (the diagram simply
+    /// opens with nothing selected).
+    /// </summary>
+    [Fact]
+    public void RecordsPagesLinkBackToTheDiagramWithTheTableInTheHash()
+    {
+        var folder = Path.Combine(FindRepoDirectory("Views"), "DataAdmin");
+        foreach (var name in new[] { "List.cshtml", "Details.cshtml", "Edit.cshtml", "Delete.cshtml" })
+        {
+            var view = File.ReadAllText(Path.Combine(folder, name));
+            // Links to Index on this controller only: a link to another controller's Index carries no table.
+            var backLinks = Regex.Matches(view, @"<a\b[^>]*>").Select(match => match.Value)
+                .Where(tag => tag.Contains("asp-action=\"Index\"", StringComparison.Ordinal))
+                .Where(tag => !tag.Contains("asp-controller=", StringComparison.Ordinal)
+                    || tag.Contains("asp-controller=\"DataAdmin\"", StringComparison.Ordinal))
+                .ToList();
+            Assert.NotEmpty(backLinks);
+            foreach (var tag in backLinks)
+            {
+                Assert.True(
+                    tag.Contains("asp-fragment=\"table=@Model.Slug\"", StringComparison.Ordinal),
+                    $"{name}: a link to Index must carry asp-fragment=\"table=@Model.Slug\": {tag}");
+            }
+        }
+
+        var page = StripLineComments(
+            File.ReadAllText(Path.Combine(FindRepoDirectory("wwwroot"), "js", PageScript)));
+        Assert.Contains("'table='", page, StringComparison.Ordinal);
+        Assert.Contains("location.hash", page, StringComparison.Ordinal);
     }
 
     // Both scripts comment with "//" only (house style), so this is enough to drop their prose.

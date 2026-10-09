@@ -26,6 +26,10 @@
             <button type="button" class="btn sm erd-bar__step" data-erd-zoom-in title="Zoom in (+)" aria-label="Zoom in">+</button>
             <button type="button" class="btn sm" data-erd-fit title="Fit the whole diagram (0)">Fit</button>
             <button type="button" class="btn sm" data-erd-reset title="Forget moved tables and lay them out again">Reset layout</button>
+            @* A link, not a button: it opens a page, so middle-click, open in a new tab and copy link
+               work. Disabled = no href (out of the tab order) + aria-disabled; the script writes both. *@
+            <a class="btn sm primary" data-erd-records role="link" aria-disabled="true"
+               title="Open the selected table's records (V). Select a table first.">View records</a>
             <button type="button" class="btn sm" data-erd-focus disabled aria-pressed="false" title="Show only one table and its neighbours (F). Select a table first.">Focus</button>
             <button type="button" class="btn sm" data-erd-panel-toggle aria-controls="erd-panel" aria-expanded="true" title="Show or hide the side panel">Panel</button>
         </div>

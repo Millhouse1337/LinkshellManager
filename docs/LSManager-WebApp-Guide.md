@@ -89,12 +89,14 @@ against the treasury in the same transaction.
 
 ### Data Admin *(super admin only)*
 A browser over the database for the one account marked super admin. It opens on the **schema diagram**
-(below): select a table there and the panel's **Browse rows** link opens that table's list page, with
-search, sort, filters and paging. From the list, a details page shows every column, its foreign keys link
-to the row they point at, and it lists every table with rows pointing back; where the table allows it
-there are add/edit/delete pages too. The delete page shows what else goes with the row (deleted,
-unlinked, or blocking the delete) before you confirm. Ledgers and history tables are read-only,
-credentials and images are never shown, and `Linkshell` and `App User` can never be deleted from here.
+(below): select a table there (click its card, or pick it in the panel) and **View records** (the bar
+button, the panel, or V) opens its list page, with search, sort, filters and paging; Back from any
+records page returns to the diagram with that table still selected. From the list, a details page shows
+every column, its foreign keys link to the row they point at, and it lists every table with rows pointing
+back; where the table allows it there are add/edit/delete pages too. The delete page shows what else goes
+with the row (deleted, unlinked, or blocking the delete) before you confirm. Ledgers and history tables
+are read-only, credentials and images are never shown, and `Linkshell` and `App User` can never be
+deleted from here.
 
 **Schema diagram** (the Data Admin landing page) draws the whole database as one
 picture: a card per table listing its columns and keys, and a line for every foreign key, whose ends
@@ -104,8 +106,8 @@ move it (the browser remembers where you left it), and hover or click a table or
 what it connects to. The side panel searches tables and columns, lists every relationship and
 many-to-many pairing, and holds the view options (keys only, square lines, hide the login tables);
 **Focus**, or a double-click on a table, shows just that table and its neighbours until you press
-Esc. The diagram itself is structure only, never rows: every app table links to its list page from the
-panel, and the login (Identity) tables are drawn but have no rows page.
+Esc. The diagram itself is structure only, never rows: View records opens an app table's list page, and
+the login (Identity) tables are drawn but have no records page.
 
 ## Customize Linkshell (the control panel)
 `Configurations → Customize Linkshell` (officer only):

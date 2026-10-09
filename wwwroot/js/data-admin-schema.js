@@ -1,7 +1,9 @@
 // The Data Admin schema diagram (/data-admin): draws every table as a card and every foreign
 // key as a line, lets the viewer pan, zoom and move the cards about, lights up what the pointer is
 // over, keeps the side panel (search, selection, lists, legend) in step with the picture, cuts the
-// picture down to one table and its neighbours (focus mode), and answers the keyboard.
+// picture down to one table and its neighbours (focus mode), answers the keyboard, and opens the
+// selected table's records: the View records link, the v key, and a #table=<slug> deep link that
+// selects a table on arrival (the records pages link back with it).
 //
 // Why two files: every number on this page (where a card goes, how tall it is, the path of a line,
 // the pan and zoom maths) comes from data-admin-schema-layout.js (window.LsmSchemaLayout), which has
@@ -66,6 +68,11 @@
     const focusName = root.querySelector('[data-erd-focus-name]');
     const focusExit = root.querySelector('[data-erd-focus-exit]');
     if (!focusButton || !focusChip || !focusName || !focusExit) { return; }
+
+    // The bar's View records link: the script writes its href (the pinned table's records page)
+    // and its disabled state.
+    const recordsLink = root.querySelector('[data-erd-records]');
+    if (!recordsLink) { return; }
 
     const M = L.METRICS;
     const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -135,9 +142,16 @@
         ordinal(nameOf(a).toLowerCase(), nameOf(b).toLowerCase()) || ordinal(a, b);
     const tableIdsByName = index.tables.map((table) => table.id).sort(byName);
 
-    // Where the "Browse rows" link goes. Every table with a slug has a records page (the policy
-    // decides which tables get one); everything else is structure only.
-    const browseUrl = root.getAttribute('data-browse-url') || '';
+    // Where View records goes. Every table with a slug has a records page (the policy decides
+    // which tables get one); everything else is structure only. The slug is also the deep link
+    // (#table=<slug>), looked up lower-cased so a hand-typed one still finds its table.
+    const recordsUrl = root.getAttribute('data-browse-url') || '';
+    const idBySlug = new Map();
+    index.tables.forEach((table) => {
+        if (table.slug) { idBySlug.set(String(table.slug).toLowerCase(), table.id); }
+    });
+    const slugOf = (id) => index.byId[id].slug || null;
+    const recordsUrlFor = (id) => recordsUrl.replace('__slug__', encodeURIComponent(slugOf(id)));
 
     // ---- What the browser remembers ------------------------------------------------------------
     // One localStorage entry: { v: 1, options, positions: { all: { id: [x, y] }, keys, names } }.
@@ -639,6 +653,8 @@
         renderRels();
         applyHighlight();
         applyFocusChrome();
+        applyRecordsLink();
+        syncHash();
         restoreFocus(had);
         if (pinned.table !== null) { revealListed(pinned.table); }
     }
@@ -1038,9 +1054,9 @@
         // A table with a slug has a records page; a login table is structure only; a table with
         // neither (policy-hidden) gets nothing.
         if (table.slug) {
-            const link = el('a', 'btn sm primary', 'Browse rows');
-            link.setAttribute('data-erd-browse', '');
-            link.href = browseUrl.replace('__slug__', encodeURIComponent(table.slug));
+            const link = el('a', 'btn sm primary', 'View records');
+            link.href = recordsUrlFor(id);
+            link.title = 'Open the records of ' + nameOf(id);
             actions.appendChild(link);
         } else if (table.framework) {
             actions.appendChild(el('p', 'erd-selected__note',
@@ -1324,13 +1340,18 @@
         }
         if (restored) { positions = restored; } else { computePositions(); }
         if (!focusDrawn(hover)) { hover = NOTHING; }
-        if (!focusDrawn(pinned)) { pinned = NOTHING; }
+        const dropped = pinned !== NOTHING && !focusDrawn(pinned);
+        if (dropped) { pinned = NOTHING; }
         renderCards();
         renderEdges();
         renderPanel();
         applyHighlight();
         applyDim();
         applyFocusChrome();
+        applyRecordsLink();
+        // A pin this redraw has dropped (its table hidden by a view option) takes its hash with
+        // it; a redraw that keeps the pin leaves the address alone.
+        if (dropped) { syncHash(); }
         restoreFocus(had);
     }
 
@@ -1425,6 +1446,86 @@
         canvas.focus({ preventScroll: true });
     }
 
+    // ---- View records --------------------------------------------------------------------------
+    // The pinned table's records page (/data-admin/<slug>): the bar's link, the v key, and the
+    // same link at the top of the panel's Selected section. The pinned table is also written to
+    // the address as #table=<slug>, so a records page's Back link (or a refresh, or a bookmark)
+    // comes back to the diagram with that table selected.
+
+    const HASH_PREFIX = 'table=';
+
+    // The pinned table when it has a records page, else null.
+    function recordsTable() {
+        const id = pinned.table;
+        return id !== null && isDrawn(id) && slugOf(id) ? id : null;
+    }
+
+    // Why the link is disabled: nothing (or a relationship) is pinned, the pinned table is a
+    // login table, or it has no page for another reason (policy-hidden).
+    function recordsDisabledTitle() {
+        if (pinned.table === null || !isDrawn(pinned.table)) {
+            return 'Open the selected table\'s records (V). Select a table first.';
+        }
+        return index.byId[pinned.table].framework
+            ? 'Login tables have no records page: structure only.'
+            : 'This table has no records page.';
+    }
+
+    // Writes the bar's link: a real href while the pinned table has a records page (the browser
+    // then gives middle-click, open in a new tab and copy link), else no href and aria-disabled.
+    // An anchor without an href cannot hold the keyboard focus: taking the href off the focused
+    // link would drop the focus to the body, so the diagram takes it first (as the Focus button).
+    function applyRecordsLink() {
+        const id = recordsTable();
+        if (id !== null) {
+            recordsLink.setAttribute('href', recordsUrlFor(id));
+            recordsLink.removeAttribute('aria-disabled');
+            recordsLink.title = 'Open the records of ' + nameOf(id) + ' (V)';
+            return;
+        }
+        if (document.activeElement === recordsLink) { canvas.focus({ preventScroll: true }); }
+        recordsLink.removeAttribute('href');
+        recordsLink.setAttribute('aria-disabled', 'true');
+        recordsLink.title = recordsDisabledTitle();
+    }
+
+    // The slug the address names (#table=<slug>), lower-cased, or null when the hash is not ours.
+    // Decoded first, in case a link percent-encoded it; a hash that will not decode is read as it is.
+    function readHashSlug() {
+        let hash = window.location.hash.replace(/^#/, '');
+        try { hash = decodeURIComponent(hash); } catch (e) { /* not percent-encoded: keep the text */ }
+        return hash.indexOf(HASH_PREFIX) === 0 ? hash.slice(HASH_PREFIX.length).toLowerCase() : null;
+    }
+
+    // The fragment the page arrived with when it is not ours (an anchor of someone else's, or
+    // nothing): a pin writes over it, and the unpin puts it back instead of clearing the address.
+    const foreignHash = readHashSlug() === null ? window.location.hash : '';
+
+    // Keeps the address in step with the pin: #table=<slug> while a table with a records page is
+    // pinned, and once it is not, the fragment the page arrived with (none, usually). replaceState,
+    // never pushState: a pin is not a page of its own, and the browser's Back must still leave the
+    // diagram. A hash that is not ours is never cleared. Called from setPinned, and from redraw
+    // only when the redraw has dropped the pin: the first redraw at start-up runs before the hash
+    // has been read, and must not touch it.
+    function syncHash() {
+        try {
+            const id = recordsTable();
+            if (id !== null) {
+                window.history.replaceState(null, '', '#' + HASH_PREFIX + slugOf(id));
+            } else if (readHashSlug() !== null) {
+                window.history.replaceState(null, '', window.location.pathname + window.location.search + foreignHash);
+            }
+        } catch (e) {
+            // A browser that refuses (a sandboxed frame, say) keeps the address as it is.
+        }
+    }
+
+    // The v key: the page the link opens, while the link is enabled.
+    function openRecords() {
+        const id = recordsTable();
+        if (id !== null) { window.location.assign(recordsUrlFor(id)); }
+    }
+
     // ---- Keyboard ------------------------------------------------------------------------------
     // Keys are left alone while the viewer types (a field or an editable element has them), with
     // Ctrl, Alt or Meta held (Ctrl+0 and Ctrl+- belong to the browser), when something else on
@@ -1486,6 +1587,8 @@
             side.search.focus({ preventScroll: true });
         } else if (key === 'f' || key === 'F') {
             onFocusKey();
+        } else if (key === 'v' || key === 'V') {
+            openRecords();
         } else if (key === 'Escape') {
             // One level at a time: out of focus mode, then the search text, then the pin.
             if (focusTable !== null) {
@@ -1719,6 +1822,19 @@
     renderLegend();
     redraw();
     fit();
+    // A deep link (#table=<slug>, written by the records pages' Back links and by every pin)
+    // selects that table and brings its card into view. An unknown or hidden table is ignored
+    // and the hash left as it is.
+    const linkedSlug = readHashSlug();
+    const linked = linkedSlug !== null ? idBySlug.get(linkedSlug) : undefined;
+    let pendingCentre = null;
+    if (linked !== undefined && isDrawn(linked)) {
+        pinTable(linked);
+        centreOn([linked]);
+        // A canvas with no size yet (the page laid out while hidden) cannot centre: the resize
+        // watch below does it once the canvas has a size and has been fitted.
+        if (!touched) { pendingCentre = linked; }
+    }
 
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);
@@ -1753,9 +1869,17 @@
     onClick('[data-erd-reset]', resetLayout);
 
     // Until the viewer takes over, keep the whole diagram in view as the canvas changes size
-    // (the first layout pass, a window resize).
-    if (typeof window.ResizeObserver === 'function') {
-        resizeWatch = new window.ResizeObserver(() => { if (!touched) { fit(); } });
+    // (the first layout pass, a window resize). Not after a deep link: centring on its card
+    // counts as the viewer's view (touched), and a later resize must not re-fit over it.
+    if (!touched && typeof window.ResizeObserver === 'function') {
+        resizeWatch = new window.ResizeObserver(() => {
+            if (touched) { return; }
+            fit();
+            // The deep link's card, centred now that there is room (centreOn marks the view
+            // touched and disconnects this watch; a canvas still without a size leaves it for
+            // the next change).
+            if (pendingCentre !== null) { centreOn([pendingCentre]); }
+        });
         resizeWatch.observe(canvas);
     }
 })();

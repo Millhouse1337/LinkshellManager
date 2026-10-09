@@ -2101,14 +2101,17 @@
 }
 .erd-bar__spacer { flex: 1 1 0; }
 .erd-bar__tools { flex: none; display: flex; align-items: center; gap: 6px; }
-/* Not the site's "transition: all": that would animate the focus ring from its browser default. */
-.lsm-page .erd-bar .btn { height: 32px; padding: 0 12px; transition: background-color .15s ease, border-color .15s ease; }
+/* Not the site's "transition: all": that would animate the focus ring from its browser default.
+   The glow and the brightening are the primary View records link's hover; they ease here as they
+   do in the panel's copy of it. */
+.lsm-page .erd-bar .btn { height: 32px; padding: 0 12px; transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, filter .15s ease; }
 .lsm-page .erd-bar .erd-bar__step { min-width: 32px; padding: 0; font-family: var(--font-mono); font-size: 14px; }
-/* Keyboard focus is the :focus-visible outline, in the bar and in the panel ("Browse rows").
-   Bootstrap's .btn:focus halo, which would stay on after a mouse click and double the ring, is
-   switched off in its favour; the primary Browse rows link keeps its own glow. */
+/* Keyboard focus is the :focus-visible outline, in the bar and in the panel. Bootstrap's
+   .btn:focus halo, which would stay on after a mouse click and double the ring, is switched off
+   in its favour; the primary View records link (in the bar, and in the panel's Selected section)
+   keeps its own glow. */
 .lsm-page .erd .btn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
-.lsm-page .erd-bar .btn:focus { box-shadow: none; }
+.lsm-page .erd-bar .btn:focus:not(.primary) { box-shadow: none; }
 .lsm-page .erd-side .btn:focus:not(.primary) { box-shadow: none; }
 .lsm-page .erd-side .btn { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, filter .15s ease; }
 /* A disabled button keeps its tooltip, which says what would enable it (the site's .btn:disabled
@@ -2137,6 +2140,12 @@
 .lsm-page .erd-bar [data-erd-focus][aria-pressed="true"]:hover {
     background: color-mix(in srgb, var(--erd-accent) 30%, var(--bg-card-hover));
 }
+/* The View records link while nothing it could open is selected: dimmed, the not-allowed cursor,
+   and none of the primary button's glow, on hover too (the site's .btn.primary:hover brightens it
+   and widens the glow). Not pointer-events: none, which the site's .btn:disabled uses: the
+   tooltip must stay, it says what would enable the link. */
+.lsm-page .erd-bar [data-erd-records][aria-disabled="true"] { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.lsm-page .erd-bar [data-erd-records][aria-disabled="true"]:hover { filter: none; box-shadow: none; }
 /* The focus chip: "Focus: <table>" and a button to leave. It takes the room the name needs, up
    to 420px, and gives way only after the counts have gone: the name is then cut with an ellipsis
    (the script puts the whole of it in the tooltip). */
@@ -2176,12 +2185,17 @@
 .erd-bar__chip > .erd-linkbtn:focus-visible { border-radius: 50%; outline-offset: 0; }
 /* Below 1500px the bar cannot hold the name, the counts and the tools at once, and below 1600px
    not the chip as well: the counts give way whole (cut to "73 tables - 924 c..." they said
-   nothing), so the name never gains or loses its ellipsis on the way into focus mode. */
+   nothing), so the name never gains or loses its ellipsis on the way into focus mode. Below
+   1366px the chip at its 140px floor still leaves the tools short, and the section label goes
+   too while focus mode is on (the chip says where the viewer is); the database name is never cut. */
 @media (max-width: 1499px) {
     .lsm-page .erd-bar__counts { display: none; }
 }
 @media (max-width: 1599px) {
     .erd.is-focus .erd-bar__counts { display: none; }
+}
+@media (max-width: 1365px) {
+    .erd.is-focus .erd-bar__section { display: none; }
 }
 .erd-bar__zoom {
     width: 44px;

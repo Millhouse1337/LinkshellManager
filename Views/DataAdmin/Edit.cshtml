@@ -8,7 +8,7 @@
 <div class="page-head fade d1">
     <div>
         <div class="page-eyebrow">
-            <a asp-action="Index">Data Admin</a> &rsaquo; <a asp-action="List" asp-route-slug="@Model.Slug">@Model.DisplayName</a>
+            <a asp-action="Index" asp-fragment="table=@Model.Slug">Data Admin</a> &rsaquo; <a asp-action="List" asp-route-slug="@Model.Slug">@Model.DisplayName</a>
             @if (!Model.IsCreate)
             {
                 <text>&rsaquo; </text><a asp-action="Details" asp-route-slug="@Model.Slug" asp-route-id="@Model.Key">@Model.Label</a>
