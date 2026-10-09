@@ -211,16 +211,15 @@ builder.Services.AddScoped<GlobalSettingsService>();
 builder.Services.AddScoped<AdminOverrideService>();
 
 // Data Admin: the super-admin table browser. The catalog is built ONCE from the EF model (itself a
-// process singleton) plus the code-side DataAdminPolicy, then only read. Which tables are SHOWN is
-// a separate runtime choice stored in AppSettings (DataAdminSelectionService), so the catalog can
-// never expose a table the policy hides.
+// process singleton) plus the code-side DataAdminPolicy, then only read. Every table in it is
+// browsable; what a table allows (hidden, read-only, no create, no delete) is DataAdminPolicy's
+// decision alone, with no runtime setting to widen or narrow it.
 builder.Services.AddSingleton(sp =>
 {
     using var scope = sp.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     return new DataAdminCatalog(db.Model, DataAdminPolicy.Default);
 });
-builder.Services.AddScoped<DataAdminSelectionService>();
 builder.Services.AddScoped<DataAdminQueryService>();
 builder.Services.AddScoped<DataAdminEditor>();
 builder.Services.AddScoped<JobsRosterService>();

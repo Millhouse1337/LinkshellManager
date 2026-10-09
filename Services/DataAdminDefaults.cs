@@ -51,9 +51,12 @@ public static class DataAdminDefaults
     // every other line.
     public const int SchemaHubMinInbound = 15;
 
-    // Literal route segments under /data-admin. A table slug must never collide with one.
+    // Literal route segments under /data-admin that a table slug must never collide with. The three
+    // here guard the second segment (/data-admin/{slug}/create, .../{id}/edit, .../{id}/delete); no
+    // page sits beside {slug} today. The list stays so a future one has somewhere to register, and
+    // the catalog refuses a colliding slug.
     public static readonly IReadOnlySet<string> ReservedSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "tables", "create", "edit", "delete",
+        "create", "edit", "delete",
     };
 }

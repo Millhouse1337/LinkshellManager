@@ -12,7 +12,7 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The Data Admin controller can reach every shown table across every linkshell, so its gate must
+// The Data Admin controller can reach every table across every linkshell, so its gate must
 // be structural: [Authorize] + [SuperAdminOnly] on the CLASS (no action can forget it), no action
 // may opt out with [AllowAnonymous], and every mutation must carry [ValidateAntiForgeryToken] on
 // top of the global CookieAuthAntiforgeryFilter, matching the rest of the MVC controllers. There
@@ -70,7 +70,6 @@ public class DataAdminControllerShapeTests
         var templates = RouteTemplates();
 
         Assert.Contains("data-admin", templates);
-        Assert.Contains("data-admin/tables", templates);
         Assert.Contains("data-admin/{slug}", templates);
         Assert.Contains("data-admin/{slug}/{id}", templates);
         Assert.Contains("data-admin/{slug}/create", templates);
@@ -79,10 +78,11 @@ public class DataAdminControllerShapeTests
         Assert.All(templates, template => Assert.False(string.IsNullOrEmpty(template)));
     }
 
-    // /data-admin/tables sits where a table's slug goes (/data-admin/{slug}), and a literal segment
-    // wins over a parameter. A table whose slug equalled it would be unreachable, so the catalog
-    // refuses the reserved slugs. This keeps the two lists in step: a new page added here without
-    // reserving its name fails the build, not a table in production.
+    // A literal first segment (/data-admin/<page>) sits where a table's slug goes (/data-admin/{slug}),
+    // and a literal wins over a parameter: a table whose slug equalled it would be unreachable, so
+    // the catalog refuses the reserved slugs. No such page exists today (the list below is empty),
+    // so this is a guard for the next one: a page added here without reserving its name fails the
+    // build, not a table in production.
     [Fact]
     public void EveryLiteralFirstSegment_IsAReservedSlug()
     {
@@ -93,7 +93,6 @@ public class DataAdminControllerShapeTests
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-        Assert.Contains("tables", literals);
         Assert.All(literals, literal => Assert.True(
             DataAdminDefaults.ReservedSlugs.Contains(literal),
             $"/data-admin/{literal} is a page, but '{literal}' is not in DataAdminDefaults.ReservedSlugs."));

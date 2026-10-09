@@ -1,14 +1,15 @@
 namespace LinkshellManagerDiscordApp.Services;
 
-// Groups tables by cascade delete for the Data Admin "Choose tables" page: a table nests under
-// the table whose deletion would delete its rows. Built from an edge list (dependent -> principal
-// for every Cascade foreign key) rather than from EF metadata directly so the shape rules can be
-// unit-tested with plain strings, including the cycle guard the real model never exercises.
+// Groups tables by cascade delete for Data Admin: a table nests under the table whose deletion
+// would delete its rows (the schema diagram lays tables out by the same rule). Built from an edge
+// list (dependent -> principal for every Cascade foreign key) rather than from EF metadata directly
+// so the shape rules can be unit-tested with plain strings, including the cycle guard the real
+// model never exercises.
 //
 // Parent choice when a table has several cascade principals (DkpPoolEventType cascades from both
 // Linkshell and DkpPool): the DEEPEST principal wins, so the table sits under the most specific
 // owner; a tie goes to the item `preferOnTie` marks (Linkshell, the tenant root), then to the
-// name. The other principals are kept as AlsoDeletedWith so the page can still say so.
+// name. The other principals are kept as AlsoDeletedWith so a caller can still say so.
 public sealed class DataAdminCascadeForest<T> where T : notnull
 {
     public sealed class Node

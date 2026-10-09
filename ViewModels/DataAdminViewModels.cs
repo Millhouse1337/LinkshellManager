@@ -5,35 +5,6 @@ namespace LinkshellManagerDiscordApp.ViewModels;
 // View models for the Data Admin pages. Views bind to these, never to the engine's own types, so
 // a Razor file cannot reach a DbContext or an expression builder by accident.
 
-public sealed class DataAdminTablesViewModel
-{
-    public List<DataAdminTableNode> Roots { get; } = new();
-    public bool ShowCounts { get; set; }
-    public int SelectedCount { get; set; }
-    public int TotalCount { get; set; }
-}
-
-// One row of the chooser tree. Rendered by the recursive ~/Views/DataAdmin/_TableNode.cshtml.
-public sealed class DataAdminTableNode
-{
-    public required string ClrName { get; init; }
-    public required string DisplayName { get; init; }
-    public required string TableName { get; init; }
-    public required string Slug { get; init; }
-    // Slash-joined CLR names from the root down, so the "tick group" helper can find descendants.
-    public required string Path { get; init; }
-    public required int Depth { get; init; }
-    public bool Selected { get; init; }
-    public bool ReadOnly { get; init; }
-    public bool NoCreate { get; init; }
-    public bool NoDelete { get; init; }
-    public string? DiscordSideEffect { get; init; }
-    public long? RowCount { get; init; }
-    public IReadOnlyList<string> AlsoDeletedWith { get; init; } = Array.Empty<string>();
-    public IReadOnlyList<string> CascadeDescendants { get; init; } = Array.Empty<string>();
-    public List<DataAdminTableNode> Children { get; } = new();
-}
-
 // One list page. The route helpers re-emit the whole query (search, sort, filters) so no link
 // ever drops a filter -- the house rule from Views/ManageTeam/Index.cshtml, generalised.
 public sealed class DataAdminListViewModel
@@ -86,7 +57,7 @@ public sealed class DataAdminListCell
     public string Text { get; set; } = string.Empty;
     public bool IsEmpty { get; init; }
     public bool IsNumeric { get; init; }
-    // Set when the cell is a foreign key to a table that is currently shown: the principal row's details page.
+    // Set when the cell is a foreign key to a table that is not policy-hidden: the principal row's details page.
     public string? LinkSlug { get; set; }
     public string? LinkKey { get; set; }
 }
@@ -193,7 +164,8 @@ public sealed class DataAdminRelatedTable
     public long Count { get; init; }
     // What happens to those rows when this row is deleted, in words.
     public required string OnDelete { get; init; }
-    public bool IsShown { get; init; }
+    // A policy-hidden dependent: named and counted, never linked, its pages are 404.
+    public bool IsHidden { get; init; }
     // ?f.<ForeignKeyColumn>=<key> for the dependent's list page.
     public required Dictionary<string, string> FilterRoute { get; init; }
 }
@@ -216,8 +188,6 @@ public sealed class DataAdminSchemaViewModel
     public required int TableCount { get; init; }
     public required int ColumnCount { get; init; }
     public required int RelationshipCount { get; init; }
-    // Ids of the tables that currently have a rows page, so the diagram only links to those.
-    public required IReadOnlyList<string> ShownTableIds { get; init; }
     // DataAdminSchemaGraph.Json: already serialized and safe inside a <script> data block.
     public required string DiagramJson { get; init; }
 }

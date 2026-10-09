@@ -16,9 +16,6 @@ namespace LinkshellManager.Tests;
 // why EscapeLike has its own test on the pattern string.
 public class DataAdminQueryServiceTests
 {
-    private static readonly IReadOnlySet<string> ShowRulesAndLinkshells = new HashSet<string> { "Rule", "Linkshell" };
-    private static readonly IReadOnlySet<string> ShowRulesOnly = new HashSet<string> { "Rule" };
-
     private static ApplicationDbContext NewInMemoryContext() =>
         new(new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -50,16 +47,22 @@ public class DataAdminQueryServiceTests
         return db;
     }
 
-    private static DataAdminModel Rules(ApplicationDbContext db) =>
-        new DataAdminCatalog(db.Model, DataAdminPolicy.Default).FindByClrType(typeof(Rule))
+    private static DataAdminModel Rules(ApplicationDbContext db, DataAdminPolicy? policy = null) =>
+        new DataAdminCatalog(db.Model, policy ?? DataAdminPolicy.Default).FindByClrType(typeof(Rule))
         ?? throw new InvalidOperationException("Rule is not in the catalog.");
+
+    // The default policy hides nothing, so a Hidden principal needs a policy of its own.
+    private static readonly DataAdminPolicy LinkshellHidden = new(new Dictionary<Type, DataAdminEntityPolicy>
+    {
+        [typeof(Linkshell)] = new() { Flags = DataAdminPolicyFlags.Hidden },
+    });
 
     private static DataAdminListQuery Query(params (string Key, string Value)[] pairs) =>
         DataAdminListQuery.Parse(new QueryCollection(pairs.ToDictionary(p => p.Key, p => new StringValues(p.Value))));
 
     private static async Task<int[]> IdsAsync(ApplicationDbContext db, DataAdminListQuery query)
     {
-        var page = await new DataAdminQueryService(db).ListAsync(Rules(db), query, ShowRulesOnly, CancellationToken.None);
+        var page = await new DataAdminQueryService(db).ListAsync(Rules(db), query, CancellationToken.None);
         return page.Rows.Select(row => int.Parse(row.Key, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
     }
 
@@ -68,7 +71,7 @@ public class DataAdminQueryServiceTests
     {
         using var db = await SeededAsync();
 
-        var model = await new DataAdminQueryService(db).ListAsync(Rules(db), Query(), ShowRulesOnly, CancellationToken.None);
+        var model = await new DataAdminQueryService(db).ListAsync(Rules(db), Query(), CancellationToken.None);
 
         Assert.Equal(new[] { 5, 4, 3, 2, 1 }, await IdsAsync(db, Query()));
         Assert.Equal(5, model.Total);
@@ -108,7 +111,7 @@ public class DataAdminQueryServiceTests
         Assert.Equal(new[] { 3, 5 }, (await IdsAsync(db, Query(("f.LinkshellId", "2")))).OrderBy(id => id));
         Assert.Equal(5, (await IdsAsync(db, Query(("f.NoSuchColumn", "1")))).Length);
         // ...and an unknown filter is dropped from the links too, rather than following every page.
-        var stale = await new DataAdminQueryService(db).ListAsync(Rules(db), Query(("f.NoSuchColumn", "1"), ("f.LinkshellId", "1")), ShowRulesOnly, CancellationToken.None);
+        var stale = await new DataAdminQueryService(db).ListAsync(Rules(db), Query(("f.NoSuchColumn", "1"), ("f.LinkshellId", "1")), CancellationToken.None);
         Assert.Equal(new[] { "f.LinkshellId" }, stale.PageRoute(1).Keys);
         Assert.Equal(5, (await IdsAsync(db, Query(("f.LinkshellId", "abc")))).Length);
         // Only key and foreign-key columns are filterable; a text column is not.
@@ -151,27 +154,27 @@ public class DataAdminQueryServiceTests
         var service = new DataAdminQueryService(db);
         var rules = Rules(db);
 
-        var first = await service.ListAsync(rules, Query(), ShowRulesOnly, CancellationToken.None);
+        var first = await service.ListAsync(rules, Query(), CancellationToken.None);
         Assert.Equal(30, first.Total);
         Assert.Equal(2, first.TotalPages);
         Assert.Equal(DataAdminDefaults.PageSize, first.Rows.Count);
         Assert.Equal(1, first.FirstRowNumber);
         Assert.Equal(DataAdminDefaults.PageSize, first.LastRowNumber);
 
-        var second = await service.ListAsync(rules, Query(("page", "2")), ShowRulesOnly, CancellationToken.None);
+        var second = await service.ListAsync(rules, Query(("page", "2")), CancellationToken.None);
         Assert.Equal(30 - DataAdminDefaults.PageSize, second.Rows.Count);
         Assert.Equal(2, second.Page);
         Assert.Equal(DataAdminDefaults.PageSize + 1, second.FirstRowNumber);
         Assert.Equal(30, second.LastRowNumber);
 
-        Assert.Equal(2, (await service.ListAsync(rules, Query(("page", "99")), ShowRulesOnly, CancellationToken.None)).Page);
-        Assert.Equal(1, (await service.ListAsync(rules, Query(("page", "0")), ShowRulesOnly, CancellationToken.None)).Page);
+        Assert.Equal(2, (await service.ListAsync(rules, Query(("page", "99")), CancellationToken.None)).Page);
+        Assert.Equal(1, (await service.ListAsync(rules, Query(("page", "0")), CancellationToken.None)).Page);
         Assert.Equal("2", second.PageRoute(2)[DataAdminListQuery.PageKey]);
         Assert.False(second.PageRoute(1).ContainsKey(DataAdminListQuery.PageKey));
     }
 
     [Fact]
-    public async Task ForeignKeyCells_ShowThePrincipalLabel_AndLinkOnlyWhenThePrincipalIsShown()
+    public async Task ForeignKeyCells_ShowThePrincipalLabel_AndLinkUnlessThePrincipalIsHidden()
     {
         using var db = await SeededAsync();
         db.Rules.Add(NewRule(9, 999, "Orphan", "linkshell gone", null));
@@ -181,7 +184,7 @@ public class DataAdminQueryServiceTests
         var linkshellColumn = rules.ListColumns.ToList().FindIndex(c => c.Name == nameof(Rule.LinkshellId));
         Assert.True(linkshellColumn >= 0);
 
-        var linked = await service.ListAsync(rules, Query(), ShowRulesAndLinkshells, CancellationToken.None);
+        var linked = await service.ListAsync(rules, Query(), CancellationToken.None);
         var cell = linked.Rows.Single(r => r.Key == "1").Cells[linkshellColumn];
         Assert.Equal("Kraken LS", cell.Text);
         Assert.Equal("linkshell", cell.LinkSlug);
@@ -189,7 +192,8 @@ public class DataAdminQueryServiceTests
         var orphan = linked.Rows.Single(r => r.Key == "9").Cells[linkshellColumn];
         Assert.Equal("999", orphan.Text);
 
-        var unlinked = await service.ListAsync(rules, Query(), ShowRulesOnly, CancellationToken.None);
+        // A policy-hidden principal: the label still shows, but there is no page to link to.
+        var unlinked = await service.ListAsync(Rules(db, LinkshellHidden), Query(), CancellationToken.None);
         var same = unlinked.Rows.Single(r => r.Key == "1").Cells[linkshellColumn];
         Assert.Equal("Kraken LS", same.Text);
         Assert.Null(same.LinkSlug);
@@ -201,14 +205,14 @@ public class DataAdminQueryServiceTests
         using var db = await SeededAsync();
         var service = new DataAdminQueryService(db);
 
-        var titans = await service.ListAsync(Rules(db), Query(("f.LinkshellId", "2")), ShowRulesOnly, CancellationToken.None);
+        var titans = await service.ListAsync(Rules(db), Query(("f.LinkshellId", "2")), CancellationToken.None);
         var chip = Assert.Single(titans.ActiveFilters);
         Assert.Equal("LinkshellId", chip.Column);
         Assert.Equal("Linkshell", chip.DisplayName);
         Assert.Equal("Titans", chip.Label);
         Assert.False(titans.RemoveFilterRoute("LinkshellId").ContainsKey("f.LinkshellId"));
 
-        var gone = await service.ListAsync(Rules(db), Query(("f.LinkshellId", "999")), ShowRulesOnly, CancellationToken.None);
+        var gone = await service.ListAsync(Rules(db), Query(("f.LinkshellId", "999")), CancellationToken.None);
         Assert.Equal("999", Assert.Single(gone.ActiveFilters).Label);
         Assert.Empty(gone.Rows);
     }

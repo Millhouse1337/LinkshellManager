@@ -12,7 +12,7 @@ public sealed partial class DataAdminController
     [HttpGet("{slug}/create")]
     public async Task<IActionResult> Create(string slug, CancellationToken ct)
     {
-        var table = await ResolveShownAsync(slug, ct);
+        var table = Resolve(slug);
         if (table is null)
         {
             return NotFound();
@@ -30,7 +30,7 @@ public sealed partial class DataAdminController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(string slug, [FromForm] Dictionary<string, string?> values, CancellationToken ct)
     {
-        var table = await ResolveShownAsync(slug, ct);
+        var table = Resolve(slug);
         if (table is null)
         {
             return NotFound();
@@ -54,7 +54,7 @@ public sealed partial class DataAdminController
     [HttpGet("{slug}/{id}/edit")]
     public async Task<IActionResult> Edit(string slug, string id, CancellationToken ct)
     {
-        var table = await ResolveShownAsync(slug, ct);
+        var table = Resolve(slug);
         if (table is null || !table.TryParseKey(id, out var key))
         {
             return NotFound();
@@ -77,7 +77,7 @@ public sealed partial class DataAdminController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(string slug, string id, [FromForm] Dictionary<string, string?> values, CancellationToken ct)
     {
-        var table = await ResolveShownAsync(slug, ct);
+        var table = Resolve(slug);
         if (table is null || !table.TryParseKey(id, out var key))
         {
             return NotFound();
@@ -106,7 +106,7 @@ public sealed partial class DataAdminController
     [HttpGet("{slug}/{id}/delete")]
     public async Task<IActionResult> Delete(string slug, string id, CancellationToken ct)
     {
-        var table = await ResolveShownAsync(slug, ct);
+        var table = Resolve(slug);
         if (table is null || !table.TryParseKey(id, out var key))
         {
             return NotFound();
@@ -132,7 +132,7 @@ public sealed partial class DataAdminController
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteConfirmed(string slug, string id, CancellationToken ct)
     {
-        var table = await ResolveShownAsync(slug, ct);
+        var table = Resolve(slug);
         if (table is null || !table.TryParseKey(id, out var key))
         {
             return NotFound();

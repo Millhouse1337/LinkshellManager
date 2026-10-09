@@ -147,7 +147,6 @@ public class DataAdminCatalogTests
         Assert.Same(Table(catalog, typeof(Rule)), catalog.Find("rule"));
         Assert.Same(Table(catalog, typeof(DkpPoolEventType)), catalog.Find("dkp-pool-event-type"));
         Assert.Same(Table(catalog, typeof(AppUser)), catalog.Find("APP-USER"));
-        Assert.Null(catalog.Find("tables"));
     }
 
     // The forest and the delete preview read DeleteBehavior straight from metadata, and EF's

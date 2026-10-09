@@ -18,10 +18,10 @@ public sealed record DataAdminSchemaColumn(
 // A unique index. Filter is the model's own text for a partial index, null for a plain one.
 public sealed record DataAdminSchemaUnique(IReadOnlyList<string> Columns, string? Filter);
 
-// One table. Id is the CLR type name, never the table name: it is the same on every provider and it
-// is what "Choose tables" stores, so the page can tell which cards have rows to browse. Slug is set
-// only where /data-admin can route to the rows; Framework marks the Identity tables, which are
-// drawn but never browsable. Hub and Parent are layout hints and nothing else.
+// One table. Id is the CLR type name, never the table name: it is the same on every provider and
+// it is what the page keys its state on (selection, moved cards). Slug is set only where
+// /data-admin can route to the rows; Framework marks the Identity tables, which are drawn but
+// never browsable. Hub and Parent are layout hints and nothing else.
 public sealed record DataAdminSchemaTable(
     string Id, string Name, string Label, string? Slug, bool Framework, bool Hub, string? Parent,
     IReadOnlyList<DataAdminSchemaColumn> Columns, IReadOnlyList<DataAdminSchemaUnique> Uniques);
@@ -392,7 +392,7 @@ public sealed class DataAdminSchemaGraph
     }
 
     // Layout hint only: a table is placed beside the table that owns its rows, by the same rule as
-    // the "Choose tables" grouping (cascade delete, deepest owner wins). A table nothing cascades
+    // the catalog's cascade forest (cascade delete, deepest owner wins). A table nothing cascades
     // into would float on its own, so it falls back to whatever it points at -- except a hub, or
     // Linkshell would nest under AppUser through Linkshell.AppUserId and take the diagram with it.
     private static DataAdminCascadeForest<string> BuildLayoutForest(

@@ -6,8 +6,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // Every table the Data Admin UI can ever reach, decided ONCE at startup from the EF model plus
 // DataAdminPolicy. This is the only place in the app that enumerates the model
 // (DataAdminGateTests pins that), and it is the whole universe: a table that is not here does not
-// exist as far as /data-admin is concerned. Which of these tables is SHOWN is a separate runtime
-// choice a super admin makes on the "Choose tables" page (DataAdminSelectionService).
+// exist as far as /data-admin is concerned. Every table here that the policy does not hide is
+// browsable; there is no runtime selection on top of the policy.
 public sealed class DataAdminCatalog
 {
     private readonly Dictionary<string, DataAdminModel> _bySlug;
@@ -61,7 +61,8 @@ public sealed class DataAdminCatalog
 
     public IReadOnlyList<DataAdminModel> Models { get; }
 
-    // Cascade-delete grouping for the chooser.
+    // Cascade-delete grouping (which table's deletion takes which rows with it). Nothing in the app
+    // reads it any more; the tests pin its shape over the real model, so it stays.
     public DataAdminCascadeForest<DataAdminModel> Forest { get; }
 
     // The whole database as a picture, for the schema diagram. Lazy on purpose, and NOT read in the

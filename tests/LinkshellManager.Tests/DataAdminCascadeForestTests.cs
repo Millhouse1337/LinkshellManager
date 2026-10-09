@@ -6,9 +6,9 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The "Choose tables" page groups tables by cascade delete so a super admin can see that ticking
-// Event also concerns the rows an Event delete takes with it. The grouping is a forest computed
-// from the real Cascade foreign keys; these tests pin its shape over the real model (so a new
+// The cascade forest groups tables by cascade delete: Event's group is every table whose rows an
+// Event delete takes with it (the schema diagram lays tables out by it). It is computed from the
+// real Cascade foreign keys; these tests pin its shape over the real model (so a new
 // foreign key that re-parents a table is noticed) and the rules that decide a parent when a table
 // has several cascade owners, plus the cycle guard the real model never exercises.
 public class DataAdminCascadeForestTests

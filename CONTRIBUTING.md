@@ -68,9 +68,10 @@ operations unless you pass the connected database name as confirmation — never
 - Style is enforced in the build via `.editorconfig` + analyzers (`dotnet format` to auto-fix).
 - The Angular project uses ESLint (`npm run lint` in `discord-activity`).
 - Data Admin (`/data-admin`) discovers every table from the EF model, so a new entity appears on its
-  **Choose tables** page automatically. What it may do with a table lives in `Services/DataAdminPolicy.cs`:
-  add an entry there to make a table read-only, block create/delete, hide credential columns, or turn a
-  string column into a dropdown of its const class. `DataAdminPolicyTests` fails on any misspelled column.
+  schema diagram, with a records page, automatically. What it may do with a table lives in
+  `Services/DataAdminPolicy.cs`: add an entry there to make a table read-only, block create/delete,
+  hide credential columns, or turn a string column into a dropdown of its const class.
+  `DataAdminPolicyTests` fails on any misspelled column.
 
 
 ## Tests

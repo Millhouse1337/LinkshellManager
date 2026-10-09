@@ -11,9 +11,7 @@
    which is what pan and zoom write. *@
 <div class="erd" id="erd"
      data-db="@Model.DatabaseName"
-     data-browse-url="@Url.Action("List", new { slug = "__slug__" })"
-     data-tables-url="@Url.Action("Tables")"
-     data-shown="@string.Join(",", Model.ShownTableIds)">
+     data-browse-url="@Url.Action("List", new { slug = "__slug__" })">
     <header class="erd-bar">
         <span class="erd-bar__section">Data Admin</span>
         <h1 class="erd-bar__db">@Model.DatabaseName</h1>

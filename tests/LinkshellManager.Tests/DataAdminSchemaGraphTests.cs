@@ -458,7 +458,7 @@ public class DataAdminSchemaGraphTests
 
         Assert.Equal("Linkshell", Table(graph, "Event").Parent);
         Assert.Equal("Event", Table(graph, "AppUserEvent").Parent);
-        // Deepest cascade owner, as on "Choose tables".
+        // Deepest cascade owner, as in the catalog's cascade forest.
         Assert.Equal("DkpPool", Table(graph, "DkpPoolEventType").Parent);
         // No cascade owner (SetNull): falls back to the one table it points at.
         Assert.Equal("AppUser", Table(graph, "DiscordActivityUser").Parent);

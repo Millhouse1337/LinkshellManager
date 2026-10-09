@@ -1,4 +1,4 @@
-// Geometry for the Data Admin schema diagram (/data-admin/schema): how tall a card is, where the
+// Geometry for the Data Admin schema diagram (/data-admin): how tall a card is, where the
 // automatic layout puts each table, the path of every relationship line, and the pan / zoom maths.
 //
 // Why this is its own file: it is the bug-prone part of the page, so it is kept apart from the
@@ -270,7 +270,7 @@
     }
 
     // ---- Automatic layout ("cluster pack") -----------------------------------------------------
-    // Tables are grouped the way the Choose tables page nests them: a table sits to the right of
+    // Tables are grouped by cascade delete (the server's cascade forest): a table sits to the right of
     // the table that owns it (table.parent, worked out by the server). Each group is packed into
     // a rectangle (a "block") a whole number of card columns wide, and the blocks are then packed
     // into the final picture. Every x is therefore a multiple of the column pitch.

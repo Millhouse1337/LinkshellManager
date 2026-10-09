@@ -135,11 +135,9 @@
         ordinal(nameOf(a).toLowerCase(), nameOf(b).toLowerCase()) || ordinal(a, b);
     const tableIdsByName = index.tables.map((table) => table.id).sort(byName);
 
-    // Where the "Browse rows" link goes, and which tables may have one: only those the super admin
-    // has put on Data Admin's table list. Everything else is structure only.
+    // Where the "Browse rows" link goes. Every table with a slug has a records page (the policy
+    // decides which tables get one); everything else is structure only.
     const browseUrl = root.getAttribute('data-browse-url') || '';
-    const tablesUrl = root.getAttribute('data-tables-url') || '';
-    const shownIds = new Set((root.getAttribute('data-shown') || '').split(',').filter(Boolean));
 
     // ---- What the browser remembers ------------------------------------------------------------
     // One localStorage entry: { v: 1, options, positions: { all: { id: [x, y] }, keys, names } }.
@@ -1037,17 +1035,13 @@
             .forEach((unique) => { body.appendChild(el('div', 'erd-selected__uq', uniqueText(unique))); });
 
         const actions = el('div', 'erd-selected__actions');
-        if (table.slug && shownIds.has(id)) {
+        // A table with a slug has a records page; a login table is structure only; a table with
+        // neither (policy-hidden) gets nothing.
+        if (table.slug) {
             const link = el('a', 'btn sm primary', 'Browse rows');
             link.setAttribute('data-erd-browse', '');
             link.href = browseUrl.replace('__slug__', encodeURIComponent(table.slug));
             actions.appendChild(link);
-        } else if (table.slug) {
-            const note = el('p', 'erd-selected__note', 'Not in Data Admin\'s table list. ');
-            const link = el('a', 'erd-selected__link', 'Choose tables');
-            link.href = tablesUrl;
-            note.appendChild(link);
-            actions.appendChild(note);
         } else if (table.framework) {
             actions.appendChild(el('p', 'erd-selected__note',
                 'Structure only: rows of login tables are never shown here.'));

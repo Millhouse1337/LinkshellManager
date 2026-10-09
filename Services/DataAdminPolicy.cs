@@ -10,7 +10,7 @@ namespace LinkshellManagerDiscordApp.Services;
 public enum DataAdminPolicyFlags
 {
     None = 0,
-    // Never selectable on the chooser and never routable.
+    // Never routable: no slug on the diagram, and every /data-admin/{slug} page is a 404.
     Hidden = 1,
     NoCreate = 2,
     NoEdit = 4,
@@ -24,7 +24,7 @@ public enum DataAdminPolicyFlags
 public sealed record DataAdminSyncedCopy(string TargetColumn, string ViaForeignKey, string SourceColumn);
 
 // What EF metadata cannot tell us about one table. Everything here narrows what the generic
-// engine would otherwise allow; a runtime choice (the chooser) can never widen it.
+// engine would otherwise allow, and nothing at runtime can widen it: this is the only protection.
 public sealed record DataAdminEntityPolicy
 {
     public DataAdminPolicyFlags Flags { get; init; }
