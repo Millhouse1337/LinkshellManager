@@ -109,6 +109,8 @@ public class DataAdminSchemaContractTests
         // a control the script cannot find leaves that option stuck at whatever was stored.
         "data-erd-view", "data-erd-opt=\"density\"", "data-erd-opt=\"edges\"", "data-erd-opt=\"types\"",
         "data-erd-opt=\"hubs\"", "data-erd-opt=\"framework\"", "data-erd-panel-toggle",
+        // Focus mode: the bar's Focus button and the chip (its name slot and its leave button).
+        "data-erd-focus", "data-erd-focus-chip", "data-erd-focus-name", "data-erd-focus-exit",
     };
 
     private static ApplicationDbContext NewInMemoryContext() =>

@@ -2042,6 +2042,21 @@
 .erd.no-types .erd-row__type { display: none; }
 .erd.hide-hubs .erd-edges:not(.erd-edges--top) .erd-edge.is-hub { display: none; }
 
+/* A button that reads as a link (Clear, select a table, the chip's leave button). It comes
+   before the bar so that the chip's overrides below land after their component. */
+.erd-linkbtn {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--blue-main);
+    cursor: pointer;
+}
+.erd-linkbtn:hover { text-decoration: underline; }
+.erd-linkbtn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; border-radius: 3px; }
+
 /* ---- The bar ---- */
 .erd-bar {
     grid-column: 1 / -1;
@@ -2062,33 +2077,47 @@
 .erd-bar__back::after { content: "/"; margin-left: 16px; color: var(--border-soft); }
 .erd-bar__back:hover { color: var(--text-main); }
 .erd-bar__back:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 3px; border-radius: 4px; }
-/* The name and the counts give way (ellipsis) before the buttons do. */
-.erd-bar__db,
+/* The database name is never cut. When the bar runs short the counts give way first (an
+   ellipsis, and under 1500px they go whole: the panel repeats them as "Tables 73"), then the
+   chip (down to 140px, its name cut with the whole of it in the tooltip). */
+.erd-bar__db {
+    flex: none;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0;
+    white-space: nowrap;
+    color: var(--text-main);
+}
 .erd-bar__counts {
+    flex: 0 4 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
 }
-.erd-bar__db {
-    flex: 0 1 auto;
-    margin: 0;
-    font-size: 15px;
-    font-weight: 600;
-    line-height: 1.2;
-    letter-spacing: 0;
-    color: var(--text-main);
-}
-.erd-bar__counts { flex: 0 4 auto; font-size: 12px; color: var(--text-muted); }
 .erd-bar__spacer { flex: 1 1 0; }
 .erd-bar__tools { flex: none; display: flex; align-items: center; gap: 6px; }
 /* Not the site's "transition: all": that would animate the focus ring from its browser default. */
 .lsm-page .erd-bar .btn { height: 32px; padding: 0 12px; transition: background-color .15s ease, border-color .15s ease; }
 .lsm-page .erd-bar .erd-bar__step { min-width: 32px; padding: 0; font-family: var(--font-mono); font-size: 14px; }
-/* The site's .btn has no focus style of its own; this covers the bar and the panel ("Browse rows"). */
+/* Keyboard focus is the :focus-visible outline, in the bar and in the panel ("Browse rows").
+   Bootstrap's .btn:focus halo, which would stay on after a mouse click and double the ring, is
+   switched off in its favour; the primary Browse rows link keeps its own glow. */
 .lsm-page .erd .btn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
+.lsm-page .erd-bar .btn:focus { box-shadow: none; }
+.lsm-page .erd-side .btn:focus:not(.primary) { box-shadow: none; }
 .lsm-page .erd-side .btn { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, filter .15s ease; }
+/* A disabled button keeps its tooltip, which says what would enable it (the site's .btn:disabled
+   turns pointer events off and the title with them). The disabled attribute keeps it inert; it
+   does not answer the hover either. */
+.lsm-page .erd-bar .btn:disabled { pointer-events: auto; cursor: not-allowed; }
+.lsm-page .erd-bar .btn:disabled:hover { background: var(--bg-card); border-color: var(--border-soft); }
 /* The Panel button reads as pressed while the panel is open: tinted text, fill and border, so
    it is told apart from a merely hovered neighbour. It outranks the site's .btn:hover, so the
    hover answer is restated here or the open button would give none. */
@@ -2099,6 +2128,62 @@
 }
 .lsm-page .erd-bar [data-erd-panel-toggle][aria-expanded="true"]:hover {
     background: color-mix(in srgb, var(--blue-main) 32%, var(--bg-card-hover));
+}
+/* The Focus button reads as pressed while focus mode is on, in the selection's accent: the chip
+   by the counts and the frame round the canvas say the same thing in the same colour. */
+.lsm-page .erd-bar [data-erd-focus][aria-pressed="true"] {
+    color: color-mix(in srgb, var(--erd-accent) 45%, var(--text-main));
+    background: color-mix(in srgb, var(--erd-accent) 22%, var(--bg-card));
+    border-color: color-mix(in srgb, var(--erd-accent) 65%, var(--border-soft));
+}
+.lsm-page .erd-bar [data-erd-focus][aria-pressed="true"]:hover {
+    background: color-mix(in srgb, var(--erd-accent) 30%, var(--bg-card-hover));
+}
+/* The focus chip: "Focus: <table>" and a button to leave. It takes the room the name needs, up
+   to 420px, and gives way only after the counts have gone: the name is then cut with an ellipsis
+   (the script puts the whole of it in the tooltip). */
+.erd-bar__chip {
+    flex: 0 1 auto;
+    min-width: 140px;
+    max-width: 420px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 4px 0 10px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--text-main);
+    background: color-mix(in srgb, var(--erd-accent) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--erd-accent) 55%, transparent);
+}
+.erd-bar__chip[hidden] { display: none; }
+.erd-bar__chip > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.erd-bar__chip > .erd-linkbtn {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--text-main);
+}
+.erd-bar__chip > .erd-linkbtn:hover {
+    text-decoration: none;
+    background: color-mix(in srgb, var(--erd-accent) 35%, transparent);
+}
+/* The ring follows the round button, snug, instead of the component's square one. */
+.erd-bar__chip > .erd-linkbtn:focus-visible { border-radius: 50%; outline-offset: 0; }
+/* Below 1500px the bar cannot hold the name, the counts and the tools at once, and below 1600px
+   not the chip as well: the counts give way whole (cut to "73 tables - 924 c..." they said
+   nothing), so the name never gains or loses its ellipsis on the way into focus mode. */
+@media (max-width: 1499px) {
+    .lsm-page .erd-bar__counts { display: none; }
+}
+@media (max-width: 1599px) {
+    .erd.is-focus .erd-bar__counts { display: none; }
 }
 .erd-bar__zoom {
     width: 44px;
@@ -2184,7 +2269,12 @@
     color: var(--text-main);
     cursor: grab;
 }
-.erd-card__head:focus-visible { outline: 2px solid var(--blue-main); outline-offset: -2px; border-radius: 8px 8px 0 0; }
+/* The ring is measured in --erd-hair: two pixels on screen at the overview, not a scaled-down hairline. */
+.erd-card__head:focus-visible {
+    outline: calc(2 * var(--erd-hair)) solid var(--blue-main);
+    outline-offset: calc(-2 * var(--erd-hair));
+    border-radius: 8px 8px 0 0;
+}
 /* The script picks the font size (headerFont) so that a long name fits without being cut. */
 .erd-card__name {
     flex: 1 1 auto;
@@ -2284,6 +2374,7 @@
     stroke: transparent;
     stroke-width: calc(14px / var(--erd-zoom, 1));
     pointer-events: stroke;
+    cursor: pointer;
 }
 .erd-edge__line,
 .erd-edge__mark {
@@ -2307,7 +2398,6 @@
    not hover targets. */
 .erd-edge.is-hub { opacity: .16; }
 .erd-edge.is-hub .erd-edge__hit { pointer-events: none; }
-.erd-edge__hit { cursor: pointer; }
 .erd-row[data-rel] { cursor: pointer; }
 
 /* ---- Highlighting ----
@@ -2352,6 +2442,20 @@
     font-weight: 600;
     text-anchor: middle;
 }
+
+/* ---- Focus mode ----
+   One table and its neighbours (the root has is-focus). A thin accent frame inside the canvas
+   says the picture is a cut-out, not the whole database. Lines into hubs are ordinary lines
+   here, whatever the hub-lines option says: there are only a handful, and a neighbour drawn
+   with no line to it would make no sense. */
+.erd.is-focus .erd-canvas {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--erd-accent) 45%, transparent);
+}
+/* The keyboard ring sits just inside the frame: both are 2px, and one must not paint over the other. */
+.erd.is-focus .erd-canvas:focus-visible { outline-offset: -4px; }
+.erd.is-focus .erd-edges:not(.erd-edges--top) .erd-edge.is-hub { display: inline; opacity: .7; }
+.erd.is-focus .erd-layer.has-focus .erd-edges:not(.erd-edges--top) .erd-edge.is-hub { opacity: .15; }
+.erd.is-focus .erd-edge.is-hub .erd-edge__hit { pointer-events: stroke; }
 
 /* ---- The side panel ----
    Scrolls inside itself; the two long lists also scroll inside themselves so that the sections
@@ -2453,20 +2557,6 @@ summary.erd-sec__title:focus-visible { outline: 2px solid var(--blue-main); outl
 .lsm-page .erd-opt .switch { background: var(--bg-main); border-color: var(--border-soft); }
 .lsm-page .erd-opt .switch:checked { background: var(--blue-main); border-color: var(--blue-main); }
 .lsm-page .erd-opt .switch:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
-
-/* A button that reads as a link (Clear, select a table). */
-.erd-linkbtn {
-    padding: 0;
-    border: 0;
-    background: none;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--blue-main);
-    cursor: pointer;
-}
-.erd-linkbtn:hover { text-decoration: underline; }
-.erd-linkbtn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; border-radius: 3px; }
 
 /* The Tables list. An item is a two-column grid (name, count) so that only the name gives way:
    in a wrapping flex row a long name would push the count onto a second line instead. */

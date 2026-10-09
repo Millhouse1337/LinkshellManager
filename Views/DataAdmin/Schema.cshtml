@@ -17,13 +17,17 @@
         <a class="erd-bar__back" asp-action="Index">Data Admin</a>
         <h1 class="erd-bar__db">@Model.DatabaseName</h1>
         <span class="erd-bar__counts">@Model.TableCount tables &middot; @Model.ColumnCount columns &middot; @Model.RelationshipCount relationships</span>
+        @* Focus mode: one table and its neighbours. The script names the table and shows the chip. *@
+        <span class="erd-bar__chip" data-erd-focus-chip hidden>Focus: <b data-erd-focus-name></b>
+            <button type="button" class="erd-linkbtn" data-erd-focus-exit aria-label="Leave focus mode" title="Leave focus mode (Esc)">&times;</button></span>
         <span class="erd-bar__spacer"></span>
         <div class="erd-bar__tools">
-            <button type="button" class="btn sm erd-bar__step" data-erd-zoom-out title="Zoom out" aria-label="Zoom out">&minus;</button>
+            <button type="button" class="btn sm erd-bar__step" data-erd-zoom-out title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
             <span class="erd-bar__zoom" data-erd-zoom-label aria-live="off">100%</span>
-            <button type="button" class="btn sm erd-bar__step" data-erd-zoom-in title="Zoom in" aria-label="Zoom in">+</button>
-            <button type="button" class="btn sm" data-erd-fit title="Fit the whole diagram">Fit</button>
+            <button type="button" class="btn sm erd-bar__step" data-erd-zoom-in title="Zoom in (+)" aria-label="Zoom in">+</button>
+            <button type="button" class="btn sm" data-erd-fit title="Fit the whole diagram (0)">Fit</button>
             <button type="button" class="btn sm" data-erd-reset title="Forget moved tables and lay them out again">Reset layout</button>
+            <button type="button" class="btn sm" data-erd-focus disabled aria-pressed="false" title="Show only one table and its neighbours (F). Select a table first.">Focus</button>
             <button type="button" class="btn sm" data-erd-panel-toggle aria-controls="erd-panel" aria-expanded="true" title="Show or hide the side panel">Panel</button>
         </div>
     </header>

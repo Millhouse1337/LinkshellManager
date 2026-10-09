@@ -97,6 +97,17 @@ The delete page shows what else goes with the row (deleted, unlinked, or blockin
 you confirm. Ledgers and history tables are read-only, credentials and images are never shown, and
 `Linkshell` and `App User` can never be deleted from here.
 
+**Schema diagram** (the button at the top of the Data Admin pages) draws the whole database as one
+picture: a card per table listing its columns and keys, and a line for every foreign key, whose ends
+show one-to-many or one-to-one and whose style shows what a delete does (solid cascades, dashed
+unlinks, dotted blocks). Drag the background to pan, scroll to zoom, drag a table by its header to
+move it (the browser remembers where you left it), and hover or click a table or a line to light up
+what it connects to. The side panel searches tables and columns, lists every relationship and
+many-to-many pairing, and holds the view options (keys only, square lines, hide the login tables);
+**Focus**, or a double-click on a table, shows just that table and its neighbours until you press
+Esc. It is structure only, never rows: a table that is on the Data Admin list links to its list page
+from the panel.
+
 ## Customize Linkshell (the control panel)
 `Configurations → Customize Linkshell` (officer only):
 

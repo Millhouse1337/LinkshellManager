@@ -1,6 +1,7 @@
 // The Data Admin schema diagram (/data-admin/schema): draws every table as a card and every foreign
 // key as a line, lets the viewer pan, zoom and move the cards about, lights up what the pointer is
-// over, and keeps the side panel (search, selection, lists, legend) in step with the picture.
+// over, keeps the side panel (search, selection, lists, legend) in step with the picture, cuts the
+// picture down to one table and its neighbours (focus mode), and answers the keyboard.
 //
 // Why two files: every number on this page (where a card goes, how tall it is, the path of a line,
 // the pan and zoom maths) comes from data-admin-schema-layout.js (window.LsmSchemaLayout), which has
@@ -59,6 +60,13 @@
     };
     if (Object.keys(controls).some((key) => !controls[key])) { return; }
 
+    // Focus mode's places in the bar: the button, and the chip that names the table and leaves.
+    const focusButton = root.querySelector('[data-erd-focus]');
+    const focusChip = root.querySelector('[data-erd-focus-chip]');
+    const focusName = root.querySelector('[data-erd-focus-name]');
+    const focusExit = root.querySelector('[data-erd-focus-exit]');
+    if (!focusButton || !focusChip || !focusName || !focusExit) { return; }
+
     const M = L.METRICS;
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const STORAGE_KEY = 'lsm.dataAdmin.schema.v1';
@@ -69,7 +77,10 @@
     // Options that are a choice from a list; every other option is a plain true / false.
     const OPTION_CHOICES = { density: DENSITIES, edges: ['curved', 'orthogonal'] };
     const CLICK_SLOP = 4;           // px a press may move and still be a click, not a drag
+    const DOUBLE_CLICK_MS = 500;    // two clicks on one card this close together in time...
+    const DOUBLE_CLICK_PX = 5;      // ...and in place are one double-click
     const BUTTON_ZOOM = 1.2;
+    const ARROW_PAN = 80;           // screen px one arrow key moves the view
     const GRID_STEP = 20;           // dot grid spacing at 100%
     const GRID_MIN_PX = 14;         // the dots never get closer together than this on screen
     const CENTRE_MARGIN = 40;       // a card this close to the canvas edge is not "in view" yet
@@ -211,6 +222,10 @@
     let pinned = NOTHING;
     let search = '';                    // the search box, trimmed and lower-cased
     let listedTableIds = [];            // the Tables list as shown (search applied), in list order
+    // Focus mode: the table drawn alone with its neighbours, or null; and the overview it
+    // replaced, kept so that leaving puts everything back exactly (never persisted).
+    let focusTable = null;
+    let beforeFocus = null;             // { positions, view, density, framework }
 
     const cardEls = new Map();          // table id -> its card element
     const rowEls = new Map();           // table id -> Map(column name -> its row element)
@@ -231,9 +246,16 @@
     }
 
     // The automatic layout, with the cards the viewer has moved (at this density) put back
-    // where they were left.
+    // where they were left. In focus mode: the focused table and its drawn neighbours, laid out
+    // around it, and nothing else (what is not positioned is not drawn).
     function computePositions() {
-        const auto = L.autoLayout(index, { density: options.density, hidden: hiddenIds() }).positions;
+        const hidden = hiddenIds();
+        if (focusTable !== null) {
+            positions = L.focusLayout(
+                index, focusTable, { density: options.density, hidden: hidden }).positions;
+            return;
+        }
+        const auto = L.autoLayout(index, { density: options.density, hidden: hidden }).positions;
         const moved = saved[options.density];
         const next = {};
         Object.keys(auto).forEach((id) => {
@@ -244,7 +266,10 @@
     }
 
     const isDrawn = (id) => own(positions, id) !== undefined;
-    const isDrawnRel = (rel) => isDrawn(rel.from) && isDrawn(rel.to);
+    // In focus mode only the lines that touch the focused table are drawn: a line between two
+    // of its neighbours says nothing about it.
+    const isDrawnRel = (rel) => isDrawn(rel.from) && isDrawn(rel.to) &&
+        (focusTable === null || rel.from === focusTable || rel.to === focusTable);
 
     // ---- Cards ---------------------------------------------------------------------------------
 
@@ -610,11 +635,12 @@
     // A pin changes the Selected section and, for a table, which relationships are listed.
     function setPinned(next) {
         if (sameFocus(pinned, next)) { return; }
-        const had = focusedPanelPart();
+        const had = focusedPart();
         pinned = next;
         renderSelected();
         renderRels();
         applyHighlight();
+        applyFocusChrome();
         restoreFocus(had);
         if (pinned.table !== null) { revealListed(pinned.table); }
     }
@@ -652,10 +678,11 @@
     });
     const clearButton = side.selected.querySelector('[data-erd-clear]');
 
-    // Where the keyboard focus is when it sits in a part of the panel that a rebuild replaces:
-    // one of the lists (with the focused item's table, relationship or via id), or the Selected
-    // section (its Clear button or a "select table" button). null anywhere else.
-    function focusedPanelPart() {
+    // Where the keyboard focus is when it sits in a part of the page that a rebuild replaces:
+    // one of the panel's lists (with the focused item's table, relationship or via id), the
+    // Selected section (its Clear button or a "select table" button), or the diagram (the
+    // canvas itself, or a card header with its table id). null anywhere else.
+    function focusedPart() {
         const active = document.activeElement;
         if (!(active instanceof Element)) { return null; }
         const part = Object.keys(LISTS).find((name) => LISTS[name].box.contains(active));
@@ -663,7 +690,12 @@
             const item = active.closest('[' + LISTS[part].attr + ']');
             return { part: part, id: item ? item.getAttribute(LISTS[part].attr) : null };
         }
-        return side.selected.contains(active) ? { part: 'selected', id: null } : null;
+        if (side.selected.contains(active)) { return { part: 'selected', id: null }; }
+        if (canvas.contains(active)) {
+            const card = active.closest('.erd-card');
+            return { part: 'canvas', id: card ? card.getAttribute('data-table') : null };
+        }
+        return null;
     }
 
     // Re-rendering removes the focused element (or hides its section), and the browser then
@@ -671,9 +703,10 @@
     // the focus is put back on the nearest thing that still makes sense: the item of the same
     // table or relationship in the rebuilt list, else that list's first item or its heading;
     // the Clear button of the Selected section; or, when that section has just gone, the search
-    // box above it. A keyboard user must be able to see the focus, so a list item is then
-    // brought into view: first its list scrolls, then the panel, each only as far as it must
-    // (preventScroll: the page and the canvas never move).
+    // box above it; the same table's new card header, or the canvas when that table is no
+    // longer drawn (focus mode in or out). A keyboard user must be able to see the focus, so a
+    // list item is then brought into view: first its list scrolls, then the panel, each only as
+    // far as it must (preventScroll: the page and the canvas never move).
     function restoreFocus(was) {
         if (!was) { return; }
         const active = document.activeElement;
@@ -686,6 +719,9 @@
         if (list) {
             target = (was.id !== null && list.els.get(was.id)) ||
                 list.box.querySelector('[' + list.attr + ']') || list.summary;
+        } else if (was.part === 'canvas') {
+            const card = was.id !== null ? cardEls.get(was.id) : undefined;
+            target = card ? card.querySelector('.erd-card__head') : canvas;
         } else {
             target = side.selected.hidden ? side.search : clearButton;
         }
@@ -1075,7 +1111,20 @@
         side.rels.scrollTop = 0;
     }
 
+    function clearSearch() {
+        side.search.value = '';
+        onSearchInput();
+    }
+
+    // Enter pins the first table listed. Escape empties the box and leaves it, so that the next
+    // Escape, on the page, backs out of the next thing (focus mode, the pin).
     function onSearchKey(e) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            if (side.search.value) { clearSearch(); }
+            side.search.blur();
+            return;
+        }
         if (e.key !== 'Enter' || listedTableIds.length === 0) { return; }
         e.preventDefault();
         pinTable(listedTableIds[0]);
@@ -1165,6 +1214,8 @@
         if (pending.card !== null) {
             const id = pending.card;
             pending.card = null;
+            // The card may have gone meanwhile (the picture drawn again under the drag).
+            if (!cardEls.has(id)) { return; }
             placeCard(id);
             updateEdges([id]);
             // A lit line that touches the moved card has moved too, so its copy is drawn again.
@@ -1243,13 +1294,16 @@
         renderTopEdges();
     }
 
+    // Lays the drawn cards out again and fits them. In the overview that also forgets the moved
+    // cards (at this density); in focus mode it only re-runs the focus layout, which was never
+    // remembered in the first place, and the overview's moved cards stay remembered.
     function resetLayout() {
-        saved[options.density] = {};
+        if (focusTable === null) { saved[options.density] = {}; }
         computePositions();
         cardEls.forEach((card, id) => { placeCard(id); });
         reshapeEdges();
         fit();
-        saveStored();
+        if (focusTable === null) { saveStored(); }
     }
 
     // Whether everything a hover or a pin names is drawn.
@@ -1263,10 +1317,18 @@
     // Draws the page again from the options: the cards for the density and the visible tables,
     // every line, the panel's lists, and the highlight on the new elements. A hover or a pin on
     // something that is no longer drawn is dropped first; a keyboard focus in the panel's lists
-    // is put back afterwards (the rebuild would otherwise drop it to the body).
-    function redraw() {
-        const had = focusedPanelPart();
-        computePositions();
+    // or in the diagram is put back afterwards (the rebuild would otherwise drop it to the body).
+    // `restored`, when given, is a set of positions to draw instead of computing them (leaving
+    // focus mode).
+    function redraw(restored) {
+        const had = focusedPart();
+        // The focused table has just been hidden (the Identity tables switched off): focus mode
+        // is over, and the overview comes back laid out afresh for the new options.
+        if (focusTable !== null && hiddenIds().has(focusTable)) {
+            focusTable = null;
+            beforeFocus = null;
+        }
+        if (restored) { positions = restored; } else { computePositions(); }
         if (!focusDrawn(hover)) { hover = NOTHING; }
         if (!focusDrawn(pinned)) { pinned = NOTHING; }
         renderCards();
@@ -1274,7 +1336,172 @@
         renderPanel();
         applyHighlight();
         applyDim();
+        applyFocusChrome();
         restoreFocus(had);
+    }
+
+    // ---- Focus mode ----------------------------------------------------------------------------
+    // One table and its direct neighbours, laid out around it by focusLayout (the tables it
+    // references on the left, the tables that reference it on the right), with only the lines
+    // that touch it. It is a temporary arrangement: the overview's positions and view are put
+    // aside on the way in and come back exactly on the way out, and nothing done inside is
+    // remembered. The table stays pinned throughout.
+
+    // Writes focus mode to the bar: is-focus on the root (the stylesheet frames the canvas and
+    // draws hub lines normally), the chip with the table's name, and the Focus button, pressed
+    // while in and live whenever it can do something (enter for a pinned table, or leave).
+    function applyFocusChrome() {
+        const on = focusTable !== null;
+        root.classList.toggle('is-focus', on);
+        focusChip.hidden = !on;
+        focusName.textContent = on ? nameOf(focusTable) : '';
+        // The chip cuts a long name with an ellipsis; the tooltip has all of it.
+        focusName.title = focusName.textContent;
+        focusButton.setAttribute('aria-pressed', on ? 'true' : 'false');
+        const disabled = !on && (pinned.table === null || !isDrawn(pinned.table));
+        // A disabled button cannot hold the keyboard focus: the browser would drop it to the
+        // body, so the diagram takes it first.
+        if (disabled && document.activeElement === focusButton) {
+            canvas.focus({ preventScroll: true });
+        }
+        focusButton.disabled = disabled;
+    }
+
+    // Into focus mode on this table, or across to it from another table's focus mode (the
+    // overview put aside the first time is kept: leaving always returns to it).
+    function focusOn(id) {
+        if (id === focusTable || !isDrawn(id)) { return; }
+        if (focusTable === null) {
+            beforeFocus = {
+                positions: Object.assign({}, positions),
+                view: Object.assign({}, view),
+                density: options.density,
+                framework: options.framework
+            };
+        }
+        focusTable = id;
+        redraw();
+        fit();
+    }
+
+    // Back to the overview as it was. Unless the cards themselves changed meanwhile (a density
+    // or Identity change made in focus mode): then the put-aside positions no longer fit the
+    // cards, and the overview is laid out and fitted afresh instead.
+    function leaveFocus() {
+        if (focusTable === null) { return; }
+        // The chip goes, and with it any keyboard focus on its button (Escape pressed there):
+        // the diagram takes the focus instead, so the arrow keys pan straight away.
+        if (document.activeElement === focusExit) { canvas.focus({ preventScroll: true }); }
+        const was = beforeFocus;
+        focusTable = null;
+        beforeFocus = null;
+        if (was.density === options.density && was.framework === options.framework) {
+            redraw(was.positions);
+            view = was.view;
+            applyView();
+        } else {
+            redraw();
+            fit();
+        }
+    }
+
+    // The f key: in for the pinned table; across to it when another table was pinned inside
+    // focus mode; out again when the focused table is the pinned one, or nothing is.
+    function onFocusKey() {
+        if (focusTable !== null && (pinned.table === null || pinned.table === focusTable)) {
+            leaveFocus();
+        } else if (pinned.table !== null) {
+            focusOn(pinned.table);
+        }
+    }
+
+    // The Focus button is a plain switch: in for the pinned table, out again.
+    function onFocusButton() {
+        if (focusTable !== null) {
+            leaveFocus();
+        } else if (pinned.table !== null) {
+            focusOn(pinned.table);
+        }
+    }
+
+    // The chip's button, by mouse or keyboard: the diagram takes the focus either way (a
+    // browser that does not focus a clicked button would otherwise leave it on the body).
+    function onFocusExit() {
+        leaveFocus();
+        canvas.focus({ preventScroll: true });
+    }
+
+    // ---- Keyboard ------------------------------------------------------------------------------
+    // Keys are left alone while the viewer types (a field or an editable element has them), with
+    // Ctrl, Alt or Meta held (Ctrl+0 and Ctrl+- belong to the browser), when something else on
+    // the page has already answered the key, and in the middle of a pan or a card drag.
+
+    // Inputs that take no text: a key pressed on one of them (a View switch, which keeps the
+    // focus after a mouse click) is the page's.
+    const NO_TEXT_INPUTS = ['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color'];
+
+    function typingIn(target) {
+        if (!(target instanceof Element)) { return false; }
+        if (target.isContentEditable) { return true; }
+        const tag = target.tagName;
+        if (tag === 'INPUT') { return NO_TEXT_INPUTS.indexOf(target.type) < 0; }
+        return tag === 'TEXTAREA' || tag === 'SELECT';
+    }
+
+    // An arrow key looks that way: the view moves the other way, as a scroll would.
+    const ARROWS = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+
+    function panBy(dx, dy) {
+        markTouched();
+        view = { x: view.x + dx, y: view.y + dy, zoom: view.zoom };
+        applyView();
+    }
+
+    function onKeyDown(e) {
+        if (e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || typingIn(e.target)) { return; }
+        // A drag measures from the zoom and the cards it started with (as onWheel): a key that
+        // zoomed, or drew the cards again, under a live drag would move or lose the dragged card.
+        if (gesture) { return; }
+        const key = e.key;
+        const inCanvas = e.target instanceof Element && canvas.contains(e.target);
+        const arrow = own(ARROWS, key);
+        if (arrow) {
+            // Only while the keyboard is in the diagram (the canvas or a card header): anywhere
+            // else the arrows are the page's.
+            if (!inCanvas) { return; }
+            e.preventDefault();
+            panBy(arrow[0] * ARROW_PAN, arrow[1] * ARROW_PAN);
+        } else if (key === 'Enter' || key === ' ') {
+            // A focused card header pins its table, and unpins it again, as a click does. Space
+            // must not scroll; every other Enter and Space (buttons, switches, summaries, the
+            // relationship cards) keeps its own meaning.
+            const head = inCanvas ? e.target.closest('.erd-card__head') : null;
+            if (!head) { return; }
+            e.preventDefault();
+            const id = head.parentNode.getAttribute('data-table');
+            setPinned(pinned.table === id ? NOTHING : { table: id, rels: null });
+        } else if (key === '+' || key === '=') {
+            zoomBy(BUTTON_ZOOM);
+        } else if (key === '-') {
+            zoomBy(1 / BUTTON_ZOOM);
+        } else if (key === '0') {
+            fit();
+        } else if (key === '/') {
+            e.preventDefault();         // the browser's own quick find
+            if (!options.panel) { setOption('panel', true); }
+            side.search.focus({ preventScroll: true });
+        } else if (key === 'f' || key === 'F') {
+            onFocusKey();
+        } else if (key === 'Escape') {
+            // One level at a time: out of focus mode, then the search text, then the pin.
+            if (focusTable !== null) {
+                leaveFocus();
+            } else if (side.search.value) {
+                clearSearch();
+            } else {
+                setPinned(NOTHING);
+            }
+        }
     }
 
     // ---- View options --------------------------------------------------------------------------
@@ -1345,6 +1572,7 @@
             pointerId: e.pointerId,
             target: e.target,           // what was pressed, for when it turns out to be a click
             card: card,                 // table id, or null for a pan
+            inFocus: focusTable !== null,   // a drag begun in focus mode is never remembered
             startX: e.clientX,
             startY: e.clientY,
             originX: origin.x,
@@ -1365,9 +1593,12 @@
             g.moved = true;
             markTouched();
             canvas.classList.add('is-grabbing');
-            if (g.card !== null) { cardEls.get(g.card).classList.add('is-dragging'); }
+            if (g.card !== null) { toggleIn(cardEls, g.card, 'is-dragging', true); }
         }
         if (g.card !== null) {
+            // A card that is no longer drawn (the picture was drawn again under the drag) is
+            // not moved: a position for it would be a phantom.
+            if (!cardEls.has(g.card)) { return; }
             // The pointer moves in screen pixels, the card in layer pixels.
             positions[g.card] = {
                 x: Math.round(g.originX + dx / view.zoom),
@@ -1383,15 +1614,47 @@
 
     // A click in the diagram: a foreign-key row or a line pins its relationship, a card pins its
     // table (the pinned one again unpins it), the empty background unpins.
-    function clickAt(target) {
-        const focus = focusAt(target);
+    // Except the second click of a double-click on a card: that one leaves the table pinned,
+    // because the dblclick that follows focuses on it and needs it pinned (the browser sends two
+    // whole clicks before the dblclick; pin, unpin, pin would flash the panel three times).
+    let lastCardClick = null;           // { table, x, y, time } of the last click on a card
+
+    // Whether a press is the second half of a double-click on this card: soon after the last
+    // click and on the same spot, as the browser's own rule has it. A second click elsewhere on
+    // the card, a row 100px down say, is a click of its own.
+    const doubleClickOn = (table, g, time) =>
+        lastCardClick !== null && lastCardClick.table === table &&
+        time - lastCardClick.time < DOUBLE_CLICK_MS &&
+        Math.abs(g.startX - lastCardClick.x) <= DOUBLE_CLICK_PX &&
+        Math.abs(g.startY - lastCardClick.y) <= DOUBLE_CLICK_PX;
+
+    function clickAt(g, time) {
+        const focus = focusAt(g.target);
         if (focus.rels) {
             pinRel(focus.rels[0]);
         } else if (focus.table !== null) {
-            setPinned(pinned.table === focus.table ? NOTHING : focus);
+            const again = pinned.table === focus.table && !doubleClickOn(focus.table, g, time);
+            lastCardClick = { table: focus.table, x: g.startX, y: g.startY, time: time };
+            setPinned(again ? NOTHING : focus);
+            return;
         } else {
             setPinned(NOTHING);
         }
+        lastCardClick = null;
+    }
+
+    // A double-click on a card: focus mode on its table (the two clicks have pinned it already;
+    // in focus mode on another table this moves the focus across). The canvas holds the pointer
+    // capture during a press, so the browser names the canvas as the target; the card is read
+    // from under the pointer instead.
+    function onDoubleClick(e) {
+        const under = document.elementFromPoint(e.clientX, e.clientY);
+        const card = under instanceof Element ? under.closest('.erd-card') : null;
+        const id = card ? card.getAttribute('data-table') : null;
+        if (id === null || !isDrawn(id)) { return; }
+        e.preventDefault();
+        pinTable(id);
+        focusOn(id);
     }
 
     // Ends the gesture however it ended (released, cancelled by the browser, capture lost): a
@@ -1404,12 +1667,16 @@
         canvas.classList.remove('is-grabbing');
         if (canvas.hasPointerCapture(g.pointerId)) { canvas.releasePointerCapture(g.pointerId); }
         if (g.card !== null && g.moved) {
-            cardEls.get(g.card).classList.remove('is-dragging');
-            saved[options.density][g.card] = [positions[g.card].x, positions[g.card].y];
-            saveStored();
+            toggleIn(cardEls, g.card, 'is-dragging', false);
+            // Focus mode is a passing arrangement: a card moved there is not remembered, not
+            // even when the drag outlives it. Nor is a card that is no longer drawn.
+            if (!g.inFocus && focusTable === null && cardEls.has(g.card)) {
+                saved[options.density][g.card] = [positions[g.card].x, positions[g.card].y];
+                saveStored();
+            }
         }
         if (!g.moved && e.type === 'pointerup') {
-            clickAt(g.target);
+            clickAt(g, e.timeStamp);
         } else if (g.moved && e.pointerType !== 'touch') {
             // Hover was frozen during the gesture; the view or the card has moved under the pointer.
             setHover(focusAt(document.elementFromPoint(e.clientX, e.clientY)));
@@ -1468,6 +1735,10 @@
     canvas.addEventListener('pointerleave', onPointerLeave);
     canvas.addEventListener('wheel', onWheel, { passive: false });
     canvas.addEventListener('scroll', onCanvasScroll);
+    canvas.addEventListener('dblclick', onDoubleClick);
+    document.addEventListener('keydown', onKeyDown);
+    focusButton.addEventListener('click', onFocusButton);
+    focusExit.addEventListener('click', onFocusExit);
 
     panel.addEventListener('pointerover', onPanelPointerOver);
     panel.addEventListener('pointermove', onPanelPointerMove);
