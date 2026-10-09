@@ -1,82 +1,108 @@
-@model DataAdminIndexViewModel
+@model DataAdminSchemaViewModel
 @{
     ViewData["Title"] = "Data Admin";
-    ViewData["BodyClass"] = "lsm-page";
+    // da-schema turns .content into a full-height flex column (lsm-theme.css, "Data Admin: schema diagram").
+    ViewData["BodyClass"] = "lsm-page da-schema";
 }
 
-<div class="page-head fade d1">
-    <div>
-        <h1 class="page-title">Data Admin</h1>
-        <div class="page-sub">
-            <span><span class="num">@Model.ShownCount</span> of @Model.CatalogCount tables shown</span>
-            <span class="tag accent">Super admin</span>
+@* The Data Admin landing page: the whole database as a picture. This markup is only the frame:
+   data-admin-schema.js builds every card and every line from the JSON block below, and finds its
+   places through the data-erd-* hooks. No .fade anywhere in here: that animation holds transform,
+   which is what pan and zoom write. *@
+<div class="erd" id="erd"
+     data-db="@Model.DatabaseName"
+     data-browse-url="@Url.Action("List", new { slug = "__slug__" })"
+     data-tables-url="@Url.Action("Tables")"
+     data-shown="@string.Join(",", Model.ShownTableIds)">
+    <header class="erd-bar">
+        <span class="erd-bar__section">Data Admin</span>
+        <h1 class="erd-bar__db">@Model.DatabaseName</h1>
+        <span class="erd-bar__counts">@Model.TableCount tables &middot; @Model.ColumnCount columns &middot; @Model.RelationshipCount relationships</span>
+        @* Focus mode: one table and its neighbours. The script names the table and shows the chip. *@
+        <span class="erd-bar__chip" data-erd-focus-chip hidden>Focus: <b data-erd-focus-name></b>
+            <button type="button" class="erd-linkbtn" data-erd-focus-exit aria-label="Leave focus mode" title="Leave focus mode (Esc)">&times;</button></span>
+        <span class="erd-bar__spacer"></span>
+        <div class="erd-bar__tools">
+            <button type="button" class="btn sm erd-bar__step" data-erd-zoom-out title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
+            <span class="erd-bar__zoom" data-erd-zoom-label aria-live="off">100%</span>
+            <button type="button" class="btn sm erd-bar__step" data-erd-zoom-in title="Zoom in (+)" aria-label="Zoom in">+</button>
+            <button type="button" class="btn sm" data-erd-fit title="Fit the whole diagram (0)">Fit</button>
+            <button type="button" class="btn sm" data-erd-reset title="Forget moved tables and lay them out again">Reset layout</button>
+            <button type="button" class="btn sm" data-erd-focus disabled aria-pressed="false" title="Show only one table and its neighbours (F). Select a table first.">Focus</button>
+            <button type="button" class="btn sm" data-erd-panel-toggle aria-controls="erd-panel" aria-expanded="true" title="Show or hide the side panel">Panel</button>
         </div>
+    </header>
+    <div class="erd-canvas" data-erd-canvas tabindex="0" aria-label="Database schema diagram">
+        @* Child order is paint order: lines, then cards, then (later) highlighted lines on top. *@
+        <div class="erd-layer" data-erd-layer>
+            <svg class="erd-edges" data-erd-edges aria-hidden="true"></svg>
+            <div class="erd-cards" data-erd-cards></div>
+            <svg class="erd-edges erd-edges--top" data-erd-edges-top aria-hidden="true"></svg>
+        </div>
+        <div class="erd-hint">Drag a header to move a table &middot; drag the background to pan &middot; scroll to zoom</div>
+        <div class="empty erd-empty" data-erd-empty hidden>The schema could not be drawn.</div>
+        <noscript><div class="empty erd-empty">The schema diagram needs JavaScript.</div></noscript>
     </div>
-    <div class="page-actions">
-        <a class="btn ghost" asp-action="Schema">Schema diagram</a>
-        <a class="btn primary" asp-action="Tables">Choose tables</a>
-    </div>
+    @* The side panel is only a skeleton: the script fills every data-erd-* container from the same
+       JSON block, so the lists can never disagree with the picture. *@
+    <aside class="erd-side" id="erd-panel" data-erd-panel aria-label="Schema details">
+        <input type="search" class="input erd-search" data-erd-search placeholder="Find a table or column"
+               aria-label="Find a table or column" autocomplete="off" spellcheck="false" />
+        @* View options. The markup shows the defaults; the script sets the controls from what the
+           browser remembered, and saves every change under the same key as the moved tables. *@
+        <section class="erd-sec" data-erd-view>
+            <h2 class="erd-sec__title">View</h2>
+            <div class="erd-opt">
+                <span class="erd-opt__label" id="erd-opt-density">Columns</span>
+                <div class="hnm-chart-tabs" role="group" aria-labelledby="erd-opt-density" data-erd-opt="density">
+                    <button type="button" class="hnm-chart-tab is-active" data-value="all" aria-pressed="true">All</button>
+                    <button type="button" class="hnm-chart-tab" data-value="keys" aria-pressed="false">Keys</button>
+                    <button type="button" class="hnm-chart-tab" data-value="names" aria-pressed="false">Names</button>
+                </div>
+            </div>
+            <div class="erd-opt">
+                <span class="erd-opt__label" id="erd-opt-edges">Lines</span>
+                <div class="hnm-chart-tabs" role="group" aria-labelledby="erd-opt-edges" data-erd-opt="edges">
+                    <button type="button" class="hnm-chart-tab is-active" data-value="curved" aria-pressed="true">Curved</button>
+                    <button type="button" class="hnm-chart-tab" data-value="orthogonal" aria-pressed="false">Square</button>
+                </div>
+            </div>
+            <label class="erd-opt erd-opt--switch"><span class="erd-opt__label">Column types</span>
+                <input type="checkbox" class="switch" data-erd-opt="types" checked /></label>
+            <label class="erd-opt erd-opt--switch"><span class="erd-opt__label">Lines into hub tables</span>
+                <input type="checkbox" class="switch" data-erd-opt="hubs" checked /></label>
+            <label class="erd-opt erd-opt--switch"><span class="erd-opt__label">Login (Identity) tables</span>
+                <input type="checkbox" class="switch" data-erd-opt="framework" checked /></label>
+        </section>
+        <section class="erd-sec" data-erd-selected hidden>
+            <div class="erd-sec__head">
+                <h2 class="erd-sec__title">Selected</h2>
+                <button type="button" class="erd-linkbtn" data-erd-clear>Clear</button>
+            </div>
+            <div class="erd-selected" data-erd-selected-body></div>
+        </section>
+        <details class="erd-sec" data-erd-sec="tables" open>
+            <summary class="erd-sec__title">Tables <span class="erd-sec__n" data-erd-count="tables"></span></summary>
+            <div class="erd-list" data-erd-tables></div>
+        </details>
+        <details class="erd-sec" data-erd-sec="relationships" open>
+            <summary class="erd-sec__title"><span data-erd-rels-title>Relationships</span> <span class="erd-sec__n" data-erd-count="relationships"></span></summary>
+            <div class="erd-rels" data-erd-rels></div>
+        </details>
+        <details class="erd-sec" data-erd-sec="junctions" open>
+            <summary class="erd-sec__title">Many-to-many <span class="erd-sec__n" data-erd-count="junctions"></span></summary>
+            <div class="erd-rels" data-erd-junctions></div>
+        </details>
+        <details class="erd-sec" data-erd-sec="legend" open>
+            <summary class="erd-sec__title">Legend</summary>
+            <div class="erd-legend" data-erd-legend></div>
+        </details>
+    </aside>
 </div>
 
-<partial name="~/Views/DataAdmin/_Flash.cshtml" />
+<script type="application/json" id="erd-data" nonce="@Html.CspNonce()">@Html.Raw(Model.DiagramJson)</script>
 
-@if (Model.Groups.Count == 0)
-{
-    <div class="card fade d2">
-        <div class="empty">
-            <div style="font-size:15px;color:var(--fg);font-weight:500;margin-bottom:6px">No tables are shown yet</div>
-            <div style="margin-bottom:12px">Pick the tables you want to browse and edit. They are grouped by what deletes them, so related tables stay together.</div>
-            <a class="btn primary" asp-action="Tables">Choose tables</a>
-        </div>
-    </div>
-}
-else
-{
-    foreach (var group in Model.Groups)
-    {
-        <div class="card fade d2" style="margin-bottom:16px">
-            <div class="card-head">
-                <div class="card-title">@group.RootName</div>
-                <span class="tag">@group.Cards.Count table@(group.Cards.Count == 1 ? "" : "s")</span>
-            </div>
-            <table class="table themed">
-                <thead>
-                    <tr>
-                        <th>Table</th>
-                        <th>Database table</th>
-                        <th>Access</th>
-                        <th style="text-align:right">Rows</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var card in group.Cards)
-                    {
-                        <tr>
-                            <td style="font-weight:500"><a asp-action="List" asp-route-slug="@card.Slug">@card.DisplayName</a></td>
-                            <td style="color:var(--fg-3);font-size:12px">@card.TableName</td>
-                            <td>
-                                <div style="display:flex;flex-wrap:wrap;gap:4px">
-                                    @if (!card.CanCreate && !card.CanEdit && !card.CanDelete)
-                                    {
-                                        <span class="tag">Read-only</span>
-                                    }
-                                    else
-                                    {
-                                        if (card.CanCreate) { <span class="tag success">Add</span> }
-                                        if (card.CanEdit) { <span class="tag success">Edit</span> }
-                                        if (card.CanDelete) { <span class="tag warning">Delete</span> }
-                                    }
-                                    @if (card.DiscordSideEffect is not null)
-                                    {
-                                        <span class="tag accent" title="@card.DiscordSideEffect">Discord</span>
-                                    }
-                                </div>
-                            </td>
-                            <td class="num" style="text-align:right">@card.RowCount.ToString("N0")</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
+@section Scripts {
+    <script src="~/js/data-admin-schema-layout.js" asp-append-version="true" defer></script>
+    <script src="~/js/data-admin-schema.js" asp-append-version="true" defer></script>
 }

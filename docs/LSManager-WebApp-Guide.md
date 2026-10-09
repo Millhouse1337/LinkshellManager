@@ -97,7 +97,7 @@ The delete page shows what else goes with the row (deleted, unlinked, or blockin
 you confirm. Ledgers and history tables are read-only, credentials and images are never shown, and
 `Linkshell` and `App User` can never be deleted from here.
 
-**Schema diagram** (the button at the top of the Data Admin pages) draws the whole database as one
+**Schema diagram** (the Data Admin landing page) draws the whole database as one
 picture: a card per table listing its columns and keys, and a line for every foreign key, whose ends
 show one-to-many or one-to-one and whose style shows what a delete does (solid cascades, dashed
 unlinks, dotted blocks). Drag the background to pan, scroll to zoom, drag a table by its header to

@@ -54,6 +54,6 @@ public static class DataAdminDefaults
     // Literal route segments under /data-admin. A table slug must never collide with one.
     public static readonly IReadOnlySet<string> ReservedSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "tables", "schema", "create", "edit", "delete",
+        "tables", "create", "edit", "delete",
     };
 }

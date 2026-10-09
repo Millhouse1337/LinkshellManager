@@ -1989,7 +1989,7 @@
 .lsm-page .chart-keyitems tr.is-you { background: var(--bg-card-hover); }
 
 /* ===== Data Admin: schema diagram (.erd) =====
-   The /data-admin/schema page: the whole database drawn as cards (tables) and lines (foreign keys).
+   The /data-admin landing page: the whole database drawn as cards (tables) and lines (foreign keys).
    data-admin-schema.js builds the cards and lines; data-admin-schema-layout.js works out every
    position from fixed numbers (card width, header height, row height) and never measures the page.
    So the job of this block is to make those numbers TRUE: a card is exactly --erd-card-w wide and
@@ -2068,15 +2068,13 @@
     border-bottom: 1px solid var(--border-soft);
     background: var(--bg-panel);
 }
-.erd-bar__back {
+/* The section's name, a plain label: this page IS Data Admin, so there is nothing to go back to. */
+.erd-bar__section {
     flex: none;
     font-size: 13px;
     color: var(--text-muted);
-    text-decoration: none;
 }
-.erd-bar__back::after { content: "/"; margin-left: 16px; color: var(--border-soft); }
-.erd-bar__back:hover { color: var(--text-main); }
-.erd-bar__back:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 3px; border-radius: 4px; }
+.erd-bar__section::after { content: "/"; margin-left: 16px; color: var(--border-soft); }
 /* The database name is never cut. When the bar runs short the counts give way first (an
    ellipsis, and under 1500px they go whole: the panel repeats them as "Tables 73"), then the
    chip (down to 140px, its name cut with the whole of it in the tooltip). */

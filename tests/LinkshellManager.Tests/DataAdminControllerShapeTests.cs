@@ -71,7 +71,6 @@ public class DataAdminControllerShapeTests
 
         Assert.Contains("data-admin", templates);
         Assert.Contains("data-admin/tables", templates);
-        Assert.Contains("data-admin/schema", templates);
         Assert.Contains("data-admin/{slug}", templates);
         Assert.Contains("data-admin/{slug}/{id}", templates);
         Assert.Contains("data-admin/{slug}/create", templates);
@@ -80,10 +79,10 @@ public class DataAdminControllerShapeTests
         Assert.All(templates, template => Assert.False(string.IsNullOrEmpty(template)));
     }
 
-    // /data-admin/tables and /data-admin/schema sit where a table's slug goes (/data-admin/{slug}),
-    // and a literal segment wins over a parameter. A table whose slug equalled one of them would be
-    // unreachable, so the catalog refuses the reserved slugs. This keeps the two lists in step: a
-    // new page added here without reserving its name fails the build, not a table in production.
+    // /data-admin/tables sits where a table's slug goes (/data-admin/{slug}), and a literal segment
+    // wins over a parameter. A table whose slug equalled it would be unreachable, so the catalog
+    // refuses the reserved slugs. This keeps the two lists in step: a new page added here without
+    // reserving its name fails the build, not a table in production.
     [Fact]
     public void EveryLiteralFirstSegment_IsAReservedSlug()
     {
@@ -95,7 +94,6 @@ public class DataAdminControllerShapeTests
             .ToList();
 
         Assert.Contains("tables", literals);
-        Assert.Contains("schema", literals);
         Assert.All(literals, literal => Assert.True(
             DataAdminDefaults.ReservedSlugs.Contains(literal),
             $"/data-admin/{literal} is a page, but '{literal}' is not in DataAdminDefaults.ReservedSlugs."));

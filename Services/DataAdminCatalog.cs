@@ -61,7 +61,7 @@ public sealed class DataAdminCatalog
 
     public IReadOnlyList<DataAdminModel> Models { get; }
 
-    // Cascade-delete grouping for the chooser and the index page.
+    // Cascade-delete grouping for the chooser.
     public DataAdminCascadeForest<DataAdminModel> Forest { get; }
 
     // The whole database as a picture, for the schema diagram. Lazy on purpose, and NOT read in the

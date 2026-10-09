@@ -5,32 +5,6 @@ namespace LinkshellManagerDiscordApp.ViewModels;
 // View models for the Data Admin pages. Views bind to these, never to the engine's own types, so
 // a Razor file cannot reach a DbContext or an expression builder by accident.
 
-public sealed class DataAdminIndexViewModel
-{
-    public List<DataAdminIndexGroup> Groups { get; } = new();
-    public int ShownCount { get; set; }
-    public int CatalogCount { get; set; }
-}
-
-// Shown tables grouped under the root of their cascade-delete tree (Linkshell, App User, ...).
-public sealed class DataAdminIndexGroup
-{
-    public required string RootName { get; init; }
-    public List<DataAdminIndexCard> Cards { get; } = new();
-}
-
-public sealed class DataAdminIndexCard
-{
-    public required string Slug { get; init; }
-    public required string DisplayName { get; init; }
-    public required string TableName { get; init; }
-    public long RowCount { get; init; }
-    public bool CanCreate { get; init; }
-    public bool CanEdit { get; init; }
-    public bool CanDelete { get; init; }
-    public string? DiscordSideEffect { get; init; }
-}
-
 public sealed class DataAdminTablesViewModel
 {
     public List<DataAdminTableNode> Roots { get; } = new();
@@ -233,8 +207,9 @@ public sealed class DataAdminActiveFilter
     public required string Label { get; init; }
 }
 
-// The schema diagram page: the header's numbers plus the graph as one JSON block. The diagram
-// itself is drawn in the browser (wwwroot/js/data-admin-schema.js) from DiagramJson.
+// The Data Admin landing page (the schema diagram): the header's numbers plus the graph as one
+// JSON block. The diagram itself is drawn in the browser (wwwroot/js/data-admin-schema.js) from
+// DiagramJson.
 public sealed class DataAdminSchemaViewModel
 {
     public required string DatabaseName { get; init; }

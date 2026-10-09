@@ -1,4 +1,4 @@
-// The Data Admin schema diagram (/data-admin/schema): draws every table as a card and every foreign
+// The Data Admin schema diagram (/data-admin): draws every table as a card and every foreign
 // key as a line, lets the viewer pan, zoom and move the cards about, lights up what the pointer is
 // over, keeps the side panel (search, selection, lists, legend) in step with the picture, cuts the
 // picture down to one table and its neighbours (focus mode), and answers the keyboard.

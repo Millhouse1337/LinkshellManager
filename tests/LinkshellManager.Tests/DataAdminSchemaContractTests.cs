@@ -14,7 +14,7 @@ namespace LinkshellManager.Tests;
 /// <summary>
 /// The schema diagram's hand-offs between C#, the Razor view, the stylesheet and the two scripts.
 ///
-/// The page (/data-admin/schema) is drawn entirely in the browser. The server writes one JSON block
+/// The page (/data-admin) is drawn entirely in the browser. The server writes one JSON block
 /// (DataAdminSchemaGraph.Json) and two scripts read it back: data-admin-schema-layout.js (where
 /// things go) and data-admin-schema.js (the cards and lines). Nothing type-checks any of it, and
 /// each piece fails silently:
@@ -219,7 +219,7 @@ public class DataAdminSchemaContractTests
         foreach (var hook in ViewHooks)
         {
             var inView = Regex.Matches(view, @"\s" + Regex.Escape(hook) + @"(?=[\s>/])").Count;
-            Assert.True(inView == 1, $"Schema.cshtml must carry '{hook}' exactly once; found {inView}.");
+            Assert.True(inView == 1, $"Index.cshtml must carry '{hook}' exactly once; found {inView}.");
             Assert.Contains("[" + hook + "]", page, StringComparison.Ordinal);
         }
     }
@@ -275,7 +275,7 @@ public class DataAdminSchemaContractTests
     // The view without its Razor comments: they are notes for the reader and never reach the page.
     private static string ReadView()
     {
-        var view = File.ReadAllText(Path.Combine(FindRepoDirectory("Views"), "DataAdmin", "Schema.cshtml"));
+        var view = File.ReadAllText(Path.Combine(FindRepoDirectory("Views"), "DataAdmin", "Index.cshtml"));
         return Regex.Replace(view, @"@\*.*?\*@", " ", RegexOptions.Singleline);
     }
 
