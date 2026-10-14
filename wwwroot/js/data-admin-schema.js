@@ -74,6 +74,11 @@
     const recordsLink = root.querySelector('[data-erd-records]');
     if (!recordsLink) { return; }
 
+    // The three-dot grip on the panel's left edge: drag it (or use the arrow keys on it) to make
+    // the panel wider or narrower.
+    const sideGrip = root.querySelector('[data-erd-side-grip]');
+    if (!sideGrip) { return; }
+
     const M = L.METRICS;
     const SVG_NS = 'http://www.w3.org/2000/svg';
     const STORAGE_KEY = 'lsm.dataAdmin.schema.v1';
@@ -103,6 +108,12 @@
     // 5000px across, and a value such as 1e300 would blank the canvas and break every SVG path.
     const POSITION_LIMIT = 1000000;
     const NOTHING = { table: null, rels: null };   // a hover or a pin with nothing in it
+    // The side panel's width in px. The stylesheet also caps it at half the page, so a wide
+    // panel saved on a big screen can never squeeze the picture away on a small one.
+    const SIDE_DEFAULT = 300;
+    const SIDE_MIN = 240;
+    const SIDE_MAX = 720;
+    const SIDE_KEY_STEP = 16;       // px one arrow key on the grip moves the edge
 
     // Own properties only, so a table called "constructor" can never find Object.prototype's.
     const own = (map, key) =>
@@ -154,7 +165,8 @@
     const recordsUrlFor = (id) => recordsUrl.replace('__slug__', encodeURIComponent(slugOf(id)));
 
     // ---- What the browser remembers ------------------------------------------------------------
-    // One localStorage entry: { v: 1, options, positions: { all: { id: [x, y] }, keys, names } }.
+    // One localStorage entry:
+    // { v: 1, options, positions: { all: { id: [x, y] }, keys, names }, sideWidth }.
     // Moved cards are remembered per density because a card's height, and so the whole layout,
     // differs between them. Pan and zoom are never stored: a fresh visit starts with the overview.
 
@@ -205,14 +217,20 @@
         const usable = isObject(raw) && raw.v === 1;
         return {
             options: cleanOptions(usable ? raw.options : null),
-            saved: cleanPositions(usable ? raw.positions : null)
+            saved: cleanPositions(usable ? raw.positions : null),
+            sideWidth: cleanSideWidth(usable ? raw.sideWidth : null)
         };
+    }
+
+    // A whole number of px within the panel's limits; anything else is the default width.
+    function cleanSideWidth(raw) {
+        return Number.isFinite(raw) ? clamp(Math.round(raw), SIDE_MIN, SIDE_MAX) : SIDE_DEFAULT;
     }
 
     function saveStored() {
         try {
-            window.localStorage.setItem(
-                STORAGE_KEY, JSON.stringify({ v: 1, options: options, positions: saved }));
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(
+                { v: 1, options: options, positions: saved, sideWidth: sideWidth }));
         } catch (e) {
             // Not being able to remember a layout is no reason to bother the viewer.
         }
@@ -223,6 +241,8 @@
     const stored = loadStored();
     const options = stored.options;
     const saved = stored.saved;         // density -> { id: [x, y] }: only the cards the viewer moved
+    let sideWidth = stored.sideWidth;   // the side panel's width in px
+    let sideDrag = null;                // { pointerId, startX, startWidth } while the grip is dragged
     let positions = {};                 // id -> { x, y }: where every drawn card is right now
     let view = { x: 0, y: 0, zoom: 1 }; // layer point p is on screen at p * zoom + (x, y)
     let touched = false;                // has the viewer panned, zoomed or dragged yet?
@@ -1639,6 +1659,66 @@
         saveStored();
     }
 
+    // ---- Panel width ---------------------------------------------------------------------------
+    // The grip on the panel's left edge moves that edge: dragged left the panel grows, right it
+    // shrinks. The width is a custom property the stylesheet's grid reads, so the canvas simply
+    // gets the rest of the row (and the resize watch keeps an untouched overview fitted).
+
+    // The widest the panel may be right now: SIDE_MAX, but never more than half of the page.
+    const sideMax = () => Math.max(SIDE_MIN, Math.min(SIDE_MAX, Math.floor(root.clientWidth / 2)));
+
+    function applySideWidth() {
+        root.style.setProperty('--erd-side-w', sideWidth + 'px');
+        sideGrip.setAttribute('aria-valuenow', String(Math.min(sideWidth, sideMax())));
+        sideGrip.setAttribute('aria-valuemax', String(sideMax()));
+    }
+
+    function setSideWidth(width, save) {
+        const next = clamp(Math.round(width), SIDE_MIN, sideMax());
+        if (next !== sideWidth) {
+            sideWidth = next;
+            applySideWidth();
+        }
+        if (save) { saveStored(); }
+    }
+
+    function onGripDown(e) {
+        if (e.button !== 0 || sideDrag) { return; }
+        e.preventDefault();             // no text selection, and the grip keeps the focus
+        sideGrip.focus({ preventScroll: true });
+        sideDrag = { pointerId: e.pointerId, startX: e.clientX, startWidth: Math.min(sideWidth, sideMax()) };
+        try { sideGrip.setPointerCapture(e.pointerId); } catch (err) { /* already released */ }
+        root.classList.add('is-resizing');
+    }
+
+    function onGripMove(e) {
+        if (!sideDrag || e.pointerId !== sideDrag.pointerId) { return; }
+        setSideWidth(sideDrag.startWidth + (sideDrag.startX - e.clientX), false);
+    }
+
+    function onGripUp(e) {
+        if (!sideDrag || e.pointerId !== sideDrag.pointerId) { return; }
+        sideDrag = null;
+        root.classList.remove('is-resizing');
+        saveStored();
+    }
+
+    // The grip as a keyboard control (a separator): the arrows move the edge, Home and End go to
+    // the narrowest and widest, Enter puts it back.
+    function onGripKey(e) {
+        if (e.ctrlKey || e.altKey || e.metaKey) { return; }
+        const now = Math.min(sideWidth, sideMax());
+        let next = null;
+        if (e.key === 'ArrowLeft') { next = now + SIDE_KEY_STEP; }
+        else if (e.key === 'ArrowRight') { next = now - SIDE_KEY_STEP; }
+        else if (e.key === 'Home') { next = SIDE_MIN; }
+        else if (e.key === 'End') { next = sideMax(); }
+        else if (e.key === 'Enter') { next = SIDE_DEFAULT; }
+        if (next === null) { return; }
+        e.preventDefault();
+        setSideWidth(next, true);
+    }
+
     // A segmented button: its group's option takes the button's value.
     function onViewClick(e) {
         const button = e.target instanceof Element ? e.target.closest('[data-value]') : null;
@@ -1806,6 +1886,12 @@
         if (canvas.scrollTop !== 0) { canvas.scrollTop = 0; }
     }
 
+    // The panel scrolls up and down only. A browser bringing a focused item into view may still
+    // scroll it sideways (overflow-x: hidden allows that), cutting the start off every label.
+    function onPanelScroll() {
+        if (panel.scrollLeft !== 0) { panel.scrollLeft = 0; }
+    }
+
     function onClick(selector, handler) {
         const button = root.querySelector(selector);
         if (button) { button.addEventListener('click', handler); }
@@ -1816,6 +1902,8 @@
     root.style.setProperty('--erd-card-w', M.cardW + 'px');
     root.style.setProperty('--erd-head-h', M.headH + 'px');
     root.style.setProperty('--erd-row-h', M.rowH + 'px');
+    // The remembered panel width, before the first fit measures the canvas.
+    applySideWidth();
 
     // The options first: a closed panel gives the canvas its full width before the first fit.
     applyOptions();
@@ -1857,11 +1945,22 @@
     panel.addEventListener('wheel', forgetPanelClick, { passive: true });
     panel.addEventListener('click', onPanelClick);
     panel.addEventListener('keydown', onPanelKey);
+    panel.addEventListener('scroll', onPanelScroll);
     side.search.addEventListener('input', onSearchInput);
     side.search.addEventListener('keydown', onSearchKey);
     viewSection.addEventListener('click', onViewClick);
     viewSection.addEventListener('change', onViewChange);
     panelToggle.addEventListener('click', () => { setOption('panel', !options.panel); });
+    sideGrip.addEventListener('pointerdown', onGripDown);
+    sideGrip.addEventListener('pointermove', onGripMove);
+    sideGrip.addEventListener('pointerup', onGripUp);
+    sideGrip.addEventListener('pointercancel', onGripUp);
+    sideGrip.addEventListener('lostpointercapture', onGripUp);
+    sideGrip.addEventListener('keydown', onGripKey);
+    // A double-click puts the default width back.
+    sideGrip.addEventListener('dblclick', () => { setSideWidth(SIDE_DEFAULT, true); });
+    // The cap is half the page, which moves with the window.
+    window.addEventListener('resize', applySideWidth);
 
     onClick('[data-erd-zoom-in]', () => { zoomBy(BUTTON_ZOOM); });
     onClick('[data-erd-zoom-out]', () => { zoomBy(1 / BUTTON_ZOOM); });

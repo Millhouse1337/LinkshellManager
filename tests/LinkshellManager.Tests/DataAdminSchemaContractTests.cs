@@ -113,6 +113,8 @@ public class DataAdminSchemaContractTests
         "data-erd-focus", "data-erd-focus-chip", "data-erd-focus-name", "data-erd-focus-exit",
         // The bar's View records link; the script writes its href and its disabled state.
         "data-erd-records",
+        // The grip on the panel's left edge; the script drags it and writes the panel's width.
+        "data-erd-side-grip",
     };
 
     private static ApplicationDbContext NewInMemoryContext() =>

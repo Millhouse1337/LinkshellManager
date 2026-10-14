@@ -2025,18 +2025,70 @@
 
     display: grid;
     grid-template-rows: 56px minmax(0, 1fr);
-    grid-template-columns: minmax(0, 1fr) 300px;
+    /* The panel's width is the viewer's (the grip on its left edge; the script writes
+       --erd-side-w), but never more than half the row, so the picture always keeps the rest. */
+    grid-template-columns: minmax(0, 1fr) min(var(--erd-side-w, 300px), 50%);
     min-width: 0;
     color: var(--text-main);
 }
 /* Too narrow for both: the picture wins and the panel goes. */
 @media (max-width: 899px) {
     .lsm-page .erd { grid-template-columns: minmax(0, 1fr); }
-    .lsm-page .erd > .erd-side { display: none; }
+    .lsm-page .erd > .erd-side,
+    .lsm-page .erd > .erd-grip { display: none; }
 }
 /* The same when the Panel button has closed it. */
 .lsm-page .erd.is-panel-closed { grid-template-columns: minmax(0, 1fr); }
-.lsm-page .erd.is-panel-closed > .erd-side { display: none; }
+.lsm-page .erd.is-panel-closed > .erd-side,
+.lsm-page .erd.is-panel-closed > .erd-grip { display: none; }
+
+/* The resize grip: a 12px strip over the panel's left border with three dots in the middle.
+   It shares the panel's grid cell and sits on top of its edge, so it never takes room from
+   either side. Dragging shows a line along the edge and keeps the col-resize cursor on the whole
+   page (the pointer is captured, but it can be over the canvas while the edge catches up). */
+.erd-grip {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+    align-self: stretch;
+    position: relative;
+    z-index: 5;
+    width: 12px;
+    margin-left: -6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+}
+.erd-grip::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 5px;
+    width: 2px;
+    background: transparent;
+}
+.erd-grip > span {
+    position: relative;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+.erd-grip:hover::before,
+.erd.is-resizing .erd-grip::before { background: var(--blue-main); }
+.erd-grip:hover > span,
+.erd.is-resizing .erd-grip > span { background: var(--text-main); }
+.erd-grip:focus { outline: none; }
+.erd-grip:focus-visible::before { background: var(--blue-main); }
+.erd-grip:focus-visible > span { background: var(--blue-main); }
+.erd.is-resizing,
+.erd.is-resizing * { cursor: col-resize; user-select: none; }
 /* View options the stylesheet carries out: the types column goes (the name gets the room); hub
    lines go from the base SVG only, so a lit one still shows its copy on top. */
 .erd.no-types .erd-row__type { display: none; }
@@ -2478,6 +2530,8 @@
     min-height: 0;
     min-width: 0;
     overflow-y: auto;
+    /* The browser can still scroll a hidden overflow sideways (to show a focused item), which
+       cut the left edge off every label: the script puts it straight back (onPanelScroll). */
     overflow-x: hidden;
     display: flex;
     flex-direction: column;

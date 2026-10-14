@@ -45,6 +45,12 @@
         <div class="empty erd-empty" data-erd-empty hidden>The schema could not be drawn.</div>
         <noscript><div class="empty erd-empty">The schema diagram needs JavaScript.</div></noscript>
     </div>
+    @* The panel's resize grip: drag it left or right, or focus it and use the arrow keys (Enter or a
+       double-click puts the default width back). The script writes the width and the aria values. *@
+    <div class="erd-grip" data-erd-side-grip role="separator" aria-orientation="vertical"
+         aria-controls="erd-panel" aria-label="Resize the side panel" aria-valuemin="240"
+         aria-valuemax="720" aria-valuenow="300" tabindex="0"
+         title="Drag to resize the panel (double-click to reset)"><span></span><span></span><span></span></div>
     @* The side panel is only a skeleton: the script fills every data-erd-* container from the same
        JSON block, so the lists can never disagree with the picture. *@
     <aside class="erd-side" id="erd-panel" data-erd-panel aria-label="Schema details">
