@@ -6,7 +6,8 @@ import {
   ActivityCreateAuctionInput,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import { formatElapsed, parseDate } from '../sidebar-panel.helpers';import { ADMIN_BADGE, canManageLinkshellIn } from '../activity-home.helpers';
+import { formatElapsed, parseDate } from '../sidebar-panel.helpers';
+import { canManageLinkshellIn } from '../activity-home.helpers';
 
 @Component({
   selector: 'app-auctions-panel',

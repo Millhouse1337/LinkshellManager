@@ -23,7 +23,7 @@ import {
 import { hasHqVariant, isHnmTierMonster } from './activity-home.types';
 import { PartySetupService } from '../discord/party-setup.service';
 import { TodService } from '../discord/tod.service';
-import { ADMIN_BADGE, canManageLinkshellIn } from './activity-home.helpers';
+import { canManageLinkshellIn } from './activity-home.helpers';
 import type { ActivityPartySetupListRow, ActivityUpcomingRepop } from '../discord/discord-activity.types';
 import { MarkdownTextareaComponent } from './tabs/markdown-textarea.component';
 import { PartySetupEditorComponent } from './tabs/party-setup-editor.component';

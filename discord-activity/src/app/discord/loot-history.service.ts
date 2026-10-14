@@ -56,7 +56,7 @@ export class LootHistoryService {
       if (query && query.trim()) search.set("q", query.trim());
       const qs = search.toString();
       return await this.http.fetchActivityJson<ActivityLootEventOptions>(
-        `/api/activity/loot-history/event-options-e`,
+        `/api/activity/loot-history/event-options${qs ? `?${qs}` : ''}`,
         accessToken
       );
     } catch {

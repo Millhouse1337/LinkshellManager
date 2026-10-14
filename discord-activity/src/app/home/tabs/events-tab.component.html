@@ -191,7 +191,7 @@
                           @if (matches.length > 0) {
                             <ul class="live-add-member-typeahead__menu" role="listbox">
                               @for (candidate of matches; track candidate.appUserId) {
-                                <li role="option">
+                                <li role="option" aria-selected="false">
                                   <button type="button"
                                     class="live-add-member-typeahead__option"
                                     (mousedown)="$event.preventDefault()"

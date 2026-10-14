@@ -34,7 +34,7 @@ export type TabName = typeof TAB_NAMES[number];
 // create-event monster dropdown the two are offered as ONE entry: the base name below
 // HNM_COMBINED_FROM_DAY, the combined "Base/Stronger" name at/above it. The chosen text is
 // stored verbatim in Event.AssignedMonsterName (the server splits it on '/' for lookups).
-export const HNM_MERGE_PAIRS: ReadonlyArray<{ base: string; stronger: string }> = [
+export const HNM_MERGE_PAIRS: readonly { base: string; stronger: string }[] = [
   { base: 'Adamantoise', stronger: 'Aspidochelone' },
   { base: 'Behemoth', stronger: 'King Behemoth' },
   { base: 'Fafnir', stronger: 'Nidhogg' }

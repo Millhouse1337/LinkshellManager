@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import {
-  ChangeDetectionStrategy, Component, ElementRef, Input,
-  computed, effect, inject, signal, viewChild
+  ChangeDetectionStrategy, Component, Input,
+  computed, effect, inject, signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 

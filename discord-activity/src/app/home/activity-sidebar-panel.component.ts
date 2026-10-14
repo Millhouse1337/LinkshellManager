@@ -3,7 +3,8 @@ import { ChangeDetectionStrategy, Component, Input, effect, inject, signal } fro
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../discord/discord-activity.service';
 import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../discord/discord-activity.types';
-import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from './event-job-options';import { ADMIN_BADGE, canManageLinkshellIn } from './activity-home.helpers';
+import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from './event-job-options';
+import { canManageLinkshellIn } from './activity-home.helpers';
 import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.helpers';
 import { AuctionsPanelComponent } from './sidebar-panels/auctions-panel.component';
 import { InvitesPanelComponent } from './sidebar-panels/invites-panel.component';
@@ -773,7 +774,7 @@ export class ActivitySidebarPanelComponent {
     return this.activity.historyDetail();
   }
 
-  protected formatDurationForLinkshell(duration: number | null | undefined, _linkshellId: number): string {
+  protected formatDuration(duration: number | null | undefined): string {
     // Exact elapsed time (second precision), never rounded down to a misleading
     // "0h". Long events read "2h 15m"; short ones "35m" / "35s".
     const totalSeconds = Math.max(0, Math.round((duration ?? 0) * 3600));

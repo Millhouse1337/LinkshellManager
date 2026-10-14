@@ -3,7 +3,6 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, inje
 import { FormsModule } from '@angular/forms';
 import {
   ActivityCreateTodInput,
-  ActivityLootStructure,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
 import {
@@ -334,10 +333,6 @@ export class TodFormComponent {
 
   private linkshellSettingsFor(linkshellId: number) {
     return this.activity.overview()?.linkshells?.find(l => l.id === linkshellId)?.settings ?? null;
-  }
-
-  protected lootStructureFor(linkshellId: number): ActivityLootStructure {
-    return this.linkshellSettingsFor(linkshellId)?.lootStructure ?? 'Dkp';
   }
 
   protected linkshellName(): string | null {
@@ -708,7 +703,6 @@ export class TodFormComponent {
 
     const dayNumber = this.todDayNumberNotSpecified ? null : this.todDraft.dayNumber;
     const interval = this.todIntervalLabel();
-    const lootStructure = this.lootStructureFor(linkshellId);
     // Loot is NEVER posted from a ToD any more. It is recorded in the Loot tab and filed against a
     // live or past event -- which is what stopped every ToD-recorded drop landing in the history as
     // source "ToD" with no event behind it. Sent empty rather than dropped from the payload so an

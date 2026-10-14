@@ -16,7 +16,7 @@ import type {
   ActivityMonsterTimingInput,
   ActivityMonsterTimingsResponse
 } from '../../discord/discord-activity.types';
-import { ADMIN_BADGE, canManageLinkshellIn } from '../activity-home.helpers';
+import { canManageLinkshellIn } from '../activity-home.helpers';
 
 // (PoolDraft moved to tabs/dkp-grouping-tab.component.ts with the editor it belongs to.)
 
@@ -578,7 +578,7 @@ export class ConfigurationsTabComponent {
 
   // Event-board image palettes (mirrors the server-side EventBoardThemes). The
   // swatch colours are shown in the picker; the key is what gets persisted.
-  protected readonly eventBoardThemes: ReadonlyArray<{ key: string; label: string; bg: string; accent: string }> = [
+  protected readonly eventBoardThemes: readonly { key: string; label: string; bg: string; accent: string }[] = [
     { key: 'Crystal', label: 'Crystal', bg: '#0b0e1a', accent: '#d8b86a' },
     { key: 'Abyss', label: 'Abyss', bg: '#041c24', accent: '#3fd9e6' },
     { key: 'Ember', label: 'Ember', bg: '#170a05', accent: '#f0883e' },
