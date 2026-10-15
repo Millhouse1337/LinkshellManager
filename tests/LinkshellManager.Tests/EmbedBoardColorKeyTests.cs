@@ -80,7 +80,7 @@ public class EmbedBoardColorKeyTests
     }
 
     // The tags describe a button every board carries, so the key lists them whether or not
-    // anybody on THIS board has ticked one — same rule the image board's key follows.
+    // anybody on THIS board has ticked one.
     [Fact]
     public void ColorKey_NamesReadinessTags_EvenWithNoneSet()
     {

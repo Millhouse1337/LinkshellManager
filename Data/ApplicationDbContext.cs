@@ -143,20 +143,31 @@ namespace LinkshellManagerDiscordApp.Data
 
         // Newly-created auctions (→ post an "auction opened" embed) and
         // newly-created auction histories (→ post the "closed" results embed)
-        // to the linkshell's Auctions webhook. Only *Added* rows are collected.
-        // The publisher no-ops when no Auctions webhook is configured.
-        private (List<Auction> created, List<AuctionHistory> closed) CollectAuctionChannelWork()
+        // to the linkshell's Auctions channel. Also posted auctions whose start or
+        // end just changed (Start, End early, a re-timed auction) → refresh the card,
+        // whose Queued / Live / Ended line reads those times.
+        // The publisher no-ops when no Auctions channel route is configured.
+        private (List<Auction> created, List<AuctionHistory> closed, List<int> retimed) CollectAuctionChannelWork()
         {
             if (_auctionChannelQueue is null)
             {
-                return (new List<Auction>(), new List<AuctionHistory>());
+                return (new List<Auction>(), new List<AuctionHistory>(), new List<int>());
             }
             var created = new List<Auction>();
+            var retimed = new List<int>();
             foreach (var entry in ChangeTracker.Entries<Auction>())
             {
                 if (entry.State == EntityState.Added && entry.Entity.LinkshellId > 0)
                 {
                     created.Add(entry.Entity);
+                }
+                else if (entry.State == EntityState.Modified
+                    && !string.IsNullOrEmpty(entry.Entity.DiscordMessageId)
+                    && (entry.Property(a => a.StartedAt).IsModified
+                        || entry.Property(a => a.StartTime).IsModified
+                        || entry.Property(a => a.EndTime).IsModified))
+                {
+                    retimed.Add(entry.Entity.Id);
                 }
             }
             var closed = new List<AuctionHistory>();
@@ -167,7 +178,7 @@ namespace LinkshellManagerDiscordApp.Data
                     closed.Add(entry.Entity);
                 }
             }
-            return (created, closed);
+            return (created, closed, retimed);
         }
 
         // Newly-created events (→ announce to the linkshell's Discord channel for
@@ -421,11 +432,15 @@ namespace LinkshellManagerDiscordApp.Data
         }
 
         private void EnqueueAuctionChannelWork(
-            IReadOnlyList<Auction> created, IReadOnlyList<AuctionHistory> closed)
+            IReadOnlyList<Auction> created, IReadOnlyList<AuctionHistory> closed, IReadOnlyList<int> retimed)
         {
             if (_auctionChannelQueue is null)
             {
                 return;
+            }
+            foreach (var auctionId in retimed)
+            {
+                _auctionChannelQueue.Enqueue(new AuctionChannelJob(AuctionChannelJobKind.Update, auctionId));
             }
             foreach (var auction in created)
             {
@@ -886,7 +901,7 @@ namespace LinkshellManagerDiscordApp.Data
             AssertTreasuryEntriesBalance();
             AssertConfirmedTreasuryEntriesAreImmutable();
             var affected = CollectChangedTodLinkshellIds();
-            var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
+            var (createdAuctions, closedAuctions, retimedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
             var editedEvents = CollectEditedEvents();
             var (todLoot, eventLoot) = CollectAddedLoot();
@@ -898,7 +913,7 @@ namespace LinkshellManagerDiscordApp.Data
             var liveChanges = CollectLiveChanges();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
             EnqueueTodBoardRefreshes(affected);
-            EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
+            EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
             EnqueueEventPosts(editedEvents);
             EnqueueLootPosts(todLoot, eventLoot);
@@ -918,7 +933,7 @@ namespace LinkshellManagerDiscordApp.Data
             AssertTreasuryEntriesBalance();
             AssertConfirmedTreasuryEntriesAreImmutable();
             var affected = CollectChangedTodLinkshellIds();
-            var (createdAuctions, closedAuctions) = CollectAuctionChannelWork();
+            var (createdAuctions, closedAuctions, retimedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
             var editedEvents = CollectEditedEvents();
             var (todLoot, eventLoot) = CollectAddedLoot();
@@ -929,7 +944,7 @@ namespace LinkshellManagerDiscordApp.Data
             var liveChanges = CollectLiveChanges();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
-            EnqueueAuctionChannelWork(createdAuctions, closedAuctions);
+            EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
             EnqueueEventPosts(editedEvents);
             EnqueueLootPosts(todLoot, eventLoot);
