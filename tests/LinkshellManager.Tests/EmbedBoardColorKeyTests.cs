@@ -8,10 +8,8 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The classic embed board (the fallback when the PNG renderer is unavailable, and the shape
-// used for ad-hoc boards) prints a member's readiness tags inline after their jobs. Its
-// "Color Key" field therefore has to name them, exactly like the wide grid key and the image
-// board's key do — a bare ⬛ next to somebody's name is otherwise a mystery.
+// The embed board prints a member's readiness tags inline after their jobs. Its "Color Key"
+// field therefore has to name them — a bare ⬛ next to somebody's name is otherwise a mystery.
 public class EmbedBoardColorKeyTests
 {
     // Mirrors DiscordBotClient.JsonOptions so assertions see the on-the-wire JSON.

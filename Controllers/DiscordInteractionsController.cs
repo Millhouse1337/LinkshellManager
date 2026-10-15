@@ -1066,8 +1066,8 @@ public sealed class DiscordInteractionsController : ControllerBase
     }
 
     // Renders a captured window roster as plain text for the ephemeral. Grouped alliance → party in
-    // the board's own order, since that's the shape people remember seeing. Kept text-only on
-    // purpose: the live board is a rendered image, but this has to come back inside Discord's 3s
+    // the board's own order, since that's the shape people remember seeing. Kept plain text on
+    // purpose: this has to come back inside Discord's 3s
     // interaction window — and it re-renders on every arrow press, so the cost is paid per page,
     // not once. The heading names both the window in view and the live one, which is the only thing
     // orienting a reader several pages back in the history.
@@ -3842,7 +3842,7 @@ public sealed class DiscordInteractionsController : ControllerBase
 
         await _db.SaveChangesAsync(cancellationToken);
         ClearCharacterChoice(idAppUser, idDiscord, eventId);
-        // The board is a rendered image — queue the refresh (render runs off the 3s
+        // Queue the board refresh (it runs off the 3s
         // window) and silently acknowledge the click (no confirmation message); the
         // refreshed board is the feedback.
         _eventQueue.Enqueue(eventId);
@@ -4064,9 +4064,8 @@ public sealed class DiscordInteractionsController : ControllerBase
         // second ephemeral under it — the select has served its purpose once it's submitted.
         //
         // Deliberately says nothing about HOW the tags appear. They were once a spiked ring on a
-        // rendered image, then coloured squares, then symbols beside the name — and on a board
-        // near Discord's size limit they may not fit in the grid at all. Promising a particular
-        // rendering here just dates the message.
+        // rendered image, then coloured squares, then symbols beside the name. Promising a
+        // particular rendering here just dates the message.
         var tags = EventReadiness.Selected(enfeeb, resist, relic);
         return WizardStep(
             tags.Count == 0
@@ -4294,11 +4293,10 @@ public sealed class DiscordInteractionsController : ControllerBase
         var slotSignups = ev.PartySetup is null
             ? null
             : await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
-        // A PARTY board is never rebuilt from here. It may be several messages (a wide board is
-        // one per alliance) and only the publisher knows which mode it was posted in — replacing
-        // the clicked message with a freshly-built one would overwrite, say, alliance 2 with the
-        // whole board. Queue the refresh and acknowledge silently; the re-rendered board is the
-        // feedback, exactly as it is for every other board button.
+        // A PARTY board is never rebuilt from here. The publisher owns its lifecycle — re-posting
+        // a board whose edit failed, deleting messages left over from the old full-width mode —
+        // so queue the refresh and acknowledge silently; the re-rendered board is the feedback,
+        // exactly as it is for every other board button.
         if (ev.PartySetup is not null)
         {
             _eventQueue.Enqueue(eventId);

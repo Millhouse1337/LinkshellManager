@@ -15,10 +15,9 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// Ending a camp from the addon left a wide sign-up board as its first alliance alone. Two things
-// together did it: the board was rendered mid-way through End Event (the "defeated" note, which
-// deletes every alliance message after the first), and the render that followed lost the
-// re-posts of those alliances to a rate limit that posts, unlike edits, never retried.
+// Ending a camp from the addon once left the old full-width sign-up board as its first alliance
+// alone. Two things together did it: the board was rendered mid-way through End Event, and the
+// render that followed lost its re-posts to a rate limit that posts, unlike edits, never retried.
 public class DiscordBoardBurstTests
 {
     // Answers each request in turn from `responses`, recording what was asked.

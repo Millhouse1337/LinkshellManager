@@ -11,9 +11,9 @@ public sealed class DiscordEventChannelBackgroundService : BackgroundService
     // One action often saves the same event more than once in quick succession, and every save
     // queues a render. The addon's End Event is the case that broke: it parks the camp as
     // defeated, then a few hundred milliseconds later revives it for the next pop. Rendered as
-    // they arrived, the first render read the half-finished state -- the "defeated" note, which on
-    // a wide board DELETES every alliance message after the first -- and the second then had to
-    // re-post those alliances from scratch, at the bottom of the channel, into a rate limit.
+    // they arrived, the first render read the half-finished state -- the "defeated" note -- and the
+    // second then had to turn it straight back into a board, two Discord calls into a rate limit
+    // for a state nobody was meant to see.
     //
     // Waiting a beat and rendering each event ONCE, from wherever it settled, edits the board in
     // place instead: nothing deleted, nothing re-posted, a fraction of the Discord calls. It also

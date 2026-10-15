@@ -222,11 +222,8 @@ public sealed class DiscordBotClient
         }
 
         // Through SendClassifiedAsync for its one rate-limit retry, which edits have always had and
-        // posts did not. A post is exactly what gets limited: the bursts that exhaust a channel's
-        // budget are the multi-message ones, and a wide board re-posting its alliances right after
-        // an End Event lost every one of them to a single 429. SendWideAsync then kept the one that
-        // did post, and the board sat there as its first alliance alone -- no Sign Up buttons,
-        // because those ride on the LAST message and that message never arrived.
+        // posts did not. A post is exactly what gets limited: a burst of calls against one channel
+        // exhausts its budget, and a post dropped to a single 429 is a board that never appears.
         //
         // Safe to retry: Discord refuses a 429 before processing it, so this cannot double-post.
         var outcome = await SendClassifiedAsync(
@@ -540,9 +537,9 @@ public sealed class DiscordBotClient
                     return true;
                 }
 
-                // Same single rate-limit retry the posts and edits get. A wide board's teardown is
-                // a run of deletes against one channel, and a delete dropped to a 429 leaves an
-                // alliance of the board behind, live-looking and with its buttons.
+                // Same single rate-limit retry the posts and edits get. A teardown is often a run
+                // of deletes against one channel, and a delete dropped to a 429 leaves a board
+                // message behind, live-looking and with its buttons.
                 if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt == 0)
                 {
                     var delay = ResolveRetryAfter(response);

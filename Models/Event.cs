@@ -222,13 +222,10 @@ public class Event
     // The board's CONTINUATION messages, comma-separated, in display order — everything after
     // DiscordMessageId, which stays the first.
     //
-    // A wide text board is one Discord message per ALLIANCE, because a message caps at 2000
-    // characters and a 54-slot roster with names, jobs and icons does not fit in one. Splitting
-    // gives each alliance its own 2000 (it uses about a third), which is what lets the board
-    // keep full names, wide columns and the readiness icons at the same time.
-    //
-    // Null/empty for every other board shape — the picture board and ad-hoc events are a single
-    // message and only ever set DiscordMessageId.
+    // Only boards posted by the old full-width mode have these: it posted one message per
+    // ALLIANCE. Every board posted now is a single message, so this is null for them, and the
+    // publisher deletes any leftovers on a board's next refresh
+    // (DiscordEventChannelPublisher.DeleteLeftoverWideMessagesAsync).
     public string? DiscordExtraMessageIds { get; set; }
 
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();

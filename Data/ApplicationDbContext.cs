@@ -307,8 +307,8 @@ namespace LinkshellManagerDiscordApp.Data
                 {
                     boards.Add(new DiscordMessageRef(channelId!, entry.Entity.DiscordMessageId!));
                 }
-                // A wide board is one message per ALLIANCE, so deleting the event has to take
-                // all of them. Missing these would leave orphaned messages in the channel that
+                // A board posted by the old full-width mode is one message per ALLIANCE, so
+                // deleting the event has to take all of them. Missing these would leave orphaned messages in the channel that
                 // still carry Sign Up buttons for an event that no longer exists.
                 if (!string.IsNullOrWhiteSpace(entry.Entity.DiscordExtraMessageIds))
                 {
