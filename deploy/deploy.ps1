@@ -66,11 +66,10 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed" }
 Write-Host "==> Stopping service on droplet" -ForegroundColor Cyan
 Invoke-Ssh "sudo systemctl stop lsmanager || true"
 
-# Sync via a tarball, NOT `scp -r publish\*`: that glob skips dot-directories (so
-# the Playwright driver folder `.playwright` never copied) and scp from Windows
-# drops the Linux executable bit. `tar -C publish .` captures hidden entries, and
-# we restore +x on the node driver after extraction.
-Write-Host "==> Packaging publish output (tarball keeps .playwright + perms)" -ForegroundColor Cyan
+# Sync via a tarball, NOT `scp -r publish\*`: that glob skips dot-directories.
+# `tar -C publish .` captures hidden entries, and we restore +x on the app host
+# after extraction (neither scp nor tar from Windows keeps the Linux exec bit).
+Write-Host "==> Packaging publish output" -ForegroundColor Cyan
 $tarball = Join-Path $repoRoot 'artifacts\publish.tar.gz'
 if (Test-Path $tarball) { Remove-Item -Force $tarball }
 & tar -czf $tarball -C $publishDir .
@@ -79,9 +78,9 @@ if ($LASTEXITCODE -ne 0) { throw "tar failed packaging $publishDir" }
 Write-Host "==> Syncing to droplet" -ForegroundColor Cyan
 Invoke-Ssh "sudo rm -rf ${RemoteAppDir}.new /tmp/lsm-publish.tar.gz && sudo mkdir -p ${RemoteAppDir}.new"
 Invoke-Scp $tarball "/tmp/lsm-publish.tar.gz"
-# Extract, restore +x on the Playwright node driver (tar-from-Windows stores no
-# exec bit), chown to the service user, then swap the dir into place atomically.
-Invoke-Ssh "sudo tar -xzf /tmp/lsm-publish.tar.gz -C ${RemoteAppDir}.new && sudo chmod +x ${RemoteAppDir}.new/.playwright/node/*/node && sudo chmod +x ${RemoteAppDir}.new/LinkshellManagerDiscordApp 2>/dev/null; sudo chown -R lsmanager:lsmanager ${RemoteAppDir}.new && sudo rm -rf ${RemoteAppDir}.old && (sudo test -d ${RemoteAppDir} && sudo mv ${RemoteAppDir} ${RemoteAppDir}.old || true) && sudo mv ${RemoteAppDir}.new ${RemoteAppDir} && sudo rm -f /tmp/lsm-publish.tar.gz"
+# Extract, restore +x on the app host (tar-from-Windows stores no exec bit), chown
+# to the service user, then swap the dir into place atomically.
+Invoke-Ssh "sudo tar -xzf /tmp/lsm-publish.tar.gz -C ${RemoteAppDir}.new && sudo chmod +x ${RemoteAppDir}.new/LinkshellManagerDiscordApp 2>/dev/null; sudo chown -R lsmanager:lsmanager ${RemoteAppDir}.new && sudo rm -rf ${RemoteAppDir}.old && (sudo test -d ${RemoteAppDir} && sudo mv ${RemoteAppDir} ${RemoteAppDir}.old || true) && sudo mv ${RemoteAppDir}.new ${RemoteAppDir} && sudo rm -f /tmp/lsm-publish.tar.gz"
 
 Write-Host "==> Starting service" -ForegroundColor Cyan
 Invoke-Ssh "sudo systemctl start lsmanager"
@@ -101,19 +100,6 @@ if ($active -ne 'active') {
 }
 Write-Host "    service is active." -ForegroundColor Green
 Invoke-Ssh "sudo systemctl --no-pager --full status lsmanager | head -n 12"
-
-# Soft check: surface the event-board image renderer status. The Chromium
-# auto-install runs on a background task and may still be downloading on a fresh
-# host, so this is informational only and never fails the deploy.
-Write-Host "==> Event-board image renderer (Playwright/Chromium)" -ForegroundColor Cyan
-$pw = & ssh @sshArgs $DropletHost "sudo journalctl -u lsmanager --since '5 min ago' --no-pager | grep -i -E 'playwright|chromium|board image' | tail -n 3"
-if ($pw) {
-    $pw | ForEach-Object { Write-Host "    $_" -ForegroundColor Green }
-} else {
-    Write-Host "    No Playwright log lines yet - Chromium may still be downloading on first boot." -ForegroundColor Yellow
-    Write-Host "    Boards post as the text-embed fallback until it's ready. Re-check with:" -ForegroundColor Yellow
-    Write-Host "      ssh $DropletHost 'sudo journalctl -u lsmanager | grep -i playwright'" -ForegroundColor Yellow
-}
 
 Write-Host "==> Done." -ForegroundColor Green
 Write-Host "Tail logs with: ssh $DropletHost 'sudo journalctl -u lsmanager -f'"

@@ -36,11 +36,10 @@ ssh root@<DROPLET_IP> 'bash /tmp/setup-droplet.sh'
 
 The script:
 - installs .NET 8 ASP.NET Core runtime, nginx, ufw
-- installs the headless-Chromium OS libraries used to render event-board images
 - creates a `lsmanager` system user
 - enables ufw with 22/80/443 only
 - creates the `lsmanager` Postgres database + user with a random password
-- writes `/etc/lsmanager/env` with that connection string, placeholders for Discord secrets, and a persistent Playwright browser-cache path
+- writes `/etc/lsmanager/env` with that connection string and placeholders for Discord secrets
 
 At the end it prints the generated DB password - you shouldn't need to write it down (it's already in the env file), but note that it ran.
 
@@ -254,59 +253,33 @@ key ring then persists across all future deploys, so the connection sticks.
 > Google Cloud Console is in **Testing** mode (refresh tokens expire in 7 days).
 > Publish it to **Production** to stop that — that's a Google-side limit, not app code.
 
-## One-time migration: Chromium for event-board images
+## Board images removed (October 2026)
 
-Party-setup events post their sign-up board to Discord as a **rendered PNG** (the
-"Esports HUD" — colour, 3 parties per row). Rendering uses headless Chromium via
-Playwright. Fresh bootstraps (`setup-droplet.sh`) now install the Chromium OS
-libraries, provision a persistent browser cache, and point the app at it
-automatically. **Existing droplets created before this change need a one-time
-fixup.** Until then nothing breaks — boards just post as the plain **text-embed
-fallback** instead of the image.
+Discord boards (event sign-up, auction, DKP sheet) used to be rendered as PNGs with
+headless Chromium (Playwright). They are text embeds now, so the app no longer needs
+Chromium, its OS libraries or the browser cache.
+
+**Optional cleanup on droplets set up before this change** (nothing breaks if you skip it):
 
 ```bash
 ssh root@<IP>
-
-# 1. Persistent browser cache (survives deploys, like the key ring; it's already a
-#    ReadWritePath in the shipped unit file). Without this, Chromium re-downloads
-#    (~110 MB) on every deploy.
-sudo mkdir -p /var/lib/lsmanager/ms-playwright
-sudo chown -R lsmanager:lsmanager /var/lib/lsmanager
-
-# 2. Point the app at it (setup-droplet.sh leaves an existing env file untouched, so
-#    add this line yourself).
-echo 'PLAYWRIGHT_BROWSERS_PATH=/var/lib/lsmanager/ms-playwright' | sudo tee -a /etc/lsmanager/env
-
-# 3. Install the Chromium OS libraries (root/apt). Ubuntu 24.04 renamed several
-#    packages with a "t64" suffix, and there libasound2 is a virtual package with
-#    no install candidate — so install each name, falling back to its t64 variant
-#    (a single `apt-get install` of the whole list would abort on the first such
-#    package and install nothing). This is exactly what setup-droplet.sh does.
-sudo apt-get update -y
-for lib in libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-           libdrm2 libatspi2.0-0 libx11-6 libxcomposite1 libxdamage1 libxext6 \
-           libxfixes3 libxrandr2 libgbm1 libxcb1 libxkbcommon0 libpango-1.0-0 \
-           libcairo2 libasound2 libwayland-client0 fonts-liberation fonts-noto-color-emoji; do
-  sudo apt-get install -y "$lib" 2>/dev/null \
-    || sudo apt-get install -y "${lib}t64" 2>/dev/null \
-    || echo "   (skipped $lib — not packaged on this release)"
-done
-
-# 4. Restart; the app downloads Chromium into the cache on first boot.
-sudo systemctl daemon-reload
+sudo rm -rf /var/lib/lsmanager/ms-playwright                     # ~110 MB browser cache
+sudo sed -i '/^PLAYWRIGHT_BROWSERS_PATH=/d' /etc/lsmanager/env
 sudo systemctl restart lsmanager
 ```
 
-Verify after restart:
+**Rolling back past this release** needs the database changed first. Its migration
+(`RemoveEventBoardImageSettings`) drops `Linkshells.EventBoardTheme` and
+`Linkshells.UseComponentsV2Boards`, and the older app reads both, so it fails on
+startup without them. Before swapping the old app back in, open `psql` (the
+connection block under **Database access** above, with `pg_dump` swapped for `psql`)
+and run:
 
-```bash
-ssh root@<IP> 'sudo journalctl -u lsmanager | grep -i playwright'
-# "Playwright Chromium is installed — event boards will render as images." = good.
-# A render failure logs "falling back to the text board" with the cause.
+```sql
+ALTER TABLE "Linkshells" ADD COLUMN "EventBoardTheme" character varying(16) NOT NULL DEFAULT 'Crystal';
+ALTER TABLE "Linkshells" ADD COLUMN "UseComponentsV2Boards" boolean NOT NULL DEFAULT false;
+DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261015084328_RemoveEventBoardImageSettings';
 ```
-
-> Opt out of the auto-download (e.g. to bake Chromium into a custom image) by
-> adding `LSM_PLAYWRIGHT_AUTOINSTALL=0` to `/etc/lsmanager/env`.
 
 ## Things to set up later (not blocking go-live)
 
