@@ -113,8 +113,7 @@ public sealed class DataAdminPolicy
             {
                 Flags = DataAdminPolicyFlags.NoDelete,
                 Options = Opts(
-                    (nameof(Linkshell.HnmAttendanceMode), HnmAttendanceModes.All),
-                    (nameof(Linkshell.EventBoardTheme), EventBoardThemes.All.Select(theme => theme.Key).ToArray())),
+                    (nameof(Linkshell.HnmAttendanceMode), HnmAttendanceModes.All)),
                 ProtectedColumns = Names(nameof(Linkshell.GoogleOAuthRefreshTokenEnc)),
             },
             [typeof(AppUser)] = new()

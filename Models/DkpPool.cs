@@ -40,7 +40,7 @@ public class DkpPool
     public ICollection<DkpPoolEventType> EventTypes { get; set; } = new List<DkpPoolEventType>();
 }
 
-// The colour vocabulary for a DKP group's tag/swatch. Plain colour names (NOT the EventBoardThemes
+// The colour vocabulary for a DKP group's tag/swatch. Plain colour names (NOT the old event-board
 // theme keys) — each maps to a design token in the stylesheets (web lsm-theme.css --*-main,
 // Activity _tokens.scss). Resolve() normalises anything else — including legacy theme keys still
 // stored on old rows — to Default, so the swatch always lands on a known colour.

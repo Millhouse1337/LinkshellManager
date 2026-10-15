@@ -224,16 +224,10 @@ export interface ActivityLinkshellSettings {
   // Optional, separate access lock. When true, the Activity can only open this
   // linkshell from discordGuildId. False by default (associated but not locked).
   lockToDiscordGuild: boolean;
-  // Palette key for this linkshell's rendered event-board image. One of the
-  // EVENT_BOARD_THEMES keys (Crystal, Abyss, Ember, Verdant, Royal, Tome).
-  eventBoardTheme: string;
   // Allow Discord members with no LSM account to sign up (or Check In) from a board, for
   // EVERY event type including HNM. Backed by a placeholder member, so they DO earn DKP +
   // are tracked.
   outsidePartySignupEnabled?: boolean;
-  // Experimental: post event boards as Components V2 (wide media-gallery card) instead of
-  // the classic image-in-embed. Only affects boards posted after it's turned on.
-  useComponentsV2Boards?: boolean;
   // Discord channel id new post-event discussion comments mirror to, or null to
   // keep discussion in-app only.
   discussionChannelId?: string | null;

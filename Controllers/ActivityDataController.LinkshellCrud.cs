@@ -264,12 +264,6 @@ public sealed partial class ActivityDataController
         {
             linkshell.DkpRoundingIncrement = NormalizeDkpRounding(request.DkpRoundingIncrement);
         }
-        // null/blank = leave unchanged. Resolve normalises to a known theme key
-        // (or the default), so an unknown value can never reach the renderer.
-        if (!string.IsNullOrWhiteSpace(request.EventBoardTheme))
-        {
-            linkshell.EventBoardTheme = EventBoardThemes.Resolve(request.EventBoardTheme);
-        }
         // null in the request = leave unchanged. An explicitly empty list
         // clears the hidden-mob list. The serializer trims, drops blanks,
         // and de-dupes so the stored value stays clean.
@@ -289,10 +283,6 @@ public sealed partial class ActivityDataController
         if (request.OutsidePartySignupEnabled.HasValue)
         {
             linkshell.OutsidePartySignupEnabled = request.OutsidePartySignupEnabled.Value;
-        }
-        if (request.UseComponentsV2Boards.HasValue)
-        {
-            linkshell.UseComponentsV2Boards = request.UseComponentsV2Boards.Value;
         }
         if (request.InactiveAfterAbsences.HasValue)
         {

@@ -172,28 +172,6 @@
               }
 
               <section class="card">
-                <div class="card-head"><div class="card-title">Event board theme</div></div>
-                <div class="card-body customize-form__section">
-                  <p class="muted">Colour palette for the event signup board image posted to Discord.</p>
-                  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">
-                    @for (theme of eventBoardThemes; track theme.key) {
-                      <label class="customize-form__option" style="align-items:center;gap:8px;padding:8px;border-radius:10px;border:1px solid"
-                        [style.border-color]="customizeDraft.eventBoardTheme === theme.key ? theme.accent : 'var(--border, rgba(255,255,255,0.12))'">
-                        <input type="radio" name="eventBoardThemeDraft" [value]="theme.key"
-                          [ngModel]="customizeDraft.eventBoardTheme"
-                          (ngModelChange)="customizeDraft.eventBoardTheme = $event; onCustomizeFieldChange()" />
-                        <span style="width:26px;height:26px;border-radius:7px;flex-shrink:0"
-                          [style.background]="theme.bg"
-                          [style.border]="'2px solid ' + theme.accent"
-                          [style.box-shadow]="'0 0 8px ' + theme.accent"></span>
-                        <strong>{{ theme.label }}</strong>
-                      </label>
-                    }
-                  </div>
-                </div>
-              </section>
-
-              <section class="card">
                 <div class="card-head"><div class="card-title">Feature toggles</div></div>
                 <div class="card-body customize-form__section">
                   <p class="muted">Hide sections your linkshell doesn't use.</p>
@@ -300,27 +278,6 @@
                       [ngModel]="customizeDraft.outsidePartySignupEnabled"
                       (ngModelChange)="customizeDraft.outsidePartySignupEnabled = $event; onCustomizeFieldChange()" />
                     <span>Allow outside (non-account) Discord signups</span>
-                  </label>
-                </div>
-              </section>
-
-              <section class="card">
-                <div class="card-head">
-                  <div class="card-title">Full-width event boards <span class="muted">(experimental)</span></div>
-                </div>
-                <div class="card-body customize-form__section">
-                  <p class="muted">
-                    Post sign-up boards as a <strong>full-width text grid</strong>: parties in three columns with role,
-                    leader and readiness icons, spanning the whole message column. No rendered image &mdash; the grid
-                    already shows every slot, so boards post faster too. Off, a rendered picture <em>is</em> the board and
-                    Discord caps it at roughly a third of that width. Same buttons and signup flow. Discord won't let a
-                    board switch modes once posted, so this only affects boards posted <strong>after</strong> you turn it on.
-                  </p>
-                  <label class="customize-form__toggle">
-                    <input type="checkbox" name="useComponentsV2BoardsDraft"
-                      [ngModel]="customizeDraft.useComponentsV2Boards"
-                      (ngModelChange)="customizeDraft.useComponentsV2Boards = $event; onCustomizeFieldChange()" />
-                    <span>Full-width text boards</span>
                   </label>
                 </div>
               </section>

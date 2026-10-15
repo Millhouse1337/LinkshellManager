@@ -95,7 +95,6 @@ public class DataAdminPolicyTests
         Assert.Equal(DataAdminOptions.FromConsts(typeof(LinkshellRanks)), Options(catalog, typeof(AppUserLinkshell), nameof(AppUserLinkshell.Rank)));
         Assert.Contains(LinkshellRanks.Trial, Options(catalog, typeof(AppUserLinkshell), nameof(AppUserLinkshell.Rank)));
         Assert.Equal(HnmAttendanceModes.All, Options(catalog, typeof(Linkshell), nameof(Linkshell.HnmAttendanceMode)));
-        Assert.Equal(EventBoardThemes.All.Select(theme => theme.Key), Options(catalog, typeof(Linkshell), nameof(Linkshell.EventBoardTheme)));
         Assert.Equal(DkpPoolAccents.All, Options(catalog, typeof(DkpPool), nameof(DkpPool.Accent)));
         Assert.Equal(DataAdminOptions.FromConsts(typeof(WindowEventStatuses)), Options(catalog, typeof(WindowEvent), nameof(WindowEvent.Status)));
         Assert.Contains(WindowEventStatuses.Archived, Options(catalog, typeof(WindowEvent), nameof(WindowEvent.Status)));

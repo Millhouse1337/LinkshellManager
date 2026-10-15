@@ -628,9 +628,6 @@ public class LinkshellController : Controller
 
         linkshell.LootStructure = model.LootStructure!;
         linkshell.DkpRoundingIncrement = model.DkpRoundingIncrement!;
-        // Resolve normalises to a known theme key (or the default), so an unknown
-        // posted value can never reach the renderer.
-        linkshell.EventBoardTheme = EventBoardThemes.Resolve(model.EventBoardTheme);
         linkshell.EnableEndgame  = model.EnableEndgame;
         linkshell.EnableHnmSection = model.EnableHnmSection;
         linkshell.EnableMissions = model.EnableMissions;
@@ -642,7 +639,6 @@ public class LinkshellController : Controller
         linkshell.EnableRevenue  = model.EnableRevenue;
         linkshell.EnableActivityTracking = model.EnableActivityTracking;
         linkshell.OutsidePartySignupEnabled = model.OutsidePartySignupEnabled;
-        linkshell.UseComponentsV2Boards = model.UseComponentsV2Boards;
         // Clamp to >= 1 so the streak rule can't be configured into a no-op.
         linkshell.InactiveAfterAbsences   = Math.Max(1, model.InactiveAfterAbsences);
         linkshell.ActiveAfterAttendances  = Math.Max(1, model.ActiveAfterAttendances);
@@ -1319,7 +1315,6 @@ public class LinkshellController : Controller
             LinkshellName         = target.LinkshellName,
             LootStructure         = target.LootStructure,
             DkpRoundingIncrement  = target.DkpRoundingIncrement,
-            EventBoardTheme       = EventBoardThemes.Resolve(target.EventBoardTheme),
             EnableEndgame         = target.EnableEndgame,
             EnableHnmSection      = target.EnableHnmSection,
             EnableMissions        = target.EnableMissions,
@@ -1331,7 +1326,6 @@ public class LinkshellController : Controller
             EnableRevenue         = target.EnableRevenue,
             EnableActivityTracking = target.EnableActivityTracking,
             OutsidePartySignupEnabled = target.OutsidePartySignupEnabled,
-            UseComponentsV2Boards = target.UseComponentsV2Boards,
             InactiveAfterAbsences  = target.InactiveAfterAbsences,
             ActiveAfterAttendances = target.ActiveAfterAttendances,
             HiddenTodMonsters     = (target.HiddenTodMonsters ?? string.Empty)

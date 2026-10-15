@@ -107,12 +107,8 @@ export class LinkshellService {
       // null = leave unchanged; "" = clear association; digits = associate with
       // that Discord server (does NOT lock — use setLinkshellGuildLock for that).
       discordGuildId?: string | null;
-      // null/blank = leave unchanged. One of the EVENT_BOARD_THEMES keys.
-      eventBoardTheme?: string | null;
       // null = leave unchanged. Allow account-less Discord board signups (every event type).
       outsidePartySignupEnabled?: boolean | null;
-      // null = leave unchanged. Post event boards as Components V2 (wide media-gallery card).
-      useComponentsV2Boards?: boolean | null;
       // Manual Check In HNM attendance (null = leave unchanged). Mode: 'Standard' | 'Wd'.
       hnmAttendanceMode?: string | null;
       wdDkpPerWindow?: number | null;
@@ -156,9 +152,7 @@ export class LinkshellService {
         activeAfterAttendances: input.activeAfterAttendances ?? null,
         hiddenTodMonsters: input.hiddenTodMonsters ?? null,
         discordGuildId: input.discordGuildId ?? null,
-        eventBoardTheme: input.eventBoardTheme ?? null,
         outsidePartySignupEnabled: input.outsidePartySignupEnabled ?? null,
-        useComponentsV2Boards: input.useComponentsV2Boards ?? null,
         hnmAttendanceMode: input.hnmAttendanceMode ?? null,
         wdDkpPerWindow: input.wdDkpPerWindow ?? null,
         wdClaimBonus: input.wdClaimBonus ?? null,

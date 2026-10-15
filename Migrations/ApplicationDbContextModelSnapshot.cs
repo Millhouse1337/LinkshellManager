@@ -2771,11 +2771,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("EnableToDs")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("EventBoardTheme")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
                     b.Property<DateTime?>("GoogleOAuthConnectedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2852,9 +2847,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("TodMonsterTimings")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<bool>("UseComponentsV2Boards")
-                        .HasColumnType("boolean");
 
                     b.Property<double>("WdClaimBonus")
                         .HasColumnType("double precision");

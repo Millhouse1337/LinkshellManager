@@ -515,12 +515,8 @@ export class ConfigurationsTabComponent {
     enableActivityTracking: boolean;
     inactiveAfterAbsences: number;
     activeAfterAttendances: number;
-    // Palette key for the rendered event-board image (one of EVENT_BOARD_THEMES).
-    eventBoardTheme: string;
     // Allow account-less Discord members to sign up / Check In from a board, every event type.
     outsidePartySignupEnabled: boolean;
-    // Experimental: post event boards as Components V2 (wide media-gallery card).
-    useComponentsV2Boards: boolean;
     // Manual Check In HNM attendance: mode ('Standard' | 'Wd') + scoring. Only the mode + rates
     // matter when Wd; window counts/cadence are built in per monster (HnmConfig), not configurable.
     hnmAttendanceMode: string;
@@ -557,9 +553,7 @@ export class ConfigurationsTabComponent {
     enableActivityTracking: false,
     inactiveAfterAbsences: 3,
     activeAfterAttendances: 2,
-    eventBoardTheme: 'Crystal',
     outsidePartySignupEnabled: false,
-    useComponentsV2Boards: false,
     hnmAttendanceMode: 'Standard',
     wdDkpPerWindow: 0.25,
     wdClaimBonus: 0,
@@ -575,18 +569,6 @@ export class ConfigurationsTabComponent {
     hnmAutoSnapshotEnabled: false,
     hnmAutoSnapshotDelaySeconds: 20
   };
-
-  // Event-board image palettes (mirrors the server-side EventBoardThemes). The
-  // swatch colours are shown in the picker; the key is what gets persisted.
-  protected readonly eventBoardThemes: readonly { key: string; label: string; bg: string; accent: string }[] = [
-    { key: 'Crystal', label: 'Crystal', bg: '#0b0e1a', accent: '#d8b86a' },
-    { key: 'Abyss', label: 'Abyss', bg: '#041c24', accent: '#3fd9e6' },
-    { key: 'Ember', label: 'Ember', bg: '#170a05', accent: '#f0883e' },
-    { key: 'Verdant', label: 'Verdant', bg: '#07150f', accent: '#cda86a' },
-    { key: 'Royal', label: 'Royal', bg: '#150a24', accent: '#c9a8f0' },
-    { key: 'Tome', label: 'Tome', bg: '#e8d6ad', accent: '#8a3522' }
-  ];
-
 
   protected customizeDirty = false;
 
@@ -1035,9 +1017,7 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.enableActivityTracking = settings.enableActivityTracking ?? false;
     this.customizeDraft.inactiveAfterAbsences = settings.inactiveAfterAbsences || 3;
     this.customizeDraft.activeAfterAttendances = settings.activeAfterAttendances || 2;
-    this.customizeDraft.eventBoardTheme = settings.eventBoardTheme || 'Crystal';
     this.customizeDraft.outsidePartySignupEnabled = settings.outsidePartySignupEnabled ?? false;
-    this.customizeDraft.useComponentsV2Boards = settings.useComponentsV2Boards ?? false;
     this.customizeDraft.hnmAttendanceMode = settings.hnmAttendanceMode || 'Standard';
     this.customizeDraft.wdDkpPerWindow = settings.wdDkpPerWindow ?? 0.25;
     this.customizeDraft.wdClaimBonus = settings.wdClaimBonus ?? 0;
@@ -1085,9 +1065,7 @@ export class ConfigurationsTabComponent {
         inactiveAfterAbsences: this.customizeDraft.inactiveAfterAbsences,
         activeAfterAttendances: this.customizeDraft.activeAfterAttendances,
         hiddenTodMonsters: [],
-        eventBoardTheme: this.customizeDraft.eventBoardTheme,
         outsidePartySignupEnabled: this.customizeDraft.outsidePartySignupEnabled,
-        useComponentsV2Boards: this.customizeDraft.useComponentsV2Boards,
         hnmAttendanceMode: this.customizeDraft.hnmAttendanceMode,
         wdDkpPerWindow: this.customizeDraft.wdDkpPerWindow,
         wdClaimBonus: this.customizeDraft.wdClaimBonus,

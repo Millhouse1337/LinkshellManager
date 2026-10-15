@@ -163,14 +163,6 @@ public class Linkshell
 
     public bool EnableEvents { get; set; } = true;
 
-    // Colour palette used when this linkshell's event signup board is rendered
-    // to a PNG for Discord (see EventBoardThemes / EventBoardHtmlBuilder). One of
-    // the EventBoardThemes keys (Crystal, Abyss, Ember, Verdant, Royal, Tome);
-    // an unknown value falls back to the default at render time. Edited from the
-    // Customize panel + the Discord Activity Configurations card.
-    [MaxLength(16)]
-    public string EventBoardTheme { get; set; } = "Crystal";
-
     public bool EnableDkp { get; set; } = true;
 
     public bool EnableItems { get; set; } = true;
@@ -200,16 +192,6 @@ public class Linkshell
     // ordinary events that pay DKP through the field-activity queue like anything else, so
     // the event type is always offered and one identity gate covers every board.
     public bool OutsidePartySignupEnabled { get; set; } = false;
-
-    // Components V2 event boards (experimental): when ON, this linkshell's Discord
-    // event sign-up boards are posted as Discord "Components V2" messages — the
-    // rendered board PNG sits in a full-width media gallery (no embed chrome) and the
-    // card is rendered on a wider internal canvas — instead of the classic image-in-embed.
-    // Same buttons, same signup flow. Off by default so existing boards are untouched.
-    // NOTE: Discord forbids toggling the V2 flag on edit, so a board keeps whichever
-    // mode it was FIRST posted with for its whole lifecycle — flipping this only affects
-    // boards posted afterwards.
-    public bool UseComponentsV2Boards { get; set; } = false;
 
     // Pipe-separated list of monster names to hide from this linkshell's
     // ToD Tracker (Discord Activity + legacy MVC views). Empty = nothing

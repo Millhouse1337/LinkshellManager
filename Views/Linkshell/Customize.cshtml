@@ -183,48 +183,8 @@
                             </div>
                             <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="OutsidePartySignupEnabled" /> Allow outside (non-account) Discord signups</label>
                         </div>
-
-                        <div style="flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:8px">
-                            <div class="card-title" style="font-size:14px">Full-width event boards <span style="font-size:11px;color:var(--fg-3)">(experimental)</span></div>
-                            <div style="font-size:12px;color:var(--fg-3)">
-                                Post sign-up boards as a <strong>full-width text grid</strong>: parties in three columns
-                                with role, leader and readiness icons, spanning the whole message column. No rendered
-                                image &mdash; the grid already shows every slot, so boards post faster too. Off, a rendered
-                                picture <em>is</em> the board and Discord caps it at roughly a third of that width. Same
-                                buttons and signup flow. Discord won't let a board switch modes once posted, so this only
-                                affects boards posted <strong>after</strong> you turn it on.
-                            </div>
-                            <label style="display:flex;gap:8px;align-items:center;margin-top:auto"><input type="checkbox" class="switch" asp-for="UseComponentsV2Boards" /> Full-width text boards</label>
-                        </div>
                     </div>
                 </div>
-            </div>
-            <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--border);padding-top:14px">
-                <button class="btn primary" type="submit">Save changes</button>
-            </div>
-        </div>
-    </div>
-    <div class="card" style="margin-bottom:16px">
-        <div class="card-head">
-            <div class="card-title">Event Board Theme</div>
-        </div>
-        <div style="padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px">
-            <div style="font-size:12px;color:var(--fg-3)">
-                Colour palette for the event signup board image posted to your Discord channel.
-                Applies the next time a board is posted or refreshed.
-            </div>
-            <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px">
-                @foreach (var theme in LinkshellManagerDiscordApp.Services.EventBoardThemes.All)
-                {
-                    var selected = string.Equals(Model.EventBoardTheme, theme.Key, StringComparison.OrdinalIgnoreCase);
-                    <label style="flex:0 0 auto;min-width:160px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;border:1px solid @(selected ? theme.SwatchAccent : "var(--border)");background:var(--surface)">
-                        <input type="radio" asp-for="EventBoardTheme" value="@theme.Key" style="margin:0" />
-                        <span style="width:34px;height:34px;border-radius:8px;flex-shrink:0;background:@theme.SwatchBg;border:2px solid @theme.SwatchAccent;box-shadow:0 0 10px @theme.SwatchAccent;display:flex;align-items:center;justify-content:center">
-                            <span style="width:12px;height:12px;border-radius:3px;transform:rotate(45deg);background:@theme.SwatchAccent"></span>
-                        </span>
-                        <strong style="font-size:13px">@theme.DisplayName</strong>
-                    </label>
-                }
             </div>
             <div style="display:flex;justify-content:flex-end;border-top:1px solid var(--border);padding-top:14px">
                 <button class="btn primary" type="submit">Save changes</button>

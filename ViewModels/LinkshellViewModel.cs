@@ -30,11 +30,6 @@ public class LinkshellCustomizeViewModel
     [Required, MaxLength(16)]
     public string? DkpRoundingIncrement { get; set; } = "Quarter";
 
-    // Palette for this linkshell's event signup board image (one of the
-    // EventBoardThemes keys). Rendered as swatches on the Customize page.
-    [MaxLength(16)]
-    public string? EventBoardTheme { get; set; } = "Crystal";
-
     // Endgame + Missions start OFF by default (match the Linkshell entity
     // defaults); linkshells opt in from the Customize page.
     public bool EnableEndgame    { get; set; } = false;
@@ -57,11 +52,6 @@ public class LinkshellCustomizeViewModel
     // board, for EVERY event type including HNM. Backed by a placeholder member, so they
     // DO earn DKP + tracked.
     public bool OutsidePartySignupEnabled { get; set; } = false;
-
-    // Experimental: post Discord event boards as Components V2 (wide media-gallery card)
-    // instead of the classic image-in-embed. Off by default; only affects boards posted
-    // after it's turned on.
-    public bool UseComponentsV2Boards { get; set; } = false;
 
     public bool CanManageRoles { get; set; }
 

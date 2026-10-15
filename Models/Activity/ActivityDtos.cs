@@ -207,16 +207,10 @@ public sealed record ActivityLinkshellSettingsDto(
     bool EnableActivityTracking,
     int InactiveAfterAbsences,
     int ActiveAfterAttendances,
-    // Palette key for this linkshell's rendered event-board image (one of the
-    // EventBoardThemes keys: Crystal, Abyss, Ember, Verdant, Royal, Tome).
-    string EventBoardTheme,
     // Allow Discord members with no LSM account to sign up (or Check In) from a board, for
     // EVERY event type including HNM. Backed by a placeholder member, so they DO earn DKP
     // + are tracked.
     bool OutsidePartySignupEnabled,
-    // Experimental: post event boards as Components V2 (wide media-gallery card) instead
-    // of the classic image-in-embed. Only affects boards posted after it's turned on.
-    bool UseComponentsV2Boards,
     // Discord channel id new post-event discussion comments are mirrored to, or
     // null to keep discussion in-app only.
     string? DiscussionChannelId = null,
@@ -1444,13 +1438,8 @@ public sealed record ActivityUpdateLinkshellRequest(
     bool? EnableActivityTracking = null,
     int? InactiveAfterAbsences = null,
     int? ActiveAfterAttendances = null,
-    // null/blank = leave unchanged. One of the EventBoardThemes keys; an unknown
-    // value is normalised to the default server-side.
-    string? EventBoardTheme = null,
     // null = leave unchanged. Allow account-less Discord board signups (every event type).
     bool? OutsidePartySignupEnabled = null,
-    // null = leave unchanged. Post event boards as Components V2 (wide media-gallery card).
-    bool? UseComponentsV2Boards = null,
     // Manual Check In HNM attendance (all null = leave unchanged). Mode is normalized (Standard | Wd)
     // and fails closed to Standard; the doubles are clamped to >= 0.
     string? HnmAttendanceMode = null,
