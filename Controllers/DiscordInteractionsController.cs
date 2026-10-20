@@ -290,6 +290,10 @@ public sealed class DiscordInteractionsController : ControllerBase
                         title = "🎮 LinkshellManager",
                         description = "Tap **Join** to open the LinkshellManager app — DKP, events, party setups, and more.",
                         color = 0x5865F2,
+                        // Discord fetches the image itself, so it needs an absolute public URL. This
+                        // request arrived through our own host (nginx forwards Host + https), so it
+                        // is that address — no App:PublicBaseUrl needed.
+                        thumbnail = new { url = $"{Request.Scheme}://{Request.Host}/images/LinkshellManagerIcon.png" },
                     }
                 },
                 components = new[]
