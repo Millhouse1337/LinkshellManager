@@ -394,29 +394,111 @@ public sealed class SubmissionApprovalService
         return ApprovalResult.Approved;
     }
 
-    // ---------- Reject: delete pending row, no side effects ----------
+    // ---------- Review: the reviewer's corrections, then approve ----------
+    // A reviewer may correct a pending submission before approving it: edit the ToD and its loot,
+    // or untick attendees. These apply the corrections to the pending rows, then run the normal
+    // approve above. Shared by the Razor review pages and the Activity's Pending Submissions tab.
+    // Scoped to linkshellId: a submission from another linkshell is NotFound and never touched.
+    //
+    // The corrections are saved before approving, so when approve answers InsufficientDkp the
+    // pending row keeps them and the reviewer can fix the loot and approve again.
 
-    public async Task<ApprovalResult> RejectTodAsync(int submissionId, string? notes, CancellationToken cancellationToken)
+    public async Task<ApprovalResult> ApproveTodWithEditsAsync(
+        int linkshellId, int submissionId, PendingTodEdits edits, CancellationToken cancellationToken)
     {
-        var pending = await _db.PendingTodSubmissions.FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
+        var submission = await _db.PendingTodSubmissions
+            .Include(s => s.LootRows)
+            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
+        if (submission is null) return ApprovalResult.NotFound;
+
+        submission.MonsterName = string.IsNullOrWhiteSpace(edits.MonsterName) ? submission.MonsterName : edits.MonsterName.Trim();
+        submission.DayNumber = edits.DayNumber;
+        submission.Claim = edits.Claim;
+        submission.Time = edits.Time;
+        submission.Cooldown = string.IsNullOrWhiteSpace(edits.Cooldown) ? submission.Cooldown : edits.Cooldown.Trim();
+        submission.Interval = string.IsNullOrWhiteSpace(edits.Interval) ? submission.Interval : edits.Interval.Trim();
+        submission.RepopTime = edits.RepopTime;
+
+        // Replace loot rows wholesale with the edited list so removed rows disappear before
+        // materialization. A row with nothing in it is a blank form line, not loot.
+        _db.PendingTodLootSubmissions.RemoveRange(submission.LootRows);
+        foreach (var row in edits.LootRows ?? Array.Empty<TodSubmissionLootInput>())
+        {
+            if (string.IsNullOrWhiteSpace(row.ItemName) && string.IsNullOrWhiteSpace(row.ItemWinner) && !row.WinningDkpSpent.HasValue) continue;
+            submission.LootRows.Add(new PendingTodLootSubmission
+            {
+                ItemName = row.ItemName?.Trim(),
+                ItemWinner = row.ItemWinner?.Trim(),
+                WinningDkpSpent = row.WinningDkpSpent,
+            });
+        }
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return await ApproveTodAsync(submissionId, cancellationToken);
+    }
+
+    // keepMemberIds: the pending member rows still ticked; every other one is dropped.
+    public async Task<ApprovalResult> ApproveAttendanceWindowKeepingAsync(
+        int linkshellId, int submissionId, IReadOnlyCollection<int> keepMemberIds, CancellationToken cancellationToken)
+    {
+        var submission = await _db.PendingAttendanceWindowSubmissions
+            .Include(s => s.Members)
+            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
+        if (submission is null) return ApprovalResult.NotFound;
+
+        var keep = keepMemberIds.ToHashSet();
+        _db.PendingAttendanceWindowMemberSubmissions.RemoveRange(submission.Members.Where(m => !keep.Contains(m.Id)).ToList());
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return await ApproveAttendanceWindowAsync(submissionId, cancellationToken);
+    }
+
+    // keepEntryIds: the pending snapshot entries still ticked; every other one is dropped.
+    public async Task<ApprovalResult> ApproveSnapshotKeepingAsync(
+        int linkshellId, int submissionId, IReadOnlyCollection<int> keepEntryIds, CancellationToken cancellationToken)
+    {
+        var submission = await _db.PendingAttendanceSnapshotSubmissions
+            .Include(s => s.Entries)
+            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
+        if (submission is null) return ApprovalResult.NotFound;
+
+        var keep = keepEntryIds.ToHashSet();
+        var toRemove = submission.Entries.Where(e => !keep.Contains(e.Id)).ToList();
+        _db.PendingAttendanceSnapshotEntries.RemoveRange(toRemove);
+        submission.EntryCount = submission.Entries.Count - toRemove.Count;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return await ApproveSnapshotAsync(submissionId, cancellationToken);
+    }
+
+    // ---------- Reject: delete pending row, no side effects ----------
+    // Scoped to linkshellId like the review methods above, so a reviewer in one linkshell can't
+    // delete another linkshell's submission by guessing its id.
+
+    public async Task<ApprovalResult> RejectTodAsync(int linkshellId, int submissionId, string? notes, CancellationToken cancellationToken)
+    {
+        var pending = await _db.PendingTodSubmissions
+            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
         if (pending is null) return ApprovalResult.NotFound;
         _db.PendingTodSubmissions.Remove(pending);
         await _db.SaveChangesAsync(cancellationToken);
         return ApprovalResult.Rejected;
     }
 
-    public async Task<ApprovalResult> RejectAttendanceWindowAsync(int submissionId, string? notes, CancellationToken cancellationToken)
+    public async Task<ApprovalResult> RejectAttendanceWindowAsync(int linkshellId, int submissionId, string? notes, CancellationToken cancellationToken)
     {
-        var pending = await _db.PendingAttendanceWindowSubmissions.FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
+        var pending = await _db.PendingAttendanceWindowSubmissions
+            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
         if (pending is null) return ApprovalResult.NotFound;
         _db.PendingAttendanceWindowSubmissions.Remove(pending);
         await _db.SaveChangesAsync(cancellationToken);
         return ApprovalResult.Rejected;
     }
 
-    public async Task<ApprovalResult> RejectSnapshotAsync(int submissionId, string? notes, CancellationToken cancellationToken)
+    public async Task<ApprovalResult> RejectSnapshotAsync(int linkshellId, int submissionId, string? notes, CancellationToken cancellationToken)
     {
-        var pending = await _db.PendingAttendanceSnapshotSubmissions.FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
+        var pending = await _db.PendingAttendanceSnapshotSubmissions
+            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
         if (pending is null) return ApprovalResult.NotFound;
         _db.PendingAttendanceSnapshotSubmissions.Remove(pending);
         await _db.SaveChangesAsync(cancellationToken);
@@ -449,6 +531,18 @@ public sealed record TodSubmissionInput(
     int? PopWindow = null);
 
 public sealed record TodSubmissionLootInput(string? ItemName, string? ItemWinner, int? WinningDkpSpent);
+
+// A reviewer's corrections to a pending ToD (ApproveTodWithEditsAsync). A blank monster, cooldown
+// or interval keeps what was submitted; LootRows replaces the submitted loot wholesale.
+public sealed record PendingTodEdits(
+    string? MonsterName,
+    int? DayNumber,
+    bool? Claim,
+    DateTime? Time,
+    string? Cooldown,
+    string? Interval,
+    DateTime? RepopTime,
+    IReadOnlyList<TodSubmissionLootInput>? LootRows);
 
 public sealed record AttendanceWindowSubmissionInput(int EventId, int WindowIndex, IReadOnlyList<AttendanceWindowMemberInput>? Members);
 

@@ -183,36 +183,13 @@ public sealed class LinkshellPendingSubmissionsController : Controller
         var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
         if (role?.CanManageTods != true) return Forbid();
 
-        var submission = await _db.PendingTodSubmissions
-            .Include(s => s.LootRows)
-            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
-        if (submission is null) return NotFound();
-
         // Apply officer edits to the pending row before approve materializes it.
-        submission.MonsterName = string.IsNullOrWhiteSpace(form.MonsterName) ? submission.MonsterName : form.MonsterName.Trim();
-        submission.DayNumber = form.DayNumber;
-        submission.Claim = form.Claim;
-        submission.Time = form.Time;
-        submission.Cooldown = string.IsNullOrWhiteSpace(form.Cooldown) ? submission.Cooldown : form.Cooldown.Trim();
-        submission.Interval = string.IsNullOrWhiteSpace(form.Interval) ? submission.Interval : form.Interval.Trim();
-        submission.RepopTime = form.RepopTime;
-
-        // Replace loot rows wholesale with the edited list so toggled-off rows
-        // disappear before materialization.
-        _db.PendingTodLootSubmissions.RemoveRange(submission.LootRows);
-        foreach (var lr in form.LootRows ?? new List<EditPendingTodLootRow>())
-        {
-            if (string.IsNullOrWhiteSpace(lr.ItemName) && string.IsNullOrWhiteSpace(lr.ItemWinner) && !lr.WinningDkpSpent.HasValue) continue;
-            submission.LootRows.Add(new PendingTodLootSubmission
-            {
-                ItemName = lr.ItemName?.Trim(),
-                ItemWinner = lr.ItemWinner?.Trim(),
-                WinningDkpSpent = lr.WinningDkpSpent,
-            });
-        }
-        await _db.SaveChangesAsync(cancellationToken);
-
-        var result = await _approvals.ApproveTodAsync(submissionId, cancellationToken);
+        var edits = new PendingTodEdits(
+            form.MonsterName, form.DayNumber, form.Claim, form.Time, form.Cooldown, form.Interval, form.RepopTime,
+            (form.LootRows ?? new List<EditPendingTodLootRow>())
+                .Select(lr => new TodSubmissionLootInput(lr.ItemName, lr.ItemWinner, lr.WinningDkpSpent))
+                .ToList());
+        var result = await _approvals.ApproveTodWithEditsAsync(linkshellId, submissionId, edits, cancellationToken);
         if (result == ApprovalResult.NotFound) return NotFound();
         if (result == ApprovalResult.InsufficientDkp)
         {
@@ -234,7 +211,7 @@ public sealed class LinkshellPendingSubmissionsController : Controller
         var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
         if (role?.CanManageTods != true) return Forbid();
 
-        var result = await _approvals.RejectTodAsync(submissionId, null, cancellationToken);
+        var result = await _approvals.RejectTodAsync(linkshellId, submissionId, null, cancellationToken);
         if (result == ApprovalResult.NotFound) return NotFound();
         TempData["PendingApprovalMessage"] = "ToD submission rejected and removed.";
         return RedirectToAction(nameof(Index), new { linkshellId });
@@ -298,21 +275,12 @@ public sealed class LinkshellPendingSubmissionsController : Controller
         var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
         if (role?.CanModerateLiveEvent != true) return Forbid();
 
-        var submission = await _db.PendingAttendanceWindowSubmissions
-            .Include(s => s.Members)
-            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
-        if (submission is null) return NotFound();
-
         // Apply officer toggles: drop any members the officer un-checked.
         var keep = (form.Members ?? new List<EditPendingAttendanceMember>())
             .Where(m => m.Include)
             .Select(m => m.Id)
-            .ToHashSet();
-        var toRemove = submission.Members.Where(m => !keep.Contains(m.Id)).ToList();
-        _db.PendingAttendanceWindowMemberSubmissions.RemoveRange(toRemove);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        var result = await _approvals.ApproveAttendanceWindowAsync(submissionId, cancellationToken);
+            .ToList();
+        var result = await _approvals.ApproveAttendanceWindowKeepingAsync(linkshellId, submissionId, keep, cancellationToken);
         if (result == ApprovalResult.NotFound) return NotFound();
         TempData["PendingApprovalMessage"] = "Attendance window approved.";
         return RedirectToAction(nameof(Index), new { linkshellId });
@@ -327,7 +295,7 @@ public sealed class LinkshellPendingSubmissionsController : Controller
         var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
         if (role?.CanModerateLiveEvent != true) return Forbid();
 
-        var result = await _approvals.RejectAttendanceWindowAsync(submissionId, null, cancellationToken);
+        var result = await _approvals.RejectAttendanceWindowAsync(linkshellId, submissionId, null, cancellationToken);
         if (result == ApprovalResult.NotFound) return NotFound();
         TempData["PendingApprovalMessage"] = "Attendance window rejected.";
         return RedirectToAction(nameof(Index), new { linkshellId });
@@ -391,21 +359,11 @@ public sealed class LinkshellPendingSubmissionsController : Controller
         var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
         if (role?.CanModerateLiveEvent != true) return Forbid();
 
-        var submission = await _db.PendingAttendanceSnapshotSubmissions
-            .Include(s => s.Entries)
-            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
-        if (submission is null) return NotFound();
-
         var keep = (form.Entries ?? new List<EditPendingSnapshotEntry>())
             .Where(e => e.Include)
             .Select(e => e.Id)
-            .ToHashSet();
-        var toRemove = submission.Entries.Where(e => !keep.Contains(e.Id)).ToList();
-        _db.PendingAttendanceSnapshotEntries.RemoveRange(toRemove);
-        submission.EntryCount = submission.Entries.Count - toRemove.Count;
-        await _db.SaveChangesAsync(cancellationToken);
-
-        var result = await _approvals.ApproveSnapshotAsync(submissionId, cancellationToken);
+            .ToList();
+        var result = await _approvals.ApproveSnapshotKeepingAsync(linkshellId, submissionId, keep, cancellationToken);
         if (result == ApprovalResult.NotFound) return NotFound();
         TempData["PendingApprovalMessage"] = "Attendance snapshot approved.";
         return RedirectToAction(nameof(Index), new { linkshellId });
@@ -420,7 +378,7 @@ public sealed class LinkshellPendingSubmissionsController : Controller
         var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
         if (role?.CanModerateLiveEvent != true) return Forbid();
 
-        var result = await _approvals.RejectSnapshotAsync(submissionId, null, cancellationToken);
+        var result = await _approvals.RejectSnapshotAsync(linkshellId, submissionId, null, cancellationToken);
         if (result == ApprovalResult.NotFound) return NotFound();
         TempData["PendingApprovalMessage"] = "Attendance snapshot rejected.";
         return RedirectToAction(nameof(Index), new { linkshellId });
