@@ -1,103 +1,45 @@
-# Web and Discord Activity Parity Checklist
+# Website and Discord Activity: one UI, two hosts
 
-This checklist defines parity as:
+This used to be a parity checklist: the website (Razor MVC) and the Discord Activity (Angular) were
+two front ends for the same data, and this file tracked where they had drifted apart. Since
+October 2026 there is one front end. The Angular app is the Discord Activity inside Discord and the
+website in a normal browser, so data, actions, permissions and outcomes are the same by construction.
 
-- same data model
-- same allowed options
-- same actions available to the user
-- same permission rules
-- same outcomes
+What remains is a short list of **intentional** differences between the two hosts.
 
-The only intentionally different part is the login entry surface.
+## What differs by host
 
-## Already aligned
+| | Website (browser) | Discord Activity (iframe) |
+|---|---|---|
+| Sign-in | Site cookie, via `/auth/discord/login` (Discord OAuth, `identify`). Sign-in screen when signed out, Sign out button. | Discord Embedded App SDK `authorize` → `/auth/discord/exchange`; bearer token on every call. |
+| Linkshell "Lock to this server" | Not applied: members always see their linkshells. Claiming a placeholder still respects it. | Applied: a locked linkshell only opens from its server, for its members. |
+| URL | One URL per tab and sub-view (`/discord-activity/events/past`), `?ls=<id>` switches linkshell; reload, Back and deep links work. | Never changed; the tab lives in memory (a stateful iframe URL interacts badly with the SDK's URL mapping). |
+| Website-only | Pending Submissions review tab, super-admin Admin tab, DKP Import, DKP Sheet Export to Excel, Privacy/Terms/launcher footer. | Hidden (`isWebsite`, `canOpenTab`). The DKP rounding card points to the website for importing. |
+| Discord-only | Hidden. | Connected-participants list and "connected now" invite shortcuts, "Set to this server" from the launching guild. |
+| Public pages | `/` landing (signed out), Privacy, Terms are server-rendered (`_PublicLayout`). | Not used. |
 
-- Discord-linked identity resolves to the same `AppUser` on web and in the Activity.
-- MVC and Activity now enforce the same membership, manager, and leader permission rules for linkshells, events, dashboard selection, and event history access.
-- Linkshell creation, edit, delete, leave, primary selection, member removal, and role updates exist in both surfaces.
-- Invite send, accept, decline, revoke, join requests, and join-request approval/decline exist in both surfaces.
-- Event create, edit, cancel, start, signup, unsign, verification, loot, and end-event flows exist in both surfaces.
-- Event job options are now fixed dropdowns in both the MVC event form and the Discord Activity queue form.
-- Profile identity fields use the same underlying `AppUser` data in both surfaces.
-- Timezone handling is based on UTC storage with per-user display conversion.
-- Dashboard content parity is in place: linkshell selector, member list, upcoming events, and recent history are now exposed in the Activity.
-- Event history parity is in place: full history list and detail views now exist in the Activity.
-- Live event parity is in place on actions and data: quick join, attendance actions, loot, and end-event flow exist in both surfaces.
-- Linkshell details parity is in place: the Activity now supports drill-in details for any membership, not only the primary linkshell.
-- Event System layout parity is in place: `/Event` now renders the Activity's three sections in the
-  same order — Current Field Activity (live camps + open attendance events), Pending Events, then
-  the archive (unlinked snapshots + closed attendance events) and Past Events. The live/queued
-  bucketing predicates are shared rules in `Services/EventSystemBuckets.cs`, mirroring the
-  Activity's `liveEvents()` / `queuedEvents()` / `isEndedCamp()`.
+## Permissions
 
-## Remaining parity gaps
+One set of rules everywhere: the role permission flags, checked by `ActivityDataController.CanAsync`
+(admin override first, then the Leader always passes, then the role's flag). The old website checked
+the Leader/Officer **rank** in about a dozen places, so moving it onto the app changed three things
+for the default Officer role, which doesn't carry these flags:
 
-### 1. Invite and membership UX parity
+- changing members' rank or status (`CanManageMembers`)
+- manual DKP adjustments (`CanAuditDkp`)
+- Customize linkshell, including DKP import (`CanCustomizeLinkshell`)
 
-Discord Activity has extra Discord-native affordances:
+A leader grants them on the Permissions tab if their officers should keep them.
 
-- connected participant invite shortcuts
-- connected participant list
-- member mode / manager mode view split
-- refresh activity button
+## Adding a feature
 
-Web does not have equivalents for these.
+Build it once, in the Angular app. If it only makes sense in a browser (a file upload or download, a
+super-admin tool), gate it with `DiscordActivityService.isWebsite`, and a whole tab with
+`ActivityHomeComponent.canOpenTab`. Don't add Razor pages for app features.
 
-Parity target:
+## Retiring the old website
 
-- either add equivalent operational shortcuts on the web
-- or accept these as Discord-only operational enhancements and document them as intentional exceptions
-
-Priority: Medium
-
-### 2. Profile/settings UX parity
-
-Web has:
-
-- dedicated profile page
-- dedicated settings page
-
-Discord Activity has:
-
-- inline operator profile card
-- inline onboarding checklist
-
-Parity target:
-
-- align editable fields and validation rules exactly
-- decide whether onboarding is Activity-only or should be visible on the web too
-
-Priority: Medium
-
-### 3. Presentation-only flow differences
-
-The underlying data, actions, and rules are now mostly aligned, but the surfaces still present them differently:
-
-- web uses dedicated pages for dashboard, linkshell details, and live event operations
-- Activity uses the command-deck layout with inline panels and drawers
-
-Event history is no longer one of these: it is a section of `/Event` on both surfaces. The
-standalone `/EventHistory` and `/linkshells/{id}/window-events/history` pages remain reachable —
-the sidebar links point at the combined page's anchors, and the detail pages still link back to
-their own list.
-
-If strict parity means identical actions and outcomes, this is acceptable. If strict parity also means matching navigation structure, more redesign work is still required.
-
-Priority: Low
-
-## Recommended implementation order
-
-1. Profile/settings parity
-2. Decide whether Discord-native operational affordances remain intentional exceptions
-3. Decide whether page-vs-panel presentation differences matter for your definition of parity
-
-## Intentional exceptions to decide explicitly
-
-These features may remain Discord-only if treated as platform-specific enhancements rather than parity failures:
-
-- connected participant list
-- connected-now invite shortcuts
-- runtime/session context panel
-- refresh activity button
-
-If these remain Discord-only, document them as approved exceptions instead of leaving them as accidental drift.
+The old Razor pages' GET addresses redirect into the app (`Utils/LegacyUrlRedirects.cs`, 302 for
+now). Their controllers and views stay until a cleanup pass deletes them and switches the redirects to
+301. Data Admin (`/data-admin`) is still a Razor page, linked from the Admin tab, until it is rebuilt
+in the app.

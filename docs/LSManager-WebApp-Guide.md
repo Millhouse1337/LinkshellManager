@@ -1,6 +1,6 @@
 # LinkshellManager — Web App Guide
 
-> The full management surface. Roster, DKP, items, revenue, auctions, events, ToDs, and party setups — all in the browser.
+> The same app as the Discord Activity, in your browser — plus the tools that need a full browser.
 
 **LinkshellManager (LSManager)** is a three-piece system over one shared database. This guide covers the **Web App**. Its companions have their own guides:
 
@@ -10,82 +10,62 @@
 | **Discord Activity** | Inside Discord — voice channel "Activities" tray | [Discord Activity Guide](LSManager-DiscordActivity-Guide.md) |
 | **In-Game Addon** (`lsm`) | Ashita v3 / HorizonXI client | [In-Game Addon Guide](LSManager-Addon-Guide.md) |
 
-Everything is shared — anything done on the addon or in Discord shows up in the web in seconds.
+Everything is shared — anything done on the addon or in Discord shows up on the website in seconds.
 
 ---
 
 ## Getting in
-- Open the site in a browser.
-- Click **Login with Discord** — accounts are linked to your Discord identity automatically.
-- First-time login creates your account. You'll be prompted to set your **character name** (and optionally up to two **alt character names**) on the Profile page.
+- Open the site in a browser and click **Sign in**. You sign in with Discord, so it's the same account as the Discord Activity.
+- First time? Set your **character name** (and optionally up to two **alt character names**) on the **Profile** tab.
+- **Sign out** is at the top right. Signed in, the site's home address takes you straight into the app.
 
-## Sidebar map
+## The tabs
 
-The left sidebar is grouped into sections. Sub-items marked *(officer)* require a role permission and won't appear for regular members. Some groups appear only depending on your linkshell's **type** and **feature toggles** (see Customize Linkshell).
+The website is the same app as the Discord Activity, with the same tabs along the top: Dashboard,
+Charts, Auctions, Event System, ToDs, Party Setup, DKP, Loot, Management, Treasury, Profile, Messages,
+Configurations, Permissions and Game Addon. The [Discord Activity Guide](LSManager-DiscordActivity-Guide.md#the-tabs)
+describes each one. Which tabs appear depends on your linkshell's **feature toggles**, and the buttons
+inside them on your role's **permissions** (Permissions tab).
 
-### Dashboard
-A snapshot of your active linkshell — member count, upcoming events, upcoming auctions, upcoming ToDs, and revenue (if enabled). Below the stat strip are **two distinct feeds**:
-- **News & Updates** — the "newsy" feed: new announcements, rules, auctions, members who just joined, and large DKP changes.
-- **Recent Activity** — the "operational" feed (filter by Kills / Claims / Events / Loot): ToD kills and claims, loot awarded, and completed events.
+A few things are nicer in a browser:
 
-The **Upcoming Events** card also surfaces ToD repops opening within the next 2 hours, tagged as repops, so you see what's about to pop alongside scheduled events.
+- **Every tab has its own address**, so you can bookmark it, share it, reload, and use Back. For example
+  `/discord-activity/events/past` is the Event System's Past view and `/discord-activity/dkp/sheet` the DKP Sheet.
+- **Old website links still work.** Bookmarks and old Discord posts pointing at the previous website's
+  pages (such as `/Event` or `/LootHistory`) open the matching tab.
+- **"Lock to this server" doesn't apply on the website.** That Configurations setting only limits which
+  Discord server the Activity opens a linkshell from; members always see their linkshells on the website.
 
-The **Linkshell roster** card lists every member with their rank, DKP, and status. An **App** tag beside a name means that member has opened and synced the app at least once. Tick **Show Jobs** to swap Rank/DKP/Status for each member’s leveled jobs — main and alts, with merit stars and relic pills — and the search box then matches job names and levels too. This mirrors the Discord Activity’s dashboard roster.
+## Only on the website
 
-### Announcements
-- **View Announcements** — scrollable feed for everyone in the linkshell.
-- **Create Announcement** *(officer)* — post news.
+These need a full browser (uploading or downloading a file, or a long review form), so they don't appear
+inside Discord. They show as extra tabs after a divider at the end of the tab strip, or as extra buttons.
 
-### Rules
-- **View Rules** — your linkshell's published rule set.
-- **Create Rule** *(officer)* — add or edit rules.
+### Pending Submissions *(reviewers)*
+Members without the right permission can still submit a ToD or attendance for approval. This tab is the
+queue, for anyone who can manage ToDs or moderate live events (and the Leader):
 
-### Missions *(optional)*
-Navigation placeholders for **Rise of the Zilart / Chains of Promathia / Treasures of Aht Urhgan**.
+- **ToDs** — check and fix the monster, time of death, repop time, cooldown, interval, claim and loot, then
+  **Approve** or **Reject**. Approving charges each loot winner their DKP; if someone can't afford their item,
+  approval is blocked until you fix the loot or their DKP.
+- **Attendance windows** and **snapshots** — untick anyone who wasn't there (or shouldn't count), then
+  **Approve**, or **Reject** the whole submission.
 
-### End Game *(optional)*
-Navigation placeholders for **Sky / Sea / Dynamis / Limbus**.
+### Import DKP *(Configurations tab)*
+Bringing a linkshell over from another tracker? Upload a spreadsheet (.xlsx or .csv) of your existing DKP.
+**Download template** shows the exact columns (Member Name, Alt 1, Alt 2, Current DKP, Total DKP, Total DKP
+Spent). **Preview import** lists every row as an update, a new member, or skipped, and flags negative
+balances (they import as 0). Nothing changes until you press **Import**. Members already in the app are
+updated; names it doesn't recognise become unsynced members who keep their DKP until that person first
+opens the app and claims it. Needs the "Customize linkshell" permission.
 
-### Linkshell Auction
-- **View Auctions** — current live and upcoming auctions.
-- **Create Auction** *(officer)* — list an item with starting bid, min increment, and end time.
-- **Auction History** — every settled auction with winner and final DKP.
+### Export to Excel *(DKP → DKP Sheet)*
+Downloads the linkshell's current DKP as a styled spreadsheet.
 
-### Event System
-- **Timed Events** — every active event (open for sign-ups, in progress, or scheduled). Snapshot/window-based attendance — fed by the in-game addon's `/lsm now` scans and by ending an HNM camp — also lands here: open attendance events and unlinked snapshots render at the top of this page, where you review each roster, set DKP, and post it.
-- **Create Timed Event** *(officer)* — name, type (HNM / Event / Custom), location, start time, DKP per hour, requested slots.
-- **Event History** — completed events with full attendance, breaks, and loot ledger.
-- **Attendance History** — closed attendance events, searchable.
-- **Pending Submissions** *(officer)* — addon submissions awaiting review.
-
-### ToD Tracker
-- **View ToDs** — every tracked NM/HNM with countdown to repop, claim status, and loot history.
-- **Add ToD** *(officer)* — manually log a kill (the addon does this automatically — see the [Addon Guide](LSManager-Addon-Guide.md)).
-
-### Party Setups
-- **View Party Setups** — alliance → party → slot raid templates; claim an open slot. You hold at most one slot per setup.
-- **Create Party Setup** *(officer)* — build the template (job/role requirements, party leaders) and assign it to a monster so it appears on that monster's ToD card.
-
-### Management
-*The linkshell's people.*
-- **Manage Team** *(officer)* — View Team, Add Members (search players), View Invites.
-- **DKP** — **View DKP** (ledger), **DKP Adjustments** *(officer — Adjust / Add to a previous entry / Misc)*, and **App DKP Sheet** (read-only view of the synced Google Sheet, Main + Tally tabs).
-- **Loot** — **Loot History**; Add Loot *(officer)*.
-- **Configurations** — **View Linkshells**, **Create Linkshell**, **Customize Linkshell** *(officer)*, **Google Sheet Integration** *(officer)*, **Reconcile Members** *(officer)*.
-
-### Treasury
-*Everything the linkshell owns. Both halves are readable by every member; only changing them needs a
-permission.*
-- **Gil** — **Gil on hand** (a simple balance sheet plus every transaction), **Record Transaction**
-  *(needs "Record treasury entries")*.
-- **Items** — **View Items**, **Add Item** *(needs "Manage inventory")*.
-
-Gil and Items sit together because one turns into the other: marking an item sold records the gil
-against the treasury in the same transaction.
-
-### Pages
-- **Profile** — character name, alts, time zone, profile image, primary linkshell.
-- **Messages** — internal messaging.
+### Admin *(super admin only)*
+The server-wide switches: turn the in-game addon or its Claim Shield capture off for everyone, turn the
+**admin override** on or off, and set the **launcher download** link shown on the home page. It also links
+to **Data Admin**.
 
 ### Data Admin *(super admin only)*
 A browser over the database for the one account marked super admin. It opens on the **schema diagram**
@@ -109,8 +89,8 @@ many-to-many pairing, and holds the view options (keys only, square lines, hide 
 Esc. The diagram itself is structure only, never rows: View records opens an app table's list page, and
 the login (Identity) tables are drawn but have no records page.
 
-## Customize Linkshell (the control panel)
-`Configurations → Customize Linkshell` (officer only):
+## Configurations (the control panel)
+The **Configurations** tab (needs the "Customize linkshell" permission):
 
 - **Loot structure**
   - **DKP** — time-based DKP per event, spent on items.
@@ -119,11 +99,11 @@ the login (Identity) tables are drawn but have no records page.
 - **DKP rounding** — Quarter (0.25) or Half (0.5) increments.
 - **Feature toggles** — hide any section your linkshell doesn't use (Endgame, Missions, Auctions, ToDs, Events, DKP, Items tile, Finances tile).
 - **Hide ToD Mobs** — pick monsters (grouped HNM / Sky / Other) to hide from the Tracked Windows panel on the Dashboard and the ToD views. Pop-only mobs (Sky Gods, Sea NMs, HENMs) aren't listed — they spawn from an item, not a repop timer, so they have no window to track.
-- **Addon pairing codes** — generate one-time codes the in-game addon redeems to link itself to this linkshell.
+- **Addon pairing codes** — on the **Game Addon** tab: generate one-time codes the in-game addon redeems to link itself to this linkshell.
 
 ### How the Treasury works, and what it does not do
 
-`Management → Finances → Treasury` tracks the linkshell's gil. Behind the scenes every transaction is
+The **Treasury** tab tracks the linkshell's gil. Behind the scenes every transaction is
 recorded twice — once against gil on hand and once against a category — so the two always cancel out and
 the balance can be worked out from the entries rather than stored and hoped over. You never see that
 part: you say **what happened** in two clicks and the app does the rest. If you are curious,
@@ -216,14 +196,12 @@ Two limits, stated plainly rather than left to be discovered:
   starting-balance ritual either: a linkshell adopting the app records what it already had as one
   **Gil In** saying exactly that.
 
-### Google Sheet Integration *(web only)*
-`Configurations → Google Sheet Integration` connects a Google account so DKP syncs out to a spreadsheet, with import/preview and member reconciliation. This lives **only** in the web app — the OAuth redirect flow doesn't run inside the Discord iframe. Once connected, members can read the synced sheet from the **App DKP Sheet** page (web) or the **DKP** tab (Discord Activity).
-
 ---
 
 ## Quick reference
-- **URL:** `https://your-host/` → Login with Discord → use the left sidebar.
-- **Set up loot:** Configurations → Customize Linkshell → Loot structure → Save.
-- **Connect a sheet:** Configurations → Google Sheet Integration → Connect Google.
-- **Pair the addon:** Configurations → Customize Linkshell → Addon pairing → generate code → in FFXI `/lsm link <code>`.
+- **URL:** `https://your-host/` → Sign in with Discord → tabs along the top.
+- **Set up loot:** Configurations → Loot structure → Save.
+- **Import existing DKP:** Configurations → Import DKP → Download template → fill it in → Preview import → Import.
+- **Review member submissions:** Pending Submissions tab.
+- **Pair the addon:** Game Addon → + Get Code → in FFXI `/lsm link <code>`.
 - **Companion guides:** [Discord Activity](LSManager-DiscordActivity-Guide.md) · [In-Game Addon](LSManager-Addon-Guide.md)

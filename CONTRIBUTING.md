@@ -54,8 +54,8 @@ In non-development environments the app applies pending migrations automatically
 
 | Project | Purpose |
 |---|---|
-| `LinkshellManagerDiscordApp.csproj` | The web app: MVC + Razor + EF Core + the Discord Activity host |
-| `discord-activity/` | The Angular SPA embedded by Discord (built into `wwwroot/`) |
+| `LinkshellManagerDiscordApp.csproj` | The host: JSON APIs + EF Core, a few public Razor pages, and the Angular app |
+| `discord-activity/` | The Angular SPA: the Discord Activity inside Discord and the website in a browser (built into `wwwroot/`) |
 | `DbWipe/` | **Destructive** dev utility — truncates all tables to reset a local DB |
 | `tools/DbInspector/` | Read-only DB inspection (+ a guarded `reset-public`) |
 
@@ -77,7 +77,11 @@ operations unless you pass the connected database name as confirmation — never
 ## Tests
 
 ```bash
-dotnet test                          # backend unit/integration tests
-node --test tests/js/data-admin-schema-layout.test.js   # website JS tests (Node 20+, nothing to install)
-cd discord-activity && npm test      # Angular tests
+dotnet test                          # backend unit tests
+node --test tests/js/data-admin-schema-layout.test.js   # Data Admin diagram JS tests (Node 20+, nothing to install)
+cd discord-activity && npm run lint && npm run build    # the Angular app has no unit tests yet; lint + build is the check
 ```
+
+A new feature goes into the Angular app, for both hosts. One that only makes sense in a browser
+(file upload/download, super-admin tools) is gated with `DiscordActivityService.isWebsite` and, for a
+whole tab, `ActivityHomeComponent.canOpenTab`. Don't add new Razor pages for app features.

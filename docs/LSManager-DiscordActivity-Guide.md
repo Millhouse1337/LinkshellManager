@@ -3,7 +3,7 @@
 > Same data as the web app, packaged for Discord. Launch it from any voice channel — no browser tab.
 
 This guide covers the **Discord Activity**. Its companions have their own guides:
-- **[Web App Guide](LSManager-WebApp-Guide.md)** — the full management surface in a browser.
+- **[Web App Guide](LSManager-WebApp-Guide.md)** — the same app in a browser, plus the website-only tools.
 - **[In-Game Addon Guide](LSManager-Addon-Guide.md)** — the `lsm` Ashita addon.
 
 Everything is shared across all three surfaces over one database.
@@ -16,7 +16,7 @@ Open any voice channel → click the **rocket icon → Activities → LinkshellM
 ### First launch
 1. Discord prompts you to authorize the app (`identify`, `guilds`, `applications.commands`).
 2. The app finds your linked account and drops you on the **Dashboard** tab.
-3. Visiting `/discord-activity` directly in a browser (outside Discord) gives a **standalone preview** with the same UI.
+3. Opening the site in a normal browser instead gives you this same app as the website (sign in with Discord there). See the [Web App Guide](LSManager-WebApp-Guide.md).
 
 The top strip shows the active linkshell name and member count, a clock, a refresh button, and your role/name. Which tabs appear depends on the linkshell's **type** and **feature toggles**.
 
@@ -32,7 +32,7 @@ The top strip shows the active linkshell name and member count, a clock, a refre
 
 - **Auctions** *(DKP linkshells)* — Live bid view; place bids inline. The tab carries a live-auction count badge.
 
-- **DKP** *(DKP linkshells)* — The DKP ledger and manual adjustments/audit (**Adjust**, **Add to a previous entry**, **Misc**), **plus** the read-only synced **Google Sheet** (Main + Tally tabs, searchable). Connect the sheet on the web.
+- **DKP** *(DKP linkshells)* — The DKP ledger and manual adjustments/audit (**Adjust**, **Add to a previous entry**, **Misc**), **plus** the **DKP Sheet**: every member's current, total and spent DKP, searchable.
 
 - **Loot** — Loot history across events and ToDs (works for Loot Council linkshells too).
 
@@ -61,7 +61,7 @@ The top strip shows the active linkshell name and member count, a clock, a refre
 4. Click **Generate** — the code displays with a countdown. Copy it before it expires.
 5. In FFXI, type `/lsm link <code>` (see the [Addon Guide](LSManager-Addon-Guide.md)).
 
-You can also generate codes from the web app at **Configurations → Customize Linkshell → Addon pairing**.
+The website has the same **Game Addon** tab.
 
 > **Note:** Auctions, DKP, and Loot are full tabs along the top (they used to be right-edge side panels). Roster lookups live in the search box on both the Dashboard and Management tabs; invites are handled on the Management tab.
 

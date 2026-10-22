@@ -2,14 +2,17 @@
 
 ## Architecture
 
-- Root app: ASP.NET Core MVC + Razor Pages + Identity + EF Core + PostgreSQL
-- Activity frontend: Angular app in `discord-activity`
+- Root app: ASP.NET Core + Identity + EF Core + PostgreSQL (JSON APIs, plus a few server-rendered pages)
+- Frontend: Angular app in `discord-activity`, the **one UI for both hosts**
 - Angular build output: `wwwroot/discord-activity/browser`
-- Activity route: ASP.NET serves the Angular SPA at `/discord-activity`
+- App route: ASP.NET serves the Angular SPA at `/discord-activity`
 - Discord auth exchange endpoint: `POST /auth/discord/exchange`
-- Local identity store: `DiscordActivityUsers` linked to `AspNetUsers` (`AppUser`) for the restored MVC slice
+- Local identity store: `DiscordActivityUsers` linked to `AspNetUsers` (`AppUser`)
 
-The architecture is intentionally hybrid. The ASP.NET app remains the host, security boundary, and configuration source. The Angular app remains a separate frontend project that is built into `wwwroot`.
+One UI, two hosts. Inside Discord the Angular app runs as the Discord Activity; in a normal browser
+the same app is the website (see [Website mode](#website-mode)). The ASP.NET app remains the host,
+security boundary, and configuration source; the Angular app is a separate frontend project built
+into `wwwroot`.
 
 ## Discord Activity flow
 
@@ -25,7 +28,39 @@ The architecture is intentionally hybrid. The ASP.NET app remains the host, secu
 
 The authenticated session inside Discord can include additional scopes such as `guilds.members.read` or `rpc.voice.read`. The app does not explicitly request those in Angular; it requests the minimum set it currently relies on for the embedded flow.
 
-Outside Discord, the Angular app intentionally falls back to a standalone preview mode so `/discord-activity` can still be validated locally in a normal browser.
+## Website mode
+
+In a normal browser (`window.parent === window`) the same Angular app is the website. It skips the
+Discord SDK entirely and uses the site's own cookie login:
+
+- **Sign in:** `/auth/discord/login?returnUrl=...` (the `DiscordWebsite` OAuth scheme, scope `identify`)
+  sets the Identity cookie. `GET /api/web/session` tells the app whether it is signed in; signed out,
+  `app.html` shows a sign-in screen instead of the app. Any API 401 flips back to it. **Sign out** is
+  `POST /api/web/sign-out`.
+- **Same API:** every `/api/activity/*` endpoint accepts the cookie as well as the Discord bearer token
+  (`ResolveAppUserAsync`). Cookie mutations need the `X-XSRF-TOKEN` header, which
+  `ActivityHttpClient.sendActivityRequest` adds.
+- **Discord server lock:** a linkshell's "Lock to this server" governs the Discord Activity only. The
+  website always shows a linkshell to its members (`GuildLockPolicy`); claiming a placeholder still
+  respects the lock.
+- **A URL per tab:** on the website the tab and sub-view live in the URL (`/discord-activity/events/past`,
+  `/dkp/sheet`, `/charts/sea`; slugs in `src/app/home/tab-routes.ts`), so reload, Back and deep links
+  work. `?ls=<id>` switches the active linkshell. Inside Discord the iframe's URL is never touched; the
+  tab lives in memory there.
+- **Website-only features**, hidden inside Discord: the **Pending Submissions** review tab, the
+  super-admin **Admin** tab (`/api/web/admin`), DKP **Import** (Configurations) and DKP Sheet
+  **Export to Excel**. `ActivityHomeComponent.canOpenTab` gates the website-only tabs.
+- `/` shows the public landing page signed out and redirects into the app signed in.
+
+## Server-rendered pages
+
+Razor now renders only what can't be the app: the public landing page, Privacy, Terms, the Identity
+sign-in (error) page, Access denied and Error, all on `Views/Shared/_PublicLayout.cshtml`, plus Data
+Admin (`/data-admin`, super admins) until it moves into the app.
+
+The old Razor website's pages are being retired. Their GET addresses redirect into the app
+(`Utils/LegacyUrlRedirects.cs`, e.g. `/Event` → `/discord-activity/events`); their controllers and
+views remain only until a cleanup pass deletes them.
 
 ## Auth flow
 
@@ -35,27 +70,6 @@ Outside Discord, the Angular app intentionally falls back to a standalone previe
 - The backend creates or updates a local `DiscordActivityUsers` row keyed to the Discord user id.
 - The backend returns the access token payload needed for the embedded `authenticate` step and the local user summary.
 - The frontend then authenticates with the Embedded App SDK and uses `GET /api/me` for a database-backed user record.
-
-## MVC first slice
-
-The working Discord Activity shell now sits beside a restored first-slice MVC app.
-
-Restored server-rendered areas in this pass:
-
-- `Dashboard`
-- `Linkshell`
-- `Event`
-- `EventHistory`
-- `Account/Profile`
-- `Account/Settings`
-
-Design constraints for this restoration:
-
-- `AppUser` is now the primary ASP.NET Identity user type.
-- Discord launch/auth stays on the existing `POST /auth/discord/exchange` and `GET /api/me` flow.
-- The MVC slice uses the same host, same cookies, same PostgreSQL database, and same CSP/frame policy as the Discord Activity host.
-- The earlier restoration pass deferred modules such as Auctions, Rule management, and revenue/item management; these have since been implemented and now compile and ship. Contact/Messaging remains a "coming soon" stub (see `Controllers/MessagesController.cs`).
-- The ToD (Time of Death) tracker has been restored as a first-class feature, with logging, editing, and per-linkshell monster tracking.
 
 ## Local user model
 
@@ -68,10 +82,10 @@ The app now has two linked user layers:
 
 2. Internal app identity
    - stored in `AspNetUsers` using the custom `AppUser` type
-   - used by the restored MVC linkshell/event flows
+   - the account the website's cookie login signs into, and what every linkshell, membership and event hangs off
    - linked from `DiscordActivityUsers.IdentityUserId`
 
-Current `AppUser` fields used by the restored slice:
+Current `AppUser` fields include:
 
 - `Id`
 - `UserName`
@@ -101,7 +115,7 @@ Provisioning behavior:
 
 - First Discord launch creates or updates the `DiscordActivityUsers` row.
 - If no linked `AppUser` exists yet, the backend creates one and stores its id in `IdentityUserId`.
-- `GET /api/me` now returns both the Discord-linked local user record and the linked `AppUser` summary needed by the restored website features.
+- `GET /api/me` returns both the Discord-linked local user record and the linked `AppUser` summary (Discord only; the website uses `GET /api/web/session`).
 - Linkshells, memberships, live events, completed event history, and notifications are all keyed from the `AppUser` layer.
 
 Important: for the embedded Activity flow, the backend does not send `redirect_uri` during token exchange. Discord's current Activity tutorial shows the embedded flow without `redirect_uri`; the Redirect URI still needs to exist in the Developer Portal, but it is a portal requirement rather than a request parameter used by this app flow.
@@ -198,9 +212,26 @@ Use the `https` profile. The Activity route should be available at:
 
 ### Local route checks
 
-- Open `/discord-activity` in a normal browser and confirm the standalone preview shell loads.
-- Open a deep route such as `/discord-activity/test-route` and confirm the SPA fallback returns the Angular app.
+- Open `/discord-activity` in a normal browser: signed out you get the sign-in screen, signed in the app.
+- Open a deep route such as `/discord-activity/events/past` and confirm it opens that tab, and that reload and Back keep you there.
+- Open an old address such as `/Event` and confirm it redirects to `/discord-activity/events`.
 - Rebuild Angular after frontend changes before retesting through ASP.NET.
+
+### Testing against a throwaway database
+
+If your user secrets point `ConnectionStrings:DefaultConnection` at a shared or hosted database, don't
+run the app against it to test. Point a single run at a local database instead (environment variables
+override user secrets), and give it a dummy bot token so the startup jobs that configure the Discord
+application (`DiscordEntryPointConfigurator`) can't reach the real one:
+
+```bash
+docker run -d --name lsm-test-db -e POSTGRES_PASSWORD=<pw> -e POSTGRES_DB=lsm_test -p 55432:5432 postgres:16
+dotnet ef database update --connection "Host=localhost;Port=55432;Database=lsm_test;Username=postgres;Password=<pw>"
+ConnectionStrings__DefaultConnection="Host=localhost;Port=55432;Database=lsm_test;Username=postgres;Password=<pw>" \
+Discord__BotToken=disabled dotnet run --launch-profile https
+```
+
+Development doesn't migrate on startup, hence the explicit `database update`.
 
 ## Deployment notes
 
@@ -232,7 +263,7 @@ Use the `https` profile. The Activity route should be available at:
 - Third-party external requests can still fail in Discord with CSP or proxy restrictions if new external domains are introduced later.
 - Cookie-based authenticated API calls from inside Discord depend on HTTPS and `SameSite=None; Secure`.
 - Tunnel hostnames are included for development, but production CSP should be reviewed again once the final hostname is fixed.
-- The standalone browser preview is intentionally not a full Discord-authenticated experience.
+- In a browser the app is the website (cookie login), not the Activity: Discord-only bits such as the connected-participants invite shortcuts stay hidden there.
 
 ## Quick start commands
 
