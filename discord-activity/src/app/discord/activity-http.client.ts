@@ -49,6 +49,9 @@ export class ActivityHttpClient {
     }
 
     if (!response.ok) {
+      if (response.status === 401) {
+        this.auth.noteUnauthorized();
+      }
       const errorPayload = parsedJson ? (payload as { error?: unknown }) : null;
       const message =
         errorPayload && typeof errorPayload.error === 'string'
@@ -129,6 +132,10 @@ export class ActivityHttpClient {
         // "Unexpected token '<'".
         throw new Error(this.nonJsonMessage(response, responseText));
       }
+    }
+
+    if (response.status === 401) {
+      this.auth.noteUnauthorized();
     }
 
     if (!responseText) {

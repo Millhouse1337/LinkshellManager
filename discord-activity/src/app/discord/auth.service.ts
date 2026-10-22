@@ -3,7 +3,8 @@ import { Injectable, signal } from '@angular/core';
 import type {
   ActivityOverview,
   DiscordSession,
-  LocalActivityUser
+  LocalActivityUser,
+  WebSession
 } from './discord-activity.types';
 
 /**
@@ -36,8 +37,21 @@ export class AuthService {
   readonly discordGuildId = signal<string | null>(null);
   readonly discordGuildName = signal<string | null>(null);
 
+  // Website (browser) host only: the cookie session from GET /api/web/session. Stays null
+  // inside Discord. signedIn=false swaps the whole app for the sign-in screen (app.html).
+  readonly webSession = signal<WebSession | null>(null);
+
   currentAccessToken(): string | undefined {
     return this.session()?.access_token;
+  }
+
+  // On the website a 401 means the cookie session ended (expired, or signed out in another
+  // tab) — every Activity API 401 is "not signed in". Inside Discord this is a no-op.
+  noteUnauthorized(): void {
+    const session = this.webSession();
+    if (session?.signedIn) {
+      this.webSession.set({ ...session, signedIn: false });
+    }
   }
 
   // Header sent on every Activity request to identify the launching guild.
@@ -94,6 +108,9 @@ export class AuthService {
     }
 
     if (!response.ok) {
+      if (response.status === 401) {
+        this.noteUnauthorized();
+      }
       const errorPayload = payload as { error?: unknown };
       const message =
         typeof errorPayload.error === 'string'

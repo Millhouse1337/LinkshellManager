@@ -2,6 +2,15 @@ import { DiscordSDK } from '@discord/embedded-app-sdk';
 
 export type ActivityStatus = 'idle' | 'initializing' | 'standalone' | 'ready' | 'error';
 
+// The website's cookie session (GET /api/web/session). Only fetched when the app runs in a
+// normal browser; inside Discord the Activity signs in with a Discord token instead.
+export interface WebSession {
+  signedIn: boolean;
+  displayName: string | null;
+  isSuperAdmin: boolean;
+  launcherDownloadEnabled: boolean;
+}
+
 export type DiscordSdkContextSource = DiscordSDK & {
   channelId?: string;
   guildId?: string;

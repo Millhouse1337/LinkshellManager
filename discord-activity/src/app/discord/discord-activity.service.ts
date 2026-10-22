@@ -60,7 +60,8 @@ import type {
   DiscordSdkContextSource,
   DiscordSession,
   DiscordTokenExchangeResponse,
-  LocalActivityUser
+  LocalActivityUser,
+  WebSession
 } from './discord-activity.types';
 
 // Re-export types so existing consumers that import from
@@ -121,7 +122,8 @@ export type {
   ActivityUpdateProfileInput,
   ActivityUpdateTodInput,
   ActivityUserSearchResult,
-  DiscordParticipant
+  DiscordParticipant,
+  WebSession
 } from './discord-activity.types';
 
 declare const NG_APP_DISCORD_CLIENT_ID: string;
@@ -227,6 +229,12 @@ export class DiscordActivityService {
   readonly isReady = computed(() => this.status() === 'ready');
   readonly isStandalonePreview = computed(() => this.status() === 'standalone');
 
+  // Where the app runs, fixed at startup: inside Discord's iframe, or the website in a normal
+  // browser tab (signed in with the site's own cookie, no Discord SDK).
+  readonly isWebsite = window.parent === window;
+  readonly webSession = this.auth.webSession;
+  readonly isSignedOut = computed(() => this.auth.webSession()?.signedIn === false);
+
   // --- Discord SDK initialization + OAuth (kept on facade) ---
   async initialize(): Promise<void> {
     if (this.initializationPromise) {
@@ -247,6 +255,7 @@ export class DiscordActivityService {
     this.auth.session.set(null);
     this.auth.localUser.set(null);
     this.auth.overview.set(null);
+    this.auth.webSession.set(null);
     this.participants.set([]);
     this.context.set(null);
     this.error.set(null);
@@ -263,10 +272,10 @@ export class DiscordActivityService {
       return;
     }
 
-    if (window.parent === window) {
+    if (this.isWebsite) {
       this.status.set('standalone');
-      this.phase.set('Loaded outside Discord. Embedded auth is skipped.');
-      await this.tryLoadStandaloneOverview();
+      this.phase.set('Loaded outside Discord using the website sign-in.');
+      await this.loadWebsiteSession();
       return;
     }
 
@@ -396,18 +405,24 @@ export class DiscordActivityService {
     return payload as LocalActivityUser;
   }
 
-  private async tryLoadStandaloneOverview(): Promise<void> {
+  // Website host: ask the server whether this browser is signed in. Signed out → app.html
+  // shows the sign-in screen and nothing else loads. Signed in → load the overview with the
+  // site cookie, the same data the Activity loads with its Discord token.
+  private async loadWebsiteSession(): Promise<void> {
     try {
-      this.auth.overview.set(await this.auth.fetchOverview());
-      this.phase.set('Loaded outside Discord using the current website session.');
-    } catch {
-      this.auth.overview.set(null);
+      const session = await this.http.fetchActivityJson<WebSession>('/api/web/session');
+      this.auth.webSession.set(session);
+      if (session.signedIn) {
+        this.auth.overview.set(await this.auth.fetchOverview());
+      }
+    } catch (error) {
+      this.setError(formatError(error));
     }
   }
 
   private setError(message: string): void {
     this.status.set('error');
-    this.phase.set('Discord Activity initialization failed');
+    this.phase.set(this.isWebsite ? 'LinkshellManager failed to load' : 'Discord Activity initialization failed');
     this.error.set(message);
   }
 
