@@ -162,11 +162,13 @@
                         <option value="Half">Nearest Half (0.5)</option>
                       </select>
                     </label>
-                    <p class="muted" style="margin-top:8px">
-                      📥 <strong>Importing existing DKP?</strong> Open LinkshellManager on the web →
-                      <em>Customize Linkshell → Import DKP</em> to upload a spreadsheet of your current
-                      balances.
-                    </p>
+                    @if (!activity.isWebsite) {
+                      <p class="muted" style="margin-top:8px">
+                        📥 <strong>Importing existing DKP?</strong> Open LinkshellManager on the web →
+                        <em>Configurations → Import DKP</em> to upload a spreadsheet of your current
+                        balances.
+                      </p>
+                    }
                   </div>
                 </section>
               }
@@ -324,6 +326,12 @@
 
         }
       </div>
+
+      <!-- Website only: uploading a spreadsheet and reviewing it doesn't fit the Discord iframe,
+           which keeps the "use the web" hint in the DKP rounding card instead. -->
+      @if (activity.isWebsite && canCustomizeSelectedLinkshell()) {
+        <app-dkp-import-card [linkshellId]="customizeTargetLinkshellId()" />
+      }
 
       <!-- HNM-only settings. Split out of Customize Linkshell into its own card, but bound to the
            same customizeDraft — so either card's Save persists the whole settings payload. -->

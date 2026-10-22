@@ -22,6 +22,41 @@ export interface WebAdminSettings {
   message: string | null;
 }
 
+// DKP import (website only): one row parsed from the uploaded sheet. Opaque to the client — the
+// preview hands these back and commit sends exactly them.
+export interface ActivityDkpImportRow {
+  name: string;
+  alt1: string | null;
+  alt2: string | null;
+  current: number | null;
+  total: number | null;
+  spent: number | null;
+}
+
+export interface ActivityDkpImportPreviewRow {
+  name: string;
+  alt1: string | null;
+  alt2: string | null;
+  kind: 'Update' | 'Create' | 'Ambiguous' | 'Skipped';
+  matchedExistingName: string | null;
+  oldCurrent: number;
+  newCurrent: number;
+  newTotal: number;
+  newSpent: number;
+  note: string | null;
+}
+
+export interface ActivityDkpImportPreview {
+  sourceLabel: string;
+  updateCount: number;
+  createCount: number;
+  ambiguousCount: number;
+  // Rows whose sheet balance is negative and will import as 0.
+  clampedCount: number;
+  preview: ActivityDkpImportPreviewRow[];
+  rows: ActivityDkpImportRow[];
+}
+
 export type DiscordSdkContextSource = DiscordSDK & {
   channelId?: string;
   guildId?: string;
