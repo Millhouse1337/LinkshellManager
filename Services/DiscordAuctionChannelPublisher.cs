@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Utils;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -168,6 +169,8 @@ public sealed class DiscordAuctionChannelPublisher
         {
             return null;
         }
-        return $"{baseUrl.TrimEnd('/')}/Auction";
+        // The app's Auctions tab (the website's own UI now). Older posts still link /Auction,
+        // which LegacyUrlRedirects sends to the same place.
+        return $"{baseUrl.TrimEnd('/')}{LegacyUrlRedirects.AppBase}auctions";
     }
 }

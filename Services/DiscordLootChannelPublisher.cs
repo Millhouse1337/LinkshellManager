@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Utils;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -142,7 +143,9 @@ public sealed class DiscordLootChannelPublisher
         {
             return null;
         }
-        var url = $"{baseUrl.TrimEnd('/')}/LootHistory";
+        // The app's Loot tab (the website's own UI now). Older posts still link /LootHistory,
+        // which LegacyUrlRedirects sends to the same place.
+        var url = $"{baseUrl.TrimEnd('/')}{LegacyUrlRedirects.AppBase}loot";
         return new object[]
         {
             new
