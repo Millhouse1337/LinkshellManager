@@ -53,6 +53,10 @@ public sealed class DataAdminListRow
 
 public sealed class DataAdminListCell
 {
+    // The column's value as EF read it, for Razor formatting only. Never sent as JSON
+    // (DataAdminApiController): Text is the display form, and an arbitrary CLR value has no business
+    // on the wire.
+    [System.Text.Json.Serialization.JsonIgnore]
     public object? Raw { get; init; }
     public string Text { get; set; } = string.Empty;
     public bool IsEmpty { get; init; }
