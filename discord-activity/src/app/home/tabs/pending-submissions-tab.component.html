@@ -1,0 +1,168 @@
+<div class="panel-tab fade">
+  <div class="section-head">
+    <div>
+      <div class="section-label">Website only</div>
+      <div class="section-title">Pending submissions</div>
+      <div class="section-sub">What members submitted for approval. Nothing counts until it is approved.</div>
+    </div>
+    <div class="section-head-right">
+      <button type="button" class="btn sm" [disabled]="pending.loading()" (click)="pending.load(linkshellId())">Refresh</button>
+    </div>
+  </div>
+
+  @if (queue(); as q) {
+    @if (isEmpty()) {
+      <div class="card"><div class="card-body muted">Nothing is waiting for review.</div></div>
+    }
+
+    <div style="display:grid;gap:14px">
+
+      <!-- ===== ToDs ===== -->
+      @for (tod of q.tods; track tod.id) {
+        @let draft = todDraft(tod);
+        @let busy = pending.busyKey() === 'tod-' + tod.id;
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">ToD: {{ tod.monsterName || '?' }}</div>
+            <span class="tag">{{ tod.submittedBy }} · {{ activity.formatDateTime(tod.submittedAtUtc) }}</span>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px">
+              <label style="display:flex;flex-direction:column;gap:4px">
+                <span class="muted">Monster</span>
+                <select [(ngModel)]="draft.monsterName">
+                  @for (option of monsterOptions(tod); track option) {
+                    <option [value]="option">{{ option }}</option>
+                  }
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:4px">
+                <span class="muted">Day</span>
+                <input type="number" min="0" [(ngModel)]="draft.dayNumber" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:4px">
+                <span class="muted">Time of death</span>
+                <input type="datetime-local" step="1" [(ngModel)]="draft.timeLocal" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:4px">
+                <span class="muted">Repop time</span>
+                <input type="datetime-local" step="1" [(ngModel)]="draft.repopTimeLocal" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:4px">
+                <span class="muted">Cooldown</span>
+                <select [(ngModel)]="draft.cooldown">
+                  @for (option of q.cooldownOptions; track option) {
+                    <option [value]="option">{{ option }}</option>
+                  }
+                </select>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:4px">
+                <span class="muted">Interval</span>
+                <select [(ngModel)]="draft.interval">
+                  @for (option of q.intervalOptions; track option) {
+                    <option [value]="option">{{ option }}</option>
+                  }
+                </select>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;align-self:end">
+                <input type="checkbox" [(ngModel)]="draft.claim" />
+                <span>Claimed</span>
+              </label>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span class="muted">Loot</span>
+              @for (row of draft.lootRows; track $index) {
+                <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,2fr) minmax(0,1fr) auto;gap:8px;align-items:center">
+                  <input type="text" placeholder="Item" [(ngModel)]="row.itemName" />
+                  <input type="text" placeholder="Winner" [attr.list]="'roster-' + tod.id"
+                         [(ngModel)]="row.itemWinner" />
+                  <input type="number" min="0" placeholder="DKP" [(ngModel)]="row.winningDkpSpent" />
+                  <button type="button" class="btn ghost sm" (click)="removeLootRow(draft, $index)">Remove</button>
+                </div>
+              }
+              <datalist [id]="'roster-' + tod.id">
+                @for (name of q.rosterNames; track name) {
+                  <option [value]="name"></option>
+                }
+              </datalist>
+              <div><button type="button" class="btn ghost sm" (click)="addLootRow(draft)">+ Add loot row</button></div>
+            </div>
+
+            @if (tod.imagePath) {
+              <a class="muted" [href]="tod.imagePath" target="_blank" rel="noopener">View the submitted screenshot</a>
+            }
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn primary sm" [disabled]="busy" (click)="approveTod(tod)">Approve</button>
+              <button type="button" class="btn danger-outline sm" [disabled]="busy" (click)="rejectTod(tod)">Reject</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- ===== Attendance windows ===== -->
+      @for (window of q.windows; track window.id) {
+        @let key = 'window-' + window.id;
+        @let busy = pending.busyKey() === key;
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Window {{ window.windowIndex }} attendance · {{ window.eventName }}</div>
+            <span class="tag">{{ window.submittedBy }} · {{ activity.formatDateTime(window.submittedAtUtc) }}</span>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+            <p class="muted" style="margin:0">Untick anyone who wasn't there.</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
+              @for (member of window.members; track member.id) {
+                <label style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" [checked]="isKept(key, member)" (change)="toggleKept(key, member)" />
+                  <span>{{ member.characterName }}</span>
+                  <span class="muted">{{ job(member) }}</span>
+                </label>
+              }
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn primary sm" [disabled]="busy" (click)="approveWindow(window.id, window.members)">
+                Approve {{ keptIds(key, window.members).length }} of {{ window.members.length }}
+              </button>
+              <button type="button" class="btn danger-outline sm" [disabled]="busy" (click)="pending.rejectWindow(linkshellId(), window.id)">Reject</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- ===== Attendance snapshots ===== -->
+      @for (snapshot of q.snapshots; track snapshot.id) {
+        @let key = 'snapshot-' + snapshot.id;
+        @let busy = pending.busyKey() === key;
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Snapshot by {{ snapshot.capturedByCharacterName || '?' }} · {{ activity.formatDateTime(snapshot.capturedAtUtc) }}</div>
+            <span class="tag">{{ snapshot.submittedBy }} · {{ activity.formatDateTime(snapshot.submittedAtUtc) }}</span>
+          </div>
+          <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+            <p class="muted" style="margin:0">Untick anyone who shouldn't count.</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px">
+              @for (entry of snapshot.entries; track entry.id) {
+                <label style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" [checked]="isKept(key, entry)" (change)="toggleKept(key, entry)" />
+                  <span>{{ entry.characterName }}</span>
+                  <span class="muted">{{ job(entry) }}{{ entry.zone ? ' · ' + entry.zone : '' }}</span>
+                </label>
+              }
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn primary sm" [disabled]="busy" (click)="approveSnapshot(snapshot.id, snapshot.entries)">
+                Approve {{ keptIds(key, snapshot.entries).length }} of {{ snapshot.entries.length }}
+              </button>
+              <button type="button" class="btn danger-outline sm" [disabled]="busy" (click)="pending.rejectSnapshot(linkshellId(), snapshot.id)">Reject</button>
+            </div>
+          </div>
+        </div>
+      }
+
+    </div>
+  } @else {
+    <div class="card"><div class="card-body muted">Loading the pending submissions…</div></div>
+  }
+</div>

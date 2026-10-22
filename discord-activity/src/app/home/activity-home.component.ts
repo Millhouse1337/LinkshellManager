@@ -15,7 +15,7 @@ import {
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
 import { TAB_NAMES, type TabName } from './activity-home.types';
-import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
+import { ADMIN_BADGE, isLeaderTierIn, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
 import { AdminSettingsTabComponent } from './tabs/admin-settings-tab.component';
 import { ChartsTabComponent, chartsSectionFromSlug } from './tabs/charts-tab.component';
@@ -25,6 +25,7 @@ import { DkpGroupingTabComponent } from './tabs/dkp-grouping-tab.component';
 import { DkpSheetTabComponent } from './tabs/dkp-sheet-tab.component';
 import { EventsTabComponent } from './tabs/events-tab.component';
 import { LinkshellTabComponent } from './tabs/linkshell-tab.component';
+import { PendingSubmissionsTabComponent } from './tabs/pending-submissions-tab.component';
 import { TreasuryTabComponent } from './tabs/treasury-tab.component';
 import { PartySetupTabComponent } from './tabs/party-setup-tab.component';
 import { TodsTabComponent } from './tabs/tods-tab.component';
@@ -47,6 +48,7 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
     TreasuryTabComponent,
     LootHistoryPanelComponent,
     PartySetupTabComponent,
+    PendingSubmissionsTabComponent,
     TodsTabComponent
   ],
   templateUrl: './activity-home.component.html',
@@ -280,11 +282,24 @@ export class ActivityHomeComponent {
   // naming one you can't open shows the dashboard instead. Every other tab is always openable.
   protected canOpenTab(tab: TabName): boolean {
     switch (tab) {
+      case 'pending-submissions':
+        return this.activity.isWebsite && this.canReviewSubmissions();
       case 'admin':
         return this.activity.isWebsite && !!this.activity.webSession()?.isSuperAdmin;
       default:
         return true;
     }
+  }
+
+  // Either review permission in the active linkshell. The Leader always may (as the server's
+  // CanAsync allows); isLeaderTierIn also covers the admin override.
+  private canReviewSubmissions(): boolean {
+    const overview = this.activity.overview();
+    const linkshellId = this.primaryLinkshell()?.id;
+    const permissions = (overview?.linkshells ?? []).find(link => link.id === linkshellId)?.permissions;
+    return !!permissions?.canManageTods
+      || !!permissions?.canModerateLiveEvent
+      || isLeaderTierIn(overview, linkshellId);
   }
 
   // A sub-view's default (DKP History, Current events, Active auctions, the Sky board) is the

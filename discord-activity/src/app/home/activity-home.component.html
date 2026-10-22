@@ -263,8 +263,19 @@
               [class.active]="activeTab() === 'addon'"
               (click)="setActiveTab('addon')">Game Addon</button>
       <!-- Website-only tabs, after a divider. canOpenTab hides them inside Discord. -->
-      @if (canOpenTab('admin')) {
+      @if (canOpenTab('pending-submissions') || canOpenTab('admin')) {
         <span class="tab-divider" aria-hidden="true"></span>
+      }
+      @if (canOpenTab('pending-submissions')) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('pending-submissions')"
+                [attr.aria-controls]="panelId('pending-submissions')"
+                [attr.aria-selected]="activeTab() === 'pending-submissions'"
+                [attr.tabindex]="activeTab() === 'pending-submissions' ? 0 : -1"
+                [class.active]="activeTab() === 'pending-submissions'"
+                (click)="setActiveTab('pending-submissions')">Pending Submissions</button>
+      }
+      @if (canOpenTab('admin')) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('admin')"
                 [attr.aria-controls]="panelId('admin')"
@@ -438,6 +449,15 @@
   @if (activeTab() === 'configurations' || activeTab() === 'permissions' || activeTab() === 'addon') {
     <div role="tabpanel" [id]="panelId(activeTab())" [attr.aria-labelledby]="tabId(activeTab())">
       <app-configurations-tab [view]="activeTab()" />
+    </div>
+  }
+
+  <!-- ===== PENDING SUBMISSIONS TAB (website only, reviewers) ===== -->
+  @if (activeTab() === 'pending-submissions') {
+    <div role="tabpanel" [id]="panelId('pending-submissions')" [attr.aria-labelledby]="tabId('pending-submissions')">
+      @defer {
+        <app-pending-submissions-tab />
+      }
     </div>
   }
 

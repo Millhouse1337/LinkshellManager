@@ -57,6 +57,84 @@ export interface ActivityDkpImportPreview {
   rows: ActivityDkpImportRow[];
 }
 
+// The Pending Submissions review queue (website only): what members submitted for approval.
+export interface ActivityPendingTodLoot {
+  itemName: string | null;
+  itemWinner: string | null;
+  winningDkpSpent: number | null;
+}
+
+export interface ActivityPendingTod {
+  id: number;
+  submittedBy: string;
+  submittedAtUtc: string;
+  monsterName: string | null;
+  dayNumber: number | null;
+  claim: boolean | null;
+  time: string | null;
+  cooldown: string | null;
+  interval: string | null;
+  repopTime: string | null;
+  imagePath: string | null;
+  lootRows: ActivityPendingTodLoot[];
+}
+
+// A window attendee or snapshot entry; zone is snapshots only.
+export interface ActivityPendingAttendee {
+  id: number;
+  characterName: string;
+  mainJob: string | null;
+  mainJobLevel: number | null;
+  subJob: string | null;
+  subJobLevel: number | null;
+  zone: string | null;
+}
+
+export interface ActivityPendingWindow {
+  id: number;
+  submittedBy: string;
+  submittedAtUtc: string;
+  eventId: number;
+  eventName: string;
+  windowIndex: number;
+  members: ActivityPendingAttendee[];
+}
+
+export interface ActivityPendingSnapshot {
+  id: number;
+  submittedBy: string;
+  submittedAtUtc: string;
+  capturedAtUtc: string;
+  capturedByCharacterName: string | null;
+  utcOffset: string | null;
+  entries: ActivityPendingAttendee[];
+}
+
+export interface ActivityPendingSubmissions {
+  canReviewTods: boolean;
+  canReviewAttendance: boolean;
+  tods: ActivityPendingTod[];
+  windows: ActivityPendingWindow[];
+  snapshots: ActivityPendingSnapshot[];
+  monsterOptions: string[];
+  cooldownOptions: string[];
+  intervalOptions: string[];
+  rosterNames: string[];
+}
+
+// A reviewer's corrections to a pending ToD. Times are datetime-local values in the viewer's
+// profile zone (datetimeLocalToUtcIso), blank clears them.
+export interface ActivityPendingTodEdits {
+  monsterName: string | null;
+  dayNumber: number | null;
+  claim: boolean | null;
+  timeLocal: string | null;
+  cooldown: string | null;
+  interval: string | null;
+  repopTimeLocal: string | null;
+  lootRows: ActivityPendingTodLoot[];
+}
+
 export type DiscordSdkContextSource = DiscordSDK & {
   channelId?: string;
   guildId?: string;

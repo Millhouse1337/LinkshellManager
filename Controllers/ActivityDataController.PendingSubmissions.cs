@@ -95,11 +95,20 @@ public sealed partial class ActivityDataController
         int linkshellId, int submissionId, [FromBody] ActivityApprovePendingTodRequest request,
         [FromServices] SubmissionApprovalService approvals, CancellationToken cancellationToken)
     {
-        if (await ReviewGateAsync(linkshellId, role => role.CanManageTods, cancellationToken) is { } denied) return denied;
+        var (reviewer, denied) = await ReviewGateAsync(linkshellId, role => role.CanManageTods, cancellationToken);
+        if (denied is not null) return denied;
+
+        // The editor shows times in the reviewer's profile zone (as every Activity form does);
+        // a blank box clears the time.
+        if (!TryReadReviewTime(request.TimeLocal, reviewer!, out var time)
+            || !TryReadReviewTime(request.RepopTimeLocal, reviewer!, out var repopTime))
+        {
+            return BadRequest(new { error = "Enter valid dates and times." });
+        }
 
         var edits = new PendingTodEdits(
-            request.MonsterName, request.DayNumber, request.Claim, request.Time,
-            request.Cooldown, request.Interval, request.RepopTime,
+            request.MonsterName, request.DayNumber, request.Claim, time,
+            request.Cooldown, request.Interval, repopTime,
             (request.LootRows ?? new List<ActivityPendingTodLootDto>())
                 .Select(row => new TodSubmissionLootInput(row.ItemName, row.ItemWinner, row.WinningDkpSpent))
                 .ToList());
@@ -112,7 +121,7 @@ public sealed partial class ActivityDataController
         int linkshellId, int submissionId,
         [FromServices] SubmissionApprovalService approvals, CancellationToken cancellationToken)
     {
-        if (await ReviewGateAsync(linkshellId, role => role.CanManageTods, cancellationToken) is { } denied) return denied;
+        if ((await ReviewGateAsync(linkshellId, role => role.CanManageTods, cancellationToken)).Denied is { } denied) return denied;
         return ReviewOutcome(await approvals.RejectTodAsync(linkshellId, submissionId, null, cancellationToken),
             "ToD submission rejected and removed.");
     }
@@ -122,7 +131,7 @@ public sealed partial class ActivityDataController
         int linkshellId, int submissionId, [FromBody] ActivityApprovePendingAttendanceRequest request,
         [FromServices] SubmissionApprovalService approvals, CancellationToken cancellationToken)
     {
-        if (await ReviewGateAsync(linkshellId, role => role.CanModerateLiveEvent, cancellationToken) is { } denied) return denied;
+        if ((await ReviewGateAsync(linkshellId, role => role.CanModerateLiveEvent, cancellationToken)).Denied is { } denied) return denied;
         return ReviewOutcome(await approvals.ApproveAttendanceWindowKeepingAsync(
             linkshellId, submissionId, request.KeepIds ?? new List<int>(), cancellationToken),
             "Attendance window approved.");
@@ -133,7 +142,7 @@ public sealed partial class ActivityDataController
         int linkshellId, int submissionId,
         [FromServices] SubmissionApprovalService approvals, CancellationToken cancellationToken)
     {
-        if (await ReviewGateAsync(linkshellId, role => role.CanModerateLiveEvent, cancellationToken) is { } denied) return denied;
+        if ((await ReviewGateAsync(linkshellId, role => role.CanModerateLiveEvent, cancellationToken)).Denied is { } denied) return denied;
         return ReviewOutcome(await approvals.RejectAttendanceWindowAsync(linkshellId, submissionId, null, cancellationToken),
             "Attendance window rejected.");
     }
@@ -143,7 +152,7 @@ public sealed partial class ActivityDataController
         int linkshellId, int submissionId, [FromBody] ActivityApprovePendingAttendanceRequest request,
         [FromServices] SubmissionApprovalService approvals, CancellationToken cancellationToken)
     {
-        if (await ReviewGateAsync(linkshellId, role => role.CanModerateLiveEvent, cancellationToken) is { } denied) return denied;
+        if ((await ReviewGateAsync(linkshellId, role => role.CanModerateLiveEvent, cancellationToken)).Denied is { } denied) return denied;
         return ReviewOutcome(await approvals.ApproveSnapshotKeepingAsync(
             linkshellId, submissionId, request.KeepIds ?? new List<int>(), cancellationToken),
             "Attendance snapshot approved.");
@@ -154,20 +163,28 @@ public sealed partial class ActivityDataController
         int linkshellId, int submissionId,
         [FromServices] SubmissionApprovalService approvals, CancellationToken cancellationToken)
     {
-        if (await ReviewGateAsync(linkshellId, role => role.CanModerateLiveEvent, cancellationToken) is { } denied) return denied;
+        if ((await ReviewGateAsync(linkshellId, role => role.CanModerateLiveEvent, cancellationToken)).Denied is { } denied) return denied;
         return ReviewOutcome(await approvals.RejectSnapshotAsync(linkshellId, submissionId, null, cancellationToken),
             "Attendance snapshot rejected.");
     }
 
-    // Null when the caller may review this kind of submission in this linkshell.
-    private async Task<IActionResult?> ReviewGateAsync(
+    // Denied is null (and Reviewer set) when the caller may review this kind of submission here.
+    private async Task<(AppUser? Reviewer, IActionResult? Denied)> ReviewGateAsync(
         int linkshellId, Func<LinkshellRole, bool> permission, CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null) return Unauthorized(new { error = "Sign in to review submissions." });
+        if (appUser is null) return (null, Unauthorized(new { error = "Sign in to review submissions." }));
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        return await CanAsync(membership, permission, cancellationToken) ? null : Forbid();
+        return await CanAsync(membership, permission, cancellationToken) ? (appUser, null) : (null, Forbid());
+    }
+
+    // A datetime-local value in the reviewer's profile zone (or an explicit UTC instant) to UTC.
+    // Blank is a valid "no time".
+    private bool TryReadReviewTime(string? value, AppUser reviewer, out DateTime? utc)
+    {
+        utc = null;
+        return string.IsNullOrWhiteSpace(value) || TryConvertUserTimeZoneToUtc(value, reviewer.TimeZone, out utc);
     }
 
     private IActionResult ReviewOutcome(ApprovalResult result, string success) => result switch
@@ -219,9 +236,11 @@ public sealed record ActivityPendingSubmissionsResponse(
     IReadOnlyList<string> IntervalOptions,
     IReadOnlyList<string> RosterNames);
 
+// TimeLocal / RepopTimeLocal: datetime-local values in the reviewer's profile zone, like every
+// other Activity form (datetimeLocalToUtcIso on the client); blank clears the time.
 public sealed record ActivityApprovePendingTodRequest(
-    string? MonsterName, int? DayNumber, bool? Claim, DateTime? Time,
-    string? Cooldown, string? Interval, DateTime? RepopTime,
+    string? MonsterName, int? DayNumber, bool? Claim, string? TimeLocal,
+    string? Cooldown, string? Interval, string? RepopTimeLocal,
     List<ActivityPendingTodLootDto>? LootRows);
 
 // KeepIds: the member / entry ids still ticked; everything else is dropped before approving.
