@@ -1,5 +1,6 @@
 @{
     ViewData["Title"] = "Access denied";
+    Layout = "_PublicLayout";
     var returnUrl = ViewBag.ReturnUrl as string;
 }
 
@@ -7,9 +8,6 @@
     <div>
         <h1 class="page-title">Access denied</h1>
         <div class="page-sub"><span>You don't have permission to view this page</span></div>
-    </div>
-    <div class="page-actions">
-        <a class="btn ghost" asp-controller="Dashboard" asp-action="Index">Back to dashboard</a>
     </div>
 </div>
 
@@ -23,6 +21,6 @@
         {
             <a class="btn ghost" href="@returnUrl">Go back</a>
         }
-        <a class="btn primary" asp-controller="Dashboard" asp-action="Index">Go to dashboard</a>
+        <a class="btn primary" href="/discord-activity/">Go to the app</a>
     </div>
 </div>

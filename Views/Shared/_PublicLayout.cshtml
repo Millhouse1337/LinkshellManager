@@ -1,0 +1,35 @@
+@* The layout for the few pages that stay server-rendered now that the website's app is the
+   Angular UI at /discord-activity/: the landing page, Privacy, Terms, Access denied, Error and
+   the Identity sign-in page. No sidebar, no app shell and no per-user database work: the same
+   look a signed-out visitor always got from _Layout, now for everyone. *@
+@{
+    var pageTitle = ViewData["Title"]?.ToString() ?? "LinkshellManager";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@pageTitle · LinkshellManager</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/lsm-theme.css" asp-append-version="true" />
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+    @if (ViewData["FullBleed"] as bool? ?? false)
+    {
+        @* A page that draws its own full-width chrome (the landing page) skips the centred
+           .auth-shell, whose padding and grid centring would box it in. *@
+        @RenderBody()
+    }
+    else
+    {
+        <div class="auth-shell">
+            @RenderBody()
+        </div>
+    }
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

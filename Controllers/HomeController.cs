@@ -23,6 +23,13 @@ public class HomeController : Controller
             return Redirect("/discord-activity");
         }
 
+        // Signed in on the website: the app is the same Angular UI Discord shows. The landing
+        // page below is only for signed-out visitors.
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            return Redirect("/discord-activity/");
+        }
+
         // Set here as well as in _Layout: a view body renders before its layout, so Index.cshtml
         // cannot see what _Layout writes. This is the only anonymous-reachable surface, so it is
         // where a tester without a Discord account finds the launcher.
