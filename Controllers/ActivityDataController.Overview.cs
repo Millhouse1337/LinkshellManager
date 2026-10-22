@@ -1007,14 +1007,20 @@ public sealed partial class ActivityDataController
             });
         }
 
+        // Only *locked* linkshells gate access (same as the overview); a
+        // set-but-unlocked server passes null so it's always allowed.
         var linkshellCandidates = await _dbContext.AppUserLinkshells
             .Where(link => link.AppUserId == appUser.Id)
-            .Select(link => new { link.LinkshellId, link.Linkshell!.DiscordGuildId })
+            .Select(link => new
+            {
+                link.LinkshellId,
+                LockedGuildId = link.Linkshell!.LockToDiscordGuild ? link.Linkshell.DiscordGuildId : null
+            })
             .Distinct()
             .ToListAsync(cancellationToken);
 
         var accessibleLinkshellIds = await FilterAccessibleLinkshellIdsAsync(
-            linkshellCandidates.Select(c => (c.LinkshellId, c.DiscordGuildId)).ToList(),
+            linkshellCandidates.Select(c => (c.LinkshellId, c.LockedGuildId)).ToList(),
             cancellationToken);
         var linkshellIds = accessibleLinkshellIds.ToList();
 
