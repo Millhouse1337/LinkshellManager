@@ -1,0 +1,444 @@
+/* landing.css
+   The public home page (Views/Home/Index.cshtml) only. Everything is scoped under .landing,
+   which carries its own palette: the page is a gold-on-night poster around the hero art, not
+   the app's blue lsm-theme. Signed out it fills the window (the view sets FullBleed, so the
+   layout drops .auth-shell); signed in it sits in the app shell's content column, with the
+   column's padding removed by .landing-content. */
+
+.landing {
+    /* Palette */
+    --l-bg: #0b0d13;
+    --l-panel: #10131b;
+    --l-panel-hover: #141823;
+    --l-gold: #d9b55e;
+    --l-gold-hover: #ecc96f;
+    --l-gold-soft: #e8c876;
+    --l-gold-bright: #f0d48a;
+    --l-ink: #14110a;
+    --l-heading: #f3ead2;
+    --l-text: #e8e3d6;
+    --l-text-2: #cfc8b8;
+    --l-text-3: #a9a294;
+    --l-text-4: #7d786d;
+    --l-discord: #5865f2;
+    --l-discord-hover: #6c78f5;
+    --l-on-discord: #fff;
+    --l-shade: #000;
+
+    --l-serif: "Cinzel", Georgia, serif;
+    --l-sans: "Figtree", var(--font-sans);
+    --l-gutter: clamp(20px, 5vw, 64px);
+
+    position: relative;
+    min-height: 100vh;
+    overflow: hidden;
+    background: var(--l-bg);
+    color: var(--l-text);
+    font-family: var(--l-sans);
+    -webkit-font-smoothing: antialiased;
+}
+
+.landing a { color: var(--l-gold); text-decoration: none; }
+.landing a:hover { color: var(--l-gold-bright); }
+.landing a:focus-visible {
+    outline: 2px solid var(--l-gold);
+    outline-offset: 3px;
+    border-radius: 3px;
+}
+
+/* Signed in: the home page lives in the app shell, so take back the content column's padding
+   and width cap to let the hero run edge to edge. */
+.content.landing-content { padding: 0; max-width: none; }
+.landing--app { min-height: calc(100vh - 48px); }
+
+/* ---------- Top bar (signed-out only) ---------- */
+.landing-nav {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+    padding: 22px var(--l-gutter);
+}
+
+.landing .landing-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--l-gold-soft);
+    font-family: var(--l-serif);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: .08em;
+}
+
+.landing-diamond {
+    width: 10px;
+    height: 10px;
+    flex: none;
+    transform: rotate(45deg);
+    background: var(--l-gold);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--l-gold) 55%, transparent);
+}
+
+.landing-links {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    flex-wrap: wrap;
+    font-size: 14px;
+}
+
+.landing .landing-links a { color: var(--l-text-2); }
+.landing .landing-links a:hover { color: var(--l-gold-bright); }
+
+.landing .landing-links .landing-signin {
+    padding: 9px 16px;
+    border: 1px solid color-mix(in srgb, var(--l-gold) 40%, transparent);
+    border-radius: 3px;
+    color: var(--l-gold-soft);
+}
+
+.landing .landing-links .landing-signin:hover {
+    background: color-mix(in srgb, var(--l-gold) 8%, transparent);
+    color: var(--l-gold-bright);
+}
+
+/* ---------- Hero ---------- */
+.landing-hero {
+    position: relative;
+    min-height: clamp(560px, 92vh, 860px);
+    display: flex;
+    align-items: flex-end;
+    padding: 140px var(--l-gutter) clamp(56px, 9vh, 96px);
+}
+
+.landing--app .landing-hero {
+    min-height: clamp(520px, 84vh, 800px);
+    padding-top: 72px;
+}
+
+/* Narrow screens crop the art to a column; aim it at the crystal spire, which then stands
+   above the copy. */
+.landing-hero-art {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 58% 40%;
+}
+
+/* Two scrims over the art: top-to-bottom so the nav reads against the sky and the hero melts
+   into the page, and a second one so the copy has a dark field to sit on. */
+.landing-hero::before,
+.landing-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.landing-hero::before {
+    background: linear-gradient(180deg,
+        color-mix(in srgb, var(--l-bg) 80%, transparent) 0%,
+        color-mix(in srgb, var(--l-bg) 13%, transparent) 30%,
+        color-mix(in srgb, var(--l-bg) 40%, transparent) 62%,
+        var(--l-bg) 100%);
+}
+
+/* Narrow screens: the copy runs the full width, so darken evenly. */
+.landing-hero::after { background: color-mix(in srgb, var(--l-bg) 45%, transparent); }
+
+/* Wide screens: the adventurers on the art's left are its subject, so the copy takes the right
+   column (over the tower) and the scrim darkens from the right, leaving them in clear view. */
+@media (min-width: 900px) {
+    .landing-hero { justify-content: flex-end; }
+    .landing-hero-art { object-position: center 40%; }
+    /* Faded out toward the top so the moon and airship above the copy keep their light. */
+    .landing-hero::after {
+        background: linear-gradient(270deg,
+            color-mix(in srgb, var(--l-bg) 90%, transparent) 0%,
+            color-mix(in srgb, var(--l-bg) 53%, transparent) 42%,
+            transparent 75%);
+        -webkit-mask-image: linear-gradient(180deg, transparent 10%, black 50%);
+        mask-image: linear-gradient(180deg, transparent 10%, black 50%);
+    }
+}
+
+.landing-hero-copy {
+    position: relative;
+    z-index: 1;
+    max-width: 600px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.landing-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    color: var(--l-gold);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .24em;
+    text-transform: uppercase;
+}
+
+.landing-eyebrow::before {
+    content: "";
+    width: 32px;
+    height: 1px;
+    background: var(--l-gold);
+}
+
+.landing-hero h1 {
+    margin: 0;
+    font-family: var(--l-serif);
+    font-weight: 600;
+    font-size: clamp(38px, 6vw, 72px);
+    line-height: 1.05;
+    color: var(--l-heading);
+    text-wrap: balance;
+    text-shadow: 0 2px 30px color-mix(in srgb, var(--l-shade) 65%, transparent);
+}
+
+.landing-lede {
+    margin: 0;
+    max-width: 540px;
+    font-size: clamp(16px, 1.6vw, 19px);
+    line-height: 1.6;
+    color: var(--l-text-2);
+    text-wrap: pretty;
+}
+
+.landing-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-top: 8px;
+}
+
+/* ---------- Buttons ---------- */
+.landing .landing-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px 24px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.2;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.landing .landing-btn--gold {
+    background: var(--l-gold);
+    color: var(--l-ink);
+    box-shadow: 0 8px 30px color-mix(in srgb, var(--l-gold) 20%, transparent);
+}
+
+.landing .landing-btn--gold:hover { background: var(--l-gold-hover); color: var(--l-ink); }
+
+.landing-btn-arrow { font-size: 18px; line-height: 1; }
+
+.landing .landing-btn--ghost {
+    border-color: color-mix(in srgb, var(--l-text) 33%, transparent);
+    background: color-mix(in srgb, var(--l-bg) 40%, transparent);
+    color: var(--l-heading);
+    font-weight: 500;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+}
+
+.landing .landing-btn--ghost:hover { border-color: var(--l-gold); color: var(--l-gold-bright); }
+
+.landing .landing-btn--discord {
+    margin-top: 8px;
+    padding-inline: 28px;
+    background: var(--l-discord);
+    color: var(--l-on-discord);
+}
+
+.landing .landing-btn--discord:hover { background: var(--l-discord-hover); color: var(--l-on-discord); }
+
+/* ---------- Surfaces (website / Activity / addon) ---------- */
+.landing-section {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: clamp(64px, 10vw, 120px) var(--l-gutter);
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+}
+
+.landing-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 32px;
+    flex-wrap: wrap;
+}
+
+.landing-section-head h2 {
+    margin: 0;
+    max-width: 560px;
+    font-family: var(--l-serif);
+    font-weight: 600;
+    font-size: clamp(28px, 3.6vw, 44px);
+    line-height: 1.15;
+    color: var(--l-heading);
+    text-wrap: balance;
+}
+
+.landing-section-head p {
+    margin: 0;
+    max-width: 380px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--l-text-3);
+    text-wrap: pretty;
+}
+
+/* The 1px gap over a gold background draws the hairlines between the panels. */
+.landing-surfaces {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: 1px;
+    background: color-mix(in srgb, var(--l-gold) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--l-gold) 20%, transparent);
+}
+
+.landing-surface {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 36px 32px 40px;
+    background: var(--l-panel);
+    transition: background-color .15s ease;
+}
+
+.landing-surface:hover { background: var(--l-panel-hover); }
+
+.landing-surface-kicker {
+    margin: 0;
+    font-family: var(--l-serif);
+    font-size: 14px;
+    letter-spacing: .2em;
+    color: var(--l-gold);
+}
+
+.landing-surface h3 {
+    margin: 0;
+    font-family: var(--l-serif);
+    font-weight: 600;
+    font-size: 24px;
+    color: var(--l-heading);
+}
+
+.landing-surface p:not(.landing-surface-kicker) {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--l-text-3);
+    text-wrap: pretty;
+}
+
+.landing .landing-surface-link {
+    margin-top: auto;
+    padding-top: 12px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* ---------- Closing call to action (signed-out only) ---------- */
+.landing-closing { padding: 0 var(--l-gutter) clamp(64px, 10vw, 120px); }
+
+.landing-closing-card {
+    position: relative;
+    max-width: 1152px;
+    margin: 0 auto;
+    padding: clamp(40px, 6vw, 72px) clamp(24px, 5vw, 64px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    text-align: center;
+    border: 1px solid color-mix(in srgb, var(--l-gold) 27%, transparent);
+    background: radial-gradient(ellipse at 50% 0%,
+        color-mix(in srgb, var(--l-gold) 8%, transparent),
+        var(--l-bg) 70%);
+}
+
+/* The diamond pinned to the card's top edge. */
+.landing-closing-card::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    width: 11px;
+    height: 11px;
+    margin-left: -5px;
+    transform: rotate(45deg);
+    background: var(--l-gold);
+}
+
+.landing-closing-card h2 {
+    margin: 0;
+    font-family: var(--l-serif);
+    font-weight: 600;
+    font-size: clamp(26px, 3.2vw, 38px);
+    color: var(--l-heading);
+    text-wrap: balance;
+}
+
+.landing-closing-card p {
+    margin: 0;
+    max-width: 440px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--l-text-3);
+}
+
+/* ---------- Footer ---------- */
+.landing-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 28px var(--l-gutter);
+    border-top: 1px solid color-mix(in srgb, var(--l-text) 7%, transparent);
+    font-size: 13px;
+    color: var(--l-text-4);
+}
+
+.landing-footer-brand {
+    font-family: var(--l-serif);
+    letter-spacing: .08em;
+    color: var(--l-text-3);
+}
+
+.landing-footer nav { display: flex; gap: 24px; }
+.landing .landing-footer a { color: var(--l-text-4); }
+.landing .landing-footer a:hover { color: var(--l-gold-bright); }
+
+/* ---------- Small screens ---------- */
+@media (max-width: 560px) {
+    /* Keep the bar to one line: the section links are a scroll away anyway. */
+    .landing .landing-links .landing-section-link { display: none; }
+    .landing-hero { padding-top: 112px; }
+    .landing-actions .landing-btn { flex: 1 1 100%; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .landing .landing-btn,
+    .landing-surface { transition: none; }
+}

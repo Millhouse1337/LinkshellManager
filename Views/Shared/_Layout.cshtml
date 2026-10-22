@@ -150,6 +150,7 @@
     @* Create/Edit event form — a port of the Discord Activity's create-event modal.
        Namespaced under .cem / .mdta, so it applies only where those classes are used. *@
     <link rel="stylesheet" href="~/css/event-form.css" asp-append-version="true" />
+    @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
     @if (isSignedIn && currentUser is not null)
@@ -205,6 +206,12 @@
                 </div>
             </div>
         </div>
+    }
+    else if (ViewData["FullBleed"] as bool? ?? false)
+    {
+        @* A signed-out page that draws its own full-width chrome (the home page) skips the
+           centred .auth-shell, whose padding and grid centring would box it in. *@
+        @RenderBody()
     }
     else
     {

@@ -639,8 +639,8 @@ app.Use(async (ctx, next) =>
             $"frame-ancestors 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devTunnelHostFragment}{devLocalhostFrame};",
             $"connect-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devTunnelHostFragment}{devLocalhost};",
             "img-src 'self' data: blob: https://cdn.discordapp.com https://media.discordapp.net https://*.discordsays.com;",
-            // Google Fonts is the one external asset host: the home page's masthead
-            // (Views/Home/Index.cshtml) loads Cinzel from it. The stylesheet comes from
+            // Google Fonts is the one external asset host: the home page
+            // (Views/Home/Index.cshtml) loads Cinzel and Figtree from it. The stylesheet comes from
             // fonts.googleapis.com and the font files it points at from fonts.gstatic.com.
             "font-src 'self' data: https://fonts.gstatic.com;",
             // 'unsafe-inline' on style-src is retained because the existing
