@@ -1,0 +1,98 @@
+<div class="section-head">
+  <div>
+    <div class="section-label">
+      <a href="" (click)="$event.preventDefault(); navigate.emit([])">Data Admin</a> ›
+      <a href="" (click)="$event.preventDefault(); navigate.emit([slug()])">{{ form()?.displayName ?? slug() }}</a>
+    </div>
+    <div class="section-title">
+      @if (form(); as f) {
+        {{ f.isCreate ? 'New ' + f.displayName : 'Edit ' + (f.label ?? f.displayName + ' #' + f.key) }}
+      }
+    </div>
+  </div>
+</div>
+
+@if (error(); as message) {
+  <div class="card"><div class="card-body muted">{{ message }}</div></div>
+} @else if (form(); as f) {
+  <div class="card">
+    <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+      @if (f.discordSideEffect) {
+        <p class="muted" style="margin:0;color:var(--warning)">{{ f.discordSideEffect }}</p>
+      }
+      @for (message of f.formErrors; track $index) {
+        <p class="muted" style="margin:0;color:var(--danger)">{{ message }}</p>
+      }
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">
+        @for (field of f.fields; track field.name) {
+          <label style="display:flex;flex-direction:column;gap:4px"
+                 [style.grid-column]="field.inputType === 'textarea' ? '1 / -1' : null">
+            <span style="font-weight:500">
+              {{ field.displayName }}
+              @if (field.isRequired && field.inputType !== 'checkbox') {
+                <span title="Required">*</span>
+              }
+              @if (field.isKey) {
+                <span class="tag" style="margin-left:6px">key</span>
+              }
+            </span>
+
+            @switch (field.inputType) {
+              @case ('checkbox') {
+                <span style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" [checked]="isChecked(field)"
+                         (change)="values[field.name] = $any($event.target).checked ? 'true' : 'false'" />
+                  <span class="muted">Yes when ticked</span>
+                </span>
+              }
+              @case ('select') {
+                <select [value]="values[field.name]" (change)="values[field.name] = $any($event.target).value">
+                  @if (!field.isRequired) {
+                    <option value="" [selected]="values[field.name] === ''">—</option>
+                  }
+                  @for (option of field.options ?? []; track option.value) {
+                    <option [value]="option.value" [selected]="option.value === values[field.name]">{{ option.text }}</option>
+                  }
+                </select>
+              }
+              @case ('textarea') {
+                <textarea rows="5" [attr.maxlength]="field.maxLength" [value]="values[field.name]"
+                          (input)="values[field.name] = $any($event.target).value"></textarea>
+              }
+              @case ('number') {
+                <input type="number" [step]="field.isInteger ? '1' : 'any'" [value]="values[field.name]"
+                       (input)="values[field.name] = $any($event.target).value" />
+              }
+              @case ('datetime-local') {
+                <input type="datetime-local" step="1" [value]="values[field.name]"
+                       (input)="values[field.name] = $any($event.target).value" />
+                <span class="muted" style="font-size:11px">UTC</span>
+              }
+              @default {
+                <input type="text" autocomplete="off" [attr.maxlength]="field.maxLength" [value]="values[field.name]"
+                       (input)="values[field.name] = $any($event.target).value" />
+              }
+            }
+
+            @if (field.hint) {
+              <span class="muted" style="font-size:11px">{{ field.hint }}</span>
+            }
+            @if (field.error) {
+              <span style="font-size:12px;color:var(--danger)">{{ field.error }}</span>
+            }
+          </label>
+        }
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn primary sm" [disabled]="saving()" (click)="save()">
+          {{ saving() ? 'Saving…' : f.isCreate ? 'Create' : 'Save' }}
+        </button>
+        <button type="button" class="btn ghost sm" [disabled]="saving()" (click)="cancel()">Cancel</button>
+      </div>
+    </div>
+  </div>
+} @else {
+  <div class="card"><div class="card-body muted">Loading…</div></div>
+}

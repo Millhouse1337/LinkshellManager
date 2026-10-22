@@ -117,7 +117,7 @@ public sealed class DataAdminApiController : ControllerBase
             return Ok(new DataAdminSavedDto(table.KeyToString(table.KeyOf(result.Entity)), $"{table.DisplayName} created."));
         }
 
-        return UnprocessableEntity(await _editor.BuildFormAsync(table, entity: null, values, result.Errors, ct));
+        return FormRefused(await _editor.BuildFormAsync(table, entity: null, values, result.Errors, ct));
     }
 
     [HttpPost("tables/{slug}/{id}")]
@@ -136,7 +136,7 @@ public sealed class DataAdminApiController : ControllerBase
             return Ok(new DataAdminSavedDto(id, $"{table.DisplayName} #{id} saved."));
         }
 
-        return UnprocessableEntity(await _editor.BuildFormAsync(table, result.Entity, values, result.Errors, ct));
+        return FormRefused(await _editor.BuildFormAsync(table, result.Entity, values, result.Errors, ct));
     }
 
     // The confirmation: what else goes with the row, what is unlinked, what blocks the delete.
@@ -173,6 +173,14 @@ public sealed class DataAdminApiController : ControllerBase
 
         return Ok(new DataAdminSavedDto(id, $"{table.DisplayName} #{id} deleted."));
     }
+
+    // 422: a one-line summary for the app's error banner, plus the form rebuilt around the posted
+    // values with each field's error, which the app shows in place of the one it sent.
+    private UnprocessableEntityObjectResult FormRefused(DataAdminEditViewModel form) => UnprocessableEntity(new
+    {
+        error = form.FormErrors.Count > 0 ? string.Join(" ", form.FormErrors) : "Check the highlighted fields.",
+        form
+    });
 
     private DataAdminModel? Resolve(string? slug) =>
         _catalog.Find(slug) is { IsHidden: false } table ? table : null;

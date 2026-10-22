@@ -284,6 +284,15 @@
                 [class.active]="activeTab() === 'admin'"
                 (click)="setActiveTab('admin')">Admin</button>
       }
+      @if (canOpenTab('data-admin')) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('data-admin')"
+                [attr.aria-controls]="panelId('data-admin')"
+                [attr.aria-selected]="activeTab() === 'data-admin'"
+                [attr.tabindex]="activeTab() === 'data-admin' ? 0 : -1"
+                [class.active]="activeTab() === 'data-admin'"
+                (click)="openDataAdmin([])">Data Admin</button>
+      }
     }
   </div>
 
@@ -467,6 +476,15 @@
     <div role="tabpanel" [id]="panelId('admin')" [attr.aria-labelledby]="tabId('admin')">
       @defer {
         <app-admin-settings-tab />
+      }
+    </div>
+  }
+
+  <!-- ===== DATA ADMIN TAB (website only, super admins) ===== -->
+  @if (activeTab() === 'data-admin') {
+    <div role="tabpanel" [id]="panelId('data-admin')" [attr.aria-labelledby]="tabId('data-admin')">
+      @defer {
+        <app-data-admin-tab [path]="dataAdminPath()" (navigate)="openDataAdmin($event)" />
       }
     </div>
   }

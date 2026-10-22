@@ -149,7 +149,9 @@ export class ActivityHttpClient {
       // not JSON — fall through to the friendly message below
     }
     if (parsed?.error) {
-      throw new Error(parsed.error);
+      // Carries the status and the whole body for the few callers that need more than the
+      // message (Data Admin's 422 brings the form back with each field's error).
+      throw new ActivityRequestError(parsed.error, response.status, parsed);
     }
     // ASP.NET ProblemDetails — what [ApiController] returns on its own when model
     // binding/validation rejects the body, BEFORE the action runs, so there is no
@@ -256,6 +258,15 @@ export class ActivityHttpClient {
 }
 
 export type ActivityMutationMethod = 'POST' | 'PATCH' | 'DELETE';
+
+// A refused mutation whose body was the app's own { error, ... } shape. Still an Error whose
+// message is that error, so every existing catch keeps working unchanged.
+export class ActivityRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly body: unknown) {
+    super(message);
+    this.name = 'ActivityRequestError';
+  }
+}
 
 // The exact body CookieAuthAntiforgeryFilter returns when the token is missing or stale.
 function isAntiforgeryRejection(responseText: string): boolean {

@@ -1,0 +1,102 @@
+<div class="section-head">
+  <div>
+    <div class="section-label">
+      <a href="" (click)="$event.preventDefault(); navigate.emit([])">Data Admin</a>
+    </div>
+    <div class="section-title">{{ list()?.displayName ?? slug() }}</div>
+    @if (list(); as l) {
+      <div class="section-sub">{{ l.total | number }} row{{ l.total === 1 ? '' : 's' }} · <span class="muted">{{ l.tableName }}</span></div>
+    }
+  </div>
+  <div class="section-head-right">
+    @if (list()?.canCreate) {
+      <button type="button" class="btn primary sm" (click)="navigate.emit([slug(), 'create'])">+ New {{ list()?.displayName }}</button>
+    }
+    <button type="button" class="btn ghost sm" (click)="navigate.emit([])">Back</button>
+  </div>
+</div>
+
+@if (error(); as message) {
+  <div class="card"><div class="card-body muted">{{ message }}</div></div>
+} @else if (list(); as l) {
+  <div class="card">
+    <div class="card-head" style="gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        @if (l.searchHint) {
+          <input type="search" [placeholder]="'Search ' + l.searchHint" autocomplete="off"
+                 [value]="search()" (input)="onSearch($any($event.target).value)" />
+        } @else {
+          <span class="muted">No text columns to search.</span>
+        }
+      </div>
+      @for (filter of l.activeFilters; track filter.column) {
+        <button type="button" class="tag accent" title="Remove this filter" (click)="removeFilter(filter.column)">
+          {{ filter.displayName }}: {{ filter.label }} ×
+        </button>
+      }
+    </div>
+
+    @if (l.rows.length === 0) {
+      <div class="card-body muted">No rows match.</div>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              @for (column of l.columns; track column.name) {
+                <th [class.num]="column.isNumeric" style="white-space:nowrap;cursor:pointer"
+                    [title]="'Sort by ' + column.displayName" (click)="sortBy(column.name)">
+                  {{ column.displayName }}
+                  @if (l.sortColumn === column.name) {
+                    <span aria-hidden="true">{{ l.descending ? '▼' : '▲' }}</span>
+                  }
+                </th>
+              }
+              <th class="num">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of l.rows; track row.key) {
+              <tr>
+                @for (cell of row.cells; track $index) {
+                  <td [class.num]="cell.isNumeric">
+                    @if (cell.linkSlug && cell.linkKey) {
+                      <a href="" (click)="$event.preventDefault(); navigate.emit([cell.linkSlug, cell.linkKey])">{{ cell.text }}</a>
+                    } @else if (cell.isEmpty) {
+                      <span class="muted">{{ cell.text }}</span>
+                    } @else {
+                      {{ cell.text }}
+                    }
+                  </td>
+                }
+                <td class="num">
+                  <div style="display:flex;justify-content:flex-end;gap:4px">
+                    <button type="button" class="btn ghost sm" (click)="navigate.emit([slug(), row.key])">View</button>
+                    @if (l.canEdit) {
+                      <button type="button" class="btn ghost sm" (click)="navigate.emit([slug(), row.key, 'edit'])">Edit</button>
+                    }
+                    @if (l.canDelete) {
+                      <button type="button" class="btn ghost sm" (click)="navigate.emit([slug(), row.key, 'delete'])">Delete</button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <span class="muted">Rows {{ l.firstRowNumber | number }}–{{ l.lastRowNumber | number }} of {{ l.total | number }}</span>
+        @if (l.totalPages > 1) {
+          <div style="display:flex;align-items:center;gap:6px">
+            <button type="button" class="btn ghost sm" [disabled]="l.page <= 1 || loading()" (click)="goToPage(l.page - 1)">‹ Prev</button>
+            <span class="muted">Page {{ l.page }} of {{ l.totalPages }}</span>
+            <button type="button" class="btn ghost sm" [disabled]="l.page >= l.totalPages || loading()" (click)="goToPage(l.page + 1)">Next ›</button>
+          </div>
+        }
+      </div>
+    }
+  </div>
+} @else {
+  <div class="card"><div class="card-body muted">Loading…</div></div>
+}

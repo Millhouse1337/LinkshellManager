@@ -27,9 +27,10 @@ export const TAB_NAMES = [
   'permissions',
   'addon',
   // Website only (never inside Discord), gated by ActivityHomeComponent.canOpenTab: the review
-  // queue for member submissions, and the super-admin switches.
+  // queue for member submissions, the super-admin switches, and the super-admin database browser.
   'pending-submissions',
-  'admin'
+  'admin',
+  'data-admin'
 ] as const;
 
 export type TabName = typeof TAB_NAMES[number];

@@ -17,6 +17,7 @@ import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.componen
 import { TAB_NAMES, type TabName } from './activity-home.types';
 import { ADMIN_BADGE, isLeaderTierIn, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
+import { DataAdminTabComponent } from './data-admin/data-admin-tab.component';
 import { AdminSettingsTabComponent } from './tabs/admin-settings-tab.component';
 import { ChartsTabComponent, chartsSectionFromSlug } from './tabs/charts-tab.component';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
@@ -40,6 +41,7 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
     AdminSettingsTabComponent,
     ChartsTabComponent,
     ConfigurationsTabComponent,
+    DataAdminTabComponent,
     DashboardTabComponent,
     DkpGroupingTabComponent,
     DkpSheetTabComponent,
@@ -82,6 +84,8 @@ export class ActivityHomeComponent {
   protected readonly eventsView = computed(() => (this.subView() === 'past' ? 'past' : 'current'));
   protected readonly auctionsView = computed(() => (this.subView() === 'history' ? 'history' : 'active'));
   protected readonly chartsView = computed(() => chartsSectionFromSlug(this.subView()));
+  // Data Admin keeps a whole path below its tab: /data-admin/rule/5/edit.
+  protected readonly dataAdminPath = computed(() => (this.activeTab() === 'data-admin' ? this.location().slice(1) : []));
 
   // ?ls=<id> (old website links that named a linkshell) — handled once, see the constructor.
   private readonly requestedLinkshellId = toSignal(
@@ -266,8 +270,9 @@ export class ActivityHomeComponent {
   // one history entry per switch so Back works. Inside Discord the iframe's URL is left alone,
   // as it always was: a changing iframe URL interacts badly with the Activity SDK's URL mapping
   // (see charts-tab), and there is no address bar or Back button there anyway.
-  protected setActiveTab(tab: TabName, subView?: string): void {
-    const parts = [slugForTab(tab), subView].filter((part): part is string => !!part);
+  protected setActiveTab(tab: TabName, subView?: string | readonly string[]): void {
+    const parts = [slugForTab(tab), ...(typeof subView === 'string' ? [subView] : subView ?? [])]
+      .filter((part): part is string => !!part);
     if (tab !== this.activeTab()) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -285,6 +290,7 @@ export class ActivityHomeComponent {
       case 'pending-submissions':
         return this.activity.isWebsite && this.canReviewSubmissions();
       case 'admin':
+      case 'data-admin':
         return this.activity.isWebsite && !!this.activity.webSession()?.isSuperAdmin;
       default:
         return true;
@@ -314,6 +320,12 @@ export class ActivityHomeComponent {
 
   protected setAuctionsView(view: 'active' | 'history'): void {
     this.setActiveTab('auctions', view === 'history' ? view : undefined);
+  }
+
+  // Every Data Admin step is a new page (list → row → edit), so it starts at the top.
+  protected openDataAdmin(path: readonly string[]): void {
+    window.scrollTo({ top: 0 });
+    this.setActiveTab('data-admin', path);
   }
 
   protected setChartsView(section: string): void {
