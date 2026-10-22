@@ -40,8 +40,8 @@ public class DashboardViewModel
 
     // The second tab of the same card: which window of its band each HNM actually pops on.
     // All-time on purpose — a spawn distribution needs volume, and a 30-day slice of a monster
-    // that pops twice a week says nothing.
-    public List<HnmWindowRow> HnmWindows { get; set; } = new();
+    // that pops twice a week says nothing. One heatmap grid per band length (HnmWindowStats.Grids).
+    public List<HnmWindowGridEntry> HnmWindowGrids { get; set; } = new();
     public int HnmWindowsTotal { get; set; }
     public List<RecentActivityEntry> RecentActivity { get; set; } = new();
     public List<NewsUpdateEntry> NewsUpdates { get; set; } = new();
@@ -117,6 +117,15 @@ public class HnmClaimEntry
     public bool HasHqVariant { get; init; }
 }
 
+// One grid of the "Window frequency" heatmap: the rows drawn against the same W1..Wn header. A row
+// whose band is shorter than ColumnCount is padded with "no such window" cells.
+public class HnmWindowGridEntry
+{
+    public int ColumnCount { get; init; }
+    public bool IsWide { get; init; }
+    public IReadOnlyList<HnmWindowRow> Rows { get; init; } = Array.Empty<HnmWindowRow>();
+}
+
 // One monster's row on the card's "Window frequency" tab: which window of its spawn band it
 // actually pops on. Straight off HnmWindowStatsService — see the notes there on why this counts
 // unclaimed pops too, and why the NQ/HQ halves share one row.
@@ -127,7 +136,6 @@ public class HnmWindowRow
     public int TotalPops { get; init; }
     public int WindowCount { get; init; }
     public int PeakWindow { get; init; }
-    public double PeakPercent { get; init; }
     public IReadOnlyList<HnmWindowBarEntry> Bars { get; init; } = Array.Empty<HnmWindowBarEntry>();
 }
 
@@ -137,9 +145,9 @@ public class HnmWindowBarEntry
     public int Count { get; init; }
     public double Percent { get; init; }
 
-    // Height as a share of this monster's BUSIEST window, not of 100% — a monster whose best
-    // window holds 30% of its pops would otherwise draw as a row of stubs.
-    public double HeightPercent { get; init; }
+    // Cell tint as a share of this monster's BUSIEST window, not of 100% — a monster whose best
+    // window holds 30% of its pops would otherwise draw as a row of near-blank cells.
+    public double HeatPercent { get; init; }
 }
 
 public class RecentActivityEntry

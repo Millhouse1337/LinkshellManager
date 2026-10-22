@@ -25,7 +25,12 @@ public sealed record HnmWindowMonster(
 
 // One grid of the heatmap: the monsters drawn against the same W1..Wn header. A monster whose band
 // is shorter than ColumnCount fills the rest of its row with "no such window" cells.
-public sealed record HnmWindowGrid(int ColumnCount, IReadOnlyList<HnmWindowMonster> Monsters);
+public sealed record HnmWindowGrid(int ColumnCount, IReadOnlyList<HnmWindowMonster> Monsters)
+{
+    // A long band's grid is squeezed to fit the card rather than scrolled, and drops its cell
+    // labels when they no longer fit (see .winmatrix-grid.is-wide).
+    public bool IsWide => ColumnCount > HnmWindowStats.SharedGridMaxWindows;
+}
 
 public sealed record HnmWindowStats(IReadOnlyList<HnmWindowMonster> Monsters)
 {

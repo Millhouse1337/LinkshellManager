@@ -1734,79 +1734,117 @@ table.themed .num {
   font-weight: 600;
 }
 
-/* ===== Window frequency: one bar strip per monster =====
-   A column per window of that monster's band, so the row shows the WHOLE grid — the windows a
-   monster never pops in are as much of the finding as the one it favours. Bar heights are a share
-   of the monster's own busiest window (see HnmWindowBarEntry.HeightPercent); the percentage in the
-   header is the share of its pops. */
-.winfreq {
+/* ===== Window frequency: a heatmap, one row per monster and one cell per window =====
+   A cell's label is its share of the monster's pops; its tint is its share of the monster's
+   BUSIEST window (HnmWindowBarEntry.HeatPercent), so every row has one full-colour cell however
+   spread out its pops are. Grids come one per band length — see HnmWindowStats.Grids. */
+.winmatrix {
+  --winmatrix-name: 150px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  padding: 14px 16px;
+  container-type: inline-size;
 }
-.winfreq-row {
+/* One name width for every grid, so their columns line up; narrower on a phone-width card. */
+@container (max-width: 400px) {
+  .winmatrix-grid { --winmatrix-name: 96px; }
+}
+/* A short band's cells never shrink below their label. Each grid scrolls on its own if it has
+   to, rather than stretching the grids around it. */
+.winmatrix-grid {
   display: grid;
-  gap: 5px;
+  grid-template-columns: var(--winmatrix-name) repeat(var(--winmatrix-cols, 7), minmax(28px, 1fr));
+  gap: 4px;
+  align-items: center;
+  overflow-x: auto;
 }
-.winfreq-head {
+/* A long band (the wyrms' 25) is squeezed to fit instead: scrolled off the edge, the late windows
+   a wyrm favours would be the part nobody sees. Once its cells are too narrow for a label, the
+   tint carries the row alone (the tooltip keeps the numbers) and the header thins to every fifth
+   window. */
+.winmatrix-grid.is-wide {
+  grid-template-columns: var(--winmatrix-name) repeat(var(--winmatrix-cols, 25), minmax(0, 1fr));
+  gap: 4px 2px;
+  overflow-x: visible;
+  container-type: inline-size;
+}
+@container (max-width: 900px) {
+  .winmatrix-grid.is-wide .winmatrix-cell { color: transparent; }
+  .winmatrix-grid.is-wide .winmatrix-head { visibility: hidden; }
+  /* Child 1 is the empty corner, so W1 is child 2 and Wn is child n + 1. */
+  .winmatrix-grid.is-wide .winmatrix-head:nth-child(2),
+  .winmatrix-grid.is-wide .winmatrix-head:nth-child(5n + 1) { visibility: visible; }
+}
+.winmatrix-head {
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: center;
+}
+/* Pinned while a wide grid scrolls sideways, so a row never loses its monster's name. The shadow
+   covers the gap, so cells sliding underneath don't peek out beside it. */
+.winmatrix-name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  font-size: 12px;
-}
-.winfreq-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--fg);
-  font-weight: 500;
   min-width: 0;
-}
-.winfreq-peak { color: var(--fg-3); font-size: 11px; white-space: nowrap; }
-
-/* Equal-width columns across whatever band the monster has: 25 for the wyrms, 5 for the ToAU
-   three. A fixed column width would either overflow the card at 25 or leave 5 marooned. */
-.winfreq-bars {
-  display: grid;
-  grid-template-columns: repeat(var(--winfreq-count, 25), minmax(0, 1fr));
-  align-items: end;
-  gap: 1px;
-  height: 46px;
-  padding: 3px 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm, 6px);
-  background: var(--surface);
-}
-.winfreq-bar {
-  display: flex;
-  align-items: flex-end;
   height: 100%;
+  background: var(--bg-panel, var(--bg-elev));
+  box-shadow: 4px 0 0 var(--bg-panel, var(--bg-elev));
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+.winmatrix-name .donut-swatch { flex: none; }
+.winmatrix-label {
   min-width: 0;
-  border-radius: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.winfreq-bar:hover { background: rgba(255, 255, 255, 0.06); }
-/* A zero-pop window still paints a hairline, so the empty windows read as "measured and empty"
-   rather than as a gap in the chart. */
-.winfreq-bar-fill {
-  width: 100%;
-  min-height: 1px;
-  border-radius: 1px;
-  background: var(--seg-color, var(--accent));
-  opacity: 0.75;
-}
-.winfreq-bar.is-peak .winfreq-bar-fill {
-  opacity: 1;
-  box-shadow: 0 0 6px var(--seg-color, var(--accent));
-}
-.winfreq-foot {
+/* The tint is two layers of the family colour: an 8% wash on the cell, then a ::before at --heat
+   opacity. Together they cover 8% + 92% × heat, so a window that popped once still reads apart
+   from one that never did. */
+.winmatrix-cell {
+  position: relative;
+  isolation: isolate;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--fg-4);
-  font-size: 10px;
+  justify-content: center;
+  height: 34px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--seg-color, var(--accent)) 8%, transparent);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
-.winfreq-total { color: var(--fg-3); }
+.winmatrix-cell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--seg-color, var(--accent));
+  opacity: calc(var(--heat, 0) / 100);
+}
+.winmatrix-cell.is-zero { background: var(--bg-card, var(--surface-2)); color: var(--fg-3); }
+/* Light label on a pale tint, dark label on a strong one. */
+.winmatrix-cell.is-hot { color: var(--bg-main, var(--bg)); }
+.winmatrix-cell.is-peak { outline: 1px solid rgba(255, 255, 255, 0.35); outline-offset: -1px; }
+/* Past the end of a shorter band: the monster has no such window, which is not the same as a
+   window it never popped in. */
+.winmatrix-cell.is-none {
+  background: transparent;
+  color: var(--fg-4);
+  outline: 1px dashed var(--border);
+  outline-offset: -1px;
+}
+.winmatrix-cell.is-none::before { content: none; }
 
 /* News & Updates */
 .news-list { display: flex; flex-direction: column; }

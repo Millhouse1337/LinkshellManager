@@ -234,6 +234,7 @@ public class HnmWindowStatsServiceTests
         // the short rows mostly padding, so it gets a grid of its own. The grid holding the
         // most-observed monster leads, and rows stay most-observed first.
         Assert.Equal(new[] { 7, 25 }, grids.Select(grid => grid.ColumnCount));
+        Assert.Equal(new[] { false, true }, grids.Select(grid => grid.IsWide));
         Assert.Equal(new[] { "Fafnir/Nidhogg", "Cerberus" }, grids[0].Monsters.Select(m => m.MonsterName));
         Assert.Equal("Tiamat", Assert.Single(grids[1].Monsters).MonsterName);
     }
