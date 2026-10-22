@@ -636,23 +636,7 @@ export class EventService {
   async removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> {
     this.auth.setActionError(null);
     try {
-      const accessToken = this.auth.currentAccessToken();
-      const headers: Record<string, string> = {};
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-      const response = await fetch(`/api/addon/management/window-attendees/${attendeeId}`, {
-        method: 'DELETE',
-        headers,
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        try {
-          const payload = JSON.parse(text || '{}') as { error?: string };
-          throw new Error(payload.error || `Remove failed (HTTP ${response.status}).`);
-        } catch {
-          throw new Error(text || `Remove failed (HTTP ${response.status}).`);
-        }
-      }
+      await this.http.sendActivityRequest('DELETE', `/api/addon/management/window-attendees/${attendeeId}`);
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Removing the attendee failed.'));
@@ -670,24 +654,7 @@ export class EventService {
   async setAttendanceWindowDkp(windowId: number, dkpAmount: number | null): Promise<boolean> {
     this.auth.setActionError(null);
     try {
-      const accessToken = this.auth.currentAccessToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-      const response = await fetch(`/api/addon/management/attendance-windows/${windowId}/dkp`, {
-        method: 'PATCH',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ dkpAmount })
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        try {
-          const payload = JSON.parse(text || '{}') as { error?: string };
-          throw new Error(payload.error || `Update failed (HTTP ${response.status}).`);
-        } catch {
-          throw new Error(text || `Update failed (HTTP ${response.status}).`);
-        }
-      }
+      await this.http.sendActivityRequest('PATCH', `/api/addon/management/attendance-windows/${windowId}/dkp`, { dkpAmount });
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, "Setting this window's DKP failed."));
@@ -706,24 +673,7 @@ export class EventService {
   async setCampKillBonus(eventId: number, killBonus: number | null): Promise<boolean> {
     this.auth.setActionError(null);
     try {
-      const accessToken = this.auth.currentAccessToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-      const response = await fetch(`/api/addon/management/events/${eventId}/kill-bonus`, {
-        method: 'PATCH',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ killBonus })
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        try {
-          const payload = JSON.parse(text || '{}') as { error?: string };
-          throw new Error(payload.error || `Update failed (HTTP ${response.status}).`);
-        } catch {
-          throw new Error(text || `Update failed (HTTP ${response.status}).`);
-        }
-      }
+      await this.http.sendActivityRequest('PATCH', `/api/addon/management/events/${eventId}/kill-bonus`, { killBonus });
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, "Setting the camp's kill bonus failed."));
@@ -741,24 +691,7 @@ export class EventService {
   async setAttendanceWindowClosing(windowId: number, isClosingWindow: boolean): Promise<boolean> {
     this.auth.setActionError(null);
     try {
-      const accessToken = this.auth.currentAccessToken();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-      const response = await fetch(`/api/addon/management/attendance-windows/${windowId}/closing`, {
-        method: 'PATCH',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ isClosingWindow })
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        try {
-          const payload = JSON.parse(text || '{}') as { error?: string };
-          throw new Error(payload.error || `Update failed (HTTP ${response.status}).`);
-        } catch {
-          throw new Error(text || `Update failed (HTTP ${response.status}).`);
-        }
-      }
+      await this.http.sendActivityRequest('PATCH', `/api/addon/management/attendance-windows/${windowId}/closing`, { isClosingWindow });
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Marking the closing window failed.'));

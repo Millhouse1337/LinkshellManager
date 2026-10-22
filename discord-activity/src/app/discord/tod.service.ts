@@ -189,29 +189,12 @@ export class TodService {
   async uploadTodImage(file: File): Promise<string | null> {
     this.auth.setActionError(null);
     try {
-      const accessToken = this.auth.currentAccessToken();
       const formData = new FormData();
       formData.append('file', file);
 
-      const headers: Record<string, string> = {};
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
-
-      const response = await fetch('/api/activity/tods/upload-image', {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-        headers
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'Upload failed');
-      }
-
-      const payload = await response.json() as { imagePath?: string };
-      return payload.imagePath ?? null;
+      const payload = await this.http.sendActivityRequest<{ imagePath?: string } | undefined>(
+        'POST', '/api/activity/tods/upload-image', formData);
+      return payload?.imagePath ?? null;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Uploading the ToD image failed.'));
       return null;

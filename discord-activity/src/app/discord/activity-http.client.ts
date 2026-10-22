@@ -9,6 +9,7 @@ import { AuthService } from './auth.service';
  * - postActivityAction
  * - postActivityJson
  * - fetchActivityJson
+ * plus sendActivityRequest, the one path for every POST/PATCH/DELETE.
  *
  * The access token is sourced from AuthService so per-domain services don't
  * have to thread it through every call site.
@@ -64,10 +65,36 @@ export class ActivityHttpClient {
   }
 
   async postActivityJson<T = void>(path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...this.auth.guildHeaders()
-    };
+    return this.sendActivityRequest<T>('POST', path, body);
+  }
+
+  // Every state-changing call goes through here so it carries the right credential: the
+  // Discord bearer inside the Activity, or the antiforgery header on the website's cookie
+  // login (CookieAuthAntiforgeryFilter rejects a cookie mutation without it). A FormData
+  // body is sent as multipart; anything else as JSON.
+  async sendActivityRequest<T = void>(method: ActivityMutationMethod, path: string, body?: unknown): Promise<T> {
+    let response = await this.sendMutation(method, path, body);
+    let responseText = await response.text();
+
+    // Cookie path only: a stale antiforgery token (the website session was renewed since it
+    // was fetched) is refreshed and the request retried once. The filter rejects before the
+    // action runs, so nothing was saved by the first attempt.
+    if (response.status === 400 && !this.auth.currentAccessToken() && isAntiforgeryRejection(responseText)) {
+      this.antiforgeryTokenPromise = null;
+      response = await this.sendMutation(method, path, body);
+      responseText = await response.text();
+    }
+
+    return this.readMutationResponse<T>(response, responseText);
+  }
+
+  private async sendMutation(method: ActivityMutationMethod, path: string, body?: unknown): Promise<Response> {
+    const isForm = body instanceof FormData;
+    const headers: Record<string, string> = { ...this.auth.guildHeaders() };
+    // The browser sets multipart's Content-Type itself (it carries the boundary).
+    if (!isForm) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     const accessToken = this.auth.currentAccessToken();
     if (accessToken) {
@@ -79,21 +106,18 @@ export class ActivityHttpClient {
       }
     }
 
-    const response = await fetch(path, {
-      method: 'POST',
+    return fetch(path, {
+      method,
       headers,
       cache: 'no-store',
       credentials: 'include',
-      body: body ? JSON.stringify(body) : undefined
+      body: isForm ? body : body ? JSON.stringify(body) : undefined
     });
+  }
 
+  private readMutationResponse<T>(response: Response, responseText: string): T {
     if (response.ok) {
-      if (response.status === 204) {
-        return undefined as T;
-      }
-
-      const responseText = await response.text();
-      if (!responseText) {
+      if (response.status === 204 || !responseText) {
         return undefined as T;
       }
 
@@ -107,7 +131,6 @@ export class ActivityHttpClient {
       }
     }
 
-    const responseText = await response.text();
     if (!responseText) {
       throw new Error(this.emptyBodyMessage(response.status));
     }
@@ -195,8 +218,19 @@ export class ActivityHttpClient {
     return `The server returned an unexpected response (status ${response.status}).`;
   }
 
-  private async getAntiforgeryToken(): Promise<ActivityAntiforgeryToken | null> {
-    this.antiforgeryTokenPromise ??= this.fetchAntiforgeryToken();
+  private getAntiforgeryToken(): Promise<ActivityAntiforgeryToken | null> {
+    if (!this.antiforgeryTokenPromise) {
+      const pending = this.fetchAntiforgeryToken();
+      this.antiforgeryTokenPromise = pending;
+      // Never keep a failed fetch: the next mutation asks again, instead of every request
+      // going out without a token until the page is reloaded.
+      const forget = () => {
+        if (this.antiforgeryTokenPromise === pending) {
+          this.antiforgeryTokenPromise = null;
+        }
+      };
+      pending.then(token => (token ? undefined : forget()), forget);
+    }
     return this.antiforgeryTokenPromise;
   }
 
@@ -211,6 +245,17 @@ export class ActivityHttpClient {
     }
 
     return (await response.json()) as ActivityAntiforgeryToken;
+  }
+}
+
+export type ActivityMutationMethod = 'POST' | 'PATCH' | 'DELETE';
+
+// The exact body CookieAuthAntiforgeryFilter returns when the token is missing or stale.
+function isAntiforgeryRejection(responseText: string): boolean {
+  try {
+    return (JSON.parse(responseText) as ActivityErrorBody).error === 'Antiforgery validation failed.';
+  } catch {
+    return false;
   }
 }
 
