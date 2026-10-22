@@ -23,11 +23,26 @@ public sealed record HnmWindowMonster(
     double PeakPercent,
     IReadOnlyList<HnmWindowBar> Bars);
 
+// One grid of the heatmap: the monsters drawn against the same W1..Wn header. A monster whose band
+// is shorter than ColumnCount fills the rest of its row with "no such window" cells.
+public sealed record HnmWindowGrid(int ColumnCount, IReadOnlyList<HnmWindowMonster> Monsters);
+
 public sealed record HnmWindowStats(IReadOnlyList<HnmWindowMonster> Monsters)
 {
+    // Bands this short share one grid: the merge families' 7 windows, with the ToAU three's 5
+    // padded out to match. A longer band (the wyrms' 25) gets a grid of its own, since padding a
+    // 7-window row out to 25 would leave it mostly padding.
+    public const int SharedGridMaxWindows = 7;
+
     public static readonly HnmWindowStats Empty = new(Array.Empty<HnmWindowMonster>());
 
     public int TotalPops => Monsters.Sum(monster => monster.TotalPops);
+
+    // Grids in the order their most-observed monster appears, and rows keep Monsters' order too.
+    public IReadOnlyList<HnmWindowGrid> Grids => Monsters
+        .GroupBy(monster => monster.WindowCount <= SharedGridMaxWindows ? 0 : monster.WindowCount)
+        .Select(group => new HnmWindowGrid(group.Max(monster => monster.WindowCount), group.ToList()))
+        .ToList();
 }
 
 // Builds the Dashboard / Discord Activity "Window frequency" chart: for each HNM, which window of

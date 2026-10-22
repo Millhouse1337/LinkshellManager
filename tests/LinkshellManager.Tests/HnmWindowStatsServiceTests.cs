@@ -216,6 +216,29 @@ public class HnmWindowStatsServiceTests
     }
 
     [Fact]
+    public async Task ShortBandsShareOneGrid_LongBandsGetTheirOwn()
+    {
+        using var db = NewInMemoryContext();
+        // Default bands: Fafnir 7 windows, Cerberus 5, Tiamat 25.
+        db.Tods.Add(Pop(1, 10, "Fafnir", 7));
+        db.Tods.Add(Pop(2, 10, "Fafnir", 7));
+        db.Tods.Add(Pop(3, 10, "Fafnir", 7));
+        db.Tods.Add(Pop(4, 10, "Tiamat", 25));
+        db.Tods.Add(Pop(5, 10, "Tiamat", 3));
+        db.Tods.Add(Pop(6, 10, "Cerberus", 5));
+        await db.SaveChangesAsync();
+
+        var grids = (await NewService(db).BuildAsync(10)).Grids;
+
+        // Cerberus sits in Fafnir's 7-wide grid, padded past W5. Tiamat's 25 windows would leave
+        // the short rows mostly padding, so it gets a grid of its own. The grid holding the
+        // most-observed monster leads, and rows stay most-observed first.
+        Assert.Equal(new[] { 7, 25 }, grids.Select(grid => grid.ColumnCount));
+        Assert.Equal(new[] { "Fafnir/Nidhogg", "Cerberus" }, grids[0].Monsters.Select(m => m.MonsterName));
+        Assert.Equal("Tiamat", Assert.Single(grids[1].Monsters).MonsterName);
+    }
+
+    [Fact]
     public async Task NoLinkshell_OrNoRecordedWindows_IsEmpty()
     {
         using var db = NewInMemoryContext();
