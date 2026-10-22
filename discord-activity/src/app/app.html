@@ -1,1 +1,7 @@
-<router-outlet />
+<!-- Website only: with no cookie session the sign-in screen replaces the whole app, so the
+     home component (and its polling) never runs signed out. -->
+@if (activity.isSignedOut()) {
+  <app-web-sign-in />
+} @else {
+  <router-outlet />
+}

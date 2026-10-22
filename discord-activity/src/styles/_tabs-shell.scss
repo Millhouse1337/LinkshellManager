@@ -156,6 +156,33 @@ body {
 .identity-refresh svg.spinning { animation: identity-refresh-spin 0.9s linear infinite; }
 @keyframes identity-refresh-spin { to { transform: rotate(360deg); } }
 
+/* Website only (not inside Discord): sign-out pill + the page footer. */
+.identity-signout {
+  height: 24px;
+  padding: 0 11px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-2);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 120ms, color 120ms;
+}
+.identity-signout:hover:not(:disabled) { border-color: var(--border-hot); color: var(--fg); }
+.identity-signout:disabled { cursor: wait; opacity: 0.7; }
+
+.web-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 16px;
+  margin: 32px 0 8px;
+  font-size: 12px;
+}
+.web-footer a { color: var(--fg-3); text-decoration: none; }
+.web-footer a:hover { color: var(--fg-1); }
+
 /* ===== Identity bar — mobile collapse =====
    On phone-portrait widths (Discord activities run at ~390-412px), the
    identity row is dense. Hide the noisy bits (wordmark, divider, members

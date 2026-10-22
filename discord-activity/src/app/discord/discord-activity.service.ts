@@ -245,6 +245,19 @@ export class DiscordActivityService {
     return this.initializationPromise;
   }
 
+  // Website only: ends the cookie session, then leaves for the public landing page.
+  // Returns false (with the action error set) when the server refused.
+  async signOut(): Promise<boolean> {
+    try {
+      await this.http.postActivityJson('/api/web/sign-out');
+    } catch (error) {
+      this.auth.setActionError(`Signing out failed: ${formatError(error)}`);
+      return false;
+    }
+    window.location.assign('/');
+    return true;
+  }
+
   // Used by the error UI to retry initialization after a permanent failure
   // (the cached `initializationPromise` would otherwise re-resolve immediately
   // with the same error). Resets the SDK handle and clears overview state so

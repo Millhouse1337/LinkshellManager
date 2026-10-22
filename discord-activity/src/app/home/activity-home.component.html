@@ -13,7 +13,11 @@
         class="action-button"
         [disabled]="reconnecting()"
         (click)="reconnect()">
-        {{ reconnecting() ? 'Reconnecting…' : 'Reconnect to Discord' }}
+        @if (activity.isWebsite) {
+          {{ reconnecting() ? 'Retrying…' : 'Retry' }}
+        } @else {
+          {{ reconnecting() ? 'Reconnecting…' : 'Reconnect to Discord' }}
+        }
       </button>
     </section>
   }
@@ -71,6 +75,15 @@
       }
       <span class="identity-user">{{ appDisplayName() }}</span>
       <div class="identity-av">{{ initials(appDisplayName()) }}</div>
+      @if (activity.isWebsite) {
+        <button
+          type="button"
+          class="identity-signout"
+          [disabled]="signingOut()"
+          (click)="signOut()">
+          {{ signingOut() ? 'Signing out…' : 'Sign out' }}
+        </button>
+      }
     </div>
   </div>
 
@@ -414,6 +427,16 @@
     <div role="tabpanel" [id]="panelId(activeTab())" [attr.aria-labelledby]="tabId(activeTab())">
       <app-configurations-tab [view]="activeTab()" />
     </div>
+  }
+
+  @if (activity.isWebsite) {
+    <footer class="web-footer">
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      @if (activity.webSession()?.launcherDownloadEnabled) {
+        <a href="/download/launcher">Download launcher</a>
+      }
+    </footer>
   }
 </main>
 

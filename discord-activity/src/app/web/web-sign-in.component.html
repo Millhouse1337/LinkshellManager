@@ -1,0 +1,19 @@
+<main class="web-sign-in">
+  <section class="web-sign-in__card" aria-labelledby="web-sign-in-title">
+    <div class="web-sign-in__brand">
+      <div class="web-sign-in__mark" aria-hidden="true">L</div>
+      <span>LinkshellManager</span>
+    </div>
+    <h1 id="web-sign-in-title">Sign in</h1>
+    <p>Sign in with your Discord account to open your linkshell.</p>
+    <a class="action-button web-sign-in__cta" [href]="signInUrl">Sign in with Discord</a>
+    <nav class="web-sign-in__links" aria-label="Site links">
+      <a href="/">Home</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      @if (activity.webSession()?.launcherDownloadEnabled) {
+        <a href="/download/launcher">Download launcher</a>
+      }
+    </nav>
+  </section>
+</main>

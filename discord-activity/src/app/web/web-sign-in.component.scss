@@ -1,0 +1,78 @@
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
+.web-sign-in {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.web-sign-in__card {
+  width: 100%;
+  max-width: 380px;
+  padding: 28px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-pop);
+  text-align: center;
+
+  h1 {
+    margin: 18px 0 6px;
+    font-size: 20px;
+    color: var(--fg);
+  }
+
+  p {
+    margin: 0 0 20px;
+    font-size: 13px;
+    color: var(--fg-2);
+  }
+}
+
+.web-sign-in__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.web-sign-in__mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  display: grid;
+  place-items: center;
+  color: var(--bg);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.web-sign-in__cta {
+  display: block;
+  text-decoration: none;
+}
+
+.web-sign-in__links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  margin-top: 20px;
+  font-size: 12px;
+
+  a {
+    color: var(--fg-2);
+    text-decoration: none;
+  }
+
+  a:hover {
+    color: var(--fg);
+  }
+}

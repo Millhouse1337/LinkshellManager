@@ -54,6 +54,7 @@ export class ActivityHomeComponent {
   private readonly liveUpdate = inject(LiveUpdateService);
   protected readonly activeTab = signal<TabName>('dashboard');
   protected readonly reconnecting = signal(false);
+  protected readonly signingOut = signal(false);
 
   // Which of the DKP tab's three views is showing. They share one space and one strip of
   // sub-tabs rather than being top-level tabs of their own: all three are the same DKP economy
@@ -183,6 +184,15 @@ export class ActivityHomeComponent {
       await this.activity.reconnect();
     } finally {
       this.reconnecting.set(false);
+    }
+  }
+
+  // Website only. On success the page leaves for the landing page, so the flag never resets.
+  protected async signOut(): Promise<void> {
+    if (this.signingOut()) return;
+    this.signingOut.set(true);
+    if (!(await this.activity.signOut())) {
+      this.signingOut.set(false);
     }
   }
 
