@@ -572,35 +572,36 @@
             </div>
           </div>
           @if (dashboardHnmChartTab() === 'windows') {
-            <!-- Which window of its band each HNM actually pops on, off Tod.PopWindow. A column
-                 per window across the whole grid, so the windows a monster never pops in are as
-                 visible as the one it favours. -->
-            @if (dashboardHnmWindows().length > 0) {
-              <div class="winfreq">
-                @for (monster of dashboardHnmWindows(); track monster.monsterName) {
-                  <div class="winfreq-row">
-                    <div class="winfreq-head">
-                      <span class="winfreq-name">
+            <!-- Which window of its band each HNM actually pops on, off Tod.PopWindow, as a
+                 heatmap: one row per monster, one cell per window. The label is the share of that
+                 monster's pops; the tint is the share of its busiest window, so the favoured window
+                 stands out in every row at once. -->
+            @if (dashboardHnmWindowGrids().length > 0) {
+              <div class="winmatrix">
+                @for (grid of dashboardHnmWindowGrids(); track grid.columnCount) {
+                  <div class="winmatrix-grid" [class.is-wide]="grid.isWide" [style.--winmatrix-cols]="grid.columnCount">
+                    <span></span>
+                    @for (window of windowRange(1, grid.columnCount); track window) {
+                      <span class="winmatrix-head">W{{ window }}</span>
+                    }
+                    @for (monster of grid.monsters; track monster.monsterName) {
+                      <span class="winmatrix-name" [title]="monster.monsterName + ' · ' + popsLabel(monster.totalPops) + ' recorded'">
                         <span class="donut-swatch donut-seg-{{ monster.colorClass }}"></span>
-                        {{ monster.monsterName }}
+                        <span class="winmatrix-label">{{ monster.monsterName }}</span>
                       </span>
-                      <span class="winfreq-peak">W{{ monster.peakWindow }} · {{ monster.peakPercent | number:'1.0-1' }}%</span>
-                    </div>
-                    <div class="winfreq-bars" [style.--winfreq-count]="monster.windowCount">
                       @for (bar of monster.bars; track bar.window) {
-                        <span class="winfreq-bar"
-                          [class.is-peak]="bar.window === monster.peakWindow && bar.count > 0"
-                          [title]="windowBarTitle(monster.monsterName, bar)">
-                          <span class="winfreq-bar-fill donut-seg-{{ monster.colorClass }}"
-                            [style.height.%]="bar.heightPercent"></span>
-                        </span>
+                        <span class="winmatrix-cell donut-seg-{{ monster.colorClass }}"
+                          [class.is-zero]="bar.count === 0"
+                          [class.is-hot]="bar.count > 0 && bar.heatPercent > 55"
+                          [class.is-peak]="bar.count > 0 && bar.window === monster.peakWindow"
+                          [style.--heat]="bar.heatPercent"
+                          [title]="windowCellTitle(monster, bar)">{{ bar.percent | number:'1.0-0' }}%</span>
                       }
-                    </div>
-                    <div class="winfreq-foot">
-                      <span>W1</span>
-                      <span class="winfreq-total">{{ monster.totalPops }} pop{{ monster.totalPops === 1 ? '' : 's' }} recorded</span>
-                      <span>W{{ monster.windowCount }}</span>
-                    </div>
+                      <!-- Past the end of a shorter band: this monster has no such window. -->
+                      @for (window of windowRange(monster.windowCount + 1, grid.columnCount); track window) {
+                        <span class="winmatrix-cell is-none" [title]="monster.monsterName + ' has no window ' + window">—</span>
+                      }
+                    }
                   </div>
                 }
               </div>

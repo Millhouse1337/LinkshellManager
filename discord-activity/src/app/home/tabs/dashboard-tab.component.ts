@@ -6,6 +6,7 @@ import type {
   ActivityEvent,
   ActivityHnmClaimSlice,
   ActivityHnmWindowBar,
+  ActivityHnmWindowGrid,
   ActivityHnmWindowMonster
 } from '../../discord/discord-activity.types';
 import {
@@ -462,19 +463,30 @@ export class DashboardTabComponent {
 
   protected readonly dashboardHnmChartTab = signal<'claims' | 'windows'>('claims');
 
-  // All-time and already shaped by the server (HnmWindowStatsService + MapHnmWindows): bar heights
-  // are a share of each monster's busiest window, so the web and the Activity can't scale the same
-  // data differently. No 7d/30d/all switch — a spawn distribution needs volume to mean anything,
-  // which is also why the window toggle is hidden while this tab is open.
-  protected readonly dashboardHnmWindows = computed<ActivityHnmWindowMonster[]>(() =>
-    this.activity.overview()?.hnmWindows?.monsters ?? []);
+  // All-time and already shaped by the server (HnmWindowStatsService + MapHnmWindows): grids are
+  // grouped by band length and cell tints are a share of each monster's busiest window, so the web
+  // and the Activity can't lay out the same data differently. No 7d/30d/all switch — a spawn
+  // distribution needs volume to mean anything, which is also why the window toggle is hidden
+  // while this tab is open.
+  protected readonly dashboardHnmWindowGrids = computed<ActivityHnmWindowGrid[]>(() =>
+    this.activity.overview()?.hnmWindows?.grids ?? []);
 
   protected setDashboardHnmChartTab(tab: 'claims' | 'windows'): void {
     this.dashboardHnmChartTab.set(tab);
   }
 
-  protected windowBarTitle(monsterName: string, bar: ActivityHnmWindowBar): string {
-    return `${monsterName} — window ${bar.window}: ${bar.count} pop${bar.count === 1 ? '' : 's'} (${bar.percent}%)`;
+  // Window numbers from..to: a grid's W1..Wn header, and the "no such window" cells that pad a
+  // shorter band out to its grid's width.
+  protected windowRange(from: number, to: number): number[] {
+    return Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i);
+  }
+
+  protected popsLabel(total: number): string {
+    return `${total} pop${total === 1 ? '' : 's'}`;
+  }
+
+  protected windowCellTitle(monster: ActivityHnmWindowMonster, bar: ActivityHnmWindowBar): string {
+    return `${monster.monsterName} · W${bar.window}: ${bar.count} of ${this.popsLabel(monster.totalPops)}`;
   }
 
   // ----- News & recent activity -----

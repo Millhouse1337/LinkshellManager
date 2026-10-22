@@ -1649,14 +1649,14 @@ export interface ActivityHnmClaims {
 }
 
 // One window of one monster's spawn band, on the card's Windows tab. `percent` is the share of
-// that MONSTER's pops ("Adamantoise pops on window 4 42% of the time"); `heightPercent` is the
-// share of its busiest window, which is what the bar draws to — a monster whose best window holds
-// 30% would otherwise render as a row of stubs.
+// that MONSTER's pops ("Adamantoise pops on window 4 42% of the time"); `heatPercent` is the
+// share of its busiest window, which is what the cell's tint is drawn to — a monster whose best
+// window holds 30% would otherwise render as near-blank cells.
 export interface ActivityHnmWindowBar {
   window: number;
   count: number;
   percent: number;
-  heightPercent: number;
+  heatPercent: number;
 }
 
 // One monster's window distribution. `colorClass` is the family's donut colour, so a monster looks
@@ -1668,13 +1668,21 @@ export interface ActivityHnmWindowMonster {
   totalPops: number;
   windowCount: number;
   peakWindow: number;
-  peakPercent: number;
   bars: ActivityHnmWindowBar[];
+}
+
+// One grid of the heatmap: the monsters drawn against the same W1..Wn header. Bands of up to 7
+// windows share one (shorter rows padded with "no such window" cells); a longer band gets its own,
+// flagged `isWide` so it squeezes to fit the card instead of scrolling.
+export interface ActivityHnmWindowGrid {
+  columnCount: number;
+  isWide: boolean;
+  monsters: ActivityHnmWindowMonster[];
 }
 
 // All-time on purpose — a spawn distribution needs volume, so there is no 7d/30d split here.
 export interface ActivityHnmWindows {
-  monsters: ActivityHnmWindowMonster[];
+  grids: ActivityHnmWindowGrid[];
   totalPops: number;
 }
 

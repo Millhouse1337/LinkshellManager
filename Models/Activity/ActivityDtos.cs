@@ -1318,9 +1318,9 @@ public sealed record ActivityHnmClaimsDto(
     IReadOnlyList<ActivityHnmClaimSliceDto> AllTime);
 
 // One window of one monster's spawn band on the card's second tab. Percent is the share of THAT
-// monster's pops; HeightPercent is the share of its busiest window, which is what the bar draws to
-// (a monster whose best window holds 30% would otherwise render as a row of stubs).
-public sealed record ActivityHnmWindowBarDto(int Window, int Count, double Percent, double HeightPercent);
+// monster's pops; HeatPercent is the share of its busiest window, which is what the cell's tint is
+// drawn to (a monster whose best window holds 30% would otherwise render as near-blank cells).
+public sealed record ActivityHnmWindowBarDto(int Window, int Count, double Percent, double HeatPercent);
 
 // One monster's window distribution. ColorClass is the family's donut colour, so a monster looks
 // the same on both tabs. The NQ/HQ halves share a row here — unlike the Claims donut — because the
@@ -1331,12 +1331,18 @@ public sealed record ActivityHnmWindowMonsterDto(
     int TotalPops,
     int WindowCount,
     int PeakWindow,
-    double PeakPercent,
     IReadOnlyList<ActivityHnmWindowBarDto> Bars);
+
+// One grid of the heatmap: the monsters drawn against the same W1..Wn header. See
+// HnmWindowStats.Grids for which monsters share one, and HnmWindowGrid.IsWide.
+public sealed record ActivityHnmWindowGridDto(
+    int ColumnCount,
+    bool IsWide,
+    IReadOnlyList<ActivityHnmWindowMonsterDto> Monsters);
 
 // All-time on purpose: a spawn distribution needs volume, so there is no 7d/30d split to toggle.
 public sealed record ActivityHnmWindowsDto(
-    IReadOnlyList<ActivityHnmWindowMonsterDto> Monsters,
+    IReadOnlyList<ActivityHnmWindowGridDto> Grids,
     int TotalPops);
 
 public sealed record ActivityOverviewStatsDto(
