@@ -679,6 +679,21 @@ if (Directory.Exists(activityPhysicalPath))
     app.MapFallbackToFile("/discord-activity/{*path}", "discord-activity/browser/index.html");
 }
 
+// The old website's page addresses (bookmarks, Discord bot posts, old tabs) go to the same place
+// in the Activity UI, which is the website now. GET/HEAD only: old forms still post to their
+// controllers until the cleanup phase removes them. 302 while the slugs settle; see
+// LegacyUrlRedirects.
+app.Use(async (context, next) =>
+{
+    if ((HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
+        && LegacyUrlRedirects.TryResolve(context.Request.Path, context.Request.QueryString, out var target))
+    {
+        context.Response.Redirect(target, permanent: false);
+        return;
+    }
+    await next();
+});
+
 app.UseRouting();
 app.UseCors("DiscordCors");
 app.UseRateLimiter();
