@@ -37,8 +37,9 @@ public sealed partial class ActivityDataController
             .ToListAsync(cancellationToken);
 
         // The single DiscordGuildId drives two complementary checks:
-        //  1. Membership — drop any linkshell tied to a guild the user can't
-        //     prove membership in (membership-verified; not tied = no call).
+        //  1. Membership — inside the Activity, drop any linkshell locked to a
+        //     guild the user can't prove membership in (membership-verified; not
+        //     locked = no call). The website keeps all of its memberships.
         //  2. Launch context — hide linkshells tied to a different Discord
         //     server than the one the Activity is launched in (the web, with no
         //     guild header, is never filtered by this one).

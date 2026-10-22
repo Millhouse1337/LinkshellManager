@@ -52,14 +52,15 @@ public sealed partial class ActivityDataController
             return Ok(new { candidates = Array.Empty<object>() });
         }
 
-        // Respect the per-linkshell guild lock (Activity path). On the cookie/web
-        // path, locked linkshells without a verifiable guild membership are
-        // excluded — the officer link fallback still covers those.
+        // Respect the per-linkshell guild lock on BOTH paths. Claiming joins the
+        // linkshell, so unlike plain viewing the website does not get a pass: on
+        // the cookie path, locked linkshells without a verifiable guild membership
+        // are excluded — the officer link fallback still covers those.
         var lockPairs = placeholderMemberships
             .Select(m => (m.LinkshellId, m.Linkshell?.LockToDiscordGuild == true ? m.Linkshell?.DiscordGuildId : null))
             .Distinct()
             .ToList();
-        var accessible = await FilterAccessibleLinkshellIdsAsync(lockPairs, cancellationToken);
+        var accessible = await FilterAccessibleLinkshellIdsAsync(lockPairs, cancellationToken, lockAppliesOnWebsite: true);
 
         var candidates = placeholderMemberships
             .Where(m => accessible.Contains(m.LinkshellId))

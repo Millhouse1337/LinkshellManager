@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Headers;
+using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -123,7 +124,8 @@ public sealed partial class ActivityDataController
 
         // Enforce the per-linkshell Discord guild lock for every endpoint that
         // resolves access through GetMembershipAsync. Only applies when the
-        // linkshell is *locked* (a set-but-unlocked server doesn't gate access).
+        // linkshell is *locked* (a set-but-unlocked server doesn't gate access),
+        // and only inside the Activity — the website sees all its memberships.
         // A locked linkshell the user can't prove membership in is treated as
         // "no access" (the caller maps a null membership to Forbid()/403).
         var guildId = membership.Linkshell?.LockToDiscordGuild == true ? membership.Linkshell?.DiscordGuildId : null;
@@ -141,35 +143,43 @@ public sealed partial class ActivityDataController
     }
 
     // Given candidate linkshells (id + the guild they're locked to), returns the
-    // subset the current request is allowed to access:
+    // subset the current request is allowed to access (see GuildLockPolicy):
     //   * no DiscordGuildId  -> always allowed (unlocked; never calls Discord)
+    //   * locked + website (cookie, no bearer) -> allowed, unless
+    //     lockAppliesOnWebsite (the request would JOIN the linkshell)
     //   * locked + bearer token + verified member -> allowed
-    //   * locked + no token (cookie path) or non-member -> excluded
+    //   * locked + unresolved bearer or non-member -> excluded
     // Fail-closed: if the membership check can't reach Discord, the locked
     // linkshell is excluded rather than 500-ing the whole request, so unlocked
     // linkshells keep working during a Discord outage.
     private async Task<HashSet<int>> FilterAccessibleLinkshellIdsAsync(
         IReadOnlyCollection<(int LinkshellId, string? DiscordGuildId)> candidates,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool lockAppliesOnWebsite = false)
     {
+        var hasBearerToken = TryGetBearerToken(out _);
+        var bearerTokenResolved = !string.IsNullOrWhiteSpace(_resolvedDiscordAccessToken);
         var allowed = new HashSet<int>();
         foreach (var candidate in candidates)
         {
-            if (string.IsNullOrWhiteSpace(candidate.DiscordGuildId))
+            var decision = GuildLockPolicy.Decide(
+                candidate.DiscordGuildId, hasBearerToken, bearerTokenResolved, lockAppliesOnWebsite);
+            if (decision == GuildLockDecision.Allow)
             {
                 allowed.Add(candidate.LinkshellId);
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(_resolvedDiscordAccessToken))
+            if (decision == GuildLockDecision.Deny)
             {
                 continue;
             }
 
             try
             {
+                // VerifyWithDiscord is only returned once the bearer token resolved.
                 if (await _discordIdentityService.VerifyGuildMembershipAsync(
-                        _resolvedDiscordAccessToken, candidate.DiscordGuildId!, cancellationToken))
+                        _resolvedDiscordAccessToken!, candidate.DiscordGuildId!, cancellationToken))
                 {
                     allowed.Add(candidate.LinkshellId);
                 }
