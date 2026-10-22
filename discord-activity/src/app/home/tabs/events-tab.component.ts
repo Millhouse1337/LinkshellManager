@@ -85,6 +85,12 @@ export class EventsTabComponent {
   protected readonly lootDrafts: Record<number, ActivityLootInput> = {};
   protected readonly quickJoinDrafts: Record<number, ActivityQuickJoinInput> = {};
 
+  // The header's Current / Past switch (session-only). Current is everything still in play — live
+  // camps, the queue, unlinked snapshots, events awaiting a DKP post; Past is settled history.
+  // The template HIDES the other view rather than unmounting it, so a half-typed draft or search
+  // survives a switch, and the queue panel (a required view child) is always there to find.
+  protected readonly eventsView = signal<'current' | 'past'>('current');
+
   // Tracks which window's tab is currently active per event (key = event id).
   protected readonly activeWindowByEvent = signal<Record<number, number>>({});
 

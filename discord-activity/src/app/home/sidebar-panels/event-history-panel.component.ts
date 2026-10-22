@@ -26,11 +26,9 @@ import type {
   imports: [FormsModule, DatePipe],
   template: `
     <div class="evt-history">
-      <!-- No Refresh button of its own: the header's Refresh drives this panel too, via the
-           refreshSignal effect below. -->
-      <div class="evt-history__head">
-        <h3>Past events</h3>
-      </div>
+      <!-- No heading or Refresh button of its own: the Event System tab's header names this view
+           ("Past Events"), and the header's Refresh drives this panel too, via the refreshSignal
+           effect below. -->
 
       @if (!loading() && histories().length === 0) {
         <p class="notice">No completed events yet.</p>
@@ -459,10 +457,6 @@ import type {
     </div>
   `,
   styles: [`
-    .evt-history { margin-top: 12px; }
-    .evt-history__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-    .evt-history__head h3 { margin: 0; font-size: 14px; }
-
     /* Search + tally */
     .evt-tools { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
     .evt-search {
