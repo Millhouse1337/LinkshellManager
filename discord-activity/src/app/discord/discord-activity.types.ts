@@ -11,6 +11,17 @@ export interface WebSession {
   launcherDownloadEnabled: boolean;
 }
 
+// The server-wide switches on the website-only Admin tab (GET/POST /api/web/admin/settings).
+// `message` says what the last change did; null on a plain read.
+export interface WebAdminSettings {
+  addonGloballyDisabled: boolean;
+  claimShieldGloballyDisabled: boolean;
+  adminOverrideEnabled: boolean;
+  launcherDownloadEnabled: boolean;
+  launcherDownloadUrl: string | null;
+  message: string | null;
+}
+
 export type DiscordSdkContextSource = DiscordSDK & {
   channelId?: string;
   guildId?: string;

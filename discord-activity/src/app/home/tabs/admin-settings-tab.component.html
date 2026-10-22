@@ -1,0 +1,150 @@
+<div class="panel-tab fade">
+  <div class="section-head">
+    <div>
+      <div class="section-label">Website only</div>
+      <div class="section-title">Admin</div>
+      <div class="section-sub">Server-wide controls <span class="tag accent">Super admin</span></div>
+    </div>
+  </div>
+
+  @if (admin.settings(); as s) {
+    <div style="display:grid;gap:14px">
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Addon (server-wide)</div>
+          @if (s.addonGloballyDisabled) {
+            <span class="tag danger">Addon is DISABLED</span>
+          } @else {
+            <span class="tag success">Addon is enabled</span>
+          }
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+          <p class="muted" style="margin:0">
+            Global kill-switch for the in-game addon. When disabled, <strong>every</strong> linkshell's
+            addon stops working — existing tokens are rejected and no new pairing codes can be generated
+            or redeemed — until you turn it back on.
+          </p>
+          <div>
+            @if (s.addonGloballyDisabled) {
+              <button type="button" class="btn primary sm" [disabled]="admin.busy()"
+                      (click)="admin.setAddonKillSwitch(false)">Re-enable addon</button>
+            } @else {
+              <button type="button" class="btn danger-outline sm" [disabled]="admin.busy()"
+                      (click)="admin.setAddonKillSwitch(true)">Disable addon globally</button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Claim Shield (server-wide)</div>
+          @if (s.claimShieldGloballyDisabled) {
+            <span class="tag danger">Claim Shield is DISABLED</span>
+          } @else {
+            <span class="tag success">Claim Shield is enabled</span>
+          }
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+          <p class="muted" style="margin:0">
+            Master switch for the addon's claim-shield capture — the record of who tagged an HNM during a
+            lottery. Disabling stops <strong>every</strong> linkshell's addon recording them; the addon itself
+            keeps working. Individual monsters are switched on and off per linkshell under
+            <strong>Monster setups</strong>, and those only apply while this is on.
+          </p>
+          <div>
+            @if (s.claimShieldGloballyDisabled) {
+              <button type="button" class="btn primary sm" [disabled]="admin.busy()"
+                      (click)="admin.setClaimShieldKillSwitch(false)">Re-enable Claim Shield</button>
+            } @else {
+              <button type="button" class="btn danger-outline sm" [disabled]="admin.busy()"
+                      (click)="admin.setClaimShieldKillSwitch(true)">Disable Claim Shield globally</button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Admin override (all linkshells)</div>
+          @if (s.adminOverrideEnabled) {
+            <span class="tag success">Admin override is ON</span>
+          } @else {
+            <span class="tag">Admin override is off</span>
+          }
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+          <p class="muted" style="margin:0">
+            Grants you <strong>every</strong> permission in every linkshell you are a member of, on top of the
+            rank that linkshell gave you — your rank is never changed, and this never reaches a linkshell you
+            have not joined. While it is on, a <span class="tag accent">{{ ADMIN_BADGE }}</span> tag appears
+            beside your rank. Turn it off to fall back to your normal rank permissions.
+          </p>
+          <div>
+            @if (s.adminOverrideEnabled) {
+              <button type="button" class="btn danger-outline sm" [disabled]="admin.busy()"
+                      (click)="admin.setAdminOverride(false)">Turn off admin override</button>
+            } @else {
+              <button type="button" class="btn primary sm" [disabled]="admin.busy()"
+                      (click)="admin.setAdminOverride(true)">Turn on admin override</button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Launcher download link</div>
+          @if (s.launcherDownloadEnabled) {
+            <span class="tag success">Download link is ON</span>
+          } @else {
+            <span class="tag">Download link is off</span>
+          }
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+          <p class="muted" style="margin:0">
+            Shows a <strong>Download launcher</strong> link on the home page and in the website's footer. The
+            home page is reachable without signing in, so a tester can get the launcher before they have a
+            Discord account. Turning this off blocks the download link itself, not just the button.
+          </p>
+          <label style="display:flex;flex-direction:column;gap:6px">
+            <span class="muted">
+              Download URL (https). Point this at the installer asset on the lsb-launcher GitHub release.
+              Saving an empty box clears the URL and switches the link off.
+            </span>
+            <input type="url" placeholder="https://…" [value]="launcherUrl()"
+                   (input)="launcherUrl.set($any($event.target).value)" />
+          </label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn sm" [disabled]="admin.busy()" (click)="saveLauncherUrl()">Save URL</button>
+            @if (s.launcherDownloadEnabled) {
+              <button type="button" class="btn danger-outline sm" [disabled]="admin.busy()"
+                      (click)="admin.setLauncherDownload(false)">Hide download link</button>
+            } @else {
+              <button type="button" class="btn primary sm" [disabled]="admin.busy()"
+                      (click)="admin.setLauncherDownload(true)">Show download link</button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Data Admin</div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+          <p class="muted" style="margin:0">
+            Browse and edit any table across every linkshell. It still opens the classic website page for now.
+          </p>
+          <div>
+            <a class="btn sm" href="/data-admin">Open Data Admin</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  } @else {
+    <div class="card"><div class="card-body muted">Loading the admin settings…</div></div>
+  }
+</div>

@@ -156,7 +156,16 @@ body {
 .identity-refresh svg.spinning { animation: identity-refresh-spin 0.9s linear infinite; }
 @keyframes identity-refresh-spin { to { transform: rotate(360deg); } }
 
-/* Website only (not inside Discord): sign-out pill + the page footer. */
+/* Website only (not inside Discord): the divider before the website-only tabs, the sign-out
+   pill and the page footer. */
+.tab-divider {
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 1px;
+  margin: 6px 4px;
+  background: var(--border-2);
+}
+
 .identity-signout {
   height: 24px;
   padding: 0 11px;

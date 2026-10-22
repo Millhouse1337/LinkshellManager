@@ -262,6 +262,17 @@
               [attr.tabindex]="activeTab() === 'addon' ? 0 : -1"
               [class.active]="activeTab() === 'addon'"
               (click)="setActiveTab('addon')">Game Addon</button>
+      <!-- Website-only tabs, after a divider. canOpenTab hides them inside Discord. -->
+      @if (canOpenTab('admin')) {
+        <span class="tab-divider" aria-hidden="true"></span>
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('admin')"
+                [attr.aria-controls]="panelId('admin')"
+                [attr.aria-selected]="activeTab() === 'admin'"
+                [attr.tabindex]="activeTab() === 'admin' ? 0 : -1"
+                [class.active]="activeTab() === 'admin'"
+                (click)="setActiveTab('admin')">Admin</button>
+      }
     }
   </div>
 
@@ -427,6 +438,16 @@
   @if (activeTab() === 'configurations' || activeTab() === 'permissions' || activeTab() === 'addon') {
     <div role="tabpanel" [id]="panelId(activeTab())" [attr.aria-labelledby]="tabId(activeTab())">
       <app-configurations-tab [view]="activeTab()" />
+    </div>
+  }
+
+  <!-- ===== ADMIN TAB (website only, super admins) ===== -->
+  <!-- @defer keeps it out of the startup bundle; almost nobody opens it. -->
+  @if (activeTab() === 'admin') {
+    <div role="tabpanel" [id]="panelId('admin')" [attr.aria-labelledby]="tabId('admin')">
+      @defer {
+        <app-admin-settings-tab />
+      }
     </div>
   }
 

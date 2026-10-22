@@ -25,7 +25,9 @@ export const TAB_NAMES = [
   'messages',
   'configurations',
   'permissions',
-  'addon'
+  'addon',
+  // Website only (never inside Discord): the super-admin switches. ActivityHomeComponent.canOpenTab.
+  'admin'
 ] as const;
 
 export type TabName = typeof TAB_NAMES[number];

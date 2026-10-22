@@ -17,6 +17,7 @@ import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.componen
 import { TAB_NAMES, type TabName } from './activity-home.types';
 import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
+import { AdminSettingsTabComponent } from './tabs/admin-settings-tab.component';
 import { ChartsTabComponent, chartsSectionFromSlug } from './tabs/charts-tab.component';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
@@ -35,6 +36,7 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
     CommonModule,
     FormsModule,
     ActivitySidebarPanelComponent,
+    AdminSettingsTabComponent,
     ChartsTabComponent,
     ConfigurationsTabComponent,
     DashboardTabComponent,
@@ -67,7 +69,10 @@ export class ActivityHomeComponent {
   private readonly discordLocation = signal<readonly string[]>([]);
   private readonly location = computed<readonly string[]>(() =>
     this.activity.isWebsite ? this.urlSegments().map(segment => segment.path) : this.discordLocation());
-  protected readonly activeTab = computed<TabName>(() => tabFromSlug(this.location()[0]) ?? 'dashboard');
+  protected readonly activeTab = computed<TabName>(() => {
+    const tab = tabFromSlug(this.location()[0]) ?? 'dashboard';
+    return this.canOpenTab(tab) ? tab : 'dashboard';
+  });
   private readonly subView = computed(() => this.location()[1] ?? null);
 
   // The sub-views other tabs keep in the location too: /events/past, /auctions/history,
@@ -268,6 +273,17 @@ export class ActivityHomeComponent {
       void this.router.navigate(['/', ...parts]);
     } else {
       this.discordLocation.set(parts);
+    }
+  }
+
+  // The website-only tabs: never inside Discord, and only for the accounts they are for. A URL
+  // naming one you can't open shows the dashboard instead. Every other tab is always openable.
+  protected canOpenTab(tab: TabName): boolean {
+    switch (tab) {
+      case 'admin':
+        return this.activity.isWebsite && !!this.activity.webSession()?.isSuperAdmin;
+      default:
+        return true;
     }
   }
 
