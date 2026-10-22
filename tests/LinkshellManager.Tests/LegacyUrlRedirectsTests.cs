@@ -6,7 +6,7 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 // The old Razor website's addresses now redirect into the Activity UI. These rows pin where each
-// old page lands, that the pages which stay server-side (sign-in, legal, API, Data Admin for now)
+// old page lands, that the pages which stay server-side (sign-in, legal, API, launcher)
 // are never redirected, and that every target names a tab the Angular app actually routes
 // (tab-routes.ts), so renaming a slug there can't silently break an old bookmark.
 public class LegacyUrlRedirectsTests
@@ -54,6 +54,10 @@ public class LegacyUrlRedirectsTests
     [InlineData("/linkshells/5/attendance-snapshots", "", "/discord-activity/events?ls=5")]
     [InlineData("/linkshells/5/pending-submissions", "", "/discord-activity/pending-submissions?ls=5")]
     [InlineData("/linkshells/5/pending-submissions/tod/31", "", "/discord-activity/pending-submissions?ls=5")]
+    [InlineData("/data-admin", "", "/discord-activity/data-admin")]
+    [InlineData("/data-admin/rule", "?q=afk&f.LinkshellId=5", "/discord-activity/data-admin/rule")]
+    [InlineData("/data-admin/app-user/abc-123/edit", "", "/discord-activity/data-admin/app-user/abc-123/edit")]
+    [InlineData("/data-admin/rule/create", "", "/discord-activity/data-admin/rule/create")]
     public void OldPage_RedirectsIntoTheApp(string path, string query, string expected)
     {
         Assert.True(LegacyUrlRedirects.TryResolve(new PathString(path), new QueryString(query), out var target));
@@ -74,7 +78,7 @@ public class LegacyUrlRedirectsTests
     [InlineData("/api/activity/overview")]
     [InlineData("/api/web/session")]
     [InlineData("/download/launcher")]
-    [InlineData("/data-admin")]
+    [InlineData("/data-administration")]
     [InlineData("/discord-activity/events")]
     [InlineData("/Events")]
     [InlineData("/EventsArchive")]

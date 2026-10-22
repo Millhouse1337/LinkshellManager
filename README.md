@@ -48,15 +48,17 @@ Discord SDK entirely and uses the site's own cookie login:
   work. `?ls=<id>` switches the active linkshell. Inside Discord the iframe's URL is never touched; the
   tab lives in memory there.
 - **Website-only features**, hidden inside Discord: the **Pending Submissions** review tab, the
-  super-admin **Admin** tab (`/api/web/admin`), DKP **Import** (Configurations) and DKP Sheet
-  **Export to Excel**. `ActivityHomeComponent.canOpenTab` gates the website-only tabs.
+  super-admin **Admin** (`/api/web/admin`) and **Data Admin** (`/api/data-admin`) tabs, DKP
+  **Import** (Configurations) and DKP Sheet **Export to Excel**. `ActivityHomeComponent.canOpenTab`
+  gates the website-only tabs.
 - `/` shows the public landing page signed out and redirects into the app signed in.
 
 ## Server-rendered pages
 
 Razor now renders only what can't be the app: the public landing page, Privacy, Terms, the Identity
-sign-in (error) page, Access denied and Error, all on `Views/Shared/_PublicLayout.cshtml`, plus Data
-Admin (`/data-admin`, super admins) until it moves into the app.
+sign-in (error) page, Access denied and Error, all on `Views/Shared/_PublicLayout.cshtml`. Data Admin
+is the app's super-admin **Data Admin** tab (`/api/data-admin`); its schema diagram is the shared
+`wwwroot/js/data-admin-schema.js` + `wwwroot/css/data-admin-schema.css`, mounted by the tab.
 
 The old Razor website's pages are being retired. Their GET addresses redirect into the app
 (`Utils/LegacyUrlRedirects.cs`, e.g. `/Event` → `/discord-activity/events`); their controllers and

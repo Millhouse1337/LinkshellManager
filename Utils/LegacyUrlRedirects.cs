@@ -78,6 +78,14 @@ public static class LegacyUrlRedirects
             return target.Length > 0;
         }
 
+        // /data-admin/... keeps its whole path: the app's Data Admin tab routes the same segments
+        // (slug, id, create / edit / delete). The list's ?q=&f.= are dropped; the app keeps its own.
+        if (path.StartsWithSegments("/data-admin", out var dataAdminRest))
+        {
+            target = AppBase + "data-admin" + dataAdminRest.ToUriComponent();
+            return true;
+        }
+
         if (path.StartsWithSegments("/Charts", out var chartsRest))
         {
             var board = chartsRest.Value?.Trim('/') ?? string.Empty;

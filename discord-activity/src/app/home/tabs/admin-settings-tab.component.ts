@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { WebAdminService } from '../../discord/web-admin.service';
 import { ADMIN_BADGE } from '../activity-home.helpers';
@@ -9,6 +10,7 @@ import { ADMIN_BADGE } from '../activity-home.helpers';
 // else, and the API refuses them regardless ([SuperAdminOnly] on WebAdminController).
 @Component({
   selector: 'app-admin-settings-tab',
+  imports: [RouterLink],
   templateUrl: './admin-settings-tab.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })

@@ -68,7 +68,8 @@ The server-wide switches: turn the in-game addon or its Claim Shield capture off
 to **Data Admin**.
 
 ### Data Admin *(super admin only)*
-A browser over the database for the one account marked super admin. It opens on the **schema diagram**
+A browser over the database for the one account marked super admin, on its own tab at the end of the tab
+strip (below the diagram there is also a plain list of every table). It opens on the **schema diagram**
 (below): select a table there (click its card, or pick it in the panel) and **View records** (the bar
 button, the panel, or V) opens its list page, with search, sort, filters and paging; Back from any
 records page returns to the diagram with that table still selected. From the list, a details page shows
