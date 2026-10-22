@@ -352,7 +352,7 @@
           <button type="button" class="dkp-view-tab" role="tab"
             [class.active]="dkpView() === view.key"
             [attr.aria-selected]="dkpView() === view.key"
-            (click)="dkpView.set(view.key)">{{ view.label }}</button>
+            (click)="setDkpView(view.key)">{{ view.label }}</button>
         }
       </div>
       @switch (dkpView()) {

@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AutoRefreshService } from '../discord/auto-refresh.service';
 import { ClaimService } from '../discord/claim.service';
 import type { ActivityClaimCandidate } from '../discord/discord-activity.types';
@@ -13,6 +15,7 @@ import {
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
 import { TAB_NAMES, type TabName } from './activity-home.types';
 import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
+import { slugForTab, tabFromSlug } from './tab-routes';
 import { ChartsTabComponent } from './tabs/charts-tab.component';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
@@ -52,7 +55,15 @@ export class ActivityHomeComponent {
   protected readonly claim = inject(ClaimService);
   private readonly autoRefresh = inject(AutoRefreshService);
   private readonly liveUpdate = inject(LiveUpdateService);
-  protected readonly activeTab = signal<TabName>('dashboard');
+  private readonly router = inject(Router);
+
+  // The URL is the source of truth for where you are: /events is the Event System tab,
+  // /dkp/sheet the DKP tab's sheet view (tab-routes.ts). The bare app URL, or a name nobody
+  // knows, is the dashboard.
+  private readonly urlSegments = toSignal(inject(ActivatedRoute).url, { requireSync: true });
+  protected readonly activeTab = computed<TabName>(() => tabFromSlug(this.urlSegments()[0]?.path) ?? 'dashboard');
+  private readonly subView = computed(() => this.urlSegments()[1]?.path ?? null);
+
   protected readonly reconnecting = signal(false);
   protected readonly signingOut = signal(false);
 
@@ -66,7 +77,10 @@ export class ActivityHomeComponent {
     { key: 'sheet' as const, label: 'DKP Sheet' },
     { key: 'grouping' as const, label: 'DKP Grouping' },
   ];
-  protected readonly dkpView = signal<'history' | 'sheet' | 'grouping'>('history');
+  protected readonly dkpView = computed<'history' | 'sheet' | 'grouping'>(() => {
+    const view = this.activeTab() === 'dkp' ? this.subView() : null;
+    return view === 'sheet' || view === 'grouping' ? view : 'history';
+  });
 
   // Wall-clock display for the identity bar. We tick once per minute since the
   // header only shows hours/minutes; the initial timeout aligns the next tick
@@ -161,8 +175,19 @@ export class ActivityHomeComponent {
     // plumbing. Cadence flips to 5s on live surfaces (open window event,
     // started auction, commenced timed event), 25s otherwise; pauses while
     // the iframe is hidden.
-    this.autoRefresh.setActiveTab(this.activeTab());
+    let refreshTab = this.activeTab();
+    this.autoRefresh.setActiveTab(refreshTab);
     this.autoRefresh.start();
+
+    // Follow every tab change, whether a click, Back/Forward or a typed URL. Skips the
+    // tab already handed over above so startup doesn't fetch twice.
+    effect(() => {
+      const tab = this.activeTab();
+      if (tab !== refreshTab) {
+        refreshTab = tab;
+        untracked(() => this.autoRefresh.setActiveTab(tab));
+      }
+    });
 
     // Live change feed (long-poll). Primary path for freshness; when it's
     // connected the auto-refresh timer relaxes to a safety-net cadence, and if
@@ -196,10 +221,22 @@ export class ActivityHomeComponent {
     }
   }
 
-  protected setActiveTab(tab: TabName): void {
-    this.activeTab.set(tab);
-    this.autoRefresh.setActiveTab(tab);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Changing tab changes the URL; activeTab follows it. On the website each switch is a
+  // history entry so Back works. Inside Discord the URL is replaced instead (the iframe has no
+  // visible address bar or Back button) and its query string is kept: the Discord SDK reads
+  // frame_id from it if the page reloads.
+  protected setActiveTab(tab: TabName, subView?: string): void {
+    const commands = ['/', slugForTab(tab), subView].filter((part): part is string => !!part);
+    if (tab !== this.activeTab()) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    void this.router.navigate(commands, this.activity.isWebsite
+      ? {}
+      : { replaceUrl: true, queryParamsHandling: 'preserve' });
+  }
+
+  protected setDkpView(view: 'history' | 'sheet' | 'grouping'): void {
+    this.setActiveTab('dkp', view === 'history' ? undefined : view);
   }
 
   // Manual refresh: refreshes the overview AND the active tab's own data through
