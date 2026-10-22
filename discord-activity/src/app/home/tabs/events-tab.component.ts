@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, model, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAddEventMemberInput,
@@ -89,7 +89,8 @@ export class EventsTabComponent {
   // camps, the queue, unlinked snapshots, events awaiting a DKP post; Past is settled history.
   // The template HIDES the other view rather than unmounting it, so a half-typed draft or search
   // survives a switch, and the queue panel (a required view child) is always there to find.
-  protected readonly eventsView = signal<'current' | 'past'>('current');
+  // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/events/past).
+  readonly eventsView = model<'current' | 'past'>('current', { alias: 'view' });
 
   // Tracks which window's tab is currently active per event (key = event id).
   protected readonly activeWindowByEvent = signal<Record<number, number>>({});

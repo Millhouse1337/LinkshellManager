@@ -315,7 +315,7 @@
   <!-- ===== EVENTS TAB ===== -->
   @if (activeTab() === 'timed-events') {
     <div role="tabpanel" [id]="panelId('timed-events')" [attr.aria-labelledby]="tabId('timed-events')">
-      <app-events-tab />
+      <app-events-tab [view]="eventsView()" (viewChange)="setEventsView($event)" />
     </div>
   }
 
@@ -336,7 +336,8 @@
   <!-- ===== AUCTIONS TAB ===== -->
   @if (activeTab() === 'auctions') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('auctions')" [attr.aria-labelledby]="tabId('auctions')">
-      <app-activity-sidebar-panel [visibleSections]="['auctions']" />
+      <app-activity-sidebar-panel [visibleSections]="['auctions']"
+        [auctionsView]="auctionsView()" (auctionsViewChange)="setAuctionsView($event)" />
     </div>
   }
 
@@ -375,7 +376,7 @@
   <!-- ===== ENDGAME TAB ===== -->
   @if (activeTab() === 'endgame' && isFeatureEnabled('enableEndgame')) {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('endgame')" [attr.aria-labelledby]="tabId('endgame')">
-      <app-charts-tab />
+      <app-charts-tab [view]="chartsView()" (viewChange)="setChartsView($event)" />
     </div>
   }
 

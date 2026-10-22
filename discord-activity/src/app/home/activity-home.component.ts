@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, injec
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { map } from 'rxjs';
 import { AutoRefreshService } from '../discord/auto-refresh.service';
 import { ClaimService } from '../discord/claim.service';
 import type { ActivityClaimCandidate } from '../discord/discord-activity.types';
@@ -16,7 +17,7 @@ import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.componen
 import { TAB_NAMES, type TabName } from './activity-home.types';
 import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
-import { ChartsTabComponent } from './tabs/charts-tab.component';
+import { ChartsTabComponent, chartsSectionFromSlug } from './tabs/charts-tab.component';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
 import { DkpGroupingTabComponent } from './tabs/dkp-grouping-tab.component';
@@ -57,12 +58,28 @@ export class ActivityHomeComponent {
   private readonly liveUpdate = inject(LiveUpdateService);
   private readonly router = inject(Router);
 
-  // The URL is the source of truth for where you are: /events is the Event System tab,
-  // /dkp/sheet the DKP tab's sheet view (tab-routes.ts). The bare app URL, or a name nobody
-  // knows, is the dashboard.
-  private readonly urlSegments = toSignal(inject(ActivatedRoute).url, { requireSync: true });
-  protected readonly activeTab = computed<TabName>(() => tabFromSlug(this.urlSegments()[0]?.path) ?? 'dashboard');
-  private readonly subView = computed(() => this.urlSegments()[1]?.path ?? null);
+  // Where you are, as URL-style parts: ['events'], ['dkp', 'sheet'] (tab-routes.ts). On the
+  // website that is the URL itself. Inside Discord the iframe's URL is never touched (see
+  // setActiveTab), so the same parts live in memory there. No parts, or a name nobody knows,
+  // is the dashboard.
+  private readonly route = inject(ActivatedRoute);
+  private readonly urlSegments = toSignal(this.route.url, { requireSync: true });
+  private readonly discordLocation = signal<readonly string[]>([]);
+  private readonly location = computed<readonly string[]>(() =>
+    this.activity.isWebsite ? this.urlSegments().map(segment => segment.path) : this.discordLocation());
+  protected readonly activeTab = computed<TabName>(() => tabFromSlug(this.location()[0]) ?? 'dashboard');
+  private readonly subView = computed(() => this.location()[1] ?? null);
+
+  // The sub-views other tabs keep in the location too: /events/past, /auctions/history,
+  // /charts/sea. Each tab two-way binds its own view, so a click there updates the URL.
+  protected readonly eventsView = computed(() => (this.subView() === 'past' ? 'past' : 'current'));
+  protected readonly auctionsView = computed(() => (this.subView() === 'history' ? 'history' : 'active'));
+  protected readonly chartsView = computed(() => chartsSectionFromSlug(this.subView()));
+
+  // ?ls=<id> (old website links that named a linkshell) — handled once, see the constructor.
+  private readonly requestedLinkshellId = toSignal(
+    this.route.queryParamMap.pipe(map(params => Number(params.get('ls')) || null)),
+    { requireSync: true });
 
   protected readonly reconnecting = signal(false);
   protected readonly signingOut = signal(false);
@@ -189,6 +206,23 @@ export class ActivityHomeComponent {
       }
     });
 
+    // Website only: ?ls=<id> makes that linkshell the active one (when the user belongs to it),
+    // then leaves the URL, so a reload can't switch back after they pick another linkshell.
+    effect(() => {
+      const requested = this.requestedLinkshellId();
+      const overview = this.activity.overview();
+      if (!requested || !overview || !this.activity.isWebsite) {
+        return;
+      }
+      untracked(() => {
+        if (overview.linkshells.some(ls => ls.id === requested)
+            && overview.appUser?.primaryLinkshellId !== requested) {
+          void this.activity.setPrimaryLinkshell(requested);
+        }
+        void this.router.navigate([], { queryParams: { ls: null }, queryParamsHandling: 'merge', replaceUrl: true });
+      });
+    });
+
     // Live change feed (long-poll). Primary path for freshness; when it's
     // connected the auto-refresh timer relaxes to a safety-net cadence, and if
     // it drops the timer takes back over — so updates never stop.
@@ -221,22 +255,39 @@ export class ActivityHomeComponent {
     }
   }
 
-  // Changing tab changes the URL; activeTab follows it. On the website each switch is a
-  // history entry so Back works. Inside Discord the URL is replaced instead (the iframe has no
-  // visible address bar or Back button) and its query string is kept: the Discord SDK reads
-  // frame_id from it if the page reloads.
+  // Changing tab changes the location; activeTab follows it. On the website that is the URL,
+  // one history entry per switch so Back works. Inside Discord the iframe's URL is left alone,
+  // as it always was: a changing iframe URL interacts badly with the Activity SDK's URL mapping
+  // (see charts-tab), and there is no address bar or Back button there anyway.
   protected setActiveTab(tab: TabName, subView?: string): void {
-    const commands = ['/', slugForTab(tab), subView].filter((part): part is string => !!part);
+    const parts = [slugForTab(tab), subView].filter((part): part is string => !!part);
     if (tab !== this.activeTab()) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    void this.router.navigate(commands, this.activity.isWebsite
-      ? {}
-      : { replaceUrl: true, queryParamsHandling: 'preserve' });
+    if (this.activity.isWebsite) {
+      void this.router.navigate(['/', ...parts]);
+    } else {
+      this.discordLocation.set(parts);
+    }
   }
 
+  // A sub-view's default (DKP History, Current events, Active auctions, the Sky board) is the
+  // bare tab URL; anything else is a second segment.
   protected setDkpView(view: 'history' | 'sheet' | 'grouping'): void {
     this.setActiveTab('dkp', view === 'history' ? undefined : view);
+  }
+
+  protected setEventsView(view: 'current' | 'past'): void {
+    this.setActiveTab('timed-events', view === 'past' ? view : undefined);
+  }
+
+  protected setAuctionsView(view: 'active' | 'history'): void {
+    this.setActiveTab('auctions', view === 'history' ? view : undefined);
+  }
+
+  protected setChartsView(section: string): void {
+    const slug = section.toLowerCase();
+    this.setActiveTab('endgame', slug === chartsSectionFromSlug(null).toLowerCase() ? undefined : slug);
   }
 
   // Manual refresh: refreshes the overview AND the active tab's own data through

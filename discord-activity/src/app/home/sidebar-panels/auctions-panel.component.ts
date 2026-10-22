@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, ViewChild, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, ViewChild, inject, model, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAuctionItemInput,
@@ -46,7 +46,8 @@ export class AuctionsPanelComponent {
   // a floating modal). On desktop the modal is fixed-position and this
   // call is a harmless no-op visually.
   @ViewChild('auctionFormAnchor') private auctionFormAnchor?: ElementRef<HTMLElement>;
-  protected readonly auctionsView = signal<'active' | 'history'>('active');
+  // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/auctions/history).
+  readonly auctionsView = model<'active' | 'history'>('active', { alias: 'view' });
 
   // Auction history is rendered as a flat table — one row per item across
   // all closed auctions, paginated. Page is a signal so OnPush picks up

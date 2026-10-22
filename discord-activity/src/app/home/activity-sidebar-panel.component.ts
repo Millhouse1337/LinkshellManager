@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, effect, inject, model, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../discord/discord-activity.service';
 import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../discord/discord-activity.types';
@@ -152,6 +152,8 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
 })
 export class ActivitySidebarPanelComponent {
   @Input() visibleSections?: readonly string[];
+  // Passed straight through to the auctions panel (Active / History), two-way.
+  readonly auctionsView = model<'active' | 'history'>('active');
   protected readonly activity = inject(DiscordActivityService);
 
   protected showSection(name: string): boolean {

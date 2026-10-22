@@ -302,7 +302,8 @@
 
   @if (showSection('auctions')) {
     <app-auctions-panel
-      [selectedLinkshellId]="selectedLinkshellId" />
+      [selectedLinkshellId]="selectedLinkshellId"
+      [(view)]="auctionsView" />
   }
 
   @if (showSection('history')) {
