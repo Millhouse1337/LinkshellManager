@@ -3,11 +3,13 @@ import { ChangeDetectionStrategy, Component, computed, inject, output, signal } 
 
 import { formatError } from '../../discord/discord-activity.helpers';
 import { DataAdminService } from '../../discord/data-admin.service';
+import { DataAdminDiagramComponent } from './data-admin-diagram.component';
 
-// Data Admin's landing: the database at a glance and every table that has a records page.
+// Data Admin's landing: the schema diagram, then a plain list of every table with a records page
+// (quicker when you know the name, and there on narrow screens where the diagram's panel isn't).
 @Component({
   selector: 'app-data-admin-index',
-  imports: [DecimalPipe],
+  imports: [DecimalPipe, DataAdminDiagramComponent],
   template: `
     <div class="section-head">
       <div>
@@ -25,8 +27,10 @@ import { DataAdminService } from '../../discord/data-admin.service';
 
     @if (error(); as message) {
       <div class="card"><div class="card-body muted">{{ message }}</div></div>
-    } @else if (dataAdmin.schema()) {
-      <div class="card">
+    } @else if (dataAdmin.schema(); as schema) {
+      <app-data-admin-diagram [schema]="schema" (navigate)="navigate.emit($event)" />
+
+      <div class="card" style="margin-top:14px">
         <div class="card-head">
           <div class="card-title">Tables</div>
           <input type="search" placeholder="Find a table" style="max-width:260px"

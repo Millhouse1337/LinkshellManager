@@ -1,0 +1,91 @@
+<!-- The frame from Views/DataAdmin/Index.cshtml: data-admin-schema.js builds every card, line and
+     panel list into these data-erd-* hooks. lsm-page is what data-admin-schema.css scopes the frame
+     under (it carries nothing else here). No .fade inside: that animation holds transform, which is
+     what pan and zoom write. -->
+<div class="lsm-page erd-host" (click)="onClick($event)">
+  <div class="erd" #frame [attr.data-db]="schema().databaseName" [attr.data-browse-url]="recordsUrlTemplate">
+    <header class="erd-bar">
+      <span class="erd-bar__section">Data Admin</span>
+      <h1 class="erd-bar__db">{{ schema().databaseName }}</h1>
+      <span class="erd-bar__counts">{{ schema().tableCount }} tables &middot; {{ schema().columnCount }} columns &middot; {{ schema().relationshipCount }} relationships</span>
+      <span class="erd-bar__chip" data-erd-focus-chip hidden>Focus: <b data-erd-focus-name></b>
+        <button type="button" class="erd-linkbtn" data-erd-focus-exit aria-label="Leave focus mode" title="Leave focus mode (Esc)">&times;</button></span>
+      <span class="erd-bar__spacer"></span>
+      <div class="erd-bar__tools">
+        <button type="button" class="btn sm erd-bar__step" data-erd-zoom-out title="Zoom out (-)" aria-label="Zoom out">&minus;</button>
+        <span class="erd-bar__zoom" data-erd-zoom-label aria-live="off">100%</span>
+        <button type="button" class="btn sm erd-bar__step" data-erd-zoom-in title="Zoom in (+)" aria-label="Zoom in">+</button>
+        <button type="button" class="btn sm" data-erd-fit title="Fit the whole diagram (0)">Fit</button>
+        <button type="button" class="btn sm" data-erd-reset title="Forget moved tables and lay them out again">Reset layout</button>
+        <a class="btn sm primary" data-erd-records role="link" aria-disabled="true"
+           title="Open the selected table's records (V). Select a table first.">View records</a>
+        <button type="button" class="btn sm" data-erd-focus disabled aria-pressed="false" title="Show only one table and its neighbours (F). Select a table first.">Focus</button>
+        <button type="button" class="btn sm" data-erd-panel-toggle aria-controls="erd-panel" aria-expanded="true" title="Show or hide the side panel">Panel</button>
+      </div>
+    </header>
+    <div class="erd-canvas" data-erd-canvas tabindex="0" aria-label="Database schema diagram">
+      <div class="erd-layer" data-erd-layer>
+        <svg class="erd-edges" data-erd-edges aria-hidden="true"></svg>
+        <div class="erd-cards" data-erd-cards></div>
+        <svg class="erd-edges erd-edges--top" data-erd-edges-top aria-hidden="true"></svg>
+      </div>
+      <div class="erd-hint">Drag a header to move a table &middot; drag the background to pan &middot; scroll to zoom</div>
+      <div class="empty erd-empty" data-erd-empty hidden>The schema could not be drawn.</div>
+    </div>
+    <div class="erd-grip" data-erd-side-grip role="separator" aria-orientation="vertical"
+         aria-controls="erd-panel" aria-label="Resize the side panel" aria-valuemin="240"
+         aria-valuemax="720" aria-valuenow="300" tabindex="0"
+         title="Drag to resize the panel (double-click to reset)"><span></span><span></span><span></span></div>
+    <aside class="erd-side" id="erd-panel" data-erd-panel aria-label="Schema details">
+      <input type="search" class="input erd-search" data-erd-search placeholder="Find a table or column"
+             aria-label="Find a table or column" autocomplete="off" spellcheck="false" />
+      <section class="erd-sec" data-erd-view>
+        <h2 class="erd-sec__title">View</h2>
+        <div class="erd-opt">
+          <span class="erd-opt__label" id="erd-opt-density">Columns</span>
+          <div class="hnm-chart-tabs" role="group" aria-labelledby="erd-opt-density" data-erd-opt="density">
+            <button type="button" class="hnm-chart-tab is-active" data-value="all" aria-pressed="true">All</button>
+            <button type="button" class="hnm-chart-tab" data-value="keys" aria-pressed="false">Keys</button>
+            <button type="button" class="hnm-chart-tab" data-value="names" aria-pressed="false">Names</button>
+          </div>
+        </div>
+        <div class="erd-opt">
+          <span class="erd-opt__label" id="erd-opt-edges">Lines</span>
+          <div class="hnm-chart-tabs" role="group" aria-labelledby="erd-opt-edges" data-erd-opt="edges">
+            <button type="button" class="hnm-chart-tab is-active" data-value="curved" aria-pressed="true">Curved</button>
+            <button type="button" class="hnm-chart-tab" data-value="orthogonal" aria-pressed="false">Square</button>
+          </div>
+        </div>
+        <label class="erd-opt erd-opt--switch"><span class="erd-opt__label">Column types</span>
+          <input type="checkbox" class="switch" data-erd-opt="types" checked /></label>
+        <label class="erd-opt erd-opt--switch"><span class="erd-opt__label">Lines into hub tables</span>
+          <input type="checkbox" class="switch" data-erd-opt="hubs" checked /></label>
+        <label class="erd-opt erd-opt--switch"><span class="erd-opt__label">Login (Identity) tables</span>
+          <input type="checkbox" class="switch" data-erd-opt="framework" checked /></label>
+      </section>
+      <section class="erd-sec" data-erd-selected hidden>
+        <div class="erd-sec__head">
+          <h2 class="erd-sec__title">Selected</h2>
+          <button type="button" class="erd-linkbtn" data-erd-clear>Clear</button>
+        </div>
+        <div class="erd-selected" data-erd-selected-body></div>
+      </section>
+      <details class="erd-sec" data-erd-sec="tables" open>
+        <summary class="erd-sec__title">Tables <span class="erd-sec__n" data-erd-count="tables"></span></summary>
+        <div class="erd-list" data-erd-tables></div>
+      </details>
+      <details class="erd-sec" data-erd-sec="relationships" open>
+        <summary class="erd-sec__title"><span data-erd-rels-title>Relationships</span> <span class="erd-sec__n" data-erd-count="relationships"></span></summary>
+        <div class="erd-rels" data-erd-rels></div>
+      </details>
+      <details class="erd-sec" data-erd-sec="junctions" open>
+        <summary class="erd-sec__title">Many-to-many <span class="erd-sec__n" data-erd-count="junctions"></span></summary>
+        <div class="erd-rels" data-erd-junctions></div>
+      </details>
+      <details class="erd-sec" data-erd-sec="legend" open>
+        <summary class="erd-sec__title">Legend</summary>
+        <div class="erd-legend" data-erd-legend></div>
+      </details>
+    </aside>
+  </div>
+</div>

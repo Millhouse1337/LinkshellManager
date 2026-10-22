@@ -1,0 +1,781 @@
+/* The Data Admin schema diagram's stylesheet, loaded by the Razor diagram page (Views/DataAdmin/Index.cshtml)
+ * and by the Activity's Data Admin tab (data-admin-diagram.component.ts). It reads the site theme's tokens
+ * (lsm-theme.css on the Razor page; the Activity maps them onto its own in that component). */
+
+/* ===== Data Admin: schema diagram (.erd) =====
+   The /data-admin landing page: the whole database drawn as cards (tables) and lines (foreign keys).
+   data-admin-schema.js builds the cards and lines; data-admin-schema-layout.js works out every
+   position from fixed numbers (card width, header height, row height) and never measures the page.
+   So the job of this block is to make those numbers TRUE: a card is exactly --erd-card-w wide and
+   --erd-head-h + rows * --erd-row-h tall. That is why outlines are box-shadows and not borders.
+   Colours are site tokens only. Every class is erd- prefixed (Bootstrap owns .row, .card, .col). */
+
+/* The page fills the window under the 48px top bar instead of scrolling like every other page. */
+.lsm-page.da-schema {
+    max-width: none;
+    padding: 0;
+    height: calc(100vh - 48px);
+    height: calc(100dvh - 48px);
+    min-height: 420px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.lsm-page.da-schema > #dkp-claim-mount { flex: 0 0 auto; }
+.lsm-page.da-schema > #dkp-claim-mount:not(:empty) { padding: 12px 16px 0; }
+.lsm-page.da-schema > .erd { flex: 1 1 auto; min-height: 0; }
+
+.lsm-page .erd {
+    --erd-accent: var(--orange-main);
+    --erd-pk: var(--gold-main);
+    --erd-fk: var(--cyan-main);
+    --erd-uq: var(--violet-main);
+    --erd-line: var(--text-muted);
+    --erd-canvas: var(--bg-main);
+    /* The script overwrites these three from the layout module's METRICS. */
+    --erd-card-w: 280px;
+    --erd-head-h: 44px;
+    --erd-row-h: 30px;
+
+    display: grid;
+    grid-template-rows: 56px minmax(0, 1fr);
+    /* The panel's width is the viewer's (the grip on its left edge; the script writes
+       --erd-side-w), but never more than half the row, so the picture always keeps the rest. */
+    grid-template-columns: minmax(0, 1fr) min(var(--erd-side-w, 300px), 50%);
+    min-width: 0;
+    color: var(--text-main);
+}
+/* Too narrow for both: the picture wins and the panel goes. */
+@media (max-width: 899px) {
+    .lsm-page .erd { grid-template-columns: minmax(0, 1fr); }
+    .lsm-page .erd > .erd-side,
+    .lsm-page .erd > .erd-grip { display: none; }
+}
+/* The same when the Panel button has closed it. */
+.lsm-page .erd.is-panel-closed { grid-template-columns: minmax(0, 1fr); }
+.lsm-page .erd.is-panel-closed > .erd-side,
+.lsm-page .erd.is-panel-closed > .erd-grip { display: none; }
+
+/* The resize grip: a 12px strip over the panel's left border with three dots in the middle.
+   It shares the panel's grid cell and sits on top of its edge, so it never takes room from
+   either side. Dragging shows a line along the edge and keeps the col-resize cursor on the whole
+   page (the pointer is captured, but it can be over the canvas while the edge catches up). */
+.erd-grip {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+    align-self: stretch;
+    position: relative;
+    z-index: 5;
+    width: 12px;
+    margin-left: -6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+}
+.erd-grip::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 5px;
+    width: 2px;
+    background: transparent;
+}
+.erd-grip > span {
+    position: relative;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+.erd-grip:hover::before,
+.erd.is-resizing .erd-grip::before { background: var(--blue-main); }
+.erd-grip:hover > span,
+.erd.is-resizing .erd-grip > span { background: var(--text-main); }
+.erd-grip:focus { outline: none; }
+.erd-grip:focus-visible::before { background: var(--blue-main); }
+.erd-grip:focus-visible > span { background: var(--blue-main); }
+.erd.is-resizing,
+.erd.is-resizing * { cursor: col-resize; user-select: none; }
+/* View options the stylesheet carries out: the types column goes (the name gets the room); hub
+   lines go from the base SVG only, so a lit one still shows its copy on top. */
+.erd.no-types .erd-row__type { display: none; }
+.erd.hide-hubs .erd-edges:not(.erd-edges--top) .erd-edge.is-hub { display: none; }
+
+/* A button that reads as a link (Clear, select a table, the chip's leave button). It comes
+   before the bar so that the chip's overrides below land after their component. */
+.erd-linkbtn {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--blue-main);
+    cursor: pointer;
+}
+.erd-linkbtn:hover { text-decoration: underline; }
+.erd-linkbtn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; border-radius: 3px; }
+
+/* ---- The bar ---- */
+.erd-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-panel);
+}
+/* The section's name, a plain label: this page IS Data Admin, so there is nothing to go back to. */
+.erd-bar__section {
+    flex: none;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.erd-bar__section::after { content: "/"; margin-left: 16px; color: var(--border-soft); }
+/* The database name is never cut. When the bar runs short the counts give way first (an
+   ellipsis, and under 1500px they go whole: the panel repeats them as "Tables 73"), then the
+   chip (down to 140px, its name cut with the whole of it in the tooltip). */
+.erd-bar__db {
+    flex: none;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0;
+    white-space: nowrap;
+    color: var(--text-main);
+}
+.erd-bar__counts {
+    flex: 0 4 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.erd-bar__spacer { flex: 1 1 0; }
+.erd-bar__tools { flex: none; display: flex; align-items: center; gap: 6px; }
+/* Not the site's "transition: all": that would animate the focus ring from its browser default.
+   The glow and the brightening are the primary View records link's hover; they ease here as they
+   do in the panel's copy of it. */
+.lsm-page .erd-bar .btn { height: 32px; padding: 0 12px; transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, filter .15s ease; }
+.lsm-page .erd-bar .erd-bar__step { min-width: 32px; padding: 0; font-family: var(--font-mono); font-size: 14px; }
+/* Keyboard focus is the :focus-visible outline, in the bar and in the panel. Bootstrap's
+   .btn:focus halo, which would stay on after a mouse click and double the ring, is switched off
+   in its favour; the primary View records link (in the bar, and in the panel's Selected section)
+   keeps its own glow. */
+.lsm-page .erd .btn:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
+.lsm-page .erd-bar .btn:focus:not(.primary) { box-shadow: none; }
+.lsm-page .erd-side .btn:focus:not(.primary) { box-shadow: none; }
+.lsm-page .erd-side .btn { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, filter .15s ease; }
+/* A disabled button keeps its tooltip, which says what would enable it (the site's .btn:disabled
+   turns pointer events off and the title with them). The disabled attribute keeps it inert; it
+   does not answer the hover either. */
+.lsm-page .erd-bar .btn:disabled { pointer-events: auto; cursor: not-allowed; }
+.lsm-page .erd-bar .btn:disabled:hover { background: var(--bg-card); border-color: var(--border-soft); }
+/* The Panel button reads as pressed while the panel is open: tinted text, fill and border, so
+   it is told apart from a merely hovered neighbour. It outranks the site's .btn:hover, so the
+   hover answer is restated here or the open button would give none. */
+.lsm-page .erd-bar [data-erd-panel-toggle][aria-expanded="true"] {
+    color: color-mix(in srgb, var(--blue-main) 40%, var(--text-main));
+    background: color-mix(in srgb, var(--blue-main) 24%, var(--bg-card));
+    border-color: color-mix(in srgb, var(--blue-main) 65%, var(--border-soft));
+}
+.lsm-page .erd-bar [data-erd-panel-toggle][aria-expanded="true"]:hover {
+    background: color-mix(in srgb, var(--blue-main) 32%, var(--bg-card-hover));
+}
+/* The Focus button reads as pressed while focus mode is on, in the selection's accent: the chip
+   by the counts and the frame round the canvas say the same thing in the same colour. */
+.lsm-page .erd-bar [data-erd-focus][aria-pressed="true"] {
+    color: color-mix(in srgb, var(--erd-accent) 45%, var(--text-main));
+    background: color-mix(in srgb, var(--erd-accent) 22%, var(--bg-card));
+    border-color: color-mix(in srgb, var(--erd-accent) 65%, var(--border-soft));
+}
+.lsm-page .erd-bar [data-erd-focus][aria-pressed="true"]:hover {
+    background: color-mix(in srgb, var(--erd-accent) 30%, var(--bg-card-hover));
+}
+/* The View records link while nothing it could open is selected: dimmed, the not-allowed cursor,
+   and none of the primary button's glow, on hover too (the site's .btn.primary:hover brightens it
+   and widens the glow). Not pointer-events: none, which the site's .btn:disabled uses: the
+   tooltip must stay, it says what would enable the link. */
+.lsm-page .erd-bar [data-erd-records][aria-disabled="true"] { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.lsm-page .erd-bar [data-erd-records][aria-disabled="true"]:hover { filter: none; box-shadow: none; }
+/* The focus chip: "Focus: <table>" and a button to leave. It takes the room the name needs, up
+   to 420px, and gives way only after the counts have gone: the name is then cut with an ellipsis
+   (the script puts the whole of it in the tooltip). */
+.erd-bar__chip {
+    flex: 0 1 auto;
+    min-width: 140px;
+    max-width: 420px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 4px 0 10px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--text-main);
+    background: color-mix(in srgb, var(--erd-accent) 16%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--erd-accent) 55%, transparent);
+}
+.erd-bar__chip[hidden] { display: none; }
+.erd-bar__chip > b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.erd-bar__chip > .erd-linkbtn {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--text-main);
+}
+.erd-bar__chip > .erd-linkbtn:hover {
+    text-decoration: none;
+    background: color-mix(in srgb, var(--erd-accent) 35%, transparent);
+}
+/* The ring follows the round button, snug, instead of the component's square one. */
+.erd-bar__chip > .erd-linkbtn:focus-visible { border-radius: 50%; outline-offset: 0; }
+/* Below 1500px the bar cannot hold the name, the counts and the tools at once, and below 1600px
+   not the chip as well: the counts give way whole (cut to "73 tables - 924 c..." they said
+   nothing), so the name never gains or loses its ellipsis on the way into focus mode. Below
+   1366px the chip at its 140px floor still leaves the tools short, and the section label goes
+   too while focus mode is on (the chip says where the viewer is); the database name is never cut. */
+@media (max-width: 1499px) {
+    .lsm-page .erd-bar__counts { display: none; }
+}
+@media (max-width: 1599px) {
+    .erd.is-focus .erd-bar__counts { display: none; }
+}
+@media (max-width: 1365px) {
+    .erd.is-focus .erd-bar__section { display: none; }
+}
+.erd-bar__zoom {
+    width: 44px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-feature-settings: "tnum";
+}
+
+/* ---- The canvas ----
+   overflow: clip, not just hidden: a hidden box can still be scrolled by the browser (focusing a
+   card that is off screen does it), and a scrolled canvas would shift the whole diagram away from
+   where the script thinks it is. */
+.erd-canvas {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    overflow: clip;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+    background-color: var(--erd-canvas);
+    /* The dot grid. The script sets its size and position from pan and zoom. */
+    background-image: radial-gradient(var(--border-soft) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+.erd-canvas.is-grabbing,
+.erd-canvas.is-grabbing .erd-card__head { cursor: grabbing; }
+.erd-canvas:focus-visible { outline: 2px solid var(--blue-main); outline-offset: -2px; }
+
+/* Everything that pans and zooms sits in this zero-sized box; the script writes its transform. */
+.erd-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.erd-cards { position: absolute; left: 0; top: 0; }
+.erd-edges { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+
+.erd-hint {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    pointer-events: none;
+    /* Cards slide underneath it, so it carries its own backing to stay readable. */
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+    box-shadow: 0 0 0 1px var(--border-soft);
+}
+.erd-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.erd-empty[hidden] { display: none; }
+
+/* ---- Cards ----
+   --erd-hair is one pixel ON SCREEN when zoomed out (a 1px outline scaled to 25% would vanish)
+   and one layer pixel when zoomed in. */
+.erd-card {
+    --erd-hair: max(1px, calc(1px / var(--erd-zoom, 1)));
+    position: absolute;
+    box-sizing: border-box;
+    width: var(--erd-card-w);
+    border: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-panel);
+    box-shadow: 0 0 0 var(--erd-hair) var(--border-soft);
+    transition: box-shadow .15s ease;
+}
+.erd-card.is-dragging {
+    z-index: 2;
+    box-shadow: 0 0 0 calc(2 * var(--erd-hair)) var(--erd-accent);
+}
+
+.erd-card__head {
+    box-sizing: border-box;
+    height: var(--erd-head-h);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    background: var(--bg-card-hover);
+    color: var(--text-main);
+    cursor: grab;
+}
+/* The ring is measured in --erd-hair: two pixels on screen at the overview, not a scaled-down hairline. */
+.erd-card__head:focus-visible {
+    outline: calc(2 * var(--erd-hair)) solid var(--blue-main);
+    outline-offset: calc(-2 * var(--erd-hair));
+    border-radius: 8px 8px 0 0;
+}
+/* The script picks the font size (headerFont) so that a long name fits without being cut. */
+.erd-card__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 1.3;
+}
+.erd-card__count {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+/* A hub is a table nearly everything points at (Linkshells, AspNetUsers). */
+.erd-card.is-hub .erd-card__head { box-shadow: inset 4px 0 0 var(--blue-main); }
+.erd-card.is-hub { box-shadow: 0 0 0 var(--erd-hair) color-mix(in srgb, var(--blue-main) 60%, var(--border-soft)); }
+
+/* Identity (login framework) tables are structure only, so they look secondary on purpose:
+   a dashed outline and a slightly darker, still opaque body (lines pass behind these cards). */
+.erd-card.is-framework {
+    box-shadow: none;
+    outline: var(--erd-hair) dashed var(--text-muted);
+    background: color-mix(in srgb, var(--bg-panel) 80%, var(--bg-main));
+}
+.erd-card.is-framework .erd-card__head { background: var(--bg-panel-light); color: var(--text-muted); }
+.erd-card.is-framework .erd-card__far { color: var(--text-muted); }
+
+.erd-row {
+    box-sizing: border-box;
+    height: var(--erd-row-h);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    /* The divider is drawn inside the box so that a row stays exactly --erd-row-h tall. */
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--border-soft) 70%, transparent);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+/* 22px holds one badge; a card with a two-badge column (PK + FK) sets --erd-key-w to 46px. */
+.erd-row__keys { flex: none; width: var(--erd-key-w, 22px); display: flex; gap: 4px; }
+.erd-key { font-size: 10px; font-weight: 600; letter-spacing: .02em; }
+.erd-key--pk { color: var(--erd-pk); }
+.erd-key--fk { color: var(--erd-fk); }
+.erd-key--uq { color: var(--erd-uq); }
+/* The name gives way (ellipsis, full text in the title); the type keeps its width. */
+.erd-row__name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.erd-row__type { flex: none; font-size: 11.5px; color: var(--text-muted); }
+.erd-row.is-pk .erd-row__name { font-weight: 600; }
+/* Protected: Data Admin never shows this column's values (password hashes, tokens). */
+.erd-row.is-protected .erd-row__name { color: var(--text-muted); font-style: italic; }
+
+/* ---- Far zoom ----
+   Below 60% the rows cannot be read, so they are hidden and each card shows its name at a
+   constant size on screen (12px), capped by --erd-far-max (set per card by the script) so that
+   it never outgrows its card. It ignores the pointer: it covers the header, which is the drag handle. */
+.erd-card__far {
+    display: none;
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    padding: 0 14px;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: min(var(--erd-far-max, 12px), calc(12px / var(--erd-zoom, 1)));
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    color: var(--text-main);
+    pointer-events: none;
+}
+.erd-layer.is-far .erd-card__far { display: flex; }
+.erd-layer.is-far .erd-row,
+.erd-layer.is-far .erd-card__head > * { visibility: hidden; }
+/* With the name written across it, the header band is only a faint hint of where to grab. */
+.erd-layer.is-far .erd-card__head { background: color-mix(in srgb, var(--bg-card-hover) 45%, transparent); }
+.erd-layer.is-far .erd-card.is-framework .erd-card__head { background: transparent; }
+
+/* ---- Relationship lines ----
+   Widths and dashes are divided by the zoom so they keep their size on screen: the whole diagram
+   is usually seen at about 25%, where a 1.5px line would be a third of a pixel. (vector-effect
+   does not help here: the scale is on an HTML ancestor, not inside the SVG.) */
+.erd-edge { opacity: .7; }
+.erd-edge__hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: calc(14px / var(--erd-zoom, 1));
+    pointer-events: stroke;
+    cursor: pointer;
+}
+.erd-edge__line,
+.erd-edge__mark {
+    stroke: var(--erd-line);
+    stroke-width: calc(1.5px / var(--erd-zoom, 1));
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.erd-edge__line { fill: none; }
+/* The crow's-foot circle is filled with the canvas colour so the line does not show through it. */
+.erd-edge__mark { fill: var(--erd-canvas); }
+/* ON DELETE: cascade is solid, set null is dashed, blocked (restrict) is dotted. */
+.erd-edge.is-set-null .erd-edge__line {
+    stroke-dasharray: calc(7px / var(--erd-zoom, 1)) calc(5px / var(--erd-zoom, 1));
+    stroke-linecap: butt;
+}
+.erd-edge.is-restrict .erd-edge__line {
+    stroke-dasharray: calc(0.1px / var(--erd-zoom, 1)) calc(4.5px / var(--erd-zoom, 1));
+}
+/* Lines into a hub would bury the picture (over half of all lines), so they are faint and are
+   not hover targets. */
+.erd-edge.is-hub { opacity: .16; }
+.erd-edge.is-hub .erd-edge__hit { pointer-events: none; }
+.erd-row[data-rel] { cursor: pointer; }
+
+/* ---- Highlighting ----
+   While something is hovered or pinned (the layer has has-focus) everything unrelated steps back:
+   unrelated cards fade, base lines fade further. The lit lines are drawn again in the top SVG in
+   the accent colour, over the cards. A search greys out the cards that do not match (is-dim). */
+.erd-layer.has-focus .erd-card:not(.is-rel),
+.erd-card.is-dim { opacity: .35; }
+.erd-layer.has-focus .erd-card.is-rel { opacity: 1; }
+.erd-layer.has-focus .erd-edges:not(.erd-edges--top) .erd-edge { opacity: .15; }
+.erd-layer.has-focus .erd-edges:not(.erd-edges--top) .erd-edge.is-hub { opacity: .06; }
+.erd-card.is-selected { box-shadow: 0 0 0 calc(2 * var(--erd-hair)) var(--erd-accent); }
+.erd-card.is-active {
+    z-index: 1;
+    box-shadow:
+        0 0 0 calc(2 * var(--erd-hair)) var(--erd-accent),
+        0 calc(8 * var(--erd-hair)) calc(24 * var(--erd-hair)) color-mix(in srgb, var(--bg-main) 70%, transparent);
+}
+.erd-card.is-framework.is-selected,
+.erd-card.is-framework.is-active { outline-color: var(--erd-accent); }
+.erd-row.is-active { background: color-mix(in srgb, var(--erd-accent) 16%, transparent); }
+
+/* Above every card, the active (z-index 1) and the dragged (2) one included: the paint order is
+   base lines, cards, lit lines. The top SVG takes no pointer events, so nothing is covered. */
+.erd-edges--top { z-index: 3; }
+.erd-edges--top .erd-edge { opacity: 1; }
+.erd-edges--top .erd-edge__line,
+.erd-edges--top .erd-edge__mark {
+    stroke: var(--erd-accent);
+    stroke-width: calc(2px / var(--erd-zoom, 1));
+}
+/* The cardinality pill: drawn around (0, 0), moved to the line's middle and scaled back by the
+   zoom so that it reads at the same size whatever the zoom. */
+.erd-edge-pill {
+    transform: translate(var(--erd-pill-x, 0px), var(--erd-pill-y, 0px)) scale(calc(1 / var(--erd-zoom, 1)));
+}
+.erd-edge-pill__box { fill: var(--erd-accent); }
+.erd-edge-pill__text {
+    fill: var(--bg-main);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    text-anchor: middle;
+}
+
+/* ---- Focus mode ----
+   One table and its neighbours (the root has is-focus). A thin accent frame inside the canvas
+   says the picture is a cut-out, not the whole database. Lines into hubs are ordinary lines
+   here, whatever the hub-lines option says: there are only a handful, and a neighbour drawn
+   with no line to it would make no sense. */
+.erd.is-focus .erd-canvas {
+    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--erd-accent) 45%, transparent);
+}
+/* The keyboard ring sits just inside the frame: both are 2px, and one must not paint over the other. */
+.erd.is-focus .erd-canvas:focus-visible { outline-offset: -4px; }
+.erd.is-focus .erd-edges:not(.erd-edges--top) .erd-edge.is-hub { display: inline; opacity: .7; }
+.erd.is-focus .erd-layer.has-focus .erd-edges:not(.erd-edges--top) .erd-edge.is-hub { opacity: .15; }
+.erd.is-focus .erd-edge.is-hub .erd-edge__hit { pointer-events: stroke; }
+
+/* ---- The side panel ----
+   Scrolls inside itself; the two long lists also scroll inside themselves so that the sections
+   below them stay within reach. */
+.erd-side {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    /* The browser can still scroll a hidden overflow sideways (to show a focused item), which
+       cut the left edge off every label: the script puts it straight back (onPanelScroll). */
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 20px;
+    border-left: 1px solid var(--border-soft);
+    background: var(--bg-panel);
+    font-size: 13px;
+}
+.lsm-page .erd-side .erd-search {
+    flex: none;
+    width: 100%;
+    box-sizing: border-box;
+    height: 34px;
+    padding: 0 12px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+}
+.erd-sec { flex: none; min-width: 0; }
+.erd-sec__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.erd-sec__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.erd-sec__n { flex: none; font-weight: 500; letter-spacing: 0; }
+.erd-sec__n:empty { display: none; }
+/* "Relationships of <table>": a long name is cut with an ellipsis (the tooltip has all of it)
+   so that the count stays beside it and the heading never pushes past the panel's edge. */
+summary.erd-sec__title > [data-erd-rels-title] {
+    min-width: 0;
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* A collapsible section: the title is its summary, with a small turning arrow in front. */
+summary.erd-sec__title { list-style: none; cursor: pointer; user-select: none; }
+summary.erd-sec__title::-webkit-details-marker { display: none; }
+summary.erd-sec__title::before {
+    content: "\25B8";
+    width: 10px;
+    flex: none;
+    font-size: 12px;
+    line-height: 1;
+    transition: transform .15s ease;
+}
+details[open] > summary.erd-sec__title::before { transform: rotate(90deg); }
+summary.erd-sec__title:hover { color: var(--text-main); }
+summary.erd-sec__title:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 3px; border-radius: 3px; }
+.erd-sec > :not(summary):not(.erd-sec__head) { margin-top: 10px; }
+.erd-sec > .erd-sec__title:first-child { margin-top: 0; }
+
+/* ---- View options ----
+   One row per option: its name on the left, the control on the right. The segmented buttons are
+   the site's .hnm-chart-tabs and the switches its .switch, in this panel's colours (the site's
+   defaults are for its own surfaces and would nearly vanish on the panel). The site also styles
+   a bare <label> as a small muted caption with a margin; here the label is the whole row. */
+.erd-opt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    /* One height for every row: a segmented control is 29px tall and a switch 22px, and
+       without this the rows would step unevenly down the section. */
+    min-height: 30px;
+    margin: 10px 0 0;
+    font-size: 12.5px;
+    color: var(--text-main);
+}
+.erd-opt--switch { cursor: pointer; }
+.erd-opt__label { min-width: 0; overflow-wrap: anywhere; }
+.lsm-page .erd-opt .hnm-chart-tabs { flex: none; background: var(--bg-main); border-color: var(--border-soft); }
+.lsm-page .erd-opt .hnm-chart-tab { padding: 3px 10px; font-size: 11.5px; color: var(--text-muted); }
+.lsm-page .erd-opt .hnm-chart-tab:hover { color: var(--text-main); }
+.lsm-page .erd-opt .hnm-chart-tab.is-active {
+    background: color-mix(in srgb, var(--blue-main) 24%, transparent);
+    color: var(--text-main);
+}
+.lsm-page .erd-opt .hnm-chart-tab:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 1px; }
+.lsm-page .erd-opt .switch { background: var(--bg-main); border-color: var(--border-soft); }
+.lsm-page .erd-opt .switch:checked { background: var(--blue-main); border-color: var(--blue-main); }
+.lsm-page .erd-opt .switch:focus-visible { outline: 2px solid var(--blue-main); outline-offset: 2px; }
+
+/* The Tables list. An item is a two-column grid (name, count) so that only the name gives way:
+   in a wrapping flex row a long name would push the count onto a second line instead. */
+.erd-list { max-height: 264px; overflow-y: auto; overscroll-behavior: contain; }
+.erd-list__item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    row-gap: 2px;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-main);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.erd-list__item:hover,
+.erd-list__item.is-active { background: color-mix(in srgb, var(--erd-accent) 14%, transparent); }
+.erd-list__item.is-selected { box-shadow: inset 0 0 0 1px var(--erd-accent); }
+.erd-list__item:focus-visible { outline: 2px solid var(--blue-main); outline-offset: -2px; }
+.erd-list__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+}
+.erd-list__meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+}
+/* The column a search matched: its own line under the name, in the search's accent. */
+.erd-list__col {
+    grid-column: 1 / -1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--erd-accent);
+}
+.erd-list__empty { padding: 6px 8px; font-size: 12px; color: var(--text-muted); }
+
+/* The Relationships and Many-to-many lists: the mock's cards. */
+.erd-rels { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; overscroll-behavior: contain; }
+.erd-rels.is-pinned { max-height: none; overflow: visible; }
+.erd-rels__group {
+    margin: 6px 0 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.erd-rels__group:first-child { margin-top: 0; }
+.erd-rel {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background: var(--bg-panel-light);
+    cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease;
+}
+.erd-rel:hover,
+.erd-rel.is-active {
+    border-color: var(--erd-accent);
+    background: color-mix(in srgb, var(--erd-accent) 12%, var(--bg-panel-light));
+}
+.erd-rel.is-selected { box-shadow: 0 0 0 1px var(--erd-accent); border-color: var(--erd-accent); }
+/* The ring is drawn inside the card: the list clips anything outside its box. */
+.erd-rel:focus-visible { outline: 2px solid var(--blue-main); outline-offset: -2px; }
+.erd-rel--junction { border-style: dashed; }
+.erd-rel__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+.erd-rel__name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.erd-pill {
+    flex: none;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--text-main);
+    color: var(--bg-main);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.erd-pill--accent { background: var(--erd-accent); }
+.erd-rel__detail { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* The Selected section. */
+.erd-selected { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.erd-selected__name { font-family: var(--font-mono); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.erd-selected__name--rel { font-size: 12.5px; }
+.erd-selected__meta { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.erd-selected__tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.erd-selected__uq { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
+.erd-selected__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 6px; }
+.erd-selected__note { margin: 0; font-size: 12px; color: var(--text-muted); }
+.erd-selected__link { color: var(--blue-main); }
+.erd-selected__link:hover { text-decoration: underline; }
+
+/* The legend: each line sample is drawn with the diagram's own classes and marker geometry.
+   The crow's-foot ring is filled with the panel colour here, not the canvas colour. */
+.erd-legend { display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); font-size: 12px; }
+.erd-legend__row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.erd-legend__svg { flex: none; width: 64px; height: 22px; overflow: visible; }
+.erd-legend .erd-edge__mark { fill: var(--bg-panel); }
+.erd-legend__key { flex: none; width: 64px; text-align: center; }
+.erd-legend__null { font-weight: 600; color: var(--text-muted); }
+.erd-legend__text { min-width: 0; overflow-wrap: anywhere; color: var(--text-main); }
+
+@media (prefers-reduced-motion: reduce) {
+    .erd-card,
+    .erd-rel,
+    summary.erd-sec__title::before,
+    .lsm-page .erd-bar .btn,
+    .lsm-page .erd-side .btn,
+    .lsm-page .erd-opt .hnm-chart-tab,
+    .lsm-page .erd-opt .switch,
+    .lsm-page .erd-opt .switch::before { transition: none; }
+}
+/* ===== end Data Admin: schema diagram ===== */

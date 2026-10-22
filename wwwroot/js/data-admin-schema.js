@@ -12,15 +12,19 @@
 // line. The only things it reads from the page are the canvas rectangle and where the pointer is.
 // The stylesheet (lsm-theme.css, "Data Admin: schema diagram") makes the numbers true.
 //
-// External file because the CSP is nonce-only (no inline scripts or handlers). The model arrives as
-// a JSON block (#erd-data) written by DataAdminSchemaGraph: structure only, never rows.
-(function () {
+// External file because the CSP is nonce-only (no inline scripts or handlers). The model is
+// DataAdminSchemaGraph's JSON: structure only, never rows. Two hosts mount it, each into its own
+// copy of the frame and its data-erd-* hooks: the Razor page, from its #erd-data block (the bottom
+// of this file), and the Activity's Data Admin tab, which calls
+// window.LsmSchemaDiagram.mount(root, graph, { navigate }) and destroy()s it when the tab goes away.
+// host.navigate(url) opens a records page (the v key); without it, a full page load.
+function mountSchemaDiagram(root, graph, host) {
     'use strict';
 
-    const root = document.getElementById('erd');
-    const dataEl = document.getElementById('erd-data');
+    const NO_DIAGRAM = { destroy() {} };
     const L = window.LsmSchemaLayout;
-    if (!root || !dataEl || !L) { return; }
+    if (!root || !L) { return NO_DIAGRAM; }
+    const navigate = (host && host.navigate) || ((url) => { window.location.assign(url); });
 
     const canvas = root.querySelector('[data-erd-canvas]');
     const layer = root.querySelector('[data-erd-layer]');
@@ -29,7 +33,7 @@
     const cardsEl = root.querySelector('[data-erd-cards]');
     const zoomLabel = root.querySelector('[data-erd-zoom-label]');
     const panel = root.querySelector('[data-erd-panel]');
-    if (!canvas || !layer || !edgesSvg || !topSvg || !cardsEl || !panel) { return; }
+    if (!canvas || !layer || !edgesSvg || !topSvg || !cardsEl || !panel) { return NO_DIAGRAM; }
 
     // The panel's containers. The script fills all of them, so a missing one is a broken page, not
     // a page without that section.
@@ -46,13 +50,13 @@
         relCount: panel.querySelector('[data-erd-count="relationships"]'),
         junctionCount: panel.querySelector('[data-erd-count="junctions"]')
     };
-    if (Object.keys(side).some((key) => !side[key])) { return; }
+    if (Object.keys(side).some((key) => !side[key])) { return NO_DIAGRAM; }
 
     // The View section's controls (segmented buttons for density and line style, switches for
     // the rest) and the bar's Panel button. Static markup: the script only reads and marks them.
     const viewSection = panel.querySelector('[data-erd-view]');
     const panelToggle = root.querySelector('[data-erd-panel-toggle]');
-    if (!viewSection || !panelToggle) { return; }
+    if (!viewSection || !panelToggle) { return NO_DIAGRAM; }
     const controls = {
         density: viewSection.querySelector('[data-erd-opt="density"]'),
         edges: viewSection.querySelector('[data-erd-opt="edges"]'),
@@ -60,24 +64,24 @@
         hubs: viewSection.querySelector('[data-erd-opt="hubs"]'),
         framework: viewSection.querySelector('[data-erd-opt="framework"]')
     };
-    if (Object.keys(controls).some((key) => !controls[key])) { return; }
+    if (Object.keys(controls).some((key) => !controls[key])) { return NO_DIAGRAM; }
 
     // Focus mode's places in the bar: the button, and the chip that names the table and leaves.
     const focusButton = root.querySelector('[data-erd-focus]');
     const focusChip = root.querySelector('[data-erd-focus-chip]');
     const focusName = root.querySelector('[data-erd-focus-name]');
     const focusExit = root.querySelector('[data-erd-focus-exit]');
-    if (!focusButton || !focusChip || !focusName || !focusExit) { return; }
+    if (!focusButton || !focusChip || !focusName || !focusExit) { return NO_DIAGRAM; }
 
     // The bar's View records link: the script writes its href (the pinned table's records page)
     // and its disabled state.
     const recordsLink = root.querySelector('[data-erd-records]');
-    if (!recordsLink) { return; }
+    if (!recordsLink) { return NO_DIAGRAM; }
 
     // The three-dot grip on the panel's left edge: drag it (or use the arrow keys on it) to make
     // the panel wider or narrower.
     const sideGrip = root.querySelector('[data-erd-side-grip]');
-    if (!sideGrip) { return; }
+    if (!sideGrip) { return NO_DIAGRAM; }
 
     const M = L.METRICS;
     const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -129,12 +133,10 @@
         if (empty) { empty.hidden = false; }
     }
 
-    let graph = null;
-    try { graph = JSON.parse(dataEl.textContent || ''); } catch (e) { graph = null; }
     const index = L.buildIndex(graph);
     if (index.tables.length === 0) {
         showEmpty();
-        return;
+        return NO_DIAGRAM;
     }
 
     // Which relationship a foreign-key column belongs to: table id -> column name -> relationship.
@@ -1531,7 +1533,10 @@
         try {
             const id = recordsTable();
             if (id !== null) {
-                window.history.replaceState(null, '', '#' + HASH_PREFIX + slugOf(id));
+                // The full path, not a bare '#…': a bare fragment resolves against <base href>, and
+                // the Activity's base is /discord-activity/, which would drop the tab from the URL.
+                window.history.replaceState(null, '',
+                    window.location.pathname + window.location.search + '#' + HASH_PREFIX + slugOf(id));
             } else if (readHashSlug() !== null) {
                 window.history.replaceState(null, '', window.location.pathname + window.location.search + foreignHash);
             }
@@ -1543,7 +1548,7 @@
     // The v key: the page the link opens, while the link is enabled.
     function openRecords() {
         const id = recordsTable();
-        if (id !== null) { window.location.assign(recordsUrlFor(id)); }
+        if (id !== null) { navigate(recordsUrlFor(id)); }
     }
 
     // ---- Keyboard ------------------------------------------------------------------------------
@@ -1981,4 +1986,35 @@
         });
         resizeWatch.observe(canvas);
     }
+
+    // Undo everything mount set up outside root (the listeners on root's own elements go with
+    // them), so a host that removes the diagram leaves no key handler or observer behind.
+    function destroy() {
+        document.removeEventListener('keydown', onKeyDown);
+        window.removeEventListener('resize', applySideWidth);
+        if (resizeWatch) {
+            resizeWatch.disconnect();
+            resizeWatch = null;
+        }
+        if (pending.frame) {
+            window.cancelAnimationFrame(pending.frame);
+            pending.frame = 0;
+        }
+    }
+
+    return { destroy: destroy };
+}
+
+window.LsmSchemaDiagram = { mount: mountSchemaDiagram };
+
+// The Razor page: mount from its JSON block. The Activity has no #erd-data and mounts it itself.
+(function () {
+    'use strict';
+
+    const root = document.getElementById('erd');
+    const dataEl = document.getElementById('erd-data');
+    if (!root || !dataEl) { return; }
+    let graph = null;
+    try { graph = JSON.parse(dataEl.textContent || ''); } catch (e) { graph = null; }
+    mountSchemaDiagram(root, graph);
 })();

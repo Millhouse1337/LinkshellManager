@@ -1,7 +1,7 @@
 @model DataAdminSchemaViewModel
 @{
     ViewData["Title"] = "Data Admin";
-    // da-schema turns .content into a full-height flex column (lsm-theme.css, "Data Admin: schema diagram").
+    // da-schema turns .content into a full-height flex column (data-admin-schema.css).
     ViewData["BodyClass"] = "lsm-page da-schema";
 }
 
@@ -109,6 +109,10 @@
 </div>
 
 <script type="application/json" id="erd-data" nonce="@Html.CspNonce()">@Html.Raw(Model.DiagramJson)</script>
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/data-admin-schema.css" asp-append-version="true" />
+}
 
 @section Scripts {
     <script src="~/js/data-admin-schema-layout.js" asp-append-version="true" defer></script>

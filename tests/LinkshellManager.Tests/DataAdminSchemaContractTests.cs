@@ -28,7 +28,8 @@ namespace LinkshellManager.Tests;
 ///     fine today and wrong the day the theme changes.
 ///  4. The site's .fade animation holds `transform`, which is what pan and zoom write; the
 ///     Content-Security-Policy (script-src is nonce-only) blocks inline event handlers; and STYLE.md
-///     keeps styling in lsm-theme.css, which is also where the layout module's numbers must come from.
+///     keeps styling in data-admin-schema.css (its own file since the Activity loads it too),
+///     which is also where the layout module's numbers must come from.
 ///
 /// The browser is not part of this test suite, so these pin the text on both sides of each hand-off.
 /// </summary>
@@ -235,11 +236,11 @@ public class DataAdminSchemaContractTests
     [Fact]
     public void CssBlockHasNoHardcodedColour()
     {
-        var css = File.ReadAllText(Path.Combine(FindRepoDirectory("wwwroot"), "css", "lsm-theme.css"));
+        var css = File.ReadAllText(Path.Combine(FindRepoDirectory("wwwroot"), "css", "data-admin-schema.css"));
         var start = css.IndexOf(CssStartMarker, StringComparison.Ordinal);
         var end = css.IndexOf(CssEndMarker, StringComparison.Ordinal);
-        Assert.True(start >= 0, "The schema diagram's CSS start marker is missing from lsm-theme.css.");
-        Assert.True(end > start, "The schema diagram's CSS end marker is missing from lsm-theme.css.");
+        Assert.True(start >= 0, "The schema diagram's CSS start marker is missing from data-admin-schema.css.");
+        Assert.True(end > start, "The schema diagram's CSS end marker is missing from data-admin-schema.css.");
 
         var block = Regex.Replace(css.Substring(start, end - start), @"/\*.*?\*/", " ", RegexOptions.Singleline);
 
