@@ -61,4 +61,23 @@ public sealed partial class ActivityDataController
             data.Pools.Select(pool => new ActivityDkpSheetPoolDto(pool.PoolId, pool.Name, pool.Accent)).ToList(),
             data.PoolTotals));
     }
+
+    // The same styled .xlsx the website's DKP Sheet page exported (DkpWorkbookBuilder). Opened as
+    // a plain download link, so it rides the website cookie; the Activity only offers it on the
+    // website, since a Discord iframe has nowhere to save a file.
+    [HttpGet("dkp-sheet/export.xlsx")]
+    public async Task<IActionResult> ExportDkpSheetAsync([FromQuery] int linkshellId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Sign in to export the DKP sheet." });
+        if (linkshellId <= 0) return BadRequest(new { error = "A linkshell selection is required." });
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (membership is null) return Forbid();
+
+        var data = await _dkpSheet.BuildAsync(linkshellId, cancellationToken);
+        var bytes = DkpWorkbookBuilder.Build(data);
+        var fileName = DkpWorkbookBuilder.FileName(data.LinkshellName, DateTime.UtcNow);
+        return File(bytes, DkpWorkbookBuilder.ContentType, fileName);
+    }
 }
