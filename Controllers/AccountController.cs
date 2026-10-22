@@ -408,8 +408,8 @@ public class AccountController : Controller
             return Forbid();
         }
 
-        var trimmed = url?.Trim();
-        if (string.IsNullOrEmpty(trimmed))
+        var outcome = LauncherDownloadPolicy.Check(url, out var trimmed);
+        if (outcome == LauncherUrlOutcome.Clear)
         {
             await _globalSettings.SetLauncherDownloadUrlAsync(null);
             await _globalSettings.SetLauncherDownloadEnabledAsync(false);
@@ -418,7 +418,7 @@ public class AccountController : Controller
         }
 
         // https only: this URL is handed to every visitor, including signed-out ones.
-        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var parsed) || parsed.Scheme != Uri.UriSchemeHttps)
+        if (outcome == LauncherUrlOutcome.Invalid)
         {
             TempData["LauncherDownloadMessage"] = "Launcher URL must be an absolute https:// address. Nothing was changed.";
             return RedirectToAction(nameof(Settings));
