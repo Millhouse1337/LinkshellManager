@@ -226,9 +226,30 @@ body {
   }
 
   /* Tighten the identity bar padding on mobile so the surviving items
-     don't waste space and the tab strip below has more room. */
+     don't waste space and the tab strip below has more room.
+     Flex rather than the 1fr auto 1fr grid: the linkshell dropdown is wider
+     than a third of a phone, so the grid pushed the clock up against it.
+     Auto margins on the clock split the leftover space evenly, centring it
+     between the dropdown and the avatar. */
   .identity {
+    display: flex;
+    gap: 8px;
     padding: 6px 10px;
+  }
+  .identity-clock {
+    margin: 0 auto;
+  }
+  /* On the narrowest phones the dropdown gives up width (its name cuts
+     short), never the clock or the avatar/sign-out cluster. */
+  .identity-left,
+  .identity-ls-switch,
+  .identity-ls-select {
+    min-width: 0;
+  }
+  .identity-clock,
+  .identity-right {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 }
 
