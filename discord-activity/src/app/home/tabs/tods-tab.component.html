@@ -26,19 +26,28 @@
               <div class="tod-head">
                 <div class="tod-head-left">
                   <div class="tod-mob-name">{{ group.displayName }}</div>
-                  <span class="tag" [class.success]="group.latest.claim === true" [class.default]="group.latest.claim !== true">{{ group.latest.claim === true ? 'Claimed' : (group.latest.claim === false ? 'Unclaimed' : 'Not Specified') }}</span>
-                  @if (group.latest.hq) {
-                    <span class="tag accent">HQ</span>
-                  }
-                  <!-- Which spawn window it popped on. This slot used to hold a bare ToD COUNT
-                       (history + 1), which sat between Claimed and HQ reading like it belonged to
-                       them and duplicated the "History (n)" button below. The window is the thing
-                       worth seeing here, and End Camp now records it on every windowed camp.
-                       Absent on monsters with no window grid (Sky gods, farm NMs) and on ToDs
-                       logged before it was captured — no badge rather than a guessed "Window 1". -->
-                  @if (group.latest.popWindow) {
-                    <span class="tag default num">Window {{ group.latest.popWindow }}</span>
-                  }
+                  <!-- Phone only: the tags fold behind this button (CSS hides it on wider screens). -->
+                  <button type="button" class="tod-tags-toggle"
+                    [attr.aria-expanded]="isTodTagsExpanded(group.key)"
+                    aria-label="Show ToD details"
+                    (click)="toggleTodTags(group.key)">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+                  </button>
+                  <div class="tod-tags" [class.open]="isTodTagsExpanded(group.key)">
+                    <span class="tag" [class.success]="group.latest.claim === true" [class.default]="group.latest.claim !== true">{{ group.latest.claim === true ? 'Claimed' : (group.latest.claim === false ? 'Unclaimed' : 'Not Specified') }}</span>
+                    @if (group.latest.hq) {
+                      <span class="tag accent">HQ</span>
+                    }
+                    <!-- Which spawn window it popped on. This slot used to hold a bare ToD COUNT
+                         (history + 1), which sat between Claimed and HQ reading like it belonged to
+                         them and duplicated the "History (n)" button below. The window is the thing
+                         worth seeing here, and End Camp now records it on every windowed camp.
+                         Absent on monsters with no window grid (Sky gods, farm NMs) and on ToDs
+                         logged before it was captured — no badge rather than a guessed "Window 1". -->
+                    @if (group.latest.popWindow) {
+                      <span class="tag default num">Window {{ group.latest.popWindow }}</span>
+                    }
+                  </div>
                 </div>
                 <div class="tod-countdown num" [class.open]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
               </div>

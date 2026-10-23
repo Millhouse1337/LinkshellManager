@@ -589,6 +589,50 @@ body {
   font-weight: 500;
   color: var(--fg);
 }
+// Claim / HQ / window tags. Shown inline beside the name on wide screens; on phones they fold
+// behind the "⋯" toggle and drop onto their own line under the name when opened.
+.panel-tab .tod-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-tab .tod-tags-toggle {
+  display: none;
+}
+@media (max-width: 600px) {
+  .panel-tab .tod-head-left {
+    flex-wrap: wrap;
+  }
+  .panel-tab .tod-tags-toggle {
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 26px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border-2);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--fg-2);
+    cursor: pointer;
+  }
+  .panel-tab .tod-tags-toggle[aria-expanded="true"] {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .panel-tab .tod-tags-toggle svg {
+    width: 14px;
+    height: 14px;
+  }
+  .panel-tab .tod-tags {
+    display: none;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+  }
+  .panel-tab .tod-tags.open {
+    display: flex;
+  }
+}
 .panel-tab .tod-countdown {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

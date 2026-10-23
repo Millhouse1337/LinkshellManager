@@ -844,6 +844,20 @@ export class DashboardTabComponent {
     this.expandedTodLoot.set(next);
   }
 
+  // The claim / window tags behind the card's "⋯" button. Phone widths only — wider screens
+  // always show the tags and never render the button (see .tod-tags in _tabs-shell).
+  protected readonly expandedTodTags = signal<Set<string>>(new Set());
+
+  protected isTodTagsExpanded(key: string): boolean {
+    return this.expandedTodTags().has(key);
+  }
+
+  protected toggleTodTags(key: string): void {
+    const next = new Set(this.expandedTodTags());
+    if (next.has(key)) next.delete(key); else next.add(key);
+    this.expandedTodTags.set(next);
+  }
+
   // Countdown / ready state / the "Not entered" label all live in activity-home.helpers so this
   // tab and the ToDs tab can't drift apart — they render the same card from the same data.
   protected readonly notEntered = TOD_NOT_ENTERED;
