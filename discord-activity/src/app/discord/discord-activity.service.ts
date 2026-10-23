@@ -1,5 +1,4 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { DiscordSDK } from '@discord/embedded-app-sdk';
 
 import { ActivityHttpClient } from './activity-http.client';
 import { AddonTokenService } from './addon-token.service';
@@ -293,6 +292,10 @@ export class DiscordActivityService {
     }
 
     try {
+      // Loaded here, only inside Discord: the website never uses the SDK (about 147 kB), so it
+      // stays out of the startup bundle. Still inside the app initializer, so the SDK is built
+      // before the router's first navigation, as it needs (it reads frame_id from the URL).
+      const { DiscordSDK } = await import('@discord/embedded-app-sdk');
       const sdk = new DiscordSDK(this.clientId) as DiscordSdkContextSource;
       this.sdk = sdk;
 

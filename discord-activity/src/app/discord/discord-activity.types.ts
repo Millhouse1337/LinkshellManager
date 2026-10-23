@@ -1,4 +1,4 @@
-import { DiscordSDK } from '@discord/embedded-app-sdk';
+import type { DiscordSDK } from '@discord/embedded-app-sdk';
 
 export type ActivityStatus = 'idle' | 'initializing' | 'standalone' | 'ready' | 'error';
 
