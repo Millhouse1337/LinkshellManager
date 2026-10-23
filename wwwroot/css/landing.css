@@ -71,10 +71,25 @@ html:has(.landing) { scroll-behavior: smooth; }
     padding: 22px var(--l-gutter);
 }
 
+/* A dark glass panel behind the brand and behind the links, so both read over the brightest parts
+   of the art (the moon, the sky, the castles' lit windows) as well as the dark parts. One rule for
+   both, so the two panels stay twins. */
+.landing .landing-brand,
+.landing-links {
+    border: 1px solid color-mix(in srgb, var(--l-gold) 22%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--l-bg) 68%, transparent);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--l-shade) 35%, transparent);
+}
+
+/* Padded to the links panel's height (its Sign in button sets that), so the two sit level. */
 .landing .landing-brand {
     display: flex;
     align-items: center;
     gap: 12px;
+    padding: 13px 20px;
     color: var(--l-gold-soft);
     font-family: var(--l-serif);
     font-weight: 700;
@@ -91,20 +106,12 @@ html:has(.landing) { scroll-behavior: smooth; }
     box-shadow: 0 0 12px color-mix(in srgb, var(--l-gold) 55%, transparent);
 }
 
-/* A dark glass panel behind the links, so they read over the brightest part of the art (the moon
-   and the sky around it) as well as the dark parts. */
 .landing-links {
     display: flex;
     align-items: center;
     gap: 28px;
     flex-wrap: wrap;
     padding: 6px 6px 6px 22px;
-    border: 1px solid color-mix(in srgb, var(--l-gold) 22%, transparent);
-    border-radius: 4px;
-    background: color-mix(in srgb, var(--l-bg) 68%, transparent);
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
-    box-shadow: 0 8px 24px color-mix(in srgb, var(--l-shade) 35%, transparent);
     font-size: 14px;
 }
 
@@ -633,6 +640,9 @@ html:has(.landing) { scroll-behavior: smooth; }
        Sign in alone in the panel, so the panel hugs it evenly. */
     .landing .landing-links .landing-section-link { display: none; }
     .landing-links { padding: 6px; }
+    /* The brand's panel makes it wider, so it and Sign in only share a line at a smaller size. */
+    .landing-nav { gap: 12px; }
+    .landing .landing-brand { gap: 9px; padding: 16px 14px; font-size: 14px; }
     .landing-hero { padding-top: 112px; }
     .landing-actions .landing-btn { flex: 1 1 100%; justify-content: center; }
     .landing-feature { padding: 28px 22px 30px; }
