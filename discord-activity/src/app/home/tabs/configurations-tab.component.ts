@@ -17,7 +17,6 @@ import type {
   ActivityMonsterTimingsResponse
 } from '../../discord/discord-activity.types';
 import { canManageLinkshellIn } from '../activity-home.helpers';
-import { DkpImportCardComponent } from './dkp-import-card.component';
 
 // (PoolDraft moved to tabs/dkp-grouping-tab.component.ts with the editor it belongs to.)
 
@@ -45,7 +44,7 @@ interface RouteDraft {
 
 @Component({
   selector: 'app-configurations-tab',
-  imports: [CommonModule, FormsModule, DkpImportCardComponent],
+  imports: [CommonModule, FormsModule],
   templateUrl: './configurations-tab.component.html',
   styleUrl: './configurations-tab.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush

@@ -382,15 +382,15 @@
     </div>
   }
 
-  <!-- ===== DKP TAB — one of three views, never stacked =====
-       All three are the same economy at different zoom levels: the per-member ledger ("what has
-       this member done"), the sheet ("where does everyone stand"), and grouping ("which event
-       types share a wallet"). Stacked, the sheet sat below a ledger long enough to scroll past
-       and grouping was in Configurations entirely; the strip swaps them in place. -->
+  <!-- ===== DKP TAB — one view at a time, never stacked =====
+       The same economy at different zoom levels: the per-member ledger ("what has this member
+       done"), the sheet ("where does everyone stand"), and grouping ("which event types share a
+       wallet"), plus Import DKP on the website. Stacked, the sheet sat below a ledger long enough
+       to scroll past and grouping was in Configurations entirely; the strip swaps them in place. -->
   @if (activeTab() === 'dkp') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('dkp')" [attr.aria-labelledby]="tabId('dkp')">
       <div class="dkp-view-tabs" role="tablist" aria-label="DKP views">
-        @for (view of dkpViews; track view.key) {
+        @for (view of dkpViews(); track view.key) {
           <button type="button" class="dkp-view-tab" role="tab"
             [class.active]="dkpView() === view.key"
             [attr.aria-selected]="dkpView() === view.key"
@@ -400,6 +400,7 @@
       @switch (dkpView()) {
         @case ('sheet') { <app-dkp-sheet-tab /> }
         @case ('grouping') { <app-dkp-grouping-tab /> }
+        @case ('import') { <app-dkp-import-card [linkshellId]="dkpImportLinkshellId()" /> }
         @default { <app-activity-sidebar-panel [visibleSections]="['dkp']" /> }
       }
     </div>

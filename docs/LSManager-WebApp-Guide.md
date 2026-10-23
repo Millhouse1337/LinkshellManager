@@ -42,7 +42,7 @@ These need a full browser (uploading or downloading a file, or a long review for
 inside Discord. They show as extra tabs after a divider at the end of the tab strip, or as extra buttons.
 
 
-### Import DKP *(Configurations tab)*
+### Import DKP *(DKP tab → Import DKP)*
 Bringing a linkshell over from another tracker? Upload a spreadsheet (.xlsx or .csv) of your existing DKP.
 **Download template** shows the exact columns (Member Name, Alt 1, Alt 2, Current DKP, Total DKP, Total DKP
 Spent). **Preview import** lists every row as an update, a new member, or skipped, and flags negative
@@ -193,7 +193,7 @@ Two limits, stated plainly rather than left to be discovered:
 ## Quick reference
 - **URL:** `https://your-host/` → Sign in with Discord → tabs along the top.
 - **Set up loot:** Configurations → Loot structure → Save.
-- **Import existing DKP:** Configurations → Import DKP → Download template → fill it in → Preview import → Import.
+- **Import existing DKP:** DKP → Import DKP → Download template → fill it in → Preview import → Import.
 - **Review member submissions and captures:** Event System → Pending.
 - **Pair the addon:** Game Addon → + Get Code → in FFXI `/lsm link <code>`.
 - **Companion guides:** [Discord Activity](LSManager-DiscordActivity-Guide.md) · [In-Game Addon](LSManager-Addon-Guide.md)

@@ -17,12 +17,15 @@ import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.componen
 import { TAB_NAMES, type ProfileView, type TabName, type TreasuryView } from './activity-home.types';
 import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
+
+type DkpView = 'history' | 'sheet' | 'grouping' | 'import';
 import { DataAdminTabComponent } from './data-admin/data-admin-tab.component';
 import { AdminSettingsTabComponent } from './tabs/admin-settings-tab.component';
 import { ChartsTabComponent, chartsSectionFromSlug } from './tabs/charts-tab.component';
 import { ConfigurationsTabComponent } from './tabs/configurations-tab.component';
 import { DashboardTabComponent } from './tabs/dashboard-tab.component';
 import { DkpGroupingTabComponent } from './tabs/dkp-grouping-tab.component';
+import { DkpImportCardComponent } from './tabs/dkp-import-card.component';
 import { DkpSheetTabComponent } from './tabs/dkp-sheet-tab.component';
 import { EventsTabComponent } from './tabs/events-tab.component';
 import { LinkshellTabComponent } from './tabs/linkshell-tab.component';
@@ -43,6 +46,7 @@ import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.c
     DataAdminTabComponent,
     DashboardTabComponent,
     DkpGroupingTabComponent,
+    DkpImportCardComponent,
     DkpSheetTabComponent,
     EventsTabComponent,
     LinkshellTabComponent,
@@ -114,20 +118,36 @@ export class ActivityHomeComponent {
   protected readonly reconnecting = signal(false);
   protected readonly signingOut = signal(false);
 
-  // Which of the DKP tab's three views is showing. They share one space and one strip of
-  // sub-tabs rather than being top-level tabs of their own: all three are the same DKP economy
-  // at different zoom levels, and splitting them across the main nav would put the
-  // linkshell-wide total, and the rules that produced it, a full tab away from the member row
-  // you were just reading. 'history' is the default the tab has always opened on, though the
-  // strip leads with the Sheet.
-  protected readonly dkpViews = [
+  // Which of the DKP tab's views is showing. They share one space and one strip of sub-tabs
+  // rather than being top-level tabs of their own: all are the same DKP economy at different zoom
+  // levels, and splitting them across the main nav would put the linkshell-wide total, and the
+  // rules that produced it, a full tab away from the member row you were just reading. 'history'
+  // is the default the tab has always opened on, though the strip leads with the Sheet.
+  //
+  // Import DKP (/dkp/import) is the fourth, website only and for whoever may customize the
+  // linkshell: uploading a spreadsheet and reviewing every row doesn't fit the Discord iframe, and
+  // the import rewrites balances. Configurations used to carry it.
+  protected readonly dkpViews = computed(() => [
     { key: 'sheet' as const, label: 'DKP Sheet' },
     { key: 'history' as const, label: 'DKP History' },
     { key: 'grouping' as const, label: 'DKP Grouping' },
-  ];
-  protected readonly dkpView = computed<'history' | 'sheet' | 'grouping'>(() => {
+    ...(this.canImportDkp() ? [{ key: 'import' as const, label: 'Import DKP' }] : []),
+  ]);
+  protected readonly dkpView = computed<DkpView>(() => {
     const view = this.activeTab() === 'dkp' ? this.subView() : null;
+    if (view === 'import') return this.canImportDkp() ? view : 'history';
     return view === 'sheet' || view === 'grouping' ? view : 'history';
+  });
+
+  // The linkshell the import writes to: the one the top bar has selected, as Configurations did.
+  protected readonly dkpImportLinkshellId = computed(() => {
+    const overview = this.activity.overview();
+    return overview?.appUser?.primaryLinkshellId ?? overview?.primaryLinkshell?.id ?? overview?.linkshells?.[0]?.id ?? 0;
+  });
+  private readonly canImportDkp = computed(() => {
+    const id = this.dkpImportLinkshellId();
+    const link = (this.activity.overview()?.linkshells ?? []).find(l => l.id === id);
+    return this.activity.isWebsite && !!link?.permissions?.canCustomizeLinkshell;
   });
 
   // Wall-clock display for the identity bar. We tick once per minute since the
@@ -317,7 +337,7 @@ export class ActivityHomeComponent {
 
   // A sub-view's default (DKP History, Current events, Active auctions, the Sky board) is the
   // bare tab URL; anything else is a second segment.
-  protected setDkpView(view: 'history' | 'sheet' | 'grouping'): void {
+  protected setDkpView(view: DkpView): void {
     this.setActiveTab('dkp', view === 'history' ? undefined : view);
   }
 

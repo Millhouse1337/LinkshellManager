@@ -4,7 +4,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, inject, input, signal, 
 import { DkpImportService } from '../../discord/dkp-import.service';
 import type { ActivityDkpImportPreviewRow } from '../../discord/discord-activity.types';
 
-// The Configurations tab's "Import DKP" card, website only (ConfigurationsTabComponent keeps the
+// The DKP tab's "Import DKP" view (/dkp/import), website only (ConfigurationsTabComponent keeps the
 // "use the web" hint inside Discord). Choose a file → preview every row → confirm. Mirrors the
 // Customize page's import card and the DkpImportPreview page it led to.
 @Component({
