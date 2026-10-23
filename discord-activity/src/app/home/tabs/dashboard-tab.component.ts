@@ -27,10 +27,6 @@ import { type TabName } from '../activity-home.types';
 import { JobsRosterStore } from '../jobs-roster.store';
 import { RULE_CATEGORY_OPTIONS, categoryBadge, parseRuleDetails } from '../rule-content.helpers';
 
-// Circumference of the HNM Claims donut ring: 2πr for the r=40 circle the template draws.
-// Segment lengths are stroke-dasharray values along it.
-const DONUT_CIRCUMFERENCE = 251.2;
-
 @Component({
   selector: 'app-dashboard-tab',
   imports: [CommonModule, FormsModule],
@@ -418,17 +414,18 @@ export class DashboardTabComponent {
     return `${weekday} ${time}`;
   }
 
-  // ----- HNM donut -----
+  // ----- HNM claim rate -----
 
   protected readonly dashboardHnmWindow = signal<'7d' | '30d' | 'all'>('30d');
 
-  // Straight off the server, which aggregates every claimed ToD the linkshell has.
+  // Straight off the server, which counts every claimed and unclaimed ToD the linkshell has, per
+  // monster, and works out each one's claim rate.
   //
   // This used to be counted here from `overview.recentTods` — the 25 most recent ToDs of ANY
   // monster, claimed or not. A quiet week of Sky pops pushed the HNM claims clean out of that
-  // tail, so the donut showed two or three monsters out of a season's camps and the "All"
+  // tail, so the chart showed two or three monsters out of a season's camps and the "All"
   // toggle charted the same 25 rows as the others. The client can't aggregate rows it was
-  // never sent, so the counting moved to HnmClaimStatsService (shared with the web dashboard).
+  // never sent, so the counting moved to HnmClaimStatsService.
   protected readonly dashboardHnmClaims = computed<ActivityHnmClaimSlice[]>(() => {
     const claims = this.activity.overview()?.hnmClaims;
     if (!claims) return [];
@@ -439,24 +436,10 @@ export class DashboardTabComponent {
     }
   });
 
-  protected readonly dashboardHnmClaimsTotal = computed(() =>
-    this.dashboardHnmClaims().reduce((sum, entry) => sum + entry.count, 0));
-
-  protected donutOffset(index: number): number {
-    const claims = this.dashboardHnmClaims();
-    const total = this.dashboardHnmClaimsTotal();
-    if (total === 0) return 0;
-    let offset = 0;
-    for (let i = 0; i < index; i += 1) {
-      offset += (claims[i].count / total) * DONUT_CIRCUMFERENCE;
-    }
-    return -offset;
-  }
-
-  protected donutSegmentLength(count: number): number {
-    const total = this.dashboardHnmClaimsTotal();
-    if (total === 0) return 0;
-    return (count / total) * DONUT_CIRCUMFERENCE;
+  // The row's hover text, which also says it in words for a screen reader.
+  protected claimRateTitle(entry: ActivityHnmClaimSlice): string {
+    const pops = entry.attempts === 1 ? 'pop' : 'pops';
+    return `${entry.monsterName}: claimed ${entry.claimed} of ${entry.attempts} ${pops} (${Math.round(entry.claimRate)}%)`;
   }
 
   // ----- HNM window frequency (the card's other tab) -----

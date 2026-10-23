@@ -1761,17 +1761,18 @@ export interface ActivityParticipantInviteCandidate {
   primaryLinkshellName?: string | null;
 }
 
-// One slice of the HNM Claims donut. `percent` is already relative to its own window's total
-// and `colorClass` is the palette letter the ring and legend paint with.
+// One row of the HNM claim-rate chart: `claimed` of `attempts` (every ToD marked Claimed or
+// Unclaimed; "Not specified" isn't an attempt), and `claimRate`, the two as a percentage.
+// `colorClass` is the palette letter the row paints with.
 //
-// The three NQ/HQ families chart as two slices each — Fafnir beside Nidhogg, and so on. Both
-// halves share the FAMILY's `colorClass` and are told apart by `isHq`: a lighter arc plus an HQ
-// badge in the legend. `hasHqVariant` is false for the monsters with no stronger half, which show
-// no badge at all rather than a meaningless "NQ".
+// The three NQ/HQ families chart as two rows each — Fafnir beside Nidhogg, and so on. Both
+// halves share the FAMILY's `colorClass` and are told apart by `isHq`, which shows as an HQ badge.
+// `hasHqVariant` is false for the monsters with no stronger half.
 export interface ActivityHnmClaimSlice {
   monsterName: string;
-  count: number;
-  percent: number;
+  claimed: number;
+  attempts: number;
+  claimRate: number;
   colorClass: string;
   isHq: boolean;
   hasHqVariant: boolean;

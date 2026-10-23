@@ -546,7 +546,7 @@
         </div>
         }
 
-        <!-- HNM Claims donut (hidden when the HNM feature toggle is off). -->
+        <!-- HNM claim rate (hidden when the HNM feature toggle is off). -->
         @if (settings.enableHnmSection) {
         <div class="card">
           <div class="card-head">
@@ -555,13 +555,13 @@
                  heading would misdescribe whichever tab was open. -->
             <div class="card-title">
               @if (dashboardHnmChartTab() === 'claims') {
-                HNM Claims ({{ dashboardHnmWindow() === 'all' ? 'all time' : 'last ' + dashboardHnmWindow() }})
+                Claim rate ({{ dashboardHnmWindow() === 'all' ? 'all time' : 'last ' + dashboardHnmWindow() }})
               } @else {
                 Window frequency (all time)
               }
             </div>
             <div class="card-head-right">
-              <!-- The 7d/30d/All span only applies to the donut. It is hidden rather than disabled
+              <!-- The 7d/30d/All span only applies to the claim rate. It is hidden rather than disabled
                    on the Windows tab, where it would silently do nothing. -->
               @if (dashboardHnmChartTab() === 'claims') {
                 <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '7d'" (click)="dashboardHnmWindow.set('7d')">7d</button>
@@ -622,47 +622,33 @@
                 </div>
               </div>
             }
-          } @else if (dashboardHnmClaimsTotal() > 0) {
-            <div class="donut-wrap">
-              <svg class="donut" viewBox="0 0 100 100" aria-hidden="true">
-                <circle class="donut-track" cx="50" cy="50" r="40" fill="none" stroke-width="12"></circle>
-                <!-- An NQ and its HQ share the family's colour class and are separated by .is-hq,
-                     which lightens the arc — so Fafnir and Nidhogg read as one monster's two
-                     outcomes rather than two unrelated monsters sitting side by side. -->
-                @for (entry of dashboardHnmClaims(); track entry.monsterName; let i = $index) {
-                  <circle
-                    class="donut-seg donut-seg-{{ entry.colorClass }}"
-                    [class.is-hq]="entry.isHq"
-                    cx="50" cy="50" r="40"
-                    fill="none"
-                    stroke-width="12"
-                    [attr.stroke-dasharray]="donutSegmentLength(entry.count) + ' 251.2'"
-                    [attr.stroke-dashoffset]="donutOffset(i)"
-                    stroke-linecap="butt"></circle>
-                }
-                <text class="donut-value" x="50" y="49" text-anchor="middle" dominant-baseline="middle">{{ dashboardHnmClaimsTotal() }}</text>
-                <text class="donut-label" x="50" y="58" text-anchor="middle" dominant-baseline="middle">CLAIMS</text>
-              </svg>
-              <div class="donut-legend">
-                @for (entry of dashboardHnmClaims(); track entry.monsterName) {
-                  <div class="donut-legend-row">
-                    <span class="donut-swatch donut-seg-{{ entry.colorClass }}" [class.is-hq]="entry.isHq"></span>
-                    <span class="donut-legend-name">
-                      {{ entry.monsterName }}
-                      <!-- Only the three NQ/HQ families get a badge: the shading alone would leave
-                           a colour-blind reader guessing, and "NQ" on a Tiamat means nothing. -->
-                      @if (entry.hasHqVariant) {
-                        <span class="donut-hq-tag" [class.is-hq]="entry.isHq">{{ entry.isHq ? 'HQ' : 'NQ' }}</span>
+          } @else if (dashboardHnmClaims().length > 0) {
+            <!-- One row per monster: claimed out of attempts (every ToD marked Claimed or
+                 Unclaimed), and the bar is that rate. An NQ and its HQ share the family's colour
+                 and sit side by side; the HQ half carries the badge. -->
+            <div class="claimrate">
+              @for (entry of dashboardHnmClaims(); track entry.monsterName) {
+                <div class="claimrate-row donut-seg-{{ entry.colorClass }}" [title]="claimRateTitle(entry)">
+                  <div class="claimrate-top">
+                    <span class="claimrate-name">
+                      <span class="donut-swatch donut-seg-{{ entry.colorClass }}"></span>
+                      <span class="claimrate-label">{{ entry.monsterName }}</span>
+                      @if (entry.isHq) {
+                        <span class="claimrate-hq">HQ</span>
                       }
                     </span>
-                    <span class="donut-legend-stats">{{ entry.count }} · {{ entry.percent | number:'1.0-0' }}%</span>
+                    <span class="claimrate-frac">{{ entry.claimed }}<span>/{{ entry.attempts }}</span></span>
+                    <span class="claimrate-pct">{{ entry.claimRate | number:'1.0-0' }}%</span>
                   </div>
-                }
-              </div>
+                  <div class="claimrate-track" aria-hidden="true">
+                    <div class="claimrate-fill" [style.width.%]="entry.claimRate"></div>
+                  </div>
+                </div>
+              }
             </div>
           } @else {
             <div class="empty-state empty-state--compact">
-              <div class="empty-state-desc">{{ dashboardHnmWindow() === 'all' ? 'No HNM claims recorded yet.' : 'No HNM claims in this window yet.' }}</div>
+              <div class="empty-state-desc">{{ dashboardHnmWindow() === 'all' ? 'No claimed or unclaimed HNM pops recorded yet.' : 'No claimed or unclaimed HNM pops in this window yet.' }}</div>
             </div>
           }
         </div>

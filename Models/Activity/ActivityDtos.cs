@@ -1296,22 +1296,23 @@ public sealed record ActivityTodLootDto(
     string? ItemWinner,
     int? WinningDkpSpent);
 
-// One slice of the HNM Claims donut. Percent is already relative to its own window's total,
-// and ColorClass is the palette letter the donut/legend paint with.
+// One row of the HNM claim-rate chart: Claimed of Attempts (every ToD marked Claimed or
+// Unclaimed), and ClaimRate, the two as a percentage. ColorClass is the palette letter the row
+// paints with.
 //
-// The three NQ/HQ families chart as two slices each (Fafnir beside Nidhogg, and so on). Both
-// halves carry the FAMILY's ColorClass and are told apart by IsHq, which the donut renders as a
-// lighter arc and the legend as an HQ badge. HasHqVariant is false for monsters with no stronger
-// half, so they show no badge at all.
+// The three NQ/HQ families chart as two rows each (Fafnir beside Nidhogg, and so on). Both
+// halves carry the FAMILY's ColorClass and are told apart by IsHq, which the row shows as an HQ
+// badge. HasHqVariant is false for monsters with no stronger half.
 public sealed record ActivityHnmClaimSliceDto(
     string MonsterName,
-    int Count,
-    double Percent,
+    int Claimed,
+    int Attempts,
+    double ClaimRate,
     string ColorClass,
     bool IsHq,
     bool HasHqVariant);
 
-// The donut's three windows, so the 7d / 30d / All toggle is instant and never re-queries.
+// The chart's three windows, so the 7d / 30d / All toggle is instant and never re-queries.
 public sealed record ActivityHnmClaimsDto(
     IReadOnlyList<ActivityHnmClaimSliceDto> Last7Days,
     IReadOnlyList<ActivityHnmClaimSliceDto> Last30Days,

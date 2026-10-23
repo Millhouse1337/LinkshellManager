@@ -145,65 +145,83 @@
   margin-top: 2px;
 }
 
-/* ===== HNM Claims donut ===== */
-.panel-tab .donut-wrap {
-  display: grid;
-  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
-  gap: 24px;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 24px 28px;
-  min-height: 320px;
-}
-@media (max-width: 560px) {
-  .panel-tab .donut-wrap { grid-template-columns: 1fr; }
-}
-.panel-tab .donut {
-  width: 100%;
-  height: auto;
-  max-width: 320px;
-  margin: 0 auto;
-  display: block;
-  transform: rotate(-90deg);
-}
-.panel-tab .donut-track { stroke: var(--surface-2); }
-.panel-tab .donut-value {
-  font-family: var(--font-mono, monospace);
-  font-size: 8px;
-  font-weight: 600;
-  fill: var(--fg);
-  transform: rotate(90deg);
-  transform-origin: center;
-}
-.panel-tab .donut-label {
-  font-size: 2.4px;
-  letter-spacing: 0.2em;
-  fill: var(--fg-3);
-  transform: rotate(90deg);
-  transform-origin: center;
-}
-.panel-tab circle.donut-seg-a { stroke: var(--chart-a); }
-.panel-tab circle.donut-seg-b { stroke: var(--chart-b); }
-.panel-tab circle.donut-seg-c { stroke: var(--chart-c); }
-.panel-tab circle.donut-seg-d { stroke: var(--chart-d); }
-.panel-tab circle.donut-seg-e { stroke: var(--chart-e); }
-.panel-tab circle.donut-seg-f { stroke: var(--chart-f); }
-.panel-tab circle.donut-seg-g { stroke: var(--chart-g); }
-.panel-tab circle.donut-seg-h { stroke: var(--chart-h); }
-.panel-tab circle.donut-seg-i { stroke: var(--chart-i); }
-.panel-tab .donut-legend {
+/* ===== HNM claim rate: one row per monster, claimed out of attempts =====
+   A row takes its family's colour as --seg-color (set alongside the heatmap's cells, below), so
+   its swatch, bar and percentage match the monster's colour on the Windows tab. */
+.panel-tab .claimrate {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  padding: 6px 18px 12px;
 }
-.panel-tab .donut-legend-row {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
-  gap: 10px;
+.panel-tab .claimrate-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.panel-tab .claimrate-row:last-child { border-bottom: 0; }
+.panel-tab .claimrate-top {
+  display: flex;
   align-items: center;
-  font-size: 12px;
-  color: var(--fg-1);
+  gap: 10px;
 }
+.panel-tab .claimrate-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 500;
+}
+.panel-tab .claimrate-name .donut-swatch { flex: none; }
+.panel-tab .claimrate-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-tab .claimrate-hq {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.panel-tab .claimrate-frac {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.panel-tab .claimrate-frac span { color: var(--fg-3); }
+.panel-tab .claimrate-pct {
+  width: 64px;
+  text-align: right;
+  color: var(--seg-color, var(--accent));
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.panel-tab .claimrate-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.panel-tab .claimrate-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--seg-color, var(--accent));
+}
+
+/* The monster's colour square, here and on the Windows tab. */
 .panel-tab .donut-swatch {
   width: 8px;
   height: 8px;
@@ -219,33 +237,6 @@
 .panel-tab .donut-swatch.donut-seg-g { background: var(--chart-g); }
 .panel-tab .donut-swatch.donut-seg-h { background: var(--chart-h); }
 .panel-tab .donut-swatch.donut-seg-i { background: var(--chart-i); }
-/* NQ vs HQ on the three merge families. The pair SHARES its family's hue — Fafnir and Nidhogg are
-   one monster's two outcomes, not two unrelated monsters — and the HQ half is lightened. A filter
-   rather than nine more colour rules, so it applies to whichever hue the family holds and the ring
-   and its swatch can never drift apart. Mirrors the web's .donut-seg.is-hq. */
-.panel-tab circle.donut-seg.is-hq,
-.panel-tab .donut-swatch.is-hq { filter: brightness(1.55) saturate(0.72); }
-
-/* The badge carries the same fact in text: a lighter shade of one hue is not something every
-   reader can see. */
-.panel-tab .donut-legend-name .donut-hq-tag {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 5px;
-  border-radius: 999px;
-  border: 1px solid var(--border-2);
-  color: var(--fg-3);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  vertical-align: 1px;
-}
-.panel-tab .donut-legend-name .donut-hq-tag.is-hq {
-  border-color: var(--gold);
-  color: var(--gold);
-}
-.panel-tab .donut-legend-name { color: var(--fg); font-weight: 500; }
-.panel-tab .donut-legend-stats { color: var(--fg-3); font-family: var(--font-sans); }
 .panel-tab .btn.active {
   background: var(--accent-weak);
   color: var(--accent);
@@ -263,7 +254,8 @@
   min-height: 0;
 }
 .panel-tab .card--tod-fixed .tod-scroll,
-.panel-tab .dash-row--equal > .card .winmatrix {
+.panel-tab .dash-row--equal > .card .winmatrix,
+.panel-tab .dash-row--equal > .card .claimrate {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -274,25 +266,23 @@
   align-content: start;
 }
 .panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar,
-.panel-tab .dash-row--equal > .card .winmatrix::-webkit-scrollbar {
+.panel-tab .dash-row--equal > .card .winmatrix::-webkit-scrollbar,
+.panel-tab .dash-row--equal > .card .claimrate::-webkit-scrollbar {
   width: 8px;
 }
 .panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar-thumb,
-.panel-tab .dash-row--equal > .card .winmatrix::-webkit-scrollbar-thumb {
+.panel-tab .dash-row--equal > .card .winmatrix::-webkit-scrollbar-thumb,
+.panel-tab .dash-row--equal > .card .claimrate::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 4px;
 }
 .panel-tab .card--tod-fixed .tod-scroll::-webkit-scrollbar-thumb:hover,
-.panel-tab .dash-row--equal > .card .winmatrix::-webkit-scrollbar-thumb:hover {
+.panel-tab .dash-row--equal > .card .winmatrix::-webkit-scrollbar-thumb:hover,
+.panel-tab .dash-row--equal > .card .claimrate::-webkit-scrollbar-thumb:hover {
   background: var(--border-2);
 }
-.panel-tab .dash-row--equal > .card .donut-wrap {
-  flex: 1 1 auto;
-  align-self: center;
-  width: 100%;
-}
 
-/* ===== HNM card tabs: Claims donut <-> Window frequency ===== */
+/* ===== HNM card tabs: Claim rate <-> Window frequency ===== */
 .panel-tab .hnm-chart-tabs {
   display: inline-flex;
   gap: 2px;
@@ -432,15 +422,16 @@
   opacity: calc(var(--heat, 0) / 100);
 }
 
-.panel-tab .winmatrix-cell.donut-seg-a { --seg-color: var(--chart-a); }
-.panel-tab .winmatrix-cell.donut-seg-b { --seg-color: var(--chart-b); }
-.panel-tab .winmatrix-cell.donut-seg-c { --seg-color: var(--chart-c); }
-.panel-tab .winmatrix-cell.donut-seg-d { --seg-color: var(--chart-d); }
-.panel-tab .winmatrix-cell.donut-seg-e { --seg-color: var(--chart-e); }
-.panel-tab .winmatrix-cell.donut-seg-f { --seg-color: var(--chart-f); }
-.panel-tab .winmatrix-cell.donut-seg-g { --seg-color: var(--chart-g); }
-.panel-tab .winmatrix-cell.donut-seg-h { --seg-color: var(--chart-h); }
-.panel-tab .winmatrix-cell.donut-seg-i { --seg-color: var(--chart-i); }
+/* Shared with the claim-rate rows on the card's other tab, so a monster is one colour on both. */
+.panel-tab :is(.winmatrix-cell, .claimrate-row).donut-seg-a { --seg-color: var(--chart-a); }
+.panel-tab :is(.winmatrix-cell, .claimrate-row).donut-seg-b { --seg-color: var(--chart-b); }
+.panel-tab :is(.winmatrix-cell, .claimrate-row).donut-seg-c { --seg-color: var(--chart-c); }
+.panel-tab :is(.winmatrix-cell, .claimrate-row).donut-seg-d { --seg-color: var(--chart-d); }
+.panel-tab :is(.winmatrix-cell, .claimrate-row).donut-seg-e { --seg-color: var(--chart-e); }
+.panel-tab :is(.winmatrix-cell, .claimrate-row).donut-seg-f { --seg-color: var(--chart-f); }
+.panel-tab :is(.winmatrix-cell, .claimrate-row).donut-seg-g { --seg-color: var(--chart-g); }
+.panel-tab :is(.winmatrix-cell, .claimrate-row).donut-seg-h { --seg-color: var(--chart-h); }
+.panel-tab :is(.winmatrix-cell, .claimrate-row).donut-seg-i { --seg-color: var(--chart-i); }
 
 .panel-tab .winmatrix-cell.is-zero { background: var(--surface-2); color: var(--fg-3); }
 

@@ -212,7 +212,8 @@ public sealed partial class ActivityDataController
             .Select(slice => new ActivityHnmClaimSliceDto(
                 slice.MonsterName,
                 slice.Count,
-                slice.Percent,
+                slice.Attempts,
+                slice.ClaimRate,
                 slice.ColorClass,
                 slice.IsHq,
                 slice.HasHqVariant))

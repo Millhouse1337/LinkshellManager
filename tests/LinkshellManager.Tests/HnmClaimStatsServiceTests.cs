@@ -9,13 +9,14 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The dashboard "HNM Claims" donut.
+// The dashboard "HNM claim rate" chart.
 //
 // Both surfaces used to count this off whatever ToD rows they were already holding for other
 // cards — the Activity off the overview's 25 most recent ToDs of ANY monster, the web off its
 // 200-row Recent Activity page — so the chart showed a tail of the real history and the "All"
 // toggle charted the same tail as the others. These pin the properties that made it wrong:
-// every claim counted, merge-pair halves counted as ONE monster, and no top-N truncation.
+// every claim counted, merge-pair halves charted apart, and no top-N truncation; and what an
+// attempt is.
 public class HnmClaimStatsServiceTests
 {
     private static ApplicationDbContext NewInMemoryContext() =>
@@ -247,8 +248,10 @@ public class HnmClaimStatsServiceTests
         Assert.Equal(100, Assert.Single(stats.Last7Days).Percent);
     }
 
+    // An attempt is a ToD with a recorded outcome. Unclaimed is a pop the linkshell went for and
+    // lost, so it counts; "Not specified" says nothing either way, so it doesn't.
     [Fact]
-    public async Task IgnoresUnclaimedRows_AndOtherLinkshells()
+    public async Task UnclaimedRowsAreAttempts_NotSpecifiedAndOtherLinkshellsAreNot()
     {
         using var db = NewInMemoryContext();
         var now = DateTime.UtcNow;
@@ -260,7 +263,67 @@ public class HnmClaimStatsServiceTests
 
         var stats = await new HnmClaimStatsService(db).BuildAsync(10);
 
-        Assert.Equal(1, Assert.Single(stats.AllTime).Count);
+        var tiamat = Assert.Single(stats.AllTime);
+        Assert.Equal(1, tiamat.Count);
+        Assert.Equal(2, tiamat.Attempts);
+        Assert.Equal(50, tiamat.ClaimRate);
+    }
+
+    // The rate is per half: a Nidhogg pop the linkshell lost is a Nidhogg attempt, not a Fafnir one.
+    [Fact]
+    public async Task ClaimRate_IsClaimedOverAttempts_PerHalf()
+    {
+        using var db = NewInMemoryContext();
+        var now = DateTime.UtcNow;
+        var id = 1;
+        for (var i = 0; i < 6; i++) db.Tods.Add(Claim(id++, 10, "Fafnir", now.AddDays(-1)));
+        for (var i = 0; i < 9; i++) db.Tods.Add(Claim(id++, 10, "Fafnir", now.AddDays(-1), claim: false));
+        db.Tods.Add(Claim(id++, 10, "Fafnir/Nidhogg", now.AddDays(-1), hq: true));
+        for (var i = 0; i < 9; i++) db.Tods.Add(Claim(id++, 10, "Fafnir/Nidhogg", now.AddDays(-1), claim: false, hq: true));
+        await db.SaveChangesAsync();
+
+        var stats = await new HnmClaimStatsService(db).BuildAsync(10);
+
+        var fafnir = stats.AllTime.Single(slice => slice.MonsterName == "Fafnir");
+        var nidhogg = stats.AllTime.Single(slice => slice.MonsterName == "Nidhogg");
+        Assert.Equal((6, 15, 40.0), (fafnir.Count, fafnir.Attempts, fafnir.ClaimRate));
+        Assert.Equal((1, 10, 10.0), (nidhogg.Count, nidhogg.Attempts, nidhogg.ClaimRate));
+    }
+
+    // A monster the linkshell kept going for and never got still charts, as 0 of n. Leaving it out
+    // would hide exactly the camp a leader most wants to see.
+    [Fact]
+    public async Task NeverClaimed_ChartsAsZeroOfAttempts()
+    {
+        using var db = NewInMemoryContext();
+        var now = DateTime.UtcNow;
+        db.Tods.Add(Claim(1, 10, "Vrtra", now.AddDays(-1), claim: false));
+        db.Tods.Add(Claim(2, 10, "Vrtra", now.AddDays(-2), claim: false));
+        await db.SaveChangesAsync();
+
+        var stats = await new HnmClaimStatsService(db).BuildAsync(10);
+
+        var vrtra = Assert.Single(stats.AllTime);
+        Assert.Equal((0, 2, 0.0), (vrtra.Count, vrtra.Attempts, vrtra.ClaimRate));
+        // No claims at all in the window, so no share of them either (and no divide by zero).
+        Assert.Equal(0, vrtra.Percent);
+    }
+
+    // Rows sit in most-camped order, so a family the linkshell keeps losing comes before one it
+    // claimed a couple of times.
+    [Fact]
+    public async Task Families_OrderByAttempts()
+    {
+        using var db = NewInMemoryContext();
+        var now = DateTime.UtcNow;
+        db.Tods.Add(Claim(1, 10, "Tiamat", now.AddDays(-1)));
+        db.Tods.Add(Claim(2, 10, "Tiamat", now.AddDays(-1)));
+        for (var i = 0; i < 3; i++) db.Tods.Add(Claim(3 + i, 10, "Vrtra", now.AddDays(-1), claim: false));
+        await db.SaveChangesAsync();
+
+        var stats = await new HnmClaimStatsService(db).BuildAsync(10);
+
+        Assert.Equal(new[] { "Vrtra", "Tiamat" }, stats.AllTime.Select(slice => slice.MonsterName));
     }
 
     // A ToD with no Time and no TimeStamp can't be placed in a dated window. It still happened,

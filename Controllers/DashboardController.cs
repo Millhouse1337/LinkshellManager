@@ -193,7 +193,10 @@ public class DashboardController : Controller
         // Off its own query, not the 200-row `tods` page above — that page is the most recent ToDs
         // of any monster, so a busy month of Sky pops used to push the HNM claims out of the chart.
         var hnmStats = await _hnmClaimStats.BuildAsync(selectedLinkshellId);
+        // This page's donut charts claims only. The service also returns monsters the linkshell
+        // went for and never claimed (for the Activity's claim-rate rows); they have no arc here.
         var hnmClaims = hnmStats.Last30Days
+            .Where(slice => slice.Count > 0)
             .Select(slice => new HnmClaimEntry
             {
                 MonsterName = slice.MonsterName,
