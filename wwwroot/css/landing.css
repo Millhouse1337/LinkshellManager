@@ -1,5 +1,6 @@
 /* landing.css
-   The public home page (Views/Home/Index.cshtml) only. Everything is scoped under .landing,
+   The public pages: the home page (Views/Home/Index.cshtml) and its Features and Addon pages,
+   which share its top bar and footer (_LandingNav, _LandingFooter). Everything is scoped under .landing,
    which carries its own palette: the page is a gold-on-night poster around the hero art, not
    the app's blue lsm-theme. Signed out it fills the window (the view sets FullBleed, so the
    layout drops .auth-shell); signed in it sits in the app shell's content column, with the
@@ -299,7 +300,8 @@
     text-wrap: balance;
 }
 
-.landing-section-head p {
+/* Direct child only: a section title's eyebrow (.landing-section-title) is a p too. */
+.landing-section-head > p {
     margin: 0;
     max-width: 380px;
     font-size: 16px;
@@ -426,19 +428,201 @@
     color: var(--l-text-3);
 }
 
-.landing-footer nav { display: flex; gap: 24px; }
+.landing-footer nav { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .landing .landing-footer a { color: var(--l-text-4); }
 .landing .landing-footer a:hover { color: var(--l-gold-bright); }
 
+/* ---------- Features and Addon pages ---------- */
+
+/* The top bar marks the page you are on. */
+.landing .landing-links a[aria-current="page"] {
+    color: var(--l-gold-soft);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--l-gold) 60%, transparent);
+    text-underline-offset: 7px;
+}
+
+/* A shorter hero, so the page's own content starts on the first screen. */
+.landing-hero--page { min-height: clamp(460px, 68vh, 640px); }
+
+/* "On this page": a row of links to the sections below the hero. */
+.landing-toc {
+    max-width: 1280px;
+    margin: clamp(24px, 4vw, 40px) auto 0;
+    padding: 0 var(--l-gutter);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.landing .landing-toc a {
+    padding: 8px 14px;
+    border: 1px solid color-mix(in srgb, var(--l-gold) 27%, transparent);
+    border-radius: 3px;
+    font-size: 13px;
+    color: var(--l-text-2);
+}
+
+.landing .landing-toc a:hover { border-color: var(--l-gold); color: var(--l-gold-bright); }
+
+.landing-toc + .landing-section { padding-top: clamp(48px, 7vw, 80px); }
+
+/* Back-to-back sections: the one above already leaves its bottom padding as the gap. */
+.landing-section + .landing-section { padding-top: 0; }
+
+.landing-section-title {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* The feature cards. Each card draws its own hairline: a 1px shadow in an opaque colour, so the
+   two that meet in the 1px gap read as one line. A short last row then just ends, where the
+   background trick in .landing-surfaces would show its empty cells as gold-tinted holes. */
+.landing-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    gap: 1px;
+    margin: 1px;
+}
+
+.landing-feature {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 32px 28px 34px;
+    background: var(--l-panel);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--l-gold) 20%, var(--l-bg));
+    transition: background-color .15s ease;
+}
+
+.landing-feature:hover { background: var(--l-panel-hover); }
+
+.landing-feature h3 {
+    margin: 0;
+    font-family: var(--l-serif);
+    font-weight: 600;
+    font-size: 20px;
+    line-height: 1.3;
+    color: var(--l-heading);
+}
+
+.landing-feature p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--l-text-3);
+    text-wrap: pretty;
+}
+
+.landing-feature-points {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.landing-feature-points li {
+    position: relative;
+    padding-left: 18px;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--l-text-3);
+}
+
+/* A small gold diamond for the bullet, after the brand mark. */
+.landing-feature-points li::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: .6em;
+    width: 5px;
+    height: 5px;
+    transform: rotate(45deg);
+    background: var(--l-gold);
+}
+
+.landing-feature-points strong { color: var(--l-text-2); font-weight: 600; }
+
+/* Who a feature is for ("Website only", "Officers"). Pinned to the card's foot so the headings in
+   a row stay level whether or not their card has one. */
+.landing .landing-feature-tag {
+    margin-top: auto;
+    align-self: flex-start;
+    padding: 4px 9px;
+    border: 1px solid color-mix(in srgb, var(--l-gold) 33%, transparent);
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--l-gold);
+}
+
+.landing .landing-feature-link {
+    margin-top: auto;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* In-game commands, in copy and in the command list. Overrides Bootstrap's pink code. */
+.landing code {
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--l-gold) 9%, transparent);
+    color: var(--l-gold-soft);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: .9em;
+    white-space: nowrap;
+}
+
+/* The command list: one row per command, the command on the left. */
+.landing-commands {
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--l-gold) 20%, transparent);
+}
+
+.landing-command {
+    display: grid;
+    grid-template-columns: minmax(0, 280px) 1fr;
+    gap: 6px 32px;
+    align-items: baseline;
+    padding: 18px 28px;
+    background: var(--l-panel);
+}
+
+.landing-command + .landing-command {
+    border-top: 1px solid color-mix(in srgb, var(--l-gold) 12%, transparent);
+}
+
+.landing-command dt { margin: 0; font-weight: 400; }
+.landing-command dt code { font-size: 15px; }
+
+.landing-command dd {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--l-text-3);
+}
+
+/* Two buttons side by side in the closing card. */
+.landing-closing-card .landing-actions { justify-content: center; }
+.landing-closing-card .landing-btn--discord { margin-top: 0; }
+
 /* ---------- Small screens ---------- */
 @media (max-width: 560px) {
-    /* Keep the bar to one line: the section links are a scroll away anyway. */
+    /* Keep the bar to one line: the footer carries the Features and Addon links too. */
     .landing .landing-links .landing-section-link { display: none; }
     .landing-hero { padding-top: 112px; }
     .landing-actions .landing-btn { flex: 1 1 100%; justify-content: center; }
+    .landing-feature { padding: 28px 22px 30px; }
+    .landing-command { grid-template-columns: 1fr; padding: 16px 20px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .landing .landing-btn,
-    .landing-surface { transition: none; }
+    .landing-surface,
+    .landing-feature { transition: none; }
 }

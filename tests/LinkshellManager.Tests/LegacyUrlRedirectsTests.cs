@@ -68,6 +68,8 @@ public class LegacyUrlRedirectsTests
     [InlineData("/")]
     [InlineData("/privacy")]
     [InlineData("/terms")]
+    [InlineData("/features")]
+    [InlineData("/addon")]
     [InlineData("/Home/Error")]
     [InlineData("/Account/Login")]
     [InlineData("/Account/Logout")]

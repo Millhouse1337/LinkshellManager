@@ -1,0 +1,234 @@
+@using LinkshellManagerDiscordApp.Utils
+@{
+    ViewData["Title"] = "Addon";
+    // The landing page's "Addon" link: what the in-game lsm addon does, how to set it up, and the
+    // commands people use. Same look as the landing page (landing.css). The addon's own
+    // COMMANDS.md (and /lsm help in game) is the source for its commands; keep this in step.
+    Layout = "_PublicLayout";
+    ViewData["FullBleed"] = true;
+    ViewData["LandingPage"] = "addon";
+}
+
+@section Styles {
+    <partial name="_LandingStyles" />
+}
+
+<div class="landing">
+    <partial name="_LandingNav" />
+
+    <section class="landing-hero landing-hero--page">
+        <img class="landing-hero-art" src="~/images/landing-hero.jpg" asp-append-version="true"
+             alt="" width="2560" height="1440" fetchpriority="high" />
+        <div class="landing-hero-copy">
+            <p class="landing-eyebrow">In-game addon</p>
+            <h1>Let the game take attendance.</h1>
+            <p class="landing-lede">
+                The lsm addon for Ashita v3 on HorizonXI reads who is in your alliance, catches times
+                of death and drops from the chat log, and sends it all to your linkshell's app while
+                you play.
+            </p>
+            <div class="landing-actions">
+                <a class="landing-btn landing-btn--gold" href="@LandingLinks.AddonTab">
+                    Get a pairing code <span class="landing-btn-arrow" aria-hidden="true">→</span>
+                </a>
+                <a class="landing-btn landing-btn--ghost" asp-controller="Home" asp-action="Features">See every feature</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="landing-section" aria-labelledby="addon-setup-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">I · Setup</p>
+                <h2 id="addon-setup-title">Running in three steps.</h2>
+            </div>
+            <p>There is no server to configure: the addon already points at linkshellmanager.com.</p>
+        </div>
+
+        <div class="landing-surfaces">
+            <article class="landing-surface">
+                <p class="landing-surface-kicker">I · Install</p>
+                <h3>Load it</h3>
+                <p>Put the <code>lsm</code> folder in Ashita's <code>addons</code> folder, then type <code>/addon load lsm</code> in game.</p>
+            </article>
+
+            <article class="landing-surface">
+                <p class="landing-surface-kicker">II · Pair</p>
+                <h3>Link your account</h3>
+                <p>Sign in, open the Game Addon tab and press + Get Code. In game, type <code>/lsm link &lt;code&gt;</code>. One code pairs every linkshell you belong to, and the addon works out which pearl is which.</p>
+                <a class="landing-surface-link" href="@LandingLinks.AddonTab">Get a pairing code <span aria-hidden="true">→</span></a>
+            </article>
+
+            <article class="landing-surface">
+                <p class="landing-surface-kicker">III · Play</p>
+                <h3>Open the launcher</h3>
+                <p>Type <code>/attend</code>. Your linkshell's queued and active events are already there. Pick one and post attendance as the camp runs.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="landing-section" aria-labelledby="addon-features-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">II · What it does</p>
+                <h2 id="addon-features-title">Built for the camp.</h2>
+            </div>
+            <p>Everything lives in one launcher window, with the ToD Tracker in a window of its own.</p>
+        </div>
+
+        <div class="landing-features">
+            <article class="landing-feature">
+                <h3>The launcher</h3>
+                <p><code>/attend</code> opens one window with everything a camp needs:</p>
+                <ul class="landing-feature-points">
+                    <li>Sync status and a linkshell picker.</li>
+                    <li>Queued and active events from the app.</li>
+                    <li>The attendance roster, Break Room and Loot Pool.</li>
+                    <li>ToD and Claim Shield capture.</li>
+                </ul>
+                <p>Compact mode keeps just the live tools on screen.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Alliance attendance</h3>
+                <p>The addon reads your whole alliance, up to 18 people, straight from the game. Start &amp; Post opens the event and Post Window adds each window after it. On an HNM camp, every window gets its own tab.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Auto-Post</h3>
+                <p>Arm Auto-Post and the addon posts your alliance at each window as it opens, so nobody has to watch the clock. It is never on by default, because not everyone in the zone should count.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>The Lobby</h3>
+                <p>Before the camp starts, see who from your linkshell is here, grouped by alliance. Search the whole zone and spot who hasn't joined Linkshell Manager yet.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Quick snapshots</h3>
+                <p><code>/lsm now</code> captures your alliance at any moment, with an optional name such as <code>/lsm now Tiamat</code>. An officer then files it against an event and a window in the app.</p>
+                <p>The Misc Posts panel shows how each of your snapshots was filed.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>ToD capture</h3>
+                <p>The addon watches chat for an HNM's defeat line and posts the time of death to your linkshell. It shows up on the Dashboard's ToD tracker with a countdown to the next window.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>ToD Tracker window</h3>
+                <p><code>/tod</code> lists the newest ToD for each monster, with every spawn window counting down live. When a spawn announcement shows up the row turns to POPPED, and once the kill is seen you can post it as claimed or unclaimed.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Loot Pool</h3>
+                <p>After a kill, the drops from chat appear here. Pick the winner and the DKP, post it, and it is filed against the event. Each kill gets its own tab, so a new kill never buries loot you are still handing out.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Claim Shield</h3>
+                <p>During a spawn lottery, Claim Shield records which linkshell members actually landed an action on the HNM, rather than whose name happened to show up in chat.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="landing-section" aria-labelledby="addon-rules-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">III · Good to know</p>
+                <h2 id="addon-rules-title">How it fits with the app.</h2>
+            </div>
+            <p>A few rules that keep attendance fair and the records clean.</p>
+        </div>
+
+        <div class="landing-features">
+            <article class="landing-feature">
+                <h3>One poster per alliance</h3>
+                <p>The game only lets an addon see your own alliance, so each alliance at an event needs one person running the addon. The addon works out which alliance you are in from its leader.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Anyone can post</h3>
+                <p>A capture from a member without officer rights arrives as Pending. It shows on the event, but earns nothing until an officer confirms it.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Events come from the app</h3>
+                <p>Create events on the website or in Discord. They appear in the launcher's event list on their own, so there is nothing to set up in game.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>HNM events only</h3>
+                <p>ToD and Claim Shield capture only listen while your linkshell has an HNM event queued or running. A monster you weren't camping never shows up.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Manual Check In camps</h3>
+                <p>On a camp set to Manual Check In, members check in and out with buttons on the Discord camp board. The addon stops posting windows there, so nobody is counted twice.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>A copy on your PC</h3>
+                <p>Every snapshot is also saved as a CSV file in the addon's <code>Snapshots</code> folder. If the upload fails, the roster is still there.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="landing-section" aria-labelledby="addon-commands-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">IV · Commands</p>
+                <h2 id="addon-commands-title">The commands you'll use.</h2>
+            </div>
+            <p>Type <code>/lsm help</code> in game for the full list.</p>
+        </div>
+
+        <dl class="landing-commands">
+            <div class="landing-command">
+                <dt><code>/attend</code></dt>
+                <dd>Open or close the launcher.</dd>
+            </div>
+            <div class="landing-command">
+                <dt><code>/tod</code></dt>
+                <dd>Open or close the ToD Tracker window.</dd>
+            </div>
+            <div class="landing-command">
+                <dt><code>/lsm link &lt;code&gt;</code></dt>
+                <dd>Pair the addon, using a code from the Game Addon tab.</dd>
+            </div>
+            <div class="landing-command">
+                <dt><code>/lsm status</code></dt>
+                <dd>Show your pairings and which pearl slot each linkshell is in.</dd>
+            </div>
+            <div class="landing-command">
+                <dt><code>/lsm unlink [name|all]</code></dt>
+                <dd>Remove one linkshell's pairing, or all of them.</dd>
+            </div>
+            <div class="landing-command">
+                <dt><code>/lsm now [name] [p|a]</code></dt>
+                <dd>Snapshot your alliance, or add <code>p</code> for just your party. A name labels it in the app.</dd>
+            </div>
+            <div class="landing-command">
+                <dt><code>/lsm roster</code></dt>
+                <dd>Check who your next post will credit.</dd>
+            </div>
+            <div class="landing-command">
+                <dt><code>/lsm help</code></dt>
+                <dd>Print every command in chat.</dd>
+            </div>
+        </dl>
+    </section>
+
+    <section class="landing-closing" aria-labelledby="addon-closing-title">
+        <div class="landing-closing-card">
+            <h2 id="addon-closing-title">Pair it once. Play as usual.</h2>
+            <p>Sign in with Discord, get a code from the Game Addon tab, and type <code>/lsm link</code> in game.</p>
+            <div class="landing-actions">
+                <a class="landing-btn landing-btn--discord" href="@LandingLinks.SignInToAddonTab">Sign in with Discord</a>
+                <a class="landing-btn landing-btn--ghost" asp-controller="Home" asp-action="Features">See every feature</a>
+            </div>
+        </div>
+    </section>
+
+    <partial name="_LandingFooter" />
+</div>

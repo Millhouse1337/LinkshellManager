@@ -37,6 +37,20 @@ public class HomeController : Controller
         return View();
     }
 
+    // The landing page's top-bar links: a full page each on what the app and the in-game addon do.
+    // Open to everyone, signed in or not, so a link to either can be shared.
+    [Route("features")]
+    public IActionResult Features()
+    {
+        return View();
+    }
+
+    [Route("addon")]
+    public IActionResult Addon()
+    {
+        return View();
+    }
+
     [Route("privacy")]
     public IActionResult Privacy()
     {

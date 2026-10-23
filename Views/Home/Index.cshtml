@@ -1,3 +1,4 @@
+@using LinkshellManagerDiscordApp.Utils
 @{
     ViewData["Title"] = "LinkshellManager";
     // Always the signed-out landing page: HomeController sends a signed-in visitor straight to
@@ -5,34 +6,14 @@
     Layout = "_PublicLayout";
     ViewData["FullBleed"] = true;
     var showLauncherDownload = ViewData["ShowLauncherDownload"] as bool? ?? false;
-    // The website's app is the Angular UI (the same one Discord shows); signing in lands there.
-    const string appHref = "/discord-activity/";
-    const string signInHref = "/auth/discord/login?returnUrl=%2Fdiscord-activity%2F";
-    // Built here rather than written into the href, so Razor never has to decide what the @ means.
-    const string fontsHref = "https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Figtree:wght@400;500;600&display=swap";
 }
 
 @section Styles {
-    @* Cinzel (headings) and Figtree (body) come from Google Fonts, the one external asset host
-       the CSP in Program.cs allows. Cinzel falls back to Georgia and Figtree to the site's Geist. *@
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="@fontsHref" />
-    <link rel="stylesheet" href="~/css/landing.css" asp-append-version="true" />
+    <partial name="_LandingStyles" />
 }
 
 <div class="landing">
-    <header class="landing-nav">
-        <a class="landing-brand" href="~/">
-            <span class="landing-diamond" aria-hidden="true"></span>
-            <span>Linkshell Manager</span>
-        </a>
-        <nav class="landing-links" aria-label="Main">
-            <a class="landing-section-link" href="#features">Features</a>
-            <a class="landing-section-link" href="#addon">Addon</a>
-            <a class="landing-signin" href="@signInHref">Sign in</a>
-        </nav>
-    </header>
+    <partial name="_LandingNav" />
 
     <section class="landing-hero">
         @* Decorative: the headline carries the message. Eager + high priority because this is the
@@ -47,10 +28,10 @@
                 and event history follow you in both places.
             </p>
             <div class="landing-actions">
-                <a class="landing-btn landing-btn--gold" href="@signInHref">
+                <a class="landing-btn landing-btn--gold" href="@LandingLinks.SignIn">
                     Launch in Discord <span class="landing-btn-arrow" aria-hidden="true">→</span>
                 </a>
-                <a class="landing-btn landing-btn--ghost" href="@appHref">Open the website</a>
+                <a class="landing-btn landing-btn--ghost" href="@LandingLinks.App">Open the website</a>
                 @* This is the only page reachable without an account, so it is where a tester
                    without Discord finds the launcher. *@
                 @if (showLauncherDownload)
@@ -72,21 +53,21 @@
                 <p class="landing-surface-kicker">I · Website</p>
                 <h3>Full management</h3>
                 <p>Sign in with Discord to manage linkshells, create events, review history and configure your account.</p>
-                <a class="landing-surface-link" href="@appHref">Open website <span aria-hidden="true">→</span></a>
+                <a class="landing-surface-link" href="@LandingLinks.App">Open website <span aria-hidden="true">→</span></a>
             </article>
 
             <article class="landing-surface">
                 <p class="landing-surface-kicker">II · Discord Activity</p>
                 <h3>Right in voice chat</h3>
                 <p>Launch from any voice channel. Nothing to install, no separate login.</p>
-                <a class="landing-surface-link" href="@signInHref">Launch Activity <span aria-hidden="true">→</span></a>
+                <a class="landing-surface-link" href="@LandingLinks.SignIn">Launch Activity <span aria-hidden="true">→</span></a>
             </article>
 
             <article id="addon" class="landing-surface">
                 <p class="landing-surface-kicker">III · Attendance Addon</p>
                 <h3>Captured in game</h3>
                 <p>Pair the addon with your account to record attendance from live sessions — event history stays in sync with your linkshell.</p>
-                <a class="landing-surface-link" href="@(appHref)addon">Get the addon <span aria-hidden="true">→</span></a>
+                <a class="landing-surface-link" href="@LandingLinks.AddonTab">Get the addon <span aria-hidden="true">→</span></a>
             </article>
         </div>
     </section>
@@ -95,15 +76,9 @@
         <div class="landing-closing-card">
             <h2 id="landing-closing-title">Gather your linkshell.</h2>
             <p>Sign in with Discord — your account works everywhere from the first login.</p>
-            <a class="landing-btn landing-btn--discord" href="@signInHref">Sign in with Discord</a>
+            <a class="landing-btn landing-btn--discord" href="@LandingLinks.SignIn">Sign in with Discord</a>
         </div>
     </section>
 
-    <footer class="landing-footer">
-        <span class="landing-footer-brand">Linkshell Manager</span>
-        <nav aria-label="Legal">
-            <a asp-controller="Home" asp-action="Privacy">Privacy</a>
-            <a asp-controller="Home" asp-action="Terms">Terms</a>
-        </nav>
-    </footer>
+    <partial name="_LandingFooter" />
 </div>

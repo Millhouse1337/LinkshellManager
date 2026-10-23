@@ -1,0 +1,336 @@
+@using LinkshellManagerDiscordApp.Utils
+@{
+    ViewData["Title"] = "Features";
+    // The landing page's "Features" link: what the app does, area by area, for someone deciding
+    // whether to use it. It wears the landing page's look (landing.css), so it is full-bleed too.
+    // The copy follows docs/LSManager-WebApp-Guide.md and LSManager-DiscordActivity-Guide.md.
+    Layout = "_PublicLayout";
+    ViewData["FullBleed"] = true;
+    ViewData["LandingPage"] = "features";
+}
+
+@section Styles {
+    <partial name="_LandingStyles" />
+}
+
+<div class="landing">
+    <partial name="_LandingNav" />
+
+    <section class="landing-hero landing-hero--page">
+        <img class="landing-hero-art" src="~/images/landing-hero.jpg" asp-append-version="true"
+             alt="" width="2560" height="1440" fetchpriority="high" />
+        <div class="landing-hero-copy">
+            <p class="landing-eyebrow">Features</p>
+            <h1>Everything your linkshell runs on.</h1>
+            <p class="landing-lede">
+                Events, DKP, loot, times of death, the treasury and your roster, in one app. It opens
+                in your browser and inside Discord, and the in-game addon feeds it while you play.
+            </p>
+            <div class="landing-actions">
+                <a class="landing-btn landing-btn--gold" href="@LandingLinks.SignIn">
+                    Sign in with Discord <span class="landing-btn-arrow" aria-hidden="true">→</span>
+                </a>
+                <a class="landing-btn landing-btn--ghost" asp-controller="Home" asp-action="Addon">About the addon</a>
+            </div>
+        </div>
+    </section>
+
+    <nav class="landing-toc" aria-label="On this page">
+        <a href="#events">Events &amp; attendance</a>
+        <a href="#dkp">DKP &amp; loot</a>
+        <a href="#hnm">HNMs &amp; ToDs</a>
+        <a href="#treasury">Treasury</a>
+        <a href="#members">Members</a>
+        <a href="#setup">Setup &amp; access</a>
+    </nav>
+
+    <section id="events" class="landing-section" aria-labelledby="features-events-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">I · Events &amp; attendance</p>
+                <h2 id="features-events-title">Plan it, run it, settle it.</h2>
+            </div>
+            <p>The Event System follows every event from sign-up to DKP, in three views: Current, Pending and Past.</p>
+        </div>
+
+        <div class="landing-features">
+            <article class="landing-feature">
+                <h3>Create and schedule</h3>
+                <p>Set the event's time, DKP rate and how many people it needs. It appears on the website, in the Discord Activity and in the addon's event list.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Sign up from Discord</h3>
+                <p>Post an event to a channel and the bot keeps a live board there. Members sign up, sign up as party leader or withdraw with a button, and the board updates in place.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Live attendance</h3>
+                <p>Current shows what is running now.</p>
+                <ul class="landing-feature-points">
+                    <li>Who is there, and who is on a break.</li>
+                    <li>Every roster the addon has posted, window by window.</li>
+                    <li>Officers check each roster, set its DKP and post it.</li>
+                </ul>
+            </article>
+
+            <article class="landing-feature">
+                <h3>HNM camps, window by window</h3>
+                <p>A camp pays for each window a member is there, plus bonuses for the open, the close, the claim and the kill. Set the amounts once for the linkshell and change them for a single camp.</p>
+                <ul class="landing-feature-points">
+                    <li><strong>Addon scans:</strong> officers post each window from the game.</li>
+                    <li><strong>Manual Check In:</strong> members check in and out with buttons on the Discord camp board.</li>
+                </ul>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Pending: the officers' to-do list</h3>
+                <p>Everything that needs a decision, in one place. Everyone can read it; the button shows a count when something is waiting.</p>
+                <ul class="landing-feature-points">
+                    <li><strong>Triage:</strong> members' captures awaiting confirmation, and officers' captures not yet filed against an event.</li>
+                    <li>Events waiting for their DKP to be posted.</li>
+                    <li>ToDs and attendance members submitted for review.</li>
+                </ul>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Past events</h3>
+                <p>Settled events keep their full attendance and loot. Members can leave comments, and officers can still make corrections.</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="dkp" class="landing-section" aria-labelledby="features-dkp-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">II · DKP &amp; loot</p>
+                <h2 id="features-dkp-title">Fair loot, on the record.</h2>
+            </div>
+            <p>Pick how your linkshell hands out loot. The app keeps every point accounted for.</p>
+        </div>
+
+        <div class="landing-features">
+            <article class="landing-feature">
+                <h3>Your loot rules</h3>
+                <ul class="landing-feature-points">
+                    <li><strong>DKP:</strong> members earn DKP at events and spend it on items.</li>
+                    <li><strong>Loot Council:</strong> the leader awards items, no DKP.</li>
+                    <li><strong>Percentage Based:</strong> DKP is earned as usual; a win costs a percentage of the winner's balance.</li>
+                </ul>
+                <p>DKP rounds to quarter or half points, whichever you choose.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>A ledger you can check</h3>
+                <p>The DKP Sheet shows every member's current, total and spent DKP, and is searchable. The history behind it shows where every point came from.</p>
+                <p>Officers adjust a balance, add to an earlier entry or record a one-off, and each change is logged.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Live auctions</h3>
+                <p>Members bid from the app while the auction runs, and the tab shows how many are live. Past auctions stay in the history.</p>
+                <p class="landing-feature-tag">DKP linkshells</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Loot history</h3>
+                <p>Every drop and who won it, across events and ToDs. It works for Loot Council linkshells too.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Bring your old DKP</h3>
+                <p>Moving from a spreadsheet? Upload it as .xlsx or .csv. A preview shows every row as an update, a new member or skipped, and nothing changes until you press Import.</p>
+                <p>Names the app doesn't know yet keep their DKP until that person signs in and claims it.</p>
+                <p class="landing-feature-tag">Website only</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Export to Excel</h3>
+                <p>Download the linkshell's current DKP as a formatted spreadsheet, ready to share or archive.</p>
+                <p class="landing-feature-tag">Website only</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="hnm" class="landing-section" aria-labelledby="features-hnm-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">III · HNMs &amp; ToDs</p>
+                <h2 id="features-hnm-title">Never miss a window.</h2>
+            </div>
+            <p>Times of death, repop windows, claims and endgame pop items, tracked for the whole linkshell.</p>
+        </div>
+
+        <div class="landing-features">
+            <article class="landing-feature">
+                <h3>ToD tracker</h3>
+                <p>The Dashboard counts down to every tracked monster's next window. The addon posts the ToD the moment a kill shows in chat, or anyone can add one by hand from the full monster list.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>History per monster</h3>
+                <p>Every kill, grouped by monster. Open one to see what dropped and who won it.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Claims at a glance</h3>
+                <p>The Dashboard charts your HNM claims over the last 7 days, 30 days or all time. Recent Activity filters down to just kills or claims.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Party setups</h3>
+                <p>Lay out a raid as alliance, party and slot, then assign it to a monster. Members claim an open slot right from that monster's ToD, one slot each.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Endgame charts</h3>
+                <p>Boards for Sky, Sea, Dynamis, Limbus and HENM. Track each boss's pop items and drops, and credit whoever farmed them.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Only the mobs you camp</h3>
+                <p>Hide the monsters your linkshell doesn't go for, and they drop out of the tracker and the ToD views.</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="treasury" class="landing-section" aria-labelledby="features-treasury-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">IV · Treasury</p>
+                <h2 id="features-treasury-title">Gil you can account for.</h2>
+            </div>
+            <p>A balance sheet every member can read, kept up with a few buttons rather than bookkeeping.</p>
+        </div>
+
+        <div class="landing-features">
+            <article class="landing-feature">
+                <h3>A simple balance sheet</h3>
+                <p>What the linkshell has, what it owes, and what that leaves it worth. Open "Owed to members" to see exactly who is still waiting on gil.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Record it in a sentence</h3>
+                <p>Press Gil In or Gil Out, enter the amount, and say why in your own words: "sold the Osode" or "food for Sky". That sentence is the record. No categories to pick.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Split gil fairly</h3>
+                <p>Enter a total and tick who gets a share. The app divides it evenly, shows who gets what before you confirm, and keeps a payout list. Tick people off as you hand the gil over.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Debts, both ways</h3>
+                <p>Record gil someone owes the linkshell, or gil the linkshell owes a member. Neither touches gil on hand until it is actually paid.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Nothing is ever deleted</h3>
+                <p>Confirmed entries can't be edited. Fix records the right version and cancels the old one; Reverse just cancels it. The original stays visible either way. Save as a draft while you double-check.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>The item stash</h3>
+                <p>Everything the linkshell owns, in one list. Selling an item records the gil in the same step, and closing a gil auction records itself.</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="members" class="landing-section" aria-labelledby="features-members-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">V · Members</p>
+                <h2 id="features-members-title">Know your linkshell.</h2>
+            </div>
+            <p>Who your members are, what they play, and what is happening, on the first screen.</p>
+        </div>
+
+        <div class="landing-features">
+            <article class="landing-feature">
+                <h3>Dashboard</h3>
+                <ul class="landing-feature-points">
+                    <li>Members, items, revenue and what's coming up, at a glance.</li>
+                    <li>Rules and announcements, posted by officers right there.</li>
+                    <li>News &amp; Updates, upcoming events and a searchable roster.</li>
+                    <li>Recent Activity, filtered by kills, claims, events or loot.</li>
+                </ul>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Member management</h3>
+                <p>The full roster with characters, ranks, status and DKP, plus a search. Officers invite people, change roles and remove members from here.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Profiles</h3>
+                <p>A main character and up to two alts, with a time zone. For each character: job levels, merits, gear and skill stars, relics, and craft levels.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Player ratings</h3>
+                <p>Rate teammates' gear and skill on each job, with a comment. You can see what the linkshell thinks of each of your own characters.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Messages</h3>
+                <p>An inbox inside the app for messages between members.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>More than one linkshell</h3>
+                <p>Belong to several and switch between them in a click. Start a new one and invite your members from the app.</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="setup" class="landing-section" aria-labelledby="features-setup-title">
+        <div class="landing-section-head">
+            <div class="landing-section-title">
+                <p class="landing-eyebrow">VI · Setup &amp; access</p>
+                <h2 id="features-setup-title">Set it up your way.</h2>
+            </div>
+            <p>Decide who can do what, switch off what you don't use, and open it wherever you are.</p>
+        </div>
+
+        <div class="landing-features">
+            <article class="landing-feature">
+                <h3>One login, everywhere</h3>
+                <p>Sign in with Discord. The same account works on the website and in the Discord Activity, with no password to remember.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Roles and permissions</h3>
+                <p>Create your own roles and choose what each can do, such as adjusting DKP, recording treasury entries, managing members or changing settings.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Feature toggles</h3>
+                <p>Not running auctions, or not tracking ToDs? Switch that section off and it disappears for everyone.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>At home in a browser</h3>
+                <p>On the website, every tab has its own address. Bookmark it, share it, reload it, and the Back button works.</p>
+            </article>
+
+            <article class="landing-feature">
+                <h3>Pair the addon</h3>
+                <p>The Game Addon tab makes a one-time code. Type it in game and the addon is linked to every linkshell you belong to.</p>
+                <a class="landing-feature-link" asp-controller="Home" asp-action="Addon">What the addon does <span aria-hidden="true">→</span></a>
+            </article>
+        </div>
+    </section>
+
+    <section class="landing-closing" aria-labelledby="features-closing-title">
+        <div class="landing-closing-card">
+            <h2 id="features-closing-title">Bring your linkshell over.</h2>
+            <p>Sign in with Discord, set up your linkshell, and import the DKP you already track.</p>
+            <div class="landing-actions">
+                <a class="landing-btn landing-btn--discord" href="@LandingLinks.SignIn">Sign in with Discord</a>
+                <a class="landing-btn landing-btn--ghost" asp-controller="Home" asp-action="Addon">About the addon</a>
+            </div>
+        </div>
+    </section>
+
+    <partial name="_LandingFooter" />
+</div>
