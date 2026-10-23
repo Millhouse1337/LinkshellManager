@@ -1418,6 +1418,9 @@ export interface ActivityWindowSnapshot {
   // Posted by a member without moderation rights and not yet confirmed. Shown on the card, but
   // excluded from the combined roster and from DKP until an officer acts on it.
   isPending: boolean;
+  // The account that posted it (its character name, else user name). Sent for unlinked captures,
+  // where Triage shows who sent a member's capture; absent elsewhere.
+  postedByName?: string | null;
   // Window or Misc. Distinct from a null windowNumber, which means the camp runs no grid at all —
   // an ungridded camp still files ordinary Window captures.
   slotKind: string;

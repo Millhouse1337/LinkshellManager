@@ -118,7 +118,10 @@ public sealed partial class ActivityDataController
         string SlotKind,
         bool IsMisc,
         // What the chip reads: "Misc", or the WindowLabel.
-        string? SlotLabel);
+        string? SlotLabel,
+        // The account that posted it (character name, else user name). Filled for unlinked
+        // captures, where Triage shows who sent a member's capture; null elsewhere.
+        string? PostedByName = null);
 
     public sealed record ActivityWindowSnapshotEntryDto(
         int Id,
@@ -255,14 +258,30 @@ public sealed partial class ActivityDataController
                 s => s.LinkshellId == linkshellId && s.WindowEventId == null && s.LinkedEventId == null && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored,
                 cancellationToken);
 
+        // Captures awaiting confirmation first, so the cap never hides a member's /lsm now from a
+        // day no officer was there behind officers' own captures; newest first within each group.
         var unlinkedSnapshots = await _dbContext.AttendanceSnapshots
             .AsNoTracking()
             .Where(s => s.LinkshellId == linkshellId && s.WindowEventId == null && s.LinkedEventId == null && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
-            .OrderByDescending(s => s.CapturedAtUtc)
+            .OrderBy(s => s.SnapshotStatus == AttendanceSnapshotStatuses.Pending ? 0 : 1)
+            .ThenByDescending(s => s.CapturedAtUtc)
             .ThenBy(s => s.AllianceNumber)
             .Take(unlinkedDisplayCap)
             .Include(s => s.Entries)
             .ToListAsync(cancellationToken);
+
+        // Who posted each unlinked capture: the account behind the addon token, which for a member's
+        // capture is not necessarily the in-game character that ran /lsm now. One query.
+        var posterIds = unlinkedSnapshots
+            .Select(s => s.PostedByAppUserId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Distinct()
+            .ToList();
+        var posterNames = await _dbContext.Users
+            .AsNoTracking()
+            .Where(u => posterIds.Contains(u.Id))
+            .Select(u => new { u.Id, Name = u.CharacterName ?? u.UserName })
+            .ToDictionaryAsync(u => u.Id, u => u.Name, cancellationToken);
 
         // Roster character names (typeahead for the "Add a character by name…"
         // input on snapshot editors). Only fetched for managers since they're
@@ -288,7 +307,12 @@ public sealed partial class ActivityDataController
             closedEvents.Select(e => MapActivityWindowEvent(e, roster)).ToList(),
             // No parent event, so no window grid and no window label — deliberately, exactly as
             // AttendanceSectionsBuilder.MapSnapshot does for an unlinked snapshot on the web.
-            unlinkedSnapshots.Select(s => MapActivityWindowSnapshot(s, null, roster)).ToList(),
+            unlinkedSnapshots
+                .Select(s => MapActivityWindowSnapshot(s, null, roster) with
+                {
+                    PostedByName = s.PostedByAppUserId is { } posterId && posterNames.TryGetValue(posterId, out var name) ? name : null
+                })
+                .ToList(),
             canManage,
             WindowEventEntryTypes.All,
             rosterCharacterNames,

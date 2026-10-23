@@ -22,3 +22,17 @@
 .panel-tab .panel__header {
   border-bottom: 0;
 }
+
+/* ===== Event System → Pending → Triage: its two parts =====
+   Awaiting confirmation (members' captures) above Unlinked (officers'), in one card
+   (attendance-sections, section="unlinked"). Here rather than in that component's stylesheet,
+   which is already over the style budget. */
+.we-triage__part + .we-triage__part { border-top: 1px solid var(--border); }
+.we-triage__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px 0;
+}
+.we-triage__title { font-size: 13px; font-weight: 600; color: var(--fg); }
+.we-triage__sub { padding: 4px 18px 0; font-size: 12px; color: var(--fg-2); }

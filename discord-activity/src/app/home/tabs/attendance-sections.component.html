@@ -45,19 +45,51 @@
           }
         </div>
       </div>
-      <section class="card">
-        @if (model.unlinkedSnapshots.length === 0) {
-          <div class="we-empty">
-            Captures posted from in-game that aren't attached to an attendance event land here.
-            Name one and link it to an event, or create an event from it.
+      <!-- Two parts. First what members sent without permission to post attendance (a /lsm now on a
+           day no officer was at the run): nothing in those counts until an officer confirms, so they
+           lead. Then officers' own (or already confirmed) captures that simply aren't filed yet. -->
+      @let awaiting = unlinkedAwaiting(model);
+      @let unfiled = unlinkedUnfiled(model);
+      <section class="card we-triage">
+        <div class="we-triage__part">
+          <div class="we-triage__head">
+            <span class="we-triage__title">Awaiting confirmation</span>
+            <span class="tag" [class.warning]="awaiting.length > 0">{{ awaiting.length }}</span>
           </div>
-        } @else {
-          <section class="we-snapshots we-snapshots--unlinked">
-            @for (snapshot of model.unlinkedSnapshots; track snapshot.id) {
-              <ng-container *ngTemplateOutlet="snapshotDetails; context: { snapshot: snapshot, event: null, closed: false, model: model, unlinked: true }" />
-            }
-          </section>
-        }
+          <div class="we-triage__sub">
+            Sent with /lsm now by members without permission to post attendance — a run no officer was
+            at, say. Check who was there, then Confirm (and file it) or Reject.
+          </div>
+          @if (awaiting.length === 0) {
+            <div class="we-empty">No member captures are waiting.</div>
+          } @else {
+            <section class="we-snapshots we-snapshots--unlinked">
+              @for (snapshot of awaiting; track snapshot.id) {
+                <ng-container *ngTemplateOutlet="snapshotDetails; context: { snapshot: snapshot, event: null, closed: false, model: model, unlinked: true }" />
+              }
+            </section>
+          }
+        </div>
+
+        <div class="we-triage__part">
+          <div class="we-triage__head">
+            <span class="we-triage__title">Unlinked</span>
+            <span class="tag">{{ unfiled.length }}</span>
+          </div>
+          <div class="we-triage__sub">
+            Captures posted by officers (or already confirmed) that aren't attached to an attendance
+            event yet. Name one and link it to an event, or create an event from it.
+          </div>
+          @if (unfiled.length === 0) {
+            <div class="we-empty">Nothing unfiled.</div>
+          } @else {
+            <section class="we-snapshots we-snapshots--unlinked">
+              @for (snapshot of unfiled; track snapshot.id) {
+                <ng-container *ngTemplateOutlet="snapshotDetails; context: { snapshot: snapshot, event: null, closed: false, model: model, unlinked: true }" />
+              }
+            </section>
+          }
+        </div>
       </section>
     }
 
@@ -504,7 +536,13 @@
         }
         <strong>{{ formatDate(snapshot.capturedAtUtc) }}</strong>
         <span class="we-snapshot__meta">
-          · posted by <strong>{{ snapshot.capturedByCharacterName || '-' }}</strong>
+          · captured by <strong>{{ snapshot.capturedByCharacterName || '-' }}</strong>
+          @if (snapshot.postedByName && snapshot.postedByName !== snapshot.capturedByCharacterName) {
+            · sent by <strong>{{ snapshot.postedByName }}</strong>
+          }
+          @if (snapshot.primaryZone) {
+            · {{ snapshot.primaryZone }}
+          }
           · {{ snapshot.entryCount }} {{ snapshot.entryCount === 1 ? 'member' : 'members' }}
         </span>
         @if (snapshot.snapshotStatus !== 'Active') {

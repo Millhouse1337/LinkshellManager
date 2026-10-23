@@ -108,6 +108,16 @@ export class AttendanceSectionsComponent {
     return model.unlinkedSnapshots.filter(snapshot => snapshot.isPending).length;
   }
 
+  // Triage's two parts: what members sent without permission (waiting on an officer's Confirm),
+  // and officers' own or already confirmed captures that just aren't filed against an event yet.
+  protected unlinkedAwaiting(model: { unlinkedSnapshots: ActivityWindowSnapshot[] }): ActivityWindowSnapshot[] {
+    return model.unlinkedSnapshots.filter(snapshot => snapshot.isPending);
+  }
+
+  protected unlinkedUnfiled(model: { unlinkedSnapshots: ActivityWindowSnapshot[] }): ActivityWindowSnapshot[] {
+    return model.unlinkedSnapshots.filter(snapshot => !snapshot.isPending);
+  }
+
   // "Window" / "Misc" are the STORAGE names (AttendanceSnapshotSlotKinds), and they told an
   // officer nothing about where a row came from. They map exactly onto the two ways attendance is
   // captured, so the chip says that instead. Mirrors Views/WindowEvents/_WindowEventCard.cshtml --
