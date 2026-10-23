@@ -1,14 +1,17 @@
-<!-- Treasury > Items -->
-<div class="section-head">
+<!-- Treasury > Items. The Treasury tab's view strip is projected in as [treasuryViews]. -->
+<div class="section-head fin-head">
   <div>
     <div class="section-label">Treasury</div>
     <div class="section-title">Items</div>
   </div>
-  @if (canManage) {
-    <button type="button" class="btn primary sm" (click)="toggleForm()">
-      {{ showForm() ? 'Cancel' : (editingItemId() !== null ? 'Editing...' : '+ Add Item') }}
-    </button>
-  }
+  <div class="fin-head-actions">
+    @if (canManage) {
+      <button type="button" class="btn primary sm" (click)="toggleForm()">
+        {{ showForm() ? 'Cancel' : (editingItemId() !== null ? 'Editing...' : '+ Add Item') }}
+      </button>
+    }
+    <ng-content select="[treasuryViews]" />
+  </div>
 </div>
 
 <div class="card">

@@ -39,6 +39,10 @@ export type TabName = typeof TAB_NAMES[number];
 // /profile/ratings.
 export type ProfileView = 'jobs' | 'crafts' | 'ratings';
 
+// The Treasury tab's views, picked by the strip in its header: /treasury (the balance sheet),
+// /treasury/items, /treasury/transactions.
+export type TreasuryView = 'balance' | 'items' | 'transactions';
+
 // HNM base -> stronger merge pairs (mirrors HnmConfig.MonsterMergePairs). On the
 // create-event monster dropdown the two are offered as ONE entry: the base name below
 // HNM_COMBINED_FROM_DAY, the combined "Base/Stronger" name at/above it. The chosen text is

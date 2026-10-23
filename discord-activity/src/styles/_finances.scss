@@ -12,7 +12,13 @@
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
 }
+
+/* The Treasury headers carry an action button AND the three-view strip, which don't fit beside the
+   title on a phone. The right side drops under the title instead, still against the right edge. */
+.panel-tab .fin-head { flex-wrap: wrap; }
 
 /* The "Uncategorized N" chip is a real button (it filters the transaction list). Undo the browser's
    button styling so it stays identical to the static tags beside it, then add what a tag has no need

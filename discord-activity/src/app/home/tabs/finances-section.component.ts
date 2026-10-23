@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import {
   ChangeDetectionStrategy, Component, Input,
-  computed, effect, inject, signal
+  computed, effect, inject, input, signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -52,6 +52,13 @@ export class FinancesSectionComponent {
   }
 
   protected readonly selectedLinkshellId = signal<number | null>(null);
+
+  /**
+   * Which of the Treasury tab's two Gil views is showing: the balance sheet or the transactions list.
+   * Both are this one component because they share its data and its Record Transaction form, which
+   * shows on either.
+   */
+  readonly view = input<'balance' | 'transactions'>('balance');
 
   protected readonly search = signal('');
   protected readonly filter = signal<ActivityTreasuryFilter>('all');

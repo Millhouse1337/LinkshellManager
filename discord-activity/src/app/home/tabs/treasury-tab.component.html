@@ -1,18 +1,35 @@
 <div class="panel-tab">
   @if (linkshellId(); as id) {
-    <!-- Gil first: it is the number people open this tab for. Items sit in the MIDDLE of it, above
-         the transactions list — selling one is what moves the totals, and the transactions list runs
-         long enough to bury anything placed under it. finances-section has a slot at that point;
-         see the comment there for why Items is projected rather than rendered inside it. -->
+    <!-- The view strip. Drawn into the header row of whichever section is showing, at its far right,
+         so it stays in one place while the button beside it changes with the view. -->
+    <ng-template #viewTabs>
+      @if (views().length > 1) {
+        <div class="view-tabs" role="tablist" aria-label="Treasury view">
+          @for (option of views(); track option.key) {
+            <button type="button" class="view-tab" role="tab"
+              [class.active]="shownView() === option.key"
+              [attr.aria-selected]="shownView() === option.key"
+              (click)="view.set(option.key)">{{ option.label }}</button>
+          }
+        </div>
+      }
+    </ng-template>
+
+    <!-- Hidden rather than removed when another view is showing, so a search, a page of the
+         transactions list or a half-typed entry survives a switch. One finances section serves both
+         Gil views: they share its data and its Record Transaction form. -->
     @if (showGil()) {
-      <app-finances-section [linkshellId]="id">
-        @if (showItems()) {
-          <app-items-section [linkshellId]="id" [canManage]="canManageItems()" />
-        }
+      <app-finances-section [linkshellId]="id"
+        [view]="shownView() === 'transactions' ? 'transactions' : 'balance'"
+        [hidden]="shownView() === 'items'">
+        <ng-container ngProjectAs="[treasuryViews]" [ngTemplateOutlet]="viewTabs" />
       </app-finances-section>
-    } @else if (showItems()) {
-      <!-- Gil is switched off, so there is no host to project into. -->
-      <app-items-section [linkshellId]="id" [canManage]="canManageItems()" />
+    }
+    @if (showItems()) {
+      <app-items-section [linkshellId]="id" [canManage]="canManageItems()"
+        [hidden]="shownView() !== 'items'">
+        <ng-container ngProjectAs="[treasuryViews]" [ngTemplateOutlet]="viewTabs" />
+      </app-items-section>
     }
     @if (!showGil() && !showItems()) {
       <div class="empty-state">

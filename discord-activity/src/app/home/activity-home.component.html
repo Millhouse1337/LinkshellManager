@@ -339,7 +339,7 @@
   }
   @if (activeTab() === 'treasury') {
     <div role="tabpanel" [id]="panelId('treasury')" [attr.aria-labelledby]="tabId('treasury')">
-      <app-treasury-tab />
+      <app-treasury-tab [view]="treasuryView()" (viewChange)="setTreasuryView($event)" />
     </div>
   }
 

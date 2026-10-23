@@ -33,7 +33,7 @@ public class LegacyUrlRedirectsTests
     [InlineData("/DkpAdjustment", "?linkshellId=7", "/discord-activity/dkp?ls=7")]
     [InlineData("/LootHistory/Add", "", "/discord-activity/loot")]
     [InlineData("/ManageFinances/Record", "", "/discord-activity/treasury")]
-    [InlineData("/ManageItem/AddItem", "", "/discord-activity/treasury")]
+    [InlineData("/ManageItem/AddItem", "", "/discord-activity/treasury/items")]
     [InlineData("/ManageRevenue", "", "/discord-activity/treasury")]
     [InlineData("/Linkshell", "", "/discord-activity/management")]
     [InlineData("/Linkshell/Details/5", "", "/discord-activity/management?ls=5")]

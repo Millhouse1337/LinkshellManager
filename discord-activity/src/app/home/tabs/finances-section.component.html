@@ -1,18 +1,21 @@
-@if (summary(); as totals) {
-  <!-- Treasury > Gil -->
-  <div class="section-head">
-    <div>
-      <div class="section-label">Treasury</div>
-      <div class="section-title">Gil</div>
-    </div>
-    @if (canManage()) {
-      <div class="fin-head-actions">
-        <button type="button" class="btn primary sm" (click)="toggleForm()">
-          {{ showForm() ? 'Cancel' : 'Record Transaction' }}
-        </button>
-      </div>
-    }
+<!-- Treasury > Balance Sheet / Transactions. Outside the summary() guard so the Treasury tab's view
+     strip (projected in as [treasuryViews]) is there while the payload loads. -->
+<div class="section-head fin-head">
+  <div>
+    <div class="section-label">Treasury</div>
+    <div class="section-title">{{ view() === 'transactions' ? 'Transactions' : 'Balance Sheet' }}</div>
   </div>
+  <div class="fin-head-actions">
+    @if (summary() && canManage()) {
+      <button type="button" class="btn primary sm" (click)="toggleForm()">
+        {{ showForm() ? 'Cancel' : 'Record Transaction' }}
+      </button>
+    }
+    <ng-content select="[treasuryViews]" />
+  </div>
+</div>
+
+@if (view() === 'balance' && summary(); as totals) {
   <!-- The one gil card: what moved over the period, and — behind a disclosure — the sheet that
        explains where that leaves the linkshell. A balance and a movement are different kinds of
        number, so they sit in different bands of the card rather than in one column where the first
@@ -340,21 +343,8 @@
 
 }
 
-<!--
-  Items lands here — between the two summary cards and the transactions list, because selling one is
-  what moves the numbers above it, and the transactions list is long enough to bury anything under it.
-
-  Projected rather than rendered by this component, and deliberately OUTSIDE the summary() guards on
-  either side, so the two halves of the tab stay independent: Items still shows when Gil is switched
-  off for a linkshell, and it does not blink out while the treasury payload is loading.
-
-  A slot rather than splitting this component in two: the transactions card below is ~330 lines of
-  this template over most of the component's state, and none of that wants moving just to reorder.
--->
-<ng-content />
-
 @if (summary()) {
-  <!-- Card 3: recording one. Its own card rather than a band inside the transactions card below,
+  <!-- Recording one, on either view. Its own card rather than a band inside the transactions card below,
        because the form is taller than a screen once a split's roster opens, and a form that pushes
        the list it belongs to out of sight reads as having replaced it. Two cards say what one card
        in two moods could not: the list is still there, underneath. The head carries the mood —
@@ -605,11 +595,10 @@
     </div>
   }
 
-  <!-- Card 4: the transactions. -->
+  <!-- The transactions, on their own view. No card title: the section header above already says
+       "Transactions". -->
+  @if (view() === 'transactions') {
   <div class="card">
-    <div class="card-head">
-      <div class="card-title">Transactions</div>
-    </div>
 
     @if (page(); as loaded) {
       <div class="fin-toolbar">
@@ -801,4 +790,5 @@
       </div>
     }
   </div>
+  }
 }

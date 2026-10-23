@@ -1,16 +1,20 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, model } from '@angular/core';
 
 import { DiscordActivityService } from '../../discord/discord-activity.service';
+import { type TreasuryView } from '../activity-home.types';
 import { FinancesSectionComponent } from './finances-section.component';
 import { ItemsSectionComponent } from './items-section.component';
 
 /**
  * Treasury: everything the linkshell owns.
  *
- * Two sections — **Gil** and **Items** — which used to be buried at the bottom of the Management tab
- * below the roster. They belong together and away from people: an item is unsold value and gil is
- * realised value, and selling an item turns one into the other in a single transaction.
+ * Gil and Items, which used to be buried at the bottom of the Management tab below the roster. They
+ * belong together and away from people: an item is unsold value and gil is realised value, and
+ * selling an item turns one into the other in a single transaction.
+ *
+ * Three views, one at a time, picked by the strip at the top right: Balance Sheet and Transactions
+ * (both Gil) and Items. Stacked, the transactions list ran long enough to bury everything under it.
  *
  * Management is now just people again: roster, ranks, invites.
  */
@@ -64,4 +68,23 @@ export class TreasuryTabComponent {
   protected readonly showItems = computed(
     () => this.membership()?.settings?.enableItems !== false
   );
+
+  // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/treasury/items).
+  readonly view = model<TreasuryView>('balance');
+
+  // Only the views whose half is switched on. Balance Sheet and Transactions are both Gil.
+  protected readonly views = computed(() => {
+    const views: { key: TreasuryView; label: string }[] = [];
+    if (this.showGil()) views.push({ key: 'balance', label: 'Balance Sheet' });
+    if (this.showItems()) views.push({ key: 'items', label: 'Items' });
+    if (this.showGil()) views.push({ key: 'transactions', label: 'Transactions' });
+    return views;
+  });
+
+  // The view on screen: the one asked for, or the first one switched on — a /treasury/items link
+  // for a linkshell with Items turned off lands on the balance sheet rather than on nothing.
+  protected readonly shownView = computed<TreasuryView | null>(() => {
+    const views = this.views();
+    return views.some(option => option.key === this.view()) ? this.view() : views[0]?.key ?? null;
+  });
 }

@@ -14,7 +14,7 @@ import {
   DiscordActivityService
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
-import { TAB_NAMES, type ProfileView, type TabName } from './activity-home.types';
+import { TAB_NAMES, type ProfileView, type TabName, type TreasuryView } from './activity-home.types';
 import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
 import { DataAdminTabComponent } from './data-admin/data-admin-tab.component';
@@ -78,7 +78,8 @@ export class ActivityHomeComponent {
   private readonly subView = computed(() => this.location()[1] ?? null);
 
   // The sub-views other tabs keep in the location too: /events/pending, /events/past, /auctions/history,
-  // /profile/crafts, /charts/sea. Each tab two-way binds its own view, so a click there updates the URL.
+  // /profile/crafts, /treasury/items, /charts/sea. Each tab two-way binds its own view, so a click there
+  // updates the URL.
   protected readonly eventsView = computed(() => {
     const view = this.subView();
     return view === 'pending' || view === 'past' ? view : 'current';
@@ -92,6 +93,10 @@ export class ActivityHomeComponent {
   protected readonly profileView = computed<ProfileView>(() => {
     const view = this.subView();
     return view === 'crafts' || view === 'ratings' ? view : 'jobs';
+  });
+  protected readonly treasuryView = computed<TreasuryView>(() => {
+    const view = this.activeTab() === 'treasury' ? this.subView() : null;
+    return view === 'items' || view === 'transactions' ? view : 'balance';
   });
   protected readonly chartsView = computed(() => chartsSectionFromSlug(this.subView()));
   // Data Admin keeps a whole path below its tab: /data-admin/rule/5/edit.
@@ -317,6 +322,10 @@ export class ActivityHomeComponent {
 
   protected setAuctionsView(view: 'active' | 'history'): void {
     this.setActiveTab('auctions', view === 'history' ? view : undefined);
+  }
+
+  protected setTreasuryView(view: TreasuryView): void {
+    this.setActiveTab('treasury', view === 'balance' ? undefined : view);
   }
 
   protected setProfileView(view: ProfileView): void {

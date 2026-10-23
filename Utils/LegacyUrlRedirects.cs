@@ -41,7 +41,7 @@ public static class LegacyUrlRedirects
         ("/DkpAdjustment", "dkp", false),
         ("/LootHistory", "loot", false),
         ("/ManageFinances", "treasury", false),
-        ("/ManageItem", "treasury", false),
+        ("/ManageItem", "treasury/items", false),
         ("/ManageRevenue", "treasury", false),
         ("/Account/Profile", "profile", false),
         ("/Account/Settings", "admin", false),
