@@ -121,8 +121,9 @@ export class ActivityHomeComponent {
   // Which of the DKP tab's views is showing. They share one space and one strip of sub-tabs
   // rather than being top-level tabs of their own: all are the same DKP economy at different zoom
   // levels, and splitting them across the main nav would put the linkshell-wide total, and the
-  // rules that produced it, a full tab away from the member row you were just reading. 'history'
-  // is the default the tab has always opened on, though the strip leads with the Sheet.
+  // rules that produced it, a full tab away from the member row you were just reading. The Sheet,
+  // first in the strip, is what the tab opens on (bare /dkp); History is /dkp/history. (/dkp/sheet
+  // still reads as the Sheet, for links written when History was the default.)
   //
   // Import DKP (/dkp/import) is the fourth, website only and for whoever may customize the
   // linkshell: uploading a spreadsheet and reviewing every row doesn't fit the Discord iframe, and
@@ -135,8 +136,8 @@ export class ActivityHomeComponent {
   ]);
   protected readonly dkpView = computed<DkpView>(() => {
     const view = this.activeTab() === 'dkp' ? this.subView() : null;
-    if (view === 'import') return this.canImportDkp() ? view : 'history';
-    return view === 'sheet' || view === 'grouping' ? view : 'history';
+    if (view === 'import') return this.canImportDkp() ? view : 'sheet';
+    return view === 'history' || view === 'grouping' ? view : 'sheet';
   });
 
   // What the Refresh button and the refresh timer reload on top of the overview
@@ -342,10 +343,10 @@ export class ActivityHomeComponent {
     }
   }
 
-  // A sub-view's default (DKP History, Current events, Active auctions, the Sky board) is the
+  // A sub-view's default (DKP Sheet, Current events, Active auctions, the Sky board) is the
   // bare tab URL; anything else is a second segment.
   protected setDkpView(view: DkpView): void {
-    this.setActiveTab('dkp', view === 'history' ? undefined : view);
+    this.setActiveTab('dkp', view === 'sheet' ? undefined : view);
   }
 
   protected setEventsView(view: 'current' | 'pending' | 'past'): void {

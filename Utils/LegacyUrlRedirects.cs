@@ -37,8 +37,9 @@ public static class LegacyUrlRedirects
         ("/Tod", "tods", false),
         ("/PartySetup", "party-setup", false),
         ("/ManageTeam", "management", false),
-        ("/DkpHistory", "dkp", false),
-        ("/DkpAdjustment", "dkp", false),
+        // The DKP tab opens on the Sheet, so the old ledger pages name its History view.
+        ("/DkpHistory", "dkp/history", false),
+        ("/DkpAdjustment", "dkp/history", false),
         ("/LootHistory", "loot", false),
         ("/ManageFinances", "treasury", false),
         ("/ManageItem", "treasury/items", false),
@@ -68,7 +69,7 @@ public static class LegacyUrlRedirects
             target = (page, rest) switch
             {
                 ("dkp-sheet", "export.xlsx") => $"/api/activity/dkp-sheet/export.xlsx?linkshellId={scopedId}",
-                ("dkp-sheet", null) => App("dkp/sheet", scopedId),
+                ("dkp-sheet", null) => App("dkp", scopedId),
                 ("window-events", "history") => App("events/past", scopedId),
                 // Triage, Events Pending DKP Post and the review queue live in Events → Pending.
                 ("window-events", null) => App("events/pending", scopedId),

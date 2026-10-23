@@ -44,7 +44,7 @@ Discord SDK entirely and uses the site's own cookie login:
   website always shows a linkshell to its members (`GuildLockPolicy`); claiming a placeholder still
   respects the lock.
 - **A URL per tab:** on the website the tab and sub-view live in the URL (`/discord-activity/events/past`,
-  `/dkp/sheet`, `/charts/sea`; slugs in `src/app/home/tab-routes.ts`), so reload, Back and deep links
+  `/dkp/history`, `/charts/sea`; slugs in `src/app/home/tab-routes.ts`), so reload, Back and deep links
   work. `?ls=<id>` switches the active linkshell. Inside Discord the iframe's URL is never touched; the
   tab lives in memory there.
 - **Website-only features**, hidden inside Discord: the super-admin **Admin** (`/api/web/admin`) and

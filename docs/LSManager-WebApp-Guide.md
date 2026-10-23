@@ -30,7 +30,7 @@ inside them on your role's **permissions** (Permissions tab).
 A few things are nicer in a browser:
 
 - **Every tab has its own address**, so you can bookmark it, share it, reload, and use Back. For example
-  `/discord-activity/events/past` is the Event System's Past view and `/discord-activity/dkp/sheet` the DKP Sheet.
+  `/discord-activity/events/past` is the Event System's Past view and `/discord-activity/dkp/history` the DKP History (the DKP tab itself opens on the Sheet).
 - **Old website links still work.** Bookmarks and old Discord posts pointing at the previous website's
   pages (such as `/Event` or `/LootHistory`) open the matching tab.
 - **"Lock to this server" doesn't apply on the website.** That Configurations setting only limits which
