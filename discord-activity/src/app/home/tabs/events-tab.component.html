@@ -16,17 +16,8 @@
             }
           }
         </div>
-        <div class="section-head-right">
-          @if (eventsView() === 'current') {
-            <span class="tag default">{{ liveEvents().length }} live</span>
-          }
-          @if (eventsView() !== 'past') {
-            <span class="tag default">{{ queuedEvents().length }} queued</span>
-          }
-          @if (eventsView() === 'current' && liveAttendanceEvents().length > 0) {
-            <span class="tag accent">{{ liveAttendanceEvents().length }} attendance</span>
-          }
-          <!-- Last in the row, so it stays put when the counts beside it hide on Past. -->
+        <!-- The view switch on top, so it stays put when the counts under it hide on Past. -->
+        <div class="section-head-right section-head-right--stacked">
           <div class="view-tabs" role="tablist" aria-label="Event view">
             <button type="button" class="view-tab" role="tab"
               [class.active]="eventsView() === 'current'"
@@ -42,6 +33,17 @@
               [attr.aria-selected]="eventsView() === 'past'"
               (click)="eventsView.set('past')">Past</button>
           </div>
+          @if (eventsView() !== 'past') {
+            <div class="section-head-counts">
+              @if (eventsView() === 'current') {
+                <span class="tag default">{{ liveEvents().length }} live</span>
+              }
+              <span class="tag default">{{ queuedEvents().length }} queued</span>
+              @if (eventsView() === 'current' && liveAttendanceEvents().length > 0) {
+                <span class="tag accent">{{ liveAttendanceEvents().length }} attendance</span>
+              }
+            </div>
+          }
         </div>
       </div>
 

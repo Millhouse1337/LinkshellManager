@@ -3,14 +3,14 @@
         <div>
           <div class="section-label">ToD Tracker</div>
         </div>
-        <div class="section-head-right">
+        <!-- The linkshell is already named in the top bar's switcher, so it isn't repeated here. -->
+        <div class="section-head-right section-head-right--stacked">
           @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
             <button type="button" class="btn primary sm" (click)="todForm.openCreate(selectedDashboardLinkshellId())">+ Log ToD</button>
           }
-          <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
-          @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
-            <span class="tag accent">{{ dashboardLinkshell.name }}</span>
-          }
+          <div class="section-head-counts">
+            <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
+          </div>
         </div>
       </div>
 

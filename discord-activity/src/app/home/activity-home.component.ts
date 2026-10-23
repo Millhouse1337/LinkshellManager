@@ -437,10 +437,6 @@ export class ActivityHomeComponent {
     return this.primaryLinkshell()?.name || this.activity.overview()?.appUser?.primaryLinkshellName || 'No linkshell';
   }
 
-  protected primaryMemberCount(): number {
-    return this.primaryLinkshell()?.memberCount ?? 0;
-  }
-
   // Every linkshell the member belongs to — drives the top-bar switcher.
   protected switchableLinkshells() {
     return this.activity.overview()?.linkshells ?? [];

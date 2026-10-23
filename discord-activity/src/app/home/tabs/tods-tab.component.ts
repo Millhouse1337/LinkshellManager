@@ -117,11 +117,6 @@ export class TodsTabComponent {
     );
   }
 
-  protected selectedDashboardLinkshell() {
-    const selectedId = this.selectedDashboardLinkshellId();
-    return this.dashboardLinkshells().find(linkshell => linkshell.id === selectedId) ?? null;
-  }
-
   protected selectedDashboardTods() {
     const selectedId = this.selectedDashboardLinkshellId();
     return [...(this.activity.overview()?.recentTods ?? [])]

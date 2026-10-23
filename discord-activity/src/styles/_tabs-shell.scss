@@ -99,15 +99,6 @@ body {
 }
 .identity-ls-select:hover:not(:disabled) { border-color: var(--accent); }
 .identity-ls-select:disabled { opacity: .6; cursor: default; }
-.identity-badge {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: var(--accent-weak);
-  color: var(--accent);
-  font-weight: 500;
-}
 .identity-clock {
   display: flex;
   align-items: baseline;
@@ -196,14 +187,13 @@ body {
 
 /* ===== Identity bar — mobile collapse =====
    On phone-portrait widths (Discord activities run at ~390-412px), the
-   identity row is dense. Hide the noisy bits (wordmark, divider, members
-   badge, refresh control, role tag, admin badge, display name) and keep
+   identity row is dense. Hide the noisy bits (wordmark, divider, refresh
+   control, role tag, admin badge, display name) and keep
    only the avatar pinned to the top-right as the "whose account is this"
    cue. */
 @media (max-width: 600px) {
   .brand-bar__name,
   .identity-divider,
-  .identity-badge,
   .identity-refresh,
   .identity-role,
   .identity-admin,
@@ -400,6 +390,18 @@ body {
   display: flex;
   gap: 6px;
   align-items: center;
+}
+/* The right side in two lines, both against the right edge: the view switch or main button on
+   top, the counts that go with it underneath. */
+.section-head-right--stacked {
+  flex-direction: column;
+  align-items: flex-end;
+}
+.section-head-counts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 .section-label {
   font-size: 10px;

@@ -2,7 +2,17 @@
     <div class="section-head">
       <div>
         <p class="section-label">Auction</p>
-        <h2 id="auctions-heading" class="section-title">Auction board</h2>
+        <!-- Lock sits by the title, away from Create: one is a pause for the whole board, the
+             other adds to it, and side by side they were easy to mix up. -->
+        <div class="section-title-row">
+          <h2 id="auctions-heading" class="section-title">Auction board</h2>
+          @if (canLockAuctions()) {
+            <button type="button" class="btn sm" [class.danger-outline]="!auctionsLocked()"
+              (click)="toggleAuctionsLock()">
+              {{ auctionsLocked() ? 'Unlock bidding' : 'Lock bidding' }}
+            </button>
+          }
+        </div>
       </div>
       <div class="section-head-right">
         <div class="view-tabs" role="tablist" aria-label="Auction view">
@@ -25,12 +35,6 @@
             History
           </button>
         </div>
-        @if (canLockAuctions()) {
-          <button type="button" class="btn sm" [class.danger-outline]="!auctionsLocked()"
-            (click)="toggleAuctionsLock()">
-            {{ auctionsLocked() ? 'Unlock bidding' : 'Lock bidding' }}
-          </button>
-        }
         @if (selectedLinkshell() && canManageLinkshell(selectedLinkshellId)) {
           <button type="button" class="btn primary sm" (click)="openCreateAuctionForm()">Create</button>
         }
