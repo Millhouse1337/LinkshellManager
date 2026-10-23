@@ -96,7 +96,8 @@
   height: 34px;
   font: inherit;
   color: var(--fg);
-  background: var(--surface);
+  // Colour only, so the select chevron below keeps its position (see .create-form select).
+  background-color: var(--surface);
   border: 1px solid var(--border-2);
   border-radius: 6px;
   outline: none;
@@ -914,7 +915,10 @@
   max-width: 100%;
   border: 1px solid var(--border-2);
   border-radius: var(--r-sm);
-  background: var(--bg-elev);
+  // The colour only, not the `background` shorthand: the shorthand also resets the select chevron's
+  // position, so a later shorthand (a dark-mode browser extension re-colouring this rule, say)
+  // dropped the chevron into the field's top-left corner.
+  background-color: var(--bg-elev);
   color: var(--fg);
   font: inherit;
   padding: 8px 10px;
