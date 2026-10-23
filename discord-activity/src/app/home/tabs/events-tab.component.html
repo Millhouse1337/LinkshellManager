@@ -8,7 +8,7 @@
             }
             @case ('pending') {
               <div class="section-label">Officer To-Do</div>
-              <div class="section-title">Pending</div>
+              <div class="section-title">Snapshots</div>
             }
             @default {
               <div class="section-label">History</div>
@@ -16,7 +16,9 @@
             }
           }
         </div>
-        <!-- The view switch on top, so it stays put when the counts under it hide on Past. -->
+        <!-- The view switch on top, so it stays put when the counts under it hide.
+             "Snapshots" is the 'pending' view (URL /events/pending): the officer to-do work, the
+             captures above all. -->
         <div class="section-head-right section-head-right--stacked">
           <div class="view-tabs" role="tablist" aria-label="Event view">
             <button type="button" class="view-tab" role="tab"
@@ -27,20 +29,23 @@
               [class.active]="eventsView() === 'pending'"
               [attr.aria-selected]="eventsView() === 'pending'"
               [title]="pendingCount() > 0 ? pendingCount() + ' waiting on an officer (member captures to confirm, submissions to review)' : ''"
-              (click)="eventsView.set('pending')">Pending{{ pendingCount() > 0 ? ' (' + pendingCount() + ')' : '' }}</button>
+              (click)="eventsView.set('pending')">Snapshots{{ pendingCount() > 0 ? ' (' + pendingCount() + ')' : '' }}</button>
             <button type="button" class="view-tab" role="tab"
               [class.active]="eventsView() === 'past'"
               [attr.aria-selected]="eventsView() === 'past'"
               (click)="eventsView.set('past')">Past</button>
           </div>
-          @if (eventsView() !== 'past') {
+          <!-- Current only: the queue (and the create form its panel owns) is only shown there, and
+               a <dialog> under a hidden ancestor can't open. -->
+          @if (eventsView() === 'current') {
             <div class="section-head-counts">
-              @if (eventsView() === 'current') {
-                <span class="tag default">{{ liveEvents().length }} live</span>
-              }
+              <span class="tag default">{{ liveEvents().length }} live</span>
               <span class="tag default">{{ queuedEvents().length }} queued</span>
-              @if (eventsView() === 'current' && liveAttendanceEvents().length > 0) {
+              @if (liveAttendanceEvents().length > 0) {
                 <span class="tag accent">{{ liveAttendanceEvents().length }} attendance</span>
+              }
+              @if (canCreateEvent()) {
+                <button type="button" class="btn primary sm" (click)="openCreateEventForm()">Create Event</button>
               }
             </div>
           }
@@ -1184,17 +1189,16 @@
         <app-attendance-sections section="live" />
       </div>
 
-      <!-- ===== Queue / Create event: Current AND Pending ===== -->
-      <!-- One instance, outside both view wrappers: members sign up for upcoming runs from Current
-           as they always have, officers see it at the top of Pending, and Current's Edit Live Event
-           opens this panel's <dialog>, which a hidden ancestor would stop from showing. Placed
-           between the two wrappers so it lands under Current's live cards and above Pending's
-           sections. -->
-      <div [hidden]="eventsView() === 'past'">
+      <!-- ===== Queue / Create event: Current only ===== -->
+      <!-- Under Current's live cards. Its own wrapper rather than inside Current's, because Current's
+           Edit Live Event and the header's Create Event open this panel's <dialog>, and Angular needs
+           the panel kept (hidden on the other views), not destroyed. It used to sit at the top of
+           Pending too, repeating Current. -->
+      <div [hidden]="eventsView() !== 'current'">
         <app-activity-queue-panel />
       </div>
 
-      <!-- ===== Pending: officer to-do work ===== -->
+      <!-- ===== Snapshots (the 'pending' view): officer to-do work ===== -->
       <div [hidden]="eventsView() !== 'pending'">
         <!-- Unlinked Snapshots: captures with no attendance event yet, and the only landing place
              for one posted by a member without moderation rights (/lsm now on a day no officer was
@@ -1208,7 +1212,7 @@
 
         <!-- Pending Submissions: ToDs and attendance windows members submitted for approval. Only
              for those who may review them (the API checks again per kind), and only fetched once
-             the Pending view is first opened. -->
+             the Snapshots view is first opened. -->
         @if (canReviewSubmissions()) {
           @defer (when eventsView() === 'pending') {
             <app-pending-submissions-section />

@@ -4,11 +4,7 @@
       <p class="eyebrow eyebrow--small">{{ isMemberMode() ? 'Signups' : 'Queue' }}</p>
       <h2 id="queue-heading">{{ isMemberMode() ? 'Upcoming runs' : 'Pending Events' }}</h2>
     </div>
-    <div class="button-cluster">
-      @if (canManageAnyLinkshell() && !isCreateOpen) {
-        <button type="button" class="action-button action-button--success" (click)="openCreateForm()">Create event</button>
-      }
-    </div>
+    <!-- Create Event moved up to the Event System header, under its view switch. -->
   </div>
 
   @if (isCreateOpen) {

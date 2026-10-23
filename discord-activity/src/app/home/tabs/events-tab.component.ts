@@ -466,6 +466,16 @@ export class EventsTabComponent {
     this.queuePanel().openEditEventForm(event);
   }
 
+  // The header's "Create Event": managing any linkshell, the same rule the queue panel used for
+  // the button it used to carry (worked out here because the header draws before the panel does).
+  protected canCreateEvent(): boolean {
+    return (this.activity.overview()?.linkshells ?? []).some(link => this.canManageLinkshell(link.id));
+  }
+
+  protected openCreateEventForm(): void {
+    this.queuePanel().openCreateForm();
+  }
+
   // Whether the current member is attending this event (in a slot or the roster),
   // so the self-service "Withdraw From Event" button only shows when there's
   // something to withdraw from.

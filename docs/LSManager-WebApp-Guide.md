@@ -194,6 +194,6 @@ Two limits, stated plainly rather than left to be discovered:
 - **URL:** `https://your-host/` → Sign in with Discord → tabs along the top.
 - **Set up loot:** Configurations → Loot structure → Save.
 - **Import existing DKP:** DKP → Import DKP → Download template → fill it in → Preview import → Import.
-- **Review member submissions and captures:** Event System → Pending.
+- **Review member submissions and captures:** Event System → Snapshots.
 - **Pair the addon:** Game Addon → + Get Code → in FFXI `/lsm link <code>`.
 - **Companion guides:** [Discord Activity](LSManager-DiscordActivity-Guide.md) · [In-Game Addon](LSManager-Addon-Guide.md)

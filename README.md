@@ -48,9 +48,9 @@ Discord SDK entirely and uses the site's own cookie login:
   work. `?ls=<id>` switches the active linkshell. Inside Discord the iframe's URL is never touched; the
   tab lives in memory there.
 - **Website-only features**, hidden inside Discord: the super-admin **Admin** (`/api/web/admin`) and
-  **Data Admin** (`/api/data-admin`) tabs, DKP **Import** (Configurations) and DKP Sheet **Export to
+  **Data Admin** (`/api/data-admin`) tabs, DKP **Import** (DKP → Import DKP) and DKP Sheet **Export to
   Excel**. `ActivityHomeComponent.canOpenTab` gates the website-only tabs. (Reviewing members'
-  submissions is not website-only: it is the last section of Event System → Pending on both hosts.)
+  submissions is not website-only: it is the last section of Event System → Snapshots on both hosts.)
 - `/` shows the public landing page signed out and redirects into the app signed in.
 
 ## Server-rendered pages

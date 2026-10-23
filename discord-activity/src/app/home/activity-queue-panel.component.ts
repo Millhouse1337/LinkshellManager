@@ -5,6 +5,8 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
+  afterNextRender,
   inject,
   signal,
   viewChild
@@ -79,6 +81,7 @@ export class ActivityQueuePanelComponent {
   // showModal() so it escapes the .panel-tab.fade ancestor's stacking context
   // and lands in the browser's top layer, above the sticky tab bar.
   private readonly editDialog = viewChild<ElementRef<HTMLDialogElement>>('editDialog');
+  private readonly injector = inject(Injector);
   // Shared Log ToD form (the same component the ToDs tab uses). The "Post ToD" button
   // on an HNM board opens it pre-filled with the event's monster.
   private readonly todForm = viewChild<TodFormComponent>('todForm');
@@ -886,7 +889,9 @@ export class ActivityQueuePanelComponent {
     return !this.canManageAnyLinkshell();
   }
 
-  protected openCreateForm(): void {
+  // Public: the Event System header's "Create Event" button (EventsTabComponent) opens this
+  // panel's form; the panel no longer carries a button of its own.
+  openCreateForm(): void {
     this.activity.clearActionState();
     this.isCreateOpen = true;
     this.editingEventId = null;
@@ -902,19 +907,24 @@ export class ActivityQueuePanelComponent {
     }
     this.autoFilledStartTimeLocal = null;
     this.loadUpcomingRepops();
+    // Called from outside (the Event System header) through a viewChild, so OnPush wouldn't
+    // otherwise re-check this panel and the dialog would never render. Same as openEditEventForm.
+    this.cdr.markForCheck();
     this.showEditDialog();
   }
 
-  // Show the shared create/edit form as a native modal <dialog>. Deferred so Angular
-  // has rendered the <dialog> (from the @if (isCreateOpen) branch) before showModal()
-  // runs — the viewChild would otherwise still resolve to undefined.
+  // Show the shared create/edit form as a native modal <dialog>, once Angular has rendered it
+  // (from the @if (isCreateOpen) branch) — before that the viewChild is still undefined.
+  // afterNextRender rather than setTimeout: with eventCoalescing (app.config) the render after a
+  // click waits for the next animation frame, which a zero-delay timer can beat, and then the
+  // dialog rendered but never opened (seen when Create Event moved to the Event System header).
   private showEditDialog(): void {
-    setTimeout(() => {
+    afterNextRender(() => {
       const dialog = this.editDialog()?.nativeElement;
       if (dialog && !dialog.open) {
         dialog.showModal();
       }
-    });
+    }, { injector: this.injector });
   }
 
   // Display name for the read-only Linkshell field, resolved from the model's
