@@ -417,6 +417,14 @@ body {
   color: var(--fg);
   letter-spacing: -0.02em;
 }
+/* A title with a button beside it: Auctions' Lock bidding, Profile's Onboarding. */
+.section-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.section-title-row .section-title { margin: 0; }
 .section-sub {
   display: flex;
   align-items: center;

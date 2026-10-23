@@ -37,7 +37,9 @@ export type TabName = typeof TAB_NAMES[number];
 
 // The Profile tab's views, picked by the strip by its heading: /profile, /profile/crafts,
 // /profile/ratings.
-export type ProfileView = 'jobs' | 'crafts' | 'ratings';
+// Onboarding (/profile/onboarding, the Next Steps checklist) is opened by the button beside the
+// "Your profile" title rather than from the strip.
+export type ProfileView = 'jobs' | 'crafts' | 'ratings' | 'onboarding';
 
 // The Treasury tab's views, picked by the strip in its header: /treasury (the balance sheet),
 // /treasury/items, /treasury/transactions.

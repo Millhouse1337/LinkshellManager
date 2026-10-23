@@ -677,14 +677,6 @@ export class ActivitySidebarPanelComponent {
     return this.activity.overview()?.appUser?.primaryLinkshellId ?? this.activity.overview()?.primaryLinkshell?.id ?? null;
   }
 
-  protected isManagerMode(): boolean {
-    return this.linkshellMemberships().some(link => this.canManageLinkshell(link.id));
-  }
-
-  protected isMemberMode(): boolean {
-    return !this.isManagerMode();
-  }
-
   protected canManageLinkshell(linkshellId: number): boolean {
     return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }

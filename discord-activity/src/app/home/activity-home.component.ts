@@ -91,8 +91,12 @@ export class ActivityHomeComponent {
     { key: 'ratings' as const, label: 'Player Ratings' },
   ];
   protected readonly profileView = computed<ProfileView>(() => {
+    // No linkshell yet: Jobs, Crafts and Player Ratings all need one, so the tab is Onboarding,
+    // which is where a new member's character name and time zone go. (Only once the overview has
+    // loaded, so a slow load doesn't flash Onboarding at someone who has linkshells.)
+    if (this.activity.overview()?.linkshells?.length === 0) return 'onboarding';
     const view = this.subView();
-    return view === 'crafts' || view === 'ratings' ? view : 'jobs';
+    return view === 'crafts' || view === 'ratings' || view === 'onboarding' ? view : 'jobs';
   });
   protected readonly treasuryView = computed<TreasuryView>(() => {
     const view = this.activeTab() === 'treasury' ? this.subView() : null;

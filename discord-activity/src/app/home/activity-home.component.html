@@ -309,7 +309,15 @@
       <div class="section-head">
         <div>
           <div class="section-label">Account</div>
-          <div class="section-title">Your profile</div>
+          <!-- Onboarding is a page of its own (/profile/onboarding), not one of the strip's views:
+               it is the checklist for getting set up, not part of the profile. Always offered,
+               since a new member with no linkshell is the one who needs it most. -->
+          <div class="section-title-row">
+            <div class="section-title">Your profile</div>
+            <button type="button" class="btn primary sm"
+              [attr.aria-pressed]="profileView() === 'onboarding'"
+              (click)="setProfileView('onboarding')">Onboarding</button>
+          </div>
         </div>
         <!-- Crafts and Player Ratings only exist inside a linkshell, so with none there is
              nothing to switch between. -->
@@ -325,7 +333,9 @@
         }
       </div>
 
-      <app-activity-sidebar-panel [visibleSections]="['profile', 'next-steps']" [profileView]="profileView()" />
+      <app-activity-sidebar-panel
+        [visibleSections]="profileView() === 'onboarding' ? ['next-steps'] : ['profile']"
+        [profileView]="profileView()" />
     </div>
   }
 

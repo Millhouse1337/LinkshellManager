@@ -486,12 +486,4 @@
   color: var(--fg);
   letter-spacing: -0.02em;
 }
-/* The title with Lock bidding beside it. */
-.auctions-panel .section-title-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.auctions-panel .section-title-row .section-title { margin: 0; }
 .auctions-panel .num { font-family: var(--font-mono); font-feature-settings: "tnum"; }
