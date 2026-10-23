@@ -86,6 +86,10 @@ public sealed class HnmClaimStatsService
         _context = context;
     }
 
+    // The longest custom range the chart offers: ten years, which is All in practice. A guard on the
+    // date maths, not a product limit.
+    public const int MaxCustomDays = 3650;
+
     public async Task<HnmClaimStats> BuildAsync(int? linkshellId, CancellationToken cancellationToken = default)
     {
         if (linkshellId is not { } id)
@@ -93,6 +97,24 @@ public sealed class HnmClaimStatsService
             return HnmClaimStats.Empty;
         }
 
+        var hnmOutcomes = await LoadOutcomesAsync(id, cancellationToken);
+        var now = DateTime.UtcNow;
+        return new HnmClaimStats(
+            BuildSlices(hnmOutcomes, now.AddDays(-7)),
+            BuildSlices(hnmOutcomes, now.AddDays(-30)),
+            BuildSlices(hnmOutcomes, cutoff: null));
+    }
+
+    // One more range on top of the three the overview carries: the chart's "..." → last N days.
+    public async Task<IReadOnlyList<HnmClaimSlice>> BuildLastDaysAsync(
+        int linkshellId, int days, CancellationToken cancellationToken = default)
+    {
+        var hnmOutcomes = await LoadOutcomesAsync(linkshellId, cancellationToken);
+        return BuildSlices(hnmOutcomes, DateTime.UtcNow.AddDays(-Math.Clamp(days, 1, MaxCustomDays)));
+    }
+
+    private async Task<List<ClaimRow>> LoadOutcomesAsync(int id, CancellationToken cancellationToken)
+    {
         // The linkshell's ToDs with a recorded outcome: claimed (a claim) or unclaimed (an attempt
         // that someone else won). The HNM test is a name-SEGMENT match (a stored name may be a
         // combined "Base/Stronger" label), which no provider can translate, so the monster
@@ -119,7 +141,7 @@ public sealed class HnmClaimStatsService
         // A linkshell's own custom monsters stay out too, however they are categorised: Sky farm
         // pops, ground NMs, HENMs and Sea NMs all flow through this table with Claim = true and
         // would otherwise dominate the chart.
-        var hnmOutcomes = claims
+        return claims
             .Where(claim => HnmConfig.IsHnmTierMonster(claim.MonsterName))
             .Select(claim =>
             {
@@ -133,12 +155,6 @@ public sealed class HnmClaimStatsService
                     claim.When);
             })
             .ToList();
-
-        var now = DateTime.UtcNow;
-        return new HnmClaimStats(
-            BuildSlices(hnmOutcomes, now.AddDays(-7)),
-            BuildSlices(hnmOutcomes, now.AddDays(-30)),
-            BuildSlices(hnmOutcomes, cutoff: null));
     }
 
     private static IReadOnlyList<HnmClaimSlice> BuildSlices(

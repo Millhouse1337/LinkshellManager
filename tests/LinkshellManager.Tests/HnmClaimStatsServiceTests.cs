@@ -377,6 +377,23 @@ public class HnmClaimStatsServiceTests
         Assert.Empty(stats.AllTime);
     }
 
+    // The chart's "..." range: the same slices, over exactly the last N days.
+    [Fact]
+    public async Task LastDays_CountsOnlyThatRange()
+    {
+        using var db = NewInMemoryContext();
+        var now = DateTime.UtcNow;
+        db.Tods.Add(Claim(1, 10, "Tiamat", now.AddDays(-10)));
+        db.Tods.Add(Claim(2, 10, "Tiamat", now.AddDays(-60), claim: false));
+        db.Tods.Add(Claim(3, 10, "Tiamat", now.AddDays(-120)));     // outside 90 days
+        db.Tods.Add(new Tod { Id = 4, LinkshellId = 10, MonsterName = "Tiamat", Claim = true }); // undated
+        await db.SaveChangesAsync();
+
+        var tiamat = Assert.Single(await new HnmClaimStatsService(db).BuildLastDaysAsync(10, 90));
+
+        Assert.Equal((1, 2, 50.0), (tiamat.Count, tiamat.Attempts, tiamat.ClaimRate));
+    }
+
     [Fact]
     public async Task NoLinkshell_IsEmpty()
     {

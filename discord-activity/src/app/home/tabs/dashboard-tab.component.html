@@ -555,7 +555,7 @@
                  heading would misdescribe whichever tab was open. -->
             <div class="card-title">
               @if (dashboardHnmChartTab() === 'claims') {
-                Claim rate ({{ dashboardHnmWindow() === 'all' ? 'all time' : 'last ' + dashboardHnmWindow() }})
+                Claim rate ({{ claimRangeLabel() }})
               } @else {
                 Window frequency (all time)
               }
@@ -564,9 +564,38 @@
               <!-- The 7d/30d/All span only applies to the claim rate. It is hidden rather than disabled
                    on the Windows tab, where it would silently do nothing. -->
               @if (dashboardHnmChartTab() === 'claims') {
-                <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '7d'" (click)="dashboardHnmWindow.set('7d')">7d</button>
-                <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '30d'" (click)="dashboardHnmWindow.set('30d')">30d</button>
-                <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === 'all'" (click)="dashboardHnmWindow.set('all')">All</button>
+                <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '7d'" (click)="setClaimWindow('7d')">7d</button>
+                <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === '30d'" (click)="setClaimWindow('30d')">30d</button>
+                <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === 'all'" (click)="setClaimWindow('all')">All</button>
+                <!-- "...": any other range, as the last N days. Lit while a custom range is showing;
+                     the title says which. -->
+                <div class="claimrange">
+                  <button type="button" class="btn sm" [class.active]="dashboardHnmWindow() === 'custom'"
+                    title="Custom range" aria-label="Custom range" aria-haspopup="true"
+                    [attr.aria-expanded]="customRangeOpen()"
+                    (click)="toggleCustomRange()">⋯</button>
+                  @if (customRangeOpen()) {
+                    <form class="claimrange-pop" (submit)="$event.preventDefault(); applyCustomRange()"
+                      (keydown.escape)="customRangeOpen.set(false)">
+                      <div class="claimrange-pop__title">Custom range</div>
+                      <div class="claimrange-pop__row">
+                        <label for="claimrange-days">Last</label>
+                        <input id="claimrange-days" type="number" name="claimRangeDays" inputmode="numeric"
+                          min="1" [max]="customRangeMax" step="1" [(ngModel)]="customRangeDraft" />
+                        <span>days</span>
+                        <button type="submit" class="btn primary sm">Apply</button>
+                      </div>
+                      <div class="claimrange-pop__presets">
+                        @for (preset of customRangePresets; track preset) {
+                          <button type="button" class="btn ghost sm" (click)="applyCustomRange(preset)">{{ preset }}d</button>
+                        }
+                      </div>
+                      @if (customRangeError(); as error) {
+                        <div class="claimrange-pop__error">{{ error }}</div>
+                      }
+                    </form>
+                  }
+                </div>
               }
               <div class="hnm-chart-tabs" role="tablist" aria-label="HNM chart">
                 <button type="button" class="hnm-chart-tab" role="tab"
@@ -648,7 +677,15 @@
             </div>
           } @else {
             <div class="empty-state empty-state--compact">
-              <div class="empty-state-desc">{{ dashboardHnmWindow() === 'all' ? 'No claimed or unclaimed HNM pops recorded yet.' : 'No claimed or unclaimed HNM pops in this window yet.' }}</div>
+              <div class="empty-state-desc">
+                @if (dashboardHnmWindow() === 'custom' && customClaimsBusy()) {
+                  Loading the {{ claimRangeLabel() }}…
+                } @else if (dashboardHnmWindow() === 'custom' && customRangeError()) {
+                  {{ customRangeError() }}
+                } @else {
+                  {{ dashboardHnmWindow() === 'all' ? 'No claimed or unclaimed HNM pops recorded yet.' : 'No claimed or unclaimed HNM pops in this window yet.' }}
+                }
+              </div>
             </div>
           }
         </div>

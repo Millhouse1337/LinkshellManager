@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivityHttpClient } from '../../discord/activity-http.client';
+import { formatActionError } from '../../discord/discord-activity.helpers';
 import { ActivityTodEntry, DiscordActivityService } from '../../discord/discord-activity.service';
 import type {
   ActivityEvent,
@@ -83,6 +85,18 @@ export class DashboardTabComponent {
   public constructor() {
     const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
     this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
+
+    // The claim rate's custom range is fetched on its own (the overview only carries 7d / 30d /
+    // All). Refetched on every overview refresh too, so it stays as current as the fixed ranges,
+    // and on a linkshell switch.
+    effect(() => {
+      if (this.dashboardHnmWindow() !== 'custom') return;
+      const days = this.customRangeDays();
+      const linkshellId = this.selectedDashboardLinkshellId();
+      this.activity.overview();
+      if (!days || !linkshellId) return;
+      untracked(() => void this.loadCustomClaims(linkshellId, days));
+    });
   }
 
   // ----- Re-implemented small reads via this.activity -----
@@ -416,7 +430,78 @@ export class DashboardTabComponent {
 
   // ----- HNM claim rate -----
 
-  protected readonly dashboardHnmWindow = signal<'7d' | '30d' | 'all'>('30d');
+  private readonly http = inject(ActivityHttpClient);
+
+  // Opens on All. 'custom' is the "..." range: the last N days, any N.
+  protected readonly dashboardHnmWindow = signal<'7d' | '30d' | 'all' | 'custom'>('all');
+
+  // The custom range: the days applied (null until someone applies one), the number being typed,
+  // and whether the "..." panel is open.
+  protected readonly customRangeDays = signal<number | null>(null);
+  protected customRangeDraft = 90;
+  protected readonly customRangeOpen = signal(false);
+  protected readonly customRangeError = signal<string | null>(null);
+  protected readonly customRangePresets = [60, 90, 180, 365];
+  protected readonly customRangeMax = 3650; // HnmClaimStatsService.MaxCustomDays
+
+  private readonly customClaims = signal<ActivityHnmClaimSlice[] | null>(null);
+  protected readonly customClaimsBusy = signal(false);
+  private customClaimsRequest = 0;
+
+  // "all time", "last 7d", "last 90 days": the card title's range.
+  protected readonly claimRangeLabel = computed(() => {
+    const window = this.dashboardHnmWindow();
+    if (window === 'all') return 'all time';
+    if (window === 'custom') {
+      const days = this.customRangeDays() ?? 0;
+      return days === 1 ? 'last day' : `last ${days} days`;
+    }
+    return `last ${window}`;
+  });
+
+  protected setClaimWindow(window: '7d' | '30d' | 'all'): void {
+    this.dashboardHnmWindow.set(window);
+    this.customRangeOpen.set(false);
+  }
+
+  protected toggleCustomRange(): void {
+    this.customRangeOpen.update(open => !open);
+    this.customRangeError.set(null);
+  }
+
+  protected applyCustomRange(days: number = this.customRangeDraft): void {
+    const value = Math.trunc(Number(days));
+    if (!Number.isFinite(value) || value < 1 || value > this.customRangeMax) {
+      this.customRangeError.set(`Enter a number of days from 1 to ${this.customRangeMax}.`);
+      return;
+    }
+    this.customRangeDraft = value;
+    if (value !== this.customRangeDays()) this.customClaims.set(null);
+    this.customRangeDays.set(value);
+    this.dashboardHnmWindow.set('custom');
+    this.customRangeOpen.set(false);
+    this.customRangeError.set(null);
+  }
+
+  // Only the newest request lands, so a slow answer for an old range can't overwrite a newer one.
+  private async loadCustomClaims(linkshellId: number, days: number): Promise<void> {
+    const request = ++this.customClaimsRequest;
+    this.customClaimsBusy.set(true);
+    try {
+      const slices = await this.http.fetchActivityJson<ActivityHnmClaimSlice[]>(
+        `/api/activity/hnm-claims?linkshellId=${linkshellId}&days=${days}`);
+      if (request === this.customClaimsRequest) {
+        this.customClaims.set(slices);
+        this.customRangeError.set(null);
+      }
+    } catch (error) {
+      if (request === this.customClaimsRequest) {
+        this.customRangeError.set(formatActionError(error, 'Loading that range failed.'));
+      }
+    } finally {
+      if (request === this.customClaimsRequest) this.customClaimsBusy.set(false);
+    }
+  }
 
   // Straight off the server, which counts every claimed and unclaimed ToD the linkshell has, per
   // monster, and works out each one's claim rate.
@@ -431,8 +516,9 @@ export class DashboardTabComponent {
     if (!claims) return [];
     switch (this.dashboardHnmWindow()) {
       case '7d': return claims.last7Days ?? [];
-      case 'all': return claims.allTime ?? [];
-      default: return claims.last30Days ?? [];
+      case '30d': return claims.last30Days ?? [];
+      case 'custom': return this.customClaims() ?? [];
+      default: return claims.allTime ?? [];
     }
   });
 
