@@ -1,88 +1,247 @@
-<div class="card">
-  <div class="card-head">
-    <div class="card-title">📥 Import DKP</div>
-    <a class="btn sm" href="/api/activity/dkp-import/template" download>⬇ Download template</a>
-  </div>
-  <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
-    <p class="muted" style="margin:0">
-      Bringing a linkshell over from another tracker? Upload a spreadsheet of your existing DKP. Members
-      already in the app are updated; names we don't recognize are created as unsynced members that keep
-      their DKP until that person first opens the app and claims it. You'll review everything before
-      anything changes.
-    </p>
-    <p class="muted" style="margin:0">
-      Your sheet needs these columns: <strong>Member Name</strong>, <strong>Alt 1</strong>,
-      <strong>Alt 2</strong>, <strong>Current DKP</strong>, <strong>Total DKP</strong>,
-      <strong>Total DKP Spent</strong>. Download the template to see the exact format.
-    </p>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <a class="btn ghost sm" [href]="'/api/activity/dkp-sheet/export.xlsx?linkshellId=' + linkshellId()" download>
-        Export current DKP
-      </a>
-      <label class="btn sm" style="cursor:pointer;margin:0">
-        Choose file
-        <input #fileInput type="file" accept=".xlsx,.csv" hidden (change)="onFileChange($event)" />
-      </label>
-      <span class="muted">{{ fileName() || 'No file chosen' }}</span>
-      @if (canPreview()) {
-        <button type="button" class="btn primary sm" (click)="preview()">Preview import</button>
-      }
+<!-- Laid out like the Game Addon tab: a hero, three panels (how it works, the upload, the
+     columns), the review once a file is previewed, and a picture of the sample template. -->
+<div class="showcase">
+  <div class="showcase-hero">
+    <div class="showcase-hero__mark">DKP</div>
+    <div class="showcase-hero__copy">
+      <div class="showcase-hero__eyebrow">Bring your linkshell over</div>
+      <h2 class="showcase-hero__title">Import DKP</h2>
+      <p class="showcase-hero__lede">
+        Moving from another tracker? Upload a spreadsheet of your existing DKP and every member's
+        balance comes with you. You'll review every row before anything changes.
+      </p>
     </div>
-
-    @if (dkpImport.previewFor(linkshellId()); as p) {
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <span class="tag accent">{{ p.updateCount }} to update</span>
-        <span class="tag success">{{ p.createCount }} new</span>
-        @if (p.ambiguousCount > 0) {
-          <span class="tag warning">{{ p.ambiguousCount }} ambiguous (skipped)</span>
-        }
-        @if (p.clampedCount > 0) {
-          <span class="tag warning">{{ p.clampedCount }} negative balance(s) will import as 0</span>
-        }
-        <span class="muted">from {{ p.sourceLabel }}</span>
-      </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Status</th>
-              <th class="num">Current DKP</th>
-              <th class="num">Total</th>
-              <th class="num">Spent</th>
-              <th>Note</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (row of p.preview; track $index) {
-              <tr>
-                <td>
-                  {{ row.name }}
-                  @if (row.matchedExistingName && row.matchedExistingName !== row.name) {
-                    <span class="muted"> → {{ row.matchedExistingName }}</span>
-                  }
-                </td>
-                <td><span [class]="'tag ' + kindTag(row.kind)">{{ kindLabel(row.kind) }}</span></td>
-                <td class="num">
-                  @if (row.kind === 'Update') {
-                    <span class="muted">{{ row.oldCurrent | number:'1.0-2' }} →</span>
-                  }
-                  <strong>{{ row.newCurrent | number:'1.0-2' }}</strong>
-                </td>
-                <td class="num">{{ row.newTotal | number:'1.0-2' }}</td>
-                <td class="num">{{ row.newSpent | number:'1.0-2' }}</td>
-                <td class="muted">{{ row.note }}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn primary sm" [disabled]="dkpImport.busy()" (click)="commit()">
-          {{ dkpImport.busy() ? 'Importing…' : 'Import ' + (p.updateCount + p.createCount) + ' member(s)' }}
-        </button>
-        <button type="button" class="btn ghost sm" [disabled]="dkpImport.busy()" (click)="cancel()">Cancel</button>
-      </div>
-    }
+    <div class="showcase-hero__badge">
+      <span>ACCEPTS</span>
+      <strong>.XLSX · .CSV</strong>
+    </div>
   </div>
+
+  <div class="showcase-grid">
+    <section class="showcase-panel">
+      <header class="showcase-panel__head">
+        <span class="showcase-panel__icon">🧭</span>
+        <h3>How it works</h3>
+      </header>
+      <ol class="showcase-steps">
+        <li>
+          <span class="showcase-steps__num">1</span>
+          <div>
+            <h4>Download the template</h4>
+            <p>It's shown at the bottom of this page, so you can see the layout before you open it.</p>
+          </div>
+        </li>
+        <li>
+          <span class="showcase-steps__num">2</span>
+          <div>
+            <h4>Fill it in</h4>
+            <p>One row per member: their name, up to two alts, and their DKP. Spare
+              <code>✦</code> rows are skipped.</p>
+          </div>
+        </li>
+        <li>
+          <span class="showcase-steps__num">3</span>
+          <div>
+            <h4>Upload and preview</h4>
+            <p>Every row shows as an update, a new member, or skipped, with its old and new balance.</p>
+          </div>
+        </li>
+        <li>
+          <span class="showcase-steps__num">4</span>
+          <div>
+            <h4>Import</h4>
+            <p>Nothing changes until you press Import.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="showcase-panel">
+      <header class="showcase-panel__head">
+        <span class="showcase-panel__icon">📤</span>
+        <h3>Upload your sheet</h3>
+      </header>
+      <div class="dkpi-upload">
+        <label class="dkpi-drop" [class.is-picked]="!!fileName()">
+          <input #fileInput type="file" accept=".xlsx,.csv" hidden (change)="onFileChange($event)" />
+          <span class="dkpi-drop__icon" aria-hidden="true">📄</span>
+          <strong>{{ fileName() || 'Choose a .xlsx or .csv file' }}</strong>
+          <span class="dkpi-drop__hint">{{ fileName() ? 'Click to pick a different file' : 'Click to browse' }}</span>
+        </label>
+        @if (fileRejected()) {
+          <p class="dkpi-warn">Only .xlsx and .csv files can be read.</p>
+        }
+        <button type="button" class="btn primary dkpi-preview" [disabled]="!canPreview()" (click)="preview()">
+          {{ dkpImport.busy() ? 'Reading…' : 'Preview import' }}
+        </button>
+        <div class="showcase-list">
+          <div class="showcase-item">
+            <div class="showcase-item__icon">🔁</div>
+            <div>
+              <h4>Members already here</h4>
+              <p>Matched by name (main or alt, any capitals) and updated to the sheet's balance.</p>
+            </div>
+          </div>
+          <div class="showcase-item">
+            <div class="showcase-item__icon">🆕</div>
+            <div>
+              <h4>Names we don't know</h4>
+              <p>Added as unsynced members who keep their DKP until that person signs in and claims it.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="showcase-panel">
+      <header class="showcase-panel__head">
+        <span class="showcase-panel__icon">🧾</span>
+        <h3>The columns</h3>
+      </header>
+      <div class="showcase-list">
+        <div class="showcase-cmd"><code>Member Name</code><p>Required. The member's main character.</p></div>
+        <div class="showcase-cmd"><code>Alt 1</code> <code>Alt 2</code><p>Optional. Saved as the alts of a member the import adds.</p></div>
+        <div class="showcase-cmd"><code>Current DKP</code><p>Required. What they can spend right now. A negative number imports as 0.</p></div>
+        <div class="showcase-cmd"><code>Total DKP</code><p>Optional. Everything they've earned.</p></div>
+        <div class="showcase-cmd"><code>Total DKP Spent</code><p>Optional. Everything they've spent.</p></div>
+        <div class="showcase-cmd"><code>Biddable DKP</code><p>In the template, but ignored by the import: the app works it out itself.</p></div>
+      </div>
+    </section>
+  </div>
+
+  @if (dkpImport.previewFor(linkshellId()); as p) {
+    <section class="showcase-panel">
+      <header class="showcase-panel__head">
+        <span class="showcase-panel__icon">🔍</span>
+        <h3>Review the import</h3>
+        <span class="muted dkpi-source">from {{ p.sourceLabel }}</span>
+      </header>
+      <div class="dkpi-review">
+        <div class="dkpi-tags">
+          <span class="tag accent">{{ p.updateCount }} to update</span>
+          <span class="tag success">{{ p.createCount }} new</span>
+          @if (p.ambiguousCount > 0) {
+            <span class="tag warning">{{ p.ambiguousCount }} ambiguous (skipped)</span>
+          }
+          @if (p.clampedCount > 0) {
+            <span class="tag warning">{{ p.clampedCount }} negative balance(s) will import as 0</span>
+          }
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Status</th>
+                <th class="num">Current DKP</th>
+                <th class="num">Total</th>
+                <th class="num">Spent</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of p.preview; track $index) {
+                <tr>
+                  <td>
+                    {{ row.name }}
+                    @if (row.matchedExistingName && row.matchedExistingName !== row.name) {
+                      <span class="muted"> → {{ row.matchedExistingName }}</span>
+                    }
+                  </td>
+                  <td><span [class]="'tag ' + kindTag(row.kind)">{{ kindLabel(row.kind) }}</span></td>
+                  <td class="num">
+                    @if (row.kind === 'Update') {
+                      <span class="muted">{{ row.oldCurrent | number:'1.0-2' }} →</span>
+                    }
+                    <strong>{{ row.newCurrent | number:'1.0-2' }}</strong>
+                  </td>
+                  <td class="num">{{ row.newTotal | number:'1.0-2' }}</td>
+                  <td class="num">{{ row.newSpent | number:'1.0-2' }}</td>
+                  <td class="muted">{{ row.note }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="dkpi-tags">
+          <button type="button" class="btn primary sm" [disabled]="dkpImport.busy()" (click)="commit()">
+            {{ dkpImport.busy() ? 'Importing…' : 'Import ' + (p.updateCount + p.createCount) + ' member(s)' }}
+          </button>
+          <button type="button" class="btn ghost sm" [disabled]="dkpImport.busy()" (click)="cancel()">Cancel</button>
+        </div>
+      </div>
+    </section>
+  }
+
+  <!-- The sample template, drawn as the spreadsheet it is (Services/SampleDkpTemplateWorkbook.cs):
+       column letters and row numbers, the title bar, the summary, the header row the importer
+       matches on, the sample members, and the ✦ rows to fill in. Light, like the file. -->
+  <section class="showcase-panel">
+    <header class="showcase-panel__head">
+      <span class="showcase-panel__icon">📊</span>
+      <h3>The sample template</h3>
+      <a class="btn primary sm dkpi-download" href="/api/activity/dkp-import/template" download>⬇ Download template</a>
+    </header>
+    <div class="dkpi-sheet-wrap">
+      <table class="dkpi-sheet" aria-label="The sample DKP template">
+        <thead>
+          <tr>
+            <th class="dkpi-sheet__corner"></th>
+            @for (column of sheetColumns; track column) {
+              <th class="dkpi-sheet__col">{{ column }}</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="dkpi-sheet__title">
+            <th class="dkpi-sheet__row">1</th>
+            <td colspan="7">LSM DKP TEMPLATE</td>
+          </tr>
+          <tr class="dkpi-sheet__summary-label">
+            <th class="dkpi-sheet__row">2</th>
+            <td>TOTAL MEMBERS</td>
+            <td colspan="2">TOTAL DKP</td>
+            <td colspan="2">BIDDABLE DKP</td>
+            <td colspan="2">TOTAL DKP SPENT</td>
+          </tr>
+          <tr class="dkpi-sheet__summary-value">
+            <th class="dkpi-sheet__row">3</th>
+            <td>{{ sampleMembers.length }}</td>
+            <td colspan="2">{{ sampleTotals.total | number:'1.2-2' }}</td>
+            <td colspan="2">{{ sampleTotals.biddable | number:'1.2-2' }}</td>
+            <td colspan="2">{{ sampleTotals.spent | number:'1.2-2' }}</td>
+          </tr>
+          <tr class="dkpi-sheet__header">
+            <th class="dkpi-sheet__row">4</th>
+            <td>Member Name</td>
+            <td>Alt 1</td>
+            <td>Alt 2</td>
+            <td>Current DKP</td>
+            <td>Biddable DKP</td>
+            <td>Total DKP</td>
+            <td>Total DKP Spent</td>
+          </tr>
+          @for (member of sampleMembers; track member.name; let i = $index) {
+            <tr [class.is-band]="i % 2 === 1">
+              <th class="dkpi-sheet__row">{{ 5 + i }}</th>
+              <td>{{ member.name }}</td>
+              <td>{{ member.alt1 }}</td>
+              <td>{{ member.alt2 }}</td>
+              <td class="dkpi-sheet__num">{{ member.current | number:'1.2-2' }}</td>
+              <td class="dkpi-sheet__num">{{ member.biddable | number:'1.2-2' }}</td>
+              <td class="dkpi-sheet__num">{{ member.total | number:'1.2-2' }}</td>
+              <td class="dkpi-sheet__num">{{ member.spent | number:'1.2-2' }}</td>
+            </tr>
+          }
+          @for (blank of sampleBlankRows; track blank; let i = $index) {
+            <tr [class.is-band]="(sampleMembers.length + i) % 2 === 1">
+              <th class="dkpi-sheet__row">{{ 5 + sampleMembers.length + i }}</th>
+              <td>✦</td>
+              <td></td><td></td><td></td><td></td><td></td><td></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
 </div>

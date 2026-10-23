@@ -1,0 +1,145 @@
+/* Import DKP. The layout (hero, panels, steps, lists) is the shared showcase-* look in
+   styles/_showcase.scss; this is only what that page has and the Game Addon tab doesn't. */
+
+/* ----- Upload ----- */
+.dkpi-upload {
+  display: grid;
+  gap: 12px;
+}
+
+/* The file picker, drawn as a drop-zone-style target rather than the browser's bare button. */
+.dkpi-drop {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 22px 16px;
+  border: 1.5px dashed var(--border-hot);
+  border-radius: 14px;
+  background: var(--surface);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.dkpi-drop:hover {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+}
+.dkpi-drop.is-picked {
+  border-style: solid;
+  border-color: var(--accent);
+}
+.dkpi-drop__icon { font-size: 28px; }
+.dkpi-drop strong {
+  color: var(--fg);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.dkpi-drop__hint {
+  color: var(--fg-3);
+  font-size: 12px;
+}
+
+/* Full width under the picker, its label centred like the picker's. */
+.dkpi-preview {
+  justify-content: center;
+  text-align: center;
+}
+
+.dkpi-warn {
+  margin: 0;
+  color: var(--warning);
+  font-size: 12.5px;
+}
+
+/* ----- Review ----- */
+.dkpi-review {
+  display: grid;
+  gap: 12px;
+}
+.dkpi-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Pushed to the far end of a panel's header row. */
+.dkpi-source,
+.dkpi-download { margin-left: auto; }
+.dkpi-source { font-size: 12px; }
+
+/* ----- The sample template, as a spreadsheet -----
+   Light, in the file's own colours (the --sheet-* tokens), inside the app's dark panel. Scrolls
+   sideways on a narrow screen rather than squeezing seven columns. */
+.dkpi-sheet-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-2);
+  border-radius: 12px;
+  background: var(--sheet-paper);
+}
+.dkpi-sheet {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  background: var(--sheet-paper);
+  color: var(--sheet-ink);
+  // The workbook's font, with the usual stand-ins where Calibri isn't installed.
+  font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif;
+  font-size: 13px;
+}
+.dkpi-sheet th,
+.dkpi-sheet td {
+  height: 28px;
+  padding: 5px 10px;
+  border: 1px solid var(--sheet-grid);
+  white-space: nowrap;
+}
+/* Not the app's .num class, whose monospace digits would give the picture away as not-a-spreadsheet. */
+.dkpi-sheet__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The spreadsheet app's chrome: column letters along the top, row numbers down the side. */
+.dkpi-sheet__corner,
+.dkpi-sheet__col,
+.dkpi-sheet__row {
+  background: var(--sheet-chrome);
+  color: var(--sheet-chrome-ink);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+}
+.dkpi-sheet__corner,
+.dkpi-sheet__row { width: 38px; }
+
+.dkpi-sheet__title td {
+  height: 46px;
+  border-color: var(--sheet-title);
+  background: var(--sheet-title);
+  color: var(--sheet-title-ink);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+.dkpi-sheet__summary-label td {
+  background: var(--sheet-summary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.dkpi-sheet__summary-value td {
+  height: 36px;
+  background: var(--sheet-summary);
+  font-size: 18px;
+  font-weight: 700;
+  text-align: right;
+}
+.dkpi-sheet__header td {
+  background: var(--sheet-header);
+  color: var(--sheet-header-ink);
+  font-weight: 700;
+  text-align: center;
+}
+.dkpi-sheet tr.is-band td { background: var(--sheet-band); }

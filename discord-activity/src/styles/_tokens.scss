@@ -70,6 +70,22 @@
   --chart-h: #14b8a6;
   --chart-i: #f97316;
 
+  // The DKP template spreadsheet's own palette, for the Import DKP page's picture of it. A picture
+  // of the file, so it keeps the file's light colours rather than the app's dark theme. Copied from
+  // Services/SampleDkpTemplateWorkbook.cs (title, summary, header, stripe, grid); keep in step.
+  --sheet-paper: #ffffff;
+  --sheet-ink: #111111;
+  --sheet-title: #262939;
+  --sheet-title-ink: #ffffff;
+  --sheet-summary: #edf0fa;
+  --sheet-header: #6366f2;
+  --sheet-header-ink: #ffffff;
+  --sheet-band: #f2f2ff;
+  --sheet-grid: #b9becc;
+  // The spreadsheet app's own chrome around the cells: the A B C column letters and row numbers.
+  --sheet-chrome: #e9ebf0;
+  --sheet-chrome-ink: #6b7080;
+
   // --cyan / --purple / --orange never got a -weak the way --accent/--success/--warning/--danger/
   // --gold did.
   --cyan-weak:   rgba(56, 189, 248, 0.14);
