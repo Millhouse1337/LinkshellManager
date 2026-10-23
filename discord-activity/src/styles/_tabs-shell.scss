@@ -197,32 +197,27 @@ body {
 /* ===== Identity bar — mobile collapse =====
    On phone-portrait widths (Discord activities run at ~390-412px), the
    identity row is dense. Hide the noisy bits (wordmark, divider, members
-   badge, refresh control, role tag) but keep the member's name + avatar
-   pinned to the top-right so the user can confirm at a glance whose
-   account the activity is signed in as. */
+   badge, refresh control, role tag, admin badge, display name) and keep
+   only the avatar pinned to the top-right as the "whose account is this"
+   cue. */
 @media (max-width: 600px) {
   .brand-bar__name,
   .identity-divider,
   .identity-badge,
   .identity-refresh,
-  .identity-role {
+  .identity-role,
+  .identity-admin,
+  .identity-user {
     display: none;
   }
 
-  /* Keep the right-hand cluster visible so the user-name + avatar still
-     show. Use a flex layout that hugs the right edge of the identity bar
-     and stays compact. */
+  /* Keep the right-hand cluster visible so the avatar still shows. Use a
+     flex layout that hugs the right edge of the identity bar and stays
+     compact. */
   .identity-right {
     display: flex;
     align-items: center;
     gap: 6px;
-  }
-  .identity-user {
-    max-width: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 11px;
   }
   .identity-av {
     width: 18px;

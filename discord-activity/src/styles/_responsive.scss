@@ -67,6 +67,26 @@
     justify-items: start;
   }
 
+  /* Live card: once the hero stacks there's no empty middle for the window/timer readout, so
+     it stopped floating over the buttons. Title block spans the top; below it the readout sits
+     bottom-left in the empty space beside the button column. */
+  .event-card__hero {
+    grid-template-columns: 1fr auto;
+  }
+  .event-card__hero > :first-child {
+    grid-column: 1 / -1;
+  }
+  .event-card__global-timer {
+    position: static;
+    transform: none;
+    align-self: end;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .event-card__global-timer-label {
+    white-space: nowrap;
+  }
+
   .participant-list__actions {
     justify-content: flex-start;
     text-align: left;
