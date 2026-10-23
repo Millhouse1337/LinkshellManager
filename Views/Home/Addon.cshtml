@@ -28,15 +28,15 @@
                 you play.
             </p>
             <div class="landing-actions">
-                <a class="landing-btn landing-btn--gold" href="@LandingLinks.AddonTab">
-                    Get a pairing code <span class="landing-btn-arrow" aria-hidden="true">→</span>
+                <a class="landing-btn landing-btn--gold" href="@LandingLinks.SignIn">
+                    Launch <span class="landing-btn-arrow" aria-hidden="true">→</span>
                 </a>
-                <a class="landing-btn landing-btn--ghost" asp-controller="Home" asp-action="Features">See every feature</a>
             </div>
         </div>
     </section>
 
-    <section class="landing-section" aria-labelledby="addon-setup-title">
+    @* #content: where the top bar's Addon link lands, just below the hero. *@
+    <section id="content" class="landing-section" aria-labelledby="addon-setup-title">
         <div class="landing-section-head">
             <div class="landing-section-title">
                 <p class="landing-eyebrow">I · Setup</p>

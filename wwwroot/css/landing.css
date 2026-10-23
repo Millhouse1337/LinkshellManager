@@ -39,6 +39,10 @@
     -webkit-font-smoothing: antialiased;
 }
 
+/* In-page links (the top bar's Features / Addon on their own page, the "On this page" row) glide
+   to their section rather than jumping. Off for anyone who has asked for less motion, below. */
+html:has(.landing) { scroll-behavior: smooth; }
+
 .landing a { color: var(--l-gold); text-decoration: none; }
 .landing a:hover { color: var(--l-gold-bright); }
 .landing a:focus-visible {
@@ -87,11 +91,20 @@
     box-shadow: 0 0 12px color-mix(in srgb, var(--l-gold) 55%, transparent);
 }
 
+/* A dark glass panel behind the links, so they read over the brightest part of the art (the moon
+   and the sky around it) as well as the dark parts. */
 .landing-links {
     display: flex;
     align-items: center;
     gap: 28px;
     flex-wrap: wrap;
+    padding: 6px 6px 6px 22px;
+    border: 1px solid color-mix(in srgb, var(--l-gold) 22%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--l-bg) 68%, transparent);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--l-shade) 35%, transparent);
     font-size: 14px;
 }
 
@@ -467,6 +480,9 @@
 
 .landing-toc + .landing-section { padding-top: clamp(48px, 7vw, 80px); }
 
+/* The row is the Features link's landing spot (#content); leave a little room above it. */
+.landing-toc { scroll-margin-top: 32px; }
+
 /* Back-to-back sections: the one above already leaves its bottom padding as the gap. */
 .landing-section + .landing-section { padding-top: 0; }
 
@@ -613,8 +629,10 @@
 
 /* ---------- Small screens ---------- */
 @media (max-width: 560px) {
-    /* Keep the bar to one line: the footer carries the Features and Addon links too. */
+    /* Keep the bar to one line: the footer carries the Features and Addon links too. That leaves
+       Sign in alone in the panel, so the panel hugs it evenly. */
     .landing .landing-links .landing-section-link { display: none; }
+    .landing-links { padding: 6px; }
     .landing-hero { padding-top: 112px; }
     .landing-actions .landing-btn { flex: 1 1 100%; justify-content: center; }
     .landing-feature { padding: 28px 22px 30px; }
@@ -622,6 +640,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+    html:has(.landing) { scroll-behavior: auto; }
     .landing .landing-btn,
     .landing-surface,
     .landing-feature { transition: none; }

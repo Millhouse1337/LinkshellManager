@@ -1,7 +1,8 @@
 @using LinkshellManagerDiscordApp.Utils
 @{
     // The page this bar sits on ("features" or "addon"; none on the landing page) gets its link
-    // marked as the current page.
+    // marked as the current page. Both links land on #content, the first thing below the page's
+    // hero, so a click goes straight to what it names.
     var current = ViewData["LandingPage"] as string;
 }
 <header class="landing-nav">
@@ -10,9 +11,9 @@
         <span>Linkshell Manager</span>
     </a>
     <nav class="landing-links" aria-label="Main">
-        <a class="landing-section-link" asp-controller="Home" asp-action="Features"
+        <a class="landing-section-link" asp-controller="Home" asp-action="Features" asp-fragment="content"
            aria-current="@(current == "features" ? "page" : null)">Features</a>
-        <a class="landing-section-link" asp-controller="Home" asp-action="Addon"
+        <a class="landing-section-link" asp-controller="Home" asp-action="Addon" asp-fragment="content"
            aria-current="@(current == "addon" ? "page" : null)">Addon</a>
         <a class="landing-signin" href="@LandingLinks.SignIn">Sign in</a>
     </nav>

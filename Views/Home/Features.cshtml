@@ -28,14 +28,14 @@
             </p>
             <div class="landing-actions">
                 <a class="landing-btn landing-btn--gold" href="@LandingLinks.SignIn">
-                    Sign in with Discord <span class="landing-btn-arrow" aria-hidden="true">→</span>
+                    Launch <span class="landing-btn-arrow" aria-hidden="true">→</span>
                 </a>
-                <a class="landing-btn landing-btn--ghost" asp-controller="Home" asp-action="Addon">About the addon</a>
             </div>
         </div>
     </section>
 
-    <nav class="landing-toc" aria-label="On this page">
+    @* #content: where the top bar's Features link lands, just below the hero. *@
+    <nav id="content" class="landing-toc" aria-label="On this page">
         <a href="#events">Events &amp; attendance</a>
         <a href="#dkp">DKP &amp; loot</a>
         <a href="#hnm">HNMs &amp; ToDs</a>
