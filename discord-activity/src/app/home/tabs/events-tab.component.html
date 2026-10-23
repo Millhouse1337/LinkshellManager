@@ -1,21 +1,30 @@
     <div class="panel-tab fade">
       <div class="section-head">
         <div>
-          @if (eventsView() === 'current') {
-            <div class="section-label">Live Operations</div>
-            <div class="section-title">Current Field Activity</div>
-          } @else {
-            <div class="section-label">History</div>
-            <div class="section-title">Past Events</div>
+          @switch (eventsView()) {
+            @case ('current') {
+              <div class="section-label">Live Operations</div>
+              <div class="section-title">Current Field Activity</div>
+            }
+            @case ('pending') {
+              <div class="section-label">Officer To-Do</div>
+              <div class="section-title">Pending</div>
+            }
+            @default {
+              <div class="section-label">History</div>
+              <div class="section-title">Past Events</div>
+            }
           }
         </div>
         <div class="section-head-right">
           @if (eventsView() === 'current') {
             <span class="tag default">{{ liveEvents().length }} live</span>
+          }
+          @if (eventsView() !== 'past') {
             <span class="tag default">{{ queuedEvents().length }} queued</span>
-            @if (liveAttendanceEvents().length > 0) {
-              <span class="tag accent">{{ liveAttendanceEvents().length }} attendance</span>
-            }
+          }
+          @if (eventsView() === 'current' && liveAttendanceEvents().length > 0) {
+            <span class="tag accent">{{ liveAttendanceEvents().length }} attendance</span>
           }
           <!-- Last in the row, so it stays put when the counts beside it hide on Past. -->
           <div class="view-tabs" role="tablist" aria-label="Event view">
@@ -23,6 +32,11 @@
               [class.active]="eventsView() === 'current'"
               [attr.aria-selected]="eventsView() === 'current'"
               (click)="eventsView.set('current')">Current</button>
+            <button type="button" class="view-tab" role="tab"
+              [class.active]="eventsView() === 'pending'"
+              [attr.aria-selected]="eventsView() === 'pending'"
+              [title]="awaitingConfirmationCount() > 0 ? awaitingConfirmationCount() + ' member capture(s) awaiting confirmation' : ''"
+              (click)="eventsView.set('pending')">Pending{{ awaitingConfirmationCount() > 0 ? ' (' + awaitingConfirmationCount() + ')' : '' }}</button>
             <button type="button" class="view-tab" role="tab"
               [class.active]="eventsView() === 'past'"
               [attr.aria-selected]="eventsView() === 'past'"
@@ -1166,21 +1180,28 @@
              live board rather than behind its own tab. Mounted OUTSIDE the camp loop above: the camp
              cards contain <form> elements and this markup drives bare [(ngModel)] with no form. -->
         <app-attendance-sections section="live" />
+      </div>
 
-        <!-- Queue / Create event -->
+      <!-- ===== Queue / Create event: Current AND Pending ===== -->
+      <!-- One instance, outside both view wrappers: members sign up for upcoming runs from Current
+           as they always have, officers see it at the top of Pending, and Current's Edit Live Event
+           opens this panel's <dialog>, which a hidden ancestor would stop from showing. Placed
+           between the two wrappers so it lands under Current's live cards and above Pending's
+           sections. -->
+      <div [hidden]="eventsView() === 'past'">
         <app-activity-queue-panel />
+      </div>
 
+      <!-- ===== Pending: officer to-do work ===== -->
+      <div [hidden]="eventsView() !== 'pending'">
         <!-- Unlinked Snapshots: captures with no attendance event yet, and the only landing place
-             for one posted by a member without moderation rights. Its own mount directly under the
-             queue rather than buried in the archive below, because an unverified or unfiled capture
-             is unpaid attendance waiting on an officer — live work, not leftovers. Matches the web,
-             where it is a top-level section between Pending Events and Events Pending DKP Post. -->
+             for one posted by a member without moderation rights (/lsm now on a day no officer was
+             there). An unverified or unfiled capture is unpaid attendance waiting on an officer. -->
         <app-attendance-sections section="unlinked" />
 
-        <!-- Events Pending DKP Post: ended events nobody has posted the DKP for yet. Sits between
-             live work and Past Events because that is exactly what it is — finished in the field,
-             unfinished on the books. The "archive" section name is the component's internal slot id
-             and is deliberately left alone; its heading comes from the component. -->
+        <!-- Events Pending DKP Post: ended events nobody has posted the DKP for yet — finished in the
+             field, unfinished on the books. The "archive" section name is the component's internal
+             slot id and is deliberately left alone; its heading comes from the component. -->
         <app-attendance-sections section="archive" />
       </div>
 

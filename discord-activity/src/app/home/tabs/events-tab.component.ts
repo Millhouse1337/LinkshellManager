@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, model, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, model, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAddEventMemberInput,
@@ -85,12 +85,20 @@ export class EventsTabComponent {
   protected readonly lootDrafts: Record<number, ActivityLootInput> = {};
   protected readonly quickJoinDrafts: Record<number, ActivityQuickJoinInput> = {};
 
-  // The header's Current / Past switch (session-only). Current is everything still in play — live
-  // camps, the queue, unlinked snapshots, events awaiting a DKP post; Past is settled history.
-  // The template HIDES the other view rather than unmounting it, so a half-typed draft or search
-  // survives a switch, and the queue panel (a required view child) is always there to find.
-  // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/events/past).
-  readonly eventsView = model<'current' | 'past'>('current', { alias: 'view' });
+  // The header's Current / Pending / Past switch. Current is what is running now (live camps and
+  // open attendance events); Pending is officer to-do work (the queue, captures to triage, events
+  // awaiting a DKP post, member submissions to review); Past is settled history. The queue shows in
+  // both Current and Pending as ONE instance outside the view wrappers, because Current's Edit Live
+  // Event opens the queue panel's own <dialog>, which can't open while that panel is hidden.
+  // The template HIDES the other views rather than unmounting them, so a half-typed draft or
+  // search survives a switch, and the queue panel (a required view child) is always there to find.
+  // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/events/pending).
+  readonly eventsView = model<'current' | 'pending' | 'past'>('current', { alias: 'view' });
+
+  // Captures a member without moderation rights posted (/lsm now on a day no officer was there),
+  // still waiting on an officer's Confirm. Shown on the Pending view's button so nobody misses them.
+  protected readonly awaitingConfirmationCount = computed(() =>
+    (this.windows.data()?.unlinkedSnapshots ?? []).filter(snapshot => snapshot.isPending).length);
 
   // Tracks which window's tab is currently active per event (key = event id).
   protected readonly activeWindowByEvent = signal<Record<number, number>>({});

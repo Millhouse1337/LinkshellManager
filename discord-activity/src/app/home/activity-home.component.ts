@@ -79,9 +79,12 @@ export class ActivityHomeComponent {
   });
   private readonly subView = computed(() => this.location()[1] ?? null);
 
-  // The sub-views other tabs keep in the location too: /events/past, /auctions/history,
+  // The sub-views other tabs keep in the location too: /events/pending, /events/past, /auctions/history,
   // /charts/sea. Each tab two-way binds its own view, so a click there updates the URL.
-  protected readonly eventsView = computed(() => (this.subView() === 'past' ? 'past' : 'current'));
+  protected readonly eventsView = computed(() => {
+    const view = this.subView();
+    return view === 'pending' || view === 'past' ? view : 'current';
+  });
   protected readonly auctionsView = computed(() => (this.subView() === 'history' ? 'history' : 'active'));
   protected readonly chartsView = computed(() => chartsSectionFromSlug(this.subView()));
   // Data Admin keeps a whole path below its tab: /data-admin/rule/5/edit.
@@ -314,8 +317,8 @@ export class ActivityHomeComponent {
     this.setActiveTab('dkp', view === 'history' ? undefined : view);
   }
 
-  protected setEventsView(view: 'current' | 'past'): void {
-    this.setActiveTab('timed-events', view === 'past' ? view : undefined);
+  protected setEventsView(view: 'current' | 'pending' | 'past'): void {
+    this.setActiveTab('timed-events', view === 'current' ? undefined : view);
   }
 
   protected setAuctionsView(view: 'active' | 'history'): void {
