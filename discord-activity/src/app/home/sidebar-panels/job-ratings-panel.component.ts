@@ -27,7 +27,7 @@ interface TargetCharacter {
   template: `
     <div class="jr">
       <div class="jr__head">
-        <h3>Rate teammates</h3>
+        <h3>RATE TEAMMATES</h3>
         <p class="jr__hint">Rate another member's gear &amp; skill per job, and leave a short note.</p>
       </div>
 
@@ -104,9 +104,10 @@ interface TargetCharacter {
     </div>
   `,
   styles: [`
-    .jr { margin-top: 22px; max-width: 460px; margin-left: auto; margin-right: auto; text-align: center; }
-    .jr__head h3 { margin: 0 0 2px; font-size: 14px; }
-    .jr__hint { margin: 0 0 12px; font-size: 12px; color: var(--fg-3); }
+    /* Headed like the profile's JOBS / WHAT YOUR LINKSHELL THINKS cards it sits beside. */
+    .jr { max-width: 460px; margin: 0 auto; text-align: center; }
+    .jr__head h3 { margin: 0 0 8px; font-size: 18px; font-weight: 800; letter-spacing: .04em; }
+    .jr__hint { margin: 0 0 14px; font-size: 13px; color: var(--fg-2); }
     .jr__pick { display: flex; flex-direction: column; gap: 6px; align-items: stretch; max-width: 280px; margin: 0 auto 14px; }
     .jr__search, .jr__pick select { width: 100%; }
     .jr__chars { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 0 auto 14px; }

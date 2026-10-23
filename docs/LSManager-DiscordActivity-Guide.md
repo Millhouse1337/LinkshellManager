@@ -42,7 +42,10 @@ The top strip shows the active linkshell name and member count, a clock, a refre
 - **Management** — The linkshell's people. Full member roster: characters, ranks, status, DKP per linkshell, with an inline search. Officer tools for kicking, role changes, and invites.
 - **Treasury** — Everything the linkshell owns, in two sections. **Gil** — a simple balance sheet (what we have, what we owe — expandable to who — and what we're worth), what came in and went out, and the list of transactions. **Items** — the stash, and marking things sold. Reading is open to every member; recording gil needs "Record treasury entries" and changing the stash needs "Manage inventory". Selling an item records the gil in the same action, which is why the two live together. See [How the Treasury works](LSManager-WebApp-Guide.md#how-the-treasury-works-and-what-it-does-not-do) for what Fix and Reverse do, and why nothing is ever deleted.
 
-- **Profile** — character name, alts, time zone, profile image, primary linkshell.
+- **Profile** — three views, switched at the top right:
+  - **Jobs** — character name, alts, time zone, and each character's job levels, merits, gear/skill stars and relics.
+  - **Crafts** — each character's craft levels.
+  - **Player Ratings** — *What your linkshell thinks* (teammates' average gear/skill per job and their comments, for whichever of your characters you pick) beside **Rate teammates**.
 
 - **Messages** — internal inbox.
 

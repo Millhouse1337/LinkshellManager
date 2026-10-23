@@ -1,10 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, effect, inject, model, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, effect, inject, input, model, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../discord/discord-activity.service';
 import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../discord/discord-activity.types';
 import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from './event-job-options';
 import { canManageLinkshellIn } from './activity-home.helpers';
+import type { ProfileView } from './activity-home.types';
 import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.helpers';
 import { AuctionsPanelComponent } from './sidebar-panels/auctions-panel.component';
 import { InvitesPanelComponent } from './sidebar-panels/invites-panel.component';
@@ -145,10 +146,29 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
     .merit-modal textarea { width: 100%; resize: vertical; font-family: inherit; }
     .merit-modal__actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
     .merit-modal__clear { color: var(--danger); }
+    /* Crafts view: the job card look, smaller (a name and a level). */
+    .crafts-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; max-width: 720px; margin: 0 auto; }
+    .craft-card { min-height: 0; }
+    .craft-card .job-top { margin-bottom: 0; }
+    /* Player Ratings view: what teammates think of you, beside rating them. */
+    .ratings-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+    .peer-note, .peer-empty { margin: 0 0 10px; font-size: 12px; color: var(--fg-3); text-align: center; }
+    .peer-row {
+      display: grid; grid-template-columns: 54px 1fr 1fr auto; gap: 10px; align-items: center;
+      padding: 4px 0; border-top: 1px solid var(--border); font-size: 12px;
+    }
+    .peer-row--head { border-top: 0; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--fg-3); }
+    .peer-job { font-weight: 600; }
+    .peer-count { color: var(--fg-3); }
+    .peer-comments { margin-top: 16px; }
+    .peer-comments h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; }
+    .peer-summary { margin: 0 0 10px; font-size: 12px; line-height: 1.45; }
+    .peer-comments blockquote { margin: 0 0 6px; padding: 6px 10px; border-left: 2px solid var(--border); font-size: 12px; color: var(--fg-1); }
     @media (max-width: 1200px) { .jobs-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 1000px) { .ratings-layout { grid-template-columns: 1fr; } }
     @media (max-width: 760px) {
       .jobs-panel { padding: 20px; }
-      .jobs-grid { grid-template-columns: 1fr; }
+      .jobs-grid, .crafts-grid { grid-template-columns: 1fr; }
     }
   `]
 })
@@ -156,6 +176,8 @@ export class ActivitySidebarPanelComponent {
   @Input() visibleSections?: readonly string[];
   // Passed straight through to the auctions panel (Active / History), two-way.
   readonly auctionsView = model<'active' | 'history'>('active');
+  // Which part of the profile shows; the strip that picks it sits by the Profile tab's heading.
+  readonly profileView = input<ProfileView>('jobs');
   protected readonly activity = inject(DiscordActivityService);
 
   protected showSection(name: string): boolean {
@@ -281,8 +303,8 @@ export class ActivitySidebarPanelComponent {
   protected readonly profileCraftOptions = [...PROFILE_CRAFT_OPTIONS];
   protected readonly profileCraftMaxLevel = 110;
 
-  // Craft levels for the active job tab (reuses selectedJobTab so the Crafts grid
-  // tracks the same character as the Jobs grid above it).
+  // Craft levels for the active job tab (reuses selectedJobTab so the Crafts view
+  // shows the same character as the Jobs view).
   protected get activeCraftLevels(): number[] {
     if (this.selectedJobTab === 'alt1' && this.profileModel.altCharacterName1.trim()) return this.profileModel.alt1CraftLevels;
     if (this.selectedJobTab === 'alt2' && this.profileModel.altCharacterName2.trim()) return this.profileModel.alt2CraftLevels;
@@ -307,13 +329,6 @@ export class ActivitySidebarPanelComponent {
   // The rating character slot for the active jobs tab (0 = main, 1 = alt 1, 2 = alt 2).
   protected currentRatingSlot(): number {
     return this.selectedJobTab === 'alt1' ? 1 : this.selectedJobTab === 'alt2' ? 2 : 0;
-  }
-
-  // Name of the character whose peer feedback is currently shown (active tab).
-  protected activeRatingCharacterName(): string {
-    if (this.selectedJobTab === 'alt1') return this.profileModel.altCharacterName1.trim();
-    if (this.selectedJobTab === 'alt2') return this.profileModel.altCharacterName2.trim();
-    return this.profileModel.characterName.trim();
   }
 
   // ----- My own ratings (jobs grid self gear/skill/relic stars + "what others think") -----

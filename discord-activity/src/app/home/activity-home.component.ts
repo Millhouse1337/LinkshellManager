@@ -14,7 +14,7 @@ import {
   DiscordActivityService
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
-import { TAB_NAMES, type TabName } from './activity-home.types';
+import { TAB_NAMES, type ProfileView, type TabName } from './activity-home.types';
 import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
 import { DataAdminTabComponent } from './data-admin/data-admin-tab.component';
@@ -78,12 +78,21 @@ export class ActivityHomeComponent {
   private readonly subView = computed(() => this.location()[1] ?? null);
 
   // The sub-views other tabs keep in the location too: /events/pending, /events/past, /auctions/history,
-  // /charts/sea. Each tab two-way binds its own view, so a click there updates the URL.
+  // /profile/crafts, /charts/sea. Each tab two-way binds its own view, so a click there updates the URL.
   protected readonly eventsView = computed(() => {
     const view = this.subView();
     return view === 'pending' || view === 'past' ? view : 'current';
   });
   protected readonly auctionsView = computed(() => (this.subView() === 'history' ? 'history' : 'active'));
+  protected readonly profileViews = [
+    { key: 'jobs' as const, label: 'Jobs' },
+    { key: 'crafts' as const, label: 'Crafts' },
+    { key: 'ratings' as const, label: 'Player Ratings' },
+  ];
+  protected readonly profileView = computed<ProfileView>(() => {
+    const view = this.subView();
+    return view === 'crafts' || view === 'ratings' ? view : 'jobs';
+  });
   protected readonly chartsView = computed(() => chartsSectionFromSlug(this.subView()));
   // Data Admin keeps a whole path below its tab: /data-admin/rule/5/edit.
   protected readonly dataAdminPath = computed(() => (this.activeTab() === 'data-admin' ? this.location().slice(1) : []));
@@ -308,6 +317,10 @@ export class ActivityHomeComponent {
 
   protected setAuctionsView(view: 'active' | 'history'): void {
     this.setActiveTab('auctions', view === 'history' ? view : undefined);
+  }
+
+  protected setProfileView(view: ProfileView): void {
+    this.setActiveTab('profile', view === 'jobs' ? undefined : view);
   }
 
   // Every Data Admin step is a new page (list → row → edit), so it starts at the top.

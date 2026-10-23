@@ -35,6 +35,10 @@ export const TAB_NAMES = [
 
 export type TabName = typeof TAB_NAMES[number];
 
+// The Profile tab's views, picked by the strip by its heading: /profile, /profile/crafts,
+// /profile/ratings.
+export type ProfileView = 'jobs' | 'crafts' | 'ratings';
+
 // HNM base -> stronger merge pairs (mirrors HnmConfig.MonsterMergePairs). On the
 // create-event monster dropdown the two are offered as ONE entry: the base name below
 // HNM_COMBINED_FROM_DAY, the combined "Base/Stronger" name at/above it. The chosen text is
