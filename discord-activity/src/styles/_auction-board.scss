@@ -470,6 +470,8 @@
   align-items: center;
   flex-wrap: wrap;
 }
+/* Stacked (Create under Active / History): the rule above would centre them, so pin both right. */
+.auctions-panel .section-head-right--stacked { align-items: flex-end; }
 .auctions-panel .section-label {
   font-size: 10px;
   font-weight: 600;
