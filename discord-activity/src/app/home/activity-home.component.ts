@@ -114,10 +114,11 @@ export class ActivityHomeComponent {
   // sub-tabs rather than being top-level tabs of their own: all three are the same DKP economy
   // at different zoom levels, and splitting them across the main nav would put the
   // linkshell-wide total, and the rules that produced it, a full tab away from the member row
-  // you were just reading. 'history' is the default the tab has always opened on.
+  // you were just reading. 'history' is the default the tab has always opened on, though the
+  // strip leads with the Sheet.
   protected readonly dkpViews = [
-    { key: 'history' as const, label: 'DKP History' },
     { key: 'sheet' as const, label: 'DKP Sheet' },
+    { key: 'history' as const, label: 'DKP History' },
     { key: 'grouping' as const, label: 'DKP Grouping' },
   ];
   protected readonly dkpView = computed<'history' | 'sheet' | 'grouping'>(() => {

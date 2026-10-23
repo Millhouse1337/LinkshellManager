@@ -470,8 +470,8 @@
       <div class="button-cluster">
         <span class="pill">{{ dkpHistory()?.entries?.length ?? 0 }}</span>
         @if (canAuditSelectedLinkshell() && !isDkpAuditOpen) {
-          <button type="button" class="action-button action-button--secondary"
-            (click)="openDkpAudit()">Add audit</button>
+          <button type="button" class="btn primary sm"
+            (click)="openDkpAudit()">Add Audit</button>
         }
       </div>
     </header>
