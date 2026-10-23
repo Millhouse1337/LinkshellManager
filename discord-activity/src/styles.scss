@@ -31,5 +31,6 @@
 @use 'styles/attendance';
 @use 'styles/finances';
 @use 'styles/chart-board';
+@use 'styles/showcase';
 // Last so its .event-edit-modal-dialog--flush override lands after forms.
 @use 'styles/create-event-modal';

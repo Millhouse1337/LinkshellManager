@@ -1,0 +1,203 @@
+/* ===== Showcase page: a hero card over a grid of icon-headed panels =====
+   The Game Addon tab's look (adapted from the LSM landing page, on the app's tokens), shared so other
+   "here is how this works" pages can wear it too: Import DKP on the DKP tab. Moved here from
+   configurations-tab.component.scss, where it was the .addon-about block. */
+
+.showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.showcase-hero {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+  padding: 24px 28px;
+  border: 1px solid var(--border-2);
+  border-radius: 20px;
+  background: linear-gradient(135deg, var(--surface-2), var(--bg-elev));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.showcase-hero__mark {
+  display: grid;
+  place-items: center;
+  width: 100px;
+  aspect-ratio: 1;
+  border: 1px solid var(--border-hot);
+  border-radius: 24px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--fg);
+  background:
+    radial-gradient(circle, var(--accent-glow), transparent 62%),
+    var(--surface-3);
+  box-shadow: inset 0 0 30px var(--accent-glow), 0 0 26px var(--accent-glow);
+}
+.showcase-hero__eyebrow {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.showcase-hero__title {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 4vw, 42px);
+  line-height: 1.05;
+  font-weight: 700;
+}
+.showcase-hero__lede {
+  max-width: 720px;
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.showcase-hero__badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  color: var(--fg-2);
+  letter-spacing: 0.14em;
+}
+.showcase-hero__badge span { font-size: 11px; }
+.showcase-hero__badge strong { font-size: 24px; font-weight: 700; color: var(--fg); }
+
+.showcase-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.08fr 1.12fr;
+  gap: 16px;
+}
+.showcase-panel {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--surface-2), var(--bg-elev));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.showcase-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.showcase-panel__head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--fg);
+}
+.showcase-panel__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-hot);
+  border-radius: 11px;
+  font-size: 15px;
+  color: var(--accent);
+  background: var(--accent-weak);
+}
+
+.showcase-list { display: grid; gap: 12px; }
+
+.showcase-item {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.showcase-item__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 20px;
+  background: var(--accent-weak);
+}
+.showcase-item h4, .showcase-steps h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.showcase-item p, .showcase-steps p, .showcase-cmd p {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.showcase-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.showcase-steps li {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.showcase-steps__num {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-hot);
+  border-radius: 50%;
+  font-weight: 700;
+  color: var(--fg);
+  background: var(--accent-weak);
+}
+
+.showcase code, .showcase-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--accent-hover);
+  background: var(--bg);
+}
+.showcase-chip { color: var(--accent); }
+
+/* A labelled line in a list: a command (Game Addon) or a column (Import DKP) over what it does. */
+.showcase-cmd {
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.showcase-cmd code { margin-bottom: 8px; font-size: 12.5px; }
+
+@media (max-width: 1100px) {
+  .showcase-grid { grid-template-columns: 1fr 1fr; }
+  .showcase-grid .showcase-panel:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .showcase-hero { grid-template-columns: 80px 1fr; padding: 18px; }
+  .showcase-hero__badge { display: none; }
+  .showcase-grid { grid-template-columns: 1fr; }
+  .showcase-grid .showcase-panel:last-child { grid-column: auto; }
+}

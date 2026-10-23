@@ -1079,33 +1079,34 @@
       <!-- ===== Game Addon view (its own tab) ===== -->
       @if (view() === 'addon' && !addonGloballyDisabled()) {
       <!-- Stylized "about the addon" section (adapted from the LSM landing page,
-           remapped onto the app's design tokens). -->
-      <div class="addon-about">
-        <div class="addon-hero">
-          <div class="addon-hero__mark">LSM</div>
-          <div class="addon-hero__copy">
-            <div class="addon-hero__eyebrow">LinkshellManager Addon</div>
-            <h2 class="addon-hero__title">LSM Game Addon</h2>
-            <p class="addon-hero__lede">
+           remapped onto the app's design tokens). The showcase-* classes are shared
+           (styles/_showcase.scss) with the DKP tab's Import DKP page. -->
+      <div class="showcase">
+        <div class="showcase-hero">
+          <div class="showcase-hero__mark">LSM</div>
+          <div class="showcase-hero__copy">
+            <div class="showcase-hero__eyebrow">LinkshellManager Addon</div>
+            <h2 class="showcase-hero__title">LSM Game Addon</h2>
+            <p class="showcase-hero__lede">
               The LSM addon is a small in-game addon for Ashita v3 (FFXI). Once paired to your
               linkshell, it sends data into LinkshellManager app in real time.
             </p>
           </div>
-          <div class="addon-hero__badge">
+          <div class="showcase-hero__badge">
             <span>ASHITA V3</span>
             <strong>FFXI</strong>
           </div>
         </div>
 
-        <div class="addon-grid">
-          <section class="addon-panel">
-            <header class="addon-panel__head">
-              <span class="addon-panel__icon">✦</span>
+        <div class="showcase-grid">
+          <section class="showcase-panel">
+            <header class="showcase-panel__head">
+              <span class="showcase-panel__icon">✦</span>
               <h3>What it can do</h3>
             </header>
-            <div class="addon-featurelist">
-              <div class="addon-feature">
-                <div class="addon-feature__icon">📅</div>
+            <div class="showcase-list">
+              <div class="showcase-item">
+                <div class="showcase-item__icon">📅</div>
                 <div>
                   <h4>Timed Event Management</h4>
                   <p>Create, browse, and run timed events from the in-game launcher
@@ -1113,23 +1114,23 @@
                     can sign up and be marked present without leaving the game.</p>
                 </div>
               </div>
-              <div class="addon-feature">
-                <div class="addon-feature__icon">📸</div>
+              <div class="showcase-item">
+                <div class="showcase-item__icon">📸</div>
                 <div>
                   <h4>Attendance snapshots</h4>
                   <p>Capture everyone in your party, zone, or alliance and post them as a Window Event.
                     Add a monster name to auto-tag the camp (Kings / Wyrms / Misc).</p>
                 </div>
               </div>
-              <div class="addon-feature">
-                <div class="addon-feature__icon">⏱️</div>
+              <div class="showcase-item">
+                <div class="showcase-item__icon">⏱️</div>
                 <div>
                   <h4>Time-of-Death tracking</h4>
                   <p>Watches chat for kills, tracks pop windows, and sends the results to the ToDs tab.</p>
                 </div>
               </div>
-              <div class="addon-feature">
-                <div class="addon-feature__icon">🔄</div>
+              <div class="showcase-item">
+                <div class="showcase-item__icon">🔄</div>
                 <div>
                   <h4>Real-time sync</h4>
                   <p>Anything captured by the addon appears in LinkshellManager while it's paired.</p>
@@ -1138,14 +1139,14 @@
             </div>
           </section>
 
-          <section class="addon-panel">
-            <header class="addon-panel__head">
-              <span class="addon-panel__icon">🛠️</span>
+          <section class="showcase-panel">
+            <header class="showcase-panel__head">
+              <span class="showcase-panel__icon">🛠️</span>
               <h3>Setting it up</h3>
             </header>
-            <ol class="addon-steps">
+            <ol class="showcase-steps">
               <li>
-                <span class="addon-steps__num">1</span>
+                <span class="showcase-steps__num">1</span>
                 <div>
                   <h4>Install it</h4>
                   <p>Copy the <code>lsm</code> folder into <code>Ashita/addons/lsm/</code> and run
@@ -1158,10 +1159,10 @@
                    /lsm server still exists for anyone self-hosting, and moved to the command list
                    below rather than sitting in the path everybody walks. -->
               <li>
-                <span class="addon-steps__num">2</span>
+                <span class="showcase-steps__num">2</span>
                 <div>
                   <h4>Pair the addon (once)</h4>
-                  <p>Click <span class="addon-chip">+ Get Code</span> below, then run
+                  <p>Click <span class="showcase-chip">+ Get Code</span> below, then run
                     <code>/lsm link &lt;code&gt;</code> in FFXI. One code pairs
                     <strong>every linkshell you belong to</strong> — no need to repeat
                     it per linkshell.</p>
@@ -1170,7 +1171,7 @@
                 </div>
               </li>
               <li>
-                <span class="addon-steps__num">3</span>
+                <span class="showcase-steps__num">3</span>
                 <div>
                   <h4>Use it</h4>
                   <p>Open attendance with <code>/attend</code>, take a snapshot with <code>/lsm now</code>,
@@ -1180,21 +1181,21 @@
             </ol>
           </section>
 
-          <section class="addon-panel">
-            <header class="addon-panel__head">
-              <span class="addon-panel__icon">⌨️</span>
+          <section class="showcase-panel">
+            <header class="showcase-panel__head">
+              <span class="showcase-panel__icon">⌨️</span>
               <h3>Handy commands</h3>
             </header>
-            <div class="addon-cmds">
-              <div class="addon-cmd"><code>/lsm now [name] [p|z|a]</code><p>Snapshot your party, zone, or alliance.</p></div>
-              <div class="addon-cmd"><code>/attend</code><p>Open or close the attendance window.</p></div>
-              <div class="addon-cmd"><code>/tod</code><p>Open or close the Time-of-Death tracker.</p></div>
-              <div class="addon-cmd"><code>/lsm status</code><p>Show the server URL and pairing status.</p></div>
+            <div class="showcase-list">
+              <div class="showcase-cmd"><code>/lsm now [name] [p|z|a]</code><p>Snapshot your party, zone, or alliance.</p></div>
+              <div class="showcase-cmd"><code>/attend</code><p>Open or close the attendance window.</p></div>
+              <div class="showcase-cmd"><code>/tod</code><p>Open or close the Time-of-Death tracker.</p></div>
+              <div class="showcase-cmd"><code>/lsm status</code><p>Show the server URL and pairing status.</p></div>
               <!-- Dropped out of the setup steps when the addon started shipping pointed here, so
                    this is now its only mention. Kept, and described by the case it is FOR: nobody
                    on linkshellmanager.com should ever need it. -->
-              <div class="addon-cmd"><code>/lsm server &lt;url&gt;</code><p>Point the addon at a different LSManager — only needed if you self-host.</p></div>
-              <div class="addon-cmd"><code>/lsm help</code><p>Print the full in-game command list.</p></div>
+              <div class="showcase-cmd"><code>/lsm server &lt;url&gt;</code><p>Point the addon at a different LSManager — only needed if you self-host.</p></div>
+              <div class="showcase-cmd"><code>/lsm help</code><p>Print the full in-game command list.</p></div>
             </div>
           </section>
         </div>
