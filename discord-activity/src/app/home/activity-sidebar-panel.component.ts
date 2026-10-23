@@ -35,7 +35,10 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
     .character-tabs {
       display: inline-grid;
       grid-template-columns: repeat(3, 1fr);
-      width: 360px;
+      // Fills the panel, capped per tab by the template's [style.max-width.px]. That binding
+      // used to set a fixed width, which beat every stylesheet rule: three tabs = 360px, wider
+      // than a phone's panel, and it dragged the whole profile form past the screen edge.
+      width: 100%;
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 6px;
       overflow: hidden;
@@ -145,7 +148,6 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
     @media (max-width: 1200px) { .jobs-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     @media (max-width: 760px) {
       .jobs-panel { padding: 20px; }
-      .character-tabs { width: 100%; }
       .jobs-grid { grid-template-columns: 1fr; }
     }
   `]

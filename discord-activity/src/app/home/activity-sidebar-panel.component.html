@@ -56,7 +56,7 @@
               <!-- Character tabs: main always; an alt's tab appears once it's named. -->
               <div class="character-tabs"
                    [style.grid-template-columns]="'repeat(' + jobTabCount() + ', 1fr)'"
-                   [style.width.px]="jobTabCount() * 120">
+                   [style.max-width.px]="jobTabCount() * 120">
                 <button type="button" [class.active]="selectedJobTab === 'main'" (click)="selectJobTab('main')">
                   {{ profileModel.characterName.trim() || 'Main' }}
                 </button>
