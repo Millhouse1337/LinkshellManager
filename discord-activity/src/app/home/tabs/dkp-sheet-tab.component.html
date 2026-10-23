@@ -9,7 +9,8 @@
       @if (activity.isWebsite && primaryLinkshellId()) {
         <a class="btn sm" [href]="'/api/activity/dkp-sheet/export.xlsx?linkshellId=' + primaryLinkshellId()" download>Export to Excel</a>
       }
-      <button type="button" class="btn sm" (click)="dkpSheet.load(primaryLinkshellId())" [disabled]="dkpSheet.busy()">Refresh</button>
+      <!-- No Refresh of its own: the top bar's Refresh reloads the sheet while it's showing
+           (ActivityHomeComponent.refreshTarget). -->
     </div>
   </div>
 

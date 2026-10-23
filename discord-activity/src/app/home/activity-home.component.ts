@@ -139,6 +139,13 @@ export class ActivityHomeComponent {
     return view === 'sheet' || view === 'grouping' ? view : 'history';
   });
 
+  // What the Refresh button and the refresh timer reload on top of the overview
+  // (AutoRefreshService.loadForTab). The DKP Sheet is a view inside the DKP tab but reads its own
+  // endpoint, so while it's showing it refreshes under its old 'dkp-sheet' key; it no longer has
+  // a Refresh button of its own.
+  private readonly refreshTarget = computed<TabName>(() =>
+    this.activeTab() === 'dkp' && this.dkpView() === 'sheet' ? 'dkp-sheet' : this.activeTab());
+
   // The linkshell the import writes to: the one the top bar has selected, as Configurations did.
   protected readonly dkpImportLinkshellId = computed(() => {
     const overview = this.activity.overview();
@@ -243,14 +250,14 @@ export class ActivityHomeComponent {
     // plumbing. Cadence flips to 5s on live surfaces (open window event,
     // started auction, commenced timed event), 25s otherwise; pauses while
     // the iframe is hidden.
-    let refreshTab = this.activeTab();
+    let refreshTab = this.refreshTarget();
     this.autoRefresh.setActiveTab(refreshTab);
     this.autoRefresh.start();
 
     // Follow every tab change, whether a click, Back/Forward or a typed URL. Skips the
     // tab already handed over above so startup doesn't fetch twice.
     effect(() => {
-      const tab = this.activeTab();
+      const tab = this.refreshTarget();
       if (tab !== refreshTab) {
         refreshTab = tab;
         untracked(() => this.autoRefresh.setActiveTab(tab));
@@ -372,7 +379,7 @@ export class ActivityHomeComponent {
   // the single guarded path (spinner + error surface + in-flight dedupe), so it
   // can't jam and always refreshes what you're looking at.
   protected onRefreshClick(): void {
-    void this.autoRefresh.refreshNow(this.activeTab(), true);
+    void this.autoRefresh.refreshNow(this.refreshTarget(), true);
   }
 
   // True once the first overview load has resolved. We use it to keep the tab
