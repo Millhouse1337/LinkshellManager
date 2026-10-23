@@ -35,8 +35,8 @@
             <button type="button" class="view-tab" role="tab"
               [class.active]="eventsView() === 'pending'"
               [attr.aria-selected]="eventsView() === 'pending'"
-              [title]="awaitingConfirmationCount() > 0 ? awaitingConfirmationCount() + ' member capture(s) awaiting confirmation' : ''"
-              (click)="eventsView.set('pending')">Pending{{ awaitingConfirmationCount() > 0 ? ' (' + awaitingConfirmationCount() + ')' : '' }}</button>
+              [title]="pendingCount() > 0 ? pendingCount() + ' waiting on an officer (member captures to confirm, submissions to review)' : ''"
+              (click)="eventsView.set('pending')">Pending{{ pendingCount() > 0 ? ' (' + pendingCount() + ')' : '' }}</button>
             <button type="button" class="view-tab" role="tab"
               [class.active]="eventsView() === 'past'"
               [attr.aria-selected]="eventsView() === 'past'"
@@ -1203,6 +1203,15 @@
              field, unfinished on the books. The "archive" section name is the component's internal
              slot id and is deliberately left alone; its heading comes from the component. -->
         <app-attendance-sections section="archive" />
+
+        <!-- Pending Submissions: ToDs and attendance windows members submitted for approval. Only
+             for those who may review them (the API checks again per kind), and only fetched once
+             the Pending view is first opened. -->
+        @if (canReviewSubmissions()) {
+          @defer (when eventsView() === 'pending') {
+            <app-pending-submissions-section />
+          }
+        }
       </div>
 
       <!-- ===== Past: settled history ===== -->

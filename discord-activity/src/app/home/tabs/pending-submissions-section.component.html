@@ -1,9 +1,11 @@
-<div class="panel-tab fade">
+<!-- Inside the Event System's .panel-tab already, so no wrapper of its own; the margin is the gap
+     the other Pending sections leave above their heads. -->
+<div style="margin-top:22px">
   <div class="section-head">
     <div>
-      <div class="section-label">Website only</div>
-      <div class="section-title">Pending submissions</div>
-      <div class="section-sub">What members submitted for approval. Nothing counts until it is approved.</div>
+      <div class="section-label">Review</div>
+      <div class="section-title">Pending Submissions</div>
+      <div class="section-sub">ToDs and attendance members submitted for approval. Nothing counts until it is approved.</div>
     </div>
     <div class="section-head-right">
       <button type="button" class="btn sm" [disabled]="pending.loading()" (click)="pending.load(linkshellId())">Refresh</button>

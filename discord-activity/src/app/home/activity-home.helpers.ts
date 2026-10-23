@@ -271,6 +271,20 @@ export function isLeaderTierIn(
   return (membership.rank ?? '').toLowerCase() === 'leader';
 }
 
+// May review members' submissions (Event System → Pending → Pending Submissions): either review
+// PERMISSION the server checks (CanManageTods for ToDs, CanModerateLiveEvent for attendance), or the
+// Leader, whom the server's CanAsync always lets through. isLeaderTierIn covers the admin override.
+export function canReviewSubmissionsIn(
+  overview: ActivityOverview | null | undefined,
+  linkshellId: number | null | undefined
+): boolean {
+  if (linkshellId == null) return false;
+  const permissions = (overview?.linkshells ?? []).find(link => link.id === linkshellId)?.permissions;
+  return permissions?.canManageTods === true
+    || permissions?.canModerateLiveEvent === true
+    || isLeaderTierIn(overview, linkshellId);
+}
+
 // Two-letter avatar initials from a character name (e.g. "Millhouse" -> "MI").
 export function memberInitials(value?: string | null): string {
   const name = (value ?? '').trim();

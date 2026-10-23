@@ -26,9 +26,9 @@ export const TAB_NAMES = [
   'configurations',
   'permissions',
   'addon',
-  // Website only (never inside Discord), gated by ActivityHomeComponent.canOpenTab: the review
-  // queue for member submissions, the super-admin switches, and the super-admin database browser.
-  'pending-submissions',
+  // Website only (never inside Discord), gated by ActivityHomeComponent.canOpenTab: the super-admin
+  // switches and the super-admin database browser. (Members' submissions are reviewed in the Event
+  // System's Pending view, on both hosts.)
   'admin',
   'data-admin'
 ] as const;

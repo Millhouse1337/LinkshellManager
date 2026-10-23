@@ -70,9 +70,10 @@ public static class LegacyUrlRedirects
                 ("dkp-sheet", "export.xlsx") => $"/api/activity/dkp-sheet/export.xlsx?linkshellId={scopedId}",
                 ("dkp-sheet", null) => App("dkp/sheet", scopedId),
                 ("window-events", "history") => App("events/past", scopedId),
-                ("window-events", null) => App("events", scopedId),
-                ("attendance-snapshots", null) => App("events", scopedId),
-                ("pending-submissions", _) => App("pending-submissions", scopedId),
+                // Triage, Events Pending DKP Post and the review queue live in Events → Pending.
+                ("window-events", null) => App("events/pending", scopedId),
+                ("attendance-snapshots", null) => App("events/pending", scopedId),
+                ("pending-submissions", _) => App("events/pending", scopedId),
                 _ => string.Empty
             };
             return target.Length > 0;

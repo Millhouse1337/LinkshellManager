@@ -24,17 +24,19 @@ interface TodDraft {
   lootRows: ActivityPendingTodLoot[];
 }
 
-// Website only: the review queue for what members submitted for approval — ToDs (editable, with
-// their loot), attendance windows and attendance snapshots (untick anyone who wasn't there). The
-// Razor Pending Submissions pages, as one tab. ActivityHomeComponent.canOpenTab decides who sees
-// it; the API checks again per kind (CanManageTods / CanModerateLiveEvent).
+// The review queue for what members submitted for approval — ToDs (editable, with their loot) and
+// attendance windows (untick anyone who wasn't there) — as the last section of the Event System's
+// Pending view, inside Discord and on the website. Members' /lsm now captures are not here: they
+// land as Pending snapshots in that view's Triage. A legacy queued snapshot (nothing queues those
+// any more) still shows here if one exists. EventsTabComponent mounts this only for reviewers; the
+// API checks again per kind (CanManageTods / CanModerateLiveEvent).
 @Component({
-  selector: 'app-pending-submissions-tab',
+  selector: 'app-pending-submissions-section',
   imports: [FormsModule],
-  templateUrl: './pending-submissions-tab.component.html',
+  templateUrl: './pending-submissions-section.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class PendingSubmissionsTabComponent {
+export class PendingSubmissionsSectionComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly pending = inject(PendingSubmissionsService);
 
