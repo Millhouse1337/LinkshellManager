@@ -41,15 +41,6 @@ A few things are nicer in a browser:
 These need a full browser (uploading or downloading a file, or a long review form), so they don't appear
 inside Discord. They show as extra tabs after a divider at the end of the tab strip, or as extra buttons.
 
-### Pending Submissions *(reviewers)*
-Members without the right permission can still submit a ToD or attendance for approval. This tab is the
-queue, for anyone who can manage ToDs or moderate live events (and the Leader):
-
-- **ToDs** — check and fix the monster, time of death, repop time, cooldown, interval, claim and loot, then
-  **Approve** or **Reject**. Approving charges each loot winner their DKP; if someone can't afford their item,
-  approval is blocked until you fix the loot or their DKP.
-- **Attendance windows** and **snapshots** — untick anyone who wasn't there (or shouldn't count), then
-  **Approve**, or **Reject** the whole submission.
 
 ### Import DKP *(Configurations tab)*
 Bringing a linkshell over from another tracker? Upload a spreadsheet (.xlsx or .csv) of your existing DKP.
@@ -203,6 +194,6 @@ Two limits, stated plainly rather than left to be discovered:
 - **URL:** `https://your-host/` → Sign in with Discord → tabs along the top.
 - **Set up loot:** Configurations → Loot structure → Save.
 - **Import existing DKP:** Configurations → Import DKP → Download template → fill it in → Preview import → Import.
-- **Review member submissions:** Pending Submissions tab.
+- **Review member submissions and captures:** Event System → Pending.
 - **Pair the addon:** Game Addon → + Get Code → in FFXI `/lsm link <code>`.
 - **Companion guides:** [Discord Activity](LSManager-DiscordActivity-Guide.md) · [In-Game Addon](LSManager-Addon-Guide.md)

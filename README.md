@@ -47,10 +47,10 @@ Discord SDK entirely and uses the site's own cookie login:
   `/dkp/sheet`, `/charts/sea`; slugs in `src/app/home/tab-routes.ts`), so reload, Back and deep links
   work. `?ls=<id>` switches the active linkshell. Inside Discord the iframe's URL is never touched; the
   tab lives in memory there.
-- **Website-only features**, hidden inside Discord: the **Pending Submissions** review tab, the
-  super-admin **Admin** (`/api/web/admin`) and **Data Admin** (`/api/data-admin`) tabs, DKP
-  **Import** (Configurations) and DKP Sheet **Export to Excel**. `ActivityHomeComponent.canOpenTab`
-  gates the website-only tabs.
+- **Website-only features**, hidden inside Discord: the super-admin **Admin** (`/api/web/admin`) and
+  **Data Admin** (`/api/data-admin`) tabs, DKP **Import** (Configurations) and DKP Sheet **Export to
+  Excel**. `ActivityHomeComponent.canOpenTab` gates the website-only tabs. (Reviewing members'
+  submissions is not website-only: it is the last section of Event System → Pending on both hosts.)
 - `/` shows the public landing page signed out and redirects into the app signed in.
 
 ## Server-rendered pages

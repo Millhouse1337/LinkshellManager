@@ -95,8 +95,8 @@ the web if someone picks wrong.
 **Anyone can post.** If you don't have live-event moderation rights your capture arrives
 **Pending**: it shows up on the event straight away, but its members stay out of the roster and
 earn nothing until an officer presses Confirm. Captures that don't match an open camp land in
-**Unlinked Snapshots** on the Event System page, where an officer can name them, link them to an
-event, or create an event from them.
+**Triage** under Event System → Pending (a member's in its *Awaiting confirmation* part), where an
+officer can confirm them, name them, link them to an event, or create an event from them.
 
 The zone-wide scan (`/lsm all` and the old `/sea`-based Zone scope) has been removed. It relied on
 the FFXI search window and a render-range entity sweep, neither of which could see a zone reliably
