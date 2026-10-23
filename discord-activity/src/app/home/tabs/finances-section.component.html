@@ -6,12 +6,12 @@
     <div class="section-title">{{ view() === 'transactions' ? 'Transactions' : 'Balance Sheet' }}</div>
   </div>
   <div class="fin-head-actions">
+    <ng-content select="[treasuryViews]" />
     @if (summary() && canManage()) {
       <button type="button" class="btn primary sm" (click)="toggleForm()">
         {{ showForm() ? 'Cancel' : 'Record Transaction' }}
       </button>
     }
-    <ng-content select="[treasuryViews]" />
   </div>
 </div>
 

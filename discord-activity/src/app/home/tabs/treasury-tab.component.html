@@ -1,7 +1,7 @@
 <div class="panel-tab">
   @if (linkshellId(); as id) {
-    <!-- The view strip. Drawn into the header row of whichever section is showing, at its far right,
-         so it stays in one place while the button beside it changes with the view. -->
+    <!-- The view strip. Drawn into the header of whichever section is showing, top right, so it
+         stays in one place while the button under it changes with the view. -->
     <ng-template #viewTabs>
       @if (views().length > 1) {
         <div class="view-tabs" role="tablist" aria-label="Treasury view">

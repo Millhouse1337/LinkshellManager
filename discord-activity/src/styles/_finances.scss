@@ -7,17 +7,18 @@
    literals outside _tokens.scss, and that applies to component style blocks too — which is part of
    why these moved out of the component. */
 
+/* The Treasury headers' right side: the view strip on top and the view's button (Record
+   Transaction, + Add Item) under it, both against the right edge. */
 .panel-tab .fin-head-actions {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 6px;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
   margin-left: auto;
 }
 
-/* The Treasury headers carry an action button AND the three-view strip, which don't fit beside the
-   title on a phone. The right side drops under the title instead, still against the right edge. */
+/* Too wide to sit beside the title on a phone: the right side drops under the title instead,
+   still against the right edge. */
 .panel-tab .fin-head { flex-wrap: wrap; }
 
 /* The "Uncategorized N" chip is a real button (it filters the transaction list). Undo the browser's

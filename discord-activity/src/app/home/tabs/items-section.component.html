@@ -5,12 +5,12 @@
     <div class="section-title">Items</div>
   </div>
   <div class="fin-head-actions">
+    <ng-content select="[treasuryViews]" />
     @if (canManage) {
       <button type="button" class="btn primary sm" (click)="toggleForm()">
         {{ showForm() ? 'Cancel' : (editingItemId() !== null ? 'Editing...' : '+ Add Item') }}
       </button>
     }
-    <ng-content select="[treasuryViews]" />
   </div>
 </div>
 
