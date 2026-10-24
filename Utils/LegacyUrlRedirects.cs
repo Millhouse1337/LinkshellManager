@@ -71,10 +71,11 @@ public static class LegacyUrlRedirects
                 ("dkp-sheet", "export.xlsx") => $"/api/activity/dkp-sheet/export.xlsx?linkshellId={scopedId}",
                 ("dkp-sheet", null) => App("dkp", scopedId),
                 ("window-events", "history") => App("events/past", scopedId),
-                // Triage, Events Pending DKP Post and the review queue live in Events → Pending.
+                // Events Pending DKP Post is Events → Pending; the Unlinked Snapshots triage is on
+                // Current; members' ToD submissions are reviewed on the ToDs tab.
                 ("window-events", null) => App("events/pending", scopedId),
-                ("attendance-snapshots", null) => App("events/pending", scopedId),
-                ("pending-submissions", _) => App("events/pending", scopedId),
+                ("attendance-snapshots", null) => App("events", scopedId),
+                ("pending-submissions", _) => App("tods", scopedId),
                 _ => string.Empty
             };
             return target.Length > 0;

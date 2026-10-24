@@ -6,9 +6,11 @@ import { DiscordActivityService } from './discord-activity.service';
 import { formatActionError } from './discord-activity.helpers';
 import { DkpSheetService } from './dkp-sheet.service';
 import { PartySetupService } from './party-setup.service';
+import { PendingSubmissionsService } from './pending-submissions.service';
 import { TreasuryService } from './treasury.service';
 import { WindowEventService } from './window-event.service';
 import type { TabName } from '../home/activity-home.types';
+import { canReviewSubmissionsIn } from '../home/activity-home.helpers';
 
 // Centralized visibility-aware polling that keeps every tab "feeling live"
 // without per-feature plumbing. One self-rescheduling timer:
@@ -35,6 +37,7 @@ export class AutoRefreshService {
   private readonly dkpSheet = inject(DkpSheetService);
   private readonly auction = inject(AuctionService);
   private readonly treasury = inject(TreasuryService);
+  private readonly pendingSubmissions = inject(PendingSubmissionsService);
 
   private readonly NORMAL_MS = 25_000;
   private readonly FAST_MS = 5_000;
@@ -195,6 +198,13 @@ export class AutoRefreshService {
         break;
       case 'party-setup':
         await this.partySetup.loadList(linkshellId);
+        break;
+      case 'tods':
+        // The ToDs ride the overview, but the ToD Submissions Needing Approval section has its own
+        // endpoint, and only reviewers may read it.
+        if (canReviewSubmissionsIn(this.activity.overview(), linkshellId)) {
+          await this.pendingSubmissions.load(linkshellId);
+        }
         break;
       case 'dkp-sheet':
         await this.dkpSheet.load(linkshellId);

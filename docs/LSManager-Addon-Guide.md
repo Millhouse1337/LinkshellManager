@@ -95,7 +95,7 @@ the web if someone picks wrong.
 **Anyone can post.** If you don't have live-event moderation rights your capture arrives
 **Pending**: it shows up on the event straight away, but its members stay out of the roster and
 earn nothing until an officer presses Confirm. Captures that don't match an open camp land in
-**Triage** under Event System → Snapshots (a member's in its *Awaiting confirmation* part), where an
+**Unlinked Snapshots** on Event System → Current (a member's in its *Awaiting confirmation* part), where an
 officer can confirm them, name them, link them to an event, or create an event from them.
 
 The zone-wide scan (`/lsm all` and the old `/sea`-based Zone scope) has been removed. It relied on

@@ -25,10 +25,8 @@ import { ActivityQueuePanelComponent } from '../activity-queue-panel.component';
 import { EventHistoryPanelComponent } from '../sidebar-panels/event-history-panel.component';
 import { AttendanceSectionsComponent } from './attendance-sections.component';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
-import { PendingSubmissionsSectionComponent } from './pending-submissions-section.component';
 import { TodFormComponent } from './tod-form.component';
 import { PartySetupService } from '../../discord/party-setup.service';
-import { PendingSubmissionsService } from '../../discord/pending-submissions.service';
 import { WindowEventService } from '../../discord/window-event.service';
 import {
   EVENT_JOB_TYPE_OPTIONS,
@@ -39,7 +37,6 @@ import {
   breakSessionInfo,
   canManageEventsIn,
   canManageLinkshellIn,
-  canReviewSubmissionsIn,
   formatBreakDuration,
   formatDkp,
   formatElapsed,
@@ -59,7 +56,7 @@ interface AttendanceWindowTab {
 
 @Component({
   selector: 'app-events-tab',
-  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, PartySetupPanelComponent, EventHistoryPanelComponent, TodFormComponent, AttendanceSectionsComponent, PendingSubmissionsSectionComponent],
+  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, PartySetupPanelComponent, EventHistoryPanelComponent, TodFormComponent, AttendanceSectionsComponent],
   templateUrl: './events-tab.component.html',
   styleUrl: './events-tab.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -70,7 +67,6 @@ export class EventsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetups = inject(PartySetupService);
   protected readonly windows = inject(WindowEventService);
-  private readonly pendingSubmissions = inject(PendingSubmissionsService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly now = signal(Date.now());
   private readonly queuePanel = viewChild.required(ActivityQueuePanelComponent);
@@ -99,20 +95,12 @@ export class EventsTabComponent {
   // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/events/pending).
   readonly eventsView = model<'current' | 'pending' | 'past'>('current', { alias: 'view' });
 
-  // May review members' submissions (the Pending view's last section). Same gate as the API.
-  protected readonly canReviewSubmissions = computed(() =>
-    canReviewSubmissionsIn(this.activity.overview(), this.primaryLinkshellId()));
-  // The linkshell whose submissions to load, or 0. A computed, so the load below re-runs when the
-  // linkshell or the permission changes, not on every overview refresh.
-  private readonly reviewLinkshellId = computed(() => (this.canReviewSubmissions() ? this.primaryLinkshellId() : 0));
-
-  // What is waiting on an officer, shown on the Pending view's button so nobody misses it: captures
-  // a member without moderation rights posted (/lsm now on a day no officer was at the run), still
-  // awaiting Confirm, plus, for a reviewer, submissions to approve.
+  // Shown on the Pending view's button so nobody misses it: the ended events still waiting for their
+  // DKP to be posted, which is all that view holds. Only while the list isn't narrowed by a search,
+  // since the total then counts the matches rather than everything waiting.
   protected readonly pendingCount = computed(() => {
-    const awaiting = (this.windows.data()?.unlinkedSnapshots ?? []).filter(snapshot => snapshot.isPending).length;
-    const queue = this.reviewLinkshellId() ? this.pendingSubmissions.queueFor(this.reviewLinkshellId()) : null;
-    return awaiting + (queue ? queue.tods.length + queue.windows.length + queue.snapshots.length : 0);
+    const data = this.windows.data();
+    return data && !data.closedQuery ? data.closedTotalCount : 0;
   });
 
   // Tracks which window's tab is currently active per event (key = event id).
@@ -166,13 +154,6 @@ export class EventsTabComponent {
       const linkshellId = this.primaryLinkshellId();
       if (!linkshellId) return;
       queueMicrotask(() => void this.windows.ensureLoaded(linkshellId));
-    });
-
-    // Members' submissions, for a reviewer: loaded up front (not only when the Pending view opens)
-    // so the Pending button can count them.
-    effect(() => {
-      const linkshellId = this.reviewLinkshellId();
-      if (linkshellId) queueMicrotask(() => void this.pendingSubmissions.load(linkshellId));
     });
   }
 

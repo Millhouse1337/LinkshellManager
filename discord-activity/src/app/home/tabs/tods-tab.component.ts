@@ -8,12 +8,13 @@ import {
 import type { ActivityPartySetupListRow } from '../../discord/discord-activity.types';
 import { PartySetupService } from '../../discord/party-setup.service';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
+import { PendingSubmissionsSectionComponent } from './pending-submissions-section.component';
 import { TodFormComponent } from './tod-form.component';
-import { TOD_NOT_ENTERED, isTodReady, mergedMonsterName, todCountdownLabel, todSortKey } from '../activity-home.helpers';
+import { TOD_NOT_ENTERED, canReviewSubmissionsIn, isTodReady, mergedMonsterName, todCountdownLabel, todSortKey } from '../activity-home.helpers';
 
 @Component({
   selector: 'app-tods-tab',
-  imports: [CommonModule, FormsModule, PartySetupPanelComponent, TodFormComponent],
+  imports: [CommonModule, FormsModule, PartySetupPanelComponent, PendingSubmissionsSectionComponent, TodFormComponent],
   templateUrl: './tods-tab.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -102,6 +103,12 @@ export class TodsTabComponent {
 
   protected primaryLinkshell() {
     return this.activity.overview()?.primaryLinkshell ?? null;
+  }
+
+  // May approve members' ToD submissions (the ToD Submissions Needing Approval section). Same
+  // gate as the API.
+  protected canReviewSubmissions(): boolean {
+    return canReviewSubmissionsIn(this.activity.overview(), this.selectedDashboardLinkshellId());
   }
 
   protected dashboardLinkshells() {

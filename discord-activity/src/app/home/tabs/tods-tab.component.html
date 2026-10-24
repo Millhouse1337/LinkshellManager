@@ -14,6 +14,12 @@
         </div>
       </div>
 
+      <!-- ToD Submissions Needing Approval: only for those who may approve them (the API checks
+           again), at the top so a waiting ToD isn't missed. -->
+      @if (canReviewSubmissions()) {
+        <app-pending-submissions-section />
+      }
+
       <!-- Tracked Windows -->
       <div class="card">
         <div class="card-head">

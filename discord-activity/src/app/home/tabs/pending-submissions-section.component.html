@@ -1,20 +1,17 @@
-<!-- Inside the Event System's .panel-tab already, so no wrapper of its own; the margin is the gap
-     the other Pending sections leave above their heads. -->
-<div style="margin-top:22px">
+<!-- Inside the ToDs tab's .panel-tab already, so no wrapper of its own. No Refresh button: the top
+     bar's Refresh reloads it (AutoRefreshService). -->
+<div style="margin-bottom:22px">
   <div class="section-head">
     <div>
       <div class="section-label">Review</div>
-      <div class="section-title">Pending Submissions</div>
-      <div class="section-sub">ToDs and attendance members submitted for approval. Nothing counts until it is approved.</div>
-    </div>
-    <div class="section-head-right">
-      <button type="button" class="btn sm" [disabled]="pending.loading()" (click)="pending.load(linkshellId())">Refresh</button>
+      <div class="section-title">ToD Submissions Needing Approval</div>
+      <div class="section-sub">ToDs posted by members who can't add them directly. They don't count until approved.</div>
     </div>
   </div>
 
   @if (queue(); as q) {
     @if (isEmpty()) {
-      <div class="card"><div class="card-body muted">Nothing is waiting for review.</div></div>
+      <div class="card"><div class="card-body muted">No ToDs are waiting for approval.</div></div>
     }
 
     <div style="display:grid;gap:14px">
@@ -103,68 +100,8 @@
         </div>
       }
 
-      <!-- ===== Attendance windows ===== -->
-      @for (window of q.windows; track window.id) {
-        @let key = 'window-' + window.id;
-        @let busy = pending.busyKey() === key;
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Window {{ window.windowIndex }} attendance · {{ window.eventName }}</div>
-            <span class="tag">{{ window.submittedBy }} · {{ activity.formatDateTime(window.submittedAtUtc) }}</span>
-          </div>
-          <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
-            <p class="muted" style="margin:0">Untick anyone who wasn't there.</p>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">
-              @for (member of window.members; track member.id) {
-                <label style="display:flex;align-items:center;gap:8px">
-                  <input type="checkbox" [checked]="isKept(key, member)" (change)="toggleKept(key, member)" />
-                  <span>{{ member.characterName }}</span>
-                  <span class="muted">{{ job(member) }}</span>
-                </label>
-              }
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button type="button" class="btn primary sm" [disabled]="busy" (click)="approveWindow(window.id, window.members)">
-                Approve {{ keptIds(key, window.members).length }} of {{ window.members.length }}
-              </button>
-              <button type="button" class="btn danger-outline sm" [disabled]="busy" (click)="pending.rejectWindow(linkshellId(), window.id)">Reject</button>
-            </div>
-          </div>
-        </div>
-      }
-
-      <!-- ===== Attendance snapshots ===== -->
-      @for (snapshot of q.snapshots; track snapshot.id) {
-        @let key = 'snapshot-' + snapshot.id;
-        @let busy = pending.busyKey() === key;
-        <div class="card">
-          <div class="card-head">
-            <div class="card-title">Snapshot by {{ snapshot.capturedByCharacterName || '?' }} · {{ activity.formatDateTime(snapshot.capturedAtUtc) }}</div>
-            <span class="tag">{{ snapshot.submittedBy }} · {{ activity.formatDateTime(snapshot.submittedAtUtc) }}</span>
-          </div>
-          <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
-            <p class="muted" style="margin:0">Untick anyone who shouldn't count.</p>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px">
-              @for (entry of snapshot.entries; track entry.id) {
-                <label style="display:flex;align-items:center;gap:8px">
-                  <input type="checkbox" [checked]="isKept(key, entry)" (change)="toggleKept(key, entry)" />
-                  <span>{{ entry.characterName }}</span>
-                  <span class="muted">{{ job(entry) }}{{ entry.zone ? ' · ' + entry.zone : '' }}</span>
-                </label>
-              }
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button type="button" class="btn primary sm" [disabled]="busy" (click)="approveSnapshot(snapshot.id, snapshot.entries)">
-                Approve {{ keptIds(key, snapshot.entries).length }} of {{ snapshot.entries.length }}
-              </button>
-              <button type="button" class="btn danger-outline sm" [disabled]="busy" (click)="pending.rejectSnapshot(linkshellId(), snapshot.id)">Reject</button>
-            </div>
-          </div>
-        </div>
-      }
-
     </div>
   } @else {
-    <div class="card"><div class="card-body muted">Loading the pending submissions…</div></div>
+    <div class="card"><div class="card-body muted">Loading ToD submissions…</div></div>
   }
 </div>

@@ -8,7 +8,7 @@
             }
             @case ('pending') {
               <div class="section-label">Officer To-Do</div>
-              <div class="section-title">Snapshots</div>
+              <div class="section-title">Pending</div>
             }
             @default {
               <div class="section-label">History</div>
@@ -17,8 +17,7 @@
           }
         </div>
         <!-- The view switch on top, so it stays put when the counts under it hide.
-             "Snapshots" is the 'pending' view (URL /events/pending): the officer to-do work, the
-             captures above all. -->
+             Pending (URL /events/pending) holds the ended events still waiting for their DKP post. -->
         <div class="section-head-right section-head-right--stacked">
           <div class="view-tabs" role="tablist" aria-label="Event view">
             <button type="button" class="view-tab" role="tab"
@@ -28,8 +27,8 @@
             <button type="button" class="view-tab" role="tab"
               [class.active]="eventsView() === 'pending'"
               [attr.aria-selected]="eventsView() === 'pending'"
-              [title]="pendingCount() > 0 ? pendingCount() + ' waiting on an officer (member captures to confirm, submissions to review)' : ''"
-              (click)="eventsView.set('pending')">Snapshots{{ pendingCount() > 0 ? ' (' + pendingCount() + ')' : '' }}</button>
+              [title]="pendingCount() > 0 ? pendingCount() + ' ended event(s) waiting for their DKP to be posted' : ''"
+              (click)="eventsView.set('pending')">Pending{{ pendingCount() > 0 ? ' (' + pendingCount() + ')' : '' }}</button>
             <button type="button" class="view-tab" role="tab"
               [class.active]="eventsView() === 'past'"
               [attr.aria-selected]="eventsView() === 'past'"
@@ -1187,6 +1186,12 @@
              live board rather than behind its own tab. Mounted OUTSIDE the camp loop above: the camp
              cards contain <form> elements and this markup drives bare [(ngModel)] with no form. -->
         <app-attendance-sections section="live" />
+
+        <!-- Unlinked Snapshots: captures with no attendance event yet, and the only landing place
+             for one posted by a member without moderation rights (/lsm now on a day no officer was
+             there; its "Awaiting confirmation" part). An unverified or unfiled capture is unpaid
+             attendance waiting on an officer, so it sits with the live work. -->
+        <app-attendance-sections section="unlinked" />
       </div>
 
       <!-- ===== Queue / Create event: Current only ===== -->
@@ -1198,26 +1203,13 @@
         <app-activity-queue-panel />
       </div>
 
-      <!-- ===== Snapshots (the 'pending' view): officer to-do work ===== -->
+      <!-- ===== Pending: ended events still to be paid out ===== -->
       <div [hidden]="eventsView() !== 'pending'">
-        <!-- Unlinked Snapshots: captures with no attendance event yet, and the only landing place
-             for one posted by a member without moderation rights (/lsm now on a day no officer was
-             there). An unverified or unfiled capture is unpaid attendance waiting on an officer. -->
-        <app-attendance-sections section="unlinked" />
-
         <!-- Events Pending DKP Post: ended events nobody has posted the DKP for yet — finished in the
              field, unfinished on the books. The "archive" section name is the component's internal
-             slot id and is deliberately left alone; its heading comes from the component. -->
+             slot id and is deliberately left alone; its heading comes from the component. Members'
+             ToD submissions are reviewed on the ToDs tab. -->
         <app-attendance-sections section="archive" />
-
-        <!-- Pending Submissions: ToDs and attendance windows members submitted for approval. Only
-             for those who may review them (the API checks again per kind), and only fetched once
-             the Snapshots view is first opened. -->
-        @if (canReviewSubmissions()) {
-          @defer (when eventsView() === 'pending') {
-            <app-pending-submissions-section />
-          }
-        }
       </div>
 
       <!-- ===== Past: settled history ===== -->
