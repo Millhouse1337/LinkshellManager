@@ -125,9 +125,9 @@ export class ActivityHomeComponent {
   // first in the strip, is what the tab opens on (bare /dkp); History is /dkp/history. (/dkp/sheet
   // still reads as the Sheet, for links written when History was the default.)
   //
-  // Import DKP (/dkp/import) is the fourth, website only and for whoever may customize the
-  // linkshell: uploading a spreadsheet and reviewing every row doesn't fit the Discord iframe, and
-  // the import rewrites balances. Configurations used to carry it.
+  // Import DKP (/dkp/import) is the fourth, for whoever may customize the linkshell, since the
+  // import rewrites balances. Configurations used to carry it, website only; the upload now goes
+  // as base64 JSON and its template download through a one-time link, so Discord has it too.
   protected readonly dkpViews = computed(() => [
     { key: 'sheet' as const, label: 'DKP Sheet' },
     { key: 'history' as const, label: 'DKP History' },
@@ -155,7 +155,7 @@ export class ActivityHomeComponent {
   private readonly canImportDkp = computed(() => {
     const id = this.dkpImportLinkshellId();
     const link = (this.activity.overview()?.linkshells ?? []).find(l => l.id === id);
-    return this.activity.isWebsite && !!link?.permissions?.canCustomizeLinkshell;
+    return !!link?.permissions?.canCustomizeLinkshell;
   });
 
   // Wall-clock display for the identity bar. We tick once per minute since the

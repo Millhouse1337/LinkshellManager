@@ -180,7 +180,14 @@
     <header class="showcase-panel__head">
       <span class="showcase-panel__icon">📊</span>
       <h3>The sample template</h3>
-      <a class="btn primary sm dkpi-download" href="/api/activity/dkp-import/template" download>⬇ Download template</a>
+      <!-- Inside Discord, opened in the member's browser through a one-time link (the iframe can't
+           save a file). -->
+      @if (activity.isWebsite) {
+        <a class="btn primary sm dkpi-download" href="/api/activity/dkp-import/template" download>⬇ Download template</a>
+      } @else {
+        <button type="button" class="btn primary sm dkpi-download" [disabled]="downloads.busy()"
+          (click)="downloads.openInBrowser('dkp-template')">⬇ Download template</button>
+      }
     </header>
     <div class="dkpi-sheet-wrap">
       <table class="dkpi-sheet" aria-label="The sample DKP template">

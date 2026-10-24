@@ -5,8 +5,8 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 // DKP import (Excel/CSV): a linkshell migrating from another tracker brings its existing DKP in.
 // The JSON twin of LinkshellController's DownloadDkpTemplate / PreviewDkpImport / CommitDkpImport,
-// on the same DkpImportService, for the Configurations tab's website-only import card (uploading a
-// file and reviewing a table is not something the Discord iframe offers).
+// on the same DkpImportService, for the DKP tab's Import DKP view, on the website and in Discord
+// (the file arrives as base64 JSON, since the Discord iframe can't send a multipart upload).
 //
 // Two steps, as on the Razor page: preview parses the upload and classifies every row (update /
 // create / ambiguous) without changing anything and hands the parsed rows back; commit applies

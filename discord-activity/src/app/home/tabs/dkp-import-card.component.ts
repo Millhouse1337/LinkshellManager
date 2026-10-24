@@ -1,7 +1,9 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ElementRef, inject, input, signal, viewChild } from '@angular/core';
 
+import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { DkpImportService } from '../../discord/dkp-import.service';
+import { DownloadLinkService } from '../../discord/download-link.service';
 import type { ActivityDkpImportPreviewRow } from '../../discord/discord-activity.types';
 
 // One member row of the sample template.
@@ -24,8 +26,9 @@ const SAMPLE_MEMBERS: readonly SampleMember[] = [
   { name: 'Member3', alt1: 'Member3Alt1', alt2: 'Member3Alt2', current: 1500.25, biddable: 1500.25, total: 6000, spent: 4499.75 },
 ];
 
-// The DKP tab's "Import DKP" view (/dkp/import), website only (ConfigurationsTabComponent keeps the
-// "use the web" hint inside Discord). Choose a file → preview every row → confirm. Mirrors the
+// The DKP tab's "Import DKP" view (/dkp/import), on the website and in Discord (the file goes up
+// as base64 JSON; inside Discord the template downloads through a one-time link opened in the
+// member's browser). Choose a file → preview every row → confirm. Mirrors the
 // Customize page's import card and the DkpImportPreview page it led to. Laid out like the Game
 // Addon tab (the shared showcase-* styles), with a picture of the sample template at the bottom.
 @Component({
@@ -50,6 +53,8 @@ export class DkpImportCardComponent {
   protected readonly sheetColumns = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
   protected readonly dkpImport = inject(DkpImportService);
+  protected readonly activity = inject(DiscordActivityService);
+  protected readonly downloads = inject(DownloadLinkService);
   protected readonly fileName = signal<string | null>(null);
   private readonly fileInput = viewChild.required<ElementRef<HTMLInputElement>>('fileInput');
   private file: File | null = null;

@@ -5,7 +5,7 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type { ActivityDkpImportPreview } from './discord-activity.types';
 
-// DKP import (website only): a linkshell migrating from another tracker uploads a spreadsheet
+// DKP import (website and Discord): a linkshell migrating from another tracker uploads a spreadsheet
 // of its existing DKP. Two steps, like the old Razor page: preview classifies every row without
 // changing anything, then commit applies the previewed rows. ActivityDataController.DkpImport.
 @Injectable({ providedIn: 'root' })

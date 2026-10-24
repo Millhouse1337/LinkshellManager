@@ -36,11 +36,11 @@ A few things are nicer in a browser:
 - **"Lock to this server" doesn't apply on the website.** That Configurations setting only limits which
   Discord server the Activity opens a linkshell from; members always see their linkshells on the website.
 
-## Only on the website
+## Importing and exporting DKP
 
-These need a full browser (uploading or downloading a file, or a long review form), so they don't appear
-inside Discord. They show as extra tabs after a divider at the end of the tab strip, or as extra buttons.
-
+Both work on the website and inside Discord. Discord can't save a file itself, so there a download
+(Export to Excel, or the import template) opens in your web browser through a link that works once and
+expires after a few minutes; no sign-in needed in the browser.
 
 ### Import DKP *(DKP tab → Import DKP)*
 Bringing a linkshell over from another tracker? Upload a spreadsheet (.xlsx or .csv) of your existing DKP.
@@ -52,6 +52,11 @@ opens the app and claims it. Needs the "Customize linkshell" permission.
 
 ### Export to Excel *(DKP → DKP Sheet)*
 Downloads the linkshell's current DKP as a styled spreadsheet.
+
+## Only on the website
+
+These are tools for the one super-admin account, so they don't appear inside Discord. They show as extra
+tabs after a divider at the end of the tab strip.
 
 ### Admin *(super admin only)*
 The server-wide switches: turn the in-game addon or its Claim Shield capture off for everyone, turn the
