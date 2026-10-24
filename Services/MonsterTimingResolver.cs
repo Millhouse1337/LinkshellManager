@@ -81,6 +81,15 @@ public sealed class MonsterTimingMap
             ? Rows.Select(row => row.MonsterName).ToList()
             : HnmConfig.CombinedMonsterOptions(ViewModels.TodManagerViewModel.SupportedMonsters);
 
+    // The names the in-game addon listens for in defeat and loot lines: this catalog, with every
+    // merged row split back into its halves. The chat line names one half ("Fafnir"), never the
+    // combined label, so the addon would match nothing for a merge pair without the expansion.
+    public IReadOnlyList<string> AddonCaptureNames =>
+        EventMonsterOptions
+            .SelectMany(option => HnmConfig.MonsterMatchNames(option))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
     // Whether this linkshell may assign `monsterName`. Its OWN catalog, so a monster an officer
     // added under Monster setups is assignable everywhere a built-in one is — which is what makes
     // "add a custom monster" mean "camp it", rather than only "give it a ToD cooldown".

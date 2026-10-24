@@ -261,4 +261,32 @@ public class CustomMonsterCatalogTests
         Assert.False(map.Allows("Bloodsucker"));
         Assert.False(map.Allows("Ouryu"));
     }
+
+    // ---- the addon's ToD capture list (/api/addon/me todCaptureMonsters) ----
+
+    // A custom monster is capturable the moment it is added, and a merge pair answers for each half,
+    // because the defeat line names "Fafnir" or "Nidhogg" and never the combined row label.
+    [Fact]
+    public async Task AddonCaptureNames_IncludeCustomMonstersAndBothHalvesOfAMergePair()
+    {
+        await using var db = await SeededAsync("Ouryu");
+        var map = await new MonsterTimingResolver(db).GetMapAsync(LinkshellId, CancellationToken.None);
+
+        Assert.Contains("Ouryu", map.AddonCaptureNames);
+        Assert.Contains("Fafnir", map.AddonCaptureNames);
+        Assert.Contains("Nidhogg", map.AddonCaptureNames);
+        Assert.Contains("Tiamat", map.AddonCaptureNames);
+    }
+
+    // An unseeded linkshell captures the built-in HNMs, and nothing that isn't in its catalog.
+    [Fact]
+    public async Task AddonCaptureNames_UnseededLinkshellGetsTheBuiltIns()
+    {
+        await using var db = NewInMemoryContext();
+        var map = await new MonsterTimingResolver(db).GetMapAsync(LinkshellId, CancellationToken.None);
+
+        Assert.Contains("King Behemoth", map.AddonCaptureNames);
+        Assert.Contains("Aspidochelone", map.AddonCaptureNames);
+        Assert.DoesNotContain("Bloodsucker", map.AddonCaptureNames, StringComparer.OrdinalIgnoreCase);
+    }
 }

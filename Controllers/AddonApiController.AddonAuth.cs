@@ -102,6 +102,8 @@ public sealed partial class AddonApiController
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
+        var monsterTimings = await _monsterTimings.GetMapAsync(token.LinkshellId, cancellationToken);
+
         return Ok(new
         {
             linkshellId = token.LinkshellId,
@@ -148,7 +150,13 @@ public sealed partial class AddonApiController
             // ("Fafnir/Nidhogg") but the lottery line names one half ("Fafnir"), so an addon doing
             // a plain string compare would never match a disabled merge pair. The server already
             // owns that expansion (HnmConfig.MonsterMatchNames); the addon stays a lookup.
-            claimShieldDisabledMonsters = claimShieldDisabled
+            claimShieldDisabledMonsters = claimShieldDisabled,
+            // The monsters ToD capture listens for: this linkshell's Monster Setups (the built-in
+            // HNMs until the editor is first opened). Replaces the addon's own Settings list, so
+            // adding a custom monster on the Configurations page is all it takes to capture it.
+            // The addon still only captures one an HNM event is camping. Expanded to every alias
+            // for the same reason as the list above.
+            todCaptureMonsters = monsterTimings.AddonCaptureNames
         });
     }
 }
