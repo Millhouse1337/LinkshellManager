@@ -185,13 +185,13 @@ The standalone ToD Tracker in the screenshot is opened with:
 It shows tracked monsters, day suffixes such as `D1`, and countdown states such
 as `Window expired`, `Window 1/3`, `POPPED`, or `Posted`.
 
-The Settings window controls the capture list:
+**Display: ToD Tracker** in the Settings window turns the tracker window on or off.
 
-| Setting area | What it changes |
-|---|---|
-| **Display: ToD Tracker** | Enables or disables the standalone tracker window. |
-| **ToD Capture monsters** | Lists built-in HNMs, Sky NMs, Sea NMs, other NMs, HENMs, and custom names. |
-| **Add monster** | Adds a custom defeat-line matcher that persists across reloads. |
+The monsters the addon captures ToDs for are the ones in the **Monster Setups**
+card on the app's Configurations page. To capture a new NM, add it there with
+**+ Add monster**. The addon picks up changes when the launcher opens or on
+**Refresh**. A ToD is only captured while an HNM event for that monster is queued
+or live.
 
 When a matching defeat line appears in chat, the addon can post the ToD to the
 paired linkshell. The ToD then appears in the web and Discord tracker with the
@@ -225,9 +225,9 @@ manual re-entry on the website.
 
 ## Panel 8 - Claim Shield
 
-Claim Shield watches for configured spawn-announcement lines, then tracks LS
-members through the lottery result. The Settings window shows built-in and
-custom spawn messages.
+Claim Shield watches for each HNM's spawn-announcement line, then tracks LS
+members through the lottery result. To see a monster's spawn line, hover over
+its name in the **Monster Setups** card on the app's Configurations page.
 
 Use these commands when testing capture behavior:
 
@@ -251,11 +251,9 @@ Open Settings from the launcher and set these before the first real event:
 | **HNM - DKP / Window** | Your normal per-window camp rate. |
 | **Display panels** | Leave Loot Pool, ToD Capturing, and Claim Shield enabled on Main; disable anything noisy in Compact. |
 | **Window Opacity** | Keep `1.00` unless the addon blocks important game UI. |
-| **ToD Capture monsters** | Add custom NMs your linkshell tracks. |
-| **Claim Shield Spawn Messages** | Add custom lottery spawn lines if your server uses non-standard text. |
 
 Click **Save** after changing persistent settings. Opacity sliders apply live,
-but panel visibility, DKP defaults, and custom capture lists should be saved.
+but panel visibility and DKP defaults should be saved.
 
 ---
 
