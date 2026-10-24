@@ -7,7 +7,7 @@ import {
   ActivityLinkshellRole,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import type { ActivityJobRatingOverall, ActivityJobRatingsResponse } from '../../discord/discord-activity.types';
+import type { ActivityJobRating, ActivityJobRatingOverall, ActivityJobRatingsResponse } from '../../discord/discord-activity.types';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
 import { JobsRosterStore, type RosterCharacterJobs, type RosterJobPill } from '../jobs-roster.store';
 import {
@@ -21,51 +21,112 @@ import {
   rankIcon
 } from '../activity-home.helpers';
 import type { ManagementView } from '../activity-home.types';
-import { StarRatingComponent } from '../sidebar-panels/star-rating.component';
 
-// HorizonXI is classic-75: a job at 37+ is sub-capable (listed in the hover popover).
-// Kept in sync with ProfileJobLevels.SubJobMinLevel (C#).
-const SUB_JOB_MIN_LEVEL = 37;
+// HorizonXI is classic-75: the profile's level bars fill against it, and a 75 bar turns gold.
+// Kept in sync with ProfileJobLevels.MaxLevel (C#).
+const MAX_JOB_LEVEL = 75;
+
+// One row of the View Profile job table: a leveled job (or one only rated, level 0) with the
+// ratings left on it for that character, when there are any.
+interface ProfileJobRow extends RosterJobPill {
+  rating: ActivityJobRating | null;
+}
 
 @Component({
   selector: 'app-linkshell-tab',
-  imports: [CommonModule, FormsModule, ActivitySidebarPanelComponent, StarRatingComponent],
+  imports: [CommonModule, FormsModule, ActivitySidebarPanelComponent],
   templateUrl: './linkshell-tab.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
-    .lsp-dialog {
-      width: 100%; max-width: 880px; border-radius: 14px;
-      background: linear-gradient(var(--surface), var(--surface)) padding-box,
-                  linear-gradient(160deg, var(--border-hot), var(--border)) border-box;
-      border: 1px solid transparent;
-      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+    /* View Profile modal. Colours are tokens only (see discord-activity/CLAUDE.md). */
+    .mp-scrim {
+      position: fixed; inset: 0; z-index: 200; background: var(--scrim);
+      display: flex; align-items: flex-start; justify-content: center; padding: 48px 16px; overflow: auto;
     }
-    .lsp-body { padding: 16px 18px; max-height: 78vh; overflow: auto; }
-    .lsp-av {
-      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
-      display: grid; place-items: center; font-weight: 800; font-size: 17px;
-      color: var(--bg); background: linear-gradient(135deg, var(--accent), var(--purple));
+    .mp {
+      width: 620px; max-width: 100%; overflow: hidden;
+      background: var(--bg-elev); border: 1px solid var(--border-2); border-radius: var(--r-xl);
+      box-shadow: var(--shadow-pop);
     }
-    .lsp-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
-    @media (min-width: 760px) { .lsp-grid { grid-template-columns: 1.15fr 0.85fr; } }
-    .lsp-sub-popover {
-      position: fixed; z-index: 210; max-width: 248px;
-      padding: 8px 10px; border-radius: var(--r-md);
-      background: var(--surface-2); border: 1px solid var(--border-hot);
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
-      display: flex; flex-wrap: wrap; gap: 5px;
+    .mp-head { display: flex; align-items: center; gap: 14px; padding: 20px 22px 0; }
+    .mp-avatar {
+      width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+      display: grid; place-items: center; font-weight: 700; font-size: 16px; color: var(--fg);
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      box-shadow: 0 0 0 3px var(--bg-elev), 0 0 0 4px var(--gold);
     }
-    .lsp-sub-popover__title {
-      width: 100%; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
-      color: var(--fg-3); margin-bottom: 1px;
+    .mp-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .mp-name { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+    .mp-name strong { font-size: 19px; color: var(--fg); }
+    .mp-rank { color: var(--gold); font-size: 12px; font-weight: 600; }
+    .mp-overall { font-size: 12px; color: var(--fg-2); }
+    .mp-overall b { font-family: var(--font-mono); color: var(--fg); }
+    .mp-overall b.skill { color: var(--accent); }
+    .mp-close {
+      width: 32px; height: 32px; border-radius: var(--r-md); border: 0; flex-shrink: 0;
+      background: transparent; color: var(--fg-2); font-size: 18px; cursor: pointer;
     }
-    .lsp-sub-popover__empty { font-size: 11px; color: var(--fg-3); font-style: italic; }
-    .lsp-sub-chip {
-      font-size: 11px; padding: 1px 6px; border-radius: var(--r-sm);
-      background: var(--surface-3); border: 1px solid var(--border); color: var(--fg-1);
+    .mp-close:hover { background: var(--surface-3); color: var(--fg); }
+    .mp-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 18px 22px 0; border-bottom: 1px solid var(--border); }
+    .mp-tab {
+      display: flex; align-items: center; gap: 8px; padding: 9px 12px; margin-bottom: -1px; white-space: nowrap;
+      cursor: pointer; background: transparent; border: 0; border-bottom: 2px solid transparent;
+      color: var(--fg-2); font: 600 13px var(--font-sans);
     }
-    .lsp-sub-chip .lvl { color: var(--accent); font-weight: 700; margin-left: 3px; }
-    /* The treasury's styles moved to src/styles/_finances.scss with the section itself. */
+    .mp-tab:hover { color: var(--fg-1); }
+    .mp-tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+    .mp-count {
+      font: 600 10px var(--font-mono); background: var(--surface-3); color: var(--fg-2);
+      padding: 1px 6px; border-radius: 10px;
+    }
+    .mp-main { font: 600 9px var(--font-mono); color: var(--fg-2); letter-spacing: 0.08em; }
+    .mp-body { padding: 14px 22px 22px; display: flex; flex-direction: column; gap: 4px; min-height: 240px; }
+    .mp-cols, .mp-row {
+      display: grid; grid-template-columns: 64px minmax(0, 1fr) 92px 92px; gap: 16px; align-items: center;
+    }
+    .mp-cols { padding: 4px 10px 8px; font: 600 10px var(--font-mono); letter-spacing: 0.1em; color: var(--fg-3); }
+    .mp-row { padding: 9px 10px; border-radius: var(--r-md); }
+    .mp-row:nth-child(even) { background: var(--surface); }
+    .mp-row:hover { background: var(--surface-2); }
+    .mp-job { display: flex; gap: 5px; align-items: center; font: 700 13px var(--font-mono); color: var(--fg); }
+    .mp-star { color: var(--gold); font-size: 11px; }
+    .mp-relic { font: 600 9px var(--font-mono); color: var(--gold); letter-spacing: 0.06em; }
+    .mp-lvl { display: flex; align-items: center; gap: 10px; }
+    .mp-lvl > span { font: 700 13px var(--font-mono); width: 20px; text-align: right; color: var(--fg); }
+    .mp-track { flex: 1; height: 4px; background: var(--surface-3); border-radius: 2px; overflow: hidden; }
+    .mp-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+    .mp-fill.max { background: var(--gold); }
+    .mp-dots { display: flex; gap: 4px; align-items: center; }
+    .mp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); }
+    .mp-dots.gear .on { background: var(--fg-1); }
+    .mp-dots.skill .on { background: var(--accent); }
+    .mp-dots em { font: normal 600 11px var(--font-mono); color: var(--fg-2); margin-left: 4px; }
+    .mp-none { font-size: 12px; color: var(--fg-4); }
+    .mp-muted { font-size: 12px; color: var(--fg-3); }
+    .mp-empty {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; padding: 40px 0; color: var(--fg-3); font-size: 12px; text-align: center;
+    }
+    .mp-empty strong { font-size: 14px; color: var(--fg-2); }
+    .mp-section { margin-top: 14px; display: flex; flex-direction: column; gap: 4px; }
+    .mp-section-head { padding: 0 10px 4px; font: 600 10px var(--font-mono); letter-spacing: 0.1em; color: var(--fg-3); }
+    .mp-section-head span { font: 400 12px var(--font-sans); letter-spacing: 0; margin-left: 6px; }
+    .mp-comments { padding: 0 22px 22px; }
+    .mp-comments p { font-size: 12px; margin: 0 0 8px; line-height: 1.45; color: var(--fg-2); }
+    .mp-comments blockquote {
+      margin: 0 0 6px; padding: 6px 10px; border-left: 2px solid var(--border-2); font-size: 12px; color: var(--fg-2);
+    }
+    .mp-loading { padding: 24px 16px; text-align: center; color: var(--fg-3); font-size: 13px; }
+    @media (max-width: 520px) {
+      .mp-head { padding: 16px 14px 0; }
+      .mp-tabs { padding: 14px 14px 0; }
+      .mp-body { padding: 12px 10px 16px; }
+      .mp-cols, .mp-row { grid-template-columns: 42px minmax(0, 1fr) 62px 62px; gap: 8px; }
+      .mp-dots { gap: 2px; }
+      .mp-dot { width: 6px; height: 6px; }
+      .mp-dots em { display: none; }
+      .mp-comments { padding: 0 14px 16px; }
+    }
   `]
 })
 export class LinkshellTabComponent {
@@ -238,22 +299,15 @@ export class LinkshellTabComponent {
   // per-character blocks.
   protected readonly viewingProfileOverall = signal<ActivityJobRatingOverall | null>(null);
 
-  // The hover/tap popover listing a character's leveled subjobs (37+) for one
-  // max-level pill. Positioned with `position:fixed` from the pill's screen rect so
-  // it escapes the modal body's `overflow:auto` clipping. Null = hidden.
-  protected readonly subPopover = signal<{
-    label: string;
-    jobs: { name: string; level: number }[];
-    top: number;
-    left: number;
-  } | null>(null);
+  // Which character's tab is open in the modal: an index into rosterCharacters() (main first).
+  protected readonly profileCharIndex = signal(0);
 
   protected async openMemberProfile(memberId: number): Promise<void> {
     this.viewingProfileBusy.set(true);
     this.viewingProfileMember.set(null);
     this.viewingProfileRatingBlocks.set([]);
     this.viewingProfileOverall.set(null);
-    this.subPopover.set(null);
+    this.profileCharIndex.set(0);
     try {
       await this.ensureJobsRoster();
       const found = this.jobsRosterForCurrent()?.members.find(m => m.id === memberId) ?? null;
@@ -292,7 +346,7 @@ export class LinkshellTabComponent {
     this.viewingProfileMember.set(null);
     this.viewingProfileRatingBlocks.set([]);
     this.viewingProfileOverall.set(null);
-    this.subPopover.set(null);
+    this.profileCharIndex.set(0);
   }
 
   // The jobs to render for a character: every leveled job, highest first (leveledJobs()).
@@ -300,50 +354,49 @@ export class LinkshellTabComponent {
     return this.leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName);
   }
 
-  // A character's leveled SUBJOBS (37+), excluding the hovered job, for the popover.
-  protected subJobsFor(levels: number[], excludeName: string): { name: string; level: number }[] {
-    return this.leveledJobs(levels)
-      .filter(job => job.level >= SUB_JOB_MIN_LEVEL && job.name !== excludeName)
-      .map(job => ({ name: job.name, level: job.level }));
+  // The modal's job table for one character: every leveled job, highest first, each with the
+  // ratings left on it. A job that is rated but has no level entered still gets a row (level 0,
+  // at the end), so a rating never disappears because the level is blank.
+  protected profileRows(ch: RosterCharacterJobs): ProfileJobRow[] {
+    const rated = new Map((this.ratingsFor(ch)?.jobs ?? [])
+      .filter(job => job.selfGear > 0 || job.selfSkill > 0 || job.peerCount > 0)
+      .map(job => [this.ratingJobName(job.jobIndex), job] as const));
+    const rows: ProfileJobRow[] = this.jobsToShow(ch).map(job => ({ ...job, rating: rated.get(job.name) ?? null }));
+    for (const [name, rating] of rated) {
+      if (!rows.some(row => row.name === name)) {
+        rows.push({ name, level: 0, strong: false, relic: false, merit: '', relicName: '', rating });
+      }
+    }
+    return rows;
   }
 
-  // Open the subjob popover for a max-level pill: anchor it below the pill, clamped
-  // to the viewport so it never runs off the right edge.
-  protected openSubPopover(ev: Event, levels: number[], jobName: string): void {
-    const subs = this.subJobsFor(levels, jobName);
-    const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-    const width = 248;
-    let left = rect.left;
-    if (left + width > window.innerWidth - 8) { left = window.innerWidth - width - 8; }
-    if (left < 8) { left = 8; }
-    this.subPopover.set({ label: jobName, jobs: subs, top: rect.bottom + 6, left });
+  // The ratings loaded for one character (blocks are per character, matched by name).
+  protected ratingsFor(ch: RosterCharacterJobs): ActivityJobRatingsResponse | null {
+    return this.viewingProfileRatingBlocks().find(block => block.name === ch.label)?.ratings ?? null;
   }
 
-  protected closeSubPopover(): void {
-    this.subPopover.set(null);
+  protected hasSelfRating(rating: ActivityJobRating | null): boolean {
+    return !!rating && (rating.selfGear > 0 || rating.selfSkill > 0);
+  }
+
+  // Level bar width: a sliver even at level 1 so the track never reads as empty.
+  protected levelPercent(level: number): number {
+    return level > 0 ? Math.max(3, (level / MAX_JOB_LEVEL) * 100) : 0;
+  }
+
+  protected isMaxLevel(level: number): boolean {
+    return level >= MAX_JOB_LEVEL;
+  }
+
+  // Five rating dots, the first round(value) of them lit.
+  protected ratingDots(value: number): boolean[] {
+    const lit = Math.round(value);
+    return [0, 1, 2, 3, 4].map(i => i < lit);
   }
 
   // Jobs a teammate rated for one character block (peerCount > 0).
   protected peerJobsFor(ratings: ActivityJobRatingsResponse | null) {
     return (ratings?.jobs ?? []).filter(job => job.peerCount > 0);
-  }
-
-  // Jobs the member rated THEMSELVES (their own gear/skill assessment) for one block.
-  protected selfJobsFor(ratings: ActivityJobRatingsResponse | null) {
-    return (ratings?.jobs ?? []).filter(job => job.selfGear > 0 || job.selfSkill > 0);
-  }
-
-  // True when a character block has anything to show: self-ratings, peer ratings,
-  // or peer comments.
-  protected blockHasRatings(block: { ratings: ActivityJobRatingsResponse | null }): boolean {
-    return this.selfJobsFor(block.ratings).length > 0
-      || (block.ratings?.peerRaterCount ?? 0) > 0
-      || (block.ratings?.peerCommentCount ?? 0) > 0;
-  }
-
-  // True when ANY character (main or alt) has self-ratings, peer ratings, or comments.
-  protected viewingProfileHasRatings(): boolean {
-    return this.viewingProfileRatingBlocks().some(b => this.blockHasRatings(b));
   }
 
   // Catalog job name for a rating's jobIndex (uses the loaded jobs-roster catalog).

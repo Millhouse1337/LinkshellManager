@@ -39,6 +39,8 @@
   // Elevation for things that float over the page (dropdown menus, popovers) so they read as
   // above the form rather than part of it. A token, not an inline rgba, per the golden rule.
   --shadow-pop: 0 10px 24px rgba(0, 0, 0, 0.45);
+  // The dimmed page behind a modal (the member View Profile popup).
+  --scrim: rgba(0, 0, 0, 0.55);
 
   // Brand secondary hues (web palette). --gold-ink is dark text ON gold fills.
   --gold:      #d6a93f;   // web --gold-main

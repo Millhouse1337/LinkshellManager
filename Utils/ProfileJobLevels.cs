@@ -12,13 +12,12 @@ public static class ProfileJobLevels
     // FFXI job id of the first catalog job (WAR). MainJobOptions[i] -> job id FirstJobId + i.
     public const int FirstJobId = 1;
 
-    // HorizonXI is classic-75, so levels are capped at 75.
+    // HorizonXI is classic-75, so levels are capped at 75. NOTE: kept in sync with the Discord
+    // Activity TS const MAX_JOB_LEVEL in linkshell-tab.component.ts (the profile's level bars).
     public const int MaxLevel = 75;
 
-    // Classic FFXI sub-job cap: a job leveled to 37+ can be used as a sub. The
-    // profile UIs treat jobs at this level or higher as the character's "leveled
-    // subjobs" (shown in the hover popover on a max-level job). NOTE: kept in sync
-    // with the Discord Activity TS const SUB_JOB_MIN_LEVEL in linkshell-tab.component.ts.
+    // Classic FFXI sub-job cap: a job leveled to 37+ can be used as a sub. The old website's
+    // member profile lists jobs at this level or higher as the character's "leveled subjobs".
     public const int SubJobMinLevel = 37;
 
     public static int JobCount => EventJobCatalog.MainJobOptions.Length; // 18

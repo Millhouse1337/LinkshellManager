@@ -276,164 +276,133 @@
       <!-- Items and Gil moved to their own top-level Treasury tab. This tab is people again:
            roster, ranks and invites. -->
 
-      <!-- Per-member "View Profile" modal (their leveled jobs, main + alts). -->
-      @if (viewingProfileBusy() || viewingProfileMember()) {
-        <div
-          style="position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow:auto"
-          (click)="closeMemberProfile()">
-          <div
-            role="dialog" aria-modal="true"
-            class="lsp-dialog"
-            (click)="$event.stopPropagation()">
-            @if (viewingProfileMember(); as m) {
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)">
-                <div style="display:flex;align-items:center;gap:12px">
-                  <div class="lsp-av">{{ initials(m.characterName) }}</div>
-                  <div style="display:flex;flex-direction:column;gap:4px">
-                    <strong style="font-size:18px;line-height:1">{{ m.characterName }}</strong>
-                    <span class="tag default" style="align-self:flex-start">{{ m.rank || 'Member' }}</span>
-                  </div>
-                </div>
-                <button type="button" class="btn ghost sm" (click)="closeMemberProfile()" aria-label="Close">✕</button>
-              </div>
-              <div class="lsp-body" (click)="closeSubPopover()">
-                <div class="lsp-grid">
-                  <div>
-                    <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">Jobs</div>
-                @for (ch of rosterCharacters(m); track ch.label) {
-                  <div style="margin-top:8px">
-                    @if (ch.isAlt) {
-                      <div style="font-size:12px;color:var(--fg-2);margin-bottom:4px">{{ ch.label }} <span style="opacity:.6">· alt</span></div>
-                    }
-                    @if (jobsToShow(ch); as jobs) {
-                      @if (jobs.length === 0) {
-                        <div style="font-size:12px;color:var(--fg-3);font-style:italic">No jobs entered</div>
-                      } @else {
-                        <div style="display:flex;flex-wrap:wrap;gap:10px 6px">
-                          @for (job of jobs; track job.name) {
-                            <span class="tag default" [class.is-strong]="job.strong" [class.relic-flame]="job.relic" [title]="pillTitle(job)" style="display:inline-flex;gap:5px;cursor:default"
-                              (mouseenter)="openSubPopover($event, ch.levels, job.name)" (mouseleave)="closeSubPopover()"
-                              (click)="openSubPopover($event, ch.levels, job.name); $event.stopPropagation()"><span>{{ job.name }}</span><span style="font-weight:700">{{ job.level }}</span>@if (job.strong) { <span class="jr-strong" title="Merited">★</span> }</span>
-                          }
-                        </div>
-                      }
-                    }
-                  </div>
-                }
-                  </div><!-- /jobs column -->
+    </div>
 
-                  <div><!-- what the linkshell thinks column -->
-                <!-- What the linkshell thinks of this member, PER CHARACTER
-                     (main + alts): per-job peer averages + anonymous comment
-                     summary. Each alt's feedback shows under that alt's name. -->
-                @if (viewingProfileRatingBlocks().length > 0) {
-                  <div>
-                    <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">Ratings</div>
-                    @if (viewingProfileHasRatings()) {
-                      @for (block of viewingProfileRatingBlocks(); track block.slot) {
-                        @if (blockHasRatings(block)) {
-                          <div style="margin-top:12px">
-                            <div style="font-size:12px;font-weight:600;color:var(--fg-2);margin-bottom:6px">{{ block.name }}@if (block.isAlt) { <span style="opacity:.6;font-weight:400"> · alt</span> }</div>
-                            @if (block.ratings; as vr) {
-                              @if (selfJobsFor(vr).length > 0) {
-                                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);margin-bottom:4px">Self-rated</div>
-                                <div style="display:grid;grid-template-columns:54px 1fr 1fr;gap:10px;align-items:center;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);padding-bottom:4px">
-                                  <span>Job</span><span>Gear</span><span>Skill</span>
-                                </div>
-                                @for (job of selfJobsFor(vr); track job.jobIndex) {
-                                  <div style="display:grid;grid-template-columns:54px 1fr 1fr;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-size:12px">
-                                    <span style="font-weight:600">{{ ratingJobName(job.jobIndex) }}</span>
-                                    <app-star-rating [value]="job.selfGear" [readonly]="true" [showValue]="true" />
-                                    <app-star-rating [value]="job.selfSkill" [readonly]="true" [showValue]="true" />
-                                  </div>
-                                }
-                              }
-                              @if (vr.peerRaterCount > 0) {
-                                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);margin:12px 0 4px">What the linkshell thinks</div>
-                                <div style="font-size:11px;color:var(--fg-3);margin-bottom:8px">Based on feedback from {{ vr.peerRaterCount }} teammate{{ vr.peerRaterCount === 1 ? '' : 's' }}.</div>
-                                <div style="display:grid;grid-template-columns:54px 1fr 1fr auto;gap:10px;align-items:center;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);padding-bottom:4px">
-                                  <span>Job</span><span>Gear</span><span>Skill</span><span title="Teammates who rated this job"># Rated</span>
-                                </div>
-                                @for (job of peerJobsFor(vr); track job.jobIndex) {
-                                  <div style="display:grid;grid-template-columns:54px 1fr 1fr auto;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-size:12px">
-                                    <span style="font-weight:600">{{ ratingJobName(job.jobIndex) }}</span>
-                                    <app-star-rating [value]="job.peerAvgGear" [readonly]="true" [showValue]="true" />
-                                    <app-star-rating [value]="job.peerAvgSkill" [readonly]="true" [showValue]="true" />
-                                    <span style="opacity:.6">{{ job.peerCount }}</span>
-                                  </div>
-                                }
-                              }
+    <!-- Outside the .panel-tab: its fade-in animation leaves a transform behind, which turns the
+         modal's position:fixed into "fixed to the tab" — clipped by a short roster, or opened off-screen
+         from a long one scrolled down. Out here it covers the viewport. -->
+    <!-- Per-member "View Profile" modal: a tab per character (main first), each a table of its
+         jobs with level bars and the member's own gear/skill rating. What teammates think, and
+         the comment summary, show underneath when there are any. -->
+    @if (viewingProfileBusy() || viewingProfileMember()) {
+      <div class="mp-scrim" (click)="closeMemberProfile()">
+        <div class="mp" role="dialog" aria-modal="true" aria-labelledby="mp-name" (click)="$event.stopPropagation()">
+          @if (viewingProfileMember(); as m) {
+            <div class="mp-head">
+              <div class="mp-avatar">{{ initials(m.characterName) }}</div>
+              <div class="mp-id">
+                <div class="mp-name">
+                  <strong id="mp-name">{{ m.characterName }}</strong>
+                  <span class="mp-rank">· {{ m.rank || 'Member' }}</span>
+                </div>
+                @if (viewingProfileOverall(); as ov) {
+                  @if (ov.selfCount > 0 || ov.peerRaterCount > 0) {
+                    <span class="mp-overall">
+                      @if (ov.selfCount > 0) {
+                        Overall self-rating — Gear <b>{{ ov.selfAvgGear | number:'1.1-1' }}</b> · Skill <b class="skill">{{ ov.selfAvgSkill | number:'1.1-1' }}</b>
+                      }
+                      @if (ov.selfCount > 0 && ov.peerRaterCount > 0) { <br /> }
+                      @if (ov.peerRaterCount > 0) {
+                        Linkshell ({{ ov.peerRaterCount }}) — Gear <b>{{ ov.peerAvgGear | number:'1.1-1' }}</b> · Skill <b class="skill">{{ ov.peerAvgSkill | number:'1.1-1' }}</b>
+                      }
+                    </span>
+                  }
+                }
+              </div>
+              <button type="button" class="mp-close" aria-label="Close" (click)="closeMemberProfile()">×</button>
+            </div>
+
+            @if (rosterCharacters(m); as chars) {
+              <div class="mp-tabs" role="tablist" aria-label="Characters">
+                @for (ch of chars; track ch.label; let i = $index) {
+                  <button type="button" class="mp-tab" role="tab"
+                    [attr.aria-selected]="profileCharIndex() === i"
+                    (click)="profileCharIndex.set(i)">
+                    {{ ch.label }}<span class="mp-count">{{ profileRows(ch).length }}</span>@if (!ch.isAlt) {<span class="mp-main">MAIN</span>}
+                  </button>
+                }
+              </div>
+
+              @if (chars[profileCharIndex()]; as ch) {
+                <div class="mp-body" role="tabpanel">
+                  @if (profileRows(ch); as rows) {
+                    @if (rows.length === 0) {
+                      <div class="mp-empty"><strong>No jobs entered</strong>{{ ch.label }} hasn't added any job levels yet.</div>
+                    } @else {
+                      <div class="mp-cols"><span>JOB</span><span>LEVEL</span><span>GEAR</span><span>SKILL</span></div>
+                      <div>
+                        @for (row of rows; track row.name) {
+                          <div class="mp-row">
+                            <span class="mp-job" [title]="pillTitle(row) ?? ''">
+                              {{ row.name }}@if (row.strong) {<span class="mp-star" title="Merited">★</span>}@if (row.relic) {<span class="mp-relic">RELIC</span>}
+                            </span>
+                            <div class="mp-lvl">
+                              <span>{{ row.level > 0 ? row.level : '—' }}</span>
+                              <div class="mp-track"><div class="mp-fill" [class.max]="isMaxLevel(row.level)" [style.width.%]="levelPercent(row.level)"></div></div>
+                            </div>
+                            @if (hasSelfRating(row.rating) && row.rating; as r) {
+                              <div class="mp-dots gear" [title]="'Gear ' + (r.selfGear | number:'1.1-1')">
+                                @for (on of ratingDots(r.selfGear); track $index) {<div class="mp-dot" [class.on]="on"></div>}
+                                <em>{{ r.selfGear | number:'1.1-1' }}</em>
+                              </div>
+                              <div class="mp-dots skill" [title]="'Skill ' + (r.selfSkill | number:'1.1-1')">
+                                @for (on of ratingDots(r.selfSkill); track $index) {<div class="mp-dot" [class.on]="on"></div>}
+                                <em>{{ r.selfSkill | number:'1.1-1' }}</em>
+                              </div>
+                            } @else {
+                              <span class="mp-none">—</span><span class="mp-none">—</span>
                             }
                           </div>
                         }
-                      }
-                    } @else {
-                      <div style="font-size:12px;color:var(--fg-3)">No ratings yet for this member.</div>
+                      </div>
                     }
 
-                    <!-- OVERALL rollup across all the member's characters: average self +
-                         linkshell ratings, and an AI summary of every peer comment. -->
-                    @if (viewingProfileOverall(); as ov) {
-                      @if (ov.selfCount > 0 || ov.peerRaterCount > 0 || ov.commentCount > 0) {
-                        <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
-                          <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">Overall</div>
-                          @if (ov.selfCount > 0 || ov.peerRaterCount > 0) {
-                            <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--fg-3);padding-bottom:4px">
-                              <span></span><span>Gear</span><span>Skill</span>
-                            </div>
-                          }
-                          @if (ov.selfCount > 0) {
-                            <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-size:12px">
-                              <span style="font-weight:600">Self</span>
-                              <app-star-rating [value]="ov.selfAvgGear" [readonly]="true" [showValue]="true" />
-                              <app-star-rating [value]="ov.selfAvgSkill" [readonly]="true" [showValue]="true" />
-                            </div>
-                          }
-                          @if (ov.peerRaterCount > 0) {
-                            <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;align-items:center;padding:4px 0;border-top:1px solid var(--border);font-size:12px">
-                              <span style="font-weight:600">Linkshell</span>
-                              <app-star-rating [value]="ov.peerAvgGear" [readonly]="true" [showValue]="true" />
-                              <app-star-rating [value]="ov.peerAvgSkill" [readonly]="true" [showValue]="true" />
-                            </div>
-                            <div style="font-size:11px;color:var(--fg-3);margin-top:4px">From {{ ov.peerRaterCount }} teammate{{ ov.peerRaterCount === 1 ? '' : 's' }}.</div>
-                          }
-                          @if (ov.commentCount > 0) {
-                            <div style="margin-top:12px">
-                              <div style="font-size:12px;font-weight:600;color:var(--fg)">Comments summary</div>
-                              @if (ov.summary) {
-                                <p style="font-size:12px;margin:6px 0 0;line-height:1.45;color:var(--fg-2)">{{ ov.summary }}</p>
-                              }
-                              <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-                                @for (c of ov.comments; track $index) {
-                                  <blockquote style="margin:0;padding:6px 10px;border-left:2px solid var(--border);font-size:12px;color:var(--fg-2)">{{ c }}</blockquote>
-                                }
+                    <!-- Teammates' ratings of this character, when anyone has left one. -->
+                    @if (ratingsFor(ch); as vr) {
+                      @if (vr.peerRaterCount > 0) {
+                        <div class="mp-section">
+                          <div class="mp-section-head">WHAT THE LINKSHELL THINKS<span>from {{ vr.peerRaterCount }} teammate{{ vr.peerRaterCount === 1 ? '' : 's' }}</span></div>
+                          <div>
+                            @for (job of peerJobsFor(vr); track job.jobIndex) {
+                              <div class="mp-row">
+                                <span class="mp-job">{{ ratingJobName(job.jobIndex) }}</span>
+                                <span class="mp-muted">{{ job.peerCount }} rated</span>
+                                <div class="mp-dots gear" [title]="'Gear ' + (job.peerAvgGear | number:'1.1-1')">
+                                  @for (on of ratingDots(job.peerAvgGear); track $index) {<div class="mp-dot" [class.on]="on"></div>}
+                                  <em>{{ job.peerAvgGear | number:'1.1-1' }}</em>
+                                </div>
+                                <div class="mp-dots skill" [title]="'Skill ' + (job.peerAvgSkill | number:'1.1-1')">
+                                  @for (on of ratingDots(job.peerAvgSkill); track $index) {<div class="mp-dot" [class.on]="on"></div>}
+                                  <em>{{ job.peerAvgSkill | number:'1.1-1' }}</em>
+                                </div>
                               </div>
-                            </div>
-                          }
+                            }
+                          </div>
                         </div>
                       }
-                    }
-                  </div>
-                }
-                  </div><!-- /what the linkshell thinks column -->
-                </div><!-- /lsp-grid -->
-              </div>
-              @if (subPopover(); as p) {
-                <div class="lsp-sub-popover" [style.top.px]="p.top" [style.left.px]="p.left" (click)="$event.stopPropagation()">
-                  <div class="lsp-sub-popover__title">{{ p.label }} · leveled subs (37+)</div>
-                  @if (p.jobs.length === 0) {
-                    <div class="lsp-sub-popover__empty">No leveled subjobs (37+).</div>
-                  } @else {
-                    @for (s of p.jobs; track s.name) {
-                      <span class="lsp-sub-chip">{{ s.name }}<span class="lvl">{{ s.level }}</span></span>
                     }
                   }
                 </div>
               }
-            } @else {
-              <div style="padding:24px 16px;text-align:center;color:var(--fg-3);font-size:13px">Loading…</div>
             }
-          </div>
+
+            <!-- Every comment teammates left across all the member's characters, with the AI summary. -->
+            @if (viewingProfileOverall(); as ov) {
+              @if (ov.commentCount > 0) {
+                <div class="mp-comments">
+                  <div class="mp-section-head" style="padding-left:0">COMMENTS SUMMARY</div>
+                  @if (ov.summary) {
+                    <p>{{ ov.summary }}</p>
+                  }
+                  @for (c of ov.comments; track $index) {
+                    <blockquote>{{ c }}</blockquote>
+                  }
+                </div>
+              }
+            }
+          } @else {
+            <div class="mp-loading">Loading…</div>
+          }
         </div>
-      }
-    </div>
+      </div>
+    }
