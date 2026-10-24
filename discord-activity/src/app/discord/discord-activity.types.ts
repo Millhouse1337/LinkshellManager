@@ -267,6 +267,9 @@ export interface ActivityMonsterTiming {
   claimShieldEnabled: boolean;
   // Seconds on top of the cooldown when a ToD's repop is computed. 0 = none.
   additionalSeconds: number;
+  // The chat lines this monster's pop prints, which the addon's Claim Shield watches for. Shown as
+  // hover text on the name. Absent on a row added in this session; empty for a monster with none.
+  spawnMessages?: { monster: string; text: string }[];
 }
 
 export interface ActivityMonsterTimingsResponse {

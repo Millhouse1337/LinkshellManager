@@ -968,6 +968,15 @@ export class ConfigurationsTabComponent {
     return row.defaultWindows === null ? 'none' : String(row.defaultWindows);
   }
 
+  // Hover text for a monster's name: the spawn line(s) Claim Shield watches for. Null (no hover)
+  // for a monster without one.
+  protected spawnMessageHover(row: ActivityMonsterTiming): string | null {
+    const messages = row.spawnMessages ?? [];
+    if (!messages.length) return null;
+    const heading = messages.length > 1 ? 'Claim Shield spawn messages:' : 'Claim Shield spawn message:';
+    return [heading, ...messages.map(m => `${m.monster}: "${m.text}"`)].join('\n');
+  }
+
   protected async saveMonsterTimings(): Promise<void> {
     const id = this.customizeTargetLinkshellId();
     if (!id) return;

@@ -143,6 +143,32 @@ public static class HnmConfig
     public static List<string> MonsterMatchNamesLower(string? name) =>
         MonsterMatchNames(name).Select(n => n.ToLowerInvariant()).ToList();
 
+    // The chat line each HNM's pop prints, which the in-game addon watches for to start a Claim
+    // Shield capture (and to mark a pop on its ToD Tracker). Shown as hover text on the monster's
+    // name in the Monster Setups card; the addon's Settings window used to list them.
+    //
+    // KEEP IN SYNC with CLAIM_SHIELD_START_MESSAGE_INFO in the addon's constants.lua, which is the
+    // list that actually matches. This copy is display only.
+    public static readonly IReadOnlyList<(string Monster, string Text)> ClaimShieldSpawnMessages = new[]
+    {
+        ("Fafnir", "You hear an ominous roar off in the distance"),
+        ("Nidhogg", "You hear the roar of a great wyrm off in the distance"),
+        ("Adamantoise", "You feel the ground shake as a large monster stomps in the distance"),
+        ("Aspidochelone", "You feel the ground split as an enormous monster stomps in the distance"),
+        ("Behemoth", "You hear the thundering roar of a monster in the distance"),
+        ("King Behemoth", "You hear a thundering roar of a great Behemoth in the distance"),
+    };
+
+    // The spawn messages for one Monster Setups row. A merged row ("Fafnir/Nidhogg") gets both
+    // halves' lines, because either half can be the one that pops.
+    public static IReadOnlyList<(string Monster, string Text)> ClaimShieldSpawnMessagesFor(string? monsterName)
+    {
+        var names = MonsterMatchNames(monsterName);
+        return ClaimShieldSpawnMessages
+            .Where(message => names.Contains(message.Monster, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+    }
+
     // Base monster -> stronger counterpart. On the create-event monster dropdown the two
     // are offered as ONE merged entry: it shows the base name on early days and the combined
     // "Base/Stronger" name from CombinedFromDay onward (the day the stronger version can also

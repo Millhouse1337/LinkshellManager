@@ -579,7 +579,8 @@
                         <input type="text" [(ngModel)]="row.monsterName" (ngModelChange)="markMonsterTimingsDirty()"
                           [name]="'monsterName_' + $index" maxlength="128" placeholder="Monster name" />
                       } @else {
-                        <span>{{ row.monsterName }}</span>
+                        <span [title]="spawnMessageHover(row) ?? ''"
+                          [class.monster-setups__name--hover]="spawnMessageHover(row) !== null">{{ row.monsterName }}</span>
                       }
                     </div>
                     <div class="monster-setups__col-windows">

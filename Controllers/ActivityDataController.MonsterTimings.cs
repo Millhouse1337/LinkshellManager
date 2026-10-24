@@ -95,7 +95,10 @@ public sealed partial class ActivityDataController
             defaults.WindowCadenceMinutes,
             defaults.CooldownMinutes,
             row.ClaimShieldEnabled,
-            Math.Max(0, row.AdditionalSeconds));
+            Math.Max(0, row.AdditionalSeconds),
+            HnmConfig.ClaimShieldSpawnMessagesFor(row.MonsterName)
+                .Select(message => new ActivityClaimShieldSpawnMessageDto(message.Monster, message.Text))
+                .ToList());
     }
 
     private static List<MonsterTimingEdit> ToMonsterTimingEdits(ActivitySaveMonsterTimingsRequest request) =>

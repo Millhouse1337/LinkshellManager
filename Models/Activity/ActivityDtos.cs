@@ -122,7 +122,13 @@ public sealed record ActivityMonsterTimingDto(
     bool ClaimShieldEnabled,
     // Seconds on top of the cooldown when a ToD's repop is computed. Moved here from the Log ToD
     // form, where it was typed per kill and forgotten.
-    int AdditionalSeconds = 0);
+    int AdditionalSeconds = 0,
+    // The chat lines this monster's pop prints (HnmConfig.ClaimShieldSpawnMessages), shown as
+    // hover text on its name. Empty for a monster with none. Display only.
+    IReadOnlyList<ActivityClaimShieldSpawnMessageDto>? SpawnMessages = null);
+
+// One spawn message: which half of a merged row it belongs to, and the line itself.
+public sealed record ActivityClaimShieldSpawnMessageDto(string Monster, string Text);
 
 // The COMPACT form carried on the polled overview: only what the ToD form and the create-event
 // picker need (the option list, plus the values they auto-fill from). The editor's own GET returns

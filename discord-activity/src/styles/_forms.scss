@@ -1121,6 +1121,8 @@
 
 .monster-setups__col-name { flex: 1 1 200px; min-width: 0; color: var(--fg); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .monster-setups__col-name input { width: 100%; min-width: 0; }
+/* A name with spawn-message hover text: the dotted underline says "hover me". */
+.monster-setups__name--hover { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .monster-setups__col-windows { flex: 0 0 92px; }
 .monster-setups__col-windows input { width: 100%; min-width: 0; }
 /* Number + unit ride together so the pair reads as one field. */
