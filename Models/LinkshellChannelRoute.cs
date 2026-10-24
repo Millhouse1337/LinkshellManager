@@ -76,6 +76,12 @@ public class LinkshellChannelRoute
     [MaxLength(32)]
     public string? DkpSheetMessageId { get; set; }
 
+    // The rest of that post: a roster past ~95 members runs on into more messages
+    // (DkpSheetMessageBuilder), and these are their ids, comma-separated, in channel order after
+    // DkpSheetMessageId. Null while the sheet fits in one message.
+    [MaxLength(512)]
+    public string? DkpSheetExtraMessageIds { get; set; }
+
     public DateTime CreatedAtUtc { get; set; }
 }
 

@@ -2912,6 +2912,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DkpSheetExtraMessageIds")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
                     b.Property<string>("DkpSheetMessageId")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");

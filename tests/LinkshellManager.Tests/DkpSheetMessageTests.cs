@@ -9,9 +9,9 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The DKP sheet is one message: the totals, then the member table split into pages (one embed
-// each), with the .xlsx attached. Discord rejects a message whose embeds add up to more than
-// 6000 characters, so a big roster has to stop short and point at the spreadsheet.
+// The DKP sheet post: the totals, then the member table split into pages (one embed each), with
+// the .xlsx attached to the first message. Discord rejects a message whose embeds add up to more
+// than 6000 characters (about 95 members), so a big roster runs on into more messages.
 public class DkpSheetMessageTests
 {
     // Mirrors DiscordBotClient.JsonOptions so assertions see the on-the-wire JSON.
@@ -31,9 +31,16 @@ public class DkpSheetMessageTests
         return new DkpSheetData(1, "Sky", rows, members, 5000, 4000, 1000);
     }
 
-    private static JsonElement Render(DkpSheetData data)
-        => JsonDocument.Parse(JsonSerializer.Serialize(DkpSheetMessageBuilder.BuildPayload(data, Xlsx), Wire))
-            .RootElement.Clone();
+    private static List<JsonElement> RenderAll(DkpSheetData data)
+        => DkpSheetMessageBuilder.BuildPayloads(data, Xlsx)
+            .Select(payload => JsonDocument.Parse(JsonSerializer.Serialize(payload, Wire)).RootElement.Clone())
+            .ToList();
+
+    // The first message: the whole post, for a roster that fits in one.
+    private static JsonElement Render(DkpSheetData data) => RenderAll(data)[0];
+
+    private static List<JsonElement> Attachments(JsonElement payload)
+        => payload.TryGetProperty("attachments", out var list) ? list.EnumerateArray().ToList() : new List<JsonElement>();
 
     private static List<JsonElement> Embeds(JsonElement payload)
         => payload.GetProperty("embeds").EnumerateArray().ToList();
@@ -48,28 +55,59 @@ public class DkpSheetMessageTests
             + Text(embed, "description").Length
             + (embed.TryGetProperty("footer", out var footer) ? Text(footer, "text").Length : 0));
 
+    // A roster past one message runs on into more, every member shown once, each message inside
+    // Discord's limits. The spreadsheet rides on the first; the titles number the messages; the
+    // legend and "Updated" footer close the last.
     [Fact]
-    public void ABigRoster_StaysInsideDiscordsLimits_AndPointsAtTheSpreadsheet()
+    public void ABigRoster_RunsOnIntoMoreMessages_WithEveryMemberShown()
     {
-        var payload = Render(Sheet(200));
-        var embeds = Embeds(payload);
-        var all = string.Join("\n", embeds.Select(embed => Text(embed, "description")));
+        var payloads = RenderAll(Sheet(200));
 
-        Assert.True(TotalChars(payload) <= 6000, $"embeds total {TotalChars(payload)} chars");
-        Assert.InRange(embeds.Count, 2, 10);
-        Assert.All(embeds, embed => Assert.True(Text(embed, "description").Length <= 4096));
+        Assert.InRange(payloads.Count, 2, 4);
+        foreach (var payload in payloads)
+        {
+            var embeds = Embeds(payload);
+            Assert.True(TotalChars(payload) <= 6000, $"embeds total {TotalChars(payload)} chars");
+            Assert.InRange(embeds.Count, 1, 10);
+            Assert.All(embeds, embed => Assert.True(Text(embed, "description").Length <= 4096));
+        }
 
-        var shown = Regex.Matches(all, @"Member\d{3}").Count;
-        Assert.InRange(shown, 80, 199);
-        Assert.Contains($"_…and {200 - shown} more — full list in the attached spreadsheet._", Text(embeds[^1], "description"));
+        var all = string.Join("\n", payloads.SelectMany(Embeds).Select(embed => Text(embed, "description")));
+        var shown = Regex.Matches(all, @"Member\d{3}").Select(match => match.Value).ToList();
+        Assert.Equal(200, shown.Count);
+        Assert.Equal(200, shown.Distinct().Count());
+        Assert.DoesNotContain("more —", all);
 
-        var attachments = payload.GetProperty("attachments").EnumerateArray().ToList();
-        Assert.Equal(Xlsx, Assert.Single(attachments).GetProperty("filename").GetString());
+        Assert.Equal(Xlsx, Assert.Single(Attachments(payloads[0])).GetProperty("filename").GetString());
+        Assert.All(payloads.Skip(1), payload => Assert.Empty(Attachments(payload)));
+
+        Assert.Equal($"📊 Sky — DKP (1/{payloads.Count})", Text(Embeds(payloads[0])[0], "title"));
+        Assert.Equal($"📊 Sky — DKP (2/{payloads.Count})", Text(Embeds(payloads[1])[0], "title"));
+
+        var lastEmbed = Embeds(payloads[^1])[^1];
+        Assert.EndsWith(DkpSheetMessageBuilder.Legend, Text(lastEmbed, "description"));
+        Assert.True(lastEmbed.TryGetProperty("footer", out _));
+        Assert.Single(payloads.SelectMany(Embeds), embed => embed.TryGetProperty("footer", out _));
+    }
+
+    // Past MaxMessages the post stops and points at the spreadsheet rather than flooding the channel.
+    [Fact]
+    public void AHugeRoster_StopsAtTheMessageCap_AndPointsAtTheSpreadsheet()
+    {
+        var payloads = RenderAll(Sheet(3000));
+
+        Assert.Equal(DkpSheetMessageBuilder.MaxMessages, payloads.Count);
+        var all = string.Join("\n", payloads.SelectMany(Embeds).Select(embed => Text(embed, "description")));
+        var shown = Regex.Matches(all, @"Member\d{3,4}").Count;
+        Assert.InRange(shown, 1000, 2999);
+        Assert.Contains($"_…and {3000 - shown} more — full list in the attached spreadsheet._",
+            Text(Embeds(payloads[^1])[^1], "description"));
     }
 
     [Fact]
     public void ASmallRoster_FitsOnOnePage_WithTheLegend()
     {
+        Assert.Single(RenderAll(Sheet(3)));
         var embeds = Embeds(Render(Sheet(3)));
 
         var embed = Assert.Single(embeds);

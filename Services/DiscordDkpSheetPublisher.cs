@@ -6,7 +6,8 @@ namespace LinkshellManagerDiscordApp.Services;
 
 // Posts (and keeps refreshed, edit-in-place) the linkshell's live DKP sheet to a Discord
 // channel: the totals and a paged member table as text embeds (DkpSheetMessageBuilder), AND
-// the complete .xlsx attached for download. Driven off the app's own DKP (DkpSheetService) —
+// the complete .xlsx attached for download. A roster past ~95 members runs on into more
+// messages; their ids are kept on the route beside the first. Driven off the app's own DKP (DkpSheetService) —
 // no Google. The target channel is the linkshell's channel route with the "DKP sheet" flag
 // (ChannelRouteResolver), mirroring the ToD board; no-op when no such route is configured or
 // the bot isn't configured. Best-effort: failures are logged, never thrown, so a Discord
@@ -60,39 +61,86 @@ public sealed class DiscordDkpSheetPublisher
         var data = await _dkpSheet.BuildAsync(linkshellId, cancellationToken);
 
         var xlsxName = DkpWorkbookBuilder.FileName(data.LinkshellName, DateTime.UtcNow);
-        var payload = DkpSheetMessageBuilder.BuildPayload(data, xlsxName);
+        var payloads = DkpSheetMessageBuilder.BuildPayloads(data, xlsxName);
         var files = new List<DiscordBotClient.OutgoingFile> { new(DkpWorkbookBuilder.Build(data), xlsxName, XlsxContentType) };
 
-        // Edit the existing post in place. Only repost when the message is genuinely
-        // gone (deleted/channel changed) — on a transient Discord error keep the stored
-        // id so the next DKP change retries the edit idempotently instead of orphaning
-        // this post and uploading a duplicate .xlsx.
+        // The post's messages so far, in channel order: the first, then any it ran on into.
+        var existing = new List<string>();
         if (!string.IsNullOrEmpty(route.DkpSheetMessageId))
         {
-            var edit = await _bot.EditMessageWithFilesAsync(
-                channelId, route.DkpSheetMessageId!, payload, files, cancellationToken);
-            if (edit == DiscordEditResult.Edited || edit == DiscordEditResult.TransientFailure)
-            {
-                return; // edited, or keep the id and retry on the next change
-            }
-            route.DkpSheetMessageId = null; // MessageGone → post fresh below
+            existing.Add(route.DkpSheetMessageId!);
+            existing.AddRange(SplitIds(route.DkpSheetExtraMessageIds));
         }
 
-        var messageId = await _bot.PostMessageWithFilesAsync(channelId, payload, files, cancellationToken);
-        if (string.IsNullOrEmpty(messageId))
+        // Edit the existing messages in place. Only repost when one is genuinely gone (deleted,
+        // channel changed): then every message is deleted and the whole post goes up again, so
+        // the pages stay in order. On a transient Discord error keep the stored ids, so the next
+        // DKP change retries the edits idempotently instead of orphaning messages and uploading a
+        // duplicate .xlsx.
+        var ids = new List<string>();
+        var repost = existing.Count == 0;
+        for (var i = 0; i < existing.Count && i < payloads.Count && !repost; i++)
         {
-            _logger.LogWarning(
-                "DKP sheet for linkshell {LinkshellId}: the bot failed to post to channel {ChannelId} " +
-                "(check the bot is in the server with Send Messages).",
-                linkshellId, channelId);
-            if (_db.ChangeTracker.HasChanges())
+            var edit = i == 0
+                ? await _bot.EditMessageWithFilesAsync(channelId, existing[0], payloads[0], files, cancellationToken)
+                : await _bot.EditMessageAsync(channelId, existing[i], payloads[i], cancellationToken);
+            if (edit == DiscordEditResult.TransientFailure)
             {
-                await _db.SaveChangesAsync(cancellationToken);
+                return;
             }
-            return;
+            if (edit == DiscordEditResult.MessageGone)
+            {
+                repost = true;
+            }
+            else
+            {
+                ids.Add(existing[i]);
+            }
         }
 
-        route.DkpSheetMessageId = messageId.Length > 32 ? messageId[..32] : messageId;
-        await _db.SaveChangesAsync(cancellationToken);
+        if (repost)
+        {
+            foreach (var id in existing)
+            {
+                await _bot.DeleteMessageAsync(channelId, id, cancellationToken);
+            }
+            ids.Clear();
+        }
+        else
+        {
+            // A shorter roster needs fewer messages: delete the spare ones from the end.
+            foreach (var id in existing.Skip(payloads.Count))
+            {
+                await _bot.DeleteMessageAsync(channelId, id, cancellationToken);
+            }
+        }
+
+        // Post whatever isn't on the channel yet: everything on a repost, or the new pages at
+        // the bottom when the roster grew past what the existing messages hold.
+        for (var i = ids.Count; i < payloads.Count; i++)
+        {
+            var messageId = i == 0
+                ? await _bot.PostMessageWithFilesAsync(channelId, payloads[0], files, cancellationToken)
+                : await _bot.PostMessageAsync(channelId, payloads[i], cancellationToken);
+            if (string.IsNullOrEmpty(messageId))
+            {
+                _logger.LogWarning(
+                    "DKP sheet for linkshell {LinkshellId}: the bot failed to post to channel {ChannelId} " +
+                    "(check the bot is in the server with Send Messages).",
+                    linkshellId, channelId);
+                break;
+            }
+            ids.Add(messageId.Length > 32 ? messageId[..32] : messageId);
+        }
+
+        route.DkpSheetMessageId = ids.Count > 0 ? ids[0] : null;
+        route.DkpSheetExtraMessageIds = ids.Count > 1 ? string.Join(',', ids.Skip(1)) : null;
+        if (_db.ChangeTracker.HasChanges())
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
     }
+
+    private static IEnumerable<string> SplitIds(string? ids)
+        => (ids ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
