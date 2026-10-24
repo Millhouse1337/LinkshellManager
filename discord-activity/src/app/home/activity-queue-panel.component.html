@@ -137,44 +137,6 @@
               }
             </div>
 
-            <!-- Recurring camp: does this board come back on its own, and how long before the
-                 next predicted pop? Asked only on a queued-camp edit (recurrenceAsked).
-
-                 Not on create: the switch opened already on for any monster with a standing
-                 board, so a new camp quietly kept re-posting boards nobody meant to make. Hidden
-                 while editing a LIVE camp too: that board is not waiting on a re-post, and the
-                 next thing that happens to it is End Camp / Post ToD, which sets the same two
-                 values. Hidden for an "Other" monster with no name typed yet, since recurrence
-                 keys on an exact ToD name match (canRepeatOnTod). -->
-            @if (recurrenceAsked()) {
-              <div class="cem__switches">
-                <button type="button" class="cem__switch" [class.is-on]="createModel.repeatOnTod === true"
-                  [attr.aria-pressed]="createModel.repeatOnTod === true"
-                  (click)="toggleRepeatOnTod()">
-                  <span class="cem__track"><span class="cem__knob"></span></span>
-                  <span class="cem__switch-text">
-                    <span class="cem__switch-title">Repeat post when ToD is updated</span>
-                    <span class="cem__switch-hint">When a new ToD for this monster is recorded, re-post the sign-up board ahead of the next pop</span>
-                  </span>
-                </button>
-              </div>
-            }
-            @if (recurrenceAsked() && createModel.repeatOnTod === true) {
-              <label class="cem__field">
-                <span class="cem__label">Hours before repop <em>optional</em></span>
-                <!-- step=".25" so the lead can be given in quarter-hours (1.5 = 1h30m),
-                     matching the End Camp / Post ToD form. Left blank it posts null, which
-                     the server reads as "keep the lead this board already has". -->
-                <input class="cem__input" type="number" min="0" max="168" step="0.25"
-                  [(ngModel)]="createModel.repostLeadHours" name="repostLeadHours"
-                  placeholder="e.g. 2"
-                  title="How many hours before the predicted next pop the event and sign-up board are re-posted" />
-                <small class="cem__hint">
-                  Blank keeps this monster's current setting (1 hour if it has never had one).
-                  The End Camp / Post ToD form opens on whatever is set here.
-                </small>
-              </label>
-            }
           }
         </section>
 
@@ -615,7 +577,7 @@
                       Sign-up board automatically re-posts in the Discord channel
                       {{ activity.formatDateTimeWithSeconds(event.hnmRepostAt) }}@if (repostLeadLabel(event)) { ({{ repostLeadLabel(event) }} before the first window)}.
                     } @else {
-                      Turn on “Repeat post when ToD is updated” on this board to auto-re-post it.
+                      Turn on “Re-post board” in Edit ToD to auto-re-post it.
                     }
                   </span>
                 }

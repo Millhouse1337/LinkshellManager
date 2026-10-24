@@ -117,14 +117,6 @@ export class ActivityQueuePanelComponent {
     autoStart: false,
     countsTowardActive: true,
     monsterName: null,
-    // Tri-state. Null = "this form has no opinion, leave the monster's standing re-post board
-    // exactly as it is" — what create and an edit of a LIVE camp post, since neither has a
-    // recurrence control. A queued-camp edit ASKS, and sets a real true/false the moment a
-    // monster is picked (see applyRepeatPrefillForMonster).
-    repeatOnTod: null,
-    // Null = leave the board's existing lead alone. Only non-null once the officer types one,
-    // or once the picked monster's standing lead is pre-filled.
-    repostLeadHours: null,
     dayNumber: null,
     // Null = pay the linkshell's HNM bonus. Only non-null once "Change DKP" is used.
     hnmOpenBonusOverride: null,
@@ -237,63 +229,9 @@ export class ActivityQueuePanelComponent {
       // The seeded (or already-picked) monster may have an outstanding pop — that's the start
       // time this camp is being staged for.
       this.applyRepopStartPrefill();
-      this.applyRepeatPrefillForMonster();
     } else {
       this.createModel.monsterName = null;
       this.customMonsterName = '';
-      // Back to "no opinion": a non-HNM event has no board to repeat, so it must not carry a
-      // true/false that would rewrite some monster's standing template.
-      this.createModel.repeatOnTod = null;
-      this.createModel.repostLeadHours = null;
-    }
-  }
-
-  // ===== Recurrence pre-fill from the picked monster's standing board =====
-  //
-  // Recurrence is per MONSTER, not per event: one recurring-board row per spawn, shared by every
-  // camp made for it. So the toggle and the lead have to move with the picker — otherwise the
-  // form shows a blank choice for a monster that is already repeating, and submitting it as
-  // displayed switches that monster's board off.
-  //
-  // Skipped wherever the form has no recurrence control (create, and editing a LIVE camp) and
-  // for an "Other" monster with no name typed yet.
-  private applyRepeatPrefillForMonster(): void {
-    if (!this.recurrenceAsked()) {
-      return;
-    }
-    const lead = this.standingRepeatLeadHours();
-    this.createModel.repeatOnTod = lead !== null;
-    // Cleared rather than left holding the previous monster's number: null posts as "keep this
-    // board's current lead", the only honest default for a monster we know nothing about.
-    this.createModel.repostLeadHours = lead;
-  }
-
-  // The picked monster's standing lead in fractional hours, or null when it has no enabled
-  // recurring board. Matched case-insensitively against the linkshell's monster catalog, which
-  // already carries the merged "Base/Stronger" spellings the server keyed the board on.
-  private standingRepeatLeadHours(): number | null {
-    const monster = (this.isOtherMonsterSelected()
-      ? this.customMonsterName
-      : this.createModel.monsterName ?? '').trim().toLowerCase();
-    if (!monster) {
-      return null;
-    }
-    const setup = (this.selectedLinkshellSettings()?.monsterSetups ?? [])
-      .find(row => (row.monsterName ?? '').trim().toLowerCase() === monster);
-    const lead = setup?.repeatLeadHours;
-    return typeof lead === 'number' ? lead : null;
-  }
-
-  // The switch under the monster picker. Turning it ON with no lead of its own seeds the
-  // monster's standing lead so the box opens on the number already in effect; turning it OFF
-  // clears the box, since a disabled board's lead is stale bookkeeping.
-  protected toggleRepeatOnTod(): void {
-    const next = this.createModel.repeatOnTod !== true;
-    this.createModel.repeatOnTod = next;
-    if (next) {
-      this.createModel.repostLeadHours ??= this.standingRepeatLeadHours();
-    } else {
-      this.createModel.repostLeadHours = null;
     }
   }
 
@@ -365,12 +303,10 @@ export class ActivityQueuePanelComponent {
   protected onMonsterSelect(value: string): void {
     this.createModel.monsterName = value ? value : null;
     this.applyRepopStartPrefill();
-    this.applyRepeatPrefillForMonster();
   }
 
   protected onCustomMonsterNameChange(): void {
     this.applyRepopStartPrefill();
-    this.applyRepeatPrefillForMonster();
   }
 
   protected isOtherMonsterSelected(): boolean {
@@ -490,40 +426,6 @@ export class ActivityQueuePanelComponent {
     this.createModel.startTimeLocal = value;
     this.autoFilledStartTimeLocal = value;
     this.recomputeDuration();
-  }
-
-  // Repeat-on-ToD keys on an exact (case-insensitive) Tod.MonsterName match. For a
-  // custom "Other" monster that's the typed name, so it's allowed once a non-empty
-  // name is entered; while the box is still empty there's nothing to match on.
-  protected canRepeatOnTod(): boolean {
-    if (!this.isHnmSelected()) {
-      return false;
-    }
-    if (this.isOtherMonsterSelected()) {
-      return this.customMonsterName.trim().length > 0;
-    }
-    return true;
-  }
-
-  // The lead box as the server wants it: a real number clamped to the same 0–168h range
-  // HnmRecurringBoardService enforces, or null. Null matters — the server reads it as "keep
-  // the board's current lead", so an empty (or junk) box must not post 0, which would mean
-  // "re-post exactly at the pop" and silently discard a lead set at End Camp.
-  // Whether THIS form asked the recurrence question, and may therefore answer it. The template
-  // guards the switch on this too — the two must agree or the form would post an answer to a
-  // question it never showed. Only a queued-camp edit asks: create doesn't (a switch that opened
-  // already on for a monster with a standing board kept re-posting boards nobody meant to make),
-  // and neither does a live-camp edit.
-  protected recurrenceAsked(): boolean {
-    return this.editingEventId !== null && !this.isEditingLiveEvent && this.canRepeatOnTod();
-  }
-
-  private normalizedRepostLeadHours(): number | null {
-    const lead = this.createModel.repostLeadHours;
-    if (lead === null || lead === undefined || Number.isNaN(Number(lead))) {
-      return null;
-    }
-    return Math.min(Math.max(Number(lead), 0), 168);
   }
 
   // ===== HNM camp DKP =====
@@ -1013,18 +915,7 @@ export class ActivityQueuePanelComponent {
         // A day the form didn't ask for is not a day the board should print: switching the
         // monster from a merge pair to anything else must not post the number that was typed
         // while the box was still on offer. The model keeps it, so switching back restores it.
-        dayNumber: this.dayNumberVisible() ? this.createModel.dayNumber : null,
-        // Recurrence, tri-state. The form ASKS only on a queued-camp edit, so only that sends
-        // the real answer. Create and a LIVE-camp edit show no recurrence control, so they send
-        // null = "no opinion, leave the monster's standing board alone" — sending false there is
-        // what used to disable the re-post as a side effect of an unrelated edit.
-        repeatOnTod: this.recurrenceAsked() ? this.createModel.repeatOnTod === true : null,
-        // Null means "keep whatever lead the board already has", including one entered at End
-        // Camp. Only sent alongside an explicit yes, so turning recurrence OFF can't also
-        // rewrite the lead of the board it just disabled.
-        repostLeadHours: this.recurrenceAsked() && this.createModel.repeatOnTod === true
-          ? this.normalizedRepostLeadHours()
-          : null
+        dayNumber: this.dayNumberVisible() ? this.createModel.dayNumber : null
       };
       if (this.editingEventId) {
         await this.activity.updateEvent(this.editingEventId, payload);
@@ -1058,8 +949,6 @@ export class ActivityQueuePanelComponent {
     countsTowardActive?: boolean;
     assignedMonsterName?: string | null;
     dayNumber?: number | null;
-    repeatOnTod?: boolean;
-    repeatLeadHours?: number | null;
     hnmOpenBonusOverride?: number | null;
     hnmCloseBonusOverride?: number | null;
     hnmClaimBonusOverride?: number | null;
@@ -1102,18 +991,10 @@ export class ActivityQueuePanelComponent {
     this.partySetupNotSpecified = event.partySetupId == null;
     this.createModel.autoStart = event.autoStart ?? false;
     this.createModel.countsTowardActive = event.countsTowardActive ?? true;
-    // HNM repeat-board fields so editing preserves the monster and shows the board's current
-    // lead. repeatLeadHours is only sent for an ENABLED board, so a null here leaves the box
-    // empty and the edit submits null = "keep the board's current lead".
+    // HNM board fields so editing preserves the monster and day.
     this.createModel.monsterName = event.assignedMonsterName ?? null;
     this.customMonsterName = '';
     this.createModel.dayNumber = event.dayNumber ?? null;
-    // Straight off the event's OWN board state rather than re-derived from the monster catalog:
-    // this is the camp that exists, and what its board is set to now is what the form must open
-    // on. repeatLeadHours is only sent for an ENABLED board, so a null leaves the box empty and
-    // the edit submits null = "keep the board's current lead".
-    this.createModel.repeatOnTod = event.repeatOnTod ?? false;
-    this.createModel.repostLeadHours = event.repeatLeadHours ?? null;
     // Lazy-load the linkshell's PartySetup list so the dropdown populates.
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);
@@ -1184,8 +1065,6 @@ export class ActivityQueuePanelComponent {
     this.createModel.autoStart = false;
     this.createModel.countsTowardActive = true;
     this.createModel.monsterName = null;
-    this.createModel.repeatOnTod = null;
-    this.createModel.repostLeadHours = null;
     this.createModel.dayNumber = null;
     this.customMonsterName = '';
     this.isEditingLiveEvent = false;

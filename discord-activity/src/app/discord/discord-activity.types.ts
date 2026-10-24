@@ -1862,19 +1862,9 @@ export interface ActivityCreateEventInput {
   autoStart?: boolean;
   // When true, attendees earn active-member credit (reconciled at close). Default true.
   countsTowardActive?: boolean;
-  // HNM signup board only: the monster the board is for, plus the monster's standing re-post
-  // settings.
-  //
-  // repeatOnTod is tri-state on the wire. Only the queued-camp edit form ASKS ("Repeat post when
-  // ToD is updated?") and sends an explicit true/false. Create and a LIVE-camp edit send null —
-  // neither has a recurrence control, and null tells the server "no opinion, leave the standing
-  // board alone" rather than false, which would disable it.
-  //
-  // repostLeadHours is fractional (1.5 = 1h30m). Null means "keep the board's current lead", so
-  // an empty box never overwrites a lead entered at End Camp / Post ToD.
+  // HNM signup board only: the monster the board is for. The monster's standing re-post setting
+  // is not sent from here — create and edit leave it alone; only End Camp / Post ToD sets it.
   monsterName?: string | null;
-  repeatOnTod?: boolean | null;
-  repostLeadHours?: number | null;
   // HNM signup board only: optional "Day N" label shown on the board.
   dayNumber?: number | null;
   // HNM signup board only: per-camp overrides for the linkshell's payout amounts. Null =
