@@ -18,10 +18,11 @@
             <input class="tod-input" [value]="boardMonsterDisplay" readonly />
           } @else {
             <!-- type="text", not "search": a search box draws the browser's clear (×) button where
-                 this picker's dropdown chevron belongs. -->
+                 this picker's dropdown chevron belongs. (click) as well as (focus): picking an
+                 option leaves the box focused, so a second click never fires (focus) again. -->
             <div class="tod-monster-picker" [class.is-open]="todMonsterPickerOpen">
               <input class="tod-input" type="text" [ngModel]="todMonsterSearch" name="todMonsterSearch"
-                (focus)="openTodMonsterPicker()" (blur)="closeTodMonsterPicker()"
+                (focus)="openTodMonsterPicker()" (click)="openTodMonsterPicker()" (blur)="closeTodMonsterPicker()"
                 (ngModelChange)="onTodMonsterSearchChange($event)" (keydown)="onTodMonsterPickerKeydown($event)"
                 placeholder="Search monsters" role="combobox" [attr.aria-expanded]="todMonsterPickerOpen"
                 aria-controls="tod-monster-suggestions" aria-autocomplete="list" />
