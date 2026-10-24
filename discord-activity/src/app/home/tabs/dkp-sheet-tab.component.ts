@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { DkpSheetService } from '../../discord/dkp-sheet.service';
+import { DownloadLinkService } from '../../discord/download-link.service';
 import type { ActivityDkpSheetMember, ActivityDkpSheetPool } from '../../discord/discord-activity.types';
 
 // Always-on DKP sheet for the Activity: summary cards + a filterable member
@@ -19,6 +20,7 @@ import type { ActivityDkpSheetMember, ActivityDkpSheetPool } from '../../discord
 export class DkpSheetTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly dkpSheet = inject(DkpSheetService);
+  protected readonly downloads = inject(DownloadLinkService);
 
   protected readonly searchTerm = signal('');
 
