@@ -8,7 +8,7 @@
     <div>
         <h1 class="page-title">Pending Submissions</h1>
         <div class="page-sub">
-            <span>Review member-submitted ToDs and attendance before they go live</span>
+            <span>Review member-submitted ToDs before they go live</span>
             @if (!string.IsNullOrWhiteSpace(Model.LinkshellName))
             {
                 <span class="dot"> · </span>
@@ -27,7 +27,7 @@
 {
     <div class="card fade d2">
         <div class="empty">
-            No pending submissions. When members with the "Submit for Approval" permissions submit a ToD or attendance, it'll show up here for review.
+            No pending submissions. When a member with the "Submit ToD for approval" permission submits a ToD, it'll show up here for review.
         </div>
     </div>
 }
@@ -54,8 +54,6 @@ else
                     var url = row.Type switch
                     {
                         "Tod" => Url.Action(nameof(LinkshellManagerDiscordApp.Controllers.LinkshellPendingSubmissionsController.EditTod), new { linkshellId = Model.LinkshellId, submissionId = row.Id }),
-                        "AttendanceWindow" => Url.Action(nameof(LinkshellManagerDiscordApp.Controllers.LinkshellPendingSubmissionsController.EditAttendanceWindow), new { linkshellId = Model.LinkshellId, submissionId = row.Id }),
-                        "AttendanceSnapshot" => Url.Action(nameof(LinkshellManagerDiscordApp.Controllers.LinkshellPendingSubmissionsController.EditAttendanceSnapshot), new { linkshellId = Model.LinkshellId, submissionId = row.Id }),
                         _ => "#"
                     };
                     <tr style="border-top:1px solid var(--border,#222)">

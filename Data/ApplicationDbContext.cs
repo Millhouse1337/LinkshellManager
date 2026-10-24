@@ -1007,10 +1007,6 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<WindowEventMemberDkp> WindowEventMemberDkps => Set<WindowEventMemberDkp>();
         public DbSet<PendingTodSubmission> PendingTodSubmissions => Set<PendingTodSubmission>();
         public DbSet<PendingTodLootSubmission> PendingTodLootSubmissions => Set<PendingTodLootSubmission>();
-        public DbSet<PendingAttendanceWindowSubmission> PendingAttendanceWindowSubmissions => Set<PendingAttendanceWindowSubmission>();
-        public DbSet<PendingAttendanceWindowMemberSubmission> PendingAttendanceWindowMemberSubmissions => Set<PendingAttendanceWindowMemberSubmission>();
-        public DbSet<PendingAttendanceSnapshotSubmission> PendingAttendanceSnapshotSubmissions => Set<PendingAttendanceSnapshotSubmission>();
-        public DbSet<PendingAttendanceSnapshotEntry> PendingAttendanceSnapshotEntries => Set<PendingAttendanceSnapshotEntry>();
         public DbSet<ClaimShieldCapture> ClaimShieldCaptures => Set<ClaimShieldCapture>();
         public DbSet<ClaimShieldCaptureMember> ClaimShieldCaptureMembers => Set<ClaimShieldCaptureMember>();
         public DbSet<LinkshellDiscordWebhook> LinkshellDiscordWebhooks => Set<LinkshellDiscordWebhook>();
@@ -2037,14 +2033,6 @@ namespace LinkshellManagerDiscordApp.Data
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => new { item.WindowEventId, item.CharacterName }).IsUnique();
             });
-            builder.Entity<PendingAttendanceSnapshotSubmission>(entity =>
-            {
-                entity.HasOne(item => item.LinkedEvent)
-                    .WithMany()
-                    .HasForeignKey(item => item.LinkedEventId)
-                    .OnDelete(DeleteBehavior.SetNull);
-            });
-
             builder.Entity<ClaimShieldCapture>(entity =>
             {
                 entity.ToTable("ClaimShieldCaptures");

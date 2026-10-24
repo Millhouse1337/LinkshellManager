@@ -336,5 +336,6 @@ public sealed partial class ActivityDataController
         role.CanManageInvites = permissions.CanManageInvites;
         role.CanBid = permissions.CanBid;
         role.CanUseAddon = permissions.CanUseAddon;
+        role.CanManageAttendanceWithAddon = permissions.CanManageAttendanceWithAddon;
     }
 }

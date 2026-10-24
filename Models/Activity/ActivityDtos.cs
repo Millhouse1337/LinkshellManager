@@ -280,7 +280,8 @@ public sealed record ActivityPermissionsDto(
     bool CanManageParties,
     bool CanManageInvites,
     bool CanBid,
-    bool CanUseAddon);
+    bool CanUseAddon,
+    bool CanManageAttendanceWithAddon);
 
 public static class ActivityPermissions
 {
@@ -306,7 +307,8 @@ public static class ActivityPermissions
         CanManageParties: true,
         CanManageInvites: true,
         CanBid: true,
-        CanUseAddon: true);
+        CanUseAddon: true,
+        CanManageAttendanceWithAddon: true);
 }
 
 public sealed record ActivityPrimaryLinkshellDto(
@@ -1028,7 +1030,10 @@ public sealed record ActivityLinkshellRolePermissions(
     // default to TRUE, which is what an older client that doesn't send the field should mean --
     // a save from it must not quietly take a permission away.
     bool CanBid = true,
-    bool CanUseAddon = true);
+    bool CanUseAddon = true,
+    // The exception: FALSE, because this one hands out authority (the addon's attendance tools)
+    // rather than an everyday ability, so an older client that omits it must not grant it.
+    bool CanManageAttendanceWithAddon = false);
 
 public sealed record ActivityLinkshellRoleDto(
     int Id,
@@ -1053,7 +1058,8 @@ public sealed record ActivityLinkshellRoleDto(
     bool CanManageParties,
     bool CanManageInvites,
     bool CanBid,
-    bool CanUseAddon);
+    bool CanUseAddon,
+    bool CanManageAttendanceWithAddon);
 
 public sealed record ActivityLinkshellRolesResponse(
     int LinkshellId,

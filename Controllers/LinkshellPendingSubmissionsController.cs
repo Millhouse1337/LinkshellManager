@@ -39,74 +39,28 @@ public sealed class LinkshellPendingSubmissionsController : Controller
         if (user is null) return Challenge();
 
         var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
-        var canReviewTods = role?.CanManageTods == true;
-        var canReviewAttendance = role?.CanModerateLiveEvent == true;
-        if (!canReviewTods && !canReviewAttendance) return Forbid();
+        if (role?.CanManageTods != true) return Forbid();
 
         var linkshell = await _db.Linkshells.AsNoTracking().FirstOrDefaultAsync(l => l.Id == linkshellId);
         if (linkshell is null) return NotFound();
 
         var rows = new List<PendingSubmissionRow>();
-
-        if (canReviewTods)
+        var tods = await _db.PendingTodSubmissions
+            .AsNoTracking()
+            .Where(s => s.LinkshellId == linkshellId)
+            .Include(s => s.SubmittedBy)
+            .OrderBy(s => s.SubmittedAtUtc)
+            .ToListAsync();
+        foreach (var t in tods)
         {
-            var tods = await _db.PendingTodSubmissions
-                .AsNoTracking()
-                .Where(s => s.LinkshellId == linkshellId)
-                .Include(s => s.SubmittedBy)
-                .OrderBy(s => s.SubmittedAtUtc)
-                .ToListAsync();
-            foreach (var t in tods)
+            rows.Add(new PendingSubmissionRow
             {
-                rows.Add(new PendingSubmissionRow
-                {
-                    Id = t.Id,
-                    Type = "Tod",
-                    SubmittedByDisplay = DisplayName(t.SubmittedBy),
-                    SubmittedAtUtc = t.SubmittedAtUtc,
-                    Summary = $"ToD: {t.MonsterName ?? "?"} @ {(t.Time.HasValue ? t.Time.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : "no time")}",
-                });
-            }
-        }
-
-        if (canReviewAttendance)
-        {
-            var windows = await _db.PendingAttendanceWindowSubmissions
-                .AsNoTracking()
-                .Where(s => s.LinkshellId == linkshellId)
-                .Include(s => s.SubmittedBy)
-                .Include(s => s.Event)
-                .OrderBy(s => s.SubmittedAtUtc)
-                .ToListAsync();
-            foreach (var w in windows)
-            {
-                rows.Add(new PendingSubmissionRow
-                {
-                    Id = w.Id,
-                    Type = "AttendanceWindow",
-                    SubmittedByDisplay = DisplayName(w.SubmittedBy),
-                    SubmittedAtUtc = w.SubmittedAtUtc,
-                    Summary = $"Window {w.WindowIndex} attendance for {w.Event?.EventName ?? "event #" + w.EventId}",
-                });
-            }
-
-            var snapshots = await _db.PendingAttendanceSnapshotSubmissions
-                .AsNoTracking()
-                .Where(s => s.LinkshellId == linkshellId)
-                .Include(s => s.SubmittedBy)
-                .OrderBy(s => s.SubmittedAtUtc)
-                .ToListAsync();
-            foreach (var s in snapshots)
-            {
-                rows.Add(new PendingSubmissionRow
-                {
-                    Id = s.Id,
-                    Type = "AttendanceSnapshot",
-                    SubmittedByDisplay = DisplayName(s.SubmittedBy),
-                    SubmittedAtUtc = s.SubmittedAtUtc,
-                    Summary = $"Snapshot: {s.EntryCount} members by {s.CapturedByCharacterName ?? "?"}",
-                });
-            }
+                Id = t.Id,
+                Type = "Tod",
+                SubmittedByDisplay = DisplayName(t.SubmittedBy),
+                SubmittedAtUtc = t.SubmittedAtUtc,
+                Summary = $"ToD: {t.MonsterName ?? "?"} @ {(t.Time.HasValue ? t.Time.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : "no time")}",
+            });
         }
 
         return View(new LinkshellPendingSubmissionsViewModel
@@ -114,8 +68,6 @@ public sealed class LinkshellPendingSubmissionsController : Controller
             LinkshellId = linkshellId,
             LinkshellName = linkshell.LinkshellName,
             Rows = rows.OrderBy(r => r.SubmittedAtUtc).ToList(),
-            CanReviewTods = canReviewTods,
-            CanReviewAttendance = canReviewAttendance,
         });
     }
 
@@ -214,173 +166,6 @@ public sealed class LinkshellPendingSubmissionsController : Controller
         var result = await _approvals.RejectTodAsync(linkshellId, submissionId, null, cancellationToken);
         if (result == ApprovalResult.NotFound) return NotFound();
         TempData["PendingApprovalMessage"] = "ToD submission rejected and removed.";
-        return RedirectToAction(nameof(Index), new { linkshellId });
-    }
-
-    // ---------- Attendance Window edit page ----------
-
-    [HttpGet("/linkshells/{linkshellId:int}/pending-submissions/attendance-window/{submissionId:int}")]
-    public async Task<IActionResult> EditAttendanceWindow(int linkshellId, int submissionId)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Challenge();
-        var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
-        if (role?.CanModerateLiveEvent != true) return Forbid();
-
-        var submission = await _db.PendingAttendanceWindowSubmissions
-            .AsNoTracking()
-            .Include(s => s.Members)
-            .Include(s => s.Event)
-            .Include(s => s.SubmittedBy)
-            .Include(s => s.Linkshell)
-            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId);
-        if (submission is null) return NotFound();
-
-        return View(new EditPendingAttendanceWindowViewModel
-        {
-            LinkshellId = linkshellId,
-            LinkshellName = submission.Linkshell?.LinkshellName,
-            SubmissionId = submission.Id,
-            SubmittedByDisplay = DisplayName(submission.SubmittedBy),
-            SubmittedAtUtc = submission.SubmittedAtUtc,
-            EventId = submission.EventId,
-            EventName = submission.Event?.EventName,
-            WindowIndex = submission.WindowIndex,
-            Members = submission.Members
-                .OrderBy(m => m.CharacterName)
-                .Select(m => new EditPendingAttendanceMember
-                {
-                    Id = m.Id,
-                    CharacterName = m.CharacterName,
-                    MainJob = m.MainJob,
-                    MainJobLevel = m.MainJobLevel,
-                    SubJob = m.SubJob,
-                    SubJobLevel = m.SubJobLevel,
-                    Include = true,
-                })
-                .ToList(),
-        });
-    }
-
-    [HttpPost("/linkshells/{linkshellId:int}/pending-submissions/attendance-window/{submissionId:int}/approve")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ApproveAttendanceWindow(
-        int linkshellId,
-        int submissionId,
-        EditPendingAttendanceWindowViewModel form,
-        CancellationToken cancellationToken)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Challenge();
-        var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
-        if (role?.CanModerateLiveEvent != true) return Forbid();
-
-        // Apply officer toggles: drop any members the officer un-checked.
-        var keep = (form.Members ?? new List<EditPendingAttendanceMember>())
-            .Where(m => m.Include)
-            .Select(m => m.Id)
-            .ToList();
-        var result = await _approvals.ApproveAttendanceWindowKeepingAsync(linkshellId, submissionId, keep, cancellationToken);
-        if (result == ApprovalResult.NotFound) return NotFound();
-        TempData["PendingApprovalMessage"] = "Attendance window approved.";
-        return RedirectToAction(nameof(Index), new { linkshellId });
-    }
-
-    [HttpPost("/linkshells/{linkshellId:int}/pending-submissions/attendance-window/{submissionId:int}/reject")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RejectAttendanceWindow(int linkshellId, int submissionId, CancellationToken cancellationToken)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Challenge();
-        var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
-        if (role?.CanModerateLiveEvent != true) return Forbid();
-
-        var result = await _approvals.RejectAttendanceWindowAsync(linkshellId, submissionId, null, cancellationToken);
-        if (result == ApprovalResult.NotFound) return NotFound();
-        TempData["PendingApprovalMessage"] = "Attendance window rejected.";
-        return RedirectToAction(nameof(Index), new { linkshellId });
-    }
-
-    // ---------- Attendance Snapshot edit page ----------
-
-    [HttpGet("/linkshells/{linkshellId:int}/pending-submissions/attendance-snapshot/{submissionId:int}")]
-    public async Task<IActionResult> EditAttendanceSnapshot(int linkshellId, int submissionId)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Challenge();
-        var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
-        if (role?.CanModerateLiveEvent != true) return Forbid();
-
-        var submission = await _db.PendingAttendanceSnapshotSubmissions
-            .AsNoTracking()
-            .Include(s => s.Entries)
-            .Include(s => s.SubmittedBy)
-            .Include(s => s.Linkshell)
-            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId);
-        if (submission is null) return NotFound();
-
-        return View(new EditPendingAttendanceSnapshotViewModel
-        {
-            LinkshellId = linkshellId,
-            LinkshellName = submission.Linkshell?.LinkshellName,
-            SubmissionId = submission.Id,
-            SubmittedByDisplay = DisplayName(submission.SubmittedBy),
-            SubmittedAtUtc = submission.SubmittedAtUtc,
-            CapturedAtUtc = submission.CapturedAtUtc,
-            CapturedByCharacterName = submission.CapturedByCharacterName,
-            UtcOffset = submission.UtcOffset,
-            Entries = submission.Entries
-                .OrderBy(e => e.CharacterName)
-                .Select(e => new EditPendingSnapshotEntry
-                {
-                    Id = e.Id,
-                    CharacterName = e.CharacterName,
-                    MainJob = e.MainJob,
-                    MainJobLevel = e.MainJobLevel,
-                    SubJob = e.SubJob,
-                    SubJobLevel = e.SubJobLevel,
-                    Zone = e.Zone,
-                    Include = true,
-                })
-                .ToList(),
-        });
-    }
-
-    [HttpPost("/linkshells/{linkshellId:int}/pending-submissions/attendance-snapshot/{submissionId:int}/approve")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ApproveAttendanceSnapshot(
-        int linkshellId,
-        int submissionId,
-        EditPendingAttendanceSnapshotViewModel form,
-        CancellationToken cancellationToken)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Challenge();
-        var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
-        if (role?.CanModerateLiveEvent != true) return Forbid();
-
-        var keep = (form.Entries ?? new List<EditPendingSnapshotEntry>())
-            .Where(e => e.Include)
-            .Select(e => e.Id)
-            .ToList();
-        var result = await _approvals.ApproveSnapshotKeepingAsync(linkshellId, submissionId, keep, cancellationToken);
-        if (result == ApprovalResult.NotFound) return NotFound();
-        TempData["PendingApprovalMessage"] = "Attendance snapshot approved.";
-        return RedirectToAction(nameof(Index), new { linkshellId });
-    }
-
-    [HttpPost("/linkshells/{linkshellId:int}/pending-submissions/attendance-snapshot/{submissionId:int}/reject")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RejectAttendanceSnapshot(int linkshellId, int submissionId, CancellationToken cancellationToken)
-    {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Challenge();
-        var role = await GetEffectiveRoleAsync(user.Id, linkshellId);
-        if (role?.CanModerateLiveEvent != true) return Forbid();
-
-        var result = await _approvals.RejectSnapshotAsync(linkshellId, submissionId, null, cancellationToken);
-        if (result == ApprovalResult.NotFound) return NotFound();
-        TempData["PendingApprovalMessage"] = "Attendance snapshot rejected.";
         return RedirectToAction(nameof(Index), new { linkshellId });
     }
 

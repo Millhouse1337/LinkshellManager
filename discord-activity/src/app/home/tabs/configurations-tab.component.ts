@@ -277,7 +277,10 @@ export class ConfigurationsTabComponent {
     { key: 'canManageParties', label: 'Manage party setups' },
     { key: 'canManageInvites', label: 'Manage invites' },
     { key: 'canBid', label: 'Place bids on auctions' },
-    { key: 'canUseAddon', label: 'Use the LSM game addon' }
+    { key: 'canUseAddon', label: 'Use the LSM game addon' },
+    // Everything the addon does for the linkshell rather than for yourself. Without it a member's
+    // `/lsm now` capture still lands, Pending, in Unlinked Snapshots for an officer to confirm.
+    { key: 'canManageAttendanceWithAddon', label: 'Manage attendance with the addon (camps, rosters, DKP)' }
   ] as const;
 
   protected readonly rolesByLinkshell = signal<Record<number, ActivityLinkshellRole[]>>({});
@@ -365,7 +368,8 @@ export class ConfigurationsTabComponent {
       canManageParties: !!this.roleDraft.permissions['canManageParties'],
       canManageInvites: !!this.roleDraft.permissions['canManageInvites'],
       canBid: !!this.roleDraft.permissions['canBid'],
-      canUseAddon: !!this.roleDraft.permissions['canUseAddon']
+      canUseAddon: !!this.roleDraft.permissions['canUseAddon'],
+      canManageAttendanceWithAddon: !!this.roleDraft.permissions['canManageAttendanceWithAddon']
     };
 
     const ok = this.editingRoleId !== null

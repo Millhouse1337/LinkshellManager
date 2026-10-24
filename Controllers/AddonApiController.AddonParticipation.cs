@@ -14,7 +14,7 @@ public sealed partial class AddonApiController
     // Break-room support â€” mirrors the activity endpoints (TakeBreak / ForceBreak /
     // ReturnFromBreak / ForceResume / VerifyReturn / DenyReturn) with the same
     // permission rules: a participant can act on themselves; only token issuers
-    // whose linkshell membership has CanModerateLiveEvent can act on someone else
+    // whose linkshell role has CanManageAttendanceWithAddon can act on someone else
     // or verify/deny pending self-returns. Self is identified by matching the
     // participant's AppUserId to the token's IssuedToAppUserId.
 
@@ -288,49 +288,14 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
-        // Three-tier check: moderator → immediate post (today's behavior);
-        // submit-for-approval → queue a PendingAttendanceWindowSubmission;
-        // neither → 403.
-        var attendanceRole = await GetTokenIssuerRoleAsync(token, eventEntity.LinkshellId, cancellationToken);
-        var canModerate = attendanceRole?.CanModerateLiveEvent == true;
-        var canSubmitAttendance = attendanceRole?.CanSubmitAttendanceForApproval == true;
-        if (!canModerate && !canSubmitAttendance)
+        // Posting a window roster needs "Manage attendance with the addon", checked HERE and not
+        // just by the addon hiding its buttons -- the addon caches this permission from /me for up
+        // to 60s, and a cache is not a permission boundary. There is no queue to fall back to: a
+        // member without the permission counts attendance with `/lsm now`, which lands Pending in
+        // Unlinked Snapshots for an officer to confirm.
+        if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
         {
             return Forbid();
-        }
-
-        // Automatic per-window snapshots are moderators-only, enforced HERE and not just by the
-        // addon hiding its Arm button — the addon caches this permission from /me for up to 60s,
-        // and a cache is not a permission boundary. Without this stop, a client whose role is
-        // revoked mid-camp would silently queue a PendingAttendanceWindowSubmission every single
-        // window (7 per king camp, 25 per wyrm) and bury the approval queue.
-        if (!canModerate && request.Auto)
-        {
-            return Forbid();
-        }
-
-        if (!canModerate)
-        {
-            var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
-            var members = (request.Entries ?? new List<AddonAttendanceEntry>())
-                .Where(e => !string.IsNullOrWhiteSpace(e.CharacterName))
-                .Select(e => new AttendanceWindowMemberInput(
-                    e.CharacterName!.Trim(),
-                    string.IsNullOrWhiteSpace(e.MainJob) ? null : e.MainJob.Trim(),
-                    null,
-                    string.IsNullOrWhiteSpace(e.SubJob) ? null : e.SubJob.Trim(),
-                    null))
-                .ToList();
-            if (members.Count == 0)
-            {
-                return BadRequest(new { error = "At least one valid attendance entry is required." });
-            }
-            var submissionId = await approvalSvc.QueueAttendanceWindowAsync(
-                eventEntity.LinkshellId,
-                token.IssuedToAppUserId!,
-                new AttendanceWindowSubmissionInput(eventId, request.WindowSequence ?? 1, members),
-                cancellationToken);
-            return Ok(new { pending = true, submissionId, queued = members.Count });
         }
 
         // Auto-commence the event if it hasn't started yet (so attendance has a meaningful base time).
@@ -904,9 +869,7 @@ public sealed partial class AddonApiController
         {
             return Forbid();
         }
-        // Same bar as posting one immediately: undoing a post is the same authority as making it.
-        // A member who can only submit for approval has nothing to undo here -- their post is a
-        // PendingAttendanceWindowSubmission, which an officer rejects instead.
+        // Same bar as posting one: undoing a post is the same authority as making it.
         if (!await TokenIssuerCanModerateAsync(token, attendanceWindow.Event.LinkshellId, cancellationToken))
         {
             return Forbid();

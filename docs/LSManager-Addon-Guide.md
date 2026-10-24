@@ -92,11 +92,16 @@ Tell the addon which alliance you are in so the web can keep the rosters apart:
 It is also a dropdown in the launcher's attendance panel. Officers can correct it afterwards on
 the web if someone picks wrong.
 
-**Anyone can post.** If you don't have live-event moderation rights your capture arrives
-**Pending**: it shows up on the event straight away, but its members stay out of the roster and
-earn nothing until an officer presses Confirm. Captures that don't match an open camp land in
+**Anyone can post with `/lsm now`.** If your role doesn't have the **Manage attendance with the
+addon** permission, your capture arrives **Pending**: it shows up on the event straight away, but its
+members stay out of the roster and earn nothing until an officer presses Confirm. Captures that don't match an open camp land in
 **Unlinked Snapshots** on Event System → Current (a member's in its *Awaiting confirmation* part), where an
 officer can confirm them, name them, link them to an event, or create an event from them.
+
+**Manage attendance with the addon** is its own permission (Permissions tab), on for Leader and
+Officer by default. A member with it can run camps, post window rosters and set DKP from the addon,
+and their `/lsm now` captures count straight away, without needing any officer permission in the app.
+Without it, `/lsm now` is the only way to send attendance; nothing else is queued for approval.
 
 The zone-wide scan (`/lsm all` and the old `/sea`-based Zone scope) has been removed. It relied on
 the FFXI search window and a render-range entity sweep, neither of which could see a zone reliably
@@ -134,7 +139,7 @@ Once paired, the addon listens to chat for "X was defeated by ..." lines from kn
 1. **Officer creates an event** — on web, Discord, or in-game (the launcher's *Create Event* panel).
 2. **Members sign up** — from any of the three surfaces.
 3. **Event starts** — once it's in commencement, attendance windows open.
-4. **In-game**, anyone with the addon can run `/lsm <alias>` or `/lsm here` during each window. The addon reads your alliance, builds the roster, and posts attendance to the web. One poster per alliance — set yours with `/lsm alliance <n>`.
+4. **In-game**, anyone whose role has **Manage attendance with the addon** can run `/lsm <alias>` or `/lsm here` during each window (everyone else sends `/lsm now`, which waits for an officer). The addon reads your alliance, builds the roster, and posts attendance to the web. One poster per alliance — set yours with `/lsm alliance <n>`.
 5. **Breaks** — members can flag themselves as on-break from the launcher; officers can verify or moderate.
 6. **Loot** — winners and DKP spent are recorded against the event and against the ToD if the kill was tied to one.
 7. **Event ends** — it moves to **Event History** with the full attendance ledger and loot list.

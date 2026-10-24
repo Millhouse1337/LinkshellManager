@@ -32,6 +32,12 @@ for the default Officer role, which doesn't carry these flags:
 
 A leader grants them on the Permissions tab if their officers should keep them.
 
+The game addon has its own gate for acting on the linkshell's behalf: **Manage attendance with the
+addon** (`CanManageAttendanceWithAddon`), checked by `AddonApiController.TokenIssuerCanModerateAsync`.
+It replaced `CanModerateLiveEvent` there (the migration copied each role's value across), so a member
+can keep attendance in game without officer rights in the app. Attendance is no longer queued for
+approval; only a `/lsm now` capture from someone without it waits, as a Pending snapshot.
+
 ## Adding a feature
 
 Build it once, in the Angular app. If it only makes sense in a browser (a file upload or download, a

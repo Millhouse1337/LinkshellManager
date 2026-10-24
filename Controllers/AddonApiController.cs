@@ -164,11 +164,15 @@ public sealed partial class AddonApiController : ControllerBase
         return ctx;
     }
 
+    // "Moderate" here means acting for the linkshell from the addon (camps, window rosters, DKP),
+    // which is LinkshellRole.CanManageAttendanceWithAddon -- not the app's CanModerateLiveEvent.
+    // The two are separate so a linkshell can hand a member the addon's attendance tools without
+    // making them an officer in the app.
     private async Task<bool> TokenIssuerCanModerateAsync(
         AddonApiToken token, int linkshellId, CancellationToken cancellationToken)
     {
         var role = await GetTokenIssuerRoleAsync(token, linkshellId, cancellationToken);
-        return role?.CanModerateLiveEvent == true;
+        return role?.CanManageAttendanceWithAddon == true;
     }
 
     // Returns the LinkshellRole record for the AppUser that issued the token,

@@ -111,12 +111,11 @@ public sealed partial class AddonApiController
         // alliance that fields no officer would otherwise have no way to be counted at all, which
         // is the situation this whole feature exists to fix.
         //
-        // Rank still decides one thing: whether the capture is trusted on arrival. A moderator is
-        // the reviewer, so their own post lands Active (and stamped as verified by them). Everyone
-        // else's lands Pending — visible on the camp, excluded from the combined roster and from
-        // DKP until an officer Confirms it.
-        var role = await GetTokenIssuerRoleAsync(token, token.LinkshellId, cancellationToken);
-        var canModerate = role?.CanModerateLiveEvent == true;
+        // The role still decides one thing: whether the capture is trusted on arrival. A member with
+        // "Manage attendance with the addon" is trusted, so their own post lands Active (and stamped
+        // as verified by them). Everyone else's lands Pending — visible on the camp, excluded from
+        // the combined roster and from DKP until an officer Confirms it.
+        var canModerate = await TokenIssuerCanModerateAsync(token, token.LinkshellId, cancellationToken);
         var landingStatus = canModerate
             ? AttendanceSnapshotStatuses.Active
             : AttendanceSnapshotStatuses.Pending;
@@ -451,8 +450,7 @@ public sealed partial class AddonApiController
     {
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
 
-        var role = await GetTokenIssuerRoleAsync(token, token.LinkshellId, cancellationToken);
-        if (role?.CanModerateLiveEvent != true)
+        if (!await TokenIssuerCanModerateAsync(token, token.LinkshellId, cancellationToken))
         {
             return Forbid();
         }

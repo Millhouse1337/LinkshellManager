@@ -57,7 +57,7 @@ export interface ActivityDkpImportPreview {
   rows: ActivityDkpImportRow[];
 }
 
-// The Pending Submissions review queue (website only): what members submitted for approval.
+// The ToD Submissions Needing Approval queue (ToDs tab): ToDs members submitted for approval.
 export interface ActivityPendingTodLoot {
   itemName: string | null;
   itemWinner: string | null;
@@ -79,43 +79,8 @@ export interface ActivityPendingTod {
   lootRows: ActivityPendingTodLoot[];
 }
 
-// A window attendee or snapshot entry; zone is snapshots only.
-export interface ActivityPendingAttendee {
-  id: number;
-  characterName: string;
-  mainJob: string | null;
-  mainJobLevel: number | null;
-  subJob: string | null;
-  subJobLevel: number | null;
-  zone: string | null;
-}
-
-export interface ActivityPendingWindow {
-  id: number;
-  submittedBy: string;
-  submittedAtUtc: string;
-  eventId: number;
-  eventName: string;
-  windowIndex: number;
-  members: ActivityPendingAttendee[];
-}
-
-export interface ActivityPendingSnapshot {
-  id: number;
-  submittedBy: string;
-  submittedAtUtc: string;
-  capturedAtUtc: string;
-  capturedByCharacterName: string | null;
-  utcOffset: string | null;
-  entries: ActivityPendingAttendee[];
-}
-
 export interface ActivityPendingSubmissions {
-  canReviewTods: boolean;
-  canReviewAttendance: boolean;
   tods: ActivityPendingTod[];
-  windows: ActivityPendingWindow[];
-  snapshots: ActivityPendingSnapshot[];
   monsterOptions: string[];
   cooldownOptions: string[];
   intervalOptions: string[];
@@ -426,6 +391,10 @@ export interface ActivityLinkshellPermissions {
   // Pair and use the LSM game addon. Its own permission, on for every default role -- running the
   // addon is how a member posts the roster they are standing in, not a management action.
   canUseAddon: boolean;
+  // Manage attendance from the addon (camps, window rosters, DKP; `/lsm now` counts at once).
+  // Separate from canModerateLiveEvent so a member can keep attendance in game without officer
+  // rights in the app. On for Leader and Officer by default.
+  canManageAttendanceWithAddon: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
   canBid: boolean;
@@ -454,6 +423,10 @@ export interface ActivityLinkshellRole {
   // Pair and use the LSM game addon. Its own permission, on for every default role -- running the
   // addon is how a member posts the roster they are standing in, not a management action.
   canUseAddon: boolean;
+  // Manage attendance from the addon (camps, window rosters, DKP; `/lsm now` counts at once).
+  // Separate from canModerateLiveEvent so a member can keep attendance in game without officer
+  // rights in the app. On for Leader and Officer by default.
+  canManageAttendanceWithAddon: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
   canBid: boolean;
@@ -484,6 +457,10 @@ export interface ActivityLinkshellRolePermissionsInput {
   // Pair and use the LSM game addon. Its own permission, on for every default role -- running the
   // addon is how a member posts the roster they are standing in, not a management action.
   canUseAddon: boolean;
+  // Manage attendance from the addon (camps, window rosters, DKP; `/lsm now` counts at once).
+  // Separate from canModerateLiveEvent so a member can keep attendance in game without officer
+  // rights in the app. On for Leader and Officer by default.
+  canManageAttendanceWithAddon: boolean;
   canManageParties: boolean;
   canManageInvites: boolean;
   canBid: boolean;

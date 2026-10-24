@@ -57,8 +57,6 @@ public class LinkshellRole
 
     public bool CanSubmitTodForApproval { get; set; }
 
-    public bool CanSubmitAttendanceForApproval { get; set; }
-
     public bool CanManageParties { get; set; }
 
     public bool CanManageInvites { get; set; }
@@ -74,4 +72,13 @@ public class LinkshellRole
     // It used to ride on "Customize linkshell settings", which is the linkshell's settings pages,
     // so handing a member the addon meant handing them the configuration of the whole linkshell.
     public bool CanUseAddon { get; set; }
+
+    // Manage attendance from the game addon: post window rosters, run HNM camps, set and post DKP,
+    // and have `/lsm now` captures count straight away. Every addon action that acts for the
+    // linkshell rather than for yourself is gated on this, and only this -- it is how a linkshell
+    // lets a trusted member keep attendance in game without making them an officer in the app.
+    //
+    // Without it a member can still pair the addon (CanUseAddon) and send `/lsm now` captures; those
+    // land Pending in Unlinked Snapshots until an officer confirms them. Nothing else is queued.
+    public bool CanManageAttendanceWithAddon { get; set; }
 }

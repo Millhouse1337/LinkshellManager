@@ -54,13 +54,9 @@ TRUNCATE TABLE
     "Bids",
     -- DKP ledger
     "DkpLedgerEntries",
-    -- Attendance snapshots + pending submissions
+    -- Attendance snapshots
     "AttendanceSnapshots",
     "AttendanceSnapshotEntries",
-    "PendingAttendanceSnapshotSubmissions",
-    "PendingAttendanceSnapshotEntries",
-    "PendingAttendanceWindowSubmissions",
-    "PendingAttendanceWindowMemberSubmissions",
     -- Finances (gil/treasury) + inventory
     -- RevenueEntries is the pre-conversion shape, kept readable for one release; the four
     -- treasury tables are the live ones. TRUNCATE takes them all in one statement, so the FK

@@ -5,18 +5,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Encapsulates the queue-pending-row + approve-materializes-real-row pattern
-// for the three submission types members can submit for officer review:
-//   1. ToDs (with loot detail rows)
-//   2. Per-window event attendance posts
-//   3. Alliance attendance snapshots
+// Encapsulates the queue-pending-row + approve-materializes-real-row pattern for ToDs (with loot
+// detail rows) that members without the add-ToD permission submit for review.
+//
+// Attendance used to be queued here too. It is not any more: addon attendance is either posted
+// directly by a member with "Manage attendance with the addon", or, for a `/lsm now` capture by
+// anyone else, lands as a Pending snapshot an officer confirms in Unlinked Snapshots.
 //
 // Approval calls into existing logic where possible
 // (ActivityDataController.AdjustTodLootDkpAsync for ToD loot DKP) so DKP math
-// stays in lockstep with the immediate-create paths. For per-window attendance,
-// the v1 approve flow uses an exact-character-name match against the linkshell
-// roster -- the alt-name resolution + self-character backfill in
-// AddonApiController.PostAttendanceAsync isn't reproduced here yet.
+// stays in lockstep with the immediate-create paths.
 public sealed class SubmissionApprovalService
 {
     private readonly ApplicationDbContext _db;
@@ -70,68 +68,6 @@ public sealed class SubmissionApprovalService
         }
 
         _db.PendingTodSubmissions.Add(submission);
-        await _db.SaveChangesAsync(cancellationToken);
-        return submission.Id;
-    }
-
-    public async Task<int> QueueAttendanceWindowAsync(int linkshellId, string submittedByAppUserId, AttendanceWindowSubmissionInput input, CancellationToken cancellationToken)
-    {
-        var submission = new PendingAttendanceWindowSubmission
-        {
-            LinkshellId = linkshellId,
-            SubmittedByAppUserId = submittedByAppUserId,
-            SubmittedAtUtc = DateTime.UtcNow,
-            EventId = input.EventId,
-            WindowIndex = input.WindowIndex,
-        };
-
-        foreach (var member in input.Members ?? Enumerable.Empty<AttendanceWindowMemberInput>())
-        {
-            if (string.IsNullOrWhiteSpace(member.CharacterName)) continue;
-            submission.Members.Add(new PendingAttendanceWindowMemberSubmission
-            {
-                CharacterName = member.CharacterName.Trim(),
-                MainJob = member.MainJob,
-                MainJobLevel = member.MainJobLevel,
-                SubJob = member.SubJob,
-                SubJobLevel = member.SubJobLevel,
-            });
-        }
-
-        _db.PendingAttendanceWindowSubmissions.Add(submission);
-        await _db.SaveChangesAsync(cancellationToken);
-        return submission.Id;
-    }
-
-    public async Task<int> QueueSnapshotAsync(int linkshellId, string submittedByAppUserId, SnapshotSubmissionInput input, CancellationToken cancellationToken)
-    {
-        var submission = new PendingAttendanceSnapshotSubmission
-        {
-            LinkshellId = linkshellId,
-            SubmittedByAppUserId = submittedByAppUserId,
-            SubmittedAtUtc = DateTime.UtcNow,
-            CapturedAtUtc = input.CapturedAtUtc,
-            CapturedByCharacterName = input.CapturedByCharacterName?.Trim(),
-            UtcOffset = input.UtcOffset?.Trim(),
-            EntryCount = (input.Entries?.Count) ?? 0,
-            Name = string.IsNullOrWhiteSpace(input.Name) ? null : input.Name.Trim(),
-        };
-
-        foreach (var entry in input.Entries ?? Enumerable.Empty<SnapshotEntryInput>())
-        {
-            if (string.IsNullOrWhiteSpace(entry.CharacterName)) continue;
-            submission.Entries.Add(new PendingAttendanceSnapshotEntry
-            {
-                CharacterName = entry.CharacterName.Trim(),
-                MainJob = entry.MainJob,
-                MainJobLevel = entry.MainJobLevel,
-                SubJob = entry.SubJob,
-                SubJobLevel = entry.SubJobLevel,
-                Zone = entry.Zone,
-            });
-        }
-
-        _db.PendingAttendanceSnapshotSubmissions.Add(submission);
         await _db.SaveChangesAsync(cancellationToken);
         return submission.Id;
     }
@@ -220,184 +156,10 @@ public sealed class SubmissionApprovalService
         return ApprovalResult.Approved;
     }
 
-    public async Task<ApprovalResult> ApproveAttendanceWindowAsync(int submissionId, CancellationToken cancellationToken)
-    {
-        var pending = await _db.PendingAttendanceWindowSubmissions
-            .Include(s => s.Members)
-            .Include(s => s.Event)
-            .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
-        if (pending is null) return ApprovalResult.NotFound;
-        if (pending.Event is null) return ApprovalResult.NotFound;
-        if (pending.Event.LinkshellId != pending.LinkshellId) return ApprovalResult.NotFound;
-
-        var nowUtc = DateTime.UtcNow;
-
-        // Find or create the EventAttendanceWindow for this sequence number.
-        var attendanceWindow = await _db.EventAttendanceWindows
-            .FirstOrDefaultAsync(w => w.EventId == pending.EventId && w.SequenceNumber == pending.WindowIndex, cancellationToken);
-        if (attendanceWindow is null)
-        {
-            attendanceWindow = new EventAttendanceWindow
-            {
-                EventId = pending.EventId,
-                SequenceNumber = pending.WindowIndex,
-                // The POST count names the window (2 = Open/Close). Not the raw override, which on
-                // an app-made HNM camp holds the SPAWN count and would number a king/dragon's
-                // windows here while the addon's own posts on the same camp read Open / Close.
-                Label = HnmConfig.GetDefaultWindowLabel(pending.Event.EventName, pending.WindowIndex, DiscordEventMessageBuilder.AttendancePostCount(pending.Event)),
-                PostedAt = nowUtc,
-                PostedBySource = "approval"
-            };
-            _db.EventAttendanceWindows.Add(attendanceWindow);
-            await _db.SaveChangesAsync(cancellationToken);
-        }
-
-        // Exact-name match against the LS roster (v1 simplification — alt-name
-        // resolution from PostAttendanceAsync is not replayed here).
-        var memberNames = pending.Members.Select(m => m.CharacterName.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var memberships = await _db.AppUserLinkshells
-            .Where(m => m.LinkshellId == pending.LinkshellId
-                        && m.AppUserId != null
-                        && m.CharacterName != null
-                        && memberNames.Contains(m.CharacterName))
-            .ToListAsync(cancellationToken);
-        var membershipByName = memberships
-            .Where(m => !string.IsNullOrWhiteSpace(m.CharacterName))
-            .GroupBy(m => m.CharacterName!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-
-        var existingParticipations = memberships.Count == 0
-            ? new Dictionary<string, AppUserEvent>(StringComparer.Ordinal)
-            : await _db.AppUserEvents
-                .Where(ue => ue.EventId == pending.EventId && memberships.Select(m => m.AppUserId).Contains(ue.AppUserId))
-                .ToDictionaryAsync(ue => ue.AppUserId!, cancellationToken);
-
-        // Keyed on the DENORMALIZED AppUserId rather than the participation id: a cleared roster
-        // replaces a member's AppUserEvent while their snapshots survive, so participation-keying
-        // would let the same person be credited twice for one window. Mirrors the addon's
-        // PostAttendanceAsync.
-        var existingWindowAppUserIds = (await _db.AppUserEventWindows
-                .Where(w => w.EventAttendanceWindowId == attendanceWindow.Id && w.AppUserId != null)
-                .Select(w => w.AppUserId!)
-                .ToListAsync(cancellationToken))
-                .ToHashSet(StringComparer.Ordinal);
-
-        var matched = 0;
-        foreach (var member in pending.Members)
-        {
-            if (!membershipByName.TryGetValue(member.CharacterName.Trim(), out var membership)) continue;
-            if (string.IsNullOrWhiteSpace(membership.AppUserId)) continue;
-
-            existingParticipations.TryGetValue(membership.AppUserId, out var participation);
-            if (participation is null)
-            {
-                participation = new AppUserEvent
-                {
-                    AppUserId = membership.AppUserId,
-                    EventId = pending.EventId,
-                    CharacterName = membership.CharacterName,
-                    JobName = string.IsNullOrWhiteSpace(member.MainJob) ? null : member.MainJob.Trim(),
-                    SubJobName = string.IsNullOrWhiteSpace(member.SubJob) ? null : member.SubJob.Trim(),
-                    JobType = null,
-                    StartTime = nowUtc,
-                    IsQuickJoin = true,
-                    IsVerified = true
-                };
-                _db.AppUserEvents.Add(participation);
-                existingParticipations[membership.AppUserId] = participation;
-            }
-            else
-            {
-                if (participation.IsVerified != true)
-                {
-                    participation.IsVerified = true;
-                    participation.StartTime ??= nowUtc;
-                }
-            }
-
-            if (!existingWindowAppUserIds.Add(membership.AppUserId)) continue;
-
-            _db.AppUserEventWindows.Add(new AppUserEventWindow
-            {
-                AppUserEvent = participation,
-                EventAttendanceWindow = attendanceWindow,
-                // Denormalized so the snapshot outlives a cleared roster — see AppUserEventWindow.
-                AppUserId = membership.AppUserId,
-                CharacterName = participation.CharacterName ?? membership.CharacterName,
-                VerifiedAt = nowUtc,
-                VerifiedBy = "approval",
-                // Alliance is deliberately left NULL. PendingAttendanceWindowSubmission does not
-                // carry one, and inventing alliance 1 here would put a whole approved roster into a
-                // group nobody reported. The addon renders a null alliance as "unknown", which is
-                // the honest answer.
-            });
-
-            _db.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
-            {
-                AppUserEvent = participation,
-                EventId = pending.EventId,
-                AppUserId = membership.AppUserId,
-                ActionType = "Verify",
-                OccurredAt = nowUtc,
-                RequiresVerification = false,
-                VerifiedAt = nowUtc,
-                VerifiedBy = "approval",
-                Source = "approval",
-                EventAttendanceWindow = attendanceWindow,
-            });
-
-            matched++;
-        }
-
-        _db.PendingAttendanceWindowSubmissions.Remove(pending);
-        await _db.SaveChangesAsync(cancellationToken);
-        return ApprovalResult.Approved;
-    }
-
-    public async Task<ApprovalResult> ApproveSnapshotAsync(int submissionId, CancellationToken cancellationToken)
-    {
-        var pending = await _db.PendingAttendanceSnapshotSubmissions
-            .Include(s => s.Entries)
-            .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
-        if (pending is null) return ApprovalResult.NotFound;
-
-        var snapshot = new AttendanceSnapshot
-        {
-            LinkshellId = pending.LinkshellId,
-            CapturedAtUtc = pending.CapturedAtUtc,
-            CapturedByCharacterName = pending.CapturedByCharacterName ?? string.Empty,
-            UtcOffset = pending.UtcOffset,
-            EntryCount = pending.Entries.Count,
-            CreatedAtUtc = DateTime.UtcNow,
-            Name = pending.Name,
-            LinkedEventId = pending.LinkedEventId,
-        };
-        _db.AttendanceSnapshots.Add(snapshot);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        foreach (var entry in pending.Entries)
-        {
-            _db.AttendanceSnapshotEntries.Add(new AttendanceSnapshotEntry
-            {
-                SnapshotId = snapshot.Id,
-                CharacterName = entry.CharacterName,
-                MainJob = entry.MainJob,
-                MainJobLevel = entry.MainJobLevel,
-                SubJob = entry.SubJob,
-                SubJobLevel = entry.SubJobLevel,
-                Zone = entry.Zone,
-            });
-        }
-
-        _db.PendingAttendanceSnapshotSubmissions.Remove(pending);
-        await _db.SaveChangesAsync(cancellationToken);
-        return ApprovalResult.Approved;
-    }
-
     // ---------- Review: the reviewer's corrections, then approve ----------
-    // A reviewer may correct a pending submission before approving it: edit the ToD and its loot,
-    // or untick attendees. These apply the corrections to the pending rows, then run the normal
-    // approve above. Shared by the Razor review pages and the Activity's Pending Submissions tab.
+    // A reviewer may correct a pending ToD and its loot before approving it. This applies the
+    // corrections to the pending rows, then runs the normal approve above. Shared by the Razor
+    // review pages and the Activity's ToD Submissions Needing Approval section.
     // Scoped to linkshellId: a submission from another linkshell is NotFound and never touched.
     //
     // The corrections are saved before approving, so when approve answers InsufficientDkp the
@@ -437,40 +199,6 @@ public sealed class SubmissionApprovalService
         return await ApproveTodAsync(submissionId, cancellationToken);
     }
 
-    // keepMemberIds: the pending member rows still ticked; every other one is dropped.
-    public async Task<ApprovalResult> ApproveAttendanceWindowKeepingAsync(
-        int linkshellId, int submissionId, IReadOnlyCollection<int> keepMemberIds, CancellationToken cancellationToken)
-    {
-        var submission = await _db.PendingAttendanceWindowSubmissions
-            .Include(s => s.Members)
-            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
-        if (submission is null) return ApprovalResult.NotFound;
-
-        var keep = keepMemberIds.ToHashSet();
-        _db.PendingAttendanceWindowMemberSubmissions.RemoveRange(submission.Members.Where(m => !keep.Contains(m.Id)).ToList());
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return await ApproveAttendanceWindowAsync(submissionId, cancellationToken);
-    }
-
-    // keepEntryIds: the pending snapshot entries still ticked; every other one is dropped.
-    public async Task<ApprovalResult> ApproveSnapshotKeepingAsync(
-        int linkshellId, int submissionId, IReadOnlyCollection<int> keepEntryIds, CancellationToken cancellationToken)
-    {
-        var submission = await _db.PendingAttendanceSnapshotSubmissions
-            .Include(s => s.Entries)
-            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
-        if (submission is null) return ApprovalResult.NotFound;
-
-        var keep = keepEntryIds.ToHashSet();
-        var toRemove = submission.Entries.Where(e => !keep.Contains(e.Id)).ToList();
-        _db.PendingAttendanceSnapshotEntries.RemoveRange(toRemove);
-        submission.EntryCount = submission.Entries.Count - toRemove.Count;
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return await ApproveSnapshotAsync(submissionId, cancellationToken);
-    }
-
     // ---------- Reject: delete pending row, no side effects ----------
     // Scoped to linkshellId like the review methods above, so a reviewer in one linkshell can't
     // delete another linkshell's submission by guessing its id.
@@ -481,26 +209,6 @@ public sealed class SubmissionApprovalService
             .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
         if (pending is null) return ApprovalResult.NotFound;
         _db.PendingTodSubmissions.Remove(pending);
-        await _db.SaveChangesAsync(cancellationToken);
-        return ApprovalResult.Rejected;
-    }
-
-    public async Task<ApprovalResult> RejectAttendanceWindowAsync(int linkshellId, int submissionId, string? notes, CancellationToken cancellationToken)
-    {
-        var pending = await _db.PendingAttendanceWindowSubmissions
-            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
-        if (pending is null) return ApprovalResult.NotFound;
-        _db.PendingAttendanceWindowSubmissions.Remove(pending);
-        await _db.SaveChangesAsync(cancellationToken);
-        return ApprovalResult.Rejected;
-    }
-
-    public async Task<ApprovalResult> RejectSnapshotAsync(int linkshellId, int submissionId, string? notes, CancellationToken cancellationToken)
-    {
-        var pending = await _db.PendingAttendanceSnapshotSubmissions
-            .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
-        if (pending is null) return ApprovalResult.NotFound;
-        _db.PendingAttendanceSnapshotSubmissions.Remove(pending);
         await _db.SaveChangesAsync(cancellationToken);
         return ApprovalResult.Rejected;
     }
@@ -543,11 +251,3 @@ public sealed record PendingTodEdits(
     string? Interval,
     DateTime? RepopTime,
     IReadOnlyList<TodSubmissionLootInput>? LootRows);
-
-public sealed record AttendanceWindowSubmissionInput(int EventId, int WindowIndex, IReadOnlyList<AttendanceWindowMemberInput>? Members);
-
-public sealed record AttendanceWindowMemberInput(string CharacterName, string? MainJob, int? MainJobLevel, string? SubJob, int? SubJobLevel);
-
-public sealed record SnapshotSubmissionInput(DateTime CapturedAtUtc, string? CapturedByCharacterName, string? UtcOffset, IReadOnlyList<SnapshotEntryInput>? Entries, string? Name = null);
-
-public sealed record SnapshotEntryInput(string CharacterName, string? MainJob, int? MainJobLevel, string? SubJob, int? SubJobLevel, string? Zone);

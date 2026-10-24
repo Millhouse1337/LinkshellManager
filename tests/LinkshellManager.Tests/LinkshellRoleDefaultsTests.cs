@@ -58,4 +58,27 @@ public class LinkshellRoleDefaultsTests
         Assert.True(leader.CanManageTreasury);
         Assert.True(leader.CanCustomizeLinkshell);
     }
+
+    // The addon's attendance tools went to whoever held CanModerateLiveEvent before they had their
+    // own permission, so the defaults (and the migration) grant it to exactly those roles. Members
+    // and trials still pair the addon; their `/lsm now` captures wait for an officer.
+    [Theory]
+    [InlineData(LinkshellRanks.Leader, true)]
+    [InlineData(LinkshellRanks.Officer, true)]
+    [InlineData(LinkshellRanks.Member, false)]
+    [InlineData(LinkshellRanks.Trial, false)]
+    public void ManageAttendanceWithAddon_MatchesModerateLiveEvent(string rank, bool expected)
+    {
+        var role = Role(rank);
+
+        Assert.Equal(expected, role.CanManageAttendanceWithAddon);
+        Assert.Equal(role.CanModerateLiveEvent, role.CanManageAttendanceWithAddon);
+        Assert.True(role.CanUseAddon);
+    }
+
+    [Fact]
+    public void FullAccessRole_CanManageAttendanceWithAddon()
+    {
+        Assert.True(LinkshellRoleDefaults.BuildFullAccessRole(linkshellId: 1).CanManageAttendanceWithAddon);
+    }
 }

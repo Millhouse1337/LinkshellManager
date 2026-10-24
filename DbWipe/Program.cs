@@ -144,8 +144,6 @@ var tables = new[]
     "WindowEvents",
     "AttendanceSnapshots", "AttendanceSnapshotEntries",
     "PendingTodSubmissions", "PendingTodLootSubmissions",
-    "PendingAttendanceWindowSubmissions", "PendingAttendanceWindowMemberSubmissions",
-    "PendingAttendanceSnapshotSubmissions", "PendingAttendanceSnapshotEntries",
 };
 
 var quoted = string.Join(", ", tables.Select(t => $"\"{t}\""));
@@ -261,10 +259,6 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         // --- Pending submissions ---
         ("PendingTodLootSubmissions", "DELETE FROM \"PendingTodLootSubmissions\" WHERE \"PendingTodSubmissionId\" IN (SELECT \"Id\" FROM \"PendingTodSubmissions\" WHERE \"LinkshellId\" = @ls)"),
         ("PendingTodSubmissions", "DELETE FROM \"PendingTodSubmissions\" WHERE \"LinkshellId\" = @ls"),
-        ("PendingAttendanceWindowMemberSubmissions", "DELETE FROM \"PendingAttendanceWindowMemberSubmissions\" WHERE \"PendingAttendanceWindowSubmissionId\" IN (SELECT \"Id\" FROM \"PendingAttendanceWindowSubmissions\" WHERE \"LinkshellId\" = @ls)"),
-        ("PendingAttendanceWindowSubmissions", "DELETE FROM \"PendingAttendanceWindowSubmissions\" WHERE \"LinkshellId\" = @ls"),
-        ("PendingAttendanceSnapshotEntries", "DELETE FROM \"PendingAttendanceSnapshotEntries\" WHERE \"PendingAttendanceSnapshotSubmissionId\" IN (SELECT \"Id\" FROM \"PendingAttendanceSnapshotSubmissions\" WHERE \"LinkshellId\" = @ls)"),
-        ("PendingAttendanceSnapshotSubmissions", "DELETE FROM \"PendingAttendanceSnapshotSubmissions\" WHERE \"LinkshellId\" = @ls"),
 
         // --- DKP ledger + economy ---
         ("DkpLedgerEntries", "DELETE FROM \"DkpLedgerEntries\" WHERE \"LinkshellId\" = @ls"),

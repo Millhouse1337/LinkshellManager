@@ -5,15 +5,13 @@ public sealed class LinkshellPendingSubmissionsViewModel
     public int LinkshellId { get; set; }
     public string? LinkshellName { get; set; }
     public List<PendingSubmissionRow> Rows { get; set; } = new();
-    public bool CanReviewTods { get; set; }
-    public bool CanReviewAttendance { get; set; }
 }
 
 public sealed class PendingSubmissionRow
 {
     public int Id { get; set; }
 
-    // "Tod" | "AttendanceWindow" | "AttendanceSnapshot"
+    // "Tod" (the only kind left; attendance is no longer submitted for approval)
     public string Type { get; set; } = string.Empty;
 
     public string? SubmittedByDisplay { get; set; }
@@ -53,57 +51,4 @@ public sealed class EditPendingTodLootRow
     public string? ItemName { get; set; }
     public string? ItemWinner { get; set; }
     public int? WinningDkpSpent { get; set; }
-}
-
-public sealed class EditPendingAttendanceWindowViewModel
-{
-    public int LinkshellId { get; set; }
-    public string? LinkshellName { get; set; }
-    public int SubmissionId { get; set; }
-    public string? SubmittedByDisplay { get; set; }
-    public DateTime SubmittedAtUtc { get; set; }
-
-    public int EventId { get; set; }
-    public string? EventName { get; set; }
-    public int WindowIndex { get; set; }
-
-    public List<EditPendingAttendanceMember> Members { get; set; } = new();
-}
-
-public sealed class EditPendingAttendanceMember
-{
-    public int Id { get; set; }
-    public string CharacterName { get; set; } = string.Empty;
-    public string? MainJob { get; set; }
-    public int? MainJobLevel { get; set; }
-    public string? SubJob { get; set; }
-    public int? SubJobLevel { get; set; }
-    public bool Include { get; set; } = true;
-}
-
-public sealed class EditPendingAttendanceSnapshotViewModel
-{
-    public int LinkshellId { get; set; }
-    public string? LinkshellName { get; set; }
-    public int SubmissionId { get; set; }
-    public string? SubmittedByDisplay { get; set; }
-    public DateTime SubmittedAtUtc { get; set; }
-
-    public DateTime CapturedAtUtc { get; set; }
-    public string? CapturedByCharacterName { get; set; }
-    public string? UtcOffset { get; set; }
-
-    public List<EditPendingSnapshotEntry> Entries { get; set; } = new();
-}
-
-public sealed class EditPendingSnapshotEntry
-{
-    public int Id { get; set; }
-    public string CharacterName { get; set; } = string.Empty;
-    public string? MainJob { get; set; }
-    public int? MainJobLevel { get; set; }
-    public string? SubJob { get; set; }
-    public int? SubJobLevel { get; set; }
-    public string? Zone { get; set; }
-    public bool Include { get; set; } = true;
 }

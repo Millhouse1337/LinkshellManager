@@ -5,9 +5,9 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type { ActivityPendingSubmissions, ActivityPendingTodEdits } from './discord-activity.types';
 
-// The website-only review queue: ToDs, attendance windows and snapshots that members submitted
-// for approval (ActivityDataController.PendingSubmissions). Every approve / reject reloads the
-// queue, and the overview too, since an approved ToD or snapshot shows up across the app.
+// The ToD review queue: ToDs that members without the add-ToD permission submitted for approval
+// (ActivityDataController.PendingSubmissions), shown on the ToDs tab. Every approve / reject reloads
+// the queue, and the overview too, since an approved ToD shows up across the app.
 @Injectable({ providedIn: 'root' })
 export class PendingSubmissionsService {
   private readonly http = inject(ActivityHttpClient);
@@ -43,22 +43,6 @@ export class PendingSubmissionsService {
 
   rejectTod(linkshellId: number, id: number): Promise<void> {
     return this.act(linkshellId, `tod-${id}`, `tod/${id}/reject`, {}, 'Rejecting the ToD failed.');
-  }
-
-  approveWindow(linkshellId: number, id: number, keepIds: number[]): Promise<void> {
-    return this.act(linkshellId, `window-${id}`, `attendance-window/${id}/approve`, { keepIds }, 'Approving the window failed.');
-  }
-
-  rejectWindow(linkshellId: number, id: number): Promise<void> {
-    return this.act(linkshellId, `window-${id}`, `attendance-window/${id}/reject`, {}, 'Rejecting the window failed.');
-  }
-
-  approveSnapshot(linkshellId: number, id: number, keepIds: number[]): Promise<void> {
-    return this.act(linkshellId, `snapshot-${id}`, `attendance-snapshot/${id}/approve`, { keepIds }, 'Approving the snapshot failed.');
-  }
-
-  rejectSnapshot(linkshellId: number, id: number): Promise<void> {
-    return this.act(linkshellId, `snapshot-${id}`, `attendance-snapshot/${id}/reject`, {}, 'Rejecting the snapshot failed.');
   }
 
   private async act(linkshellId: number, key: string, path: string, body: object, failure: string): Promise<void> {

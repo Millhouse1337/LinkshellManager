@@ -32,11 +32,11 @@ public static class LinkshellRoleDefaults
         CanLockAuctions = true,
         CanCustomizeLinkshell = true,
         CanSubmitTodForApproval = true,
-        CanSubmitAttendanceForApproval = true,
         CanManageParties = true,
         CanManageInvites = true,
         CanBid = true,
-        CanUseAddon = true
+        CanUseAddon = true,
+        CanManageAttendanceWithAddon = true
     };
 
     // Label for the synthetic full-access role above. Not a rank anyone can be
@@ -67,11 +67,11 @@ public static class LinkshellRoleDefaults
             CanLockAuctions = true,
             CanCustomizeLinkshell = true,
             CanSubmitTodForApproval = true,
-            CanSubmitAttendanceForApproval = true,
             CanManageParties = true,
             CanManageInvites = true,
             CanBid = true,
-            CanUseAddon = true
+            CanUseAddon = true,
+            CanManageAttendanceWithAddon = true
         };
 
         yield return new LinkshellRole
@@ -98,11 +98,11 @@ public static class LinkshellRoleDefaults
             CanLockAuctions = true,
             CanCustomizeLinkshell = false,
             CanSubmitTodForApproval = true,
-            CanSubmitAttendanceForApproval = true,
             CanManageParties = true,
             CanManageInvites = true,
             CanBid = true,
-            CanUseAddon = true
+            CanUseAddon = true,
+            CanManageAttendanceWithAddon = true
         };
 
         yield return new LinkshellRole
