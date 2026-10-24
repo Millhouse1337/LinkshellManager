@@ -28,10 +28,12 @@ export class DkpImportService {
     this.auth.clearActionState();
     this.pending.set(null);
     try {
-      const form = new FormData();
-      form.append('file', file);
-      const preview = await this.http.sendActivityRequest<ActivityDkpImportPreview>(
-        'POST', `/api/activity/linkshells/${linkshellId}/dkp-import/preview`, form);
+      // Base64 in JSON rather than a multipart upload: the Discord iframe can't send multipart
+      // (the dashboard banner upload does the same), and it's one path for both hosts.
+      const dataBase64 = await readAsDataUrl(file);
+      const preview = await this.http.postActivityJson<ActivityDkpImportPreview>(
+        `/api/activity/linkshells/${linkshellId}/dkp-import/preview`,
+        { fileName: file.name, dataBase64 });
       this.pending.set({ linkshellId, preview });
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Reading the DKP file failed.'));
@@ -67,4 +69,14 @@ export class DkpImportService {
   cancel(): void {
     this.pending.set(null);
   }
+}
+
+// The file as a "data:...;base64,..." URL, which the preview endpoint accepts as-is.
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the file.'));
+    reader.readAsDataURL(file);
+  });
 }

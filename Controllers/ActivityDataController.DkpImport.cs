@@ -26,12 +26,15 @@ public sealed partial class ActivityDataController
         return File(SampleDkpTemplateWorkbook.Build(), SampleDkpTemplateWorkbook.ContentType, SampleDkpTemplateWorkbook.FileName);
     }
 
+    // The file arrives as base64 in JSON, not a multipart upload: the Discord iframe can't send
+    // multipart (the banner upload does the same), and one path serves both hosts.
+    private const int MaxImportFileBytes = 8_000_000;
+
     [HttpPost("linkshells/{linkshellId:int}/dkp-import/preview")]
-    [RequestSizeLimit(8_000_000)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 8_000_000)]
+    [RequestSizeLimit(11_000_000)] // 8 MB of file is ~10.7 MB once base64-encoded
     public async Task<IActionResult> PreviewDkpImportAsync(
         int linkshellId,
-        IFormFile? file,
+        [FromBody] ActivityDkpImportUploadRequest request,
         [FromServices] DkpImportService import,
         CancellationToken cancellationToken)
     {
@@ -41,16 +44,40 @@ public sealed partial class ActivityDataController
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
         if (!await CanAsync(membership, role => role.CanCustomizeLinkshell, cancellationToken)) return Forbid();
 
-        if (file is null || file.Length == 0)
+        if (request is null || string.IsNullOrWhiteSpace(request.DataBase64))
         {
             return BadRequest(new { error = "Choose an .xlsx or .csv file to import." });
+        }
+
+        // Accept either a raw base64 string or a full "data:...;base64,xxxx" URL.
+        var payload = request.DataBase64;
+        var comma = payload.IndexOf(',');
+        if (payload.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && comma >= 0)
+        {
+            payload = payload[(comma + 1)..];
+        }
+
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(payload); }
+        catch (FormatException) { return BadRequest(new { error = "The file didn't arrive intact — please choose it again." }); }
+
+        if (bytes.Length == 0 || bytes.Length > MaxImportFileBytes)
+        {
+            return BadRequest(new { error = "The file must be between 1 byte and 8 MB." });
+        }
+
+        // Only the name's extension matters (it picks .xlsx or .csv parsing); never a path.
+        var fileName = Path.GetFileName(request.FileName ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            fileName = "import.xlsx";
         }
 
         List<DkpImportRow> parsed;
         try
         {
-            await using var stream = file.OpenReadStream();
-            parsed = import.ParseImport(XlsxImportReader.Read(stream, file.FileName));
+            using var stream = new MemoryStream(bytes);
+            parsed = import.ParseImport(XlsxImportReader.Read(stream, fileName));
         }
         catch (Exception ex)
         {
@@ -62,7 +89,7 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "No member rows found. Make sure the sheet has a Member Name column and Current DKP values." });
         }
 
-        var preview = await import.BuildPreviewAsync(linkshellId, parsed, file.FileName, cancellationToken);
+        var preview = await import.BuildPreviewAsync(linkshellId, parsed, fileName, cancellationToken);
         return Ok(new ActivityDkpImportPreviewResponse(
             preview.SourceLabel,
             preview.UpdateCount,
@@ -134,5 +161,9 @@ public sealed record ActivityDkpImportPreviewResponse(
     IReadOnlyList<DkpImportRow> Rows);
 
 public sealed record ActivityDkpImportCommitRequest(List<DkpImportRow>? Rows, string? SourceLabel);
+
+// The spreadsheet to preview: its name (for the extension) and its bytes as base64, raw or as a
+// "data:...;base64," URL.
+public sealed record ActivityDkpImportUploadRequest(string? FileName, string? DataBase64);
 
 public sealed record ActivityDkpImportCommitResponse(string Message, int Updated, int Created, int Ambiguous);
