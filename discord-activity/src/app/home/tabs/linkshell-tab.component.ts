@@ -22,10 +22,8 @@ import {
 } from '../activity-home.helpers';
 import { StarRatingComponent } from '../sidebar-panels/star-rating.component';
 
-// HorizonXI is classic-75. A job at 75 is "max level" (shown by default in the
-// profile modal); a job at 37+ is sub-capable (listed in the hover popover). Kept
-// in sync with ProfileJobLevels.MaxLevel / ProfileJobLevels.SubJobMinLevel (C#).
-const MAX_JOB_LEVEL = 75;
+// HorizonXI is classic-75: a job at 37+ is sub-capable (listed in the hover popover).
+// Kept in sync with ProfileJobLevels.SubJobMinLevel (C#).
 const SUB_JOB_MIN_LEVEL = 37;
 
 @Component({
@@ -235,10 +233,6 @@ export class LinkshellTabComponent {
   // per-character blocks.
   protected readonly viewingProfileOverall = signal<ActivityJobRatingOverall | null>(null);
 
-  // Jobs grid defaults to max-level (75) jobs only; this toggles to ALL leveled
-  // jobs. One toggle for the whole modal (every character expands together).
-  protected readonly profileShowAllJobs = signal(false);
-
   // The hover/tap popover listing a character's leveled subjobs (37+) for one
   // max-level pill. Positioned with `position:fixed` from the pill's screen rect so
   // it escapes the modal body's `overflow:auto` clipping. Null = hidden.
@@ -254,7 +248,6 @@ export class LinkshellTabComponent {
     this.viewingProfileMember.set(null);
     this.viewingProfileRatingBlocks.set([]);
     this.viewingProfileOverall.set(null);
-    this.profileShowAllJobs.set(false);
     this.subPopover.set(null);
     try {
       await this.ensureJobsRoster();
@@ -294,15 +287,12 @@ export class LinkshellTabComponent {
     this.viewingProfileMember.set(null);
     this.viewingProfileRatingBlocks.set([]);
     this.viewingProfileOverall.set(null);
-    this.profileShowAllJobs.set(false);
     this.subPopover.set(null);
   }
 
-  // The jobs to render for a character: max-level (75) only by default, or every
-  // leveled job when "Show all jobs" is on. Reuses leveledJobs() (sorted desc).
+  // The jobs to render for a character: every leveled job, highest first (leveledJobs()).
   protected jobsToShow(ch: RosterCharacterJobs) {
-    const all = this.leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName);
-    return this.profileShowAllJobs() ? all : all.filter(job => job.level >= MAX_JOB_LEVEL);
+    return this.leveledJobs(ch.levels, ch.strong, ch.relic, ch.merit, ch.relicName);
   }
 
   // A character's leveled SUBJOBS (37+), excluding the hovered job, for the popover.
@@ -310,10 +300,6 @@ export class LinkshellTabComponent {
     return this.leveledJobs(levels)
       .filter(job => job.level >= SUB_JOB_MIN_LEVEL && job.name !== excludeName)
       .map(job => ({ name: job.name, level: job.level }));
-  }
-
-  protected toggleProfileShowAll(): void {
-    this.profileShowAllJobs.set(!this.profileShowAllJobs());
   }
 
   // Open the subjob popover for a max-level pill: anchor it below the pill, clamped

@@ -283,10 +283,7 @@
               <div class="lsp-body" (click)="closeSubPopover()">
                 <div class="lsp-grid">
                   <div>
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-                      <div style="font-weight:500;color:var(--fg);font-size:13px">Jobs</div>
-                      <button type="button" class="btn ghost sm" (click)="toggleProfileShowAll(); $event.stopPropagation()">{{ profileShowAllJobs() ? 'Show 75s only' : 'Show all jobs' }}</button>
-                    </div>
+                    <div style="font-weight:500;color:var(--fg);font-size:13px;margin-bottom:8px">Jobs</div>
                 @for (ch of rosterCharacters(m); track ch.label) {
                   <div style="margin-top:8px">
                     @if (ch.isAlt) {
@@ -294,11 +291,7 @@
                     }
                     @if (jobsToShow(ch); as jobs) {
                       @if (jobs.length === 0) {
-                        @if (profileShowAllJobs()) {
-                          <div style="font-size:12px;color:var(--fg-3);font-style:italic">No jobs entered</div>
-                        } @else {
-                          <div style="font-size:12px;color:var(--fg-3)">No level 75 jobs · <button type="button" class="btn ghost sm" (click)="toggleProfileShowAll(); $event.stopPropagation()">Show all</button></div>
-                        }
+                        <div style="font-size:12px;color:var(--fg-3);font-style:italic">No jobs entered</div>
                       } @else {
                         <div style="display:flex;flex-wrap:wrap;gap:10px 6px">
                           @for (job of jobs; track job.name) {
