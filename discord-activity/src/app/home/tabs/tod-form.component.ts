@@ -269,19 +269,9 @@ export class TodFormComponent {
     return this.boardEndCamp ? 'Current window' : 'Window unknown';
   }
 
-  // One tile per spawn window. W1 opens at the repop and each later window one interval after
-  // the last (HnmConfig: "window 1 at the pop"), so the times only show once a ToD is entered.
-  protected popWindowTiles(): { number: number; time: string | null }[] {
-    const first = parseLocalDateTime(this.todRepopLocalValue);
-    const interval = this.intervalMinutes();
-    const pad = (value: number) => value.toString().padStart(2, '0');
-    return Array.from({ length: this.popWindowCount() }, (_, index) => {
-      if (!first || (index > 0 && interval === null)) {
-        return { number: index + 1, time: null };
-      }
-      const opens = new Date(first.getTime() + index * (interval ?? 0) * 60_000);
-      return { number: index + 1, time: `${pad(opens.getHours())}:${pad(opens.getMinutes())}` };
-    });
+  // One tile per spawn window: 1..n.
+  protected popWindowNumbers(): number[] {
+    return Array.from({ length: this.popWindowCount() }, (_, index) => index + 1);
   }
 
   // The monster's configured window count (5, 7 or 25), and never fewer than the window already

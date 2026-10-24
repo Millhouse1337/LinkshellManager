@@ -96,12 +96,12 @@
           <div class="tod-windows" role="group" aria-label="Popped on window">
             <button type="button" class="tod-window" [attr.aria-pressed]="todPopWindow === null"
               (click)="onTodPopWindowChange(null)">
-              <b>{{ boardEndCamp ? 'Current' : 'Unknown' }}</b><small>—</small>
+              {{ boardEndCamp ? 'Current' : 'Unknown' }}
             </button>
-            @for (window of popWindowTiles(); track window.number) {
-              <button type="button" class="tod-window" [attr.aria-pressed]="todPopWindow === window.number"
-                (click)="onTodPopWindowChange(window.number)">
-                <b>W{{ window.number }}</b><small>{{ window.time ?? '--:--' }}</small>
+            @for (window of popWindowNumbers(); track window) {
+              <button type="button" class="tod-window" [attr.aria-pressed]="todPopWindow === window"
+                (click)="onTodPopWindowChange(window)">
+                W{{ window }}
               </button>
             }
           </div>
