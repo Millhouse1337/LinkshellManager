@@ -3,7 +3,7 @@
    frame to .tod-modal so the header and footer stay pinned while only the body scrolls. */
 
 .tod-dialog {
-  width: min(640px, calc(100vw - 32px));
+  width: min(800px, calc(100vw - 32px));
   max-width: none;
   max-height: 88vh;
   padding: 0;
@@ -145,6 +145,27 @@
 
 .tod-modal .tod-input[readonly] {
   color: var(--fg-1);
+}
+
+/* The monster picker reads as a dropdown: room on the right for a chevron, which flips while
+   the list is open. Clicks pass through it to the input, which opens the list. */
+.tod-modal .tod-monster-picker .tod-input {
+  padding-right: 36px;
+}
+.tod-modal .tod-monster-picker::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 15px;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--fg-2);
+  border-bottom: 1.5px solid var(--fg-2);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+.tod-modal .tod-monster-picker.is-open::after {
+  transform: translateY(-30%) rotate(-135deg);
 }
 
 /* ===== Day stepper ===== */

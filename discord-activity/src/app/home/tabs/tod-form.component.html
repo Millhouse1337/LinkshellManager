@@ -17,8 +17,10 @@
           @if (boardMode) {
             <input class="tod-input" [value]="boardMonsterDisplay" readonly />
           } @else {
-            <div class="tod-monster-picker">
-              <input class="tod-input" type="search" [ngModel]="todMonsterSearch" name="todMonsterSearch"
+            <!-- type="text", not "search": a search box draws the browser's clear (×) button where
+                 this picker's dropdown chevron belongs. -->
+            <div class="tod-monster-picker" [class.is-open]="todMonsterPickerOpen">
+              <input class="tod-input" type="text" [ngModel]="todMonsterSearch" name="todMonsterSearch"
                 (focus)="openTodMonsterPicker()" (blur)="closeTodMonsterPicker()"
                 (ngModelChange)="onTodMonsterSearchChange($event)" (keydown)="onTodMonsterPickerKeydown($event)"
                 placeholder="Search monsters" role="combobox" [attr.aria-expanded]="todMonsterPickerOpen"
