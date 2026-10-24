@@ -36,7 +36,7 @@ interface MemberDkpDraft {
 
 // Attendance snapshots used to be their own tab. They now render as two slices of the Event System
 // tab — open events sit in "Current Field Activity" beside the live camps that produced them, and
-// the review leftovers (unlinked snapshots, closed events) sit below the Pending Events queue.
+// the review leftovers (unlinked snapshots, closed events) sit below the Upcoming Events queue.
 // One component serves both because the per-member DKP draft below is read by BOTH the card's
 // combined-roster column and the per-snapshot DKP input; splitting card from snapshot would force
 // that state into a service for no gain. An event is either open or closed, so the two mounted

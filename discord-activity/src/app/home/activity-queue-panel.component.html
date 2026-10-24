@@ -1,8 +1,9 @@
 <article class="panel panel--wide" aria-labelledby="queue-heading">
   <div class="panel__header">
     <div>
-      <p class="eyebrow eyebrow--small">{{ isMemberMode() ? 'Signups' : 'Queue' }}</p>
-      <h2 id="queue-heading">{{ isMemberMode() ? 'Upcoming runs' : 'Pending Events' }}</h2>
+      <!-- section-label (blue), matching the Live Operations and Triage labels above it on this tab. -->
+      <div class="section-label">{{ isMemberMode() ? 'Signups' : 'Queue' }}</div>
+      <h2 id="queue-heading">{{ isMemberMode() ? 'Upcoming runs' : 'Upcoming Events' }}</h2>
     </div>
     <!-- Create Event moved up to the Event System header, under its view switch. -->
   </div>

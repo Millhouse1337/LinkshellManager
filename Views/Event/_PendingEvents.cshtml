@@ -2,12 +2,12 @@
 @{
     // Section 2: the queue. Events that haven't commenced, including a defeated HNM board waiting
     // to re-post (it un-commences on defeat, so it lands here for Edit ToD). Mirrors the
-    // Activity's queue panel heading — "Queue" / "Pending Events".
+    // Activity's queue panel heading — "Queue" / "Upcoming Events".
 }
 
 <div class="page-head fade d3" id="pending-events" style="margin-top:22px;margin-bottom:12px">
     <div>
-        <h2 class="page-title" style="font-size:16px">Pending Events</h2>
+        <h2 class="page-title" style="font-size:16px">Upcoming Events</h2>
         <div class="page-sub">
             <span><span class="num">@Model.PendingCount</span> queued</span>
         </div>
