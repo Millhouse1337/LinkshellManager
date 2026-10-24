@@ -38,51 +38,6 @@
   white-space: nowrap;
 }
 
-.tod-repop-card {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--accent-weak);
-}
-
-/* Both ToD forms: summary on the left, the read-only repop time filling the space on the right. */
-.tod-repop-card--with-time {
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
-  align-items: center;
-  gap: 16px;
-}
-
-.tod-repop-card__info {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.tod-repop-card__repop {
-  min-width: 0;
-}
-
-@media (max-width: 720px) {
-  .tod-repop-card--with-time { grid-template-columns: 1fr; }
-}
-
-.tod-repop-card__label {
-  color: var(--accent);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.tod-repop-card strong {
-  color: var(--fg);
-  font-size: 14px;
-  font-weight: 600;
-  font-family: var(--font-mono);
-}
-
 .tod-list {
   display: grid;
   gap: 10px;
@@ -176,80 +131,6 @@
   background: var(--surface-2);
   text-align: center;
   color: var(--fg-3);
-}
-
-/* ===== Bottom row of the Log ToD form (screenshot left, add-loot right) ===== */
-.tod-form-bottom {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: end;
-  gap: 16px;
-}
-@media (max-width: 720px) {
-  .tod-form-bottom { grid-template-columns: 1fr; }
-}
-
-.tod-form-bottom__main {
-  min-width: 0;
-}
-
-.tod-form-bottom__aside {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-bottom: 4px;
-}
-
-/* Custom file-picker that matches the rest of the form controls. The native
-   <input type="file"> is visually hidden but kept for accessibility / a11y. */
-.tod-file-upload {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px 6px 6px;
-  border: 1px solid var(--border-2);
-  border-radius: 6px;
-  background: var(--surface);
-  cursor: pointer;
-  transition: border-color 0.12s ease, background-color 0.12s ease;
-}
-
-.tod-file-upload:hover:not(.is-disabled) {
-  border-color: var(--border-hot);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.tod-file-upload.is-disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.tod-file-upload input[type="file"] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.tod-file-upload__btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 4px;
-  background: var(--surface-2);
-  color: var(--fg);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.tod-file-upload__hint {
-  color: var(--fg-3);
-  font-size: 12px;
 }
 
 /* ===== Tracker history list (expanded under each Tracked Window) ===== */

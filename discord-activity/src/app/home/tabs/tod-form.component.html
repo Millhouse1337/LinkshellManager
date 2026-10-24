@@ -1,45 +1,24 @@
-<dialog #logTodDialog class="event-edit-modal-dialog" (click)="onLogTodDialogClick($event)">
-  <div class="card-head">
-    <div class="card-title">{{ boardEndCamp ? '🏁 End Camp / Post ToD' : (editingTodId !== null ? 'Edit ToD' : 'Log ToD') }}</div>
-    <div class="card-head-right">
+<dialog #logTodDialog class="tod-dialog" (click)="onLogTodDialogClick($event)" (close)="stopClock()">
+  <form class="tod-modal" (ngSubmit)="submitTod()">
+    <header class="tod-modal__head">
+      <h2 class="tod-modal__title">{{ boardEndCamp ? '🏁 End Camp / Post ToD' : (editingTodId !== null ? 'Edit time of death' : 'Log time of death') }}</h2>
       @if (linkshellName(); as name) {
-        <span class="tag accent">{{ name }}</span>
+        <span class="tod-modal__ls">{{ name }}</span>
       }
-      <button type="button" class="btn ghost sm" (click)="cancelLogTodForm()">Close</button>
-    </div>
-  </div>
-  <div class="card-body">
-    <form class="form-grid tod-form" (ngSubmit)="submitTod()">
-      @if (boardMode) {
-        <div class="tod-form__row tod-form__row--monster"
-          [class.tod-form__row--monster-day]="boardDayNumber != null"
-          [class.tod-form__row--monster-hq]="hqOptionVisible()">
-          <label class="field">
-            <span class="form-label">Monster</span>
-            <input class="form-input" [value]="boardMonsterDisplay" readonly />
-          </label>
-          @if (boardDayNumber != null) {
-            <label class="field">
-              <span class="form-label">Day</span>
-              <input class="form-input" [value]="boardDayNumber" readonly title="Set on the event; days 1–3 show just the base monster, day 4+ shows the merge pair" />
-            </label>
-          }
-          @if (hqOptionVisible()) {
-            <label class="field">
-              <span class="form-label">HQ</span>
-              <label class="tod-toggle">
-                <input type="checkbox" [(ngModel)]="todDraft.hq" name="todHq" />
-                <span>Yes</span>
-              </label>
-            </label>
-          }
-        </div>
-      } @else {
-        <div class="tod-form__row tod-form__row--tod-lead" [class.tod-form__row--split]="isTodMonsterOther()">
-          <label class="field">
-            <span class="form-label">Monster</span>
+      <button type="button" class="tod-modal__close" aria-label="Close" (click)="cancelLogTodForm()">×</button>
+    </header>
+
+    <div class="tod-modal__body">
+      <!-- Monster, then Day and NQ/HQ. Those two belong to the three NQ/HQ families and nothing
+           else: Day counts a pop cycle and HQ names the stronger half, and only they have either. -->
+      <div class="tod-modal__row">
+        <label class="tod-field tod-field--grow">
+          <span class="tod-label">Monster</span>
+          @if (boardMode) {
+            <input class="tod-input" [value]="boardMonsterDisplay" readonly />
+          } @else {
             <div class="tod-monster-picker">
-              <input class="form-input" type="search" [ngModel]="todMonsterSearch" name="todMonsterSearch"
+              <input class="tod-input" type="search" [ngModel]="todMonsterSearch" name="todMonsterSearch"
                 (focus)="openTodMonsterPicker()" (blur)="closeTodMonsterPicker()"
                 (ngModelChange)="onTodMonsterSearchChange($event)" (keydown)="onTodMonsterPickerKeydown($event)"
                 placeholder="Search monsters" role="combobox" [attr.aria-expanded]="todMonsterPickerOpen"
@@ -54,197 +33,159 @@
                 </div>
               }
             </div>
-          </label>
-          @if (isTodMonsterOther()) {
-            <label class="field">
-              <span class="form-label">Monster name</span>
-              <input class="form-input" [(ngModel)]="todCustomMonsterName" name="todCustomMonsterName"
-                placeholder="Enter monster name" maxlength="128" required />
-            </label>
           }
-          <!-- Day belongs to the three NQ/HQ families and nothing else: it counts a pop
-               cycle, and only those monsters have one. -->
-          @if (dayNumberVisible()) {
-            <label class="field">
-              <span class="form-label">Day</span>
-              <input class="form-input" type="number" min="1" [ngModel]="todDraft.dayNumber"
-                (ngModelChange)="onTodDayNumberChange($event)" name="todDayNumber"
-                placeholder="—" title="The monster's day in its cycle. Blank = not specified." />
-            </label>
-          }
-          @if (hqOptionVisible()) {
-            <label class="field">
-              <span class="form-label">HQ</span>
-              <label class="tod-toggle">
-                <input type="checkbox" [(ngModel)]="todDraft.hq" name="todHq" />
-                <span>Yes</span>
-              </label>
-            </label>
-          }
-        </div>
-      }
-      @if (boardEndCamp) {
-        <!-- === End Camp / Post ToD layout: officer-facing field order === -->
-        <!-- Popped on window, Claim, Killed (HQ lives on the monster row above) -->
-        <div class="tod-form__row tod-form__row--trio">
-          <label class="field">
-            <span class="form-label">Popped on window</span>
-            <input class="form-input" type="number" min="1" [ngModel]="todPopWindow"
-              (ngModelChange)="onTodPopWindowChange($event)" name="todPopWindow"
-              placeholder="current window" title="Caps credit — nobody is paid past this window. Blank = the current window." />
+        </label>
+        @if (!boardMode && isTodMonsterOther()) {
+          <label class="tod-field tod-field--grow">
+            <span class="tod-label">Monster name</span>
+            <input class="tod-input" [(ngModel)]="todCustomMonsterName" name="todCustomMonsterName"
+              placeholder="Enter monster name" maxlength="128" required />
           </label>
-          <label class="field">
-            <span class="form-label">Claim</span>
-            <select class="form-select" [ngModel]="todClaimChoice"
-              (ngModelChange)="onTodClaimChoiceChange($event)" name="todClaim">
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-              <option value="NotSpecified">Not specified</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="form-label">Killed</span>
-            <select class="form-select" [(ngModel)]="boardKilledChoice" name="boardKilled">
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-            </select>
-          </label>
-        </div>
-        <!-- Time of death. The cooldown, interval and seconds offset it is measured with come from
-             the linkshell's Monster setups (Configurations tab), not from this form. -->
-        <div class="tod-form__row tod-form__row--pair">
-          <!-- Optional on End Camp: leaving it blank records "Not entered" (no time, no repop)
-               for a camp where nobody saw the mob die, instead of stamping the closing moment. -->
-          <label class="field">
-            <span class="form-label">Time of death{{ boardEndCamp ? ' (blank = not entered)' : '' }}</span>
-            <input class="form-input" [ngModel]="todTimeLocalValue"
-              (ngModelChange)="onTodTimeLocalChange($event)" name="todTimeLocal"
-              type="datetime-local" step="1" [required]="!boardEndCamp"
-              title="Leave blank if nobody saw it die — the tracker shows Not entered and the board won't auto-re-post." />
-          </label>
-        </div>
-        <!-- Calculated repop summary, with the read-only repop time filling the space on the right -->
-        <div class="tod-repop-card tod-repop-card--with-time">
-          <div class="tod-repop-card__info">
-            <div class="tod-repop-card__label">Calculated repop</div>
-            <strong>{{ todRepopSummary() }}</strong>
-          </div>
-          <label class="field tod-repop-card__repop">
-            <span class="form-label">Repop time</span>
-            <input class="form-input" [ngModel]="todRepopLocalValue" name="todRepopLocal"
-              type="datetime-local" step="1" readonly />
-          </label>
-        </div>
-      } @else {
-        <!-- === Log / Edit ToD layout: same row rhythm as the End Camp form above === -->
-        <!-- Popped on window, Claim. Board Post/Edit ToD has no window to record (the camp is
-             already over and its credit was settled at End Camp), so it only gets Claim. -->
-        <div class="tod-form__row tod-form__row--pair">
-          @if (!boardMode && popWindowVisible()) {
-            <label class="field">
-              <span class="form-label">Popped on window</span>
-              <input class="form-input" type="number" min="1" [ngModel]="todPopWindow"
-                (ngModelChange)="onTodPopWindowChange($event)" name="todPopWindow"
-                placeholder="—" title="Which window the monster popped on. Blank = not recorded." />
-            </label>
-          }
-          <label class="field">
-            <span class="form-label">Claim</span>
-            <select class="form-select" [ngModel]="todClaimChoice"
-              (ngModelChange)="onTodClaimChoiceChange($event)" name="todClaim">
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-              <option value="NotSpecified">Not specified</option>
-            </select>
-          </label>
-        </div>
-        <!-- Time of death. The cooldown, interval and seconds offset it is measured with come from
-             the linkshell's Monster setups (Configurations tab), not from this form. -->
-        <div class="tod-form__row tod-form__row--pair">
-          <label class="field">
-            <span class="form-label">Time of death</span>
-            <input class="form-input" [ngModel]="todTimeLocalValue"
-              (ngModelChange)="onTodTimeLocalChange($event)" name="todTimeLocal"
-              type="datetime-local" step="1" required />
-          </label>
-        </div>
-        <!-- Calculated repop summary, with the read-only repop time filling the space on the right -->
-        <div class="tod-repop-card tod-repop-card--with-time">
-          <div class="tod-repop-card__info">
-            <div class="tod-repop-card__label">Calculated repop</div>
-            <strong>{{ todRepopSummary() }}</strong>
-          </div>
-          <label class="field tod-repop-card__repop">
-            <span class="form-label">Repop time</span>
-            <input class="form-input" [ngModel]="todRepopLocalValue" name="todRepopLocal"
-              type="datetime-local" step="1" readonly />
-          </label>
-        </div>
-      }
-      <!-- Re-post the sign-up board before the next pop. Offered on EVERY board form — End Camp,
-           Post ToD and Edit ToD alike — because all three land on the same endpoint and all three
-           are moments when the officer knows the next pop. It used to be End Camp only, which left
-           the Activity's Post ToD as the one board surface with no say over the re-post while the
-           web's equivalent modal has always had it.
-
-           Pre-filled from the monster's standing board (the same value the create-event form set),
-           so what shows here is what is actually configured rather than a fresh, empty choice. -->
-      @if (boardMode) {
-        <div class="form-row">
-          <label class="field">
-            <span class="form-label">Re-post board before next pop?</span>
-            <label class="tod-toggle">
-              <input type="checkbox" [(ngModel)]="boardRepost" name="boardRepost" />
-              <span>Re-post the sign-up board</span>
-            </label>
-          </label>
-          @if (boardRepost) {
-            <label class="field">
-              <span class="form-label">Hours before repop</span>
-              <input class="form-input" type="number" min="0" step="0.25" [(ngModel)]="boardRepostLeadHours" name="boardRepostLeadHours"
-                placeholder="e.g. 2" title="How many hours before the predicted next pop the board auto-re-posts" />
-            </label>
-          }
-        </div>
-      }
-      <!-- Screenshot is offered on the ToDs-tab form and on End Camp (proof of the kill). A plain
-           board Post/Edit ToD stays lean — the board only needs the time. -->
-      @if (!boardMode || boardEndCamp) {
-      <div class="tod-form-bottom">
-        <div class="tod-form-bottom__main">
-          <div class="field">
-            <span class="form-label">Screenshot (optional)</span>
-            @if (todImagePath) {
-              <div class="tod-image-preview">
-                <img [src]="displayImagePath(todImagePath)" alt="ToD screenshot" />
-                <button type="button" class="btn sm danger-outline" (click)="removeTodImage()">Remove image</button>
-              </div>
+        }
+        @if (boardMode ? boardDayNumber != null : dayNumberVisible()) {
+          <div class="tod-field">
+            <span class="tod-label">Day</span>
+            @if (boardMode) {
+              <span class="tod-stepper tod-stepper--readonly"
+                title="Set on the event; days 1–3 show just the base monster, day 4+ shows the merge pair">{{ boardDayNumber }}</span>
             } @else {
-              <label class="tod-file-upload" [class.is-disabled]="isUploadingTodImage">
-                <input type="file" accept="image/png,image/jpeg,image/webp"
-                  (change)="onTodImageFileChange($event)"
-                  [disabled]="isUploadingTodImage" />
-                <span class="tod-file-upload__btn">Choose file</span>
-                <span class="tod-file-upload__hint">
-                  {{ isUploadingTodImage ? 'Uploading…' : 'PNG, JPG, or WEBP' }}
-                </span>
-              </label>
+              <div class="tod-stepper">
+                <button type="button" aria-label="Previous day" (click)="stepTodDayNumber(-1)">−</button>
+                <input type="number" min="1" [ngModel]="todDraft.dayNumber"
+                  (ngModelChange)="onTodDayNumberChange($event)" name="todDayNumber"
+                  placeholder="—" title="The monster's day in its cycle. Blank = not specified." />
+                <button type="button" aria-label="Next day" (click)="stepTodDayNumber(1)">+</button>
+              </div>
+            }
+          </div>
+        }
+        @if (hqOptionVisible()) {
+          <div class="tod-field">
+            <span class="tod-label">Spawn</span>
+            <div class="tod-segment" role="group" aria-label="Spawn">
+              <button type="button" [attr.aria-pressed]="!todDraft.hq" (click)="todDraft.hq = false">NQ</button>
+              <button type="button" [attr.aria-pressed]="todDraft.hq" (click)="todDraft.hq = true">HQ</button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- The cooldown, interval and seconds offset this is measured with come from the linkshell's
+           Monster setups (Configurations tab), not from this form. Optional on End Camp: blank
+           records "Not entered" (no time, no repop) for a camp where nobody saw the mob die. -->
+      <label class="tod-field">
+        <span class="tod-label">Time of death @if (boardEndCamp) {<em>· blank = not entered</em>}</span>
+        <input class="tod-input tod-input--mono" [ngModel]="todTimeLocalValue"
+          (ngModelChange)="onTodTimeLocalChange($event)" name="todTimeLocal"
+          type="datetime-local" step="1" [required]="!boardEndCamp"
+          [attr.title]="boardEndCamp ? 'Leave blank if nobody saw it die — the tracker shows Not entered and the board won\'t auto-re-post.' : null" />
+      </label>
+
+      <!-- End Camp caps credit at this window (blank = the current one). The ToDs tab records it as
+           history, and only for monsters with a window grid. Board Post/Edit ToD has no window to
+           record: the camp is already over and its credit was settled at End Camp. -->
+      @if (popWindowTilesVisible()) {
+        <div class="tod-field">
+          <div class="tod-field__head">
+            <span class="tod-label">Popped on window</span>
+            <span class="tod-hint">{{ popWindowHint() }}</span>
+          </div>
+          <div class="tod-windows" role="group" aria-label="Popped on window">
+            <button type="button" class="tod-window" [attr.aria-pressed]="todPopWindow === null"
+              (click)="onTodPopWindowChange(null)">
+              <b>{{ boardEndCamp ? 'Current' : 'Unknown' }}</b><small>—</small>
+            </button>
+            @for (window of popWindowTiles(); track window.number) {
+              <button type="button" class="tod-window" [attr.aria-pressed]="todPopWindow === window.number"
+                (click)="onTodPopWindowChange(window.number)">
+                <b>W{{ window.number }}</b><small>{{ window.time ?? '--:--' }}</small>
+              </button>
             }
           </div>
         </div>
-      </div>
       }
+
+      <div class="tod-repop">
+        <div class="tod-repop__when">
+          <span class="tod-label tod-label--accent">Next repop opens</span>
+          <strong>{{ todRepopSummary() }}</strong>
+        </div>
+        <div class="tod-repop__in">
+          <span class="tod-label">In</span>
+          <strong class="tod-repop__countdown">{{ repopCountdown() }}</strong>
+        </div>
+      </div>
+
+      <!-- Re-post the sign-up board before the next pop. Offered on EVERY board form — End Camp,
+           Post ToD and Edit ToD alike — because all three land on the same endpoint and all three
+           are moments when the officer knows the next pop. Pre-filled from the monster's standing
+           board, so what shows here is what is actually configured. -->
+      @if (boardMode) {
+        <div class="tod-modal__row tod-modal__row--center">
+          <button type="button" class="tod-switch" role="switch" [attr.aria-checked]="boardRepost"
+            (click)="boardRepost = !boardRepost">
+            <span class="tod-label">Re-post board</span>
+            <span class="tod-switch__track"><span class="tod-switch__knob"></span></span>
+            <span class="tod-switch__text">{{ boardRepost ? 'Yes' : 'No' }}</span>
+          </button>
+          @if (boardRepost) {
+            <label class="tod-lead">
+              <input class="tod-input tod-input--mono" type="number" min="0" step="0.25" [(ngModel)]="boardRepostLeadHours"
+                name="boardRepostLeadHours" placeholder="e.g. 2"
+                title="How many hours before the predicted next pop the board auto-re-posts" />
+              <span class="tod-hint">hours before repop</span>
+            </label>
+          }
+        </div>
+      }
+
+      <!-- Screenshot is offered on the ToDs-tab form and on End Camp (proof of the kill). A plain
+           board Post/Edit ToD stays lean — the board only needs the time. -->
+      <div class="tod-modal__row tod-modal__row--center">
+        <button type="button" class="tod-switch" role="switch" [attr.aria-checked]="todDraft.claim"
+          (click)="onTodClaimChange(!todDraft.claim)">
+          <span class="tod-label">Claimed</span>
+          <span class="tod-switch__track"><span class="tod-switch__knob"></span></span>
+          <span class="tod-switch__text">{{ todDraft.claim ? 'Yes' : 'No' }}</span>
+        </button>
+        @if (boardEndCamp) {
+          <button type="button" class="tod-switch" role="switch" [attr.aria-checked]="boardKilled"
+            (click)="boardKilled = !boardKilled">
+            <span class="tod-label">Killed</span>
+            <span class="tod-switch__track"><span class="tod-switch__knob"></span></span>
+            <span class="tod-switch__text">{{ boardKilled ? 'Yes' : 'No' }}</span>
+          </button>
+        }
+        @if (!boardMode || boardEndCamp) {
+          @if (todImagePath) {
+            <div class="tod-drop is-attached">
+              <img [src]="displayImagePath(todImagePath)" alt="ToD screenshot" />
+              <span class="tod-drop__text">Screenshot attached</span>
+              <button type="button" class="tod-drop__remove" (click)="removeTodImage()">Remove</button>
+            </div>
+          } @else {
+            <label class="tod-drop" [class.is-disabled]="isUploadingTodImage">
+              <input type="file" accept="image/png,image/jpeg,image/webp"
+                (change)="onTodImageFileChange($event)" [disabled]="isUploadingTodImage" />
+              <span class="tod-drop__text">
+                @if (isUploadingTodImage) { Uploading… } @else { Attach screenshot <em>· optional</em> }
+              </span>
+            </label>
+          }
+        }
+      </div>
       <!-- Loot used to be entered here, which is why every drop recorded from a ToD showed up in
            the Loot History as source "ToD" rather than against the event it actually came from.
            It is recorded in the Loot tab now, where it can be filed against a live or past event. -->
-      <div class="form-actions">
-        <button type="submit" class="btn primary" [disabled]="activity.busyTodSave() || isUploadingTodImage">
-          {{ activity.busyTodSave() ? 'Saving...' : (editingTodId !== null ? 'Save changes' : 'Log ToD') }}
-        </button>
-        <button type="button" class="btn ghost" (click)="cancelLogTodForm()" [disabled]="activity.busyTodSave()">
-          Cancel
-        </button>
-      </div>
-    </form>
-  </div>
+    </div>
+
+    <footer class="tod-modal__foot">
+      <button type="button" class="btn ghost" (click)="cancelLogTodForm()" [disabled]="activity.busyTodSave()">
+        Cancel
+      </button>
+      <button type="submit" class="btn primary" [disabled]="activity.busyTodSave() || isUploadingTodImage">
+        {{ activity.busyTodSave() ? 'Saving...' : (editingTodId !== null ? 'Save changes' : 'Log ToD') }}
+      </button>
+    </footer>
+  </form>
 </dialog>

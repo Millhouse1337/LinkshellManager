@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, inject, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityCreateTodInput,
@@ -7,15 +7,18 @@ import {
 } from '../../discord/discord-activity.service';
 import {
   createEmptyTodLootRow,
+  formatElapsed,
   parseLocalDateTime,
   toDateTimeLocalValue
 } from '../activity-home.helpers';
 import {
   hasHqVariant,
-  hasSpawnWindowCadence,
-  HNM_COMBINED_FROM_DAY
+  hasSpawnWindowCadence
 } from '../activity-home.types';
 import type { ActivityMonsterSetup } from '../../discord/discord-activity.types';
+
+// Window tiles to draw when the monster's setup carries no window count (the short band's 7).
+const DEFAULT_POP_WINDOWS = 7;
 
 // Standalone, reusable "Log ToD" form rendered in a native <dialog>. Extracted from
 // TodsTabComponent so it can ALSO be opened from the Events tab's "Post ToD" button on
@@ -61,7 +64,6 @@ export class TodFormComponent {
   protected todMonsterPickerOpen = false;
   protected todMonsterActiveIndex = -1;
   protected todCustomMonsterName = '';
-  protected todClaimChoice: 'Yes' | 'No' | 'NotSpecified' = 'Yes';
   protected todDayNumberNotSpecified = false;
   protected todCooldownValue: number | null = 22;
   protected todCooldownUnit = 'hours';
@@ -82,7 +84,7 @@ export class TodFormComponent {
   // "End Camp" = board mode opened from a LIVE camp's End Camp button (vs a defeated board's
   // Post/Edit ToD). Adds the pop-window + killed inputs that cap credit and drive the Manual Check In bonuses.
   protected boardEndCamp = false;
-  protected boardKilledChoice: 'Yes' | 'No' = 'Yes';
+  protected boardKilled = true;
   // Which window the monster popped on. End Camp pre-fills it from the live camp and uses it to
   // cap credit; the ToDs tab lets the officer type it in as history on the ToD itself.
   protected todPopWindow: number | null = null;
@@ -94,6 +96,15 @@ export class TodFormComponent {
   // before it. Pre-filled from the event's standing Repeat-on-ToD config.
   protected boardRepost = false;
   protected boardRepostLeadHours: number | null = null;
+
+  // Ticks once a second while the dialog is open so the repop countdown counts down. A signal,
+  // because reading it in the template is what re-renders this OnPush view on each tick.
+  private readonly now = signal(Date.now());
+  private clockTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.stopClock());
+  }
 
   // ----- Public API -----
 
@@ -144,7 +155,7 @@ export class TodFormComponent {
     this.boardEventId = eventId;
     this.boardDayNumber = dayNumber;
     this.boardEndCamp = endCampWindow != null;
-    this.boardKilledChoice = 'Yes';
+    this.boardKilled = true;
     this.boardRepost = repeatOnTod;
     this.boardRepostLeadHours = repeatLeadHours;
     this.editingTodId = null;
@@ -174,7 +185,6 @@ export class TodFormComponent {
       // with the record it just read -- and CLAIM is what the claim bonus is paid on.
       if (typeof postedTod.claim === 'boolean') {
         this.todDraft.claim = postedTod.claim;
-        this.todClaimChoice = postedTod.claim ? 'Yes' : 'No';
       }
       this.todDraft.hq = !!postedTod.hq;
       // Only when the tracker actually recorded one: End Camp already opened on the camp's
@@ -217,15 +227,12 @@ export class TodFormComponent {
     this.beginEditTod(tod);
   }
 
-  // HQ = the merge pair's stronger half popped instead of the base. Whenever the form's monster
-  // HAS a stronger half the toggle is offered, whatever the day: the officer is recording what
-  // actually showed up, and the day number only governs how the board PRINTS the name. For a
-  // monster with no known pair we fall back to the day rule (1–3 = base only, nothing to log).
+  // HQ = the merge pair's stronger half popped instead of the base. Offered for the three NQ/HQ
+  // families only (Adamantoise/Aspidochelone, Behemoth/King Behemoth, Fafnir/Nidhogg), whatever
+  // the day: the officer is recording what actually showed up, and the day number only governs
+  // how the board PRINTS the name. Every other monster has no stronger half to record.
   protected hqOptionVisible(): boolean {
-    if (this.monsterHasHqVariant()) {
-      return true;
-    }
-    return !(this.boardDayNumber != null && this.boardDayNumber < HNM_COMBINED_FROM_DAY);
+    return this.monsterHasHqVariant();
   }
 
   // "Popped on window N" only means something when the monster HAS windows: the long band's 25
@@ -249,6 +256,66 @@ export class TodFormComponent {
     return this.monsterHasHqVariant();
   }
 
+  // The window tiles: End Camp always (it caps credit), the ToDs tab only for a monster with a
+  // window grid.
+  protected popWindowTilesVisible(): boolean {
+    return this.boardEndCamp || (!this.boardMode && this.popWindowVisible());
+  }
+
+  protected popWindowHint(): string {
+    if (this.todPopWindow !== null) {
+      return `W${this.todPopWindow} selected`;
+    }
+    return this.boardEndCamp ? 'Current window' : 'Window unknown';
+  }
+
+  // One tile per spawn window. W1 opens at the repop and each later window one interval after
+  // the last (HnmConfig: "window 1 at the pop"), so the times only show once a ToD is entered.
+  protected popWindowTiles(): { number: number; time: string | null }[] {
+    const first = parseLocalDateTime(this.todRepopLocalValue);
+    const interval = this.intervalMinutes();
+    const pad = (value: number) => value.toString().padStart(2, '0');
+    return Array.from({ length: this.popWindowCount() }, (_, index) => {
+      if (!first || (index > 0 && interval === null)) {
+        return { number: index + 1, time: null };
+      }
+      const opens = new Date(first.getTime() + index * (interval ?? 0) * 60_000);
+      return { number: index + 1, time: `${pad(opens.getHours())}:${pad(opens.getMinutes())}` };
+    });
+  }
+
+  // The monster's configured window count (5, 7 or 25), and never fewer than the window already
+  // picked, so a camp that ran past its grid still shows its own tile.
+  private popWindowCount(): number {
+    const configured = this.monsterSetupFor(this.todDraft.monsterName)?.windows ?? 0;
+    return Math.max(configured > 0 ? configured : DEFAULT_POP_WINDOWS, this.todPopWindow ?? 0);
+  }
+
+  private intervalMinutes(): number | null {
+    const amount = Number(this.todIntervalValue);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    return this.todIntervalUnit === 'hours' ? amount * 60 : amount;
+  }
+
+  // Counts down to W1, then reads "Open" until the last window has opened and "Passed" after.
+  // A monster with no grid stays "Open" once its repop is reached.
+  protected repopCountdown(): string {
+    const first = parseLocalDateTime(this.todRepopLocalValue);
+    if (!first) {
+      return '--:--:--';
+    }
+    const now = this.now();
+    const opensIn = first.getTime() - now;
+    if (opensIn > 0) {
+      return formatElapsed(opensIn);
+    }
+    if (!this.popWindowVisible()) {
+      return 'Open';
+    }
+    const lastOpens = first.getTime() + (this.popWindowCount() - 1) * (this.intervalMinutes() ?? 0) * 60_000;
+    return now <= lastOpens ? 'Open' : 'Passed';
+  }
+
   // Is the form's monster part of a merge pair? Board mode reads the locked display name (which
   // may be the combined "Base/Stronger" the event stores); the ToDs tab reads the picked monster.
   private monsterHasHqVariant(): boolean {
@@ -266,6 +333,7 @@ export class TodFormComponent {
     // event inside the form forces a check. markForCheck() makes the new state render the
     // moment the dialog appears.
     this.cdr.markForCheck();
+    this.startClock();
     // Defer one tick so the dialog element is laid out before showModal().
     setTimeout(() => {
       const dialog = this.logTodDialog()?.nativeElement;
@@ -279,6 +347,20 @@ export class TodFormComponent {
     const dialog = this.logTodDialog()?.nativeElement;
     if (dialog && dialog.open) {
       dialog.close();
+    }
+  }
+
+  private startClock(): void {
+    this.stopClock();
+    this.now.set(Date.now());
+    this.clockTimer = setInterval(() => this.now.set(Date.now()), 1000);
+  }
+
+  // Bound to the dialog's (close) event, so Escape, the backdrop and every button all stop it.
+  protected stopClock(): void {
+    if (this.clockTimer !== null) {
+      clearInterval(this.clockTimer);
+      this.clockTimer = null;
     }
   }
 
@@ -322,6 +404,8 @@ export class TodFormComponent {
     } finally {
       this.isUploadingTodImage = false;
       input.value = '';
+      // The upload resolves outside any template event, so OnPush needs telling.
+      this.cdr.markForCheck();
     }
   }
 
@@ -363,6 +447,12 @@ export class TodFormComponent {
         this.applyIntervalMinutes(configured.cadenceMinutes);
         this.todDraft.additionalSeconds = Math.max(0, Math.floor(Number(configured.additionalSeconds) || 0));
       }
+    }
+    // Day and NQ/HQ hide for anything but the three merge pairs; a hidden control must not post
+    // the value it held for the previous monster.
+    if (!this.monsterHasHqVariant()) {
+      this.todDraft.hq = false;
+      this.onTodDayNumberChange(null);
     }
     this.updateTodRepopTime();
   }
@@ -544,11 +634,6 @@ export class TodFormComponent {
     }
   }
 
-  protected onTodClaimChoiceChange(value: 'Yes' | 'No' | 'NotSpecified'): void {
-    this.todClaimChoice = value;
-    this.onTodClaimChange(value === 'Yes');
-  }
-
   // The ToDs-tab "Day" input. Blank (or 0/negative) = the officer didn't record a day, which is
   // what todDayNumberNotSpecified means to submit.
   protected onTodDayNumberChange(value: number | null): void {
@@ -556,6 +641,11 @@ export class TodFormComponent {
     const normalized = Number.isFinite(day) && day > 0 ? Math.floor(day) : null;
     this.todDraft.dayNumber = normalized;
     this.todDayNumberNotSpecified = normalized == null;
+  }
+
+  // The Day stepper's − / +. Blank steps up to 1, and stepping down from 1 goes back to blank.
+  protected stepTodDayNumber(delta: number): void {
+    this.onTodDayNumberChange((this.todDraft.dayNumber ?? 0) + delta);
   }
 
   // The "Popped on window" input on both forms. Windows are 1-based; blank = not recorded.
@@ -604,7 +694,7 @@ export class TodFormComponent {
 
   protected todRepopSummary(): string {
     if (!this.todRepopLocalValue) {
-      return 'Pick a date and time to calculate the next repop window.';
+      return '—';
     }
 
     return this.activity.formatDateTimeWithSeconds(this.todRepopLocalValue) ?? this.todRepopLocalValue;
@@ -648,7 +738,7 @@ export class TodFormComponent {
         additionalSeconds: this.todDraft.additionalSeconds,
         // End Camp only: cap credit at the pop window + record whether it was killed.
         popWindow: this.boardEndCamp ? this.todPopWindow : null,
-        killed: this.boardEndCamp ? (this.boardKilledChoice === 'Yes') : null,
+        killed: this.boardEndCamp ? this.boardKilled : null,
         // Every board form asks this (End Camp, Post ToD, Edit ToD), so every board form answers
         // it. Null only for a non-board ToD, where there is no board to re-post and null means
         // "leave the monster's standing template alone".
@@ -760,7 +850,6 @@ export class TodFormComponent {
     this.todDraft.hq = !!tod.hq;
     this.todDraft.additionalSeconds = tod.additionalSeconds ?? 0;
     this.todDraft.claim = !!tod.claim;
-    this.todClaimChoice = tod.claim ? 'Yes' : 'No';
     this.todDayNumberNotSpecified = tod.dayNumber == null;
 
     const monsterName: string = tod.monsterName ?? '';
@@ -829,7 +918,6 @@ export class TodFormComponent {
     this.todMonsterPickerOpen = false;
     this.todMonsterActiveIndex = -1;
     this.todCustomMonsterName = '';
-    this.todClaimChoice = 'Yes';
     this.todDayNumberNotSpecified = false;
     this.todImagePath = null;
     this.isUploadingTodImage = false;

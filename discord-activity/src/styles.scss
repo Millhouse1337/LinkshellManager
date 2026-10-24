@@ -34,3 +34,5 @@
 @use 'styles/showcase';
 // Last so its .event-edit-modal-dialog--flush override lands after forms.
 @use 'styles/create-event-modal';
+// After the global input theming in tokens, which its field rules restyle.
+@use 'styles/tod-form';
