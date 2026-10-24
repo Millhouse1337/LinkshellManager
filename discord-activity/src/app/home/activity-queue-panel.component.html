@@ -138,15 +138,15 @@
             </div>
 
             <!-- Recurring camp: does this board come back on its own, and how long before the
-                 next predicted pop? Both halves are asked on create AND on a queued-camp edit.
-                 A camp made without asking took the 1-hour default silently and the officer had
-                 no say until End Camp, by which point the first re-post was already scheduled.
+                 next predicted pop? Asked only on a queued-camp edit (recurrenceAsked).
 
-                 Hidden while editing a LIVE camp: that board is not waiting on a re-post, and
-                 the next thing that happens to it is End Camp / Post ToD, which sets the same
-                 two values. Hidden too for an "Other" monster with no name typed yet, since
-                 recurrence keys on an exact ToD name match (canRepeatOnTod). -->
-            @if (!isEditingLiveEvent && canRepeatOnTod()) {
+                 Not on create: the switch opened already on for any monster with a standing
+                 board, so a new camp quietly kept re-posting boards nobody meant to make. Hidden
+                 while editing a LIVE camp too: that board is not waiting on a re-post, and the
+                 next thing that happens to it is End Camp / Post ToD, which sets the same two
+                 values. Hidden for an "Other" monster with no name typed yet, since recurrence
+                 keys on an exact ToD name match (canRepeatOnTod). -->
+            @if (recurrenceAsked()) {
               <div class="cem__switches">
                 <button type="button" class="cem__switch" [class.is-on]="createModel.repeatOnTod === true"
                   [attr.aria-pressed]="createModel.repeatOnTod === true"
@@ -159,7 +159,7 @@
                 </button>
               </div>
             }
-            @if (!isEditingLiveEvent && canRepeatOnTod() && createModel.repeatOnTod === true) {
+            @if (recurrenceAsked() && createModel.repeatOnTod === true) {
               <label class="cem__field">
                 <span class="cem__label">Hours before repop <em>optional</em></span>
                 <!-- step=".25" so the lead can be given in quarter-hours (1.5 = 1h30m),

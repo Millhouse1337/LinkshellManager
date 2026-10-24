@@ -1865,10 +1865,10 @@ export interface ActivityCreateEventInput {
   // HNM signup board only: the monster the board is for, plus the monster's standing re-post
   // settings.
   //
-  // repeatOnTod is tri-state on the wire. The create form and the queued-camp edit form both ASK
-  // ("Repeat post when ToD is updated?") and send an explicit true/false. Editing a LIVE camp
-  // sends null — that form has no recurrence control, and null tells the server "no opinion,
-  // leave the standing board alone" rather than false, which would disable it.
+  // repeatOnTod is tri-state on the wire. Only the queued-camp edit form ASKS ("Repeat post when
+  // ToD is updated?") and sends an explicit true/false. Create and a LIVE-camp edit send null —
+  // neither has a recurrence control, and null tells the server "no opinion, leave the standing
+  // board alone" rather than false, which would disable it.
   //
   // repostLeadHours is fractional (1.5 = 1h30m). Null means "keep the board's current lead", so
   // an empty box never overwrites a lead entered at End Camp / Post ToD.

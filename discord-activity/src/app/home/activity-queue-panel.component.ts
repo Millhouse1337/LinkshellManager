@@ -118,9 +118,9 @@ export class ActivityQueuePanelComponent {
     countsTowardActive: true,
     monsterName: null,
     // Tri-state. Null = "this form has no opinion, leave the monster's standing re-post board
-    // exactly as it is" — what an edit of a LIVE camp posts, since that form has no recurrence
-    // control. Create and queued-camp edit ASK, and set a real true/false the moment a monster
-    // is picked (see applyRepeatPrefillForMonster).
+    // exactly as it is" — what create and an edit of a LIVE camp post, since neither has a
+    // recurrence control. A queued-camp edit ASKS, and sets a real true/false the moment a
+    // monster is picked (see applyRepeatPrefillForMonster).
     repeatOnTod: null,
     // Null = leave the board's existing lead alone. Only non-null once the officer types one,
     // or once the picked monster's standing lead is pre-filled.
@@ -255,10 +255,10 @@ export class ActivityQueuePanelComponent {
   // form shows a blank choice for a monster that is already repeating, and submitting it as
   // displayed switches that monster's board off.
   //
-  // Skipped while editing a LIVE camp (that form has no recurrence control and must keep posting
-  // null) and for an "Other" monster with no name typed yet.
+  // Skipped wherever the form has no recurrence control (create, and editing a LIVE camp) and
+  // for an "Other" monster with no name typed yet.
   private applyRepeatPrefillForMonster(): void {
-    if (this.isEditingLiveEvent || !this.canRepeatOnTod()) {
+    if (!this.recurrenceAsked()) {
       return;
     }
     const lead = this.standingRepeatLeadHours();
@@ -509,11 +509,13 @@ export class ActivityQueuePanelComponent {
   // HnmRecurringBoardService enforces, or null. Null matters — the server reads it as "keep
   // the board's current lead", so an empty (or junk) box must not post 0, which would mean
   // "re-post exactly at the pop" and silently discard a lead set at End Camp.
-  // Whether THIS form asked the recurrence question, and may therefore answer it. Mirrors the
-  // template's `!isEditingLiveEvent && canRepeatOnTod()` guard on the switch — the two must agree
-  // or the form would post an answer to a question it never showed.
-  private recurrenceAsked(): boolean {
-    return !this.isEditingLiveEvent && this.canRepeatOnTod();
+  // Whether THIS form asked the recurrence question, and may therefore answer it. The template
+  // guards the switch on this too — the two must agree or the form would post an answer to a
+  // question it never showed. Only a queued-camp edit asks: create doesn't (a switch that opened
+  // already on for a monster with a standing board kept re-posting boards nobody meant to make),
+  // and neither does a live-camp edit.
+  protected recurrenceAsked(): boolean {
+    return this.editingEventId !== null && !this.isEditingLiveEvent && this.canRepeatOnTod();
   }
 
   private normalizedRepostLeadHours(): number | null {
@@ -1012,10 +1014,10 @@ export class ActivityQueuePanelComponent {
         // monster from a merge pair to anything else must not post the number that was typed
         // while the box was still on offer. The model keeps it, so switching back restores it.
         dayNumber: this.dayNumberVisible() ? this.createModel.dayNumber : null,
-        // Recurrence, tri-state. The form ASKS on create and on a queued-camp edit, so it sends
-        // the real answer. Editing a LIVE camp shows no recurrence control, so it sends null =
-        // "no opinion, leave the monster's standing board alone" — sending false there is what
-        // used to disable the re-post as a side effect of an unrelated edit.
+        // Recurrence, tri-state. The form ASKS only on a queued-camp edit, so only that sends
+        // the real answer. Create and a LIVE-camp edit show no recurrence control, so they send
+        // null = "no opinion, leave the monster's standing board alone" — sending false there is
+        // what used to disable the re-post as a side effect of an unrelated edit.
         repeatOnTod: this.recurrenceAsked() ? this.createModel.repeatOnTod === true : null,
         // Null means "keep whatever lead the board already has", including one entered at End
         // Camp. Only sent alongside an explicit yes, so turning recurrence OFF can't also
