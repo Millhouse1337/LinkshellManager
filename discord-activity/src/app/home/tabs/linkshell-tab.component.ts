@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, inject, model, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityJobsRoster,
@@ -20,6 +20,7 @@ import {
   memberStatusClass,
   rankIcon
 } from '../activity-home.helpers';
+import type { ManagementView } from '../activity-home.types';
 import { StarRatingComponent } from '../sidebar-panels/star-rating.component';
 
 // HorizonXI is classic-75: a job at 37+ is sub-capable (listed in the hover popover).
@@ -85,6 +86,10 @@ export class LinkshellTabComponent {
   // the model, child binds via these getters.
   @Input({ required: true }) rosterSearchValue!: string;
   @Input({ required: true }) rosterSearchChange!: (value: string) => void;
+
+  // Roster or Invites, picked by the strip in the header. Two-way: ActivityHomeComponent keeps it
+  // in the location (/management/invites). Invites used to sit under the roster.
+  readonly view = model<ManagementView>('roster');
 
   protected get rosterSearch(): string { return this.rosterSearchValue; }
   protected set rosterSearch(value: string) { this.rosterSearchChange(value); }

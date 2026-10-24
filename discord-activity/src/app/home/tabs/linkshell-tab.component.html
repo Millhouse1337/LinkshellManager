@@ -4,11 +4,25 @@
           <div class="section-label">Management</div>
           <div class="section-title">Manage Team</div>
         </div>
+        <!-- Roster (URL /management) is the default; Invites is /management/invites. -->
+        <div class="section-head-right">
+          <div class="view-tabs" role="tablist" aria-label="Management view">
+            <button type="button" class="view-tab" role="tab"
+              [class.active]="view() === 'roster'"
+              [attr.aria-selected]="view() === 'roster'"
+              (click)="view.set('roster')">Roster</button>
+            <button type="button" class="view-tab" role="tab"
+              [class.active]="view() === 'invites'"
+              [attr.aria-selected]="view() === 'invites'"
+              (click)="view.set('invites')">Invites</button>
+          </div>
+        </div>
       </div>
 
-      <!-- Linkshell Roster (same data as Dashboard) -->
+      <!-- Linkshell Roster (same data as Dashboard). Hidden rather than removed on Invites, so the
+           roster search and an open Modify survive a switch. -->
       @if (selectedDashboardLinkshell(); as activeLinkshell) {
-        <div class="card">
+        <div class="card" [hidden]="view() !== 'roster'">
           <div class="card-head">
             <div class="card-title">Linkshell Roster</div>
             <div class="card-head-right">
@@ -254,8 +268,10 @@
         </div>
       }
 
-      <!-- Invites section from sidebar -->
-      <app-activity-sidebar-panel [visibleSections]="['invites']" />
+      <!-- Invites (from the sidebar panel), its own view rather than a section under the roster. -->
+      <div [hidden]="view() !== 'invites'">
+        <app-activity-sidebar-panel [visibleSections]="['invites']" />
+      </div>
 
       <!-- Items and Gil moved to their own top-level Treasury tab. This tab is people again:
            roster, ranks and invites. -->

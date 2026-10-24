@@ -14,7 +14,7 @@ import {
   DiscordActivityService
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
-import { TAB_NAMES, type ProfileView, type TabName, type TreasuryView } from './activity-home.types';
+import { TAB_NAMES, type ManagementView, type ProfileView, type TabName, type TreasuryView } from './activity-home.types';
 import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
 
@@ -106,6 +106,8 @@ export class ActivityHomeComponent {
     const view = this.activeTab() === 'treasury' ? this.subView() : null;
     return view === 'items' || view === 'transactions' ? view : 'balance';
   });
+  protected readonly managementView = computed<ManagementView>(() =>
+    (this.activeTab() === 'linkshell' && this.subView() === 'invites' ? 'invites' : 'roster'));
   protected readonly chartsView = computed(() => chartsSectionFromSlug(this.subView()));
   // Data Admin keeps a whole path below its tab: /data-admin/rule/5/edit.
   protected readonly dataAdminPath = computed(() => (this.activeTab() === 'data-admin' ? this.location().slice(1) : []));
@@ -359,6 +361,10 @@ export class ActivityHomeComponent {
 
   protected setTreasuryView(view: TreasuryView): void {
     this.setActiveTab('treasury', view === 'balance' ? undefined : view);
+  }
+
+  protected setManagementView(view: ManagementView): void {
+    this.setActiveTab('linkshell', view === 'roster' ? undefined : view);
   }
 
   protected setProfileView(view: ProfileView): void {

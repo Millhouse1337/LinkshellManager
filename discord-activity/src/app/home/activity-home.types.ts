@@ -45,6 +45,9 @@ export type ProfileView = 'jobs' | 'crafts' | 'ratings' | 'onboarding';
 // /treasury/items, /treasury/transactions.
 export type TreasuryView = 'balance' | 'items' | 'transactions';
 
+// The Management tab's views: /management (the roster) and /management/invites.
+export type ManagementView = 'roster' | 'invites';
+
 // HNM base -> stronger merge pairs (mirrors HnmConfig.MonsterMergePairs). On the
 // create-event monster dropdown the two are offered as ONE entry: the base name below
 // HNM_COMBINED_FROM_DAY, the combined "Base/Stronger" name at/above it. The chosen text is

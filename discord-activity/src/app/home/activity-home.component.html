@@ -343,6 +343,7 @@
   @if (activeTab() === 'linkshell') {
     <div role="tabpanel" [id]="panelId('linkshell')" [attr.aria-labelledby]="tabId('linkshell')">
       <app-linkshell-tab
+        [view]="managementView()" (viewChange)="setManagementView($event)"
         [rosterSearchValue]="dashboardRosterSearch"
         [rosterSearchChange]="setDashboardRosterSearch" />
     </div>
