@@ -145,23 +145,6 @@ public sealed partial class ActivityDataController
         _dbContext.Events.Add(eventEntity);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        // Repeat-on-ToD: persist/refresh the recurring-board template so the board
-        // re-posts before the next predicted pop. Works for a custom monster too —
-        // recurrence keys on the (case-insensitive) AssignedMonsterName the ToD records.
-        // Null RepeatOnTod = the caller didn't ask (what the Activity's create form sends), so
-        // the monster's standing board is left exactly as it is. That's what keeps the re-post
-        // working off the End Camp form's ToD + lead: creating a camp must never switch it off.
-        if (isHnm && request.RepeatOnTod == true)
-        {
-            await HnmRecurringBoardService.UpsertAsync(
-                _dbContext, eventEntity, request.RepostLeadHours, appUser.Id,
-                stampLatestTod: true, cancellationToken);
-        }
-        else if (isHnm && request.RepeatOnTod == false)
-        {
-            await HnmRecurringBoardService.DisableAsync(_dbContext, request.LinkshellId, monsterName, cancellationToken);
-        }
-
         return Ok(new { success = true, eventId = eventEntity.Id });
     }
 
@@ -241,7 +224,7 @@ public sealed partial class ActivityDataController
         // attached). This matters because a customized board becomes a per-event SNAPSHOT
         // (OwnerEventId != null), which PartySetupBelongsToLinkshellAsync intentionally
         // rejects; without this guard, editing any other field on a snapshot-board event
-        // (e.g. toggling repeat-on-ToD) would fail with "does not belong to this linkshell".
+        // (e.g. renaming it) would fail with "does not belong to this linkshell".
         // A snapshot the caller posts back unchanged is therefore preserved further down.
         if (request.PartySetupId.HasValue &&
             request.PartySetupId != eventEntity.PartySetupId &&
@@ -314,28 +297,12 @@ public sealed partial class ActivityDataController
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        // Keep the recurring-board template in sync with the edited "repeat on ToD" choice
-        // (mirrors create). Works for a custom monster too — recurrence keys on the
-        // (case-insensitive) AssignedMonsterName the ToD records.
+        // The edit never changes the monster's standing repost setting (only End Camp / Post ToD
+        // does), but it can move the board or switch its monster. A board already waiting on its
+        // repost advertises the old time until this runs.
         var recurrenceMonster = eventEntity.AssignedMonsterName?.Trim();
         if (isHnm && !string.IsNullOrWhiteSpace(recurrenceMonster))
         {
-            // Null RepeatOnTod = the form didn't ask (the Activity's case), so recurrence is
-            // left alone; a lead on its own still applies, which is how the edit form's "Hours
-            // before repop" box works. stampLatestTod: false so editing a board that's awaiting
-            // its re-post doesn't mark the pop handled and cancel it.
-            if (request.RepeatOnTod == false)
-            {
-                await HnmRecurringBoardService.DisableAsync(_dbContext, eventEntity.LinkshellId, recurrenceMonster, cancellationToken);
-            }
-            else if (request.RepeatOnTod == true || request.RepostLeadHours.HasValue)
-            {
-                await HnmRecurringBoardService.UpsertAsync(
-                    _dbContext, eventEntity, request.RepostLeadHours, appUser.Id,
-                    stampLatestTod: false, cancellationToken);
-            }
-
-            // A board already waiting on its re-post advertises the old time until this runs.
             await HnmRecurringBoardService.RefreshRepostAtAsync(
                 _dbContext, eventEntity, recurrenceMonster, cancellationToken);
         }

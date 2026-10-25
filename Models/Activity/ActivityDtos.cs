@@ -1404,22 +1404,11 @@ public sealed record ActivityCreateEventRequest(
     // When true, attendees earn active-member credit (reconciled at close).
     // Default true, matching the web event form.
     bool CountsTowardActive = true,
-    // HNM signup board only: the canonical monster the board is for, plus the monster's
-    // standing "re-post before the next predicted pop" settings. Ignored for non-HNM events.
-    //
-    // RepeatOnTod is NULLABLE because the Activity's event form deliberately doesn't ask:
-    // recurrence is switched on and off from the End Camp / Post ToD form, which is where an
-    // officer knows the next pop. Null = "this form has no opinion, leave the standing board
-    // exactly as it is". It used to be a plain bool, which meant the Activity silently posted
-    // false on every create and switched the monster's recurring board OFF. Only an explicit
-    // true/false (the web form's checkbox) enables or disables it.
-    //
-    // RepostLeadHours is fractional (1.5 = 1h30m) and likewise null when not entered, meaning
-    // "keep the board's current lead" — so editing an event can't overwrite a lead set at End
-    // Camp. The Activity only sends it from the EDIT form.
+    // HNM signup board only: the canonical monster the board is for. Ignored for non-HNM events.
+    // The monster's standing "repost before the next predicted pop" setting is not part of this
+    // request: creating or editing an event leaves it alone, and only End Camp / Post ToD
+    // (ActivityPostBoardTodRequest.Repost) switches it on or off.
     string? MonsterName = null,
-    bool? RepeatOnTod = null,
-    double? RepostLeadHours = null,
     // HNM signup board only: optional "Day N" label shown on the board.
     int? DayNumber = null,
     // HNM only: per-camp overrides for the linkshell's payout amounts. Null = use the
