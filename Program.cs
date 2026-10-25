@@ -309,8 +309,6 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<ApplicationDbContext>("database", tags: new[] { "ready" });
 builder.Services.AddScoped<WindowEventDkpLedgerService>();
-// Builds the attendance-snapshot sections shared by the Event System page and Attendance History.
-builder.Services.AddScoped<AttendanceSectionsBuilder>();
 builder.Services.AddScoped<WindowEventLinkService>();
 builder.Services.AddScoped<MemberActivityService>();
 // The two HNM earn formulas — "what did this camp owe?", per attendance mode. Neither pays any

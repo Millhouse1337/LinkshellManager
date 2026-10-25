@@ -15,8 +15,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // before pressing Post, instead of a rate that only materializes somewhere downstream.
 //
 // This class is the SAFETY NET, not the main path. The card seeds every member's input from
-// AttendanceSectionsBuilder.BuildCombinedMembers (which already applies the misc rate) and submits
-// them all, so on the web every name arrives in `submittedNames` and ApplyMiscOverrides does
+// ActivityDataController.BuildActivityCombinedMembers (which already applies the misc rate) and
+// submits them all, so every name arrives in `submittedNames` and ApplyMiscOverrides does
 // nothing. It exists so an API caller that submits nothing — or a partial payload — still pays the
 // misc rate rather than silently paying everyone the default.
 public static class WindowEventMiscDkp

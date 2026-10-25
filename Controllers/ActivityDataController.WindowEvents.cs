@@ -211,24 +211,23 @@ public sealed partial class ActivityDataController
         var canManage = await CanAsync(membership, r => r.CanModerateLiveEvent || r.CanManageEvents, cancellationToken);
 
         // Live only -- an ended camp is Status=Open but belongs in the pending queue below.
-        // Shares AttendanceSectionsBuilder's predicate with the web so the two agree.
-        var openEvents = await AttendanceSectionsBuilder.ApplyLiveFilter(
+        // Shares AttendanceQueryFilters' predicate with the addon's Misc Posts panel so the two agree.
+        var openEvents = await AttendanceQueryFilters.ApplyLiveFilter(
                 _dbContext.WindowEvents.AsNoTracking().Where(e => e.LinkshellId == linkshellId))
             .OrderByDescending(e => e.LastCapturedAtUtc)
             .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
             .Include(e => e.MemberDkpOverrides)
             .ToListAsync(cancellationToken);
 
-        // The archive: searched and paged in SQL, BEFORE the Includes, exactly as the web's
-        // AttendanceSectionsBuilder.BuildClosedAsync does — each closed event drags its whole
-        // snapshot/entry tree along, and this payload is polled while a camp is live.
+        // The archive: searched and paged in SQL, BEFORE the Includes — each closed event drags
+        // its whole snapshot/entry tree along, and this payload is polled while a camp is live.
         //
         // This replaced a flat .Take(25). That cap was invisible: the 26th closed event simply
         // wasn't there, and no search could reach it. Sharing the builder's predicate also means a
         // query matching a card on the web matches the same card here.
         var closedQuery = string.IsNullOrWhiteSpace(attQ) ? null : attQ.Trim();
-        var closedBaseQuery = AttendanceSectionsBuilder.ApplyClosedSearch(
-            AttendanceSectionsBuilder.ApplyPendingDkpPostFilter(
+        var closedBaseQuery = AttendanceQueryFilters.ApplyClosedSearch(
+            AttendanceQueryFilters.ApplyPendingDkpPostFilter(
                 _dbContext.WindowEvents.AsNoTracking().Where(e => e.LinkshellId == linkshellId)),
             closedQuery);
 
@@ -305,8 +304,8 @@ public sealed partial class ActivityDataController
         return Ok(new ActivityWindowEventsResponse(
             openEvents.Select(e => MapActivityWindowEvent(e, roster)).ToList(),
             closedEvents.Select(e => MapActivityWindowEvent(e, roster)).ToList(),
-            // No parent event, so no window grid and no window label — deliberately, exactly as
-            // AttendanceSectionsBuilder.MapSnapshot does for an unlinked snapshot on the web.
+            // No parent event, so no window grid and no window label — deliberately: an unlinked
+            // snapshot has no camp.
             unlinkedSnapshots
                 .Select(s => MapActivityWindowSnapshot(s, null, roster) with
                 {
@@ -1045,7 +1044,7 @@ public sealed partial class ActivityDataController
         return null;
     }
 
-    private static ActivityWindowEventDto MapActivityWindowEvent(
+    internal static ActivityWindowEventDto MapActivityWindowEvent(
         WindowEvent item, RosterNameSet? roster = null)
     {
         var rosterNames = roster ?? RosterNameSet.Unknown;
@@ -1100,10 +1099,9 @@ public sealed partial class ActivityDataController
             combined.Count(m => !m.IsRegistered));
     }
 
-    // `windowEvent` supplies the cadence and grid anchor used to name the spawn window, exactly as
-    // AttendanceSectionsBuilder.MapSnapshot does for the web. Omitted for an UNLINKED snapshot,
-    // which has no camp and therefore no window.
-    private static ActivityWindowSnapshotDto MapActivityWindowSnapshot(
+    // `windowEvent` supplies the cadence and grid anchor used to name the spawn window. Omitted for
+    // an UNLINKED snapshot, which has no camp and therefore no window.
+    internal static ActivityWindowSnapshotDto MapActivityWindowSnapshot(
         AttendanceSnapshot snapshot, WindowEvent? windowEvent = null, RosterNameSet? roster = null)
     {
         var rosterNames = roster ?? RosterNameSet.Unknown;
@@ -1134,7 +1132,7 @@ public sealed partial class ActivityDataController
         // A Misc capture has NO window, and the fallback must not invent one for it. Misc stores a
         // null WindowNumber, which is exactly the shape that triggers the derivation — so without
         // this test a misc post on a gridded camp would render "Window 4 of 25" beside its own Misc
-        // chip. Same guard as AttendanceSectionsBuilder.MapSnapshot on the web.
+        // chip.
         var isMisc = AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind);
         var resolvedWindow = isMisc
             ? null
@@ -1177,7 +1175,7 @@ public sealed partial class ActivityDataController
                     : null);
     }
 
-    private static List<ActivityWindowCombinedMemberDto> BuildActivityCombinedMembers(
+    internal static List<ActivityWindowCombinedMemberDto> BuildActivityCombinedMembers(
         IEnumerable<AttendanceSnapshot> snapshots,
         IDictionary<string, double>? memberDkpOverrides = null,
         double? defaultDkpAmount = null,

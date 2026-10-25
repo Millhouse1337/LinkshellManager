@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -401,8 +402,8 @@ public class HnmCampCapturePricingTests
             .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
             .Include(w => w.MemberDkpOverrides)
             .FirstAsync(w => w.Id == windowEvent!.Id);
-        var row = AttendanceSectionsBuilder
-            .MapWindowEvent(loaded, NodaTime.DateTimeZone.Utc)
+        var row = ActivityDataController
+            .MapActivityWindowEvent(loaded)
             .CombinedMembers
             .Single(m => m.CharacterName == "Alpha");
 
@@ -539,8 +540,8 @@ public class HnmCampCapturePricingTests
             .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
             .Include(w => w.MemberDkpOverrides)
             .FirstAsync(w => w.Id == windowEvent!.Id);
-        var beta = AttendanceSectionsBuilder
-            .MapWindowEvent(loaded, NodaTime.DateTimeZone.Utc)
+        var beta = ActivityDataController
+            .MapActivityWindowEvent(loaded)
             .CombinedMembers
             .Single(m => m.CharacterName == "Beta");
 
@@ -561,8 +562,8 @@ public class HnmCampCapturePricingTests
             .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
             .Include(w => w.MemberDkpOverrides)
             .FirstAsync(w => w.Id == windowEvent!.Id);
-        var gamma = AttendanceSectionsBuilder
-            .MapWindowEvent(loaded, NodaTime.DateTimeZone.Utc)
+        var gamma = ActivityDataController
+            .MapActivityWindowEvent(loaded)
             .CombinedMembers
             .Single(m => m.CharacterName == "Gamma");
 

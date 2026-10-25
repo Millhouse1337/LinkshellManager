@@ -162,7 +162,7 @@ public sealed class HnmCampReviewHandoffService
         // and simply were not read.
         //
         // The MONEY is untouched. Amounts come from the per-character WindowEventMemberDkp rows
-        // below, and AttendanceSectionsBuilder.BuildCombinedMembers takes
+        // below, and ActivityDataController.BuildActivityCombinedMembers takes
         // `overrideAmount ?? baseAmount` -- so folding one snapshot into several changes what the
         // card SHOWS about presence, never what it pays.
         //

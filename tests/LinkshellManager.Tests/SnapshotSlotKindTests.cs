@@ -1,6 +1,6 @@
+using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
-using NodaTime;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -16,7 +16,6 @@ namespace LinkshellManager.Tests;
 // read-time window derivation, and who gets the misc rate.
 public class SnapshotSlotKindTests
 {
-    private static readonly DateTimeZone Utc = DateTimeZoneProviders.Tzdb["UTC"];
     private static readonly DateTime Anchor = new(2026, 8, 29, 21, 0, 0, DateTimeKind.Utc);
 
     // A 10-minute/7-window camp, so a window boundary is reachable inside a test.
@@ -149,15 +148,15 @@ public class SnapshotSlotKindTests
 
     // ---- the read-time derivation ----
 
-    // THE trap. MapSnapshot derives a window number when the stored one is null, and Misc stores
-    // null — so without an explicit guard a misc post on a gridded camp renders "Window 4 of 7"
-    // beside its own Misc chip.
+    // THE trap. MapActivityWindowSnapshot derives a window number when the stored one is null, and
+    // Misc stores null — so without an explicit guard a misc post on a gridded camp renders
+    // "Window 4 of 7" beside its own Misc chip.
     [Fact]
     public void AMiscCapture_RendersNoWindowLabel_EvenOnAGriddedCamp()
     {
         var misc = Capture(Anchor.AddMinutes(35), AttendanceSnapshotSlotKinds.Misc, "Millhouse");
 
-        var row = AttendanceSectionsBuilder.MapSnapshot(misc, Utc, GriddedCamp());
+        var row = ActivityDataController.MapActivityWindowSnapshot(misc, GriddedCamp());
 
         Assert.True(row.IsMisc);
         Assert.Null(row.WindowNumber);
@@ -171,7 +170,7 @@ public class SnapshotSlotKindTests
     {
         var window = Capture(Anchor.AddMinutes(35), AttendanceSnapshotSlotKinds.Window, "Millhouse");
 
-        var row = AttendanceSectionsBuilder.MapSnapshot(window, Utc, GriddedCamp());
+        var row = ActivityDataController.MapActivityWindowSnapshot(window, GriddedCamp());
 
         Assert.False(row.IsMisc);
         Assert.Equal(4, row.WindowNumber);
@@ -186,7 +185,7 @@ public class SnapshotSlotKindTests
     {
         var snapshots = new[] { Capture(Anchor, AttendanceSnapshotSlotKinds.Misc, "Millhouse") };
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             snapshots, memberDkpOverrides: null, defaultDkpAmount: 1.5, miscDkpAmount: 0.5);
 
         var row = Assert.Single(combined);
@@ -205,7 +204,7 @@ public class SnapshotSlotKindTests
             Capture(Anchor.AddMinutes(20), AttendanceSnapshotSlotKinds.Misc, "Millhouse"),
         };
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             snapshots, memberDkpOverrides: null, defaultDkpAmount: 1.5, miscDkpAmount: 0.5);
 
         var row = Assert.Single(combined);
@@ -219,7 +218,7 @@ public class SnapshotSlotKindTests
     {
         var snapshots = new[] { Capture(Anchor, AttendanceSnapshotSlotKinds.Misc, "Millhouse") };
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             snapshots, memberDkpOverrides: null, defaultDkpAmount: 1.5, miscDkpAmount: null);
 
         Assert.Equal(1.5, Assert.Single(combined).EffectiveDkpAmount);
@@ -232,7 +231,7 @@ public class SnapshotSlotKindTests
         var snapshots = new[] { Capture(Anchor, AttendanceSnapshotSlotKinds.Misc, "Millhouse") };
         var overrides = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase) { ["Millhouse"] = 3.0 };
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             snapshots, overrides, defaultDkpAmount: 1.5, miscDkpAmount: 0.5);
 
         Assert.Equal(3.0, Assert.Single(combined).EffectiveDkpAmount);

@@ -1,6 +1,6 @@
+using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
-using NodaTime;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -18,7 +18,6 @@ namespace LinkshellManager.Tests;
 // and that a mapper with no roster in hand marks nobody.
 public class UnregisteredCaptureMemberTests
 {
-    private static readonly DateTimeZone Utc = DateTimeZoneProviders.Tzdb["UTC"];
     private static readonly DateTime Anchor = new(2026, 9, 22, 21, 0, 0, DateTimeKind.Utc);
 
     private static RosterNameSet Roster(params string[] mains)
@@ -61,7 +60,7 @@ public class UnregisteredCaptureMemberTests
     [Fact]
     public void AMemberOnTheRoster_IsMarkedRegistered()
     {
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             new[] { Capture("Edicius") }, roster: Roster("Edicius"));
 
         Assert.True(Assert.Single(combined).IsRegistered);
@@ -71,7 +70,7 @@ public class UnregisteredCaptureMemberTests
     [Fact]
     public void SomeoneTheShellDoesNotKnow_IsMarkedUnregistered()
     {
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             new[] { Capture("Edicius", "Randomguy") }, roster: Roster("Edicius"));
 
         Assert.True(combined.Single(m => m.CharacterName == "Edicius").IsRegistered);
@@ -83,7 +82,7 @@ public class UnregisteredCaptureMemberTests
     [Fact]
     public void AnUnregisteredName_IsStillListed()
     {
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             new[] { Capture("Edicius", "Randomguy") }, roster: Roster("Edicius"));
 
         Assert.Equal(2, combined.Count);
@@ -99,7 +98,7 @@ public class UnregisteredCaptureMemberTests
             new RosterNameCandidate("Edicius", "Edicius", "Athmilk", null),
         });
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             new[] { Capture("Athmilk") }, roster: roster);
 
         Assert.True(Assert.Single(combined).IsRegistered);
@@ -110,7 +109,7 @@ public class UnregisteredCaptureMemberTests
     [Fact]
     public void WithNoRoster_NobodyIsMarkedUnregistered()
     {
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(new[] { Capture("Randomguy") });
+        var combined = ActivityDataController.BuildActivityCombinedMembers(new[] { Capture("Randomguy") });
 
         Assert.True(Assert.Single(combined).IsRegistered);
     }
@@ -120,8 +119,8 @@ public class UnregisteredCaptureMemberTests
     [Fact]
     public void CaptureEntries_CarryTheSameMark()
     {
-        var row = AttendanceSectionsBuilder.MapSnapshot(
-            Capture("Edicius", "Randomguy"), Utc, null, Roster("Edicius"));
+        var row = ActivityDataController.MapActivityWindowSnapshot(
+            Capture("Edicius", "Randomguy"), null, Roster("Edicius"));
 
         Assert.True(row.Entries.Single(e => e.CharacterName == "Edicius").IsRegistered);
         Assert.False(row.Entries.Single(e => e.CharacterName == "Randomguy").IsRegistered);
@@ -136,7 +135,7 @@ public class UnregisteredCaptureMemberTests
         var capture = Capture("Edicius");
         capture.Entries.Add(new AttendanceSnapshotEntry { CharacterName = "Randomguy", AddedManually = true });
 
-        var row = AttendanceSectionsBuilder.MapSnapshot(capture, Utc, null, Roster("Edicius"));
+        var row = ActivityDataController.MapActivityWindowSnapshot(capture, null, Roster("Edicius"));
 
         Assert.False(row.Entries.Single(e => e.CharacterName == "Randomguy").IsRegistered);
     }
@@ -162,7 +161,7 @@ public class UnregisteredCaptureMemberTests
             AppUserId = "user-1",
         });
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(new[] { capture }, roster: roster);
+        var combined = ActivityDataController.BuildActivityCombinedMembers(new[] { capture }, roster: roster);
 
         Assert.True(Assert.Single(combined).IsRegistered);
     }
@@ -184,7 +183,7 @@ public class UnregisteredCaptureMemberTests
             AppUserId = "user-999",
         });
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(new[] { capture }, roster: roster);
+        var combined = ActivityDataController.BuildActivityCombinedMembers(new[] { capture }, roster: roster);
 
         Assert.False(Assert.Single(combined).IsRegistered);
     }
@@ -196,8 +195,8 @@ public class UnregisteredCaptureMemberTests
     [Fact]
     public void TheCardCounts_HowManyCannotBePaid()
     {
-        var row = AttendanceSectionsBuilder.MapWindowEvent(
-            Camp(Capture("Edicius", "Randomguy", "Someoneelse")), Utc, Roster("Edicius"));
+        var row = ActivityDataController.MapActivityWindowEvent(
+            Camp(Capture("Edicius", "Randomguy", "Someoneelse")), Roster("Edicius"));
 
         Assert.Equal(3, row.CombinedMemberCount);
         Assert.Equal(2, row.UnregisteredMemberCount);
@@ -206,8 +205,8 @@ public class UnregisteredCaptureMemberTests
     [Fact]
     public void ACampOfMembersOnly_CountsNoneUnregistered()
     {
-        var row = AttendanceSectionsBuilder.MapWindowEvent(
-            Camp(Capture("Edicius", "Athmilk")), Utc, Roster("Edicius", "Athmilk"));
+        var row = ActivityDataController.MapActivityWindowEvent(
+            Camp(Capture("Edicius", "Athmilk")), Roster("Edicius", "Athmilk"));
 
         Assert.Equal(0, row.UnregisteredMemberCount);
     }

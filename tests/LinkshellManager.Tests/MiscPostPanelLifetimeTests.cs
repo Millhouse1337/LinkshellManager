@@ -77,7 +77,7 @@ public class MiscPostPanelLifetimeTests
     };
 
     private static List<string> Visible(params AttendanceSnapshot[] captures)
-        => AttendanceSectionsBuilder
+        => AttendanceQueryFilters
             .ApplyLiveCaptureFilter(captures.AsQueryable())
             .Select(s => s.Name!)
             .ToList();

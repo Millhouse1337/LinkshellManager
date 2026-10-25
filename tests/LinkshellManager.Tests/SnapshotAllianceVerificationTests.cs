@@ -1,3 +1,4 @@
+using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -176,8 +177,8 @@ public class SnapshotAllianceVerificationTests
     }
 
     // The whole point of Pending: the capture is visible but its people are not in the roster the
-    // payout is computed from. Nothing in BuildCombinedMembers mentions Pending — it filters to
-    // Active — which is why this is worth a test rather than a comment.
+    // payout is computed from. Nothing in BuildActivityCombinedMembers mentions Pending — it
+    // filters to Active — which is why this is worth a test rather than a comment.
     [Fact]
     public void PendingSnapshot_IsExcludedFromTheCombinedRoster()
     {
@@ -186,7 +187,7 @@ public class SnapshotAllianceVerificationTests
         AddSnapshot(db, camp, Anchor, alliance: 1, AttendanceSnapshotStatuses.Active, "Millhouse", "Sylph");
         AddSnapshot(db, camp, Anchor, alliance: 2, AttendanceSnapshotStatuses.Pending, "Ramuh", "Ifrit");
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             db.AttendanceSnapshots.Include(s => s.Entries).ToList());
 
         Assert.Equal(new[] { "Millhouse", "Sylph" }, combined.Select(m => m.CharacterName).ToArray());
@@ -204,7 +205,7 @@ public class SnapshotAllianceVerificationTests
         pending.SnapshotStatus = AttendanceSnapshotStatuses.Active;
         db.SaveChanges();
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             db.AttendanceSnapshots.Include(s => s.Entries).ToList());
 
         Assert.Equal(new[] { "Millhouse", "Ramuh" }, combined.Select(m => m.CharacterName).OrderBy(n => n).ToArray());
@@ -220,7 +221,7 @@ public class SnapshotAllianceVerificationTests
         AddSnapshot(db, camp, Anchor, alliance: 1, AttendanceSnapshotStatuses.Active, "Millhouse");
         AddSnapshot(db, camp, Anchor, alliance: 2, AttendanceSnapshotStatuses.Active, "Ramuh");
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             db.AttendanceSnapshots.Include(s => s.Entries).ToList());
 
         Assert.Equal(new[] { 1 }, combined.Single(m => m.CharacterName == "Millhouse").AllianceNumbers);
@@ -237,7 +238,7 @@ public class SnapshotAllianceVerificationTests
         AddSnapshot(db, camp, Anchor, alliance: 2, AttendanceSnapshotStatuses.Active, "Millhouse");
         AddSnapshot(db, camp, Anchor.AddMinutes(30), alliance: 1, AttendanceSnapshotStatuses.Active, "Millhouse");
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             db.AttendanceSnapshots.Include(s => s.Entries).ToList());
 
         Assert.Equal(new[] { 1, 2 }, Assert.Single(combined).AllianceNumbers);
@@ -376,7 +377,7 @@ public class SnapshotAllianceVerificationTests
         // A minute later, someone else in the same alliance posts — Sylph overlaps, Ramuh is new.
         AddSnapshot(db, camp, Anchor.AddMinutes(1), alliance: 1, AttendanceSnapshotStatuses.Active, "Sylph", "Ramuh");
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             db.AttendanceSnapshots.Include(s => s.Entries).ToList());
 
         Assert.Equal(
@@ -396,7 +397,7 @@ public class SnapshotAllianceVerificationTests
         AddSnapshot(db, camp, Anchor, alliance: 1, AttendanceSnapshotStatuses.Active, "Millhouse", "Sylph");
         AddSnapshot(db, camp, Anchor.AddMinutes(2), alliance: 1, AttendanceSnapshotStatuses.Active, "Millhouse");
 
-        var combined = AttendanceSectionsBuilder.BuildCombinedMembers(
+        var combined = ActivityDataController.BuildActivityCombinedMembers(
             db.AttendanceSnapshots.Include(s => s.Entries).ToList());
 
         Assert.Contains(combined, m => m.CharacterName == "Sylph");
