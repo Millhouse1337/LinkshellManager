@@ -518,7 +518,6 @@ public class ChartBoardCatalogTests
     public void EveryBossEmblem_ExistsOnDisk()
     {
         var publicRoot = FindRepoPath(Path.Combine("discord-activity", "public"));
-        var webRoot = FindRepoPath("wwwroot");
 
         foreach (var board in ChartBoardCatalog.Boards)
         {
@@ -529,9 +528,6 @@ public class ChartBoardCatalogTests
                 Assert.True(
                     File.Exists(Path.Combine(publicRoot, relative)),
                     $"Activity art missing for {board.Key}/{boss.Name}: {relative}");
-                Assert.True(
-                    File.Exists(Path.Combine(webRoot, relative)),
-                    $"Website art missing for {board.Key}/{boss.Name}: {relative}");
             }
         }
     }

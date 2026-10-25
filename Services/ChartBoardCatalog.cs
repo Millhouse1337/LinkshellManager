@@ -721,10 +721,10 @@ public static class ChartBoardCatalog
         "Pop items, holders, and farming credit for the Dynamis zones.",
         // Per-zone entrance screenshots, PNG rather than Sky/Sea's JPG and carrying a redundant
         // "Dynamis-" prefix inside a folder already called Dynamis — both kept exactly as the art
-        // was delivered, because this list names files rather than computing them. Live in BOTH
-        // discord-activity/public/ffxi_assets/Dynamis/ AND wwwroot/ffxi_assets/Dynamis/ (two copies,
-        // one per surface); ChartBoardCatalogTests.EveryBossEmblem_ExistsOnDisk fails if either is
-        // missed. Note "San-dOria" — the apostrophe is dropped in the file name, not in the zone's.
+        // was delivered, because this list names files rather than computing them. Live in
+        // discord-activity/public/ffxi_assets/Dynamis/; ChartBoardCatalogTests.EveryBossEmblem_ExistsOnDisk
+        // fails if one is missed. Note "San-dOria" — the apostrophe is dropped in the file name, not
+        // in the zone's.
         new[]
         {
             // Bare zone names rather than "Dynamis - San d'Oria": the board already says Dynamis,
@@ -803,7 +803,7 @@ public static class ChartBoardCatalog
         "Pop items, holders, and farming credit for the Limbus areas.",
         // TWO images for fourteen cards, one per zone — the areas share a zone's art because that is
         // the distinction that matters here, and the group heading above the card already names it.
-        // Both live in discord-activity/public/ffxi_assets/Limbus/ AND wwwroot/ffxi_assets/Limbus/.
+        // Both live in discord-activity/public/ffxi_assets/Limbus/.
         new[]
         {
             // Bare area names: the group heading already says Apollyon or Temenos, and this board

@@ -41,9 +41,9 @@ public class DkpPool
 }
 
 // The colour vocabulary for a DKP group's tag/swatch. Plain colour names (NOT the old event-board
-// theme keys) — each maps to a design token in the stylesheets (web lsm-theme.css --*-main,
-// Activity _tokens.scss). Resolve() normalises anything else — including legacy theme keys still
-// stored on old rows — to Default, so the swatch always lands on a known colour.
+// theme keys) — each maps to a design token in the Activity's _tokens.scss. Resolve() normalises
+// anything else — including legacy theme keys still stored on old rows — to Default, so the swatch
+// always lands on a known colour.
 public static class DkpPoolAccents
 {
     public static readonly IReadOnlyList<string> All = new[]

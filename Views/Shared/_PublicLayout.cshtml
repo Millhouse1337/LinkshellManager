@@ -1,7 +1,6 @@
 @* The layout for the few pages that stay server-rendered now that the website's app is the
-   Angular UI at /discord-activity/: the landing page, Privacy, Terms, Access denied, Error and
-   the Identity sign-in page. No sidebar, no app shell and no per-user database work: the same
-   look a signed-out visitor always got from _Layout, now for everyone. *@
+   Angular UI at /discord-activity/: the landing page, /features, /addon, Privacy, Terms, Error
+   and the Identity sign-in page. No sidebar, no app shell and no per-user database work. *@
 @{
     var pageTitle = ViewData["Title"]?.ToString() ?? "LinkshellManager";
 }
@@ -13,7 +12,6 @@
     <title>@pageTitle · LinkshellManager</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/css/lsm-theme.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
