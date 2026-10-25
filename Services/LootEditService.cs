@@ -370,8 +370,9 @@ public sealed class LootEditService
     }
 
     // Event counterpart of DeleteTodLootAsync. Resolves the parent context
-    // (active Event vs. closed EventHistory) the same way EditEventLootAsync
-    // does. Event loot is always flat DKP (Hybrid is ToD-only).
+    // (closed EventHistory, active Event, or a "No event" row's own linkshell)
+    // the same way EditEventLootAsync does. Event loot is always flat DKP
+    // (Hybrid is ToD-only).
     public async Task<LootEditResult> DeleteEventLootAsync(
         int lootDetailId,
         AppUser actor,
@@ -419,6 +420,21 @@ public sealed class LootEditService
             eventStartTime = detail.Event.StartTime;
             eventEndTime = detail.Event.EndTime;
         }
+        else if (detail.LinkshellId is int ownerLinkshellId)
+        {
+            // A "No event" row: hand-entered loot filed under nothing. It carries its own
+            // linkshell for exactly this, and has no event metadata for the refund entry.
+            linkshellId = ownerLinkshellId;
+            lootStructure = await _db.Linkshells
+                .Where(item => item.Id == ownerLinkshellId)
+                .Select(item => item.LootStructure)
+                .FirstOrDefaultAsync(cancellationToken);
+            eventName = null;
+            eventType = null;
+            eventLocation = null;
+            eventStartTime = null;
+            eventEndTime = null;
+        }
         else
         {
             return new LootEditResult(false, "Loot record is orphaned (no parent event).");
@@ -437,7 +453,11 @@ public sealed class LootEditService
                 dkpRaw: dkpRaw,
                 actualDeducted: detail.ActualDeductedDkp,
                 isHybrid: false,
-                poolRef: DkpPoolRef.Derived(eventType),
+                // Same rule as EditEventLootAsync: hand-entered loot pinned the pool it was paid
+                // from, so the refund goes back there; event loot follows its event type.
+                poolRef: detail.DkpPoolId is int pinnedPool
+                    ? DkpPoolRef.Pinned(pinnedPool)
+                    : DkpPoolRef.Derived(eventType),
                 sourceTodLootDetailId: null,
                 sourceEventLootDetailId: detail.Id,
                 eventName: eventName,

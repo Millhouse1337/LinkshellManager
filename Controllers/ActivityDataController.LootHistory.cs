@@ -1,3 +1,4 @@
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -350,23 +351,7 @@ public sealed partial class ActivityDataController
     private async Task<IActionResult?> AuthorizeLootRowAsync(
         string appUserId, bool isTod, int lootDetailId, CancellationToken cancellationToken)
     {
-        int? linkshellId;
-        if (isTod)
-        {
-            linkshellId = await _dbContext.TodLootDetails
-                .Where(detail => detail.Id == lootDetailId)
-                .Select(detail => (int?)(detail.Tod != null ? detail.Tod.LinkshellId : 0))
-                .FirstOrDefaultAsync(cancellationToken);
-        }
-        else
-        {
-            linkshellId = await _dbContext.EventLootDetails
-                .Where(detail => detail.Id == lootDetailId)
-                .Select(detail => detail.EventHistory != null
-                    ? (int?)detail.EventHistory.LinkshellId
-                    : (detail.Event != null ? (int?)detail.Event.LinkshellId : null))
-                .FirstOrDefaultAsync(cancellationToken);
-        }
+        var linkshellId = await LootRowLinkshellIdAsync(_dbContext, isTod, lootDetailId, cancellationToken);
 
         if (!linkshellId.HasValue || linkshellId.Value == 0)
         {
@@ -385,6 +370,31 @@ public sealed partial class ActivityDataController
         }
 
         return null;
+    }
+
+    // The linkshell a loot row belongs to, or null when the row is gone. Event loot resolves the
+    // same way LootEditService does: its closed EventHistory, else its live Event, else the
+    // LinkshellId stamped on the row itself — the only owner a "No event" row has. Leaving that
+    // last step out made every "No event" row answer "not found" to Edit and Delete.
+    internal static async Task<int?> LootRowLinkshellIdAsync(
+        ApplicationDbContext db, bool isTod, int lootDetailId, CancellationToken cancellationToken)
+    {
+        if (isTod)
+        {
+            return await db.TodLootDetails
+                .Where(detail => detail.Id == lootDetailId)
+                .Select(detail => (int?)(detail.Tod != null ? detail.Tod.LinkshellId : 0))
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return await db.EventLootDetails
+            .Where(detail => detail.Id == lootDetailId)
+            .Select(detail => detail.EventHistory != null
+                ? (int?)detail.EventHistory.LinkshellId
+                : detail.Event != null
+                    ? (int?)detail.Event.LinkshellId
+                    : detail.LinkshellId)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task<IActionResult> EditLootInternalAsync(

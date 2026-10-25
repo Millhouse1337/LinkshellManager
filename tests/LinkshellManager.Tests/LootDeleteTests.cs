@@ -1,3 +1,4 @@
+using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -31,8 +32,11 @@ public class LootDeleteTests
             NullLogger<LootEditService>.Instance);
     }
 
-    // A closed event whose 30-DKP item went to `winner`, already charged at close.
-    private static (AppUser Actor, EventLootDetail Loot) Seed(ApplicationDbContext db, string winner)
+    // A closed event whose 30-DKP item went to `winner`, already charged at close. `noEvent` files
+    // it the way Add loot's "No event" option does instead: no event, just the row's own
+    // linkshell, paid from `poolId` (null = the default pool).
+    private static (AppUser Actor, EventLootDetail Loot) Seed(
+        ApplicationDbContext db, string winner, bool noEvent = false, int? poolId = null)
     {
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", LootStructure = "Dkp" });
         var actor = new AppUser
@@ -52,7 +56,9 @@ public class LootDeleteTests
         var loot = new EventLootDetail
         {
             Id = 60,
-            EventHistoryId = history.Id,
+            EventHistoryId = noEvent ? null : history.Id,
+            LinkshellId = Ls,
+            DkpPoolId = poolId,
             ItemName = "Ducal Aketon",
             ItemWinner = winner,
             WinningDkpSpent = 30,
@@ -92,5 +98,34 @@ public class LootDeleteTests
         var refund = Assert.Single(db.DkpLedgerEntries);
         Assert.Equal("u1", refund.AppUserId);
         Assert.Equal(30, refund.Amount);
+    }
+
+    // The bug a "No event" row hit: the Edit/Delete permission check looked for the linkshell
+    // only through the row's event, found none, and answered "Loot record not found."
+    [Fact]
+    public async Task ANoEventRow_ResolvesToItsOwnLinkshell()
+    {
+        await using var db = NewDb();
+        var (_, loot) = Seed(db, winner: "Edicius", noEvent: true);
+
+        Assert.Equal(Ls, await ActivityDataController.LootRowLinkshellIdAsync(
+            db, isTod: false, loot.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingNoEventLoot_RefundsIntoThePoolItWasPaidFrom()
+    {
+        await using var db = NewDb();
+        db.DkpPools.Add(new DkpPool { Id = 1, LinkshellId = Ls, Name = "Main", IsDefault = true });
+        db.DkpPools.Add(new DkpPool { Id = 2, LinkshellId = Ls, Name = "Sky" });
+        var (actor, loot) = Seed(db, winner: "Edicius", noEvent: true, poolId: 2);
+
+        var result = await NewService(db).DeleteEventLootAsync(loot.Id, actor, "Wrong item", DateTime.UtcNow);
+
+        Assert.True(result.Success);
+        Assert.Empty(db.EventLootDetails);
+        var refund = Assert.Single(db.DkpLedgerEntries);
+        Assert.Equal(30, refund.Amount);
+        Assert.Equal(2, refund.DkpPoolId);
     }
 }
