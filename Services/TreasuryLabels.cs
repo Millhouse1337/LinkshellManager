@@ -4,9 +4,9 @@ namespace LinkshellManagerDiscordApp.Services;
 
 // THE one home for every word the treasury shows a user.
 //
-// Both front-ends read from here — the Razor views directly, the Activity through the DTO mapper
-// — so a label cannot drift between the web and Discord. That was a real failure mode: the same
-// column was labelled "Source" on the web, "Type" in the Activity, and "EntryType" in the API.
+// The Activity reads from here through the DTO mapper, so a label cannot drift between screens.
+// That was a real failure mode: the same column was labelled "Source" on the old website, "Type"
+// in the Activity, and "EntryType" in the API.
 //
 // Everything here is plain English on purpose. This is a treasury for a group of people playing a
 // video game, not a set of books anyone will audit, so the words on screen are the words an

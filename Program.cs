@@ -277,16 +277,14 @@ builder.Services.AddScoped<LedgerAccountProvisioner>();
 builder.Services.AddScoped<LedgerPeriodGuard>();
 builder.Services.AddScoped<TreasuryBalanceService>();
 builder.Services.AddScoped<TreasuryJournalWriter>();
-// Paying members off the balance sheet's "who we owe" list. Shared so tick-and-pay behaves
-// identically on the website and in the Activity.
+// Paying members off the balance sheet's "who we owe" list.
 builder.Services.AddScoped<TreasurySettlementService>();
 builder.Services.AddScoped<ItemSaleRecorder>();
-// Charts (Sky, Sea, …). Shared by the Activity API and the website's ChartsController so the two
-// surfaces cannot derive a different Farming Credit Ledger from the same rows.
+// Charts (Sky, Sea, …).
 builder.Services.AddScoped<ChartBoardService>();
 builder.Services.AddScoped<ChartWishlistService>();
 builder.Services.AddScoped<ChartKeyItemService>();
-// Shared save logic for the pools config (Activity + web), and the catalog of event types an
+// Save logic for the pools config, and the catalog of event types an
 // officer can assign — including the free-text ones their own events actually used.
 builder.Services.AddScoped<DkpPoolEventTypeCatalog>();
 builder.Services.AddScoped<DkpPoolEditor>();

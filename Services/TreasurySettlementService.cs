@@ -46,8 +46,8 @@ public sealed record TreasurySettlementResult(
 
     public bool DidNothing => Settled.Count == 0;
 
-    // The sentence both front-ends show. Built here rather than in either of them so the web and the
-    // Activity report the same outcome in the same words — the rule TreasuryLabels exists for.
+    // The sentence the app shows. Built here rather than in the client — the rule TreasuryLabels
+    // exists for.
     public string Message
     {
         get
@@ -180,7 +180,7 @@ public sealed class TreasurySettlementService
             // The ordinary settle transaction, identical to what the Record form used to build.
             // Paying a member adds to what-we-owe (drawing the obligation down) and takes the gil out
             // of gil on hand; being paid draws owed-to-us down and puts the gil in. Both are single
-            // catalog kinds with their two categories fixed, so neither surface chooses accounts.
+            // catalog kinds with their two categories fixed, so no caller chooses accounts.
             //
             // Counterparty id is left null to match what the form records for a single name — the
             // projections key on the NAME, and populating one surface's id but not the other's is

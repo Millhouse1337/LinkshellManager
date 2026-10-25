@@ -676,8 +676,8 @@ public sealed partial class ActivityDataController
                         ItemName: lootDetail.ItemName,
                         Details: lootDetailsText,
                         EventHistory: history,
-                        // The web close has always stamped this; this one never did, which left
-                        // Loot History unable to find the ledger row it had to reverse.
+                        // EventEndService's close has always stamped this; this one never did,
+                        // which left Loot History unable to find the ledger row it had to reverse.
                         SourceEventLootDetailId: lootDetail.Id),
                     cancellationToken,
                     // Affordability was enforced when the loot was AWARDED (LootDkpGuard). Event
@@ -699,8 +699,8 @@ public sealed partial class ActivityDataController
         }
         // And the camp's posted attendance windows, which the Event delete below would otherwise
         // cascade away along with every AppUserEventWindow roster row hanging off them. Clearing
-        // EventId unhooks them from the doomed Event before it goes. Byte-identical to the web
-        // EndEventCoreAsync — the two close paths must not drift here either.
+        // EventId unhooks them from the doomed Event before it goes. Byte-identical to
+        // EventEndService.EndEventCoreAsync — the two close paths must not drift here either.
         var archivedWindows = await _dbContext.EventAttendanceWindows
             .Where(window => window.EventId == eventEntity.Id)
             .ToListAsync(cancellationToken);

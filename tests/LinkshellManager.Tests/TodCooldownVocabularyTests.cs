@@ -83,7 +83,7 @@ public class TodCooldownVocabularyTests
     public void AcceptableIntervals_Validate(string label) =>
         Assert.True(ActivityDataController.IsAcceptableTodInterval(label));
 
-    // Round-tripping is what keeps the two surfaces printing the same thing for one configured
+    // Round-tripping is what keeps every path printing the same thing for one configured
     // monster: whole hours render as hours, everything else stays in minutes, and nothing invents
     // a fractional hour.
     [Theory]

@@ -57,7 +57,7 @@ export class PartySetupPanelComponent {
   // When > 0, this panel is rendering an EVENT's board: the roster is scoped to
   // the event (per-event signups), so detail + sign-up/withdraw use the event
   // endpoints instead of the shared template. Keeps the Activity in sync with the
-  // Discord board and the web event page.
+  // Discord board.
   readonly eventId = input<number>(0);
   // When true, this is a LIVE event's board: open slots stay claimable (late join
   // into a slot), but a member can't drop their OWN slot mid-run — only an officer

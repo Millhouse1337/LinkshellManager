@@ -55,10 +55,11 @@ public sealed class DataAdminSchemaGraph
     private const string OnDeleteSetNull = "setNull";
     private const string OnDeleteRestrict = "restrict";
 
-    // The graph sits inside a <script type="application/json"> block, so a name carrying
-    // "</script>" would end the block early. Nothing in the model does, but the relaxed encoder
-    // would let one through unescaped; this one escapes < > & and quotes. False flags and nulls
-    // are left out to keep the block small: the script reads a missing flag as false.
+    // DataAdminApiController parses this back and sends it as JSON. The strict encoder stays
+    // anyway: it escapes < > & and quotes, so the string is still safe if it is ever written into
+    // a page (the old Data Admin page put it in a <script type="application/json"> block, where a
+    // name carrying "</script>" would have ended the block early). False flags and nulls are left
+    // out to keep the payload small: the script reads a missing flag as false.
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

@@ -22,10 +22,9 @@ public sealed record ChannelRouteEdit(
     // includes "HNM"). Empty/null = catch every HNM.
     IReadOnlyList<string>? HnmMonsterFilter = null);
 
-// Shared save logic for a linkshell's Discord channel routes: full replace with
+// Save logic for a linkshell's Discord channel routes: full replace with
 // validation (one owner per non-event post type) and a ToD board re-enqueue so
-// toggles take effect immediately. Used by both the Activity API and the web
-// Customize page.
+// toggles take effect immediately.
 public sealed class ChannelRouteEditor
 {
     private readonly ApplicationDbContext _db;

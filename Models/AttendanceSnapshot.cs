@@ -26,7 +26,7 @@ public class AttendanceSnapshot
     public DateTime CreatedAtUtc { get; set; }
 
     // Optional human-friendly label for the snapshot. Set by the addon via
-    // `/lsm now <name>` or edited by an officer in the web UI. Null when
+    // `/lsm now <name>` or edited by an officer in the app. Null when
     // the capture was anonymous.
     [MaxLength(128)]
     public string? Name { get; set; }

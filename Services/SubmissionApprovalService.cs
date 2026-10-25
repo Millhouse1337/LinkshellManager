@@ -234,8 +234,8 @@ public sealed record TodSubmissionInput(
     DateTime? RepopTime,
     string? ImagePath,
     IReadOnlyList<TodSubmissionLootInput>? LootRows,
-    // Which spawn window it popped on. Optional so the surfaces that have no such field (the web
-    // and Activity ToD forms post it directly) keep their existing call shape.
+    // Which spawn window it popped on. Optional so the surfaces that have no such field (the
+    // Activity ToD form posts it directly) keep their existing call shape.
     int? PopWindow = null);
 
 public sealed record TodSubmissionLootInput(string? ItemName, string? ItemWinner, int? WinningDkpSpent);

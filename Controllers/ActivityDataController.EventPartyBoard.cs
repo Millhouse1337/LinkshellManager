@@ -8,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // Per-EVENT party-setup board for the Activity. A party setup is a reusable
 // template, so the roster is scoped to the event (EventPartySlotSignups) — these
 // endpoints return/mutate that per-event roster, keeping the Activity panel in
-// sync with the Discord board and the web event page. Reuses the same
+// sync with the Discord board. Reuses the same
 // ActivityPartySetupDetailDto shape as the template board so the Angular panel
 // renders it unchanged.
 public sealed partial class ActivityDataController
@@ -208,7 +208,7 @@ public sealed partial class ActivityDataController
 
     // "Make Me Alliance Lead": the calling member — who must already hold a slot in this
     // event — takes their whole alliance's lead (👑 by the alliance name), moving it off
-    // whoever currently holds it. Mirrors the Discord/web "Make Me Alliance Lead" button.
+    // whoever currently holds it. Mirrors the Discord board's "Make Me Alliance Lead" button.
     // Purely a board designation (no perms), allowed before AND during a live event.
     [HttpPost("events/{eventId:int}/make-alliance-lead")]
     public async Task<IActionResult> MakeEventAllianceLeadAsync(
@@ -369,7 +369,7 @@ public sealed partial class ActivityDataController
     }
 }
 
-// Officer board-edit request bodies (Activity + reused conceptually by the web JS).
+// Officer board-edit request bodies.
 public sealed record EditSlotRequirementRequest(string? Role, string? MainJob, string? SubJob);
 public sealed record MoveSlotRequest(int TargetPartyId, int TargetIndex);
 public sealed record MoveMemberRequest(int? FromSlotId, int? ToSlotId, string? AppUserId, string? DiscordUserId);

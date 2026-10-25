@@ -168,9 +168,9 @@ public class ChartCreditResolutionTests
     }
 
     /// <summary>
-    /// Adding a pop item and crediting its farmers is ONE insert. Both surfaces let an officer name
-    /// the farmers on the add form, and the row must not be able to land without the credit that was
-    /// asked for in the same breath.
+    /// Adding a pop item and crediting its farmers is ONE insert. The add form lets an officer name
+    /// the farmers, and the row must not be able to land without the credit that was asked for in
+    /// the same breath.
     ///
     /// This is why AttachCredits exists at all: ReplaceCreditsAsync keys its child rows on item.Id,
     /// which is still 0 before the insert, so using it here would write credits pointing at nothing.

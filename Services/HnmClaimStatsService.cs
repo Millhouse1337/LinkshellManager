@@ -14,7 +14,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // The three NQ/HQ families chart as TWO rows each — Adamantoise beside Aspidochelone, Behemoth
 // beside King Behemoth, Fafnir beside Nidhogg — because which one popped is the whole point of a
 // wyrm camp and folding them together hid it. Both halves carry their family's ColorClass so they
-// read as one monster split in two; IsHq is what the surfaces badge differently.
+// read as one monster split in two; IsHq is what the app badges differently.
 // HasHqVariant is false for the six monsters that have no stronger half, which get no badge.
 public sealed record HnmClaimSlice(
     string MonsterName,
@@ -38,14 +38,14 @@ public sealed record HnmClaimStats(
         Array.Empty<HnmClaimSlice>());
 }
 
-// Builds the Dashboard / Discord Activity "HNM claim rate" chart.
+// Builds the Dashboard's "HNM claim rate" chart.
 //
 // Both surfaces used to aggregate this themselves off whatever ToD rows they already happened
 // to be holding for other cards — the web off its 200-row Recent Activity page, the Activity
 // off the overview's 25 most recent ToDs of ANY monster, claimed or not. So the chart only ever
 // saw a tail: a linkshell whose last 25 pops were Sky farm NMs charted zero HNM claims, and the
 // Activity's "All" toggle could not mean all, because the rows were never sent. It is one query
-// over the claimed and unclaimed ToDs now, and the same one on both surfaces.
+// over the claimed and unclaimed ToDs now.
 public sealed class HnmClaimStatsService
 {
     // One colour per chartable monster — 6 long-window HNMs plus the 3 NQ/HQ families, so the

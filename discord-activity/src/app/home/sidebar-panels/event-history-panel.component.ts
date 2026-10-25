@@ -15,11 +15,10 @@ import type {
   ActivityEventHistoryWindowsResponse
 } from '../../discord/discord-activity.types';
 
-// Past (closed) event browser + editor for the Activity. Mirrors the web
-// EventHistory page: anyone can view; leaders/officers can edit metadata/DKP,
-// correct an attendee's DKP/active-credit, remove an attendee (refunds DKP), or
-// add a roster member who missed it (grants DKP). Embedded in the Event System
-// tab; loads for the given linkshell.
+// Past (closed) event browser + editor for the Activity: anyone can view;
+// leaders/officers can edit metadata/DKP, correct an attendee's DKP/active-credit,
+// remove an attendee (refunds DKP), or add a roster member who missed it (grants
+// DKP). Embedded in the Event System tab; loads for the given linkshell.
 @Component({
   selector: 'app-event-history-panel',
   standalone: true,

@@ -9,7 +9,7 @@ namespace LinkshellManagerDiscordApp.Authorization;
 // request is using cookie-based authentication. Bearer-token callers (the
 // Discord Activity SPA + the addon) provide a credential the browser cannot
 // forge cross-site, so they don't need the CSRF round-trip; cookie-authed
-// callers (the MVC web pages) do.
+// callers (the app on the website) do.
 public sealed class CookieAuthAntiforgeryFilter : IAsyncAuthorizationFilter
 {
     private static readonly HashSet<string> SafeMethods = new(StringComparer.OrdinalIgnoreCase)

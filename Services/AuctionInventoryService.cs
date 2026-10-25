@@ -5,8 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LinkshellManagerDiscordApp.Services;
 
 // Centralises the linkshell-inventory side-effects of an auction item moving
-// in or out of the "Received" state. Both the web app and the activity API
-// flip auction-history statuses via different controllers; routing both
+// in or out of the "Received" state. Routing every auction-history status flip
 // through here keeps the inventory math consistent and idempotent.
 public static class AuctionInventoryService
 {

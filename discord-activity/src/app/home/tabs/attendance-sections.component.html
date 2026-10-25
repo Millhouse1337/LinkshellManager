@@ -431,9 +431,9 @@
       }
     </section>
 
-    <!-- Windows and Miscellaneous render as two labelled groups. Unlike the web card there is no
-         form index to keep monotonic here (per-member DKP drafts are keyed by character name), so
-         two plain loops are safe. -->
+    <!-- Windows and Miscellaneous render as two labelled groups. There is no form index to keep
+         monotonic here (per-member DKP drafts are keyed by character name), so two plain loops are
+         safe. -->
     @if (event.snapshots.length > 0) {
       <section class="we-snapshots">
         @if (windowSnapshots(event).length > 0) {

@@ -8,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Models;
 // concurrent officer saves.
 //
 // An event type with NO row here falls through to the linkshell's default pool — so the
-// table is EMPTY for an un-customised linkshell, and free-form custom event types (the web
+// table is EMPTY for an un-customised linkshell, and free-form custom event types (the
 // event form has an "Other" free-text field) keep working without ever being enumerated.
 public class DkpPoolEventType
 {

@@ -129,8 +129,8 @@ export class ActivityQueuePanelComponent {
   // Free-text monster name when "Other" is picked in the HNM monster dropdown.
   protected customMonsterName = '';
 
-  // Base manual event types. HNM + NM are spliced in after Sea by eventTypeOptionsForForm()
-  // so the picker order matches the web form; they are not gated on anything.
+  // Base manual event types. HNM + NM are spliced in after Sea by eventTypeOptionsForForm();
+  // they are not gated on anything.
   protected readonly eventTypeOptions = ['Sky', 'Sea', 'HENM', 'Limbus', 'Dynamis', 'BCNM', 'KSNM'] as const;
   protected eventTypeSelection = '';
   protected eventTypeError = false;
@@ -439,9 +439,8 @@ export class ActivityQueuePanelComponent {
   // to (hnmLinkshellBonus below) and what "earning" one means: Standard reads the addon's window
   // scans, Manual Check In reads the member's Check In / Check Out range. One override column per
   // amount, shared across the modes; a camp only ever runs in one of them.
-  // Order is DISPLAY ONLY -- every consumer reads `key`, never the index -- and matches the web
-  // form's bonusFields: the Open, then what a window in between is worth, then the Close and the
-  // two outcome bonuses.
+  // Order is DISPLAY ONLY -- every consumer reads `key`, never the index: the Open, then what a
+  // window in between is worth, then the Close and the two outcome bonuses.
   // "in 2h 14m 09s" for a queued board, counting down to the pop it is queued for.
   //
   // startTime is the same field the card already prints as "Starts", so a re-posted board needs

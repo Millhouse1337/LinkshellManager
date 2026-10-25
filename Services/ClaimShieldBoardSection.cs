@@ -35,7 +35,7 @@ public static class ClaimShieldBoardSection
     private const int MaxLength = 1800;
 
     // A contested pop can produce a dozen lotteries in a minute. The newest few are the ones being
-    // talked about; the rest are audit, and the web card holds all of them.
+    // talked about; the rest are audit, and the app's card holds all of them.
     private const int MaxCaptures = 4;
 
     // Wide enough to read a proportion off, narrow enough that a phone does not wrap it. Rendered

@@ -4,8 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // Discord Activity read-only DKP sheet — the linkshell's live DKP straight from
-// the app's own data (DkpSheetService), the same source the web page and the Excel
-// export use. No Google connection involved; always available. Member-gated. Posting
+// the app's own data (DkpSheetService), the same source the Excel export uses.
+// No Google connection involved; always available. Member-gated. Posting
 // the sheet to a Discord channel is configured in the channel-routes editor (the "DKP
 // sheet" post type on the Configurations tab), not here.
 public sealed partial class ActivityDataController

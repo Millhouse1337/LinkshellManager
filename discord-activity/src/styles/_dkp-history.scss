@@ -1,8 +1,8 @@
 /* ===== DKP History — card redesign =====
    The DKP section (rendered by app-activity-sidebar-panel) drops the panel
-   chrome so its inner cards become the visual cards, mirroring the web DKP
-   History layout. All selectors are `dkph-` prefixed so they're safe to live
-   in the global sheet (no collisions with other components). */
+   chrome so its inner cards become the visual cards. All selectors are `dkph-`
+   prefixed so they're safe to live in the global sheet (no collisions with other
+   components). */
 
 .dkph {
   background: transparent;

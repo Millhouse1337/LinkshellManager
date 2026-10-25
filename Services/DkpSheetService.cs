@@ -104,7 +104,7 @@ public sealed class DkpSheetService
                 poolCurrent));
         }
 
-        // Sort by the resolved display name (case-insensitive) so the web table, the
+        // Sort by the resolved display name (case-insensitive) so the app's table, the
         // .xlsx export and the Discord board share one stable, alphabetical order.
         rows = rows.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
 

@@ -7,7 +7,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // A windowed (HNM) event credits attendance PER POSTED WINDOW, not by accumulated clock time.
 // There is no timer to pause, so every break-creating action — take break, force break, and the
 // live "Withdraw From Event" that parks a member in the Break Room — is meaningless for it and
-// must be refused. Every surface (Activity, Razor, addon, both API controllers) asks THIS
+// must be refused. Every surface (Activity, addon, both API controllers) asks THIS
 // question rather than re-deriving its own `windowCount > 1` test, which is how the app ended up
 // gating the Break Room panel while still offering Force break / Verify / Deny on the same camp.
 //
@@ -36,8 +36,7 @@ public static class EventBreakPolicy
     //                     AssignedMonsterName ?? EventName). Feeds the Discord board, the Activity
     //                     DTO, and the addon's event list.
     //   "Credit" chain  — WindowCountOverride ?? GetWindowCount(EventName). Used by
-    //                     EndEventCoreAsync, WdCampFinalizer, the addon late-join guard, and the
-    //                     Razor view model.
+    //                     EndEventCoreAsync, WdCampFinalizer, and the addon late-join guard.
     //
     // Neither dominates the other (an event named "Fafnir" with a custom AssignedMonsterName gives
     // display=1, credit=2), so taking the max keeps this gate from ever being LOOSER than whichever

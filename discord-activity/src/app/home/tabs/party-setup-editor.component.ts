@@ -225,7 +225,7 @@ export class PartySetupEditorComponent {
     party.slots.splice(index, 1);
   }
 
-  // Clone a slot row directly below itself (web's ps-duplicate-slot button).
+  // Clone a slot row directly below itself.
   // Skipped silently when the party is at the 6-slot cap.
   protected duplicateSlot(party: EditorParty, index: number): void {
     if (party.slots.length >= this.MAX_SLOTS) return;

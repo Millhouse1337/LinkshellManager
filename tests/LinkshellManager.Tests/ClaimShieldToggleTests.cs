@@ -15,9 +15,9 @@ namespace LinkshellManager.Tests;
 // that quietly turns everything off.
 //
 // Monster setups saves are a FULL REPLACE — every row is rewritten from the posted form — so the
-// meaning of "the client didn't send a value" decides whether an older client, or the web page
-// while the server-wide switch is off, wipes the linkshell's choices. Null must mean "leave it
-// alone"; only an explicit false may switch a monster off.
+// meaning of "the client didn't send a value" decides whether an older client wipes the
+// linkshell's choices. Null must mean "leave it alone"; only an explicit false may switch a
+// monster off.
 public class ClaimShieldToggleTests
 {
     private const int LinkshellId = 42;

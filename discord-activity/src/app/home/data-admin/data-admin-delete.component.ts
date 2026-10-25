@@ -111,8 +111,8 @@ export class DataAdminDeleteComponent {
     });
   }
 
-  // A second, browser-native confirmation like the Razor page's, on top of this page: it's a
-  // website-only tool, so window.confirm is fine here (the Discord iframe would block it).
+  // A second, browser-native confirmation on top of this page: it's a website-only tool, so
+  // window.confirm is fine here (the Discord iframe would block it).
   protected async confirmDelete(preview: DataAdminDeletePreview): Promise<void> {
     if (!window.confirm(`Delete ${preview.label}? ${this.summary()}`)) return;
     this.deleting.set(true);

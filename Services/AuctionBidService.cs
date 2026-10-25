@@ -6,10 +6,10 @@ namespace LinkshellManagerDiscordApp.Services;
 
 public sealed record AuctionBidResult(bool Success, string? Error, string? ItemName, int Amount);
 
-// Places a bid on an auction item with the same validation as the Activity/web
-// bid endpoints (auction live, above the minimum, within available DKP). Used by
+// Places a bid on an auction item with the same validation as the Activity
+// bid endpoint (auction live, above the minimum, within available DKP). Used by
 // the Discord interactions endpoint for inline modal bidding, where there's no
-// controller context to reuse. The MVC/Activity endpoints keep their own
+// controller context to reuse. The Activity endpoint keeps its own
 // guild-lock-aware path; this service does a plain linkshell-membership check,
 // which is the right gate for a click that originated inside the guild's channel.
 public static class AuctionBidService
@@ -136,7 +136,7 @@ public static class AuctionBidService
     // True if the given rank may place bids in the linkshell. Defaults to true when
     // the role row is missing (legacy linkshells whose roles were never seeded) so
     // bidding is never accidentally blocked — only an explicit CanBid=false (e.g.
-    // the built-in Trial role) stops it. Shared by the web + Discord bid paths.
+    // the built-in Trial role) stops it.
     public static async Task<bool> CanRankBidAsync(
         ApplicationDbContext db, int linkshellId, string? rank, CancellationToken cancellationToken)
     {

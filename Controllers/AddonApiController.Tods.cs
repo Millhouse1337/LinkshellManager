@@ -18,7 +18,7 @@ public sealed partial class AddonApiController
     // board writes ("Fafnir/Nidhogg", "Adamantoise/Aspidochelone") — the
     // in-game tracker showed one row where the web app showed a dozen. Rather
     // than widen the match to MonsterMatchNames we drop it entirely, so the
-    // addon lists the same set the web ToDs tab does. The addon supplies its
+    // addon lists the same set the app's ToD tracker does. The addon supplies its
     // own spawn-window cadence where it knows one and falls back to a plain
     // repop countdown where it doesn't.
     [HttpGet("tods")]
@@ -28,8 +28,8 @@ public sealed partial class AddonApiController
         var linkshellId = AddonApiAuthAttribute.GetLinkshellId(HttpContext);
 
         // Per-linkshell hidden-mob list (Activity Customize -> "Hide ToD Mobs").
-        // The same filter the MVC ToD page and the Discord pop board honor, so a
-        // monster hidden from the web trackers stays hidden in-game too.
+        // The same filter the app's ToD tracker and the Discord pop board honor, so
+        // a monster hidden from those trackers stays hidden in-game too.
         var hiddenRaw = await _dbContext.Linkshells
             .AsNoTracking()
             .Where(ls => ls.Id == linkshellId)

@@ -49,7 +49,7 @@ public sealed class DataAdminListRow
 
 public sealed class DataAdminListCell
 {
-    // The column's value as EF read it, for Razor formatting only. Never sent as JSON
+    // The column's value as EF read it, for server-side use only. Never sent as JSON
     // (DataAdminApiController): Text is the display form, and an arbitrary CLR value has no business
     // on the wire.
     [System.Text.Json.Serialization.JsonIgnore]

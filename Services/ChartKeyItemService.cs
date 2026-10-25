@@ -41,8 +41,8 @@ public sealed record ChartKeyItemGrid(
 /// <summary>
 /// THE reader and writer of per-member key item progress.
 ///
-/// Same arrangement as ChartBoardService and ChartWishlistService: both controllers are thin
-/// callers, so a card badge on the website and the same badge in the Activity are one derivation.
+/// Same arrangement as ChartBoardService and ChartWishlistService: the rules live here and the
+/// controller is a thin caller.
 /// </summary>
 public sealed class ChartKeyItemService
 {
@@ -144,8 +144,8 @@ public sealed class ChartKeyItemService
     /// <summary>
     /// THE second ownership rule: a member may tick their OWN cell, an officer may tick anybody's.
     ///
-    /// Static and shared for the same reason CanEditRequest is - both surfaces call this one copy,
-    /// so neither can end up more permissive than the other by having written its own.
+    /// Static and shared for the same reason CanEditRequest is - one copy, so no controller can end
+    /// up more permissive by having written its own.
     ///
     /// A viewer with no membership id never matches, even against membership 0.
     /// </summary>

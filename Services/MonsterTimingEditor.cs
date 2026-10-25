@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// One desired monster row from a save request (Activity or web). Id is null for a row the client
-// just added. Durations arrive as the value + unit the officer actually typed and are normalized to
-// canonical minutes in exactly one place — here — so the two surfaces cannot disagree about whether
-// "1" meant an hour or a minute.
+// One desired monster row from a save request. Id is null for a row the client just added.
+// Durations arrive as the value + unit the officer actually typed and are normalized to canonical
+// minutes in exactly one place — here — so no caller has to guess whether "1" meant an hour or a
+// minute.
 public sealed record MonsterTimingEdit(
     int? Id,
     string? MonsterName,
@@ -24,9 +24,7 @@ public sealed record MonsterTimingEdit(
     // as ClaimShieldEnabled: an older client omits it, and a full-replace save must not zero it.
     int? AdditionalSeconds = null);
 
-// Shared save logic for a linkshell's monster setups: full replace with validation, used by both
-// the Activity API and the web Customize page so there is exactly one implementation of "save the
-// monster setups".
+// Save logic for a linkshell's monster setups: full replace with validation.
 public sealed class MonsterTimingEditor
 {
     private readonly ApplicationDbContext _db;

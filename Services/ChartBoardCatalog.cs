@@ -99,8 +99,7 @@ public sealed record ChartPopItemOption(string Name, string? Source = null, stri
 {
     /// <summary>
     /// What the picker shows for this option. Composed here, once, the way ChartBoardService decides
-    /// the ledger's "6 / 8" — the website reads it off the model and the Activity off the payload,
-    /// so neither surface can word the same option differently.
+    /// the ledger's "6 / 8", and read off the payload.
     /// </summary>
     public string Label
     {
@@ -120,7 +119,7 @@ public sealed record ChartPopItemOption(string Name, string? Source = null, stri
 /// <param name="Subtitle">Static flavour under the name, or null.</param>
 /// <param name="Group">Section heading this card sits under, or null for an ungrouped board.
 /// Presentation only — nothing is stored against it, so renaming one is a caption change, unlike
-/// renaming <paramref name="Name"/>. Cards sharing a label MUST be adjacent: both surfaces emit a
+/// renaming <paramref name="Name"/>. Cards sharing a label MUST be adjacent: the app emits a
 /// heading when a card's group differs from the previous card's, so a run that restarts prints its
 /// heading twice. ChartBoardCatalogTests.GroupRunsAreContiguousWithinABoard is the guard.</param>
 public sealed record ChartBoss(
@@ -136,14 +135,14 @@ public sealed record ChartBoss(
     // clean and renders a phantom heading on Sea, with nothing to catch it but eyes on a page.
     string? Group = null,
     /// <summary>The pop items this boss takes, or null when the board does not spell them out.
-    /// A non-empty list turns the "Pop item" box on BOTH surfaces from free text into a picker.</summary>
+    /// A non-empty list turns the "Pop item" box from free text into a picker.</summary>
     IReadOnlyList<ChartPopItemOption>? PopItems = null,
     /// <summary>
     /// The card on THIS board whose pop this one's drops feed — Zipacna → "Genbu". Null for a card
     /// that feeds nothing, which is every card on every board but Sky's farm NMs.
     ///
-    /// Names a BOSS, never a colour. Both surfaces resolve it through <see cref="ChartBoard.LeadsToFor"/>
-    /// and paint the arrow badge in the TARGET card's own theme key, so an arrow and the card it
+    /// Names a BOSS, never a colour. It resolves through <see cref="ChartBoard.LeadsToFor"/> and
+    /// the arrow badge is painted in the TARGET card's own theme key, so an arrow and the card it
     /// points at can never end up different colours, and a name this board does not have degrades to
     /// no badge rather than to a badge with no hue.
     ///
@@ -165,7 +164,7 @@ public sealed record ChartBoss(
     bool EndsRow = false,
     /// <summary>
     /// What falls OFF this boss and gets held, as distinct from what is traded TO it. A non-empty
-    /// list turns the DROP form's item box from free text into a picker on both surfaces, exactly as
+    /// list turns the DROP form's item box from free text into a picker, exactly as
     /// <see cref="PopItems"/> does for the pop form.
     ///
     /// A separate list rather than more entries in PopItems, for two reasons. One, the pop list is
@@ -274,8 +273,8 @@ public sealed record ChartBoard(
     ///
     /// Deliberately Any, not All. Sea mixes: Jailer of Temperance and two of the three Ix'aern are
     /// lottery or animosity spawns that take no trade item, while the rest of the board has a closed
-    /// list. So the choice of picker-or-free-text is made per BOSS, on both surfaces, and this only
-    /// answers whether the board has to ship the machinery.
+    /// list. So the choice of picker-or-free-text is made per BOSS, and this only answers whether
+    /// the board has to ship the machinery.
     /// </summary>
     public bool HasPopItemOptions => Bosses.Any(boss => boss.PopItems is { Count: > 0 });
 
@@ -287,8 +286,8 @@ public sealed record ChartBoard(
     public bool HasDropItemOptions => Bosses.Any(boss => boss.DropItems is { Count: > 0 });
 
     /// <summary>
-    /// The pop or the drop list for a boss, chosen by kind. One resolver, so neither surface picks a
-    /// list for itself and the two cannot offer different options on the same form.
+    /// The pop or the drop list for a boss, chosen by kind. One resolver, so no caller picks a list
+    /// for itself.
     ///
     /// Anything that is not Drop resolves to the pop list, which is what makes an absent or unknown
     /// kind behave exactly like the pop-only world this replaced.
@@ -709,7 +708,7 @@ public static class ChartBoardCatalog
     };
 
     // Display captions, not keys — nothing is stored against them, so renaming one is a caption
-    // change. The two runs must stay CONTIGUOUS in DynamisBoard.Bosses below: both surfaces open a
+    // change. The two runs must stay CONTIGUOUS in DynamisBoard.Bosses below: the app opens a
     // heading when a card's group differs from the previous card's, so interleaving them would print
     // a heading twice and split one group across the board.
     private const string DynamisOriginal = "Original Dynamis";

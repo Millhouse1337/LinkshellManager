@@ -89,7 +89,7 @@ public class HnmClaimStatsServiceTests
 
         Assert.False(nq.IsHq);
         Assert.True(hq.IsHq);
-        // Both are a merge pair, so both are badged NQ / HQ on the two surfaces.
+        // Both are a merge pair, so both are badged NQ / HQ.
         Assert.True(nq.HasHqVariant);
         Assert.True(hq.HasHqVariant);
         // ...and both take the FAMILY's colour, which is what makes the two arcs read as one

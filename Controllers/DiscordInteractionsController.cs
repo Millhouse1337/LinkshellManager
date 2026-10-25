@@ -2554,7 +2554,7 @@ public sealed class DiscordInteractionsController : ControllerBase
 
     // Leader/Officer by rank, OR the app-wide admin override. A null membership is rejected
     // first, so the override can only elevate inside a linkshell the clicker has actually
-    // joined — the same order the web and Activity gates use. See AdminOverrideService.
+    // joined — the same order the Activity gates use. See AdminOverrideService.
     private async Task<bool> CanManageLinkshellAsync(
         AppUserLinkshell? membership, CancellationToken cancellationToken)
     {

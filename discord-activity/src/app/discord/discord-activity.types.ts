@@ -558,9 +558,9 @@ export interface ActivityItemInput {
 /**
  * Treasury: what the linkshell has, what moved, and what can happen to it.
  *
- * Every user-visible string comes from the server (TreasuryLabels / TreasuryTransactionKinds), so the
- * website and Discord cannot end up calling the same thing two different names — which is exactly what
- * happened before, when one column was "Source" on the web and "Type" here.
+ * Every user-visible string comes from the server (TreasuryLabels / TreasuryTransactionKinds), so
+ * no two screens can end up calling the same thing two different names — which is exactly what
+ * happened before, when one column was "Source" on the old website and "Type" here.
  */
 export interface ActivityTreasuryLine {
   /**
@@ -712,7 +712,7 @@ export interface ActivityTreasurySettlePick {
   expectedAmount: number;
 }
 
-/** What a payout run did. `message` is built server-side so both front-ends say the same thing. */
+/** What a payout run did. `message` is built server-side. */
 export interface ActivitySettleOwedResult {
   success: boolean;
   message: string;
@@ -760,8 +760,8 @@ export interface ActivityTreasuryPage {
   pageSize: number;
   categories: ActivityTreasuryCategory[];
   kinds: ActivityTreasuryKind[];
-  /** The picker's top level, in display order. Server-supplied so the wording cannot drift from the
-      website's — the group headings these replaced were hardcoded separately in both apps. */
+  /** The picker's top level, in display order. Server-supplied — the group headings these replaced
+      were hardcoded separately in the old website and here. */
   actions: ActivityTreasuryAction[];
   /** Who a split can be shared with. Empty unless canManage. */
   members: ActivityTreasuryMember[];
@@ -800,7 +800,7 @@ export interface ActivityRevenueInput {
   occurredAt?: string | null;
 }
 
-// Discord channel-routes config (mirrors the web Customize card). Officers add
+// Discord channel-routes config. Officers add
 // named routes, pick a channel, and tick which post types the bot posts there.
 export interface ActivityDiscordChannelOption {
   id: string;
@@ -1519,7 +1519,7 @@ export interface ActivityHistoryDetail {
   participants: ActivityHistoryParticipant[];
 }
 
-// Game Addon (att) pairing — mirrors the web app's /Linkshell/Customize card.
+// Game Addon (att) pairing.
 export interface ActivityAddonToken {
   id: number;
   // The linkshell the representative token row is bound to. One pairing spans
@@ -1838,7 +1838,7 @@ export interface ActivityOverview {
   // sends memberships. Use canManageLinkshellIn()/isLeaderTierIn() rather than reading
   // this directly, so the membership check is never skipped.
   adminOverrideActive?: boolean;
-  // True when a super admin has switched Claim Shield off server-wide (web Settings page). While
+  // True when a super admin has switched Claim Shield off server-wide (website Admin tab). While
   // it is, the per-monster Claim Shield switches in Monster setups do nothing — the editor greys
   // them out and says so rather than showing ticks the addon is ignoring.
   claimShieldGloballyDisabled?: boolean;
@@ -2427,7 +2427,7 @@ export type ChartItemKind = 'Pop' | 'Drop';
 /** There is deliberately no 'Withdrawn': withdrawing deletes the request. */
 export type ChartWishlistStatus = 'Pending' | 'Fulfilled';
 
-/** Composed server-side so both surfaces word the ledger identically. */
+/** Composed server-side. */
 export type ChartCreditStatus = 'Credited' | 'Partial' | 'None' | 'NotTracked';
 
 export interface ActivityChartCredit {

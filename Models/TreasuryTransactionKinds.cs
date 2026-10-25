@@ -32,8 +32,8 @@ public static class TreasuryTransactionActions
     // they had picked anyone, and put the same movement in two places in the transactions list.
     public const string WhatWeOwe = "WhatWeOwe";
     public const string OwedToUs = "OwedToUs";
-    // History only, all three of them: nothing pickable is filed under any of these any more, both
-    // front-ends drop an action with no pickable reason from the button row, and they survive so the
+    // History only, all three of them: nothing pickable is filed under any of these any more, the
+    // picker drops an action with no pickable reason from the button row, and they survive so the
     // entries recorded under them still read as what they were. An action key is never stored on a
     // row — it groups the menu — so keeping one costs nothing but a line here.
     public const string SplitGil = "SplitGil";
@@ -99,9 +99,9 @@ public sealed record TreasuryTransactionKind(
     // unpickable kind, which the APP still records (the gil-count adjustments, and the settle-up
     // the tick-and-pay panel writes) and which a write endpoint must therefore keep accepting.
     //
-    // Without this distinction "not in the picker" would be worth nothing: neither surface checks
-    // pickability on the write path, so a browser tab left open on the old form would still record
-    // a superseded kind long after it vanished from the menu.
+    // Without this distinction "not in the picker" would be worth nothing: the write path never
+    // checks pickability, so a browser tab left open on the old form would still record a
+    // superseded kind long after it vanished from the menu.
     bool IsRetired = false,
     // Which of this kind's two categories gets one line PER MEMBER instead of one line for the
     // whole amount. Must be AddTo or TakeFrom; null means this kind is never split.
@@ -160,8 +160,7 @@ public sealed record TreasuryTransactionKind(
         BringsCashIn ? TreasuryLabels.WhoIsHoldingIt : TreasuryLabels.WhosePocketItLeft;
 }
 
-// THE catalog of what can happen. The Angular picker and the Razor Record form both render this
-// list, so the two surfaces cannot offer different options.
+// THE catalog of what can happen. The Angular picker renders this list.
 //
 // Nothing is ever REMOVED from here, only retired. Every row in the treasury stores the key it was
 // recorded under, and LabelFor resolves it at render time — so deleting an entry from this table
@@ -192,7 +191,7 @@ public static class TreasuryTransactionKinds
     public const string FoundExtraGil = "FoundExtraGil";
     public const string MissingGil = "MissingGil";
 
-    // In picker order, action by action. Nothing reads this positionally — both front-ends group by
+    // In picker order, action by action. Nothing reads this positionally — the picker groups by
     // Action and the fuzz test draws at random — but keeping it in the order a user sees it is what
     // makes the table readable as the menu it describes.
     public static readonly IReadOnlyList<TreasuryTransactionKind> All = new[]

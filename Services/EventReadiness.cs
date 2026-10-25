@@ -16,8 +16,8 @@ public sealed record EventReadinessTag(
 //
 // These are declarations, not permissions: nothing validates them, exactly like the job a
 // member signs up with. Multiple tags are allowed at once (a relic holder can also be
-// enfeeb ready), and each shows beside the member. This is Discord-board-only; the web and
-// Activity boards don't surface it.
+// enfeeb ready), and each shows beside the member. This is Discord-board-only; the Activity
+// board doesn't surface it.
 public static class EventReadiness
 {
     public const string Enfeeb = "enfeeb";

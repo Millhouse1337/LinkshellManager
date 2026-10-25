@@ -174,9 +174,8 @@ public sealed partial class ActivityDataController
         item.Notes = draft.Notes;
         item.UpdatedAt = DateTime.UtcNow;
 
-        // Only when the request carried a list. A caller that says nothing about credits — the
-        // website's edit form does not — must not have the row's farmers wiped as a side effect of
-        // changing a quantity.
+        // Only when the request carried a list. A caller that says nothing about credits must not
+        // have the row's farmers wiped as a side effect of changing a quantity.
         if (request.Credits is not null)
         {
             var credits = await ResolveChartCreditsAsync(
@@ -238,8 +237,7 @@ public sealed partial class ActivityDataController
     // ---- helpers ----------------------------------------------------------------
 
     /// <summary>
-    /// Builds a whole board's payload. Shared by the read endpoint and mirrored by the website's
-    /// controller, so the two surfaces cannot present a different board.
+    /// Builds a whole board's payload for the read endpoint.
     /// </summary>
     private async Task<ActivityChartBoardDto> BuildChartBoardAsync(
         int linkshellId,

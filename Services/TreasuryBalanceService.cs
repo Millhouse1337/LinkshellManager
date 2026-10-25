@@ -135,10 +135,10 @@ public sealed class TreasuryBalanceService
     // Members are keyed on their NAME, never on their account id, and that is load-bearing rather
     // than lazy. The two ways an obligation gets recorded populate the account id differently: a
     // split resolves its recipients from the roster and stores their ids, while a single-member
-    // entry stores null on both surfaces. Keying on "id if present, else name" would therefore file
-    // one payout under the id and its later settlement under the name, and show the same person
-    // twice — once owed, once owed a negative — while still summing to the right total. The name is
-    // the only field the writer guarantees on every line that can carry a member.
+    // entry stores null. Keying on "id if present, else name" would therefore file one payout
+    // under the id and its later settlement under the name, and show the same person twice — once
+    // owed, once owed a negative — while still summing to the right total. The name is the only
+    // field the writer guarantees on every line that can carry a member.
     //
     // Known limit: renaming a character splits them into two rows. Matching against the roster does
     // not help, because a line recorded under the old name matches neither its name nor its id.
@@ -170,7 +170,7 @@ public sealed class TreasuryBalanceService
     // Unlike the obligation lists, a null name is KEPT rather than dropped: every line recorded
     // before holders existed has one, as does every gil-auction payout, and hiding that bucket
     // would make the rows visibly fail to add up to the figure above them. TreasuryLabels.
-    // UnnamedHolder is what both front-ends call it.
+    // UnnamedHolder is what the app calls it.
     public static List<GilHolding> ProjectByHolder(IEnumerable<LedgerLineRow> lines)
     {
         var totals = new Dictionary<string, (string? Name, long Amount)>(StringComparer.Ordinal);

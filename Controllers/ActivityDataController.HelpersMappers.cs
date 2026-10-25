@@ -232,8 +232,7 @@ public sealed partial class ActivityDataController
                         {
                             // Tinted against the monster's busiest window, so its shape is readable
                             // whether its pops cluster in three windows or spread across twenty-five.
-                            // Computed here rather than client-side so the web and the Activity
-                            // can't scale differently.
+                            // Computed here rather than client-side.
                             var peakCount = monster.Bars.Count == 0 ? 0 : monster.Bars.Max(bar => bar.Count);
                             return new ActivityHnmWindowMonsterDto(
                                 monster.MonsterName,

@@ -15,7 +15,7 @@ import type {
 } from '../../discord/discord-activity.types';
 
 // Baseline DKP per member when neither a saved override nor an event default
-// exists yet. Mirrors the web view (`memberDkpDefault = Model.DkpAmount ?? 1.5`).
+// exists yet.
 const FALLBACK_DKP = 1.5;
 // Mirrors AttendanceSnapshotSlotKinds on the server. Window is the fail-closed default: it is what
 // every capture means until an officer says otherwise.
@@ -29,8 +29,7 @@ const SLOT_UNSET = "";
 interface MemberDkpDraft {
   value: number | null;
   // True while the row mirrors the event's Default DKP. Goes false the moment
-  // the officer types into the per-row input (matches the web's
-  // data-follows-default attribute + inline sync script).
+  // the officer types into the per-row input.
   followsDefault: boolean;
 }
 
@@ -281,8 +280,7 @@ export class AttendanceSectionsComponent {
   protected readonly slotMisc = SLOT_MISC;
   protected readonly slotUnset = SLOT_UNSET;
 
-  // The two groups a card renders its captures in. Split server-side and mirrored here so the
-  // Activity and the web cannot disagree about what counts as Misc.
+  // The two groups a card renders its captures in. Split server-side and mirrored here.
   protected windowSnapshots(event: ActivityWindowEvent): ActivityWindowSnapshot[] {
     return event.snapshots.filter(s => !s.isMisc);
   }

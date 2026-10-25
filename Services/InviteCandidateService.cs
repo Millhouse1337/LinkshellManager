@@ -4,10 +4,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// A single LSM user who is eligible to be invited to a linkshell. Front-end
-// agnostic: the Activity maps it to ActivityUserSearchResultDto, the web view
-// renders it directly. Field order/names mirror ActivityUserSearchResultDto so
-// the Activity's JSON contract is unchanged.
+// A single LSM user who is eligible to be invited to a linkshell. The Activity
+// maps it to ActivityUserSearchResultDto. Field order/names mirror
+// ActivityUserSearchResultDto so the Activity's JSON contract is unchanged.
 public sealed record InviteCandidate(
     string Id,
     string DisplayName,
@@ -37,10 +36,9 @@ public sealed record AddDiscordMemberResult(bool Success, string? Error);
 public sealed class InviteCandidateService
 {
     // Every status that means "this person already has a pending invite or join
-    // request for this linkshell" and so must NOT be offered again. The web
-    // writes "Pending"; the Activity writes "PendingInvite"/"PendingJoinRequest".
-    // We exclude all three so a browse never re-shows someone already invited
-    // from either front-end.
+    // request for this linkshell" and so must NOT be offered again. The old
+    // website wrote "Pending"; the Activity writes "PendingInvite"/"PendingJoinRequest".
+    // We exclude all three so a browse never re-shows someone already invited.
     public static readonly string[] PendingInviteStatuses =
         { "Pending", "PendingInvite", "PendingJoinRequest" };
 

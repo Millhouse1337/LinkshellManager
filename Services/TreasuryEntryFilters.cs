@@ -4,9 +4,7 @@ namespace LinkshellManagerDiscordApp.Services;
 
 // The transactions list's chips, as one predicate per chip.
 //
-// ONE copy, because the web and the Activity both render this row and a chip that means different
-// things on the two surfaces is worse than no chip at all. It lived twice — once in each controller
-// — and had already drifted.
+// ONE copy: it lived twice — once in each controller — and had already drifted.
 //
 // Direction comes from whether GIL ON HAND moved, never from matching a string on a type column.
 // String matching is what used to file one entry under both chips at once.

@@ -214,8 +214,8 @@ public class HnmCampEndTodAdoptionTests
     }
 
     // A camp ended with NO Time of Death settled: nothing to adopt, so the board is left exactly as
-    // it was rather than being re-pointed at the pop that just died. This is also the web and
-    // Activity End Event actions, which post no ToD at all.
+    // it was rather than being re-pointed at the pop that just died. This is also the Activity End
+    // Event action, which posts no ToD at all.
     [Fact]
     public async Task EndWithNoNewTod_LeavesTheBoardWhereItWas()
     {

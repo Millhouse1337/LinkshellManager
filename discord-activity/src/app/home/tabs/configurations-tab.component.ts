@@ -1120,7 +1120,7 @@ export class ConfigurationsTabComponent {
 
   // True when a super admin has globally disabled the addon — the whole Game
   // Addon card is hidden (pairing endpoints reject requests anyway).
-  // Server-wide Claim Shield kill-switch, owned by a super admin on the web Settings page. Read
+  // Server-wide Claim Shield kill-switch, owned by a super admin on the website's Admin tab. Read
   // off the polled overview, so flipping it there reaches an open Activity within a poll.
   protected claimShieldGloballyDisabled(): boolean {
     return this.activity.overview()?.claimShieldGloballyDisabled === true;

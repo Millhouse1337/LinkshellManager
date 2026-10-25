@@ -6,8 +6,7 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The transactions chips. One predicate per chip, shared by the web and the Activity, so what
-// "Fixed" means cannot differ between the two surfaces.
+// The transactions chips. One predicate per chip.
 //
 // Fixed and Reversed are the pair worth pinning. Both are recorded by the same mechanism — a later
 // entry pointing at an earlier one — and the only thing telling them apart is the KIND of the entry

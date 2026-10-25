@@ -803,7 +803,7 @@ public sealed class HnmCampReviewHandoffService
     // also what lets the poller recognise this row as the new cycle's board instead of posting a
     // second one beside it.
     //
-    // No newer ToD — a camp ended without one, and the web / Activity End Event actions, which post
+    // No newer ToD — a camp ended without one, and the Activity End Event action, which posts
     // none — leaves the parked board exactly as it was.
     private async Task AdoptSettledTodAsync(Event ev, CancellationToken cancellationToken)
     {

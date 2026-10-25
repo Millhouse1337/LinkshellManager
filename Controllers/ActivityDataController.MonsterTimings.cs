@@ -12,8 +12,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // save, so a nullable row list on that request would mean renaming the linkshell could silently
 // wipe the monster setups.
 //
-// Both this and the web Customize page converge on MonsterTimingEditor, so there is exactly one
-// implementation of "save the monster setups".
+// The save itself lives in MonsterTimingEditor.
 public sealed partial class ActivityDataController
 {
     [HttpGet("linkshells/{linkshellId:int}/monster-timings")]

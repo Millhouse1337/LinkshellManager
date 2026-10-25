@@ -91,8 +91,8 @@ public class TreasurySplitTests
         Assert.All(shares, share => Assert.Equal(300_000, share.Share));
     }
 
-    // Fewer gil than members is a real thing to ask for and must not throw here; the surfaces reject
-    // it with a plain-English message before it reaches the writer.
+    // Fewer gil than members is a real thing to ask for and must not throw here; the API rejects it
+    // with a plain-English message before it reaches the writer.
     [Fact]
     public void Allocate_StillAddsUpWhenThereIsNotEnoughToGoAround()
     {

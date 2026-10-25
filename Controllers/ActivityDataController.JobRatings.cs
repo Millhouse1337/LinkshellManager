@@ -291,7 +291,7 @@ public sealed partial class ActivityDataController
     // the average self gear/skill (their own assessment) and the average peer gear/skill
     // (what the linkshell thinks), the distinct teammate count, plus an AI summary over
     // EVERY peer comment they've received. Powers the "Overall" section of the View
-    // Profile on both the Activity modal and the web member page.
+    // Profile modal.
     [HttpGet("job-ratings/{targetAppUserId}/overall")]
     public async Task<IActionResult> GetJobRatingOverallAsync(
         string targetAppUserId, [FromQuery] int linkshellId, CancellationToken cancellationToken)

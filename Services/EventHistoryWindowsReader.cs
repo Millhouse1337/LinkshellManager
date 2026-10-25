@@ -7,10 +7,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // Reads a CLOSED event's archived attendance windows — the HNM half of a past event, which until
 // the archive existed was deleted at close along with the Event row.
 //
-// Shared by both surfaces (the web EventHistory Details page and the Activity's Past events panel)
-// so the two can't disagree about what a window is called or which of them closed the camp. It is
-// deliberately a reader and nothing more: an archived window is a historical record, not something
-// either surface edits.
+// Used by the Activity's Past events panel. It is deliberately a reader and nothing more: an
+// archived window is a historical record, not something anyone edits.
 //
 // What it can NOT reconstruct, and why: HnmCampPricing.WindowValueFor prices a live window from
 // the camp's own bonus overrides and the linkshell's defaults, and the camp Event carrying those

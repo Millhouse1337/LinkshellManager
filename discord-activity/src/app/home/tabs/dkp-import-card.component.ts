@@ -28,9 +28,8 @@ const SAMPLE_MEMBERS: readonly SampleMember[] = [
 
 // The DKP tab's "Import DKP" view (/dkp/import), on the website and in Discord (the file goes up
 // as base64 JSON; inside Discord the template downloads through a one-time link opened in the
-// member's browser). Choose a file → preview every row → confirm. Mirrors the
-// Customize page's import card and the DkpImportPreview page it led to. Laid out like the Game
-// Addon tab (the shared showcase-* styles), with a picture of the sample template at the bottom.
+// member's browser). Choose a file → preview every row → confirm. Laid out like the Game Addon
+// tab (the shared showcase-* styles), with a picture of the sample template at the bottom.
 @Component({
   selector: 'app-dkp-import-card',
   imports: [DecimalPipe],

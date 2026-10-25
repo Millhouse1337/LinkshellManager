@@ -24,10 +24,10 @@ public static class ChartWishlistStatuses
 public sealed record ChartWishlistDraft(
     string Board, string? Boss, string ItemName, int Quantity, string? Notes);
 
-/// <summary>One request as both surfaces render it.</summary>
+/// <summary>One request as the app renders it.</summary>
 /// <param name="CanWithdraw">Decided HERE, per viewer, so no view re-derives it. A template that
 /// works out for itself whether to show a Withdraw button is a second copy of the ownership rule,
-/// and two copies are exactly what lets one front-end end up more permissive than the other.</param>
+/// and two copies are exactly what lets one end up more permissive than the other.</param>
 public sealed record ChartWishlistRow(
     int Id,
     string Board,
@@ -142,7 +142,7 @@ public sealed class ChartWishlistService
             string.Equals(known, status?.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Projects stored rows into what both surfaces render, badge counts included.
+    /// Projects stored rows into what the app renders, badge counts included.
     ///
     /// Counts are folded out of the SAME list the page lists, never queried separately: a badge
     /// saying 3 above a list showing 2 is the one bug this shape makes impossible.
@@ -199,9 +199,8 @@ public sealed class ChartWishlistService
     // ---- database ---------------------------------------------------------------
 
     /// <summary>
-    /// Every request on a board, in the order both surfaces show them: pending first, then by the
-    /// priority officers set, then oldest first. Decided here rather than per surface so the two
-    /// cannot list the same queue differently.
+    /// Every request on a board, in the order the app shows them: pending first, then by the
+    /// priority officers set, then oldest first.
     /// </summary>
     public async Task<List<ChartWishlistRequest>> LoadAsync(
         int linkshellId, string board, CancellationToken cancellationToken) =>

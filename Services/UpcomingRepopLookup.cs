@@ -11,9 +11,9 @@ namespace LinkshellManagerDiscordApp.Services;
 // creates from a ToD (StartTime = Tod.RepopTime), so a hand-made camp and an auto-made one land
 // on the same schedule instead of drifting by however precisely the officer retyped the time.
 //
-// Shared by the web event form and the Activity's create-event modal so both answer it the same
-// way — in particular the merge-pair matching, which a client-side lookup keyed on the raw stored
-// name would get wrong (a "Fafnir" ToD is the pop a "Fafnir/Nidhogg" camp is waiting on).
+// Used by the Activity's create-event modal. Server-side because of the merge-pair matching,
+// which a client-side lookup keyed on the raw stored name would get wrong (a "Fafnir" ToD is the
+// pop a "Fafnir/Nidhogg" camp is waiting on).
 public static class UpcomingRepopLookup
 {
     // MatchNames carries every spelling of the spawn (HnmConfig.MonsterMatchNames), so a caller

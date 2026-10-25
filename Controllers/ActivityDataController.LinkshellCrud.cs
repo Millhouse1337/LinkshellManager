@@ -275,7 +275,7 @@ public sealed partial class ActivityDataController
         // table now and save through their own endpoint; the column is kept, unwritten, only so
         // LinkshellMonsterTimingProvisioner can import a linkshell's old values on first seed.)
         // Member activity tracking (null = leave unchanged). Thresholds clamp to >= 1
-        // to match the web Customize page and MemberActivityService's own guard.
+        // to match MemberActivityService's own guard.
         if (request.EnableActivityTracking.HasValue)
         {
             linkshell.EnableActivityTracking = request.EnableActivityTracking.Value;
@@ -434,7 +434,7 @@ public sealed partial class ActivityDataController
     }
 
     // The Discord servers the caller can lock a linkshell to: the bot's servers
-    // that the caller is also a member of (mirrors the web Customize dropdown).
+    // that the caller is also a member of.
     [HttpGet("eligible-guilds")]
     public async Task<IActionResult> GetEligibleGuildsAsync(CancellationToken cancellationToken)
     {
@@ -460,7 +460,7 @@ public sealed partial class ActivityDataController
         }
 
         // Cap per-guild membership checks so a bot in many servers doesn't fan out
-        // into dozens of Discord calls (mirrors the web's BuildEligibleGuildsAsync).
+        // into dozens of Discord calls.
         const int maxChecks = 25;
         var eligible = new List<ActivityGuildOptionDto>();
         foreach (var guild in botGuilds.Take(maxChecks))
@@ -649,8 +649,7 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // --- Discord channel routes config, mirrored from the web Customize page so
-    // officers can set it from the Activity too. Officers add named routes, pick a
+    // --- Discord channel routes config. Officers add named routes, pick a
     // channel, and tick which post types (events/loot/auctions/attendance/ToD) the
     // bot posts there — combine several into one channel or split them out. ---
 

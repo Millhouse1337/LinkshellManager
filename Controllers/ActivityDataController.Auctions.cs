@@ -696,7 +696,7 @@ public sealed partial class ActivityDataController
                     ItemName: item.ItemName,
                     Details: $"Auction spend from {auction.AuctionTitle ?? "auction"}.",
                     // Link to the new history row so ManualPoints batches this close into one sheet
-                    // column (mirrors the web close path).
+                    // column.
                     SourceAuctionHistory: history),
                 cancellationToken,
                 // Affordability was enforced at bid time (AuctionBidService). Re-blocking at close

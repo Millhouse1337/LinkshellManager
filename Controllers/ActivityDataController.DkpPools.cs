@@ -10,8 +10,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // Configurations tab re-sends EVERY setting on any save (so a rename can't reset a flag), and a
 // nullable pool list on that request would mean a rename could silently wipe the pool config.
 //
-// Both this and the web Customize page converge on DkpPoolEditor, so there is exactly one
-// implementation of "save the pools" — and exactly one implementation of the ledger re-stamp.
+// The save itself, and the ledger re-stamp that goes with it, live in DkpPoolEditor.
 public sealed partial class ActivityDataController
 {
     [HttpGet("linkshells/{linkshellId:int}/dkp-pools")]

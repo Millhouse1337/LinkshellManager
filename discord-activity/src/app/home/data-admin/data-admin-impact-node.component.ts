@@ -5,7 +5,7 @@ import type { DataAdminImpactNode } from '../../discord/data-admin.types';
 
 // One branch of the delete preview's tree: which rows of a dependent table are deleted, unlinked,
 // or block the delete, and below them whatever those rows take with them. Renders itself for the
-// children (the Razor _CascadeImpact partial, recursively).
+// children, recursively.
 @Component({
   selector: 'app-data-admin-impact-node',
   imports: [DecimalPipe],

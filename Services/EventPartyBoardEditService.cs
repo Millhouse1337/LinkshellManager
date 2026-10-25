@@ -13,7 +13,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // at it. Every later edit mutates the clone in place (slot Ids preserved => the roster
 // survives). The snapshot is cascade-deleted when the event ends/cancels.
 //
-// These methods are SELF-COMMITTING transaction scripts (so both the web and Activity
+// These methods are SELF-COMMITTING transaction scripts (so both the Discord and Activity
 // endpoints stay thin and identical): each clones-if-needed, mutates, saves, re-syncs
 // participation / re-resolves party leadership as required. After any mutation the caller
 // just enqueues the Discord board refresh and tells the client to reload the board.

@@ -15,9 +15,9 @@ export class AddonTokenService {
 
   readonly busyAddonTokens = signal(false);
 
-  // Game Addon (att) pairing — calls the same /api/addon/management endpoints
-  // the web Customize Linkshell page uses (cookie-authenticated; the Activity's
-  // session cookie carries through via credentials:'include' on every fetch).
+  // Game Addon (att) pairing — calls the /api/addon/management endpoints
+  // (cookie-authenticated; the Activity's session cookie carries through via
+  // credentials:'include' on every fetch).
   async loadAddonTokens(linkshellId: number): Promise<ActivityAddonTokenList | null> {
     this.busyAddonTokens.set(true);
     this.auth.setActionError(null);

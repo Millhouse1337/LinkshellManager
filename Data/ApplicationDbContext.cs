@@ -257,9 +257,9 @@ namespace LinkshellManagerDiscordApp.Data
         // Newly-created EventHistory rows (an event closed → post an "event ended"
         // summary to the linkshell's Discord channel). Captured as entity
         // references pre-save because the db-generated Id isn't known until after
-        // commit. Both the web (EndEventCoreAsync) and Activity (EventsLifecycle)
-        // close paths add an EventHistory, so this fires for either without
-        // per-controller wiring.
+        // commit. Both the EventEndService (EndEventCoreAsync) and Activity
+        // (EventsLifecycle) close paths add an EventHistory, so this fires for either
+        // without per-controller wiring.
         private List<EventHistory> CollectAddedEventHistories()
         {
             if (_eventEndedQueue is null)

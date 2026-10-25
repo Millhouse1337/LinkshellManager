@@ -614,8 +614,9 @@ public class DataAdminSchemaGraphTests
         Assert.Equal("ClientSetNull", optional.GetProperty("efDelete").GetString());
     }
 
-    // The JSON is written into a <script type="application/json"> block. The real model has no
-    // name that could close it, so this one is given a table name that tries to.
+    // The JSON's encoder keeps it safe to write into a <script type="application/json"> block (the
+    // old Data Admin page did; the API sends it as JSON now). The real model has no name that could
+    // close one, so this one is given a table name that tries to.
     [Fact]
     public void Synthetic_ATableName_CannotCloseTheScriptBlock()
     {

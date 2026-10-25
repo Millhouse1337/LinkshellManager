@@ -28,9 +28,8 @@ public sealed record DkpPoolRemapPreview(
 
 public sealed record DkpPoolRemapMove(string EventType, string FromPool, string ToPool, double EarnedTotal, int LedgerRows);
 
-// Shared save logic for a linkshell's DKP pools: a full replace with validation, plus the ledger
-// re-stamp that IS the "recompute history" behaviour. Used by both the Activity API and the web
-// Customize page — modelled on ChannelRouteEditor.
+// Save logic for a linkshell's DKP pools: a full replace with validation, plus the ledger
+// re-stamp that IS the "recompute history" behaviour. Modelled on ChannelRouteEditor.
 public sealed class DkpPoolEditor
 {
     private readonly ApplicationDbContext _db;

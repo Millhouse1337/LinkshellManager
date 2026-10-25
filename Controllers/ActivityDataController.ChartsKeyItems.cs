@@ -7,8 +7,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 //
 // BOTH self-serve and officer override: a member ticks their own cell, an officer ticks anybody's,
 // and the two write an identical row distinguishable only by its audit columns. The rule itself is
-// ChartKeyItemService.CanSetKeyItemFor, shared with the website so neither surface can be the more
-// permissive one.
+// ChartKeyItemService.CanSetKeyItemFor.
 //
 // No GET here either - the grid rides in the existing GET .../charts/{board} payload alongside the
 // per-card counts derived from the same rows.

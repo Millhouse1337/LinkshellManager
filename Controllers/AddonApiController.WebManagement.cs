@@ -10,9 +10,8 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 public sealed partial class AddonApiController
 {
-    // Cookie-authenticated remove: the web /Event/Start page and the Discord
-    // Activity's Attendance Windows card both call this with the AppUserEventWindow
-    // row id (exposed via their respective view models / DTOs).
+    // Cookie-authenticated remove: the Activity's Attendance Windows card calls
+    // this with the AppUserEventWindow row id (exposed via its DTO).
     [HttpDelete("management/window-attendees/{id:int}")]
     public async Task<IActionResult> RemoveWindowAttendeeManagementAsync(
         int id, CancellationToken cancellationToken)
@@ -80,12 +79,10 @@ public sealed partial class AddonApiController
         });
     }
 
-    // Poll target for the pairing modal. Returns whether the code has been
-    // redeemed in-game yet (consumed), expired, or is still waiting. The web
-    // modal polls this every couple seconds so it can auto-close the moment
-    // the addon runs /lsm link <code>. Consumed codes are cleaned up lazily
-    // on the next CreatePairingCode call, so "not found" after a known-issued
-    // code is treated the same as expired (the modal stops polling).
+    // Pairing-code status: whether the code has been redeemed in-game yet
+    // (consumed), expired, or is still waiting. Consumed codes are cleaned up
+    // lazily on the next CreatePairingCode call, so "not found" after a
+    // known-issued code is treated the same as expired.
     [HttpGet("management/pairing-code/status")]
     public async Task<IActionResult> PairingCodeStatusAsync(
         [FromQuery] int linkshellId,
@@ -180,7 +177,7 @@ public sealed partial class AddonApiController
                     lastUsedAt = group.Max(t => t.LastUsedAt),
                     issuedToAppUserId = representative.IssuedToAppUserId,
                     // Always true now that the listing is the viewer's own pairings only. Kept on
-                    // the wire because both clients read it, and an older one that lost the field
+                    // the wire because the app reads it, and an older build that lost the field
                     // would read the absence as "somebody else's" and tag every row.
                     mine = representative.IssuedToAppUserId == appUser.Id,
                     linkshells = group

@@ -7,8 +7,8 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The reviewer side of the ToD submission queue, shared by the Razor review pages and the
-// Activity's ToD Submissions Needing Approval section. Pinned here: scoping. Every review and
+// The reviewer side of the ToD submission queue, behind the Activity's ToD Submissions Needing
+// Approval section. Pinned here: scoping. Every review and
 // reject call names the linkshell it acts in, and a submission from another linkshell is NotFound
 // and left exactly as it was. Reject used to take only the submission id, so a reviewer in one
 // linkshell could delete another linkshell's queue.

@@ -5,10 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-// Past-event (EventHistory) browsing + editing for the Discord Activity. Mirrors
-// the web EventHistory page: any member can view; leaders/officers (CanManageEvents)
-// can edit metadata/DKP, correct an attendee's DKP, or remove an attendee. DKP
-// recompute is delegated to EventHistoryEditService (same logic as the web).
+// Past-event (EventHistory) browsing + editing for the Discord Activity: any member
+// can view; leaders/officers (CanManageEvents) can edit metadata/DKP, correct an
+// attendee's DKP, or remove an attendee. DKP recompute is delegated to
+// EventHistoryEditService.
 public sealed partial class ActivityDataController
 {
     // Constructed per call rather than injected — it's stateless apart from the scoped services it

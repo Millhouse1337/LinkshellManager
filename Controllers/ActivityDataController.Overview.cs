@@ -455,7 +455,7 @@ public sealed partial class ActivityDataController
 
         // Job levels live per-membership; surface the primary linkshell's (or any
         // membership's) so the profile "My Jobs" editor can pre-fill. Catalog-
-        // aligned (index 0 = WAR ... 14 = SMN) — same shape the web profile uses.
+        // aligned (index 0 = WAR ... 14 = SMN).
         var profileJobLevels = ProfileJobLevels.ToCatalogLevels(
             linkshellMemberships.FirstOrDefault(link => link.LinkshellId == primaryLinkshellId)?.JobLevels
             ?? linkshellMemberships.FirstOrDefault(link => link.JobLevels != null)?.JobLevels);

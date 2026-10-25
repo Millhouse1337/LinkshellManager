@@ -4,7 +4,7 @@ namespace LinkshellManagerDiscordApp.Services;
 
 // Fire-and-forget queue of EventHistory ids to post an "event ended" summary for.
 // Enqueued from ApplicationDbContext on a successful commit whenever an
-// EventHistory row is added (which both the web and Activity end-event paths do),
+// EventHistory row is added (which both the EventEndService and Activity end-event paths do),
 // so the summary needs no per-controller wiring. Drained by
 // DiscordEventEndedBackgroundService. Singleton, single-reader; mirrors
 // DiscordEventChannelQueue.

@@ -298,8 +298,8 @@ public sealed class ChartBoardService
         return credited >= total ? ChartCreditStatuses.Credited : ChartCreditStatuses.Partial;
     }
 
-    // The words are decided here, once, so both surfaces say them the same way. An em dash rather
-    // than "0 / 0" for an untracked boss: a fraction implies there was something to farm.
+    // The words are decided here, once. An em dash rather than "0 / 0" for an untracked boss: a
+    // fraction implies there was something to farm.
     private static string DetailFor(int credited, int total) =>
         total == 0 ? "—" : $"{credited} / {total}";
 

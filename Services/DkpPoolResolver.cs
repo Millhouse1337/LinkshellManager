@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LinkshellManagerDiscordApp.Services;
 
 // A linkshell's event-type -> pool partition, resolved once and reused. Event.EventType is a
-// free-form string (the web event form has an "Other" free-text field), so Resolve has to cope
+// free-form string (the event form has an "Other" free-text field), so Resolve has to cope
 // with null, unknown and arbitrarily-cased values — all of which land in the default pool.
 public sealed record DkpPoolMap(
     int LinkshellId,

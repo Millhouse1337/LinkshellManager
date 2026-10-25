@@ -313,7 +313,7 @@ public class ChartBoardCatalogTests
     /// Sea MIXES: the two cards at the foot of the board hold nothing — Jailer of Love because it is
     /// the terminus of the chain, Absolute Virtue because it is a finale that documents rewards rather
     /// than tracking pops — so both fall back to a free-text box while the rest of the board gets a
-    /// picker. This is why the choice is made per boss on both surfaces, and why
+    /// picker. This is why the choice is made per boss, and why
     /// ChartBoard.HasPopItemOptions asks Any rather than All.
     /// </summary>
     [Fact]
@@ -425,7 +425,7 @@ public class ChartBoardCatalogTests
     }
 
     /// <summary>
-    /// The picker shows this, on both surfaces, off one implementation.
+    /// The picker shows this, off one implementation.
     ///
     /// No board sets Source any more — every card lists what falls off it, so the source IS the card —
     /// but the form is still built and still tested, because it is the right answer for a board whose
@@ -588,9 +588,9 @@ public class ChartBoardCatalogTests
         }
     }
 
-    // Theme keys become classes in ONE global stylesheet per surface (.lsm-page .is-jeuno,
-    // .panel-tab .is-jeuno), so they have to be unique across the WHOLE catalog, not just within a
-    // board: two boards sharing a key can only ever get one colour, and the loser is silent.
+    // Theme keys become classes in ONE global stylesheet (.panel-tab .is-jeuno), so they have to
+    // be unique across the WHOLE catalog, not just within a board: two boards sharing a key can
+    // only ever get one colour, and the loser is silent.
     [Fact]
     public void ThemeKeysAreUniqueAcrossTheWholeCatalog()
     {
@@ -633,7 +633,7 @@ public class ChartBoardCatalogTests
     ///
     /// EndsRow is only set INSIDE a run — a group heading is full-width and breaks the row before it
     /// on its own, so marking the last card of a group would emit a break that does nothing. This
-    /// walks the board the way both surfaces do (break on a group change OR on EndsRow) so the rows
+    /// walks the board the way the app does (break on a group change OR on EndsRow) so the rows
     /// asserted here are the rows that render.
     /// </summary>
     [Fact]
@@ -735,7 +735,7 @@ public class ChartBoardCatalogTests
     }
 
     /// <summary>
-    /// Walks a board into the rows it actually renders as, the way BOTH surfaces do: a new row on a
+    /// Walks a board into the rows it actually renders as, the way the app does: a new row on a
     /// group change (the heading is full width) or on EndsRow.
     /// </summary>
     private static string[][] RowsOf(ChartBoard board)
@@ -902,7 +902,7 @@ public class ChartBoardCatalogTests
             ChartBoardCatalog.Find(ChartBoardCatalog.Henm)!.Features);
     }
 
-    // Data with no flag renders NOTHING, silently: the surfaces branch on the flag, never on whether
+    // Data with no flag renders NOTHING, silently: the app branches on the flag, never on whether
     // the list happens to be populated. These two are the only way that mistake is ever loud.
     [Fact]
     public void OnlyBoardsThatAllowDropItemsDeclareAny()

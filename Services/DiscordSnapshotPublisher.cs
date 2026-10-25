@@ -153,7 +153,7 @@ public sealed class DiscordSnapshotPublisher
             ? $"{snapshot.EntryCount} members"
             : $"Captured by **{capturedBy}** · {snapshot.EntryCount} members";
         // Said outright so the channel doesn't read as a settled payout. A pending capture is not
-        // in the combined roster and earns nothing until an officer confirms it on the web.
+        // in the combined roster and earns nothing until an officer confirms it in the app.
         if (snapshot.SnapshotStatus == AttendanceSnapshotStatuses.Pending)
         {
             description += "\n⏳ Awaiting officer confirmation — not counted yet.";

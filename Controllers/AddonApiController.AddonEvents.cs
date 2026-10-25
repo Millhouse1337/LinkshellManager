@@ -304,7 +304,7 @@ public sealed partial class AddonApiController
         var nowUtc = DateTime.UtcNow;
 
         // Attach a party-setup template if the addon asked for one. Two guards,
-        // matching the website's create path:
+        // matching the Activity's create path:
         //   * it must belong to THIS linkshell (cross-linkshell defense)
         //   * it must be a reusable template, not another event's private
         //     snapshot (OwnerEventId != null) -- sharing a snapshot would let
@@ -586,10 +586,9 @@ public sealed partial class AddonApiController
         });
     }
 
-    // Ends a running event from the addon. Mirrors the web app's EndEvent
-    // flow (writes EventHistory + DkpLedgerEntry rows, removes the live
-    // Event / Jobs / participants / loot details). Reuses the same internal
-    // helper so the DKP math stays in lockstep with the web path.
+    // Ends a running event from the addon (writes EventHistory + DkpLedgerEntry
+    // rows, removes the live Event / Jobs / participants / loot details), through
+    // EventEndService.EndEventCoreAsync.
     [HttpPost("events/{eventId:int}/end")]
     [AddonApiAuth]
     public async Task<IActionResult> EndEventAsync(int eventId, CancellationToken cancellationToken)

@@ -15,8 +15,8 @@ namespace LinkshellManagerDiscordApp.Controllers;
 //   fulfil    CanManageCharts
 //   reorder   CanManageCharts
 //
-// Both ownership decisions come from the SERVICE rather than from an inline comparison, so the
-// website cannot answer them differently - see ChartWishlistService.CanEditRequest.
+// Both ownership decisions come from the SERVICE rather than from an inline comparison, so no
+// controller holds its own copy - see ChartWishlistService.CanEditRequest.
 //
 // There is no GET. A board's requests ride in the existing GET .../charts/{board} payload, for the
 // reason the ledger already does: a card's badge and the list below it are two views of one set of

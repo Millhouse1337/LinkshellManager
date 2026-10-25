@@ -6,8 +6,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // live on AppUser (AltCharacterName1/2); the roster "main" is the membership's
 // CharacterName (falling back to the account main). Signup/participation records
 // already store a CharacterName, so resolving to the right name is all that's
-// needed — no schema change. Shared by the web, the Discord Activity API, and
-// the Discord in-channel signup so the picker behaves identically everywhere.
+// needed — no schema change. Shared by the Discord Activity API and the Discord
+// in-channel signup so the picker behaves identically everywhere.
 public static class SignupCharacters
 {
     // Ordered, de-duplicated selectable names for a member: main first, then alts.

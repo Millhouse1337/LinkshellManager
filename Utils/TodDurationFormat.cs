@@ -11,9 +11,9 @@ namespace LinkshellManagerDiscordApp.Utils;
 // though, are stored as canonical minutes (LinkshellMonsterTiming.CooldownMinutes), because
 // every consumer does arithmetic on them. This class is the bridge.
 //
-// It lives in Utils rather than on either surface because the web form and the Activity form
-// both compose these strings: if they formatted independently, one would write "1 Hour" and the
-// other "60 Min" for the same configured monster and the ToD list would look inconsistent.
+// It lives in Utils because more than one path composes these strings: if they formatted
+// independently, one would write "1 Hour" and the other "60 Min" for the same configured monster
+// and the ToD list would look inconsistent.
 public static class TodDurationFormat
 {
     public const string HoursUnit = "hours";

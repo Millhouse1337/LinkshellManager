@@ -339,8 +339,8 @@
 /* --- Who we owe, and paying them off ---
    The same names read as a two-column table, with a tick in front of each for an officer who can
    settle. The tick reuses .fin-payout__tick so selecting a member looks identical wherever it
-   happens. Twin of .member-table / .lsm-settle on the web. Ticking only selects; the gil moves when
-   the button below is pressed, so the rows stay legible as a report for an officer who only reads. */
+   happens. Ticking only selects; the gil moves when the button below is pressed, so the rows stay
+   legible as a report for an officer who only reads. */
 .panel-tab .fin-member-table {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -755,8 +755,7 @@
 }
 
 /* The "what happened" action row. Layout only — the buttons are the ordinary .btn sm primary/ghost
-   pair used by the filter chips, so there is no second button style to keep in step. Mirrors
-   .lsm-actionrow on the web. */
+   pair used by the filter chips, so there is no second button style to keep in step. */
 .panel-tab .fin-actions {
   display: flex;
   align-items: center;

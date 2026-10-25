@@ -40,7 +40,7 @@ export function chartsSectionFromSlug(slug: string | null | undefined): string {
  * board renders — disabled with a "Soon" badge rather than hidden, so the menu keeps its shape.
  *
  * HNM is deliberately absent even though the old placeholder listed it — it has its own first-class
- * tab and its own EnableHnmSection toggle, and the website's Charts nav never listed it either.
+ * tab and its own EnableHnmSection toggle, and the old website's Charts nav never listed it either.
  */
 @Component({
   selector: 'app-charts-tab',

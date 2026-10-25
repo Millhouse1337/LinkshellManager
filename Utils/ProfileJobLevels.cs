@@ -17,7 +17,7 @@ public static class ProfileJobLevels
     public const int MaxLevel = 75;
 
     // Classic FFXI sub-job cap: a job leveled to 37+ can be used as a sub. The old website's
-    // member profile lists jobs at this level or higher as the character's "leveled subjobs".
+    // member profile listed jobs at this level or higher as the character's "leveled subjobs".
     public const int SubJobMinLevel = 37;
 
     public static int JobCount => EventJobCatalog.MainJobOptions.Length; // 18

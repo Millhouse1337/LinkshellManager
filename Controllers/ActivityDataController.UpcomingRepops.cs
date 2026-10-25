@@ -8,8 +8,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // logged ToD, so the form fills Start in with that instant instead of making them retype it.
 //
 // Its own endpoint rather than a field on the overview: the overview is polled, and this answer is
-// only wanted while a create/edit form is open. See UpcomingRepopLookup for the lookup itself,
-// which the web event form shares.
+// only wanted while a create/edit form is open. See UpcomingRepopLookup for the lookup itself.
 public sealed partial class ActivityDataController
 {
     [HttpGet("linkshells/{linkshellId:int}/upcoming-repops")]

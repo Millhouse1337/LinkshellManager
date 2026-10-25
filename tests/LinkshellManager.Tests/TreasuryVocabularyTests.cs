@@ -133,7 +133,7 @@ public class TreasuryVocabularyTests
         }
     }
 
-    // A split asks for several members, so the surfaces have to know to show a member field at all.
+    // A split asks for several members, so the form has to know to show a member field at all.
     [Fact]
     public void EverySplittableKindAsksForMembers()
     {
@@ -208,7 +208,7 @@ public class TreasuryVocabularyTests
     }
 
     // THE shape of the picker after the categories went. Gil In and Gil Out each offer exactly one
-    // thing, which is what lets both front-ends drop the reason select and show a box to type in
+    // thing, which is what lets the form drop the reason select and show a box to type in
     // instead. A second reason appearing under either of them silently brings the dropdown back.
     [Fact]
     public void GilInAndGilOutOfferExactlyOneThingEach()
@@ -371,9 +371,9 @@ public class TreasuryVocabularyTests
     }
 
     // THE property that retires the "Which one?" dropdown: no action an officer can pick has a
-    // second reason behind it, so neither front-end ever renders the select. Both hide it by
-    // counting the reasons under the chosen action, so one kind landing under an existing action is
-    // all it would take to bring the dropdown back everywhere.
+    // second reason behind it, so the form never renders the select. It hides it by counting the
+    // reasons under the chosen action, so one kind landing under an existing action is all it would
+    // take to bring the dropdown back.
     [Fact]
     public void NoPickableActionAsksASecondQuestion()
     {
@@ -416,9 +416,9 @@ public class TreasuryVocabularyTests
     //
     // Three are history-only, and deliberately so: Setup ("Starting Gil" and "Gil on Hand" were
     // removed), Split Gil and We Owe a Member (both folded into What We Owe, which takes one member
-    // or several). Nothing pickable is filed under any of them, which is precisely what makes both
-    // front-ends drop them from the button row — each one renders only the actions its OWN option
-    // list mentions — so they cost nothing but keep their entries reading as what they were.
+    // or several). Nothing pickable is filed under any of them, which is precisely what makes the
+    // form drop them from the button row — it renders only the actions its option list mentions —
+    // so they cost nothing but keep their entries reading as what they were.
     [Fact]
     public void EveryOfferedActionHasAReasonBehindIt()
     {

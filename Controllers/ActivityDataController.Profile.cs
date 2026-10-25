@@ -54,10 +54,9 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = errorMessage });
         }
 
-        // Persist per-job levels onto every membership (same as the web profile),
-        // so the character's jobs are consistent across linkshells and stored in
-        // the addon's FFXI-job-id format. The client sends a catalog-aligned
-        // array (index 0 = WAR ... 14 = SMN).
+        // Persist per-job levels onto every membership, so the character's jobs are
+        // consistent across linkshells and stored in the addon's FFXI-job-id format.
+        // The client sends a catalog-aligned array (index 0 = WAR ... 14 = SMN).
         if (request.JobLevels is { Length: > 0 } || request.StrongJobs is { Length: > 0 } || request.MeritJobs is { Length: > 0 })
         {
             var memberships = await _dbContext.AppUserLinkshells
@@ -89,7 +88,7 @@ public sealed partial class ActivityDataController
 
         // Alt-character job levels live on the AppUser (not per-membership). Clear
         // an alt's jobs when its name is removed; otherwise merge the submitted
-        // catalog-aligned levels — mirrors the web profile.
+        // catalog-aligned levels.
         var altJobsChanged = false;
         if (string.IsNullOrWhiteSpace(request.AltCharacterName1))
         {

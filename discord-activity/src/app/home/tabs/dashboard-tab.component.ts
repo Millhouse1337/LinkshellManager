@@ -532,10 +532,9 @@ export class DashboardTabComponent {
   protected readonly dashboardHnmChartTab = signal<'claims' | 'windows'>('claims');
 
   // All-time and already shaped by the server (HnmWindowStatsService + MapHnmWindows): grids are
-  // grouped by band length and cell tints are a share of each monster's busiest window, so the web
-  // and the Activity can't lay out the same data differently. No 7d/30d/all switch — a spawn
-  // distribution needs volume to mean anything, which is also why the window toggle is hidden
-  // while this tab is open.
+  // grouped by band length and cell tints are a share of each monster's busiest window. No
+  // 7d/30d/all switch — a spawn distribution needs volume to mean anything, which is also why the
+  // window toggle is hidden while this tab is open.
   protected readonly dashboardHnmWindowGrids = computed<ActivityHnmWindowGrid[]>(() =>
     this.activity.overview()?.hnmWindows?.grids ?? []);
 

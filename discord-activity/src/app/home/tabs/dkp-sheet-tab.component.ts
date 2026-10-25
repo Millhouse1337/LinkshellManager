@@ -8,8 +8,7 @@ import { DownloadLinkService } from '../../discord/download-link.service';
 import type { ActivityDkpSheetMember, ActivityDkpSheetPool } from '../../discord/discord-activity.types';
 
 // Always-on DKP sheet for the Activity: summary cards + a filterable member
-// table, computed from the app's own DKP (no Google connection). Mirrors the
-// web DKP Sheet page.
+// table, computed from the app's own DKP (no Google connection).
 @Component({
   selector: 'app-dkp-sheet-tab',
   imports: [CommonModule, FormsModule],

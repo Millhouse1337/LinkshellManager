@@ -408,7 +408,7 @@ public static class HnmConfig
         !string.IsNullOrWhiteSpace(name) && SkyGods.Contains(name.Trim());
 
     // Case-insensitive input ("byakko", "BYAKKO ") to the canonical spelling used for storage and
-    // for the theme key on both surfaces. Null for anything that isn't a Sky God, so callers can
+    // for the theme key. Null for anything that isn't a Sky God, so callers can
     // reject an unknown god rather than storing a row nothing will ever group.
     public static string? NormalizeSkyGod(string? name)
     {

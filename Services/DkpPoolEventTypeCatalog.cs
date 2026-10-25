@@ -12,7 +12,7 @@ namespace LinkshellManagerDiscordApp.Services;
 public sealed record DkpPoolEventTypeOption(string Key, bool IsCustom, double EarnedTotal, bool InUse);
 
 // Everything a linkshell can assign to a pool: the built-in content event types (Sky, Sea, HNM …)
-// plus any custom string this linkshell actually used — the web event form has an "Other"
+// plus any custom string this linkshell actually used — the event form has an "Other"
 // free-text field, so "Sky Farm" is a real possibility and has to be assignable rather than
 // silently falling into the default pool forever.
 //

@@ -275,7 +275,7 @@ public sealed class DiscordIdentityService
     private static readonly TimeSpan BotGuildsTtl = TimeSpan.FromMinutes(5);
 
     // Lists the guilds the LSM bot itself is in (GET /users/@me/guilds with the
-    // bot token). Used by the website's server-lock UI to offer a pick-list of
+    // bot token). Used by the app's server-lock UI to offer a pick-list of
     // servers the bot can actually gate. Returns null when no bot token is
     // configured or the call fails; cached briefly so an officer page load
     // doesn't hit Discord every time.

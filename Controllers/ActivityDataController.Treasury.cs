@@ -11,9 +11,9 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // start, and member-visible history is the compensating control for there being no second signature on
 // a recording. Writes need CanManageTreasury.
 //
-// That permission is now the ONLY gate, on both surfaces. The web pages used to check the coarse
-// Leader/Officer rank instead, so an officer without the permission could record gil through the
-// website that this API would refuse — a privilege escalation available by picking a front-end.
+// That permission is now the ONLY gate. The old web pages used to check the coarse Leader/Officer
+// rank instead, so an officer without the permission could record gil through the old website that
+// this API would refuse — a privilege escalation available by picking a front-end.
 // GrantTreasuryToOfficersWhoUsedIt preserves access for the officers who were actually using it.
 public sealed partial class ActivityDataController
 {
@@ -355,8 +355,7 @@ public sealed partial class ActivityDataController
     // Pay the ticked members straight off the balance sheet's "who we owe" list, in full.
     //
     // One ordinary "We paid a member what we owed" transaction each, in a single save, so a payout
-    // run lands whole or not at all. Same service the website's SettleOwed uses, so the two surfaces
-    // cannot pay differently.
+    // run lands whole or not at all.
     [HttpPost("linkshells/{linkshellId:int}/treasury/settle")]
     public Task<IActionResult> SettleOwedAsync(
         int linkshellId,
@@ -506,7 +505,7 @@ public sealed partial class ActivityDataController
             snapshot.Balances,
             await _ledgerPeriods.GetLockedThroughAsync(linkshellId, cancellationToken),
             TreasuryLabels.BasisNote,
-            // The word for "nobody was named" is decided here, once, so both surfaces say it the same.
+            // The word for "nobody was named" is decided here, once.
             // CanSettle comes off the obligation rather than the displayed name for the same reason:
             // a member could in principle be called whatever UnnamedMember says.
             MapObligations(sheet.OwedToMembers),

@@ -15,7 +15,7 @@ namespace LinkshellManagerDiscordApp.Models;
 ///
 /// This is also the first Charts write a plain member may make. Everything else on these boards
 /// needs CanManageCharts; a request needs only membership, and the ownership rule that follows from
-/// that lives in ChartWishlistService.CanEditRequest so both surfaces enforce one copy of it.
+/// that lives in ChartWishlistService.CanEditRequest so there is one copy of it.
 /// </summary>
 public class ChartWishlistRequest
 {

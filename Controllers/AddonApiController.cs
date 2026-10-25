@@ -65,8 +65,8 @@ public sealed partial class AddonApiController : ControllerBase
 
     // Dual-auth resolver for the management endpoints: tries the Discord OAuth
     // bearer token first (so the Activity SPA can call them) and otherwise
-    // uses ASP.NET Identity cookie auth (used by the MVC web app's Customize
-    // page). When a bearer token is presented but fails validation, the
+    // uses ASP.NET Identity cookie auth (used by the app on the website).
+    // When a bearer token is presented but fails validation, the
     // request is rejected — we do NOT silently downgrade to cookie auth, since
     // an attacker who can disrupt outbound calls to discord.com would
     // otherwise be able to force the cookie path and exploit any CSRF gap.

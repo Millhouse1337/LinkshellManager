@@ -371,8 +371,8 @@ public sealed record ActivityUpdateItemRequest(string ItemName, string? ItemType
 public sealed record ActivityCreateRevenueRequest(string EntryType, string? Category, long Value, string? Details, DateTime? OccurredAt);
 
 // --- Treasury: the two halves of a transaction, its categories, and what can happen to it. ---
-// Every user-visible string here comes from TreasuryLabels or TreasuryTransactionKinds, so the web and
-// Discord cannot drift, and none of it is bookkeeping jargon.
+// Every user-visible string here comes from TreasuryLabels or TreasuryTransactionKinds, and none of
+// it is bookkeeping jargon.
 
 // One half of a transaction. Only ever rendered inside the collapsed "show the bookkeeping details"
 // panel — the list itself shows one plain-English line per entry.
@@ -503,7 +503,7 @@ public sealed record ActivityTreasuryKindDto(
 // always add up to its WeOwe figure.
 // One person and the slice of the linkshell's gil sitting on their mule. Projected from the same
 // lines as the snapshot, so these always add up to its CashOnHand figure — including the
-// nobody-named bucket, which is why CharacterName is nullable here and the front-ends label it
+// nobody-named bucket, which is why CharacterName is nullable here and the front-end labels it
 // rather than dropping it.
 public sealed record ActivityTreasuryGilHolderDto(string? CharacterName, long Amount);
 
@@ -532,8 +532,7 @@ public sealed record ActivitySettleOwedRequest(
     string? HolderCharacterName = null,
     string? HolderAppUserId = null);
 
-// What a payout run did. The message is built server-side so the website and the Activity report
-// the same outcome in the same words.
+// What a payout run did. The message is built server-side.
 public sealed record ActivitySettleOwedResultDto(
     bool Success,
     string Message,
@@ -553,7 +552,7 @@ public sealed record ActivityTreasurySnapshotDto(
     // Whether what we hold minus what we owe still matches what we started with plus the net movement.
     bool Balances,
     DateTime? LockedThroughUtc,
-    // Disclosed as data, not baked into either front-end, so both render the same sentence.
+    // Disclosed as data, not baked into the front-end.
     string BasisNote,
     // Who the WeOwe figure above is owed to. Sent to every reader, not just officers — the treasury
     // is member-visible and these names already appear in the transactions list.
@@ -1399,7 +1398,7 @@ public sealed record ActivityCreateEventRequest(
     // instead of waiting for a manual Start. Ignored for HNM events.
     bool AutoStart = false,
     // When true, attendees earn active-member credit (reconciled at close).
-    // Default true, matching the web event form.
+    // Default true.
     bool CountsTowardActive = true,
     // HNM signup board only: the canonical monster the board is for. Ignored for non-HNM events.
     // The monster's standing "repost before the next predicted pop" setting is not part of this
@@ -1486,7 +1485,7 @@ public sealed record ActivitySetGuildRequest(string? GuildId, string? GuildName)
 public sealed record ActivitySetGuildLockRequest(bool Locked);
 
 // One Discord server the caller can lock a linkshell to (the bot is in it and
-// so is the caller). Mirrors the web Customize page's eligible-guild dropdown.
+// so is the caller).
 public sealed record ActivityGuildOptionDto(string Id, string Name);
 
 public sealed record ActivitySendInviteRequest(string AppUserId);
@@ -1825,7 +1824,7 @@ public sealed record ActivityChartBossDto(
     /// <summary>The card this one's drops feed ("Suzaku"), or null. Renders as the arrow badge.</summary>
     string? LeadsTo,
     /// <summary>That card's OWN theme key, so the badge is tinted in the TARGET's hue rather than
-    /// this card's. Resolved off the catalog server-side, so neither surface maps a boss name to a
+    /// this card's. Resolved off the catalog server-side, so the client never maps a boss name to a
     /// colour itself and an arrow can never be a different colour from the card it points at.</summary>
     string? LeadsToThemeKey,
     /// <summary>Start a new row after this card. A board that sets it anywhere is drawn as centred
@@ -1847,7 +1846,7 @@ public sealed record ActivityChartBossDto(
 
 /// <summary>
 /// <c>Name</c> is what gets stored; <c>Source</c> is the mob that drops it; <c>Label</c> is the two
-/// composed the way the website composes them, so the picker reads identically on both surfaces.
+/// composed server-side, as the picker shows them.
 /// </summary>
 public sealed record ActivityChartPopItemOptionDto(string Name, string? Source, string Label);
 
@@ -1889,7 +1888,7 @@ public sealed record ActivityChartLedgerRowDto(
     int TotalTracked,
     int CreditedPercent);
 
-/// <summary><c>Status</c> is a ChartCreditStatuses value; <c>Detail</c> ("6 / 8") is composed server-side so both surfaces word it identically.</summary>
+/// <summary><c>Status</c> is a ChartCreditStatuses value; <c>Detail</c> ("6 / 8") is composed server-side.</summary>
 public sealed record ActivityChartLedgerCellDto(
     string Boss,
     string Status,
@@ -1940,8 +1939,7 @@ public sealed record ActivitySetChartCreditsRequest(IReadOnlyList<ActivityChartC
 //
 // The one part of Charts a member without CanManageCharts may write. CanWithdraw is decided
 // server-side PER VIEWER and shipped on the row, so no client works out for itself whether to show
-// the button - a second copy of the ownership rule is exactly how one front-end ends up more
-// permissive than the other.
+// the button - a second copy of the ownership rule is exactly how two copies end up disagreeing.
 
 public sealed record ActivityChartWishlistDto(
     IReadOnlyList<ActivityChartWishlistRequestDto> Requests,

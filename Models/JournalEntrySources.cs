@@ -8,7 +8,7 @@ public static class JournalEntrySources
     // An officer recorded it by hand.
     public const string Manual = "Manual";
 
-    // An inventory item was marked sold (either surface).
+    // An inventory item was marked sold.
     public const string ItemSale = "ItemSale";
 
     // A gil auction closed and the winner is owed / was paid the gil.

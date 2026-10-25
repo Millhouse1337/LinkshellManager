@@ -21,8 +21,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // isn't the last one posted.
 //
 // Two routes over one helper — the same addon/management pair SetWindowDkpAsync established: the
-// addon knows the sequence it is posting against, the Activity and the web page know the row id
-// their DTO carries.
+// addon knows the sequence it is posting against, the Activity knows the row id its DTO carries.
 public sealed partial class AddonApiController
 {
     // PATCH /api/addon/events/{eventId}/windows/{sequence}/closing   (in-game addon, token auth)

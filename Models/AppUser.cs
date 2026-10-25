@@ -66,7 +66,7 @@ public class AppUser : IdentityUser
     public byte[]? ProfileImage { get; set; }
 
     // App-wide super admin. NOT linkshell-scoped — grants access to global
-    // server controls (e.g. the addon kill-switch on the Settings page).
+    // server controls (e.g. the addon kill-switch on the website's Admin tab).
     // Seeded on startup for the configured SuperAdmin account; see Program.cs.
     public bool IsSuperAdmin { get; set; }
 

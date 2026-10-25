@@ -61,14 +61,14 @@ public sealed class DiscordTodBoardPublisher
             StringComparer.OrdinalIgnoreCase);
 
         // All ToDs for the linkshell (HNMs included — the board is the full
-        // pop tracker, unlike the web /Tod page which hides true HNMs).
+        // pop tracker).
         var tods = await _db.Tods
             .AsNoTracking()
             .Where(t => t.LinkshellId == linkshellId)
             .Select(t => new { t.Id, t.MonsterName, t.DayNumber, t.Time, t.TimeStamp, t.RepopTime, t.Claim, t.Cooldown })
             .ToListAsync(cancellationToken);
 
-        // Latest row per monster (Time ?? TimeStamp desc, Id desc — same as the web list),
+        // Latest row per monster (Time ?? TimeStamp desc, Id desc),
         // hidden monsters removed, ordered by soonest repop (nulls last). The TimeStamp fallback
         // keeps a "Not entered" ToD (camp ended without a kill) as the monster's newest row.
         var rows = tods

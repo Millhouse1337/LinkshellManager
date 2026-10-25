@@ -269,7 +269,7 @@ export class LinkshellService {
   }
 
   // Set (or clear with null) the channel new post-event discussion comments
-  // mirror to. Mirrors the web "Post-event discussion channel" card.
+  // mirror to.
   async setDiscussionChannel(linkshellId: number, channelId: string | null): Promise<boolean> {
     this.busyLinkshellId.set(linkshellId);
     this.auth.setActionError(null);
@@ -290,7 +290,7 @@ export class LinkshellService {
   }
 
   // Phase 2 channel config: load the linkshell's channel bindings + the bot's
-  // available channels (mirrors the web Customize "Discord Channels" card).
+  // available channels.
   async loadDiscordChannels(linkshellId: number, refresh = false): Promise<ActivityChannelRoutesResponse | null> {
     this.busyDiscordChannels.set(true);
     this.auth.setActionError(null);
