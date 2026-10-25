@@ -1582,7 +1582,7 @@ public sealed class DiscordInteractionsController : ControllerBase
                 else
                 {
                     return Ephemeral(
-                        $"**Re-Post Board** takes a number of hours (like `1`, `1.5` or `4`), or `no` to turn "
+                        $"**Repost Event** takes a number of hours (like `1`, `1.5` or `4`), or `no` to turn "
                         + $"re-posting off — `{repostRaw}` is neither. Nothing was saved; hit **End Camp** again.");
                 }
             }
@@ -2303,9 +2303,9 @@ public sealed class DiscordInteractionsController : ControllerBase
         //
         // Printed at full precision, because the field takes fractional hours now. It used to round
         // to a whole number to match a whole-number parser, which was safe only while nothing but
-        // the End Camp form could set a lead — the create-event form asks for one now, so rounding
-        // here would quietly rewrite an officer's 1.5 to 2 just by their submitting this modal.
-        fields.Add(TextRow(WdPopRepostFieldId, "Re-Post Board (Hours Before Repop)",
+        // this modal could set a lead — the app's ToD form takes quarter-hours, so rounding here
+        // would quietly rewrite an officer's 1.5 to 2 just by their submitting this modal.
+        fields.Add(TextRow(WdPopRepostFieldId, "Repost Event (Hours Before Repop)",
             "Example: 1 = 1 hr before, or no = dont re-post",
             false, 10,
             currentLeadHours is { } saved && saved > 0
