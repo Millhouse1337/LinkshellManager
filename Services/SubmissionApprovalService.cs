@@ -148,7 +148,7 @@ public sealed class SubmissionApprovalService
 
         // A new ToD = a new pop window, so reset any party sign-ups assigned to
         // this monster (the old roster is for the pop that just happened).
-        await PartySetupController.ClearSignupsForMonsterAsync(_db, tod.LinkshellId, tod.MonsterName, cancellationToken);
+        await PartySetupSignupReset.ClearSignupsForMonsterAsync(_db, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
         // Approving a member's ToD puts no board up either, for the same reason the addon's own
         // post doesn't: a board comes back only through Repeat-on-ToD, at its lead.

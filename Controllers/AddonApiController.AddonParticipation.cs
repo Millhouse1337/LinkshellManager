@@ -1499,7 +1499,7 @@ public sealed partial class AddonApiController
 
         // A new ToD = a new pop window, so reset any party sign-ups assigned to
         // this monster (the old roster is for the pop that just happened).
-        await PartySetupController.ClearSignupsForMonsterAsync(_dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
+        await PartySetupSignupReset.ClearSignupsForMonsterAsync(_dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
         // Recording a Time of Death does NOT put a board up. It used to queue the next pop's camp
         // on the spot, for any tracked HNM, which meant entering a ToD created an event nobody had

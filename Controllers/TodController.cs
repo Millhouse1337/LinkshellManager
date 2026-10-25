@@ -241,7 +241,7 @@ public class TodController : Controller
 
         // A new ToD = a new pop window, so reset any party sign-ups assigned to
         // this monster (the old roster is for the pop that just happened).
-        await PartySetupController.ClearSignupsForMonsterAsync(_context, newTod.LinkshellId, newTod.MonsterName);
+        await PartySetupSignupReset.ClearSignupsForMonsterAsync(_context, newTod.LinkshellId, newTod.MonsterName);
 
         // The tracker writes only the Tod row, so any board parked waiting to re-post would keep
         // showing the old pop time until it actually re-posted. Re-point it at this ToD's repop.
