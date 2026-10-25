@@ -242,57 +242,6 @@ public partial class EventController : Controller
         return role?.CanManageEvents == true;
     }
 
-    internal static double CalculateAccumulatedDurationHours(AppUserEvent participation, DateTime referenceUtc, DateTime? eventStartUtc)
-    {
-        var accumulatedHours = Math.Max(0, participation.Duration ?? 0);
-        if (participation.IsOnBreak == true)
-        {
-            return accumulatedHours;
-        }
-
-        var segmentStart = participation.ResumeTime ?? participation.StartTime ?? eventStartUtc;
-        if (!segmentStart.HasValue)
-        {
-            return accumulatedHours;
-        }
-
-        var segmentHours = Math.Max(0, (referenceUtc - segmentStart.Value).TotalHours);
-        return accumulatedHours + segmentHours;
-    }
-
-    internal static AppUserLinkshell? ResolveLootWinnerMembership(
-        string? itemWinner,
-        IReadOnlyDictionary<string, AppUserLinkshell> membershipsByAppUserId,
-        IReadOnlyDictionary<string, AppUserEvent> participantsByCharacterName,
-        IEnumerable<AppUserLinkshell> linkshellMemberships)
-    {
-        var normalizedWinner = NormalizeLookupKey(itemWinner);
-        if (normalizedWinner is null)
-        {
-            return null;
-        }
-
-        if (participantsByCharacterName.TryGetValue(normalizedWinner, out var participation) &&
-            !string.IsNullOrWhiteSpace(participation.AppUserId) &&
-            membershipsByAppUserId.TryGetValue(participation.AppUserId, out var participantMembership))
-        {
-            return participantMembership;
-        }
-
-        // Match the winner by the membership's MAIN character OR either ALT (alts
-        // share the main's account, so loot won on an alt deducts from the one
-        // account balance). Requires the memberships to be loaded WITH AppUser.
-        return linkshellMemberships.FirstOrDefault(link =>
-            string.Equals(NormalizeLookupKey(link.CharacterName), normalizedWinner, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(NormalizeLookupKey(link.AppUser?.AltCharacterName1), normalizedWinner, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(NormalizeLookupKey(link.AppUser?.AltCharacterName2), normalizedWinner, StringComparison.OrdinalIgnoreCase));
-    }
-
-    internal static string? NormalizeLookupKey(string? value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    }
-
     private DateTime? ConvertUtcToUserTimeZone(DateTime? utcDateTime, string? timeZoneId)
         => _timeZones.ToUserTime(utcDateTime, timeZoneId);
 

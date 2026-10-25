@@ -97,7 +97,7 @@ public sealed partial class AddonApiController
         }
 
         var nowUtc = DateTime.UtcNow;
-        participation.Duration = EventController.CalculateAccumulatedDurationHours(
+        participation.Duration = EventEndService.CalculateAccumulatedDurationHours(
             participation, nowUtc, eventEntity.CommencementStartTime);
         participation.IsOnBreak = true;
         participation.PauseTime = nowUtc;

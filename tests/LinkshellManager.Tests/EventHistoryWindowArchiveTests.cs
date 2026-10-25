@@ -117,7 +117,7 @@ public class EventHistoryWindowArchiveTests
         using var db = NewDb();
         var camp = SeedCamp(db);
 
-        await EventController.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
+        await EventEndService.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
 
         var history = await db.EventHistories.SingleAsync();
         var windows = await db.EventAttendanceWindows.OrderBy(w => w.SequenceNumber).ToListAsync();
@@ -136,7 +136,7 @@ public class EventHistoryWindowArchiveTests
         using var db = NewDb();
         var camp = SeedCamp(db);
 
-        await EventController.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
+        await EventEndService.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
 
         // The participation is deleted with the event (AppUserEventId is SetNull), but the
         // denormalized name/zone on the snapshot row is exactly what keeps it readable afterwards.
@@ -153,7 +153,7 @@ public class EventHistoryWindowArchiveTests
         using var db = NewDb();
         var camp = SeedCamp(db);
 
-        await EventController.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
+        await EventEndService.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
 
         var participant = await db.AppUserEventHistories.SingleAsync();
         // Both windows, which is also what the DKP was computed from (2 x DkpPerHour-as-per-window).
@@ -190,7 +190,7 @@ public class EventHistoryWindowArchiveTests
             .Include(e => e.Linkshell)
             .First(e => e.Id == 101);
 
-        await EventController.EndEventCoreAsync(db, NewWriter(db), NewPools(db), ev);
+        await EventEndService.EndEventCoreAsync(db, NewWriter(db), NewPools(db), ev);
 
         var participant = await db.AppUserEventHistories.SingleAsync();
         // Null, not 0: "this event doesn't count windows" and "attended none of them" are different
@@ -203,7 +203,7 @@ public class EventHistoryWindowArchiveTests
     {
         using var db = NewDb();
         var camp = SeedCamp(db);
-        await EventController.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
+        await EventEndService.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
 
         var history = await db.EventHistories.SingleAsync();
         var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
@@ -223,7 +223,7 @@ public class EventHistoryWindowArchiveTests
     {
         using var db = NewDb();
         var camp = SeedCamp(db);
-        await EventController.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
+        await EventEndService.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
 
         var history = await db.EventHistories.SingleAsync();
         var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
@@ -236,7 +236,7 @@ public class EventHistoryWindowArchiveTests
     {
         using var db = NewDb();
         var camp = SeedCamp(db);
-        await EventController.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
+        await EventEndService.EndEventCoreAsync(db, NewWriter(db), NewPools(db), camp);
 
         var history = await db.EventHistories.SingleAsync();
         var counts = await EventHistoryWindowsReader.CountsByHistoryAsync(

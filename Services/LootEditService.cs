@@ -28,7 +28,7 @@ public sealed record LootEditResult(
 // The DKP math mirrors the existing create-time helpers exactly:
 //   - ToD: ActivityDataController.HelpersTods.AdjustTodLootDkpAsync (handles
 //     DKP / Hybrid / LootCouncil structures via the linkshell's LootStructure).
-//   - Event: EventController.Lifecycle.EndEventCoreAsync (flat DKP only;
+//   - Event: EventEndService.EndEventCoreAsync (flat DKP only;
 //     event loot has no Hybrid variant by design).
 //
 // LootCouncil linkshells skip all DKP work — only the loot row's metadata
@@ -55,7 +55,7 @@ public sealed class LootEditService
 
     // Resolve a loot winner's membership by MAIN OR ALT character name.
     //
-    // Event close (EventController.ResolveLootWinnerMembership) and the affordability guard
+    // Event close (EventEndService.ResolveLootWinnerMembership) and the affordability guard
     // (LootDkpGuard) both resolve alts. This service used to match on CharacterName alone, so an
     // item won on an alt was debited at close but its edit/delete refund silently found nobody and
     // logged a warning — the member was permanently short the DKP.

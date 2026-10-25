@@ -569,7 +569,7 @@ public partial class EventController
         }
 
         var nowUtc = DateTime.UtcNow;
-        participation.Duration = CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
+        participation.Duration = EventEndService.CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
         participation.IsOnBreak = true;
         participation.PauseTime = nowUtc;
         participation.ResumeTime = null;
@@ -811,7 +811,7 @@ public partial class EventController
         }
 
         var nowUtc = DateTime.UtcNow;
-        participation.Duration = CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
+        participation.Duration = EventEndService.CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
         participation.IsOnBreak = true;
         participation.PauseTime = nowUtc;
         participation.ResumeTime = null;

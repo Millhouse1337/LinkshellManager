@@ -492,13 +492,13 @@ public sealed partial class ActivityDataController
             .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         // The event's type decides which DKP pool it pays INTO and which pool its loot is paid
-        // OUT of — resolved once, not per participant. Mirrors the web EndEventCoreAsync.
+        // OUT of — resolved once, not per participant. Mirrors EventEndService.EndEventCoreAsync.
         var eventPool = DkpPoolRef.Derived(eventEntity.EventType);
         // Windowed events (HNM Style / Claim/Kill) award DKP per WINDOW ATTENDED, not per hour of
         // presence: DkpPerHour is reused as DkpPerWindow when WindowCount > 1. Counted once up
         // front so the loop below can read from a dictionary.
         //
-        // This block is a deliberate mirror of EventController.EndEventCoreAsync — including its
+        // This block is a deliberate mirror of EventEndService.EndEventCoreAsync — including its
         // window-count expression, which is the CREDIT chain (WindowCountOverride ?? EventName).
         // Do not swap it for the display chain or for EventBreakPolicy.GatingWindowCount: the two
         // end-event paths must agree exactly, and a third variant is how they drifted apart in the
@@ -511,7 +511,7 @@ public sealed partial class ActivityDataController
         var isWindowed = windowCount > 1;
         // AppUserEventId is nullable since snapshots outlive a cleared roster (see
         // AppUserEventWindow); orphans can't be credited through a participation. Same filter as
-        // EventController.EndEventCoreAsync — keep the two identical.
+        // EventEndService.EndEventCoreAsync — keep the two identical.
         Dictionary<int, int> windowsAttendedByParticipationId = isWindowed
             ? await _dbContext.AppUserEventWindows
                 .Where(w => w.EventAttendanceWindow!.EventId == eventEntity.Id && w.AppUserEventId != null)
@@ -549,10 +549,10 @@ public sealed partial class ActivityDataController
             // Windowed events pay per window attended instead — durationHours is still stamped
             // onto the history row below for display, but it must not reach the payout, or break
             // state (which CalculateAccumulatedDurationHours honours) would move windowed DKP.
-            // Matches EventController.EndEventCoreAsync exactly.
+            // Matches EventEndService.EndEventCoreAsync exactly.
             // Hoisted out of the Compute call below so it can also be stamped on the history row:
             // null on a timed event (where it would read as a misleading 0), the window tally on
-            // a windowed one. Mirrors EventController.EndEventCoreAsync.
+            // a windowed one. Mirrors EventEndService.EndEventCoreAsync.
             int? windowsAttended = isWindowed
                 ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
                 : (int?)null;
@@ -689,7 +689,7 @@ public sealed partial class ActivityDataController
         // Preserve the loot rows post-close: re-parent each to the new EventHistory (and
         // detach the EventId before the Event is deleted) so they show in Loot History
         // instead of vanishing. EventLootDetail.EventId is SetNull, so the Event delete
-        // below won't cascade-remove them. Mirrors the web EndEventCoreAsync — the Activity
+        // below won't cascade-remove them. Mirrors EventEndService.EndEventCoreAsync — the Activity
         // path was deleting them, which is why live-event loot disappeared after ending.
         foreach (var lootDetail in eventEntity.EventLootDetails)
         {
