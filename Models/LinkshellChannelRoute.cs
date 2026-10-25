@@ -56,7 +56,7 @@ public class LinkshellChannelRoute
     public string? EventTypeFilter { get; set; }
 
     // Optional per-monster narrowing for HNM event routing (only meaningful when the
-    // EventTypeFilter includes "HNM"). Pipe-delimited monster names (TodManagerViewModel
+    // EventTypeFilter includes "HNM"). Pipe-delimited monster names (TodCatalog
     // .SupportedMonsters): when set, this route only receives HNM events for THOSE monsters,
     // so a specific HNM can post to its own channel. Null/empty = catch every HNM (the
     // existing behavior). A monster-specific route is preferred over a catch-all HNM route.

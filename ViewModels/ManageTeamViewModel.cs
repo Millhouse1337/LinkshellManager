@@ -72,12 +72,6 @@ public class ManageTeamViewModel
         "Trial"
     };
 
-    public static readonly IReadOnlyList<string> StatusOptions = new[]
-    {
-        "Active",
-        "Pending",
-        "Inactive"
-    };
 }
 
 public class SendInviteInput

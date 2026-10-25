@@ -13,8 +13,8 @@ namespace LinkshellManagerDiscordApp.Controllers;
 [Authorize]
 public class TodController : Controller
 {
-    private static readonly HashSet<string> SupportedCooldowns = new(TodManagerViewModel.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> SupportedIntervals = new(TodManagerViewModel.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> SupportedCooldowns = new(TodCatalog.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> SupportedIntervals = new(TodCatalog.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> LongWindowMonsters = new(StringComparer.OrdinalIgnoreCase)
     {
         "Tiamat",
@@ -70,8 +70,8 @@ public class TodController : Controller
             {
                 LinkshellId = user.PrimaryLinkshellId ?? 0,
                 Claim = true,
-                Cooldown = TodManagerViewModel.TwentyTwoHourCooldown,
-                Interval = TodManagerViewModel.TenMinuteInterval
+                Cooldown = TodCatalog.TwentyTwoHourCooldown,
+                Interval = TodCatalog.TenMinuteInterval
             }
         });
 
@@ -93,8 +93,8 @@ public class TodController : Controller
             {
                 LinkshellId = user.PrimaryLinkshellId ?? 0,
                 Claim = true,
-                Cooldown = TodManagerViewModel.TwentyTwoHourCooldown,
-                Interval = TodManagerViewModel.TenMinuteInterval
+                Cooldown = TodCatalog.TwentyTwoHourCooldown,
+                Interval = TodCatalog.TenMinuteInterval
             }
         });
 

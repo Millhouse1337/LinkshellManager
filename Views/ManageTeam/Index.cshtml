@@ -269,7 +269,7 @@ else
                     <div class="field" style="margin-top:12px">
                         <label for="modifyStatus">Status</label>
                         <select name="Status" id="modifyStatus" class="form-select" required>
-                            @foreach (var status in LinkshellManagerDiscordApp.ViewModels.ManageTeamViewModel.StatusOptions)
+                            @foreach (var status in LinkshellManagerDiscordApp.Models.LinkshellMemberStatuses.Options)
                             {
                                 <option value="@status">@status</option>
                             }

@@ -116,8 +116,8 @@ public sealed class LinkshellPendingSubmissionsController : Controller
                 .Select(r => new EditPendingTodLootRow { ItemName = r.ItemName, ItemWinner = r.ItemWinner, WinningDkpSpent = r.WinningDkpSpent })
                 .ToList(),
             MonsterOptions = (await _monsterTimings.GetMapAsync(linkshellId, HttpContext.RequestAborted)).EventMonsterOptions,
-            CooldownOptions = TodManagerViewModel.SupportedCooldowns,
-            IntervalOptions = TodManagerViewModel.SupportedIntervals,
+            CooldownOptions = TodCatalog.SupportedCooldowns,
+            IntervalOptions = TodCatalog.SupportedIntervals,
             LinkshellMembers = members,
         });
     }

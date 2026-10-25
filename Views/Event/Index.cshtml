@@ -226,7 +226,7 @@
                 <div class="field" style="display:flex;flex-direction:column">
                     <label for="tod-modal-cooldown">Cooldown</label>
                     <select class="form-select" id="tod-modal-cooldown" name="cooldown">
-                        @foreach (var cd in TodManagerViewModel.SupportedCooldowns)
+                        @foreach (var cd in LinkshellManagerDiscordApp.Services.TodCatalog.SupportedCooldowns)
                         {
                             <option value="@cd">@cd</option>
                         }
@@ -235,7 +235,7 @@
                 <div class="field" style="display:flex;flex-direction:column">
                     <label for="tod-modal-interval">Interval</label>
                     <select class="form-select" id="tod-modal-interval" name="interval">
-                        @foreach (var iv in TodManagerViewModel.SupportedIntervals)
+                        @foreach (var iv in LinkshellManagerDiscordApp.Services.TodCatalog.SupportedIntervals)
                         {
                             <option value="@iv">@iv</option>
                         }

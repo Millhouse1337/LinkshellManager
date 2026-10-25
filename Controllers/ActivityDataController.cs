@@ -18,8 +18,8 @@ public sealed partial class ActivityDataController : ControllerBase
     // (SupportedTodMonsters lived here. Which monsters a linkshell may assign is a per-linkshell
     // question now — its built-ins plus the ones it added itself — answered by
     // MonsterTimingMap.Allows off the request's MonsterTimingResolver.)
-    private static readonly HashSet<string> SupportedTodCooldowns = new(TodManagerViewModel.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> SupportedTodIntervals = new(TodManagerViewModel.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> SupportedTodCooldowns = new(TodCatalog.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> SupportedTodIntervals = new(TodCatalog.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
 
     private readonly ApplicationDbContext _dbContext;
     private readonly DiscordIdentityService _discordIdentityService;

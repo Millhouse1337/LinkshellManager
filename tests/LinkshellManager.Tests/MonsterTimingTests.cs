@@ -46,7 +46,7 @@ public class MonsterTimingTests
     public void SeededCatalog_ContainsEveryDropdownOption()
     {
         var seeded = MonsterTimingDefaults.BuildAll().Select(t => t.MonsterName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var option in HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters))
+        foreach (var option in HnmConfig.CombinedMonsterOptions(TodCatalog.SupportedMonsters))
         {
             Assert.Contains(option, seeded);
         }
@@ -276,7 +276,7 @@ public class MonsterTimingTests
 
         // ...and the dropdown still offers the built-in merged catalog rather than nothing.
         Assert.Equal(
-            HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters),
+            HnmConfig.CombinedMonsterOptions(TodCatalog.SupportedMonsters),
             map.EventMonsterOptions);
     }
 

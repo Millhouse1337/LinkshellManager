@@ -206,7 +206,7 @@ public sealed partial class ActivityDataController
         }
 
         var status = request.Status?.Trim();
-        var match = ManageTeamViewModel.StatusOptions
+        var match = LinkshellMemberStatuses.Options
             .FirstOrDefault(s => string.Equals(s, status, StringComparison.OrdinalIgnoreCase));
         if (match is null)
         {

@@ -51,7 +51,7 @@ public sealed partial class ActivityDataController
 
         return Ok(new ActivityPendingSubmissionsResponse(
             tods,
-            monsterOptions, TodManagerViewModel.SupportedCooldowns, TodManagerViewModel.SupportedIntervals, rosterNames));
+            monsterOptions, TodCatalog.SupportedCooldowns, TodCatalog.SupportedIntervals, rosterNames));
     }
 
     [HttpPost("linkshells/{linkshellId:int}/pending-submissions/tod/{submissionId:int}/approve")]

@@ -62,7 +62,7 @@ public sealed class HnmClaimStatsService
     // to read as one monster split in two, and a monster now keeps its colour when you flip
     // 7d / 30d / All — rank-ordered assignment repainted the whole chart on every toggle.
     private static readonly IReadOnlyDictionary<string, string> ColorClassByFamily =
-        ViewModels.TodManagerViewModel.SupportedMonsters
+        TodCatalog.SupportedMonsters
             .Select(HnmConfig.ClaimGroupName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select((family, index) => (family, color: PaletteClasses[index % PaletteClasses.Length]))

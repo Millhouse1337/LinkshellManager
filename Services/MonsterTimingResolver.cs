@@ -79,7 +79,7 @@ public sealed class MonsterTimingMap
     public IReadOnlyList<string> EventMonsterOptions =>
         Rows.Count > 0
             ? Rows.Select(row => row.MonsterName).ToList()
-            : HnmConfig.CombinedMonsterOptions(ViewModels.TodManagerViewModel.SupportedMonsters);
+            : HnmConfig.CombinedMonsterOptions(TodCatalog.SupportedMonsters);
 
     // The names the in-game addon listens for in defeat and loot lines: this catalog, with every
     // merged row split back into its halves. The chat line names one half ("Fafnir"), never the

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
 
 namespace LinkshellManagerDiscordApp.ViewModels;
@@ -23,7 +24,7 @@ public class PartySetupIndexViewModel
     public List<PartySetupListRow> Items { get; set; } = new();
 
     // Supported monsters for the inline "Assign" select on each row.
-    public List<string> MonsterOptions { get; set; } = TodManagerViewModel.SupportedMonsters.ToList();
+    public List<string> MonsterOptions { get; set; } = TodCatalog.SupportedMonsters.ToList();
 }
 
 public class PartySetupListRow
@@ -74,7 +75,7 @@ public class PartySetupEditorViewModel
     // Option lists (repopulated by the controller on an invalid POST).
     public List<string> EventTypeOptions { get; set; } =
         new() { "Any", "Sky", "Sea", "HENM", "Limbus", "Dynamis", "BCNM", "KSNM" };
-    public List<string> MonsterOptions { get; set; } = TodManagerViewModel.SupportedMonsters.ToList();
+    public List<string> MonsterOptions { get; set; } = TodCatalog.SupportedMonsters.ToList();
     public List<string> RoleOptions { get; set; } = EventJobCatalog.JobTypeOptions.ToList();
     public List<string> MainJobOptions { get; set; } = EventJobCatalog.MainJobOptions.ToList();
     public List<string> SubJobOptions { get; set; } = EventJobCatalog.SubJobOptions.ToList();
@@ -119,7 +120,7 @@ public class PartySetupDetailsViewModel
     public string? AssignedMonsterName { get; set; }
     public string? Notes { get; set; }
     public bool CanManage { get; set; }
-    public List<string> MonsterOptions { get; set; } = TodManagerViewModel.SupportedMonsters.ToList();
+    public List<string> MonsterOptions { get; set; } = TodCatalog.SupportedMonsters.ToList();
     public List<PartySetupAllianceView> Alliances { get; set; } = new();
 }
 

@@ -23,7 +23,7 @@ public static class MonsterTimingDefaults
     // addon-posted Sky ToD, and it still draws the Charts → Sky board.)
     //
     // OtherCategory now seeds NOTHING — the built-in catalog is the twelve HNMs (see
-    // TodManagerViewModel.SupportedMonsters). It stays in this list precisely because it is empty:
+    // TodCatalog.SupportedMonsters). It stays in this list precisely because it is empty:
     // the editor renders a heading per category, so this is the "+ Add monster" landing pad for
     // every NM a linkshell camps. Drop it and there is nowhere to put one.
     public static readonly IReadOnlyList<string> Categories = new[] { HnmCategory, OtherCategory };
@@ -53,7 +53,7 @@ public static class MonsterTimingDefaults
     {
         var names = new List<(string Name, string Category)>();
 
-        foreach (var monster in HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters))
+        foreach (var monster in HnmConfig.CombinedMonsterOptions(TodCatalog.SupportedMonsters))
         {
             names.Add((monster, CategoryFor(monster)));
         }

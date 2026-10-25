@@ -17,7 +17,7 @@ namespace LinkshellManager.Tests;
 // a row with a ToD cooldown on it.
 //
 // It used not to be. Every one of those surfaces validated against the compile-time
-// TodManagerViewModel.SupportedMonsters, so "+ Add monster" produced something you could time and
+// TodCatalog.SupportedMonsters, so "+ Add monster" produced something you could time and
 // then not use, which is not what the button says. The per-linkshell answer is
 // MonsterTimingMap.EventMonsterOptions / .Allows, and these tests pin that a custom monster is
 // indistinguishable from a built-in one everywhere it matters.
@@ -61,7 +61,7 @@ public class CustomMonsterCatalogTests
         foreach (var name in RemoveRetiredNmMonsterTimings.RetiredNms
                      .Concat(RetireGroundNmMonsterTimings.RetiredGroundNms))
         {
-            Assert.DoesNotContain(name, TodManagerViewModel.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(name, TodCatalog.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -70,7 +70,7 @@ public class CustomMonsterCatalogTests
     [Fact]
     public void RetiredNms_AndTheCatalog_DoNotOverlap()
     {
-        var catalog = TodManagerViewModel.SupportedMonsters.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var catalog = TodCatalog.SupportedMonsters.ToHashSet(StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain(RemoveRetiredNmMonsterTimings.RetiredNms, catalog.Contains);
         Assert.DoesNotContain(RetireGroundNmMonsterTimings.RetiredGroundNms, catalog.Contains);
     }
@@ -143,7 +143,7 @@ public class CustomMonsterCatalogTests
     {
         foreach (var name in RemoveSkyNmMonsterTimings.SkyFarmNms)
         {
-            Assert.DoesNotContain(name, TodManagerViewModel.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain(name, TodCatalog.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
         }
         Assert.Equal(8, RemoveSkyNmMonsterTimings.SkyFarmNms.Length);
     }
@@ -157,7 +157,7 @@ public class CustomMonsterCatalogTests
     [InlineData("King Arthro")]
     [InlineData("King Vinegarroon")]
     public void RetiredGroundNms_AreNotBuiltIn(string name)
-        => Assert.DoesNotContain(name, TodManagerViewModel.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
+        => Assert.DoesNotContain(name, TodCatalog.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
 
     // ...but the app still KNOWS them. A linkshell that adds Bloodsucker back, or an addon that
     // posts a free-text ToD for it, must land on its real 71-hour band and not the 22h catch-all.

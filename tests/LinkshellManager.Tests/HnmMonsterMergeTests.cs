@@ -175,7 +175,7 @@ public class HnmMonsterMergeTests
     [Fact]
     public void CombinedMonsterOptions_ShowsCombinedPairs_ExcludesStrongersAndBareBases()
     {
-        var options = HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters);
+        var options = HnmConfig.CombinedMonsterOptions(TodCatalog.SupportedMonsters);
 
         Assert.Contains("Adamantoise/Aspidochelone", options);
         Assert.Contains("Behemoth/King Behemoth", options);
@@ -228,7 +228,7 @@ public class HnmMonsterMergeTests
     [Fact]
     public void TheTwoTiers_PartitionTheWholeDropdown()
     {
-        var options = HnmConfig.CombinedMonsterOptions(TodManagerViewModel.SupportedMonsters);
+        var options = HnmConfig.CombinedMonsterOptions(TodCatalog.SupportedMonsters);
         var hnmTier = options.Where(HnmConfig.IsHnmTierMonster).ToArray();
         var nmTier = options.Where(m => !HnmConfig.IsHnmTierMonster(m)).ToArray();
 
