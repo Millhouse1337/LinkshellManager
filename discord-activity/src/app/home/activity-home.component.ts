@@ -374,6 +374,14 @@ export class ActivityHomeComponent {
   // Every Data Admin step is a new page (list → row → edit), so it starts at the top.
   protected openDataAdmin(path: readonly string[]): void {
     window.scrollTo({ top: 0 });
+    // Back to the diagram from a table's records (the Back button or the Data Admin link): name
+    // that table in the address as #table=<slug>, which the diagram reads to select it again.
+    // Data Admin is website-only, so this is always a real URL.
+    const leavingSlug = this.dataAdminPath()[0];
+    if (path.length === 0 && leavingSlug && this.activity.isWebsite) {
+      void this.router.navigate(['/', slugForTab('data-admin')], { fragment: `table=${leavingSlug}` });
+      return;
+    }
     this.setActiveTab('data-admin', path);
   }
 
