@@ -802,6 +802,13 @@ export class DiscordActivityService {
     if (ok) { await this.auth.refreshOverview(); }
     return ok;
   }
+  async deleteLoot(source: 'Tod' | 'Event', lootDetailId: number, reason: string): Promise<boolean> {
+    const ok = source === 'Tod'
+      ? await this.lootHistoryService.deleteTodLoot(lootDetailId, reason)
+      : await this.lootHistoryService.deleteEventLoot(lootDetailId, reason);
+    if (ok) { await this.auth.refreshOverview(); }
+    return ok;
+  }
 
   // --- TodService ---
   createTod(input: ActivityCreateTodInput): Promise<void> { return this.todService.createTod(input); }

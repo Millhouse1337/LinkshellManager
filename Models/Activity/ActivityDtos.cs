@@ -1724,6 +1724,10 @@ public sealed record ActivityLootEditRequest(
     int? WinningDkpSpent,
     string? Reason);
 
+// Reason is optional; a blank one is stored as a default so the refund ledger entry is still
+// auditable.
+public sealed record ActivityLootDeleteRequest(string? Reason);
+
 // Hand-entered loot. SourceKind picks which id below is read: "live" an Event, "past" an
 // EventHistory, "none" neither. Context is gone -- loot points at a real event now, not at a
 // free-text label that used to become a throwaway ToD.

@@ -46,6 +46,9 @@ export class LootHistoryPanelComponent implements OnInit {
   protected readonly editingItem = signal<ActivityLootHistoryItem | null>(null);
   protected editFormModel: LootEditFormModel = this.emptyForm();
   protected editError = signal<string | null>(null);
+  // Two-step delete: the first click asks, the second deletes. window.confirm is suppressed in
+  // the Discord Activity iframe, so the dialog footer swaps to a Keep / Delete pair instead.
+  protected readonly confirmingDelete = signal(false);
 
   protected readonly addingLoot = signal(false);
   protected addFormModel: LootAddFormModel = this.emptyAddForm();
@@ -216,12 +219,31 @@ export class LootHistoryPanelComponent implements OnInit {
       reason: ''
     };
     this.editError.set(null);
+    this.confirmingDelete.set(false);
   }
 
   protected closeEdit(): void {
     this.editingItem.set(null);
     this.editFormModel = this.emptyForm();
     this.editError.set(null);
+    this.confirmingDelete.set(false);
+  }
+
+  // The edit form's reason box doubles as the delete reason; blank is allowed here (the server
+  // stores a default), unlike an edit.
+  protected async deleteRecord(): Promise<void> {
+    const item = this.editingItem();
+    if (!item) return;
+    this.editError.set(null);
+    const ok = await this.activity.deleteLoot(
+      item.source, item.lootDetailId, (this.editFormModel.reason ?? '').trim());
+    if (ok) {
+      this.closeEdit();
+      await this.refresh();
+    } else {
+      this.confirmingDelete.set(false);
+      this.editError.set(this.activity.actionError() ?? 'Deleting the loot record failed.');
+    }
   }
 
   protected async submitEdit(): Promise<void> {

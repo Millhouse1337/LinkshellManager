@@ -290,8 +290,30 @@ public sealed partial class ActivityDataController
             cancellationToken);
     }
 
-    private async Task<IActionResult> EditLootInternalAsync(
-        ActivityLootEditRequest request,
+    // Deleting a loot row removes it and refunds the winner's DKP (LootEditService). The same
+    // CanAddLoot flag that gates Edit gates Delete — it is the "manage recorded loot" permission.
+    [HttpPost("loot-history/tod/{lootDetailId:int}/delete")]
+    public async Task<IActionResult> DeleteTodLootHistoryAsync(
+        int lootDetailId,
+        [FromBody] ActivityLootDeleteRequest request,
+        [FromServices] LootEditService lootEditService,
+        CancellationToken cancellationToken)
+    {
+        return await DeleteLootInternalAsync(request, lootEditService, isTod: true, lootDetailId, cancellationToken);
+    }
+
+    [HttpPost("loot-history/event/{lootDetailId:int}/delete")]
+    public async Task<IActionResult> DeleteEventLootHistoryAsync(
+        int lootDetailId,
+        [FromBody] ActivityLootDeleteRequest request,
+        [FromServices] LootEditService lootEditService,
+        CancellationToken cancellationToken)
+    {
+        return await DeleteLootInternalAsync(request, lootEditService, isTod: false, lootDetailId, cancellationToken);
+    }
+
+    private async Task<IActionResult> DeleteLootInternalAsync(
+        ActivityLootDeleteRequest request,
         LootEditService lootEditService,
         bool isTod,
         int lootDetailId,
@@ -300,11 +322,36 @@ public sealed partial class ActivityDataController
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
         {
-            return Unauthorized(new { error = "Sign in to edit loot history." });
+            return Unauthorized(new { error = "Sign in to delete loot history." });
         }
 
-        // Resolve the parent linkshell from the loot row so we can run the
-        // permission check before LootEditService touches any data.
+        var denied = await AuthorizeLootRowAsync(appUser.Id, isTod, lootDetailId, cancellationToken);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
+        var reason = string.IsNullOrWhiteSpace(request.Reason)
+            ? "Loot record deleted via Loot History."
+            : request.Reason.Trim();
+        var occurredAtUtc = DateTime.UtcNow;
+        var result = isTod
+            ? await lootEditService.DeleteTodLootAsync(lootDetailId, appUser, reason, occurredAtUtc, cancellationToken)
+            : await lootEditService.DeleteEventLootAsync(lootDetailId, appUser, reason, occurredAtUtc, cancellationToken);
+
+        if (!result.Success)
+        {
+            return BadRequest(new { error = result.ErrorMessage ?? "Loot delete failed." });
+        }
+
+        return Ok(new { success = true, lootDetailId = result.LootDetailId, source = result.Source });
+    }
+
+    // Resolves the loot row's linkshell and checks CanAddLoot there, before LootEditService touches
+    // any data. Null = allowed; otherwise the response to return.
+    private async Task<IActionResult?> AuthorizeLootRowAsync(
+        string appUserId, bool isTod, int lootDetailId, CancellationToken cancellationToken)
+    {
         int? linkshellId;
         if (isTod)
         {
@@ -328,7 +375,7 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "Loot record not found." });
         }
 
-        var membership = await GetMembershipAsync(appUser.Id, linkshellId.Value, cancellationToken);
+        var membership = await GetMembershipAsync(appUserId, linkshellId.Value, cancellationToken);
         if (membership is null)
         {
             return Forbid();
@@ -337,6 +384,28 @@ public sealed partial class ActivityDataController
         if (!await CanAsync(membership, role => role.CanAddLoot, cancellationToken))
         {
             return Forbid();
+        }
+
+        return null;
+    }
+
+    private async Task<IActionResult> EditLootInternalAsync(
+        ActivityLootEditRequest request,
+        LootEditService lootEditService,
+        bool isTod,
+        int lootDetailId,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to edit loot history." });
+        }
+
+        var denied = await AuthorizeLootRowAsync(appUser.Id, isTod, lootDetailId, cancellationToken);
+        if (denied is not null)
+        {
+            return denied;
         }
 
         var serviceRequest = new LootEditRequest(

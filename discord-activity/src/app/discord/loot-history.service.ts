@@ -100,6 +100,31 @@ export class LootHistoryService {
     return this.editLoot(`/api/activity/loot-history/event/${lootDetailId}/edit`, input);
   }
 
+  // Removes the row and refunds the winner's DKP. A blank reason gets a server-side default.
+  async deleteTodLoot(lootDetailId: number, reason: string): Promise<boolean> {
+    return this.deleteLoot(`/api/activity/loot-history/tod/${lootDetailId}/delete`, reason);
+  }
+
+  async deleteEventLoot(lootDetailId: number, reason: string): Promise<boolean> {
+    return this.deleteLoot(`/api/activity/loot-history/event/${lootDetailId}/delete`, reason);
+  }
+
+  private async deleteLoot(path: string, reason: string): Promise<boolean> {
+    this.busyLootEdit.set(true);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      await this.http.postActivityJson(path, { reason: reason || null });
+      this.auth.setActionMessage('Loot record deleted and DKP refunded.');
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Deleting the loot record failed.'));
+      return false;
+    } finally {
+      this.busyLootEdit.set(false);
+    }
+  }
+
   private async editLoot(path: string, input: ActivityLootEditInput): Promise<boolean> {
     this.busyLootEdit.set(true);
     this.auth.setActionError(null);

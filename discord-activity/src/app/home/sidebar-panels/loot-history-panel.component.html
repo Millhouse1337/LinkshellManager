@@ -155,10 +155,22 @@
           </div>
 
           <div class="loot-edit-form__footer">
-            <button type="button" class="action-button action-button--secondary" (click)="closeEdit()">Cancel</button>
-            <button type="submit" class="action-button" [disabled]="activity.busyLootEdit()">
-              {{ activity.busyLootEdit() ? 'Saving...' : 'Save loot edit' }}
-            </button>
+            @if (confirmingDelete()) {
+              <span class="loot-edit-form__confirm">
+                Delete this record@if (item.winningDkpSpent && item.itemWinner) {<span> and refund {{ item.itemWinner }}</span>}? The reason above is saved with the refund.
+              </span>
+              <button type="button" class="action-button action-button--secondary" (click)="confirmingDelete.set(false)">Keep</button>
+              <button type="button" class="action-button loot-edit-form__delete" [disabled]="activity.busyLootEdit()" (click)="deleteRecord()">
+                {{ activity.busyLootEdit() ? 'Deleting...' : 'Delete' }}
+              </button>
+            } @else {
+              <button type="button" class="action-button action-button--secondary loot-edit-form__delete-start"
+                      [disabled]="activity.busyLootEdit()" (click)="confirmingDelete.set(true)">Delete record</button>
+              <button type="button" class="action-button action-button--secondary" (click)="closeEdit()">Cancel</button>
+              <button type="submit" class="action-button" [disabled]="activity.busyLootEdit()">
+                {{ activity.busyLootEdit() ? 'Saving...' : 'Save loot edit' }}
+              </button>
+            }
           </div>
         </form>
       </div>

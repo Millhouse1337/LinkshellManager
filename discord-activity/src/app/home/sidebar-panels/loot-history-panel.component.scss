@@ -301,11 +301,38 @@ $loot-modal-bottom-offset: 24px;
 
 .loot-edit-form__footer {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+// Delete: a quiet red-text button pushed to the far left, away from Save; its confirm step swaps
+// in a question and a solid red Delete.
+.loot-edit-form__delete-start {
+  margin-right: auto;
+  color: var(--danger);
+}
+
+.loot-edit-form__delete-start:hover:not(:disabled) {
+  background: var(--danger-weak);
+  border-color: var(--danger);
+}
+
+.loot-edit-form__confirm {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.loot-edit-form__delete,
+.loot-edit-form__delete:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--bg);
 }
 
 .loot-edit-form__error {
