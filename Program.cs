@@ -222,7 +222,6 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddScoped<DataAdminQueryService>();
 builder.Services.AddScoped<DataAdminEditor>();
-builder.Services.AddScoped<JobsRosterService>();
 builder.Services.AddScoped<HnmClaimStatsService>();
 builder.Services.AddScoped<HnmWindowStatsService>();
 builder.Services.AddSingleton<IDateTimeZoneProvider>(DateTimeZoneProviders.Tzdb);

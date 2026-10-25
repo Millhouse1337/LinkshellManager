@@ -56,11 +56,6 @@ public sealed class TimeZoneConversionService
         return zone.AtLeniently(local).ToDateTimeUtc();
     }
 
-    // All IANA zone IDs the provider knows about. Used by callers that need
-    // to populate dropdowns (`CuratedTimeZones.BuildOrderedList`) or validate
-    // user-supplied zone names against the canonical list.
-    public IReadOnlyCollection<string> AvailableZoneIds => _provider.Ids;
-
     // Convenience predicate so callers don't have to reach into the
     // underlying provider just to check "is this string a known zone?".
     public bool IsKnownZone(string? timeZoneId)
