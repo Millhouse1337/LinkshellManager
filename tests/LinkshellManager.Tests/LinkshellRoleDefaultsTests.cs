@@ -75,10 +75,4 @@ public class LinkshellRoleDefaultsTests
         Assert.Equal(role.CanModerateLiveEvent, role.CanManageAttendanceWithAddon);
         Assert.True(role.CanUseAddon);
     }
-
-    [Fact]
-    public void FullAccessRole_CanManageAttendanceWithAddon()
-    {
-        Assert.True(LinkshellRoleDefaults.BuildFullAccessRole(linkshellId: 1).CanManageAttendanceWithAddon);
-    }
 }

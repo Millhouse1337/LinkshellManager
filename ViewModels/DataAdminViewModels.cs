@@ -2,11 +2,11 @@ using LinkshellManagerDiscordApp.Services;
 
 namespace LinkshellManagerDiscordApp.ViewModels;
 
-// View models for the Data Admin pages. Views bind to these, never to the engine's own types, so
-// a Razor file cannot reach a DbContext or an expression builder by accident.
+// The Data Admin list / details / edit / delete shapes. DataAdminQueryService, DataAdminEditor and
+// DataAdminImpactMapper build them and DataAdminApiController maps them for the app, so nothing on
+// the way out can reach a DbContext or an expression builder by accident.
 
-// One list page. The route helpers re-emit the whole query (search, sort, filters) so no link
-// ever drops a filter -- the house rule from Views/ManageTeam/Index.cshtml, generalised.
+// One list page.
 public sealed class DataAdminListViewModel
 {
     public required string Slug { get; init; }
@@ -30,10 +30,6 @@ public sealed class DataAdminListViewModel
 
     public long FirstRowNumber => Total == 0 ? 0 : (long)(Page - 1) * PageSize + 1;
     public long LastRowNumber => Math.Min(Total, (long)Page * PageSize);
-
-    public Dictionary<string, string> PageRoute(int page) => Query.WithPage(page).ToRouteValues();
-    public Dictionary<string, string> SortRoute(string column) => Query.WithSort(column).ToRouteValues();
-    public Dictionary<string, string> RemoveFilterRoute(string column) => Query.WithoutFilter(column).ToRouteValues();
 }
 
 public sealed class DataAdminListColumn
@@ -181,17 +177,4 @@ public sealed class DataAdminActiveFilter
     public required string DisplayName { get; init; }
     public required string Value { get; init; }
     public required string Label { get; init; }
-}
-
-// The Data Admin landing page (the schema diagram): the header's numbers plus the graph as one
-// JSON block. The diagram itself is drawn in the browser (wwwroot/js/data-admin-schema.js) from
-// DiagramJson.
-public sealed class DataAdminSchemaViewModel
-{
-    public required string DatabaseName { get; init; }
-    public required int TableCount { get; init; }
-    public required int ColumnCount { get; init; }
-    public required int RelationshipCount { get; init; }
-    // DataAdminSchemaGraph.Json: already serialized and safe inside a <script> data block.
-    public required string DiagramJson { get; init; }
 }

@@ -31,12 +31,8 @@ public sealed class AdminOverrideService
     private readonly GlobalSettingsService _globalSettings;
     private readonly ILogger<AdminOverrideService> _logger;
 
-    private static readonly IReadOnlySet<string> EmptyAdminIds =
-        new HashSet<string>(StringComparer.Ordinal);
-
     private bool? _enabled;
     private readonly Dictionary<string, bool> _isSuperAdminById = new(StringComparer.Ordinal);
-    private HashSet<string>? _activeAdminIds;
     private bool _loggedGrantThisRequest;
 
     public AdminOverrideService(
@@ -87,31 +83,6 @@ public sealed class AdminOverrideService
         }
 
         return isSuperAdmin;
-    }
-
-    // Every AppUserId that currently carries the override, for badging a whole roster
-    // without an N+1. Memoized per request; returns an EMPTY set when the toggle is
-    // off, so a caller that forgets to check IsEnabledAsync still gets the safe answer.
-    // Prefer reading AppUser.IsSuperAdmin directly when the navigation is already
-    // loaded — this exists for the views and projections where it is not.
-    public async Task<IReadOnlySet<string>> GetActiveAdminAppUserIdsAsync(CancellationToken cancellationToken = default)
-    {
-        if (!await IsEnabledAsync(cancellationToken))
-        {
-            return EmptyAdminIds;
-        }
-
-        if (_activeAdminIds is null)
-        {
-            var ids = await _dbContext.Users
-                .AsNoTracking()
-                .Where(u => u.IsSuperAdmin)
-                .Select(u => u.Id)
-                .ToListAsync(cancellationToken);
-            _activeAdminIds = ids.ToHashSet(StringComparer.Ordinal);
-        }
-
-        return _activeAdminIds;
     }
 
     // Overload for callers that already have the AppUser loaded, so the flag doesn't

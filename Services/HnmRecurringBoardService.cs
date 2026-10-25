@@ -4,92 +4,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Create/update (or disable) the standing "repeat the HNM signup board" template
-// for a monster. Shared by the Activity and web event-create paths so both behave
-// identically. The poller (HnmRecurringBoardBackgroundService) reads these rows and
-// re-posts the board before the next predicted pop. Self-committing.
+// The standing "repost the HNM event before the next pop" template for a monster. Switched on and
+// off only from the End Camp / Post ToD form (ApplyEndCampChoiceAsync), kept in step with ToD
+// edits, and switched off when its board is removed. The poller
+// (HnmRecurringBoardBackgroundService) reads these rows and re-posts the board before the next
+// predicted pop.
 public static class HnmRecurringBoardService
 {
     // Default lead when a board is switched on and no lead has ever been set for it.
     public const double DefaultLeadHours = 1;
-
-    // Upsert the (LinkshellId, MonsterName) template from an HNM event.
-    //
-    // stampLatestTod is the difference between creating and editing, and getting it wrong
-    // silently kills the re-post:
-    //   CREATE (true)  — stamp the monster's current latest ToD, so only a genuinely-new ToD
-    //                    triggers the next recreation. Without it the poller would instantly
-    //                    re-post a board for the very pop this new event was made for.
-    //   EDIT  (false)  — leave LastSourceTodId alone. The poller skips any ToD already
-    //                    stamped (see HnmRecurringBoardBackgroundService's `tod.Id ==
-    //                    board.LastSourceTodId` guard), so stamping on a routine edit would
-    //                    cancel the pending re-post of a board that's sitting in the
-    //                    "defeated / awaiting re-post" state. Same reasoning as
-    //                    ApplyEndCampChoiceAsync, which never stamps either.
-    //
-    // leadHours comes from the edit form's "Hours before repop" box, which is optional — the
-    // End Camp / Post ToD form sets the same value, and that's where an officer already knows
-    // the next pop. Null (an empty box, and always the case on create) therefore means "keep
-    // whatever lead this board already has": editing an event must never quietly reset a lead
-    // set at End Camp, so only a value actually typed overwrites it.
-    public static async Task UpsertAsync(
-        ApplicationDbContext db, Event ev, double? leadHours, string? appUserId,
-        bool stampLatestTod, CancellationToken cancellationToken)
-    {
-        var monster = ev.AssignedMonsterName?.Trim();
-        if (string.IsNullOrWhiteSpace(monster))
-        {
-            return;
-        }
-
-        var board = await FindAsync(db, ev.LinkshellId, monster, cancellationToken);
-        var now = DateTime.UtcNow;
-
-        if (board is null)
-        {
-            board = new HnmRecurringBoard
-            {
-                LinkshellId = ev.LinkshellId,
-                MonsterName = monster,
-                CreatedByAppUserId = appUserId,
-                CreatedAt = now
-            };
-            db.HnmRecurringBoards.Add(board);
-        }
-
-        board.Enabled = true;
-        if (leadHours is { } lead && !double.IsNaN(lead))
-        {
-            board.LeadHours = Math.Clamp(lead, 0, 168);
-        }
-        else if (board.LeadHours <= 0 || double.IsNaN(board.LeadHours))
-        {
-            board.LeadHours = DefaultLeadHours;
-        }
-        // The TEMPLATE, not whatever the event happens to point at. A live board that has been
-        // edited points at a per-event SNAPSHOT, which is cascade-deleted when that camp ends --
-        // so storing it here left the standing board pointing at a row that was about to vanish.
-        board.PartySetupId = await PartySetupInheritance.ResolveTemplateIdAsync(db, ev, cancellationToken);
-        board.Details = ev.Details;
-        board.EventLocation = ev.EventLocation;
-        board.EventNameTemplate = ev.EventName;
-        if (stampLatestTod)
-        {
-            board.LastSourceTodId = await LatestTodIdAsync(db, ev.LinkshellId, monster, cancellationToken);
-        }
-        board.UpdatedAt = now;
-
-        await db.SaveChangesAsync(cancellationToken);
-    }
 
     // Apply the End Camp / Post ToD form's re-post choice: enable or disable this monster's
     // standing board and set its lead. Enabling seeds the template from THIS event (name,
     // party setup, location, details) so the re-posted board matches; disabling flips Enabled
     // off but keeps the row and its LastSourceTodId stamp.
     //
-    // Unlike UpsertAsync this deliberately does NOT re-stamp LastSourceTodId. End Camp has just
-    // logged the ToD that the poller must act on — stamping it here would mark the cycle handled
-    // and the board would never re-post, which is the whole point of the form. Self-committing.
+    // This deliberately does NOT re-stamp LastSourceTodId. End Camp has just logged the ToD that
+    // the poller must act on — stamping it here would mark the cycle handled and the board would
+    // never re-post, which is the whole point of the form. Self-committing.
     public static async Task ApplyEndCampChoiceAsync(
         ApplicationDbContext db, Event ev, string monster, bool enabled, double? leadHours,
         CancellationToken cancellationToken)
@@ -137,8 +69,8 @@ public static class HnmRecurringBoardService
     }
 
     // Re-derive a defeated board's DISPLAYED re-post time (Event.HnmRepostAt) from the
-    // monster's current standing lead. Call it after an edit that may have changed the lead
-    // or flipped recurrence: HnmRecurringBoardBackgroundService always recomputes its own
+    // monster's current standing lead. Call it after an event edit, which may have moved the
+    // board or switched its monster: HnmRecurringBoardBackgroundService always recomputes its own
     // window from board.LeadHours, so the re-post already happens at the new time — without
     // this the card would just keep advertising the old one. No enabled board = null = "this
     // board won't auto-re-post", matching the End Camp paths. Self-committing.
@@ -283,8 +215,6 @@ public static class HnmRecurringBoardService
         }
     }
 
-    // Turn the template off (keep the row + its last-seen ToD stamp) when an officer
-    // re-creates the board with the repeat option unchecked.
     // Switches the monster's Repeat-on-ToD template OFF when an officer removes its board -- Cancel,
     // or Delete Camp -- unless another open board for the same spawn is still up.
     //
@@ -336,26 +266,6 @@ public static class HnmRecurringBoardService
         board.UpdatedAt = DateTime.UtcNow;
     }
 
-    public static async Task DisableAsync(
-        ApplicationDbContext db, int linkshellId, string? monsterName, CancellationToken cancellationToken)
-    {
-        var monster = monsterName?.Trim();
-        if (string.IsNullOrWhiteSpace(monster))
-        {
-            return;
-        }
-
-        var board = await FindAsync(db, linkshellId, monster, cancellationToken);
-        if (board is null || !board.Enabled)
-        {
-            return;
-        }
-
-        board.Enabled = false;
-        board.UpdatedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
     // The standing board for this SPAWN. Matched on every spelling of the monster (both
     // halves of a merge pair and the combined label) so a board first created under
     // "Fafnir" on day 2 is the same row the day-4 "Fafnir/Nidhogg" event updates. Keying
@@ -375,9 +285,9 @@ public static class HnmRecurringBoardService
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    // The most recent ToD (by row id) for this monster that has a predicted pop time.
-    // Used both as the upsert "last-seen" stamp and as the poller's target ToD, so the
-    // two stay aligned and the poller doesn't recreate for the pop already handled.
+    // The most recent ToD (by row id) for this monster that has a predicted pop time — the same
+    // ToD the poller targets, so a camp that adopts it (HnmCampReviewHandoffService) and the
+    // poller agree on which pop is next.
     public static Task<int?> LatestTodIdAsync(
         ApplicationDbContext db, int linkshellId, string monster, CancellationToken cancellationToken)
     {

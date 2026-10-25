@@ -2,10 +2,9 @@ using Microsoft.AspNetCore.Http;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// The list page's query string, parsed once: ?q=<search>&sort=<Column>&desc=true&page=2&f.<Column>=<value>.
+// The list's query string, parsed once: ?q=<search>&sort=<Column>&desc=true&page=2&f.<Column>=<value>.
 // Filters use a dotted prefix, which MVC's dictionary binder does not understand, so this is
-// parsed by hand from the raw query and re-emitted by ToRouteValues() for every pager/sort link
-// (the house rule from Views/ManageTeam/Index.cshtml: every link re-emits every filter).
+// parsed by hand from the raw query.
 public sealed record DataAdminListQuery
 {
     public const string SearchKey = "q";
@@ -47,46 +46,6 @@ public sealed record DataAdminListQuery
             Page = page,
             Filters = filters,
         };
-    }
-
-    // The same state as route values (page 1 and defaults are omitted so URLs stay short).
-    public Dictionary<string, string> ToRouteValues()
-    {
-        var values = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (!string.IsNullOrWhiteSpace(Search))
-        {
-            values[SearchKey] = Search;
-        }
-        if (!string.IsNullOrWhiteSpace(Sort))
-        {
-            values[SortKey] = Sort;
-            if (Descending)
-            {
-                values[DescendingKey] = "true";
-            }
-        }
-        if (Page > 1)
-        {
-            values[PageKey] = Page.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        }
-        foreach (var (column, value) in Filters)
-        {
-            values[FilterPrefix + column] = value;
-        }
-        return values;
-    }
-
-    public DataAdminListQuery WithPage(int page) => this with { Page = page };
-
-    // Clicking a column header sorts by it ascending, again to flip, and always returns to page 1.
-    public DataAdminListQuery WithSort(string column) =>
-        this with { Sort = column, Descending = string.Equals(Sort, column, StringComparison.Ordinal) && !Descending, Page = 1 };
-
-    public DataAdminListQuery WithoutFilter(string column)
-    {
-        var filters = new Dictionary<string, string>(Filters, StringComparer.Ordinal);
-        filters.Remove(column);
-        return this with { Filters = filters, Page = 1 };
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

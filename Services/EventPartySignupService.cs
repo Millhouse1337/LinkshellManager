@@ -592,11 +592,6 @@ public static class EventPartySignupService
         return created;
     }
 
-    // Members may drop their own slot only BEFORE the event starts. Once live, a
-    // slot can only be cleared by an officer (which also removes the participation),
-    // so the running roster isn't disrupted by self-withdrawals mid-run.
-    public static bool MemberCanWithdraw(Event eventEntity) => eventEntity.CommencementStartTime is null;
-
     // Called right after ClaimSlotAsync is COMMITTED (the slot signup must already
     // be persisted). Before the event starts, claiming a slot drops the member's
     // "no slot" attendance (one identity per event — they'll be materialized in
@@ -753,48 +748,6 @@ public static class EventPartySignupService
 
         db.EventPartySlotSignups.RemoveRange(signups);
         return signups.Count;
-    }
-
-    // When an event's party setup changes, its slot signups are keyed to the OLD
-    // setup's slots and would be orphaned. Rather than drop the members, move each
-    // to the event's general "no slot" attendance (AppUserEvents) so they still
-    // appear on the new board's "Also attending — no slot" line, carrying their
-    // job. Members already on the no-slot roster aren't duplicated (matched by
-    // AppUserId, or by character name for manual signups with no linked user).
-    // Removes the slot signups. Does NOT commit — the caller owns SaveChanges.
-    // Returns the number of members moved.
-    public static async Task<int> MoveSlotSignupsToNoSlotAsync(
-        ApplicationDbContext db, int eventId, DateTime? startTime, CancellationToken cancellationToken)
-    {
-        var signups = await db.EventPartySlotSignups
-            .Where(s => s.EventId == eventId)
-            .ToListAsync(cancellationToken);
-        if (signups.Count == 0)
-        {
-            return 0;
-        }
-
-        var existing = await db.AppUserEvents
-            .Where(p => p.EventId == eventId)
-            .ToListAsync(cancellationToken);
-        var attendingUserIds = new HashSet<string>(
-            existing.Where(p => !string.IsNullOrEmpty(p.AppUserId)).Select(p => p.AppUserId!),
-            StringComparer.Ordinal);
-        var attendingNames = new HashSet<string>(
-            existing.Where(p => !string.IsNullOrWhiteSpace(p.CharacterName)).Select(p => p.CharacterName!.Trim()),
-            StringComparer.OrdinalIgnoreCase);
-
-        var moved = 0;
-        foreach (var signup in signups)
-        {
-            if (ConvertSignupToNoSlot(db, eventId, signup, startTime, attendingUserIds, attendingNames))
-            {
-                moved++;
-            }
-        }
-
-        db.EventPartySlotSignups.RemoveRange(signups);
-        return moved;
     }
 
     // Moves ONE slot signup to "no slot" (the board's "Also Attending"): the member

@@ -110,9 +110,10 @@ public class DataAdminQueryServiceTests
         Assert.Equal(new[] { 1, 2, 4 }, (await IdsAsync(db, Query(("f.LinkshellId", "1")))).OrderBy(id => id));
         Assert.Equal(new[] { 3, 5 }, (await IdsAsync(db, Query(("f.LinkshellId", "2")))).OrderBy(id => id));
         Assert.Equal(5, (await IdsAsync(db, Query(("f.NoSuchColumn", "1")))).Length);
-        // ...and an unknown filter is dropped from the links too, rather than following every page.
+        // ...and an unknown filter is dropped from the query the list echoes back, rather than
+        // following every page.
         var stale = await new DataAdminQueryService(db).ListAsync(Rules(db), Query(("f.NoSuchColumn", "1"), ("f.LinkshellId", "1")), CancellationToken.None);
-        Assert.Equal(new[] { "f.LinkshellId" }, stale.PageRoute(1).Keys);
+        Assert.Equal(new[] { "LinkshellId" }, stale.Query.Filters.Keys);
         Assert.Equal(5, (await IdsAsync(db, Query(("f.LinkshellId", "abc")))).Length);
         // Only key and foreign-key columns are filterable; a text column is not.
         Assert.Equal(5, (await IdsAsync(db, Query(("f.Category", "Loot")))).Length);
@@ -169,8 +170,6 @@ public class DataAdminQueryServiceTests
 
         Assert.Equal(2, (await service.ListAsync(rules, Query(("page", "99")), CancellationToken.None)).Page);
         Assert.Equal(1, (await service.ListAsync(rules, Query(("page", "0")), CancellationToken.None)).Page);
-        Assert.Equal("2", second.PageRoute(2)[DataAdminListQuery.PageKey]);
-        Assert.False(second.PageRoute(1).ContainsKey(DataAdminListQuery.PageKey));
     }
 
     [Fact]
@@ -210,7 +209,6 @@ public class DataAdminQueryServiceTests
         Assert.Equal("LinkshellId", chip.Column);
         Assert.Equal("Linkshell", chip.DisplayName);
         Assert.Equal("Titans", chip.Label);
-        Assert.False(titans.RemoveFilterRoute("LinkshellId").ContainsKey("f.LinkshellId"));
 
         var gone = await service.ListAsync(Rules(db), Query(("f.LinkshellId", "999")), CancellationToken.None);
         Assert.Equal("999", Assert.Single(gone.ActiveFilters).Label);
@@ -218,7 +216,7 @@ public class DataAdminQueryServiceTests
     }
 
     [Fact]
-    public void Parse_RoundTrips_ThroughRouteValues()
+    public void Parse_ReadsSearchSortPageAndFilters()
     {
         var query = Query(("q", " loot "), ("sort", "RuleTitle"), ("desc", "true"), ("page", "3"), ("f.LinkshellId", "2"), ("f.", "ignored"), ("f.Empty", "   "));
 
@@ -227,30 +225,8 @@ public class DataAdminQueryServiceTests
         Assert.True(query.Descending);
         Assert.Equal(3, query.Page);
         Assert.Equal(new Dictionary<string, string> { ["LinkshellId"] = "2" }, query.Filters);
-        Assert.Equal(
-            new Dictionary<string, string> { ["q"] = "loot", ["sort"] = "RuleTitle", ["desc"] = "true", ["page"] = "3", ["f.LinkshellId"] = "2" },
-            query.ToRouteValues());
 
         Assert.Equal(1, Query(("page", "-4")).Page);
         Assert.Equal(1, Query(("page", "x")).Page);
-        Assert.Empty(Query().ToRouteValues());
-    }
-
-    [Fact]
-    public void SortLinks_FlipDirection_AndReturnToPageOne()
-    {
-        var query = Query(("sort", "RuleTitle"), ("page", "3"), ("f.LinkshellId", "2"));
-
-        var flipped = query.WithSort("RuleTitle");
-        Assert.True(flipped.Descending);
-        Assert.Equal(1, flipped.Page);
-        Assert.Equal("2", flipped.Filters["LinkshellId"]);
-
-        var other = query.WithSort("Category");
-        Assert.Equal("Category", other.Sort);
-        Assert.False(other.Descending);
-
-        Assert.Empty(query.WithoutFilter("LinkshellId").Filters);
-        Assert.Equal(7, query.WithPage(7).Page);
     }
 }
