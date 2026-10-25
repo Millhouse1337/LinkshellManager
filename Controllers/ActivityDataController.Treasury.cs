@@ -591,6 +591,17 @@ public sealed partial class ActivityDataController
             .ToList();
     }
 
+    // One row per person, not per line. A member's name goes onto every half that is not gil on
+    // hand, so an entry where NEITHER half is gil on hand — "someone owes us for work", or gil
+    // owed to one member — names the same person twice and used to read as "Bob, Bob" and take
+    // the who-got-what layout meant for splits. A real split cannot collide: its recipients are
+    // distinct membership rows. First line wins, so the amount shown is the first half's.
+    internal static IEnumerable<JournalEntryLine> RecipientLines(IEnumerable<JournalEntryLine> lines) =>
+        lines
+            .Where(line => !string.IsNullOrWhiteSpace(line.CounterpartyCharacterName))
+            .GroupBy(line => line.CounterpartyCharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First());
+
     private static ActivityTreasuryEntryDto MapTreasuryEntry(
         JournalEntry entry,
         HashSet<int> reversedIds,
@@ -607,15 +618,7 @@ public sealed partial class ActivityDataController
         // it is spread over. Reading one line would report a split as one member's share.
         var amount = lines.Where(line => line.Amount > 0).Sum(line => line.Amount);
 
-        // One row per person, not per line. A member's name goes onto every half that is not gil on
-        // hand, so an entry where NEITHER half is gil on hand — "someone owes us for work", or gil
-        // owed to one member — names the same person twice and used to read as "Bob, Bob" and take
-        // the who-got-what layout meant for splits. A real split cannot collide: its recipients are
-        // distinct membership rows. First line wins, so the amount shown is the first half's.
-        var recipients = lines
-            .Where(line => !string.IsNullOrWhiteSpace(line.CounterpartyCharacterName))
-            .GroupBy(line => line.CounterpartyCharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.First())
+        var recipients = RecipientLines(lines)
             .Select(line => new ActivityTreasuryRecipientDto(
                 ResolveMembershipId(entry.LinkshellId, line, membershipByAppUser, membershipByName),
                 line.CounterpartyAppUserId,

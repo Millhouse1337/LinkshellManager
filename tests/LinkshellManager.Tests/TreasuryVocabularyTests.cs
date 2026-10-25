@@ -636,7 +636,7 @@ public class TreasuryVocabularyTests
             },
         };
 
-        Assert.Equal(new[] { "Bob" }, ManageFinancesController.RecipientsOf(owedToUs));
+        Assert.Equal(new[] { "Bob" }, RecipientNames(owedToUs));
 
         // A real split still names everyone: its recipients are distinct people, so nothing collides.
         var split = new JournalEntry
@@ -651,8 +651,13 @@ public class TreasuryVocabularyTests
             },
         };
 
-        Assert.Equal(new[] { "Ashira", "Millhouse", "Zeid" }, ManageFinancesController.RecipientsOf(split));
+        Assert.Equal(new[] { "Ashira", "Millhouse", "Zeid" }, RecipientNames(split));
     }
+
+    private static string[] RecipientNames(JournalEntry entry) =>
+        ActivityDataController.RecipientLines(entry.Lines.OrderBy(line => line.LineNumber))
+            .Select(line => line.CounterpartyCharacterName!)
+            .ToArray();
 
     // The mirror of EveryKindThatTouchesWhatWeOweNamesAMember, for the figure that had no names
     // behind it at all. A linkshell has no bank: gil on hand is the sum of what sits on members'

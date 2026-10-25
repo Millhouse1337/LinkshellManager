@@ -84,9 +84,9 @@ public class EndEventCampPathRoutingTests
     public void NoEndEventActionRestatesTheConditionByHand()
     {
         var repoRoot = FindRepoRoot();
+        // The old website's EventController.Lifecycle.cs was a third end path until it was deleted.
         var endPaths = new[]
         {
-            "Controllers/EventController.Lifecycle.cs",
             "Controllers/ActivityDataController.EventsLifecycle.cs",
             "Controllers/AddonApiController.AddonEvents.cs",
         };

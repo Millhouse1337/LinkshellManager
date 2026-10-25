@@ -8,12 +8,12 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 /// <summary>
-/// End Camp / Post ToD is reachable from three places — the Discord board button (and the modal it
-/// opens), the web signup board, and the Activity's live camp card — and for a long time they did
-/// not agree on who may press it. The Activity endpoint checked the CanManageEvents PERMISSION
-/// while the other two checked the Leader/Officer RANK, so a linkshell that built a custom role
-/// with "Manage events" on got a role that could end a camp in the Activity and nowhere else, and
-/// whose button the Activity itself never drew.
+/// End Camp / Post ToD is reachable from two places — the Discord board button (and the modal it
+/// opens) and the Activity's live camp card (the old website's signup board was a third, until it
+/// was deleted) — and for a long time they did not agree on who may press it. The Activity endpoint
+/// checked the CanManageEvents PERMISSION while the others checked the Leader/Officer RANK, so a
+/// linkshell that built a custom role with "Manage events" on got a role that could end a camp in
+/// the Activity and nowhere else, and whose button the Activity itself never drew.
 ///
 /// A coarse rank on one surface and a named permission on another is the ChartsWriteGateParityTests
 /// hazard in a more expensive place: ending a camp finalizes DKP and tears the board down. These
@@ -22,29 +22,27 @@ namespace LinkshellManager.Tests;
 /// </summary>
 public class EndCampGateParityTests
 {
-    // The three server files that gate an End Camp path, named rather than counted so adding a
-    // fourth surface is a deliberate edit here instead of a silently-passing test.
+    // The server files that gate an End Camp path, named rather than counted so adding a
+    // surface is a deliberate edit here instead of a silently-passing test.
     private static readonly string[] EndCampGateFiles =
     {
         "DiscordInteractionsController.cs",
-        "EventController.HnmBoard.cs",
         "ActivityDataController.HnmBoard.cs",
     };
 
     /// <summary>
-    /// Both rank-gated surfaces grew their own CanManageEventsAsync, mirroring the order
+    /// The rank-gated Discord surface grew its own CanManageEventsAsync, mirroring the order
     /// ActivityDataController.CanAsync already used: membership, override, Leader-always-wins,
     /// then the role row.
     /// </summary>
     [Fact]
-    public void BothRankGatedControllersExposeAnEventPermissionGate()
+    public void TheDiscordControllerExposesAnEventPermissionGate()
     {
         Assert.NotNull(Method(typeof(DiscordInteractionsController), "CanManageEventsAsync"));
-        Assert.NotNull(Method(typeof(EventController), "CanManageEventsAsync"));
     }
 
     /// <summary>
-    /// Each surface's gate is still the coarse rank check as well, kept as a separate method: the
+    /// The Discord controller's coarse rank check is still kept as a separate method: the
     /// permission gate must not quietly become the rank gate under a new name, which is exactly
     /// how the two would drift back together.
     /// </summary>
@@ -52,7 +50,6 @@ public class EndCampGateParityTests
     public void TheCoarseRankGateSurvivesAsItsOwnMethod()
     {
         Assert.NotNull(Method(typeof(DiscordInteractionsController), "CanManageLinkshellAsync"));
-        Assert.NotNull(Method(typeof(EventController), "CanManageLinkshellAsync"));
     }
 
     /// <summary>

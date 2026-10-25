@@ -172,31 +172,6 @@ public class ChartBoardCatalogTests
     }
 
     /// <summary>
-    /// The "Hide ToD Mobs" picker used to keep its OWN copy of the eight farm NM names, and this
-    /// test pinned that copy to HnmConfig so the two could not drift.
-    ///
-    /// The Sky NMs are out of the ToD tracker entirely now — off the seeded monster catalog, off the
-    /// ToD and create-event pickers — so there is nothing left to hide, and the group is gone. What
-    /// is worth pinning is the ABSENCE: re-adding a Sky name to the picker would offer a hide toggle
-    /// for a monster the tracker no longer lists, which reads as a bug in the tracker.
-    ///
-    /// The chart is unaffected either way. Sky farm NMs are still cards on the Charts → Sky board;
-    /// only their ToD-side catalog entry went away.
-    /// </summary>
-    [Fact]
-    public void TheTodPicker_NoLongerOffersTheSkyFarmNms()
-    {
-        var offered = LinkshellCustomizeViewModel.TodMonsterGroups
-            .SelectMany(group => group.Names)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var nm in HnmConfig.SkyFarmNmOrder)
-        {
-            Assert.DoesNotContain(nm, offered);
-        }
-    }
-
-    /// <summary>
     /// Sea is drawn the way Sky is: one COLUMN per second-stage Jailer, holding everything that feeds
     /// it and then the Jailer itself, with Love and Absolute Virtue below them all. The card order IS
     /// that layout — three contiguous blocks of five, then the trailing run.
@@ -903,25 +878,6 @@ public class ChartBoardCatalogTests
         var virtue = sea.Find("Absolute Virtue")!;
         Assert.Equal("Final encounter.", virtue.Subtitle);
         Assert.Equal("Final stage", virtue.Group);
-    }
-
-    // Board.cshtml's sub-nav links with asp-action="@board.Key" and ChartsController.BackTo redirects
-    // to the key, so a board with no action of that name renders an anchor with NO href (a silently
-    // dead button) and throws on every PRG redirect. Only one of those two failures is loud.
-    // Reflection rather than a WebApplicationFactory: this project is service-level, and only the
-    // method names matter.
-    [Fact]
-    public void EveryBoard_HasAControllerActionNamedAfterItsKey()
-    {
-        var actions = typeof(ChartsController)
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-            .Select(method => method.Name)
-            .ToHashSet(StringComparer.Ordinal);
-
-        foreach (var board in ChartBoardCatalog.Boards)
-        {
-            Assert.True(actions.Contains(board.Key), $"ChartsController has no {board.Key}() action.");
-        }
     }
 
     // ---- features, drop items and key items -------------------------------------

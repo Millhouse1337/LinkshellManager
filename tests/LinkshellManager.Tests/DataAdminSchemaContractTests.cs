@@ -12,24 +12,25 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 /// <summary>
-/// The schema diagram's hand-offs between C#, the Razor view, the stylesheet and the two scripts.
+/// The schema diagram's hand-offs between C#, the app's diagram component, the stylesheet and the
+/// two scripts.
 ///
-/// The page (/data-admin) is drawn entirely in the browser. The server writes one JSON block
-/// (DataAdminSchemaGraph.Json) and two scripts read it back: data-admin-schema-layout.js (where
-/// things go) and data-admin-schema.js (the cards and lines). Nothing type-checks any of it, and
-/// each piece fails silently:
+/// The diagram (Data Admin in the app) is drawn entirely in the browser. The server sends one JSON
+/// graph (DataAdminSchemaGraph) and two scripts read it: data-admin-schema-layout.js (where things
+/// go) and data-admin-schema.js (the cards and lines). Nothing type-checks any of it, and each
+/// piece fails silently:
 ///
 ///  1. A renamed C# record member renames the JSON property. The script then reads undefined, which
 ///     it treats as "false" or "none": no error, just a diagram with no keys, no lines or no cards.
-///  2. The view must give the data block its id, its JSON type and a nonce, and must load the
-///     layout script before the page script (the page script returns quietly when
-///     window.LsmSchemaLayout is missing: an empty canvas, again with no error).
+///  2. The component must load the layout script before the page script (the page script returns
+///     quietly when window.LsmSchemaLayout is missing: an empty canvas, again with no error), and
+///     its template must carry every data-erd-* hook the page script looks up.
 ///  3. STYLE.md: colours come from tokens. A hardcoded colour in the diagram's CSS block would look
 ///     fine today and wrong the day the theme changes.
 ///  4. The site's .fade animation holds `transform`, which is what pan and zoom write; the
 ///     Content-Security-Policy (script-src is nonce-only) blocks inline event handlers; and STYLE.md
-///     keeps styling in data-admin-schema.css (its own file since the Activity loads it too),
-///     which is also where the layout module's numbers must come from.
+///     keeps styling in data-admin-schema.css, which is also where the layout module's numbers must
+///     come from.
 ///
 /// The browser is not part of this test suite, so these pin the text on both sides of each hand-off.
 /// </summary>
@@ -187,26 +188,19 @@ public class DataAdminSchemaContractTests
     }
 
     /// <summary>
-    /// Hand-off (2): the data block is a nonce'd JSON block with the id the script looks up, and
-    /// the layout module is loaded first. Both scripts are deferred, so they run in that order and
-    /// only after the data block (which sits above them in the page) has been parsed.
+    /// Hand-off (2): the component loads the layout module first. The page script reads
+    /// window.LsmSchemaLayout when it mounts, so the other order draws an empty canvas.
     /// </summary>
     [Fact]
-    public void ViewCarriesTheDataBlockAndLoadsTheScriptsInOrder()
+    public void TheComponentLoadsTheLayoutScriptBeforeThePageScript()
     {
-        var view = ReadView();
-        var scriptTags = Regex.Matches(view, @"<script\b[^>]*>").Select(match => match.Value).ToList();
+        var component = File.ReadAllText(Path.Combine(DiagramComponentDirectory(), "data-admin-diagram.component.ts"));
+        var layoutLoad = component.IndexOf("loadScript('/js/" + LayoutScript + "')", StringComparison.Ordinal);
+        var pageLoad = component.IndexOf("loadScript('/js/" + PageScript + "')", StringComparison.Ordinal);
 
-        var dataBlock = Assert.Single(scriptTags, tag => tag.Contains("id=\"erd-data\"", StringComparison.Ordinal));
-        Assert.Contains("type=\"application/json\"", dataBlock, StringComparison.Ordinal);
-        Assert.Contains("nonce=\"@Html.CspNonce()\"", dataBlock, StringComparison.Ordinal);
-
-        var layoutTag = Assert.Single(scriptTags, tag => tag.Contains("/" + LayoutScript + "\"", StringComparison.Ordinal));
-        var pageTag = Assert.Single(scriptTags, tag => tag.Contains("/" + PageScript + "\"", StringComparison.Ordinal));
-        Assert.Matches(@"\sdefer\b", layoutTag);
-        Assert.Matches(@"\sdefer\b", pageTag);
-        Assert.True(
-            view.IndexOf(layoutTag, StringComparison.Ordinal) < view.IndexOf(pageTag, StringComparison.Ordinal),
+        Assert.True(layoutLoad >= 0, $"The diagram component no longer loads {LayoutScript}.");
+        Assert.True(pageLoad >= 0, $"The diagram component no longer loads {PageScript}.");
+        Assert.True(layoutLoad < pageLoad,
             $"{LayoutScript} must be loaded before {PageScript}: the page script needs window.LsmSchemaLayout.");
     }
 
@@ -224,7 +218,7 @@ public class DataAdminSchemaContractTests
         foreach (var hook in ViewHooks)
         {
             var inView = Regex.Matches(view, @"\s" + Regex.Escape(hook) + @"(?=[\s>/])").Count;
-            Assert.True(inView == 1, $"Index.cshtml must carry '{hook}' exactly once; found {inView}.");
+            Assert.True(inView == 1, $"data-admin-diagram.component.html must carry '{hook}' exactly once; found {inView}.");
             Assert.Contains("[" + hook + "]", page, StringComparison.Ordinal);
         }
     }
@@ -293,40 +287,6 @@ public class DataAdminSchemaContractTests
         Assert.Contains("removeAttribute('href')", page, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Back from a records page returns to the diagram with the same table selected: every link to
-    /// Index in the four records views carries the table as a fragment (#table=slug), and the page
-    /// script reads it from location.hash. Either side alone fails silently (the diagram simply
-    /// opens with nothing selected).
-    /// </summary>
-    [Fact]
-    public void RecordsPagesLinkBackToTheDiagramWithTheTableInTheHash()
-    {
-        var folder = Path.Combine(FindRepoDirectory("Views"), "DataAdmin");
-        foreach (var name in new[] { "List.cshtml", "Details.cshtml", "Edit.cshtml", "Delete.cshtml" })
-        {
-            var view = File.ReadAllText(Path.Combine(folder, name));
-            // Links to Index on this controller only: a link to another controller's Index carries no table.
-            var backLinks = Regex.Matches(view, @"<a\b[^>]*>").Select(match => match.Value)
-                .Where(tag => tag.Contains("asp-action=\"Index\"", StringComparison.Ordinal))
-                .Where(tag => !tag.Contains("asp-controller=", StringComparison.Ordinal)
-                    || tag.Contains("asp-controller=\"DataAdmin\"", StringComparison.Ordinal))
-                .ToList();
-            Assert.NotEmpty(backLinks);
-            foreach (var tag in backLinks)
-            {
-                Assert.True(
-                    tag.Contains("asp-fragment=\"table=@Model.Slug\"", StringComparison.Ordinal),
-                    $"{name}: a link to Index must carry asp-fragment=\"table=@Model.Slug\": {tag}");
-            }
-        }
-
-        var page = StripLineComments(
-            File.ReadAllText(Path.Combine(FindRepoDirectory("wwwroot"), "js", PageScript)));
-        Assert.Contains("'table='", page, StringComparison.Ordinal);
-        Assert.Contains("location.hash", page, StringComparison.Ordinal);
-    }
-
     // Both scripts comment with "//" only (house style), so this is enough to drop their prose.
     private static string StripLineComments(string script) => Regex.Replace(script, @"//[^\r\n]*", "");
 
@@ -335,12 +295,15 @@ public class DataAdminSchemaContractTests
             ? list.EnumerateArray().ToList()
             : new List<JsonElement>();
 
-    // The view without its Razor comments: they are notes for the reader and never reach the page.
+    // The diagram template without its HTML comments: they are notes for the reader.
     private static string ReadView()
     {
-        var view = File.ReadAllText(Path.Combine(FindRepoDirectory("Views"), "DataAdmin", "Index.cshtml"));
-        return Regex.Replace(view, @"@\*.*?\*@", " ", RegexOptions.Singleline);
+        var view = File.ReadAllText(Path.Combine(DiagramComponentDirectory(), "data-admin-diagram.component.html"));
+        return Regex.Replace(view, @"<!--.*?-->", " ", RegexOptions.Singleline);
     }
+
+    private static string DiagramComponentDirectory() =>
+        FindRepoDirectory(Path.Combine("discord-activity", "src", "app", "home", "data-admin"));
 
     /// <summary>Walks up from the test binary to the repo root, which holds the web assets.</summary>
     private static string FindRepoDirectory(string relative)

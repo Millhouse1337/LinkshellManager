@@ -9,33 +9,32 @@ namespace LinkshellManager.Tests;
 
 /// <summary>
 /// The wishlist and key items are the first Charts writes open to a member WITHOUT CanManageCharts,
-/// which makes "who may do this" a decision two front-ends now have to agree on.
+/// so "who may do this" has a member gate and an officer gate, and one shared ownership rule.
 ///
-/// A coarse check on one surface and a named permission on the other is a privilege escalation
-/// available by picking a front-end. That is the bug GrantTreasuryToOfficersWhoUsedIt exists to
-/// document, and it is why ChartsController checks CanManageCharts rather than a rank.
+/// These were written when the old website was a second front-end that had to agree with the
+/// Activity; a coarse check on one surface and a named permission on the other is a privilege
+/// escalation available by picking a front-end (the bug GrantTreasuryToOfficersWhoUsedIt exists to
+/// document). The website is gone, so they now pin the one surface left and guard against a copy.
 ///
-/// Reflection cannot prove a CALL SITE, so these pin the SHAPE instead: both controllers expose the
-/// member gate, and neither holds a private copy of an ownership comparison. Precedent for reading
-/// the repo off disk in a unit test: ChartBoardCatalogTests.EveryBossEmblem_ExistsOnDisk.
+/// Reflection cannot prove a CALL SITE, so these pin the SHAPE instead: the controller exposes the
+/// member gate, and no controller holds a private copy of an ownership comparison. Precedent for
+/// reading the repo off disk in a unit test: ChartBoardCatalogTests.EveryBossEmblem_ExistsOnDisk.
 /// </summary>
 public class ChartsWriteGateParityTests
 {
     private static string ControllersPath() => FindRepoPath("Controllers");
 
     [Fact]
-    public void BothControllersExposeAMemberLevelGate()
+    public void TheActivityExposesAMemberLevelGate()
     {
-        Assert.NotNull(Method(typeof(ChartsController), "AuthorizeMemberAsync"));
         Assert.NotNull(Method(typeof(ActivityDataController), "AuthorizeChartsMemberAsync"));
     }
 
-    // Both must still keep the OFFICER gate as a separate thing: a member gate that quietly returned
-    // true for officers only would be indistinguishable at the call site.
+    // The OFFICER gate must stay a separate thing: a member gate that quietly returned true for
+    // officers only would be indistinguishable at the call site.
     [Fact]
-    public void BothControllersStillExposeTheOfficerGate()
+    public void TheActivityStillExposesTheOfficerGate()
     {
-        Assert.NotNull(Method(typeof(ChartsController), "AuthorizeWriteAsync"));
         Assert.NotNull(Method(typeof(ActivityDataController), "AuthorizeChartsWriteAsync"));
     }
 
@@ -61,7 +60,7 @@ public class ChartsWriteGateParityTests
         }
     }
 
-    /// <summary>Twin of the above for the key item rule, which has the same two-surface hazard.</summary>
+    /// <summary>Twin of the above for the key item rule, which has the same copy hazard.</summary>
     [Fact]
     public void NoControllerDecidesKeyItemOwnershipItself()
     {
@@ -70,26 +69,24 @@ public class ChartsWriteGateParityTests
             .Select(source => Path.GetFileName(source.File))
             .ToList();
 
-        // Exactly the two write paths, one per surface. A third would be a copy; a missing one would
-        // be an ungated endpoint.
-        Assert.Contains("ChartsController.cs", callers);
-        Assert.Contains("ActivityDataController.ChartsKeyItems.cs", callers);
+        // Exactly the one write path. A second would be a copy; a missing one would be an ungated
+        // endpoint.
+        Assert.Equal(new[] { "ActivityDataController.ChartsKeyItems.cs" }, callers);
     }
 
     /// <summary>
-    /// Both wishlist write paths reach the shared rule. Named files rather than a count, so adding a
+    /// The wishlist write path reaches the shared rule. Named files rather than a count, so adding a
     /// surface is a deliberate edit here rather than a silently-passing test.
     /// </summary>
     [Fact]
-    public void BothSurfacesCallTheSharedOwnershipRule()
+    public void TheWishlistWritePathCallsTheSharedOwnershipRule()
     {
         var callers = ControllerSources()
             .Where(source => source.Text.Contains("ChartWishlistService.CanEditRequest", StringComparison.Ordinal))
             .Select(source => Path.GetFileName(source.File))
             .ToList();
 
-        Assert.Contains("ChartsController.cs", callers);
-        Assert.Contains("ActivityDataController.ChartsWishlist.cs", callers);
+        Assert.Equal(new[] { "ActivityDataController.ChartsWishlist.cs" }, callers);
     }
 
     private static MethodInfo? Method(Type type, string name) =>
