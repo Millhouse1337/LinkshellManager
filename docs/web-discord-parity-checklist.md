@@ -17,7 +17,7 @@ What remains is a short list of **intentional** differences between the two host
 | Website-only | Super-admin Admin and Data Admin tabs, Privacy/Terms/launcher footer. (Reviewing members' ToD submissions on the ToDs tab and /lsm now captures under Event System → Current is on both hosts.) | Hidden (`isWebsite`, `canOpenTab`). |
 | Downloads | DKP Sheet Export to Excel and the Import DKP template download directly. | Can't save a file: each opens in the member's browser through a one-time link (`DownloadLinkService`, `ActivityDataController.Downloads`). Import DKP uploads as base64 JSON, the same on both. |
 | Discord-only | Hidden. | Connected-participants list and "connected now" invite shortcuts, "Set to this server" from the launching guild. |
-| Public pages | `/` landing (signed out), Privacy, Terms are server-rendered (`_PublicLayout`). | Not used. |
+| Public pages | `/` landing (signed out), `/features`, `/addon`, Privacy, Terms and the sign-in page are server-rendered (`_PublicLayout`). | Not used. |
 
 ## Permissions
 
@@ -44,9 +44,8 @@ Build it once, in the Angular app. If it only makes sense in a browser (a file u
 super-admin tool), gate it with `DiscordActivityService.isWebsite`, and a whole tab with
 `ActivityHomeComponent.canOpenTab`. Don't add Razor pages for app features.
 
-## Retiring the old website
+## The old website
 
-The old Razor pages' GET addresses redirect into the app (`Utils/LegacyUrlRedirects.cs`, 302 for
-now). Their controllers and views stay until a cleanup pass deletes them and switches the redirects to
-301. That includes Data Admin: `/data-admin/...` now redirects to the app's Data Admin tab, which draws
-the same schema diagram from the shared script and stylesheet.
+The old Razor pages were deleted in October 2026. Their GET addresses redirect permanently (301) into
+the app (`Utils/LegacyUrlRedirects.cs`). That includes Data Admin: `/data-admin/...` goes to the app's
+Data Admin tab, which draws the same schema diagram from the shared script and stylesheet.

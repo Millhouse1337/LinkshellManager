@@ -677,15 +677,15 @@ if (Directory.Exists(activityPhysicalPath))
 }
 
 // The old website's page addresses (bookmarks, Discord bot posts, old tabs) go to the same place
-// in the Activity UI, which is the website now. GET/HEAD only: old forms still post to their
-// controllers until the cleanup phase removes them. 302 while the slugs settle; see
-// LegacyUrlRedirects.
+// in the Activity UI, which is the website now. Permanent (301): the old pages are deleted, so
+// browsers and search engines may remember the new address. GET/HEAD only — the old pages' forms
+// are gone, so there is nothing a POST to an old address could mean. See LegacyUrlRedirects.
 app.Use(async (context, next) =>
 {
     if ((HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
         && LegacyUrlRedirects.TryResolve(context.Request.Path, context.Request.QueryString, out var target))
     {
-        context.Response.Redirect(target, permanent: false);
+        context.Response.Redirect(target, permanent: true);
         return;
     }
     await next();

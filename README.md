@@ -56,14 +56,14 @@ Discord SDK entirely and uses the site's own cookie login:
 
 ## Server-rendered pages
 
-Razor now renders only what can't be the app: the public landing page, Privacy, Terms, the Identity
-sign-in (error) page, Access denied and Error, all on `Views/Shared/_PublicLayout.cshtml`. Data Admin
-is the app's super-admin **Data Admin** tab (`/api/data-admin`); its schema diagram is the shared
-`wwwroot/js/data-admin-schema.js` + `wwwroot/css/data-admin-schema.css`, mounted by the tab.
+Razor now renders only what can't be the app: the public landing page, `/features`, `/addon`,
+Privacy, Terms, Error and the Identity sign-in (error) page, all on `Views/Shared/_PublicLayout.cshtml`.
+Data Admin is the app's super-admin **Data Admin** tab (`/api/data-admin`); its schema diagram is the
+shared `wwwroot/js/data-admin-schema.js` + `wwwroot/css/data-admin-schema.css`, mounted by the tab.
 
-The old Razor website's pages are being retired. Their GET addresses redirect into the app
-(`Utils/LegacyUrlRedirects.cs`, e.g. `/Event` → `/discord-activity/events`); their controllers and
-views remain only until a cleanup pass deletes them.
+The old Razor website was deleted in October 2026. Its GET addresses still redirect permanently (301)
+into the app (`Utils/LegacyUrlRedirects.cs`, e.g. `/Event` → `/discord-activity/events`), so bookmarks
+and old Discord posts keep working.
 
 ## Auth flow
 

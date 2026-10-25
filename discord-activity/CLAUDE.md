@@ -1,7 +1,7 @@
 # Discord Activity — styling guide (READ BEFORE ANY UI WORK)
 
-This Angular SPA uses the same blueish **"dark-crystal / FFXI"** theme as the web app
-(`wwwroot/css/lsm-theme.css`). The whole look is driven by CSS custom-property **tokens**
+This Angular SPA uses a blueish **"dark-crystal / FFXI"** theme. It is the website too (the old
+Razor pages and their `lsm-theme.css` are gone). The whole look is driven by CSS custom-property **tokens**
 defined once in [`src/styles/_tokens.scss`](src/styles/_tokens.scss). Change a token's value
 there and it re-skins the entire app.
 
@@ -64,9 +64,8 @@ Radii: `--r-sm 6` · `--r-md 8` · `--r-lg 10` · `--r-xl 14`. Cards use `--r-xl
 ## Allowed exceptions (the ONLY raw colors permitted)
 
 1. **Token definitions** in `_tokens.scss` — this is where the literals live.
-2. **`.relic-flame`** in [`src/styles/_jobs.scss`](src/styles/_jobs.scss) — a *synced pair* with
-   the web's `.lsm-page .tag.relic-flame` in `wwwroot/css/lsm-theme.css`. Its blue→purple→magenta
-   aurora is deliberate. **Edit both files or neither**; don't tokenize it.
+2. **`.relic-flame`** in [`src/styles/_jobs.scss`](src/styles/_jobs.scss). Its blue→purple→magenta
+   aurora is deliberate; don't tokenize it.
 3. **Dark ink on bright fills** — text/checkmarks on accent/gold/success/warning buttons must
    stay dark: use `var(--bg)` (≈#0d1117) or `var(--gold-ink)`. Never recolor these light.
 4. **`#fff` / white-alpha** for toggle/checkbox knobs, text-on-accent, button top-highlights

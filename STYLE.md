@@ -47,17 +47,15 @@ Defined under `.panel-tab .btn` in `src/styles/_tabs-shell.scss` (works inside a
 Pills/badges: `.tag`, `.tag accent`, `.tag success`, or the `.pill is-success/is-muted`
 pattern in `configurations-tab.component.scss`.
 
-## Web MVC (Razor, `Views/…`, `wwwroot/css/lsm-theme.css`)
+## Server-rendered pages (Razor, `Views/Home`, `Views/Shared/_PublicLayout.cshtml`)
 
-Pages set `ViewData["BodyClass"]="lsm-page"`; styling lives in `wwwroot/css/lsm-theme.css`
-(re-themes `.card .btn .table .input .tag` over `site.css`). Use `class="btn primary | ghost
-| danger | gold"`, `class="card"`, `class="input"`/`class="form-select"` for controls,
-tokens `var(--fg) var(--fg-3) var(--border) var(--surface) var(--accent)`. Match the
-existing card markup on the page; don't paste Activity classes into Razor.
+Only the public pages are Razor now: the landing page, `/features`, `/addon`, Privacy, Terms, Error
+and the sign-in page. They are styled by `wwwroot/css/site.css` (and `wwwroot/css/landing.css` for
+the landing pages). Don't add Razor pages for app features; build them in the Angular app.
 
 ## When adding a new control/section
 - Reuse an existing component/partial that already looks right; copy its classes.
-- If a control still looks native, the fix belongs in the **base layer** (`_tokens.scss`
-  / `lsm-theme.css`), not a one-off inline style — so every future control benefits.
+- If a control still looks native, the fix belongs in the **base layer** (`_tokens.scss`),
+  not a one-off inline style — so every future control benefits.
 - Inline `style="…"` is fine for **layout** (flex/grid/gap/margins), not for **theming**
   (colors/borders/control chrome).

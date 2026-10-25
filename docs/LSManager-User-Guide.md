@@ -6,7 +6,7 @@ LinkshellManager (LSManager) is a three-piece system over one shared database. E
 
 | Piece | Where it lives | What it's for | Guide |
 | --- | --- | --- | --- |
-| **Web App** | `https://your-host/` (any browser) | The same app as the Discord Activity, plus website-only tools (reviewing submissions, DKP import/export, admin) | **[Web App Guide](LSManager-WebApp-Guide.md)** |
+| **Web App** | `https://your-host/` (any browser) | The same app as the Discord Activity, plus the super-admin tools (Admin, Data Admin) | **[Web App Guide](LSManager-WebApp-Guide.md)** |
 | **Discord Activity** | Inside Discord — voice "Activities" tray | Quick member-facing experience while everyone's in voice | **[Discord Activity Guide](LSManager-DiscordActivity-Guide.md)** |
 | **In-Game Addon** (`lsm`) | Ashita v3 / HorizonXI client | Live attendance, ToD capture, loot logging, event creation | **[In-Game Addon Guide](LSManager-Addon-Guide.md)** |
 

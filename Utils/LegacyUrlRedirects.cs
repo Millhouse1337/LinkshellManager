@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Http;
 namespace LinkshellManagerDiscordApp.Utils;
 
 // The old Razor website's page addresses, mapped to the same place in the Angular app (one URL per
-// tab; discord-activity/src/app/home/tab-routes.ts) now that the website IS the Activity UI.
-// Program.cs runs this for GET/HEAD only: an old form still posts to its controller until the
-// cleanup phase deletes it, and that controller's RedirectToAction then lands back here.
+// tab; discord-activity/src/app/home/tab-routes.ts) now that the website IS the Activity UI. The old
+// pages are deleted; these redirects are all that is left of them, for bookmarks and old Discord
+// posts. Program.cs answers GET/HEAD with a permanent (301) redirect.
 //
 // Matching is per path segment and case-insensitive, so /Event never swallows /EventHistory.
 // A linkshell named in the old URL (/linkshells/5/..., /Linkshell/Details/5, ?linkshellId=5)
@@ -46,6 +46,8 @@ public static class LegacyUrlRedirects
         ("/ManageRevenue", "treasury", false),
         ("/Account/Profile", "profile", false),
         ("/Account/Settings", "admin", false),
+        // The old sign-in page. The app shows its own sign-in screen to a signed-out visitor.
+        ("/Account/Login", "", false),
         ("/Messages", "messages", false),
         ("/Contact", "messages", false),
     };
