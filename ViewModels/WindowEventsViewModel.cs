@@ -1,14 +1,5 @@
 namespace LinkshellManagerDiscordApp.ViewModels;
 
-// Per-character DKP override posted with the Save / Post / Update-on-Sheet
-// forms. The view emits one hidden CharacterName + one number DkpAmount field
-// per row in the combined-members table.
-public sealed class WindowEventMemberDkpInput
-{
-    public string? CharacterName { get; set; }
-    public double? DkpAmount { get; set; }
-}
-
 // Per-CAPTURE DKP posted with the same forms, on a review row whose captures carry the money
 // (WindowEventRow.PerCaptureDkp). Keyed on the snapshot entry's own id rather than on a character
 // name, because the whole point is that one person has a different amount in each capture — a name
