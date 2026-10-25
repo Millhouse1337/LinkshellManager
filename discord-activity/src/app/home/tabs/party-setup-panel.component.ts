@@ -117,7 +117,7 @@ export class PartySetupPanelComponent {
   }
 
   // Which sign-up dropdowns to show: only the fields the slot does NOT pin.
-  // Mirrors the slotRequiresRole/Main/Sub logic in PartySetupController.SignUp.
+  // Mirrors PartySetupSignupService.ResolveSignupJobs.
   protected needsRole(slot: ActivityPartySetupSlot): boolean {
     return !slot.role;
   }
@@ -151,7 +151,6 @@ export class PartySetupPanelComponent {
     return false;
   }
 
-  // Mirrors PartySetupSlotView.Display (ViewModels/PartySetupViewModel.cs).
   protected slotRequirement(slot: ActivityPartySetupSlot): string {
     const label = slot.label ? ` (${slot.label})` : '';
     let core: string;

@@ -5,9 +5,8 @@ using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace LinkshellManagerDiscordApp.Authorization;
 
-// Site-wide super-admin gate. The Settings POSTs in Controllers/AccountController.cs inline the
-// same three lines (load the user, Challenge when missing, Forbid unless IsSuperAdmin); it is
-// extracted here so a controller with many actions cannot forget it on one of them.
+// Site-wide super-admin gate: load the user, Challenge when missing, Forbid unless IsSuperAdmin.
+// It is an attribute so a controller with many actions cannot forget it on one of them.
 //
 // Deliberately NOT AdminOverrideService: that is the per-linkshell permission override, gated
 // behind the admin.override toggle and scoped to memberships (see its header comment). A

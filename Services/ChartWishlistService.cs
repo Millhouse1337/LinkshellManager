@@ -55,10 +55,9 @@ public sealed record ChartWishlistBoard(
 /// <summary>
 /// THE reader and writer of the Charts wishlist.
 ///
-/// Same arrangement as ChartBoardService: the rules live here and both controllers are thin callers,
-/// so the website and the Activity cannot disagree about who may withdraw what. That matters more
-/// here than anywhere else in Charts, because this is the first write path open to a member who does
-/// NOT have CanManageCharts - see <see cref="CanEditRequest"/>.
+/// Same arrangement as ChartBoardService: the rules live here and the controller is a thin caller.
+/// That matters more here than anywhere else in Charts, because this is the first write path open
+/// to a member who does NOT have CanManageCharts - see <see cref="CanEditRequest"/>.
 /// </summary>
 public sealed class ChartWishlistService
 {
@@ -123,10 +122,10 @@ public sealed class ChartWishlistService
     /// <summary>
     /// THE ownership rule: a member may act on their OWN request, an officer on any.
     ///
-    /// Static and pure so the service-level tests reach it, and so neither controller can hold a
+    /// Static and pure so the service-level tests reach it, and so no controller can hold a
     /// private copy that drifts. A coarse check on one front-end and a named permission on the other
     /// is a privilege escalation available by picking a front-end - the bug
-    /// GrantTreasuryToOfficersWhoUsedIt exists to document, and the reason ChartsController checks
+    /// GrantTreasuryToOfficersWhoUsedIt exists to document, and the reason the Charts API checks
     /// CanManageCharts rather than a rank.
     ///
     /// A null or empty viewer id NEVER matches, even against a row whose requester id is also null.

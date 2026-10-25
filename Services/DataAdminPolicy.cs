@@ -20,7 +20,7 @@ public enum DataAdminPolicyFlags
 
 // A denormalised copy kept in step on save: TargetColumn on this entity is overwritten with
 // SourceColumn of the row that ViaForeignKey points at (Rule.LinkshellName <- Linkshell.LinkshellName),
-// exactly as the hand-written controllers do (Controllers/RuleController.cs Create).
+// exactly as the hand-written controllers do (ActivityDataController.Content.cs).
 public sealed record DataAdminSyncedCopy(string TargetColumn, string ViaForeignKey, string SourceColumn);
 
 // What EF metadata cannot tell us about one table. Everything here narrows what the generic

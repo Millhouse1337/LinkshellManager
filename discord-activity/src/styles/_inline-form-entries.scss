@@ -76,7 +76,7 @@
 
 /* ===== Rules / Announcements cards (dashboard) =====
    Each card carries an accent class that sets --acc; the icon + tag + hover read it,
-   so a card's color theme follows its category. Mirrors the web lsm-theme.css rules. */
+   so a card's color theme follows its category. */
 .panel-tab .acc-blue   { --acc: var(--accent); }
 .panel-tab .acc-purple { --acc: var(--purple); }
 .panel-tab .acc-green  { --acc: var(--success); }

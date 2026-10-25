@@ -37,7 +37,7 @@ export const PROFILE_CRAFT_OPTIONS = [
 // (index 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP). When a job is marked as having
 // its relic, the profile shows this list as a dropdown. The ToAU jobs (BLU/COR/PUP)
 // have no relic weapon, so their entries are empty and the profile hides the relic
-// block for them. Mirrors the backend JobRelicCatalog — keep in sync.
+// block for them.
 export const JOB_RELIC_OPTIONS: readonly (readonly string[])[] = [
   ['Bravura', 'Ragnarok'],              // WAR
   ['Spharai'],                          // MNK

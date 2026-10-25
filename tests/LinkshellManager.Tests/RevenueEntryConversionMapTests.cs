@@ -142,9 +142,8 @@ public class RevenueEntryConversionMapTests
 
     // The one deliberate exception, pinned so it is a decision rather than a surprise.
     //
-    // An "Expense" row with a negative Value can exist: [Range(0, long.MaxValue)] on
-    // ManageRevenueViewModel.Value is only a model-binding check, and ManageRevenueController.Edit
-    // assigns model.Value straight through. The old formula read such a row as gil coming IN
+    // An "Expense" row with a negative Value can exist: the old website's revenue edit form let a
+    // negative value through. The old formula read such a row as gil coming IN
     // (-(-1000) = +1000), which is almost certainly not what whoever typed it meant. The conversion
     // reads it as gil going out.
     //

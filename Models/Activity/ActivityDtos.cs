@@ -262,11 +262,8 @@ public sealed record ActivityLinkshellSettingsDto(
     double HnmStandardMiscBonus = 0);
 
 // LOCKSTEP: a permission added here must ALSO be added to the two records below, to the three
-// matching interfaces in discord-activity/src/app/discord/discord-activity.types.ts, to BOTH the
-// label list and the save mapping in configurations-tab.component.ts, and to the plain-JS
-// `permissions` array in Views/Linkshell/Permissions.cshtml. Only the C# and TS sides fail the
-// build when you miss one — the Razor list is unchecked, and omitting it there makes the web role
-// editor silently POST the flag as false on every save.
+// matching interfaces in discord-activity/src/app/discord/discord-activity.types.ts, and to BOTH
+// the label list and the save mapping in configurations-tab.component.ts.
 public sealed record ActivityPermissionsDto(
     bool CanManageRoles,
     bool CanManageMembers,

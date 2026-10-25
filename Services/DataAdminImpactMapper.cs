@@ -3,9 +3,7 @@ using LinkshellManagerDiscordApp.ViewModels;
 namespace LinkshellManagerDiscordApp.Services;
 
 // The delete confirmation's view model, built from a cascade-impact tree: what else goes with the
-// row, what is unlinked, and what blocks the delete. Shared by the Razor Delete page
-// (DataAdminController) and the Activity's Data Admin API (DataAdminApiController), so both show
-// the same preview.
+// row, what is unlinked, and what blocks the delete.
 public static class DataAdminImpactMapper
 {
     public static DataAdminDeleteViewModel ToViewModel(DataAdminModel table, DataAdminCascadeImpact impact)

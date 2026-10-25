@@ -801,9 +801,8 @@ public class ChartBoardCatalogTests
     }
 
     /// <summary>
-    /// Group labels appear in CONTIGUOUS runs. Both surfaces open a heading when a card's group
-    /// differs from the previous card's — ChartBoardViewModel.BossGroups and the Activity's
-    /// bossGroups computed both collapse adjacent equals — so an "A, B, A" order prints the "A"
+    /// Group labels appear in CONTIGUOUS runs. The Activity's bossGroups computed opens a heading
+    /// when a card's group differs from the previous card's, so an "A, B, A" order prints the "A"
     /// heading TWICE and splits one group across the board. Runs rather than a group-by on purpose:
     /// the catalog's order IS the display order, and grouping by key would silently reorder cards.
     /// </summary>
@@ -847,8 +846,7 @@ public class ChartBoardCatalogTests
     }
 
     // No board declares an ungrouped run any more — Sky and Sea were the last two, and both are
-    // chains now. ChartBossGroupingTests still pins that the runs transform collapses an ungrouped
-    // board to ONE unlabelled run, which is what stops a view emitting a heading for it.
+    // chains now.
 
     // The one silent way the ChartBoss signature can go wrong: an optional string? inserted before
     // Subtitle captures the line meant for it — string? into string? compiles clean and prints a

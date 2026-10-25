@@ -415,8 +415,8 @@ public sealed partial class ActivityDataController
 
         // EVERY HNM camp ends through the camp path, in both attendance modes: it stages a review
         // row (an officer's Post credits the DKP) and recycles the board. A generic end pays an HNM
-        // camp windowsAttended × DkpPerHour, and DkpPerHour is 0 on every HNM camp — see the long
-        // note on EventController.EndEvent, which this mirrors exactly.
+        // camp windowsAttended × DkpPerHour, and DkpPerHour is 0 on every HNM camp — see the note
+        // on HnmCampReviewHandoffService.EndsThroughCampPath.
         if (HnmCampReviewHandoffService.EndsThroughCampPath(eventEntity))
         {
             var finalized = HttpContext.RequestServices.GetService(typeof(HnmCampReviewHandoffService))

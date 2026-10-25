@@ -1,6 +1,6 @@
-// data-admin-schema.css is the website theme's stylesheet: it reads lsm-theme.css's names. Here
-// they are the Activity's own tokens (the pairs _tokens.scss documents), so the diagram follows
-// this app's palette. Token-to-token only: no colour is written here.
+// data-admin-schema.css reads the old website theme's variable names. Here they are the
+// Activity's own tokens (the pairs _tokens.scss documents), so the diagram follows this app's
+// palette. Token-to-token only: no colour is written here.
 :host {
   display: block;
 
@@ -19,8 +19,7 @@
   --cyan-main: var(--cyan);
 }
 
-// The Razor page fills the window under its top bar (.lsm-page.da-schema); here the tab gives the
-// diagram most of the viewport below the tab strip.
+// The tab gives the diagram most of the viewport below the tab strip.
 .erd {
   height: calc(100vh - 210px);
   height: calc(100dvh - 210px);

@@ -316,12 +316,6 @@ public sealed partial class ActivityDataController
         // is NOT an alternative: AppUserEventWindow cascade-deletes with AppUserEvent
         // (ApplicationDbContext), so it would destroy the window credit they already earned.
         // The Activity hides the button while a windowed camp is live; this is the backstop.
-        //
-        // Note the deliberate asymmetry with the Razor Unsign action in
-        // EventController.Participation.cs, which plain-removes: it is only reachable from the
-        // pre-start signup list (Views/Event/Index.cshtml), where there is nothing accrued to
-        // destroy. The two differ because they sit at different lifecycle stages — don't "fix"
-        // one to match the other.
         if (eventEntity.CommencementStartTime.HasValue)
         {
             if (EventBreakPolicy.IsWindowedAttendance(eventEntity))

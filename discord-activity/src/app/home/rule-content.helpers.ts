@@ -1,10 +1,8 @@
-// Presentation helpers for the dashboard Rules / Announcements cards — mirrors the
-// web Utils/RuleContent.cs (keep the category list, badge mapping, and bullet parsing
-// in sync across the two). Turns free-text details into paragraph/bullet blocks and
-// maps an optional category to an accent class + icon.
+// Presentation helpers for the dashboard Rules / Announcements cards. Turns free-text
+// details into paragraph/bullet blocks and maps an optional category to an accent
+// class + icon.
 
-// Preset category choices for the dropdown (plus a free-text "Other"). Mirrors
-// RuleContent.CategoryOptions (C#).
+// Preset category choices for the dropdown (plus a free-text "Other").
 export const RULE_CATEGORY_OPTIONS: readonly string[] = [
   'Overview', 'Focus', 'Conduct', 'Standards', 'DKP', 'Attendance',
   'Loot', 'Policy', 'Event', 'Update', 'Reminder', 'General'
@@ -19,7 +17,7 @@ export interface RuleBlock {
 const BULLET_MARKERS = ['-', '•', '*', '·', '–', '—', '▪', '●', '◦'];
 
 // Splits free-text details into blocks: runs of bullet lines become one list; other
-// non-blank lines become paragraphs. Mirrors RuleContent.Parse.
+// non-blank lines become paragraphs.
 export function parseRuleDetails(details: string | null | undefined): RuleBlock[] {
   const blocks: RuleBlock[] = [];
   if (!details || !details.trim()) { return blocks; }
@@ -53,7 +51,7 @@ export function parseRuleDetails(details: string | null | undefined): RuleBlock[
 
 const PALETTE = ['acc-blue', 'acc-purple', 'acc-green', 'acc-gold', 'acc-cyan', 'acc-orange'];
 
-// Accent CSS class + icon glyph for a card. Mirrors RuleContent.Badge.
+// Accent CSS class + icon glyph for a card.
 export function categoryBadge(category: string | null | undefined, index: number): { accent: string; icon: string } {
   const key = (category ?? '').trim().toLowerCase();
   if (key.length > 0) {

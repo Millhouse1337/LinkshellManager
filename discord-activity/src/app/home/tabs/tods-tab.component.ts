@@ -79,7 +79,7 @@ export class TodsTabComponent {
 
   // The party setup (if any) assigned to a ToD group's monster. Matched
   // case-insensitively + trimmed, the same convention as
-  // PartySetupController.ClearSignupsForMonsterAsync.
+  // PartySetupSignupReset.ClearSignupsForMonsterAsync.
   protected setupForMonster(monsterName: string | null | undefined): ActivityPartySetupListRow | null {
     const target = (monsterName ?? '').trim().toLowerCase();
     if (!target) return null;

@@ -19,9 +19,9 @@ interface SchemaDiagramApi {
 // Records links inside the diagram point here; a click on one opens that table's list in the app.
 const RECORDS_PATH = '/discord-activity/data-admin/';
 
-// The diagram is the same code the Razor page runs: the site's stylesheet and two scripts
-// (wwwroot/css/data-admin-schema.css, wwwroot/js/data-admin-schema-layout.js then
-// data-admin-schema.js), loaded once, on first use. 'self' scripts and styles are allowed by the CSP.
+// The diagram is the site's stylesheet and two scripts (wwwroot/css/data-admin-schema.css,
+// wwwroot/js/data-admin-schema-layout.js then data-admin-schema.js), loaded once, on first use.
+// 'self' scripts and styles are allowed by the CSP.
 let diagramAssets: Promise<void> | null = null;
 
 function loadDiagramAssets(): Promise<void> {
@@ -50,9 +50,8 @@ function loadScript(src: string): Promise<void> {
 }
 
 // Data Admin's schema diagram: every table as a card, every foreign key as a line, pan, zoom,
-// focus mode and the side panel, exactly as on the Razor /data-admin page. This component only
-// supplies the frame (the same data-erd-* hooks Views/DataAdmin/Index.cshtml carries) and mounts
-// the shared script into it; destroying the tab destroys the diagram, key handler included.
+// focus mode and the side panel. This component only supplies the frame (the data-erd-* hooks)
+// and mounts the script into it; destroying the tab destroys the diagram, key handler included.
 @Component({
   selector: 'app-data-admin-diagram',
   templateUrl: './data-admin-diagram.component.html',

@@ -31,12 +31,9 @@ public sealed record DiscordRosterCandidate(
 
 public sealed record AddDiscordMemberResult(bool Success, string? Error);
 
-// Shared invite-candidate browse used by BOTH the Discord Activity
-// (ActivityDataController.Invites) and the website (ManageTeamController), so
-// the two front-ends list the same eligible players with the same filtering and
-// guild-lock behavior. The caller is responsible for auth (resolving the user
-// and checking the manage-members permission); this service only runs the
-// query.
+// Invite-candidate browse for the Discord Activity (ActivityDataController.Invites).
+// The caller is responsible for auth (resolving the user and checking the
+// manage-members permission); this service only runs the query.
 public sealed class InviteCandidateService
 {
     // Every status that means "this person already has a pending invite or join

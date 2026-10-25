@@ -9,12 +9,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-// Data Admin as JSON, for the Activity's website-only Data Admin tab: the JSON twin of
-// DataAdminController (the Razor pages), on the same catalog, query service and editor, and
-// answering with the same view models those pages bind to (they are already the safe projection:
-// display text, never entities). A table resolves through the catalog and an unknown or
-// policy-hidden slug is a 404, exactly as on the Razor pages; DataAdminPolicy is the only
-// protection, and every write re-checks the table's capability in the editor.
+// Data Admin as JSON, for the Activity's website-only Data Admin tab, on the catalog, query
+// service and editor, answering with the Data Admin view models (they are already the safe
+// projection: display text, never entities). A table resolves through the catalog and an unknown
+// or policy-hidden slug is a 404; DataAdminPolicy is the only protection, and every write
+// re-checks the table's capability in the editor.
 //
 // Gated structurally on the class ([Authorize] + [SuperAdminOnly]), with [ValidateAntiForgeryToken]
 // on every POST on top of the global filter (DataAdminApiControllerShapeTests).
@@ -101,7 +100,7 @@ public sealed class DataAdminApiController : ControllerBase
     }
 
     // Created: the new row's key. Refused: 422 with the form rebuilt around the posted values and
-    // its errors, exactly what the Razor page re-renders.
+    // its errors.
     [HttpPost("tables/{slug}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateAsync(string slug, [FromBody] DataAdminValuesRequest request, CancellationToken ct)
@@ -193,7 +192,7 @@ public sealed class DataAdminApiController : ControllerBase
 // Diagram is DataAdminSchemaGraph.Json as-is: the names data-admin-schema.js reads.
 public sealed record DataAdminSchemaDto(string DatabaseName, int TableCount, int ColumnCount, int RelationshipCount, JsonElement Diagram);
 
-// Column name -> the form's string value, as the Razor form posts values[<Name>].
+// Column name -> the form's string value.
 public sealed record DataAdminValuesRequest(Dictionary<string, string?>? Values);
 
 public sealed record DataAdminSavedDto(string Key, string Message);

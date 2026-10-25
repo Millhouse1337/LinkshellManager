@@ -57,9 +57,8 @@ public sealed class DataAdminSchemaGraph
 
     // The graph sits inside a <script type="application/json"> block, so a name carrying
     // "</script>" would end the block early. Nothing in the model does, but the relaxed encoder
-    // would let one through unescaped; this one escapes < > & and quotes (same choice as
-    // ChartBoardViewModel.ItemOptionsJson). False flags and nulls are left out to keep the block
-    // small: the script reads a missing flag as false.
+    // would let one through unescaped; this one escapes < > & and quotes. False flags and nulls
+    // are left out to keep the block small: the script reads a missing flag as false.
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

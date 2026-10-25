@@ -9,14 +9,11 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // with the board as a route segment rather than a copy of the stack per board.
 //
 // Reads are open to every member: a farming board only officers can see cannot settle the argument
-// it exists to settle. Writes need CanManageCharts, and that permission is the ONLY gate on BOTH
-// surfaces — ChartsController checks the same flag rather than the coarse Leader/Officer rank,
-// because a coarse rank on one front-end and a named permission on the other is a privilege
-// escalation available by picking a front-end. That is the bug GrantTreasuryToOfficersWhoUsedIt
-// exists to document.
+// it exists to settle. Writes need CanManageCharts, a named permission rather than the coarse
+// Leader/Officer rank. That is the bug GrantTreasuryToOfficersWhoUsedIt exists to document.
 //
 // Every derived number — per-boss totals, the ledger's cell states, the "49 / 63  78%" row total —
-// comes from ChartBoardService, which the website also calls. Nothing on a board is stored twice.
+// comes from ChartBoardService. Nothing on a board is stored twice.
 public sealed partial class ActivityDataController
 {
     [HttpGet("linkshells/{linkshellId:int}/charts/{board}")]
@@ -465,10 +462,7 @@ public sealed partial class ActivityDataController
     /// Returns CanManage alongside, so an action branches ONCE rather than asking twice and risking
     /// two different answers within one request.
     ///
-    /// Twin of ChartsController.AuthorizeMemberAsync, and the two MUST be changed together. A coarse
-    /// check on one front-end and a named permission on the other is a privilege escalation
-    /// available by picking a front-end - the bug GrantTreasuryToOfficersWhoUsedIt documents, and
-    /// the reason the comment at the head of this file insists on CanManageCharts over a rank.
+    /// CanManage is CanManageCharts, never a rank - the comment at the head of this file says why.
     /// </summary>
     private async Task<(IActionResult? Failure, ChartBoardActor Actor, int? MembershipId, bool CanManage)>
         AuthorizeChartsMemberAsync(int linkshellId, CancellationToken cancellationToken)

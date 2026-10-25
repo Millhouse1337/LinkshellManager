@@ -63,9 +63,9 @@ public class AttendanceSnapshot
     //
     // This is NOT expressible as `WindowNumber == null`. That null is already load-bearing: it
     // means "this camp runs no window grid" (Sky gods, farm NMs, every camp-handoff roster), and
-    // AttendanceSectionsBuilder.MapSnapshot RE-DERIVES a number at read time when it is null.
-    // Overloading it would make a misc post indistinguishable from an ungridded camp and would
-    // reclassify every existing ungridded snapshot as Misc.
+    // ActivityDataController.MapActivityWindowSnapshot RE-DERIVES a number at read time when it
+    // is null. Overloading it would make a misc post indistinguishable from an ungridded camp and
+    // would reclassify every existing ungridded snapshot as Misc.
     //
     // SlotKind is orthogonal to the grid. Three states, all of which occur:
     //   Window + a number  — a gridded camp

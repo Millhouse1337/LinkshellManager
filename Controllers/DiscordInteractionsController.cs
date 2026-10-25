@@ -3785,8 +3785,8 @@ public sealed class DiscordInteractionsController : ControllerBase
         // use the Discord board (never the app), so they must be able to free their slot
         // and re-sign mid-run rather than waiting on an officer. The live Event row is
         // deleted when the event ends, so this is naturally bounded — a post-end click
-        // finds no event and is rejected above. (The web/Activity path stays officer-
-        // gated; see EventController.Lifecycle's MemberCanWithdraw check.)
+        // finds no event and is rejected above. (The Activity path stays officer-gated;
+        // see ActivityDataController.WithdrawEventPartySlotAsync.)
         var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
         if (identity is null)
         {

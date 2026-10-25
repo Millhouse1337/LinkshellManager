@@ -8,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public sealed partial class ActivityDataController
 {
     // ClosedEvents is ONE PAGE of the Attendance Archive, not the whole history — the four Closed*
-    // fields describe which page, so the Activity can render the same tally and pager the web does.
+    // fields describe which page, so the Activity can render the tally and pager.
     // ClosedQuery is echoed back rather than trusted from the client: it is the trimmed query the
     // page was actually built from, which is what the "no results for X" copy has to name.
     public sealed record ActivityWindowEventsResponse(
@@ -138,8 +138,8 @@ public sealed partial class ActivityDataController
         // on every other card, where the money is one amount per member.
         double? DkpAmount,
         // On the linkshell roster, so a DKP path can place them. False means the capture read
-        // someone the shell does not know — see AttendanceSnapshotEntryRow.IsRegistered on the web
-        // for why a capture contains such names and why this is computed at read time.
+        // someone the shell does not know (a capture reads the whole alliance). Computed at read
+        // time, so someone who registers mid-camp becomes creditable the moment they do.
         bool IsRegistered = true);
 
     public sealed record ActivityWindowCombinedMemberDto(
@@ -188,13 +188,11 @@ public sealed partial class ActivityDataController
         int? SubJobLevel,
         string? Zone);
 
-    // Closed events per page in the Activity's Attendance Archive. Matches the web's
-    // EventController.ClosedAttendancePageSize so the two archives page in lockstep.
+    // Closed events per page in the Activity's Attendance Archive.
     private const int ActivityClosedAttendancePageSize = 10;
 
-    // attQ / attPage name the archive's search and page after the web's query string, so the two
-    // surfaces read the same way. They are the ONLY paged part of this payload: open events and
-    // unlinked snapshots are live work an officer has to see in full.
+    // attQ / attPage are the archive's search and page. They are the ONLY paged part of this
+    // payload: open events and unlinked snapshots are live work an officer has to see in full.
     [HttpGet("window-events")]
     public async Task<IActionResult> GetWindowEventsAsync(
         [FromQuery] int linkshellId,
@@ -223,8 +221,7 @@ public sealed partial class ActivityDataController
         // its whole snapshot/entry tree along, and this payload is polled while a camp is live.
         //
         // This replaced a flat .Take(25). That cap was invisible: the 26th closed event simply
-        // wasn't there, and no search could reach it. Sharing the builder's predicate also means a
-        // query matching a card on the web matches the same card here.
+        // wasn't there, and no search could reach it.
         var closedQuery = string.IsNullOrWhiteSpace(attQ) ? null : attQ.Trim();
         var closedBaseQuery = AttendanceQueryFilters.ApplyClosedSearch(
             AttendanceQueryFilters.ApplyPendingDkpPostFilter(
@@ -323,9 +320,8 @@ public sealed partial class ActivityDataController
             unlinkedDisplayCap));
     }
 
-    // Sets DKP + Entry Type on an UNposted event without pushing rows (draft).
-    // Ports WindowEventsController.SaveDetails including per-character DKP
-    // overrides so the Activity matches web parity.
+    // Sets DKP + Entry Type (and any per-character overrides) on an UNposted event
+    // without pushing rows (draft).
     [HttpPost("window-events/{windowEventId:int}/save-dkp")]
     public async Task<IActionResult> SaveWindowEventDkpAsync(
         int windowEventId,
@@ -374,7 +370,7 @@ public sealed partial class ActivityDataController
 
     // Publishes a window event: sets DKP + Entry Type (and any per-character
     // overrides), marks it posted, and materializes the per-member SnapshotEarned
-    // DKP ledger. Ports WindowEventsController.PostToSheet.
+    // DKP ledger.
     [HttpPost("window-events/{windowEventId:int}/post")]
     public async Task<IActionResult> PostWindowEventToSheetAsync(
         int windowEventId,
@@ -489,17 +485,14 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // Permanently deletes a Window Event. Linked snapshots become unlinked
-    // (FK is SetNull) rather than destroyed. Mirrors WindowEventsController.Delete.
+    // Permanently deletes a Window Event and the captures filed under it.
     [HttpPost("window-events/{windowEventId:int}/delete")]
     public async Task<IActionResult> DeleteWindowEventAsync(
         int windowEventId,
         CancellationToken cancellationToken)
     {
-        // Snapshots loaded because they are deleted WITH the event — see the note on
-        // WindowEventsController.Delete for why they are no longer left behind as unlinked
-        // captures. The two surfaces delete the same thing or an officer gets a different result
-        // depending on which one they happened to be looking at.
+        // Snapshots loaded because they are deleted WITH the event, not left behind as unlinked
+        // captures (the FK is SetNull).
         var windowEvent = await LoadManageableWindowEventAsync(
             windowEventId, cancellationToken, includeSnapshots: true);
         if (windowEvent.Result is not null) return windowEvent.Result;
@@ -516,8 +509,7 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // Hard-deletes a snapshot (and its entries). Mirrors
-    // WindowEventsController.DeleteSnapshot.
+    // Hard-deletes a snapshot (and its entries).
     [HttpPost("window-events/snapshots/{snapshotId:int}/delete")]
     public async Task<IActionResult> DeleteWindowSnapshotAsync(
         int snapshotId,
@@ -540,8 +532,7 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // Removes one person from a snapshot (officer correction). Mirrors
-    // WindowEventsController.DeleteSnapshotEntry.
+    // Removes one person from a snapshot (officer correction).
     [HttpPost("window-events/snapshots/{snapshotId:int}/entries/{entryId:int}/delete")]
     public async Task<IActionResult> DeleteSnapshotEntryAsync(
         int snapshotId,
@@ -566,8 +557,7 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // Adds a person the addon missed. Mirrors
-    // WindowEventsController.AddSnapshotEntry (alliance cap = 18, name de-dupe).
+    // Adds a person the addon missed (alliance cap = 18, name de-dupe).
     [HttpPost("window-events/snapshots/{snapshotId:int}/entries")]
     public async Task<IActionResult> AddSnapshotEntryAsync(
         int snapshotId,
@@ -636,10 +626,9 @@ public sealed partial class ActivityDataController
         return null;
     }
 
-    // Mirrors WindowEventsController.ApplyCaptureDkp: the amounts land on the snapshot entries
-    // they were typed against, so one person priced differently in three windows keeps three
-    // different amounts. Refuses on a card that is not paid from its captures, for the reason given
-    // there — numbers the payout ignores are worse than none.
+    // The amounts land on the snapshot entries they were typed against, so one person priced
+    // differently in three windows keeps three different amounts. Refuses on a card that is not
+    // paid from its captures: numbers the payout ignores are worse than none.
     private static void ApplyActivityCaptureDkp(
         WindowEvent windowEvent,
         IReadOnlyList<ActivityWindowEventCaptureDkpInput>? inputs)
@@ -660,9 +649,8 @@ public sealed partial class ActivityDataController
         }
     }
 
-    // Mirrors WindowEventsController.ApplyMemberDkpOverrides: characters whose
-    // value matches the event default (or is blank) have their override row
-    // removed; differing values get upserted.
+    // Characters whose value matches the event default (or is blank) have their
+    // override row removed; differing values get upserted.
     private static void ApplyActivityMemberDkpOverrides(
         WindowEvent windowEvent,
         double defaultDkpAmount,
@@ -859,9 +847,8 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // Renames the SNAPSHOT itself, and nothing else — the Activity twin of
-    // WindowEventsController.RenameSnapshot. Separate from attach's name field, which conflated
-    // naming a capture with creating an event to file it under.
+    // Renames the SNAPSHOT itself, and nothing else. Separate from attach's name field, which
+    // conflated naming a capture with creating an event to file it under.
     [HttpPost("window-events/snapshots/{snapshotId:int}/rename")]
     public async Task<IActionResult> RenameWindowSnapshotAsync(
         int snapshotId,
@@ -1107,7 +1094,7 @@ public sealed partial class ActivityDataController
         var rosterNames = roster ?? RosterNameSet.Unknown;
 
         // Scanned names first, alphabetically; hand-added people underneath in the order an officer
-        // entered them. Mirrors the web ordering so the two surfaces list a roster identically.
+        // entered them.
         var entries = snapshot.Entries
             .Where(e => !e.AddedManually)
             .OrderBy(e => e.CharacterName, StringComparer.OrdinalIgnoreCase)
@@ -1181,7 +1168,7 @@ public sealed partial class ActivityDataController
         double? defaultDkpAmount = null,
         double? miscDkpAmount = null,
         // The captures carry the money on this card, so a member is owed their sum and neither the
-        // per-member overrides nor the misc rate has anything to say. Same rule as the web builder.
+        // per-member overrides nor the misc rate has anything to say.
         bool perCaptureDkp = false,
         RosterNameSet? roster = null)
     {
@@ -1205,8 +1192,7 @@ public sealed partial class ActivityDataController
                 }
 
                 // A member seen in ANY window capture is an ordinary attendee even if they also
-                // appear in a misc post. Same rule as the web builder, deliberately duplicated
-                // rather than shared: these two mappers already mirror each other line for line.
+                // appear in a misc post.
                 var sawWindow = g.Any(x => !AttendanceSnapshotSlotKinds.IsMisc(x.Snapshot.SlotKind));
                 var sawMisc = g.Any(x => AttendanceSnapshotSlotKinds.IsMisc(x.Snapshot.SlotKind));
                 var creditSource = sawWindow && sawMisc

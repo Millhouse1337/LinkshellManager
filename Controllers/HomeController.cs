@@ -30,9 +30,8 @@ public class HomeController : Controller
             return Redirect("/discord-activity/");
         }
 
-        // Set here as well as in _Layout: a view body renders before its layout, so Index.cshtml
-        // cannot see what _Layout writes. This is the only anonymous-reachable surface, so it is
-        // where a tester without a Discord account finds the launcher.
+        // This is the only anonymous-reachable surface, so it is where a tester without a Discord
+        // account finds the launcher.
         ViewData["ShowLauncherDownload"] = await _globalSettings.IsLauncherDownloadEnabledAsync(HttpContext.RequestAborted);
         return View();
     }

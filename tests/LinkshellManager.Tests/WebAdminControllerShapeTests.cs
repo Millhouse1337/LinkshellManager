@@ -8,9 +8,10 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 // The Admin tab's API flips server-wide switches (admin override, addon and Claim Shield kill
-// switches, the launcher link), so its gate must be structural, as DataAdminControllerShapeTests
-// pins for Data Admin: [Authorize] + [SuperAdminOnly] on the CLASS, no action opting out, and
-// every POST carrying [ValidateAntiForgeryToken] on top of the global filter.
+// switches, the launcher link), so its gate must be structural, as
+// DataAdminApiControllerShapeTests pins for Data Admin: [Authorize] + [SuperAdminOnly] on the
+// CLASS, no action opting out, and every POST carrying [ValidateAntiForgeryToken] on top of the
+// global filter.
 public class WebAdminControllerShapeTests
 {
     private static readonly Type Controller = typeof(WebAdminController);

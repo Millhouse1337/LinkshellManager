@@ -614,11 +614,11 @@ public sealed partial class AddonApiController
         }
 
         // An HNM camp ends through the CAMP path, in both attendance modes — the same redirect the
-        // web and Activity End Event actions make, and for the same reason. EndEventCoreAsync's
-        // windowed branch pays windowsAttended × DkpPerHour, and DkpPerHour is 0 on every HNM camp
-        // because that column is not how a camp is priced; running it here archived the camp with
-        // every attendee on 0 DKP and never consulted the open / close / claim / kill bonuses at
-        // all. See the note on EventController.EndEvent.
+        // Activity End Event action makes, and for the same reason. EndEventCoreAsync's windowed
+        // branch pays windowsAttended × DkpPerHour, and DkpPerHour is 0 on every HNM camp because
+        // that column is not how a camp is priced; running it here archived the camp with every
+        // attendee on 0 DKP and never consulted the open / close / claim / kill bonuses at all.
+        // See the note on HnmCampReviewHandoffService.EndsThroughCampPath.
         //
         // This endpoint had NO such guard, not even the Manual Check In one the other two carried,
         // so the in-game "End Event" button was the one surface where the 0 was reachable on a camp

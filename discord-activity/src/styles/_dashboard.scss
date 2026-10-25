@@ -359,7 +359,6 @@
 }
 
 /* ===== Window frequency: a heatmap, one row per monster and one cell per window =====
-   Mirrors the web's .winmatrix-* block in wwwroot/css/site.css — edit both or neither.
    A cell's label is its share of the monster's pops; its tint is its share of the monster's
    BUSIEST window (heatPercent), so every row has one full-colour cell however spread out its pops
    are. Grids come one per band length — see HnmWindowStats.Grids. */

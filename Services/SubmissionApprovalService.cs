@@ -158,8 +158,8 @@ public sealed class SubmissionApprovalService
 
     // ---------- Review: the reviewer's corrections, then approve ----------
     // A reviewer may correct a pending ToD and its loot before approving it. This applies the
-    // corrections to the pending rows, then runs the normal approve above. Shared by the Razor
-    // review pages and the Activity's ToD Submissions Needing Approval section.
+    // corrections to the pending rows, then runs the normal approve above. Used by the Activity's
+    // ToD Submissions Needing Approval section.
     // Scoped to linkshellId: a submission from another linkshell is NotFound and never touched.
     //
     // The corrections are saved before approving, so when approve answers InsufficientDkp the
@@ -215,8 +215,8 @@ public sealed class SubmissionApprovalService
 
     // ---------- Helpers ----------
 
-    // Same fix as TodController.ResolveCooldownHours: this compared against "72 Hour" alone, so
-    // approving a member-submitted 84/71/2 Hour or 5 Min ToD recomputed its repop at 22 hours.
+    // This used to compare against "72 Hour" alone, so approving a member-submitted 84/71/2 Hour
+    // or 5 Min ToD recomputed its repop at 22 hours.
     private static double ResolveCooldownHours(string? cooldown) =>
         Controllers.ActivityDataController.ResolveTodCooldownHours(cooldown);
 }

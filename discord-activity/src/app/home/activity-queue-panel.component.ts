@@ -235,9 +235,8 @@ export class ActivityQueuePanelComponent {
     }
   }
 
-  // HNM and NM ride in together after Sea, matching the web form's order (see
-  // Views/Event/_EventForm.cshtml). Both make the same kind of camp — they differ only in
-  // which monsters they offer — and nothing gates them: HNM is an ordinary event type that
+  // HNM and NM ride in together after Sea. Both make the same kind of camp — they differ only
+  // in which monsters they offer — and nothing gates them: HNM is an ordinary event type that
   // any linkshell can run.
   protected eventTypeOptionsForForm(): string[] {
     const base: string[] = [...this.eventTypeOptions];
@@ -721,8 +720,7 @@ export class ActivityQueuePanelComponent {
     void this.activity.startEvent(event.id);
   }
 
-  // HNM events are addon-only-startable; mirrors the web's
-  // "Start (addon-only)" disabled button at Views/Event/Index.cshtml.
+  // HNM events are addon-only-startable.
   // The server-side StartEvent guard rejects this regardless, but
   // showing a disabled button is friendlier than an alert on click.
   protected isAddonOnlyStart(event: { type?: string | null }): boolean {

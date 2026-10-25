@@ -6,12 +6,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-// The review queue for member-submitted ToDs — the JSON twin of LinkshellPendingSubmissionsController,
-// for the ToD Submissions Needing Approval section on the Activity's ToDs tab.
+// The review queue for member-submitted ToDs, for the ToD Submissions Needing Approval section on
+// the Activity's ToDs tab.
 //
-// Reviewing needs CanManageTods. Through CanAsync the Leader always passes, which the Razor pages'
-// own role lookup didn't. The review itself runs in SubmissionApprovalService, scoped to the
-// linkshell in the URL.
+// Reviewing needs CanManageTods. Through CanAsync the Leader always passes. The review itself runs
+// in SubmissionApprovalService, scoped to the linkshell in the URL.
 public sealed partial class ActivityDataController
 {
     [HttpGet("linkshells/{linkshellId:int}/pending-submissions")]
@@ -40,7 +39,7 @@ public sealed partial class ActivityDataController
                     .ToList()))
             .ToList();
 
-        // The ToD editor's pick-lists, as the Razor edit page offered them.
+        // The ToD editor's pick-lists.
         var rosterNames = await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(m => m.LinkshellId == linkshellId && m.CharacterName != null)

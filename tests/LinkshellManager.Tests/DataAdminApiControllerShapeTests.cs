@@ -7,10 +7,10 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// Data Admin's JSON API reaches every table across every linkshell, like the Razor pages
-// (DataAdminControllerShapeTests), so its gate must be just as structural: [Authorize] +
-// [SuperAdminOnly] on the CLASS, no action opting out with [AllowAnonymous], and every POST
-// carrying [ValidateAntiForgeryToken] on top of the global CookieAuthAntiforgeryFilter.
+// Data Admin's JSON API reaches every table across every linkshell, so its gate must be
+// structural: [Authorize] + [SuperAdminOnly] on the CLASS, no action opting out with
+// [AllowAnonymous], and every POST carrying [ValidateAntiForgeryToken] on top of the global
+// CookieAuthAntiforgeryFilter.
 public class DataAdminApiControllerShapeTests
 {
     private static readonly Type Controller = typeof(DataAdminApiController);

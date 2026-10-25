@@ -397,8 +397,7 @@ public sealed partial class ActivityDataController
     }
 
     // Set (or clear) the channel new post-event discussion comments mirror to.
-    // Mirrors the web LinkshellController.SetDiscussionChannel. Gated on
-    // CanCustomizeLinkshell. Empty/blank clears it (discussion stays in-app).
+    // Gated on CanCustomizeLinkshell. Empty/blank clears it (discussion stays in-app).
     [HttpPost("linkshells/{linkshellId:int}/discussion-channel")]
     public async Task<IActionResult> SetDiscussionChannelAsync(
         int linkshellId,

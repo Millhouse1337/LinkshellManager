@@ -171,7 +171,7 @@ public class HnmMonsterMergeTests
     }
 
     // The create-event dropdown always shows each pair as ONE combined entry; the stronger
-    // halves and the bare base names are not standalone options. (Mirrors EventController.)
+    // halves and the bare base names are not standalone options.
     [Fact]
     public void CombinedMonsterOptions_ShowsCombinedPairs_ExcludesStrongersAndBareBases()
     {

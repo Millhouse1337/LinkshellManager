@@ -1,6 +1,6 @@
 /* The native <dialog> grew from the default ~720px to fill more of the
    iframe so officers can see the full alliance grid without horizontal
-   scrolling. Mirrors the web app's PartySetup/Create.cshtml layout. */
+   scrolling. */
 .pse-dialog {
   // Wider so a party card has room to hold a whole slot row (leader + role +
   // main + sub + duplicate + remove) on ONE line without wrapping.

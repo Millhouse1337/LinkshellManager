@@ -64,8 +64,7 @@ public static class RevenueEntryConversionMap
     {
         var type = Normalize(entryType);
         var cat = Normalize(category);
-        // ABS, never -Value. [Range(0, long.MaxValue)] on ManageRevenueViewModel.Value is only a
-        // model-binding check and ManageRevenueController.Edit assigns model.Value straight through,
+        // ABS, never -Value. The old website's revenue edit form let a negative value through,
         // so an already-negative Expense row can exist in production. Negating one would move gil
         // the wrong way; taking its magnitude and letting the rule decide the direction cannot.
         var amount = Math.Abs(value);

@@ -3,9 +3,8 @@
      what every scoped `.we-*` rule below hangs off, so that one stays. -->
 <div class="we-tab">
   @if (data(); as model) {
-    <!-- Events Pending DKP Post, mirroring the web's section of the same name on /Event
-         (Views/Event/_AttendanceArchive.cshtml, which carries the full reasoning). Events that
-         have ENDED and whose DKP nobody has posted yet — the officer's work queue.
+    <!-- Events Pending DKP Post: events that have ENDED and whose DKP nobody has posted yet — the
+         officer's work queue.
 
          Rendered unconditionally (not gated on the list having rows) so the search below is
          reachable even when this page of it is empty — a search with no hits is exactly when the

@@ -515,8 +515,8 @@ public sealed class HnmCampReviewHandoffService
         // windows under Past Events. Clearing EventId also frees the unique
         // (EventId, SequenceNumber) index the recycled board needs for the next camp's window-1
         // scan, which is what those deletes were really for -- so archiving replaces them rather
-        // than being additive. Matches both close paths (EventController.Lifecycle EndEventCore
-        // and ActivityDataController EndEventAsync), which archive exactly this way.
+        // than being additive. Matches both close paths (EventEndService.EndEventCoreAsync and
+        // ActivityDataController EndEventAsync), which archive exactly this way.
         // Reuses campWindows from above rather than re-querying: same rows, same tracked
         // instances, one round trip.
         foreach (var window in campWindows)
@@ -675,11 +675,11 @@ public sealed class HnmCampReviewHandoffService
         // THE CAMP'S OUTCOME, from evidence rather than from the two Manual Check In columns.
         //
         // This used to pass ev.WdClaimed / ev.WdKilled straight through, and those are only ever
-        // WRITTEN on a Manual Check In camp -- EventController.HnmBoard sets them inside an
-        // `if (isWd)`. On a STANDARD camp they sat at their `false` defaults, so every camp ended
-        // from this path (the addon's End Event, and the generic End Event actions) handed the
-        // finalizer claimed:false, killed:false. HnmCampPricing.StandardBonuses then zeroed BOTH
-        // outcome bonuses, and a camp that was claimed and killed paid its open and close and
+        // WRITTEN on a Manual Check In camp -- HnmCampPopService sets them inside an
+        // `if (IsWd(ev))`. On a STANDARD camp they sat at their `false` defaults, so every camp
+        // ended from this path (the addon's End Event, and the generic End Event actions) handed
+        // the finalizer claimed:false, killed:false. HnmCampPricing.StandardBonuses then zeroed
+        // BOTH outcome bonuses, and a camp that was claimed and killed paid its open and close and
         // nothing else. The board's own End Camp form was unaffected, which is why this only
         // showed up in game.
         //

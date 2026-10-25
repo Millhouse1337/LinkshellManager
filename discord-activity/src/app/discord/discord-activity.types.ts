@@ -372,9 +372,8 @@ export interface ActivityGuildOption {
 
 // LOCKSTEP: a permission added here must ALSO be added to ActivityLinkshellRole and
 // ActivityLinkshellRolePermissionsInput below, to the three matching C# records in
-// Models/Activity/ActivityDtos.cs, to BOTH permissionKeys and saveRoleDraft in
-// configurations-tab.component.ts, and to the plain-JS `permissions` array in
-// Views/Linkshell/Permissions.cshtml. Only the last one fails silently.
+// Models/Activity/ActivityDtos.cs, and to BOTH permissionKeys and saveRoleDraft in
+// configurations-tab.component.ts.
 export interface ActivityLinkshellPermissions {
   canManageRoles: boolean;
   canManageMembers: boolean;

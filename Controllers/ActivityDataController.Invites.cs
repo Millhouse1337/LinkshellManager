@@ -321,8 +321,6 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        // Shared with the website (ManageTeamController) so both front-ends list
-        // the same server members with the same exclusions.
         var guildId = membership?.Linkshell?.DiscordGuildId;
         var candidates = await _inviteCandidates.GetDiscordRosterCandidatesAsync(linkshellId, guildId, cancellationToken);
 
@@ -338,7 +336,6 @@ public sealed partial class ActivityDataController
     // Adds a member of the linkshell's Discord server. If they already have an
     // LSM account they're added straight to the roster (auto-join); if not, a
     // Discord-keyed invite is stored that auto-joins them on first sign-in.
-    // Shared with the website (ManageTeamController) via InviteCandidateService.
     [HttpPost("linkshells/{linkshellId:int}/invites/discord")]
     public async Task<IActionResult> SendDiscordInviteAsync(
         int linkshellId,

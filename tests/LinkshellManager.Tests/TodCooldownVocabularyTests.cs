@@ -8,9 +8,9 @@ namespace LinkshellManager.Tests;
 // from, so the parser that reads them back is the difference between a correct repop and a silently
 // wrong one.
 //
-// The 84 / 71 / 2 Hour and 5 Min cases below FAILED before per-monster timings existed: the web
-// form offered all six presets while TodController.ResolveCooldownHours compared against "72 Hour"
-// and fell through to 22 for everything else, so five of the six stored a 22-hour repop. The same
+// The 84 / 71 / 2 Hour and 5 Min cases below FAILED before per-monster timings existed: the ToD
+// form offered all six presets while its cooldown parser compared against "72 Hour" and fell
+// through to 22 for everything else, so five of the six stored a 22-hour repop. The same
 // bug sat in SubmissionApprovalService, on the officer-approval path. Both now delegate here.
 public class TodCooldownVocabularyTests
 {

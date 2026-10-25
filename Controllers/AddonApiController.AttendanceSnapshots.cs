@@ -439,8 +439,7 @@ public sealed partial class AddonApiController
     }
 
     // Closes a Window Event from the addon's HNM session "End Event" button.
-    // Mirrors the cookie-auth WindowEventsController.Close: it only flips the
-    // status + stamps ClosedAtUtc. It deliberately does NOT enqueue any sheet
+    // It only flips the status + stamps ClosedAtUtc. It deliberately does NOT enqueue any sheet
     // sync — posting a Window Event to the DKP sheet stays an explicit,
     // officer-initiated action on the Window Events page.
     [HttpPost("window-events/{windowEventId:int}/close")]

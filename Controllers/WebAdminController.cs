@@ -5,13 +5,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-// The server-wide switches a super admin flips, for the Activity's website-only Admin tab. The
-// JSON twin of the Razor Settings page (AccountController.Settings + Set*), with the same rules
-// and messages; both write through GlobalSettingsService.
+// The server-wide switches a super admin flips, for the Activity's website-only Admin tab. Writes
+// go through GlobalSettingsService.
 //
 // Gated structurally on the class ([Authorize] + [SuperAdminOnly], cookie login only), so no
 // action can forget it. Every POST also carries [ValidateAntiForgeryToken] on top of the global
-// CookieAuthAntiforgeryFilter, matching DataAdminController (WebAdminControllerShapeTests).
+// CookieAuthAntiforgeryFilter, matching DataAdminApiController (WebAdminControllerShapeTests).
 [ApiController]
 [Authorize]
 [SuperAdminOnly]

@@ -461,8 +461,7 @@ public static class HnmConfig
     // Every monster that spawns from a POP ITEM rather than a repop timer: the four Sky
     // Gods + Kirin, the Sea NMs, and the HENMs. A per-linkshell ToD cooldown/interval means
     // nothing for these, so they're deliberately absent from the ToD monster catalog
-    // (LinkshellCustomizeViewModel.TodMonsterGroups and the Activity's
-    // TOD_BUILT_IN_MONSTER_GROUPS / POP_ONLY_TOD_MONSTERS).
+    // (the Activity's TOD_BUILT_IN_MONSTER_GROUPS / POP_ONLY_TOD_MONSTERS).
     //
     // The addon still CAPTURES their kills — that's what feeds loot and kill history — and
     // GetDefaultTodCooldown still resolves them to "5 Min", so an addon-posted ToD for one

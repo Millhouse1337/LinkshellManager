@@ -88,7 +88,7 @@ public class DkpLedgerEntry
 
     public int? SourceEventLootDetailId { get; set; }
 
-    // Populated on the deduction rows created at AuctionController.CloseAuction
+    // Populated on the deduction rows created at ActivityDataController.CloseAuctionAsync
     // time so a single auction close produces one batched column on the
     // ManualPoints sheet instead of N separate columns. Null on non-auction
     // ledger entries.

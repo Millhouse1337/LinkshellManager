@@ -4,14 +4,12 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // DKP import (Excel/CSV): a linkshell migrating from another tracker brings its existing DKP in.
-// The JSON twin of LinkshellController's DownloadDkpTemplate / PreviewDkpImport / CommitDkpImport,
-// on the same DkpImportService, for the DKP tab's Import DKP view, on the website and in Discord
+// Runs on DkpImportService, for the DKP tab's Import DKP view, on the website and in Discord
 // (the file arrives as base64 JSON, since the Discord iframe can't send a multipart upload).
 //
-// Two steps, as on the Razor page: preview parses the upload and classifies every row (update /
-// create / ambiguous) without changing anything and hands the parsed rows back; commit applies
-// those rows. Gated on CanCustomizeLinkshell, where the Razor page checked the Leader/Officer rank;
-// the move to the Activity's permission flags is the drift this whole switch accepts.
+// Two steps: preview parses the upload and classifies every row (update / create / ambiguous)
+// without changing anything and hands the parsed rows back; commit applies those rows. Gated on
+// CanCustomizeLinkshell.
 public sealed partial class ActivityDataController
 {
     // A blank sample .xlsx with the exact columns the importer expects.
@@ -149,8 +147,7 @@ public sealed record ActivityDkpImportPreviewRowDto(
     double NewTotal, double NewSpent,
     string? Note);
 
-// Rows is the parsed upload, handed back so the client can send exactly it to commit, the way the
-// Razor preview page round-tripped it through a hidden field.
+// Rows is the parsed upload, handed back so the client can send exactly it to commit.
 public sealed record ActivityDkpImportPreviewResponse(
     string SourceLabel,
     int UpdateCount,

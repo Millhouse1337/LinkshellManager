@@ -5,7 +5,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // catalog, the query service and the views.
 public static class DataAdminDefaults
 {
-    // Rows per list page. Matches the other paged MVC lists (ViewModels/LootHistoryViewModel.cs).
+    // Rows per list page.
     public const int PageSize = 25;
 
     // Columns shown on a list page beyond the label and the key. The details page shows them all.

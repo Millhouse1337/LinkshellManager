@@ -45,7 +45,9 @@ public enum ChartBoardFeatures
 {
     None = 0,
 
-    /// <summary>The "Add a pop item" form. Gates the ADD only -- see ChartsController.AddItem.</summary>
+    /// <summary>
+    /// The "Add a pop item" form. Gates the ADD only -- see ChartBoard.AllowsPopItems.
+    /// </summary>
     PopItems = 1,
 
     /// <summary>The "Add a drop item" form, a twin of the pop one over the same rows.</summary>
@@ -223,9 +225,9 @@ public sealed record ChartBoard(
 
     /// <summary>
     /// Gates the "Add a pop item" FORM only. Rows already on a board that turns this off stay
-    /// listed, editable and deletable - ChartsController.AddItem is the ONE place this is checked,
-    /// and putting it anywhere ChartBoardService.NormalizeDraft can reach would strand every row
-    /// Dynamis and Limbus already hold.
+    /// listed, editable and deletable - ActivityDataController.AddChartPopItemAsync is the ONE
+    /// place this is checked, and putting it anywhere ChartBoardService.NormalizeDraft can reach
+    /// would strand every row Dynamis and Limbus already hold.
     /// </summary>
     public bool AllowsPopItems => Features.HasFlag(ChartBoardFeatures.PopItems);
 
@@ -402,9 +404,8 @@ public static class ChartBoardCatalog
             ["Seiryu"] = new(new[] { new ChartPopItemOption("Seal of Seiryu") }),
             ["Byakko"] = new(new[] { new ChartPopItemOption("Seal of Byakko") }),
 
-            // Standard rather than Final, deliberately: a Final card with no Rewards list renders a
-            // reward strip reading "Rewards 0" and loses its totals footer (_ChartBossCard.cshtml).
-            // Kirin says what pops it in a subtitle and keeps the footer the four gods beside it have.
+            // Standard rather than Final, deliberately: a Final card has no totals footer. Kirin
+            // says what pops it in a subtitle and keeps the footer the four gods beside it have.
             ["Kirin"] = new(null, "Popped with one seal from each of the four gods"),
         };
 

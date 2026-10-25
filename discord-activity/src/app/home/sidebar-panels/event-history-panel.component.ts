@@ -76,7 +76,7 @@ import type {
               </span>
               <!-- Hidden on an HNM: those camps are priced per WINDOW (open / close / kill /
                    claim bonuses) and never by the hour, so the chip reads "0 DKP/h" on a camp
-                   that paid perfectly well. Mirrors Views/EventHistory/Details.cshtml. -->
+                   that paid perfectly well. -->
               @if (!isHnm(h)) {
                 <span class="chip">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
@@ -853,8 +853,7 @@ export class EventHistoryPanelComponent {
 
   // An HNM camp is paid per window by HnmStandardCampFinalizer / WdCampFinalizer -- open, close,
   // kill and claim bonuses -- and DkpPerHour is never read for one. Every DKP/hour surface on the
-  // card is gated on this so it does not advertise a rate nobody set. Same test as the Razor
-  // page's `isHnm` in Views/EventHistory/Details.cshtml; the two must move together.
+  // card is gated on this so it does not advertise a rate nobody set.
   protected isHnm(h: ActivityEventHistory): boolean {
     return (h.eventType ?? '').trim().toLowerCase() === 'hnm';
   }

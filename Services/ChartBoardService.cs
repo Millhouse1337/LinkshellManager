@@ -89,11 +89,8 @@ public readonly record struct ChartBoardActor(string? AppUserId, string? Charact
 /// <summary>
 /// THE reader and writer of the Charts boards.
 ///
-/// The rules live here rather than in the controllers for two reasons. One, both surfaces use them —
-/// the Activity API and the website's ChartsController are both thin callers, so the two cannot
-/// derive a different ledger from the same rows (the same reason ItemSaleRecorder is shared). Two,
-/// the tests in this repo are service-level, so anything worth pinning has to be reachable without
-/// spinning up a controller.
+/// The rules live here rather than in the controller because the tests in this repo are
+/// service-level, so anything worth pinning has to be reachable without spinning up a controller.
 ///
 /// Board-agnostic throughout: Sky's five gods and Sea's eight Jailers differ only by what
 /// ChartBoardCatalog says, never by a branch in here.
@@ -324,8 +321,8 @@ public sealed class ChartBoardService
         // This method is on the EDIT path as well as the add path. Dynamis and Limbus no longer
         // offer an add form, but they still hold rows that officers entered before that, and those
         // rows have to stay editable and deletable. A feature check in here would refuse every one
-        // of them and strand the lot. The check belongs in the two Add actions only - see
-        // ChartsController.AddItem and ActivityDataController.AddChartPopItemAsync - and
+        // of them and strand the lot. The check belongs in the Add action only - see
+        // ActivityDataController.AddChartPopItemAsync - and
         // ChartItemKindTests.NormalizeDraft_DoesNotRefuseARowOnABoardThatNoLongerTakesAdds pins it.
         var canonicalBoard = ChartBoardCatalog.NormalizeBoard(board);
         if (canonicalBoard is null)

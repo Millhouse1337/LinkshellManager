@@ -120,8 +120,7 @@ export class AttendanceSectionsComponent {
 
   // "Window" / "Misc" are the STORAGE names (AttendanceSnapshotSlotKinds), and they told an
   // officer nothing about where a row came from. They map exactly onto the two ways attendance is
-  // captured, so the chip says that instead. Mirrors Views/WindowEvents/_WindowEventCard.cshtml --
-  // the two must move together.
+  // captured, so the chip says that instead.
   protected creditSourceLabel(source: string | null | undefined): string {
     if (source === 'Misc') return '/lsm now';
     if (source === 'Both') return 'Addon UI + /lsm now';

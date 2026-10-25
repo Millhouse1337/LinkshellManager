@@ -8,10 +8,9 @@ public enum LauncherUrlOutcome
     Invalid
 }
 
-// The rule for the launcher download URL a super admin pastes into Settings. Empty clears it;
-// anything else must be an absolute https:// address, because the URL is handed to every
-// visitor, including signed-out ones. Shared by the Razor Settings page (AccountController)
-// and the Activity's Admin tab (WebAdminController) so the two can't drift.
+// The rule for the launcher download URL a super admin pastes into the Activity's Admin tab
+// (WebAdminController). Empty clears it; anything else must be an absolute https:// address,
+// because the URL is handed to every visitor, including signed-out ones.
 public static class LauncherDownloadPolicy
 {
     public static LauncherUrlOutcome Check(string? url, out string? normalized)

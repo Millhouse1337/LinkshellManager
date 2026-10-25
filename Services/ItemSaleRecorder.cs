@@ -6,10 +6,8 @@ namespace LinkshellManagerDiscordApp.Services;
 
 // Selling an item out of the linkshell's stash, and undoing it.
 //
-// Extracted because both surfaces do this and both used to do it slightly differently — the same
-// twenty lines copied into ManageItemController and ActivityDataController, each with its own pair of
-// unguarded saves. One function means the web and Discord cannot drift, which is the actual fix for
-// two front-ends disagreeing about the same table.
+// Extracted because the old website and the Activity each had a slightly different copy of this,
+// each with its own pair of unguarded saves.
 public sealed class ItemSaleRecorder
 {
     private readonly ApplicationDbContext _db;

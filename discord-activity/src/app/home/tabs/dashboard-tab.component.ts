@@ -173,8 +173,7 @@ export class DashboardTabComponent {
   protected announcementCategoryCustom = '';
   protected editingAnnouncementId = signal<number | null>(null);
 
-  // Category picker presets (the dropdown), shared with the web via
-  // rule-content.helpers (mirrors C# RuleContent).
+  // Category picker presets (the dropdown), from rule-content.helpers.
   protected readonly categoryOptions = RULE_CATEGORY_OPTIONS;
 
   // Rules/announcements pre-shaped for the card layout: the row + its accent/icon

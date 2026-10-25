@@ -44,9 +44,9 @@ public class WindowEvent
 
     // The grid this camp's snapshots are numbered against, captured at creation from the
     // linkshell's monster setup. Same set-once-never-moved contract as WindowAnchorAtUtc above, and
-    // for the same reason: AttendanceSectionsBuilder DERIVES a missing window number at read time,
-    // so a camp that re-read the live config would silently renumber history the first time someone
-    // edited the monster's cadence.
+    // for the same reason: ActivityDataController.MapActivityWindowSnapshot DERIVES a missing
+    // window number at read time, so a camp that re-read the live config would silently renumber
+    // history the first time someone edited the monster's cadence.
     //
     // Null on rows created before this column existed, and on any monster with no grid — the
     // HnmConfig fallback then answers, exactly as it always did.

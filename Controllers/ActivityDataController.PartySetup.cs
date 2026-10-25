@@ -8,10 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // Discord Activity API for the officer-designed raid-composition planner that
-// lives inside the ToD Tracker. Mirrors Controllers/PartySetupController.cs (the
-// Razor web controller) but swaps cookie auth for the Activity's
-// ResolveAppUserAsync + GetMembershipAsync + CanAsync pattern so Discord
-// bearer-token requests work. VIEW + sign-up/withdraw are open to any linkshell
+// lives inside the ToD Tracker. VIEW + sign-up/withdraw are open to any linkshell
 // member; create/edit/delete/assign require the CanManageParties role flag
 // (added in the Phase 2 editor section below).
 public sealed partial class ActivityDataController
@@ -200,8 +197,7 @@ public sealed partial class ActivityDataController
 
     // Member self-service: claim an open slot. Any linkshell member may sign up;
     // you hold at most one slot per setup (signing up releases any other slot you
-    // hold in the same setup so you can switch roles cleanly). Ports
-    // PartySetupController.SignUp.
+    // hold in the same setup so you can switch roles cleanly).
     [HttpPost("party-setups/{id:int}/slots/{slotId:int}/signup")]
     public async Task<IActionResult> SignUpForPartySlotAsync(
         int id,
@@ -240,8 +236,7 @@ public sealed partial class ActivityDataController
     }
 
     // Release a slot. The member who holds it can withdraw themselves; an officer
-    // with CanManageParties can clear anyone's sign-up. Ports
-    // PartySetupController.Withdraw.
+    // with CanManageParties can clear anyone's sign-up.
     [HttpPost("party-setups/{id:int}/slots/{slotId:int}/withdraw")]
     public async Task<IActionResult> WithdrawFromPartySlotAsync(int id, int slotId, CancellationToken cancellationToken)
     {
@@ -269,9 +264,7 @@ public sealed partial class ActivityDataController
     }
 
     // ----- Officer editor (create / edit / delete / assign) -----
-    // All require the CanManageParties role flag. Ports the create/edit/delete/
-    // assign logic + tree builder from PartySetupController, validating against
-    // the same catalogs.
+    // All require the CanManageParties role flag.
 
     public sealed record ActivityPartySetupSlotInput(
         int AllianceIndex,
@@ -365,8 +358,7 @@ public sealed partial class ActivityDataController
         var validationError = ValidatePartySetupEditor(request, normalizedEventType, allowedMonsters);
         if (validationError is not null) return BadRequest(new { error = validationError });
 
-        // Replace the whole tree (mirrors PartySetupController.Edit). Cascade
-        // delete clears the old parties/slots.
+        // Replace the whole tree. Cascade delete clears the old parties/slots.
         _dbContext.PartySetupAlliances.RemoveRange(partySetup.Alliances);
 
         partySetup.Name = request.Name.Trim();
@@ -446,10 +438,9 @@ public sealed partial class ActivityDataController
     private static bool IsHnmPartySetupType(string? eventType)
         => string.Equals(eventType?.Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
 
-    // Ports PartySetupController.NormalizeAndValidate to a single error string
-    // (null = valid). The editor sends a RequirementType already derived from
-    // the picks (Job > Role > Any), so this validates the same way the web form
-    // does. FFXI caps: <=3 parties per alliance, <=6 slots per party.
+    // Validates the editor request to a single error string (null = valid). The
+    // editor sends a RequirementType already derived from the picks
+    // (Job > Role > Any). FFXI caps: <=3 parties per alliance, <=6 slots per party.
     // allowedMonsters is the LINKSHELL's catalog (built-ins + its own custom monsters), passed in
     // rather than read from a static field so a monster an officer added is assignable here.
     private static string? ValidatePartySetupEditor(
@@ -528,9 +519,8 @@ public sealed partial class ActivityDataController
         return null;
     }
 
-    // Ports PartySetupController.BuildTreeFromFlat: rebuild the persisted
-    // Alliance -> Party -> Slot tree from the flat posted slot list, grouped by
-    // the per-row alliance/party indices.
+    // Rebuild the persisted Alliance -> Party -> Slot tree from the flat posted
+    // slot list, grouped by the per-row alliance/party indices.
     private static List<PartySetupAlliance> BuildPartyTreeFromFlat(IEnumerable<ActivityPartySetupSlotInput> slots)
     {
         var alliances = new List<PartySetupAlliance>();
@@ -591,9 +581,8 @@ public sealed partial class ActivityDataController
         return alliances;
     }
 
-    // Ports PartySetupController.MapSlot: RequirementType is derived by
-    // precedence (Job > Role > Any); "Any Role" is the editor's "anything goes"
-    // sentinel and stores as an open Any slot.
+    // RequirementType is derived by precedence (Job > Role > Any); "Any Role" is
+    // the editor's "anything goes" sentinel and stores as an open Any slot.
     private static PartySetupSlot MapPartySlot(ActivityPartySetupSlotInput input, int sortOrder)
     {
         var role = input.Role?.Trim();

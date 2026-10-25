@@ -246,7 +246,7 @@ public class DataAdminSchemaContractTests
     /// <summary>
     /// Hand-off (4): nothing in the view carries the class "fade" (its animation would fight pan
     /// and zoom), there is no inline event handler (the CSP blocks it), and no style attribute (the
-    /// house rule: styling lives in lsm-theme.css; the CSP itself allows inline styles).
+    /// house rule: styling lives in the stylesheets; the CSP itself allows inline styles).
     /// </summary>
     [Fact]
     public void ViewHasNoFadeClassAndNothingInline()

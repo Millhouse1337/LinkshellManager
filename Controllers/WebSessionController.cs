@@ -12,8 +12,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 //
 //   GET  session  — anonymous. Tells the app whether to show its sign-in screen, and which
 //                   website-only tabs this account may see (isSuperAdmin).
-//   POST sign-out — the JSON twin of AccountController.Logout (a Razor form post). The
-//                   global CookieAuthAntiforgeryFilter requires the XSRF header here.
+//   POST sign-out — the global CookieAuthAntiforgeryFilter requires the XSRF header here.
 [ApiController]
 [Route("api/web")]
 public sealed class WebSessionController : ControllerBase

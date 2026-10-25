@@ -38,7 +38,7 @@ public class LauncherController : Controller
 
         // Off-site redirect to the release asset, so the droplet never serves the installer
         // itself. Not an open redirect: only a super admin can set this value, and
-        // AccountController.SetLauncherDownloadUrl rejects anything that is not absolute https.
+        // WebAdminController.SetLauncherDownloadUrlAsync rejects anything but absolute https.
         return Redirect(url);
     }
 }

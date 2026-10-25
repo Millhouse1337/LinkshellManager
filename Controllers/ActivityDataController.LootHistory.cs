@@ -145,9 +145,8 @@ public sealed partial class ActivityDataController
 
     // POST /api/activity/loot-history
     //
-    // Manual loot entry for the caller's primary linkshell. Mirrors the web
-    // LootHistoryController.Add flow exactly: the loot is filed against a LIVE event, a PAST
-    // event, or nothing at all.
+    // Manual loot entry for the caller's primary linkshell. The loot is filed against a LIVE
+    // event, a PAST event, or nothing at all.
     //
     // It used to mint a throwaway ToD per submission and hang a TodLootDetail off it, which is why
     // every hand-entered drop showed up in history as source "ToD".
@@ -180,8 +179,7 @@ public sealed partial class ActivityDataController
         }
 
         // Everything below — roster match, affordability, the debit, and the DkpDebitedAt stamp
-        // that stops a live event's close charging this a second time — is ManualLootService's,
-        // shared with the web form so the two surfaces cannot drift on DKP.
+        // that stops a live event's close charging this a second time — is ManualLootService's.
         var result = await manualLoot.AddAsync(
             linkshellId,
             ManualLootTarget.Parse(request.SourceKind, request.EventId, request.EventHistoryId),

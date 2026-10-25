@@ -78,7 +78,7 @@ export class DkpGroupingTabComponent {
   }
 
   // Group-colour name → theme token. Keys mirror the server's DkpPoolAccents; unknown / legacy
-  // keys fall back to blue. Mirrors SwatchColor() in the web Customize.cshtml.
+  // keys fall back to blue.
   private static readonly POOL_SWATCH: Record<string, string> = {
     blue: 'var(--accent)', green: 'var(--success)', red: 'var(--danger)',
     orange: 'var(--orange)', gold: 'var(--gold)', purple: 'var(--purple)', cyan: 'var(--cyan)',
