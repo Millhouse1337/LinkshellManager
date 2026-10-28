@@ -488,9 +488,24 @@ export class ActivityQueuePanelComponent {
   protected hnmDkpOverrideOpen = false;
 
   protected hnmBonusFields(): readonly HnmBonusField[] {
-    return this.isWdAttendanceMode()
-      ? ActivityQueuePanelComponent.MANUAL_CHECK_IN_BONUS_FIELDS
+    if (this.isWdAttendanceMode()) {
+      return ActivityQueuePanelComponent.MANUAL_CHECK_IN_BONUS_FIELDS;
+    }
+    // An Open/Close Only monster's camp takes just an Open and a Close, so the Regular window
+    // rate is never paid on it — offering the box would invite a price that changes nothing.
+    return this.selectedMonsterWindowMethod() === 'OpenClose'
+      ? ActivityQueuePanelComponent.STANDARD_BONUS_FIELDS.filter(field => field.key !== 'hnmPerWindowOverride')
       : ActivityQueuePanelComponent.STANDARD_BONUS_FIELDS;
+  }
+
+  // The picked monster's Window Method from the linkshell's monster setups, or null when no
+  // monster is picked, it is "Other", or the server predates the field.
+  private selectedMonsterWindowMethod(): string | null {
+    const picked = (this.createModel.monsterName ?? '').trim().toLowerCase();
+    if (!picked) return null;
+    const setup = (this.selectedLinkshellSettings()?.monsterSetups ?? [])
+      .find(candidate => candidate.monsterName.trim().toLowerCase() === picked);
+    return setup?.windowMethod ?? null;
   }
 
   private selectedLinkshellSettings() {

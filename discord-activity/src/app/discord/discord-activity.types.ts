@@ -240,6 +240,9 @@ export interface ActivityMonsterSetup {
   // Seconds on top of the cooldown when a ToD's repop is computed. Optional only so a payload
   // from an older server still type-checks; read it as 0 when absent.
   additionalSeconds?: number;
+  // How a Standard camp for this monster posts: "OpenClose" or "WindowN", already resolved
+  // against the default. The create form hides the amounts that method can't pay.
+  windowMethod?: string | null;
 }
 
 // The fuller row the Monster Setups editor loads: adds the row id, the built-in defaults (shown as
