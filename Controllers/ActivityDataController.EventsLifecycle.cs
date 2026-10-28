@@ -272,9 +272,19 @@ public sealed partial class ActivityDataController
             var monsterName = request.MonsterName?.Trim();
             if (!string.IsNullOrWhiteSpace(monsterName))
             {
+                // Re-stamped only when the camp hasn't started or its monster changed. The form
+                // sends the monster on EVERY save, so re-stamping unconditionally let an unrelated
+                // edit (a typo in the details) pull a Monster Setups change into a live camp — the
+                // thing Event.SpawnWindowCount and Event.WindowMethod are stamped to prevent.
+                var monsterChanged = !string.Equals(
+                    eventEntity.AssignedMonsterName?.Trim(), monsterName, StringComparison.OrdinalIgnoreCase);
+                var restamp = monsterChanged || eventEntity.CommencementStartTime is null;
                 eventEntity.AssignedMonsterName = monsterName;
-                eventEntity.WindowCountOverride = HnmConfig.EffectiveWindowCount(monsterName);
-                await HnmEventSeeder.StampSpawnGridAsync(_dbContext, eventEntity, monsterName, cancellationToken);
+                if (restamp)
+                {
+                    eventEntity.WindowCountOverride = HnmConfig.EffectiveWindowCount(monsterName);
+                    await HnmEventSeeder.StampSpawnGridAsync(_dbContext, eventEntity, monsterName, cancellationToken);
+                }
                 if (string.IsNullOrWhiteSpace(eventEntity.EventLocation))
                 {
                     eventEntity.EventLocation = HnmConfig.ZoneFor(monsterName);

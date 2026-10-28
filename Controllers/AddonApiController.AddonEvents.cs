@@ -382,6 +382,11 @@ public sealed partial class AddonApiController
                     .Select(l => l.HnmAttendanceMode)
                     .FirstOrDefaultAsync(cancellationToken),
                 monster);
+
+            // The spawn grid and Window Method from the linkshell's monster setup, the same stamp an
+            // app-made camp gets. Without it an addon-made camp ignored Monster Setups entirely. The
+            // override above is left alone: a stamped camp reads its post count from the method.
+            await HnmEventSeeder.StampSpawnGridAsync(_dbContext, eventEntity, monster, cancellationToken);
         }
 
         _dbContext.Events.Add(eventEntity);

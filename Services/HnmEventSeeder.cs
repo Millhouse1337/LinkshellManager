@@ -125,12 +125,17 @@ public static class HnmEventSeeder
     //
     // Null when the monster has no grid, which leaves every downstream reader on the HnmConfig
     // fallback it always used.
+    //
+    // The monster's Window Method rides along, for the same reason: it decides how the camp posts
+    // (DiscordEventMessageBuilder.WindowMethodFor), so a camp keeps the method it started with. An
+    // HNM board with no monster gets none, and stays on the legacy post-count rules.
     public static async Task StampSpawnGridAsync(
         ApplicationDbContext db, Event ev, string? monster, CancellationToken ct = default)
     {
         var timing = await new MonsterTimingResolver(db).ResolveAsync(ev.LinkshellId, monster, ct);
         ev.SpawnWindowCount = timing.WindowCount;
         ev.SpawnWindowMinutes = timing.WindowCadenceMinutes;
+        ev.WindowMethod = string.IsNullOrWhiteSpace(monster) ? null : timing.WindowMethod;
     }
 
     public static async Task SeedHnmEventAsync(

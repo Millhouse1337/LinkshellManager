@@ -279,3 +279,91 @@ public class ReviveForNewPopTests
         Assert.Null(ev.NextWindowAt);
     }
 }
+
+// The Window Method is stamped beside the spawn grid, from the linkshell's monster setup, so a camp
+// keeps the posting shape it started with whatever happens to Monster Setups afterwards.
+public class HnmWindowMethodStampTests
+{
+    private const int LinkshellId = 7;
+
+    private static ApplicationDbContext NewDb() =>
+        new(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options);
+
+    private static Event Camp(string? monster) => new()
+    {
+        LinkshellId = LinkshellId,
+        EventName = monster ?? "Unassigned camp",
+        EventType = "HNM",
+        AssignedMonsterName = monster,
+        StartTime = new DateTime(2026, 10, 28, 20, 0, 0, DateTimeKind.Utc),
+    };
+
+    [Fact]
+    public async Task UnseededLinkshell_StampsTheBuiltInDefault()
+    {
+        await using var db = NewDb();
+
+        var tiamat = Camp("Tiamat");
+        await HnmEventSeeder.StampSpawnGridAsync(db, tiamat, tiamat.AssignedMonsterName);
+        var fafnir = Camp("Fafnir");
+        await HnmEventSeeder.StampSpawnGridAsync(db, fafnir, fafnir.AssignedMonsterName);
+
+        Assert.Equal(MonsterWindowMethods.WindowN, tiamat.WindowMethod);
+        Assert.Equal(MonsterWindowMethods.OpenClose, fafnir.WindowMethod);
+    }
+
+    [Fact]
+    public async Task CustomRow_StampsItsOwnMethodAndGrid()
+    {
+        await using var db = NewDb();
+        db.LinkshellMonsterTimings.Add(new LinkshellMonsterTiming
+        {
+            LinkshellId = LinkshellId,
+            MonsterName = "Jugner Funguar",
+            NormalizedMonsterName = "jugner funguar",
+            WindowCount = 7,
+            WindowCadenceMinutes = 10,
+            CooldownMinutes = 60,
+            Category = MonsterTimingDefaults.OtherCategory,
+            IsCustom = true,
+            WindowMethod = MonsterWindowMethods.WindowN,
+        });
+        await db.SaveChangesAsync();
+
+        var camp = Camp("Jugner Funguar");
+        await HnmEventSeeder.StampSpawnGridAsync(db, camp, camp.AssignedMonsterName);
+
+        Assert.Equal(MonsterWindowMethods.WindowN, camp.WindowMethod);
+        Assert.Equal(7, camp.SpawnWindowCount);
+        Assert.Equal(7, DiscordEventMessageBuilder.AttendancePostCount(camp));
+        Assert.False(DiscordEventMessageBuilder.PostsOpenAndClose(camp));
+    }
+
+    // The seeder used to write an override of 1 for every custom NM, which pinned the camp to one
+    // post paid by time. With the method stamped, the same camp posts an Open and a Close.
+    [Fact]
+    public async Task SeededCustomNm_PostsAnOpenAndAClose()
+    {
+        await using var db = NewDb();
+        var camp = Camp("Jugner Funguar");
+
+        await HnmEventSeeder.SeedHnmEventAsync(db, camp, linkshell: null, camp.AssignedMonsterName);
+
+        Assert.Equal(MonsterWindowMethods.OpenClose, camp.WindowMethod);
+        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(camp));
+        Assert.True(DiscordEventMessageBuilder.PostsOpenAndClose(camp));
+    }
+
+    [Fact]
+    public async Task UnassignedBoard_GetsNoMethod()
+    {
+        await using var db = NewDb();
+        var camp = Camp(null);
+
+        await HnmEventSeeder.StampSpawnGridAsync(db, camp, camp.AssignedMonsterName);
+
+        Assert.Null(camp.WindowMethod);
+    }
+}
