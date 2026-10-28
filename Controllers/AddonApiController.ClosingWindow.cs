@@ -150,7 +150,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(l => l.Id == eventEntity.LinkshellId, cancellationToken);
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
             siblings, eventEntity.HnmWindowNumber,
-            DiscordEventMessageBuilder.AttendancePostCount(eventEntity));
+            DiscordEventMessageBuilder.CloseIsLatestPost(eventEntity));
 
         return Ok(new
         {

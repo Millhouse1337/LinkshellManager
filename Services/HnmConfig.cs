@@ -730,7 +730,15 @@ public static class HnmConfig
         // the addon's constants.window_label; the two must agree or a camp reads one way in game
         // and another in the app.
         var count = effectiveWindowCount ?? GetWindowCount(eventName);
-        if (count != 2)
+        return GetDefaultWindowLabel(sequenceNumber, namedOpenClose: count == 2);
+    }
+
+    // The same labels, for a caller that already knows the camp's shape. A camp with an Event in
+    // hand asks DiscordEventMessageBuilder.DefaultWindowLabel, which decides `namedOpenClose` from
+    // the camp's Window Method rather than from a post count.
+    public static string? GetDefaultWindowLabel(int sequenceNumber, bool namedOpenClose)
+    {
+        if (!namedOpenClose)
         {
             return null;
         }

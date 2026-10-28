@@ -173,8 +173,7 @@ public static class HnmCampPricing
 
         if (HonoursWindowAmount(ev))
         {
-            var label = HnmConfig.GetDefaultWindowLabel(
-                ev.EventName, window, DiscordEventMessageBuilder.AttendancePostCount(ev));
+            var label = DiscordEventMessageBuilder.DefaultWindowLabel(ev, window);
             var (_, open, close, _, _) = StandardBonuses(ev, linkshell, claimed: false, killed: false);
             switch (label)
             {

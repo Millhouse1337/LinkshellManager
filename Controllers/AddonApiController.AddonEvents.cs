@@ -64,17 +64,20 @@ public sealed partial class AddonApiController
         // The close is window 2 by that camp's shape, which is what ResolveCloseWindow settles on
         // for it at End Camp -- so quoting it that way is quoting what will actually be paid.
         //
-        // A numbered camp is unchanged: there the opened window IS the role.
+        // A numbered camp is unchanged: there the opened window IS the role. Except an open-ended
+        // one, whose spawn counter never leaves 1 -- its next post is simply one past the last.
         double? NextPostDkp(Event evt)
         {
-            var opened = Math.Clamp(
-                evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt));
-            if (DiscordEventMessageBuilder.AttendancePostCount(evt) != 2)
+            postedSequences.TryGetValue(evt.Id, out var filed);
+            if (!DiscordEventMessageBuilder.PostsOpenAndClose(evt))
             {
-                return HnmCampPricing.DefaultWindowValue(evt, linkshell, opened);
+                var next = DiscordEventMessageBuilder.WindowsOpenEnded(evt)
+                    ? (filed is { Count: > 0 } ? filed.Max() + 1 : 1)
+                    : Math.Clamp(evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt));
+                return HnmCampPricing.DefaultWindowValue(evt, linkshell, next);
             }
 
-            var openFiled = postedSequences.TryGetValue(evt.Id, out var filed) && filed.Contains(1);
+            var openFiled = filed is not null && filed.Contains(1);
             return openFiled
                 ? HnmCampPricing.WindowValueFor(evt, linkshell, sequence: 2, closeWindow: 2, explicitAmount: null)
                 : HnmCampPricing.WindowValueFor(evt, linkshell, sequence: 1, closeWindow: 0, explicitAmount: null);
@@ -705,7 +708,7 @@ public sealed partial class AddonApiController
         // addon itself used to write and then read back as if it were a payout.
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
             eventEntity.AttendanceWindows, eventEntity.HnmWindowNumber,
-            DiscordEventMessageBuilder.AttendancePostCount(eventEntity));
+            DiscordEventMessageBuilder.CloseIsLatestPost(eventEntity));
 
         return Ok(new
         {

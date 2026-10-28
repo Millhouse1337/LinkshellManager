@@ -1032,18 +1032,27 @@ public static class DiscordEventMessageBuilder
     // setup — wins over the built-in cadence, and null falls straight through to the old chain, so
     // a camp created before per-linkshell setups behaves byte-identically.
     //
-    // The WindowCountOverride == 1 short-circuit MUST stay first, stamp or no stamp: 1 means "this
-    // camp is NOT windowed, pay it by accumulated duration", which EventBreakPolicy reads to decide
-    // the camp keeps its Break Room.
-    public static int EffectiveWindowCount(Event ev) =>
-        Math.Clamp(
-            ev.WindowCountOverride == 1
+    // The WindowCountOverride == 1 short-circuit stays first for every camp WITHOUT a stamped Window
+    // Method: 1 means "this camp is NOT windowed, pay it by accumulated duration", which
+    // EventBreakPolicy reads to decide the camp keeps its Break Room.
+    //
+    // A camp WITH a stamped method ignores the override entirely. It is an HNM-type camp whose
+    // monster setup decided how it posts — and every HNM camp is windowed in EventBreakPolicy
+    // regardless — so the override's "not windowed" meaning doesn't apply to it. Reading it anyway
+    // is what pinned every custom NM camp to "Window 1 of 1" whatever its Monster Setups grid said,
+    // and what would cap an addon-made camp (which stores its POST count there) at 2 windows.
+    public static int EffectiveWindowCount(Event ev)
+    {
+        var stamped = ev.WindowMethod is not null;
+        return Math.Clamp(
+            ev.WindowCountOverride == 1 && !stamped
                 ? 1
                 : ev.SpawnWindowCount
                     ?? HnmConfig.DefaultWindowCadence(ev.AssignedMonsterName)?.Windows
-                    ?? ev.WindowCountOverride
+                    ?? (stamped ? null : ev.WindowCountOverride)
                     ?? HnmConfig.GetWindowCount(ev.AssignedMonsterName ?? ev.EventName),
             1, HnmConfig.MaxWindow);
+    }
 
     // Minutes between window openings for THIS camp. The companion to EffectiveWindowCount, and its
     // one home, so the count and the cadence can never come from different grids.
@@ -1070,12 +1079,85 @@ public static class DiscordEventMessageBuilder
     // One home, because it is applied wherever a window is named or counted: the Activity DTO, the
     // addon's event list, snapshot ingestion, and submission approval. They must never disagree, or
     // one camp ends up with two different names for the same window.
+    //
+    // A camp stamped with a Window Method (see WindowMethodFor) answers from the method instead:
+    //   Open/Close Only -> 2, however many spawn windows it sits through.
+    //   Window N        -> one post per spawn window, or HnmConfig.MaxWindow for an open-ended camp.
     public static int AttendancePostCount(Event ev) =>
+        WindowMethodFor(ev) switch
+        {
+            MonsterWindowMethods.OpenClose => 2,
+            MonsterWindowMethods.WindowN => WindowsOpenEnded(ev) ? HnmConfig.MaxWindow : EffectiveWindowCount(ev),
+            _ => LegacyAttendancePostCount(ev),
+        };
+
+    // The post count as it was decided before Window Methods existed, from the HnmConfig tables.
+    // Every camp without a stamped method still runs on it, so an event made before the setting
+    // shipped (or a Manual Check In camp, or a non-HNM event) behaves exactly as it always did.
+    public static int LegacyAttendancePostCount(Event ev) =>
         Math.Clamp(
             HnmConfig.IsTrueHnm(ev.AssignedMonsterName)
                 ? HnmConfig.GetWindowCount(ev.AssignedMonsterName)
                 : ev.WindowCountOverride ?? HnmConfig.GetWindowCount(ev.EventName),
             1, HnmConfig.MaxWindow);
+
+    // The Window Method that decides how THIS camp posts, or null when none does.
+    //
+    // Only a Standard-mode HNM camp. A Manual Check In camp is paid from check-ins rather than from
+    // posts, and a non-HNM event has no posts to shape, so both stay on the legacy rules even if a
+    // method was stamped on them. Normalize drops anything unrecognised to null for the same reason.
+    public static string? WindowMethodFor(Event ev) =>
+        IsHnm(ev) && !IsWd(ev) ? MonsterWindowMethods.Normalize(ev.WindowMethod) : null;
+
+    // Does this camp take a NAMED Open and Close (rather than numbered windows)? THE question every
+    // "post count == 2" test used to stand in for. It isn't the same question once Window N can
+    // have exactly two spawn windows: those are "Window 1" and "Window 2", not an Open and a Close.
+    public static bool PostsOpenAndClose(Event ev) =>
+        WindowMethodFor(ev) switch
+        {
+            MonsterWindowMethods.OpenClose => true,
+            MonsterWindowMethods.WindowN => false,
+            _ => LegacyAttendancePostCount(ev) == 2,
+        };
+
+    // A Window N camp whose monster has no window grid: it posts numbered windows for as long as
+    // the camp runs, up to HnmConfig.MaxWindow, and there is no "of M" to print.
+    public static bool WindowsOpenEnded(Event ev) =>
+        WindowMethodFor(ev) == MonsterWindowMethods.WindowN && EffectiveWindowCount(ev) < 2;
+
+    // Is the camp's close simply its LATEST post? True on an Open/Close camp (the Close ends the
+    // posting) and on an open-ended camp, whose spawn counter never moves off window 1 and so can't
+    // say which window the pop landed in. Otherwise the pop window decides (ResolveCloseWindow).
+    public static bool CloseIsLatestPost(Event ev) =>
+        PostsOpenAndClose(ev) || WindowsOpenEnded(ev);
+
+    // The highest NON-kill sequence the camp accepts.
+    //
+    // A camp with no Window Method keeps the spawn count it was always checked against. With one,
+    // an Open/Close camp accepts exactly its Open and Close — even when its monster has no spawn
+    // grid at all (EffectiveWindowCount 1), which is the custom NM that couldn't post a Close
+    // before — and a Window N camp accepts up to the larger of its spawn and post counts, so an
+    // open-ended one reaches HnmConfig.MaxWindow.
+    public static int MaxPostSequence(Event ev)
+    {
+        if (WindowMethodFor(ev) is null)
+        {
+            return EffectiveWindowCount(ev);
+        }
+        return PostsOpenAndClose(ev)
+            ? 2
+            : Math.Max(EffectiveWindowCount(ev), AttendancePostCount(ev));
+    }
+
+    // The highest sequence a KILL post may take: one past the last window, which is where the addon
+    // files it (its post count + 1), capped one past the server's window ceiling.
+    public static int KillPostCeiling(Event ev) =>
+        Math.Min(MaxPostSequence(ev) + 1, HnmConfig.MaxWindow + 1);
+
+    // The default label for window `sequenceNumber` of this camp: "Open" / "Close" / "Kill" on an
+    // Open/Close camp, null (numbered) on any other.
+    public static string? DefaultWindowLabel(Event ev, int sequenceNumber) =>
+        HnmConfig.GetDefaultWindowLabel(sequenceNumber, PostsOpenAndClose(ev));
 
     private static string BuildStartHeading(Event ev, int lockedCount = 0)
     {

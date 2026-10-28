@@ -318,20 +318,18 @@ public sealed partial class AddonApiController
             //
             // Range check only. A snapshot is filed against the SPAWN window it was taken in —
             // window 1 is the pop, window 5 is fifty minutes later — so the ceiling is the spawn
-            // count. How many posts the camp takes is the separate number below.
-            var maxWindows = DiscordEventMessageBuilder.EffectiveWindowCount(eventEntity);
-            // How many roster reads this camp takes (2 on a Standard king/dragon). Names the
-            // window and decides whether the Close ends the posting; both are about posts, not
-            // pop chances.
-            var postCount = DiscordEventMessageBuilder.AttendancePostCount(eventEntity);
-            // The kill roster is allowed ONE sequence past the camp's spawn count. It is filed
-            // after the last window by definition, and on a camp whose spawn count is also its post
-            // count (a 2-window NM) there is no in-range sequence left for it — the range check
-            // would reject the very post the Post Kill button exists to make. Everything else still
-            // has to name a real spawn window.
+            // count, or the camp's Window Method where one is stamped (MaxPostSequence). Whether the
+            // Close ends the posting is the separate question below.
+            //
+            // The kill roster is allowed ONE sequence past that. It is filed after the last window
+            // by definition, and on a camp whose spawn count is also its post count (a 2-window NM)
+            // there is no in-range sequence left for it — the range check would reject the very
+            // post the Post Kill button exists to make. Everything else still has to name a real
+            // window.
+            var postsOpenAndClose = DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity);
             var ceiling = request.IsKillWindow
-                ? Math.Min(maxWindows + 1, HnmConfig.MaxWindow + 1)
-                : maxWindows;
+                ? DiscordEventMessageBuilder.KillPostCeiling(eventEntity)
+                : DiscordEventMessageBuilder.MaxPostSequence(eventEntity);
             if (windowSequence < 1 || windowSequence > ceiling)
             {
                 return BadRequest(new { error = $"Window sequence {windowSequence} is out of range for this event (max {ceiling})." });
@@ -367,7 +365,7 @@ public sealed partial class AddonApiController
                 //     never sat the window, and on a 2-post camp there is no later sequence for
                 //     them to land in. Excluding it here is what lets a king/dragon camp record a
                 //     kill roster at all.
-                if (postCount == 2 && !request.IsKillWindow
+                if (postsOpenAndClose && !request.IsKillWindow
                     && await _dbContext.EventAttendanceWindows.AnyAsync(
                         w => w.EventId == eventId && w.SequenceNumber == 2, cancellationToken))
                 {
@@ -387,7 +385,7 @@ public sealed partial class AddonApiController
                     // never carry, since the close is the window an officer ticked.
                     Label = request.IsKillWindow
                         ? "Kill"
-                        : HnmConfig.GetDefaultWindowLabel(eventEntity.EventName, windowSequence, postCount),
+                        : DiscordEventMessageBuilder.DefaultWindowLabel(eventEntity, windowSequence),
                     PostedAt = nowUtc,
                     PostedBySource = AddonSource,
                     IsKillWindow = request.IsKillWindow
@@ -480,7 +478,7 @@ public sealed partial class AddonApiController
                     eventEntity, campLinkshell, attendanceWindow.SequenceNumber,
                     HnmStandardCampFinalizer.ResolveCloseWindow(
                         campWindows, eventEntity.HnmWindowNumber,
-                        DiscordEventMessageBuilder.AttendancePostCount(eventEntity)),
+                        DiscordEventMessageBuilder.CloseIsLatestPost(eventEntity)),
                     attendanceWindow.DkpAmount, attendanceWindow.IsKillWindow);
             }
             else
@@ -894,7 +892,7 @@ public sealed partial class AddonApiController
         //
         // Only on a 2-post camp, which is the only shape that guard applies to; a numbered camp
         // re-posts any window freely, so it may be undone in any order.
-        if (DiscordEventMessageBuilder.AttendancePostCount(attendanceWindow.Event) == 2
+        if (DiscordEventMessageBuilder.PostsOpenAndClose(attendanceWindow.Event)
             && !attendanceWindow.IsKillWindow
             && await _dbContext.EventAttendanceWindows.AnyAsync(
                 w => w.EventId == eventId && w.SequenceNumber > sequence && !w.IsKillWindow,

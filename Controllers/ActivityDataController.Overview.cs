@@ -292,10 +292,9 @@ public sealed partial class ActivityDataController
             {
                 return new List<ActivityLinkedSnapshotDto>();
             }
-            // The POST count, because this names a window. On a Standard king/dragon that is 2,
-            // so a snapshot taken in the camp's first window reads "Open" — the spawn count (7)
-            // would send it down GetDefaultWindowLabel's numbered branch instead.
-            var windowCount = DiscordEventMessageBuilder.AttendancePostCount(evt);
+            // Named from the camp's SHAPE (DefaultWindowLabel), because this names a window. On a
+            // Standard king/dragon a snapshot taken in the camp's first window reads "Open" — the
+            // spawn count (7) would send it down the numbered branch instead.
             return snapshots.Select(snapshot => new ActivityLinkedSnapshotDto(
                 snapshot.Id,
                 snapshot.Name,
@@ -310,7 +309,7 @@ public sealed partial class ActivityDataController
                 AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind)
                     ? "Misc"
                     : snapshot.WindowNumber is { } window
-                        ? HnmConfig.GetDefaultWindowLabel(evt.EventName, window, windowCount)
+                        ? DiscordEventMessageBuilder.DefaultWindowLabel(evt, window)
                           ?? $"Window {window}"
                         : null,
                 snapshot.SnapshotStatus,
@@ -817,10 +816,7 @@ public sealed partial class ActivityDataController
                         // heals those without a migration; a stored label still wins.
                         // (activeEvents is materialized, so this runs in memory.)
                         HnmConfig.NormalizeWindowLabel(window.Label)
-                            ?? HnmConfig.GetDefaultWindowLabel(
-                                evt.EventName,
-                                window.SequenceNumber,
-                                DiscordEventMessageBuilder.AttendancePostCount(evt)),
+                            ?? DiscordEventMessageBuilder.DefaultWindowLabel(evt, window.SequenceNumber),
                         window.PostedAt,
                         window.Attendees
                             // Sorted on the SAME fallback the row renders, or a roster clear would

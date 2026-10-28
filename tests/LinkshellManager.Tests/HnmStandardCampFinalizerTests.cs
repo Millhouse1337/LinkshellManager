@@ -92,7 +92,7 @@ public class HnmStandardCloseWindowTests
         // not whichever post happens to share the spawn counter's number.
         var posted = new[] { 1, 2 };
         Assert.Equal(2, HnmStandardCampFinalizer.ResolveCloseWindow(
-            posted, popWindow: 1, markedCloseWindow: null, attendancePostCount: 2));
+            posted, popWindow: 1, markedCloseWindow: null, closeIsLatestPost: true));
     }
 
     [Fact]

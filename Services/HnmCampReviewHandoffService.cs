@@ -206,7 +206,7 @@ public sealed class HnmCampReviewHandoffService
         // no honest per-capture number to write. They keep the per-member rows below.
         var perCapture = HnmCampPricing.HonoursWindowAmount(ev);
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
-            campWindows, popWindow, DiscordEventMessageBuilder.AttendancePostCount(ev));
+            campWindows, popWindow, DiscordEventMessageBuilder.CloseIsLatestPost(ev));
         var (_, _, _, _, killBonus) = HnmCampPricing.StandardBonuses(ev, linkshell, claimed, killed);
         var valueBySequence = perCapture
             ? campWindows.ToDictionary(
