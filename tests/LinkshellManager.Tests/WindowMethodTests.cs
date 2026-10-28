@@ -215,3 +215,50 @@ public class WindowMethodTests
         throw new DirectoryNotFoundException($"Could not locate the repo root above {AppContext.BaseDirectory}.");
     }
 }
+
+// What the addon is told about a camp's shape (AddonEventWindowShape), for the camps it draws.
+public class AddonEventWindowShapeTests
+{
+    private static Event Camp(string monster, string? method, int? spawnWindows, int? spawnMinutes) => new()
+    {
+        EventName = monster,
+        EventType = "HNM",
+        AssignedMonsterName = monster,
+        StartTime = new DateTime(2026, 10, 28, 18, 0, 0, DateTimeKind.Utc),
+        SpawnWindowCount = spawnWindows,
+        SpawnWindowMinutes = spawnMinutes,
+        WindowMethod = method,
+    };
+
+    [Fact]
+    public void King_IsOpenClose_OnATenMinuteGrid()
+    {
+        var shape = AddonEventWindowShape.For(Camp("Behemoth/King Behemoth", MonsterWindowMethods.OpenClose, 7, 10));
+
+        Assert.Equal(MonsterWindowMethods.OpenClose, shape.WindowMethod);
+        Assert.True(shape.PostsOpenAndClose);
+        Assert.False(shape.WindowsOpenEnded);
+        Assert.Equal(600, shape.WindowCadenceSeconds);
+    }
+
+    [Fact]
+    public void CustomNmWithNoGrid_UnderWindowN_IsOpenEnded_WithNoCadence()
+    {
+        var shape = AddonEventWindowShape.For(Camp("King Vinegarroon", MonsterWindowMethods.WindowN, null, null));
+
+        Assert.False(shape.PostsOpenAndClose);
+        Assert.True(shape.WindowsOpenEnded);
+        Assert.Null(shape.WindowCadenceSeconds);
+    }
+
+    // An unstamped camp reports no method, so the addon falls back to its old post-count test.
+    [Fact]
+    public void UnstampedCamp_ReportsNoMethod()
+    {
+        var shape = AddonEventWindowShape.For(Camp("Tiamat", null, null, null));
+
+        Assert.Null(shape.WindowMethod);
+        Assert.False(shape.PostsOpenAndClose);
+        Assert.Equal(3600, shape.WindowCadenceSeconds);
+    }
+}

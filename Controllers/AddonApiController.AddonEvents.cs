@@ -140,6 +140,8 @@ public sealed partial class AddonApiController
                     : (double?)null;
         }
 
+        var shapes = raw.ToDictionary(evt => evt.Id, AddonEventWindowShape.For);
+
         // createdFromAddon is sourced from the explicit CreationSource column. Legacy
         // rows (CreationSource null) fall back to a Details-prefix check so events
         // created before the column existed still show the cancel button if they
@@ -168,6 +170,12 @@ public sealed partial class AddonApiController
             // started traversing the real spawn cycle: a Standard Behemoth camp began asking its
             // officer for seven posts instead of an Open and a Close.
             attendancePostCount = DiscordEventMessageBuilder.AttendancePostCount(evt),
+            // How the camp posts, from its stamped Window Method (see AddonEventWindowShape). The
+            // addon draws its Post buttons from these rather than from its own name tables.
+            windowMethod = shapes[evt.Id].WindowMethod,
+            postsOpenAndClose = shapes[evt.Id].PostsOpenAndClose,
+            windowsOpenEnded = shapes[evt.Id].WindowsOpenEnded,
+            windowCadenceSeconds = shapes[evt.Id].WindowCadenceSeconds,
             // Whether the Break Room applies (take break / force break / return / verify / deny).
             // False for windowed HNM camps: they credit per posted window, so there is no timer
             // to pause. Same predicate the break endpoints enforce, so the addon can't offer a
@@ -714,6 +722,7 @@ public sealed partial class AddonApiController
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
             eventEntity.AttendanceWindows, eventEntity.HnmWindowNumber,
             DiscordEventMessageBuilder.CloseIsLatestPost(eventEntity));
+        var shape = AddonEventWindowShape.For(eventEntity);
 
         return Ok(new
         {
@@ -725,6 +734,13 @@ public sealed partial class AddonApiController
             commencementStartTime = eventEntity.CommencementStartTime,
             isLive = eventEntity.CommencementStartTime != null && eventEntity.EndTime == null,
             windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName),
+            // Same shape fields as the events list, so a camp re-selected after a relog draws the
+            // same buttons it did before.
+            attendancePostCount = DiscordEventMessageBuilder.AttendancePostCount(eventEntity),
+            windowMethod = shape.WindowMethod,
+            postsOpenAndClose = shape.PostsOpenAndClose,
+            windowsOpenEnded = shape.WindowsOpenEnded,
+            windowCadenceSeconds = shape.WindowCadenceSeconds,
             windows = eventEntity.AttendanceWindows
                 .OrderBy(w => w.SequenceNumber)
                 .Select(w => new
