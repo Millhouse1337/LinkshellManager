@@ -125,7 +125,11 @@ public sealed record ActivityMonsterTimingDto(
     int AdditionalSeconds = 0,
     // The chat lines this monster's pop prints (HnmConfig.ClaimShieldSpawnMessages), shown as
     // hover text on its name. Empty for a monster with none. Display only.
-    IReadOnlyList<ActivityClaimShieldSpawnMessageDto>? SpawnMessages = null);
+    IReadOnlyList<ActivityClaimShieldSpawnMessageDto>? SpawnMessages = null,
+    // How a Standard camp for this monster posts (MonsterWindowMethods): the row's choice resolved
+    // against the default, and the default itself, which the Reset link restores.
+    string? WindowMethod = null,
+    string? DefaultWindowMethod = null);
 
 // One spawn message: which half of a merged row it belongs to, and the line itself.
 public sealed record ActivityClaimShieldSpawnMessageDto(string Monster, string Text);
@@ -155,7 +159,10 @@ public sealed record ActivityMonsterSetupDto(
     double? RepeatLeadHours = null,
     // Seconds on top of the cooldown, so the Log ToD form's repop preview matches what the server
     // will store without an input for it.
-    int AdditionalSeconds = 0);
+    int AdditionalSeconds = 0,
+    // The resolved Window Method (MonsterWindowMethods), so the create form can show only the
+    // camp DKP amounts this monster's camp can actually pay.
+    string? WindowMethod = null);
 
 public sealed record ActivityMonsterTimingsDto(
     IReadOnlyList<ActivityMonsterTimingDto> Rows,
@@ -175,7 +182,9 @@ public sealed record ActivityMonsterTimingInput(
     // silently switching every monster off on its next save.
     bool? ClaimShieldEnabled,
     // Same contract: null = leave the stored value alone.
-    int? AdditionalSeconds = null);
+    int? AdditionalSeconds = null,
+    // MonsterWindowMethods value. Same contract: null = leave the stored value alone.
+    string? WindowMethod = null);
 
 public sealed record ActivitySaveMonsterTimingsRequest(
     IReadOnlyList<ActivityMonsterTimingInput>? Rows);

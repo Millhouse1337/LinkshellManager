@@ -97,7 +97,9 @@ public sealed partial class ActivityDataController
             Math.Max(0, row.AdditionalSeconds),
             HnmConfig.ClaimShieldSpawnMessagesFor(row.MonsterName)
                 .Select(message => new ActivityClaimShieldSpawnMessageDto(message.Monster, message.Text))
-                .ToList());
+                .ToList(),
+            MonsterTimingDefaults.ResolveWindowMethod(row.WindowMethod, row.MonsterName),
+            MonsterTimingDefaults.DefaultWindowMethod(row.MonsterName));
     }
 
     private static List<MonsterTimingEdit> ToMonsterTimingEdits(ActivitySaveMonsterTimingsRequest request) =>
@@ -112,6 +114,7 @@ public sealed partial class ActivityDataController
                 row.CooldownUnit,
                 row.Category,
                 row.ClaimShieldEnabled,
-                row.AdditionalSeconds))
+                row.AdditionalSeconds,
+                row.WindowMethod))
             .ToList();
 }

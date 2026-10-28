@@ -22,7 +22,9 @@ public sealed record MonsterTimingEdit(
     bool? ClaimShieldEnabled = null,
     // Seconds on top of the cooldown. Null = leave the stored value as it is, for the same reason
     // as ClaimShieldEnabled: an older client omits it, and a full-replace save must not zero it.
-    int? AdditionalSeconds = null);
+    int? AdditionalSeconds = null,
+    // MonsterWindowMethods value. Null = leave the stored value as it is, same contract again.
+    string? WindowMethod = null);
 
 // Save logic for a linkshell's monster setups: full replace with validation.
 public sealed class MonsterTimingEditor
@@ -150,6 +152,26 @@ public sealed class MonsterTimingEditor
             if (edit.AdditionalSeconds is { } additionalSeconds)
             {
                 row.AdditionalSeconds = Math.Clamp(additionalSeconds, 0, MaxAdditionalSeconds);
+            }
+            if (edit.WindowMethod is { } windowMethod)
+            {
+                if (!MonsterWindowMethods.IsValid(windowMethod))
+                {
+                    return $"\"{windowMethod}\" is not a window method for {name}.";
+                }
+                // Stored as null when it matches the default, so a built-in row keeps following the
+                // default instead of freezing today's answer into the table.
+                row.WindowMethod = windowMethod == MonsterTimingDefaults.DefaultWindowMethod(name)
+                    ? null
+                    : windowMethod;
+            }
+            // Checked on the RESULT, not only when the method was sent: editing Windows down to 1
+            // on a Window N monster makes the same contradiction. One window is one post, which is
+            // neither an Open and a Close nor a run of windows; blank Windows is the open-ended form.
+            if (row.WindowCount == 1
+                && MonsterTimingDefaults.ResolveWindowMethod(row.WindowMethod, name) == MonsterWindowMethods.WindowN)
+            {
+                return $"{name} has 1 window, so Window N has nothing to count. Leave Windows blank for open-ended windows, or use Open/Close Only.";
             }
             row.SortOrder = sortOrder++;
             row.UpdatedAtUtc = now;

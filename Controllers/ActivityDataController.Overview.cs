@@ -980,7 +980,8 @@ public sealed partial class ActivityDataController
                     row.CooldownMinutes,
                     MonsterTimingDefaults.NormalizeCategory(row.Category),
                     LeadFor(row.MonsterName),
-                    Math.Max(0, row.AdditionalSeconds)))
+                    Math.Max(0, row.AdditionalSeconds),
+                    MonsterTimingDefaults.ResolveWindowMethod(row.WindowMethod, row.MonsterName)))
                 .ToList();
         }
 
@@ -991,7 +992,8 @@ public sealed partial class ActivityDataController
                 timing.WindowCadenceMinutes,
                 timing.CooldownMinutes,
                 timing.Category,
-                LeadFor(timing.MonsterName)))
+                LeadFor(timing.MonsterName),
+                WindowMethod: MonsterTimingDefaults.DefaultWindowMethod(timing.MonsterName)))
             .ToList();
     }
 

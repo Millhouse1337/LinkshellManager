@@ -23,7 +23,11 @@ public readonly record struct MonsterTiming(
     int CooldownMinutes,
     // Seconds on top of the cooldown when a repop is computed. Defaulted so the built-in
     // fallback and every existing construction read as "no offset".
-    int AdditionalSeconds = 0)
+    int AdditionalSeconds = 0,
+    // How a Standard camp for this monster posts (MonsterWindowMethods), already resolved against
+    // the built-in default. Defaulted for the same reason AdditionalSeconds is; both real
+    // constructions below set it.
+    string WindowMethod = MonsterWindowMethods.OpenClose)
 {
     public bool HasSpawnGrid => WindowCount is > 0 && WindowCadenceMinutes is > 0;
 }
@@ -130,7 +134,8 @@ public sealed class MonsterTimingMap
             fallback.WindowCount,
             fallback.WindowCount is null ? null : fallback.WindowCadenceMinutes,
             fallback.WindowCadenceMinutes ?? MonsterTimingDefaults.DefaultIntervalMinutes(name),
-            fallback.CooldownMinutes);
+            fallback.CooldownMinutes,
+            WindowMethod: MonsterTimingDefaults.DefaultWindowMethod(name));
     }
 
     private static MonsterTiming ToTiming(LinkshellMonsterTiming row)
@@ -148,7 +153,8 @@ public sealed class MonsterTimingMap
             row.CooldownMinutes > 0
                 ? row.CooldownMinutes
                 : MonsterTimingDefaults.DefaultCooldownMinutes(row.MonsterName),
-            Math.Max(0, row.AdditionalSeconds));
+            Math.Max(0, row.AdditionalSeconds),
+            MonsterTimingDefaults.ResolveWindowMethod(row.WindowMethod, row.MonsterName));
     }
 }
 

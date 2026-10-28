@@ -168,6 +168,21 @@ public static class MonsterTimingDefaults
         return 22 * 60;
     }
 
+    // The Window Method a monster runs when its row doesn't choose one (MonsterWindowMethods).
+    //
+    // Window N for the long-window wyrms and the ToAU three (a subset of LongWindowHnms), which
+    // post every window today. Open/Close Only for everything else: the kings and dragons, the
+    // timed NMs on their band, and every custom NM — which is the shape a camp with no curated
+    // window table should get, rather than the single post paid by duration it used to fall into.
+    public static string DefaultWindowMethod(string? monsterName) =>
+        HnmConfig.MonsterSegments(monsterName).Any(HnmConfig.LongWindowHnms.Contains)
+            ? MonsterWindowMethods.WindowN
+            : MonsterWindowMethods.OpenClose;
+
+    // The method a stored row actually runs: its own choice, else the built-in default.
+    public static string ResolveWindowMethod(string? stored, string? monsterName) =>
+        MonsterWindowMethods.Normalize(stored) ?? DefaultWindowMethod(monsterName);
+
     // How often the ToD form suggests re-checking a monster with no spawn grid.
     public static int DefaultIntervalMinutes(string? monsterName) =>
         HnmConfig.MonsterSegments(monsterName).Any(HnmConfig.LongWindowHnms.Contains) ? 60 : 10;
