@@ -828,7 +828,13 @@ public sealed record ActivityEventDto(
     double? HnmCloseBonusOverride = null,
     double? HnmClaimBonusOverride = null,
     double? HnmKillBonusOverride = null,
-    double? HnmPerWindowOverride = null);
+    double? HnmPerWindowOverride = null,
+    // Whether the camp's posts are a named Open and Close rather than numbered windows
+    // (DiscordEventMessageBuilder.PostsOpenAndClose), and the Window Method it was stamped with.
+    // The card asks this instead of testing AttendancePostCount against 2, which Window N with
+    // two windows makes wrong.
+    bool PostsOpenAndClose = false,
+    string? WindowMethod = null);
 
 public sealed record ActivityAttendanceWindowDto(
     int Id,

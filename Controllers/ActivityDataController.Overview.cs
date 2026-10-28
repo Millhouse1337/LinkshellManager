@@ -883,7 +883,9 @@ public sealed partial class ActivityDataController
                 evt.HnmCloseBonusOverride,
                 evt.HnmClaimBonusOverride,
                 evt.HnmKillBonusOverride,
-                evt.HnmPerWindowOverride)).ToList(),
+                evt.HnmPerWindowOverride,
+                DiscordEventMessageBuilder.PostsOpenAndClose(evt),
+                DiscordEventMessageBuilder.WindowMethodFor(evt))).ToList(),
             pendingInvites.Select(invite => new ActivityInviteDto(
                 invite.Id,
                 invite.AppUserId,

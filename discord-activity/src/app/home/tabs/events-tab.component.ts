@@ -279,7 +279,10 @@ export class EventsTabComponent {
   // and constants.window_label in the addon — all three must agree or one camp gets three names.
   protected campWindowLabel(event: ActivityEvent): string {
     const focus = event.hnmFocusWindow ?? event.hnmWindowNumber ?? 1;
-    if (event.windowCount === 2) {
+    // An Open/Close camp with at most two spawn windows has no "Window N of M" worth printing —
+    // that includes a custom NM with no window grid at all, which would otherwise read "of 1".
+    // A king/dragon keeps its "Window N of 7" heading, matching the Discord board.
+    if (this.postsOpenAndClose(event) && (event.windowCount ?? 1) <= 2) {
       // Once the Close is in, the camp is done posting whatever the cadence counter says.
       // Without this a Close-only camp read "Open" — naming a window it will never have and
       // can no longer accept — because focus tracks the clock, not what was posted.
@@ -298,10 +301,17 @@ export class EventsTabComponent {
     return event.attendancePostCount ?? event.windowCount ?? 1;
   }
 
-  // A two-post camp whose Close has landed. Both the addon and the server refuse further
+  // Whether the camp's posts are a named Open and Close. The server decides it from the camp's
+  // Window Method; a payload from a server predating the field falls back to the old "two posts"
+  // test, which is what this was before Window N could have exactly two windows.
+  protected postsOpenAndClose(event: ActivityEvent): boolean {
+    return event.postsOpenAndClose ?? this.postCount(event) === 2;
+  }
+
+  // An Open/Close camp whose Close has landed. Both the addon and the server refuse further
   // windows at that point, so the card must stop implying one is outstanding.
   protected campClosePosted(event: ActivityEvent): boolean {
-    return this.postCount(event) === 2
+    return this.postsOpenAndClose(event)
         && this.attendanceWindowsFor(event).some(w => w.sequenceNumber === 2);
   }
 
@@ -765,7 +775,7 @@ export class EventsTabComponent {
     const posted = new Map(this.attendanceWindowsFor(event).map(w => [w.sequenceNumber, w]));
     const sequences = new Set<number>(posted.keys());
 
-    if (this.postCount(event) > 2) {
+    if (!this.postsOpenAndClose(event) && this.postCount(event) > 1) {
       const reached = Math.min(
         Math.max(1, event.hnmWindowNumber ?? 1),
         Math.max(1, event.windowCount ?? 1));

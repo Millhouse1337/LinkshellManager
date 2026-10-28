@@ -1134,6 +1134,12 @@ export interface ActivityEvent {
   // server predating the field — fall back to windowCount, which is what the two were before
   // they were split. See DiscordEventMessageBuilder.AttendancePostCount.
   attendancePostCount?: number;
+  // Whether the camp's posts are a named Open and Close rather than numbered windows, and the
+  // Window Method ("OpenClose" / "WindowN") it was stamped with. Ask postsOpenAndClose rather than
+  // testing attendancePostCount against 2: a Window N camp with two windows is numbered. Optional
+  // for payloads from a server predating the fields.
+  postsOpenAndClose?: boolean;
+  windowMethod?: string | null;
   // Whether the Break Room applies (take break / force break / return / verify / deny, and the
   // live "Withdraw From Event" that parks a member there). False for windowed HNM camps: they
   // credit per posted window, so there is no timer to pause. Server-computed from
