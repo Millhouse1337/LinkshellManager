@@ -70,6 +70,18 @@ public class EventBreakPolicyTests
         Assert.True(EventBreakPolicy.IsWindowedAttendance(ev));
     }
 
+    // The addon's late-join endpoint asks this same predicate. An NM camp filed with an override of
+    // 1 — the "not windowed" value the old seeder wrote for every custom NM — reads 1 on the credit
+    // chain the endpoint used to check, which let a member join a camp whose finalizer never pays
+    // duration. Every HNM camp must refuse.
+    [Fact]
+    public void NmCampWithAnOverrideOfOne_IsStillWindowed_SoLateJoinIsRefused()
+    {
+        var ev = Ev("Jugner Funguar", "HNM", assignedMonster: "Jugner Funguar", windowCountOverride: 1);
+        Assert.Equal(1, ev.WindowCountOverride ?? HnmConfig.GetWindowCount(ev.EventName));
+        Assert.True(EventBreakPolicy.IsWindowedAttendance(ev));
+    }
+
     // The addon's NMS / HENM preset categories send a multi-window event with a NON-"HNM" type.
     // Razor's old `EventType == "HNM"` test let these keep their break controls; the count arm of
     // the OR is what closes that.

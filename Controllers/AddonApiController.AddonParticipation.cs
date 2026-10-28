@@ -974,8 +974,11 @@ public sealed partial class AddonApiController
         // never gets credited. Force officers to use the per-window Post
         // flow for those instead of confusing members with a join button
         // that silently doesn't pay out.
-        var windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName);
-        if (windowCount > 1)
+        //
+        // The same gate the Break Room uses, so EVERY HNM camp is refused. The credit-chain count
+        // this used to read is 1 on an NM camp with no curated window table, which let a member
+        // join a camp whose finalizer never pays duration.
+        if (EventBreakPolicy.IsWindowedAttendance(eventEntity))
         {
             return BadRequest(new { error = "Late join only applies to timed events. Ask an officer to post a window for HNM-style events." });
         }
