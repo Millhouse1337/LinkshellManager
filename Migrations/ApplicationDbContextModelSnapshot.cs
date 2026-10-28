@@ -1781,6 +1781,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int?>("WindowCountOverride")
                         .HasColumnType("integer");
 
+                    b.Property<string>("WindowMethod")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("LinkshellId");
@@ -3096,6 +3100,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int?>("WindowCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("WindowMethod")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.HasKey("Id");
 

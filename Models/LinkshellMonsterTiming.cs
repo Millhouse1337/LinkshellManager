@@ -3,6 +3,33 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LinkshellManagerDiscordApp.Models;
 
+// How a Standard-mode camp for a monster takes attendance — the "Window Method" column of the
+// Monster Setups editor.
+//   OpenClose = "Open/Close Only": an Open post and a Close post, however many spawn windows the
+//               monster sits through. Only those two pay (HNM Settings' Open and Close bonuses).
+//   WindowN   = "Window N": every window can be posted and pays the Regular window rate; window 1
+//               pays the Open bonus and the close window pays the Close bonus. A monster with no
+//               window grid posts open-ended numbered windows up to HnmConfig.MaxWindow.
+// Manual Check In camps ignore it — they are paid from check-ins, not posts.
+public static class MonsterWindowMethods
+{
+    public const string OpenClose = "OpenClose";
+    public const string WindowN   = "WindowN";
+
+    public static readonly IReadOnlyList<string> All = new[]
+    {
+        OpenClose, WindowN,
+    };
+
+    public static bool IsValid(string? value)
+        => !string.IsNullOrEmpty(value) && All.Contains(value);
+
+    // Null for anything unrecognised: callers read null as "no method stamped", which keeps a camp
+    // on the rules it ran under before this setting existed rather than guessing one for it.
+    public static string? Normalize(string? value)
+        => IsValid(value) ? value : null;
+}
+
 // One monster's timing setup for one linkshell: how many spawn windows its camp runs, how far
 // apart those windows open, and how long after a kill it repops.
 //
@@ -76,6 +103,12 @@ public class LinkshellMonsterTiming
     // with no camp open at all, so a camp-scoped flag would have nothing to read at the moment the
     // decision is made.
     public bool ClaimShieldEnabled { get; set; } = true;
+
+    // MonsterWindowMethods value, or null for "the built-in default" (MonsterTimingDefaults
+    // .DefaultWindowMethod). Null rather than a backfilled value so a built-in row keeps following
+    // the default, and the editor stores null again whenever the chosen value equals it.
+    [MaxLength(16)]
+    public string? WindowMethod { get; set; }
 
     public int SortOrder { get; set; }
 

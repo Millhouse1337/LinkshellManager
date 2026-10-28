@@ -194,6 +194,13 @@ public class Event
     public int? SpawnWindowCount { get; set; }
     public int? SpawnWindowMinutes { get; set; }
 
+    // The monster's Window Method (MonsterWindowMethods), stamped beside the spawn grid and for the
+    // same reason: editing Monster Setups must never change how a live camp posts. Null on every
+    // camp made before the setting existed, and on an HNM board with no monster — those keep the
+    // HnmConfig post-count rules (DiscordEventMessageBuilder.LegacyAttendancePostCount).
+    [MaxLength(16)]
+    public string? WindowMethod { get; set; }
+
     // The UTC instant window 1 opened for a timed HNM camp — the anchor the window schedule counts
     // from (window N opens at WindowAnchorAt + (N-1) × WindowMinutes). Always the camp's StartTime:
     // seeded from it at auto-start and re-pinned to it on every manual Prev/Next, so the window grid

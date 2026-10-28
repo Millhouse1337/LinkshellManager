@@ -172,7 +172,11 @@ public sealed class DataAdminPolicy
             [typeof(Tod)] = new() { DiscordSideEffect = "Saving or deleting a ToD rebuilds the linkshell's Discord ToD board." },
             [typeof(TodLootDetail)] = new() { DiscordSideEffect = "Adding loot posts a loot announcement to Discord." },
             [typeof(EventLootDetail)] = new() { DiscordSideEffect = "Adding loot posts a loot announcement to Discord." },
-            [typeof(Event)] = new() { DiscordSideEffect = "Saving an event posts or edits its Discord board; deleting it removes the Discord message." },
+            [typeof(Event)] = new()
+            {
+                DiscordSideEffect = "Saving an event posts or edits its Discord board; deleting it removes the Discord message.",
+                Options = Opts((nameof(Event.WindowMethod), MonsterWindowMethods.All)),
+            },
             [typeof(Auction)] = new() { DiscordSideEffect = "Saving an auction posts or edits its Discord card; deleting it removes the card." },
             [typeof(Bid)] = new() { DiscordSideEffect = "Saving a bid updates the auction's Discord card." },
 
@@ -213,6 +217,10 @@ public sealed class DataAdminPolicy
                 Options = Opts(
                     (nameof(WindowEvent.Status), DataAdminOptions.FromConsts(typeof(WindowEventStatuses))),
                     (nameof(WindowEvent.EntryType), WindowEventEntryTypes.All)),
+            },
+            [typeof(LinkshellMonsterTiming)] = new()
+            {
+                Options = Opts((nameof(LinkshellMonsterTiming.WindowMethod), MonsterWindowMethods.All)),
             },
             [typeof(LinkshellDiscordChannel)] = new()
             {
