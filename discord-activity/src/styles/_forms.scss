@@ -1125,6 +1125,9 @@
 .monster-setups__name--hover { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .monster-setups__col-windows { flex: 0 0 92px; }
 .monster-setups__col-windows input { width: 100%; min-width: 0; }
+/* Open/Close Only vs Window N. Wide enough for the longer label without truncating it. */
+.monster-setups__col-method { flex: 0 0 140px; }
+.monster-setups__col-method select { width: 100%; min-width: 0; }
 /* Number + unit ride together so the pair reads as one field. */
 .monster-setups__col-duration { flex: 0 0 168px; display: flex; gap: 6px; min-width: 0; }
 .monster-setups__col-duration input { flex: 0 0 68px; min-width: 0; }

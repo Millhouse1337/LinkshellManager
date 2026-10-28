@@ -560,6 +560,8 @@
                   <div class="monster-setups__row-head">
                     <div class="monster-setups__col-name">Monster</div>
                     <div class="monster-setups__col-windows">Windows</div>
+                    <div class="monster-setups__col-method"
+                      title="Open/Close Only: only the Open and Close posts pay. Window N: every window can be posted and pays.">Window Method</div>
                     <div class="monster-setups__col-duration">Interval</div>
                     <div class="monster-setups__col-duration">Cooldown</div>
                     <div class="monster-setups__col-seconds"
@@ -589,6 +591,19 @@
                         [name]="'monsterWindows_' + $index"
                         [placeholder]="monsterWindowsPlaceholder(row)"
                         title="How many spawn windows this camp sits through. Blank = no window cycle." />
+                    </div>
+                    <!-- How a Standard camp posts. Hidden for a row from a server that predates the
+                         column (windowMethod undefined), so it can't save a value it never read. -->
+                    <div class="monster-setups__col-method">
+                      @if (row.windowMethod !== undefined) {
+                        <select [(ngModel)]="row.windowMethod" (ngModelChange)="markMonsterTimingsDirty()"
+                          [name]="'monsterWindowMethod_' + $index"
+                          title="Open/Close Only: only the Open and Close posts pay. Window N: every window can be posted and pays.">
+                          @for (method of monsterWindowMethods; track method.value) {
+                            <option [value]="method.value">{{ method.label }}</option>
+                          }
+                        </select>
+                      }
                     </div>
                     <div class="monster-setups__col-duration">
                       <!-- Placeholder 0, not an em dash: a blank cadence means this monster has no

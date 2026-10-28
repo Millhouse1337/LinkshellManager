@@ -270,6 +270,11 @@ export interface ActivityMonsterTiming {
   // The chat lines this monster's pop prints, which the addon's Claim Shield watches for. Shown as
   // hover text on the name. Absent on a row added in this session; empty for a monster with none.
   spawnMessages?: { monster: string; text: string }[];
+  // How a Standard camp for this monster posts: "OpenClose" (Open/Close Only) or "WindowN"
+  // (every window). The row's choice resolved against the default, and the default Reset restores.
+  // Optional for a server predating the column.
+  windowMethod?: string | null;
+  defaultWindowMethod?: string | null;
 }
 
 export interface ActivityMonsterTimingsResponse {
@@ -290,6 +295,8 @@ export interface ActivityMonsterTimingInput {
   claimShieldEnabled: boolean;
   // null = leave the stored value alone (an older client omits it entirely).
   additionalSeconds: number | null;
+  // "OpenClose" / "WindowN". null = leave the stored value alone, same contract.
+  windowMethod: string | null;
 }
 
 export interface ActivityLinkshellSettings {

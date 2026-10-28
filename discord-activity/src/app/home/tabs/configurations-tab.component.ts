@@ -64,6 +64,13 @@ export class ConfigurationsTabComponent {
   protected monsterTimingsDirty = false;
   private monsterTimingsLoadedFor: number | null = null;
   protected readonly monsterDurationUnits = ['hours', 'mins'] as const;
+  // The Window Method choices, as the server stores them (MonsterWindowMethods) with the label the
+  // officer reads. Open/Close Only is the default for every monster except the wyrms and the ToAU
+  // three, which is why a new row starts on it.
+  protected readonly monsterWindowMethods = [
+    { value: 'OpenClose', label: 'Open/Close Only' },
+    { value: 'WindowN', label: 'Window N' }
+  ] as const;
 
   // Which section this instance renders. The parent mounts ONE component for the
   // Configurations / Permissions / Game Addon tabs and swaps this input, so state is
@@ -919,7 +926,10 @@ export class ConfigurationsTabComponent {
       // On by default, matching the column's server-side default: someone adding a monster is
       // adding one they camp.
       claimShieldEnabled: true,
-      additionalSeconds: 0
+      additionalSeconds: 0,
+      // A custom monster's built-in default: an Open and a Close.
+      windowMethod: 'OpenClose',
+      defaultWindowMethod: 'OpenClose'
     });
     this.markMonsterTimingsDirty();
   }
@@ -941,6 +951,7 @@ export class ConfigurationsTabComponent {
     row.cooldownUnit = this.durationUnit(row.defaultCooldownMinutes);
     // No built-in carries an offset: the round cooldown is the default.
     row.additionalSeconds = 0;
+    if (row.defaultWindowMethod) row.windowMethod = row.defaultWindowMethod;
     this.markMonsterTimingsDirty();
   }
 
@@ -951,7 +962,8 @@ export class ConfigurationsTabComponent {
       || row.cadenceValue !== (cadence === null ? null : this.durationValue(cadence))
       || row.cooldownValue !== this.durationValue(row.defaultCooldownMinutes)
       || row.cooldownUnit !== this.durationUnit(row.defaultCooldownMinutes)
-      || (Number(row.additionalSeconds) || 0) !== 0;
+      || (Number(row.additionalSeconds) || 0) !== 0
+      || (!!row.defaultWindowMethod && row.windowMethod !== row.defaultWindowMethod);
   }
 
   // Mirrors the server's TodDurationFormat.Split: whole hours read as hours, everything else as
@@ -996,7 +1008,9 @@ export class ConfigurationsTabComponent {
         // keeps an older client from switching every monster off on a full-replace save.
         claimShieldEnabled: row.claimShieldEnabled !== false,
         // Likewise explicit: a blank box is 0, which clears any stored offset.
-        additionalSeconds: Math.max(0, Math.floor(Number(row.additionalSeconds) || 0))
+        additionalSeconds: Math.max(0, Math.floor(Number(row.additionalSeconds) || 0)),
+        // null only for a row from a server that sent none, which leaves the stored value alone.
+        windowMethod: row.windowMethod ?? null
       }));
 
     const saved = await this.activity.saveMonsterTimings(id, rows);
