@@ -296,11 +296,8 @@ public sealed partial class AddonApiController : ControllerBase
         // linkshell membership / AppUser CharacterName on first attendance
         // post when those columns were left blank at signup time.
         string? SelfCharacterName = null,
-        // True when this came from the addon's ARMED automatic per-window capture rather than an
-        // officer clicking Post. Moderators-only: a non-moderator sending this is refused outright
-        // instead of being queued for approval, so a revoked role can't flood the approval queue
-        // with one submission per window. Defaults false, so every existing caller is unaffected.
-        bool Auto = false,
+        // (Auto sat here: true for the addon's armed Auto-Post captures. The feature is gone, and an
+        // older addon that still sends `auto` is unaffected -- unknown JSON fields are ignored.)
         // What this window pays each attendee, from the officer's "Dkp this window" box. Rides on
         // the post because this request is what CREATES the window row — see the write in
         // PostAttendanceAsync. Null means "leave the window at whatever price it already has",

@@ -367,12 +367,6 @@ export interface ActivityLinkshellSettings {
   // What a MISC post (a read taken at the camp outside any window) pays each person on it on a
   // Standard camp. Its own rate; an officer can still re-price one post from the addon.
   hnmStandardMiscBonus?: number;
-  // Automatic per-window attendance snapshots (both modes). When on, an officer running the LSM
-  // addon can ARM a live camp and the addon posts THEIR ALLIANCE as that window's snapshot
-  // ~hnmAutoSnapshotDelaySeconds after each window opens. Arming stays an explicit per-officer,
-  // per-camp action in the addon — this only says officers may arm. Delay is clamped [5, 300].
-  hnmAutoSnapshotEnabled?: boolean;
-  hnmAutoSnapshotDelaySeconds?: number;
 }
 // is the caller). Populates the Configurations "Discord server lock" dropdown.
 export interface ActivityGuildOption {

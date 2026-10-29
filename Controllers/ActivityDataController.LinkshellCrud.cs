@@ -358,15 +358,6 @@ public sealed partial class ActivityDataController
         if (request.HnmStandardWindowBonus.HasValue) linkshell.HnmStandardWindowBonus = Math.Max(0d, request.HnmStandardWindowBonus.Value);
         if (request.HnmStandardMiscBonus.HasValue) linkshell.HnmStandardMiscBonus = Math.Max(0d, request.HnmStandardMiscBonus.Value);
 
-        // Automatic per-window snapshots (null = leave unchanged). The delay is clamped rather
-        // than just floored: under 5s the armed addon races the server's own 30s window-advance
-        // tick, and over 300s it could fall outside the kings/dragons' 10-minute window entirely.
-        if (request.HnmAutoSnapshotEnabled.HasValue) linkshell.HnmAutoSnapshotEnabled = request.HnmAutoSnapshotEnabled.Value;
-        if (request.HnmAutoSnapshotDelaySeconds.HasValue)
-        {
-            linkshell.HnmAutoSnapshotDelaySeconds = Math.Clamp(request.HnmAutoSnapshotDelaySeconds.Value, 5, 300);
-        }
-
         var memberships = await _dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == linkshellId)
             .AsNoTracking()

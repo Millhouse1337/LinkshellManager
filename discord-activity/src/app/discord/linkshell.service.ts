@@ -123,9 +123,6 @@ export class LinkshellService {
       hnmStandardKillBonus?: number | null;
       hnmStandardWindowBonus?: number | null;
       hnmStandardMiscBonus?: number | null;
-      // Automatic per-window attendance snapshots (both modes; null = leave unchanged).
-      hnmAutoSnapshotEnabled?: boolean | null;
-      hnmAutoSnapshotDelaySeconds?: number | null;
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
@@ -164,9 +161,7 @@ export class LinkshellService {
         hnmStandardClaimBonus: input.hnmStandardClaimBonus ?? null,
         hnmStandardKillBonus: input.hnmStandardKillBonus ?? null,
         hnmStandardWindowBonus: input.hnmStandardWindowBonus ?? null,
-        hnmStandardMiscBonus: input.hnmStandardMiscBonus ?? null,
-        hnmAutoSnapshotEnabled: input.hnmAutoSnapshotEnabled ?? null,
-        hnmAutoSnapshotDelaySeconds: input.hnmAutoSnapshotDelaySeconds ?? null
+        hnmStandardMiscBonus: input.hnmStandardMiscBonus ?? null
       });
       await this.auth.refreshOverview();
       this.auth.setActionMessage('Linkshell updated.');

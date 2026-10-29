@@ -116,16 +116,8 @@ public sealed partial class AddonApiController
             // is Discord-button-driven (self-serve x-in), so the addon can hide its
             // leader-driven "post window" UI. Normalized; fail-closed to Standard.
             attendanceMode = HnmAttendanceModes.Normalize(linkshell?.HnmAttendanceMode),
-            // Automatic per-window attendance snapshots. This says only "officers MAY arm" —
-            // arming stays an explicit per-officer, per-camp action in the addon, because a camp
-            // can have people in the zone who must not be counted. Fail-closed on a null
-            // linkshell so a broken lookup can never silently enable capture.
-            //
-            // This endpoint is the ONLY channel linkshell settings reach the addon through, and
-            // the addon's /me sweep is gated on pairing rather than launcher-open — which is what
-            // lets an armed camp keep posting with the launcher closed.
-            hnmAutoSnapshotEnabled = linkshell?.HnmAutoSnapshotEnabled == true,
-            hnmAutoSnapshotDelaySeconds = Math.Clamp(linkshell?.HnmAutoSnapshotDelaySeconds ?? 20, 5, 300),
+            // (hnmAutoSnapshotEnabled / hnmAutoSnapshotDelaySeconds were sent here for the addon's
+            // armed Auto-Post. The feature is gone; every window is posted by an officer.)
             // How wide a capture is allowed to be. "alliance" means party memory only — the server
             // rejects anything over 18 entries, so an addon still offering a zone scan would post
             // captures that bounce. Sent as a string rather than a bool so a future scope can be

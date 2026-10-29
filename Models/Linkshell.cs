@@ -126,22 +126,9 @@ public class Linkshell
     // window rate in, so nothing re-priced itself on the day it appeared.
     public double HnmStandardMiscBonus { get; set; } = 0d;
 
-    // Automatic per-window attendance snapshots. When enabled, an officer running the LSM addon
-    // can ARM auto-posting on a live camp; the addon then captures THEIR ALLIANCE and posts it as
-    // that window's snapshot ~HnmAutoSnapshotDelaySeconds after each window opens. One toggle
-    // covers both attendance modes because HnmAttendanceMode is exclusive per linkshell — but the
-    // snapshots mean different things in each: Standard pays its open/close/claim/kill bonuses
-    // from them, Manual Check In treats them as a record only (DKP still comes from Check In).
-    //
-    // Arming stays per-officer and per-camp on the addon side, never automatic — a camp can have
-    // people in the zone who must not be counted. This flag only says "officers may arm".
-    public bool HnmAutoSnapshotEnabled { get; set; } = false;
-
-    // Seconds after a window opens before the armed addon captures it. Late enough that people
-    // warping/zoning in are counted, early enough to be well inside the window. Clamped [5, 300]
-    // on save: below 5s it races the server's own 30s window-advance tick, and 300s has to stay
-    // inside the kings/dragons' 10-minute window.
-    public int HnmAutoSnapshotDelaySeconds { get; set; } = 20;
+    // (HnmAutoSnapshotEnabled / HnmAutoSnapshotDelaySeconds lived here: the switch and capture
+    // delay for the addon's armed Auto-Post. The feature was removed on 2026-10-29 and the
+    // DropHnmAutoSnapshotSettings migration drops both columns.)
 
     // Disabled by default for Beta — the Missions UI is still a placeholder.
     // Linkshell admins can opt in via Customize to surface the tab for testers.

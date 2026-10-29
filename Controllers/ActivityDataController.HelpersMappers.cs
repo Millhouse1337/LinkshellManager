@@ -56,8 +56,6 @@ public sealed partial class ActivityDataController
             linkshell.HnmStandardClaimBonus,
             linkshell.HnmStandardKillBonus,
             monsterSetups,
-            linkshell.HnmAutoSnapshotEnabled,
-            linkshell.HnmAutoSnapshotDelaySeconds,
             linkshell.HnmStandardWindowBonus,
             linkshell.WdOpenBonus,
             linkshell.WdCloseBonus,

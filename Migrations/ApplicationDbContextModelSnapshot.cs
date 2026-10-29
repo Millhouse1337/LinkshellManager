@@ -2801,12 +2801,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-                    b.Property<int>("HnmAutoSnapshotDelaySeconds")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("HnmAutoSnapshotEnabled")
-                        .HasColumnType("boolean");
-
                     b.Property<double>("HnmStandardClaimBonus")
                         .HasColumnType("double precision");
 

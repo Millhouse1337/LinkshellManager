@@ -363,37 +363,13 @@
                   </div>
                 </section>
 
-                <!-- Applies to BOTH modes, hence its own card rather than living under one
-                     mode's block. -->
-                <section class="card">
-                  <div class="card-head"><div class="card-title">Automatic window snapshots</div></div>
-                  <div class="card-body customize-form__section">
-                    <label class="customize-form__toggle">
-                      <input type="checkbox" name="hnmAutoSnapshotEnabledDraft"
-                        [ngModel]="customizeDraft.hnmAutoSnapshotEnabled"
-                        (ngModelChange)="customizeDraft.hnmAutoSnapshotEnabled = $event; onCustomizeFieldChange()" />
-                      <span>Enable automatic window snapshots</span>
-                    </label>
-                    <p class="muted">
-                      When on, an officer running the LSM addon can auto-post on a live camp.
-                      (alliance only). If the camp runs more than one alliance,
-                      <strong>one officer in each alliance</strong> must have this setting on.
-                    </p>
-                    @if (customizeDraft.hnmAutoSnapshotEnabled) {
-                      <label class="customize-form__field" style="max-width:180px">
-                        <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Capture delay (seconds)</span>
-                        <input type="number" min="5" max="300" step="5" name="hnmAutoSnapshotDelaySecondsDraft"
-                          [ngModel]="customizeDraft.hnmAutoSnapshotDelaySeconds"
-                          (ngModelChange)="customizeDraft.hnmAutoSnapshotDelaySeconds = $event; onCustomizeFieldChange()" />
-                      </label>
-                    }
-                  </div>
-                </section>
+                <!-- (An "Automatic window snapshots" card sat here: the switch and capture delay for
+                     the addon's Auto-Post. The feature was removed.) -->
 
                 <!-- Scoring for whichever mode is selected. The card title carries the mode so the
-                     bare bonus fields below always say which scheme they belong to. It spans two
-                     columns so it shares the top row with the two cards beside it. -->
-                <section class="card card--span2">
+                     bare bonus fields below always say which scheme they belong to. It takes the
+                     rest of the row beside the mode card. -->
+                <section class="card card--span3">
                   <div class="card-head">
                     <div class="card-title">
                       @if (customizeDraft.hnmAttendanceMode === 'Wd') {

@@ -398,8 +398,16 @@
   grid-column: span 2;
 }
 
+/* Three columns on the 4-up desktop grid, so the HNM scoring card fills the row beside the one
+   card ahead of it. Two on the 3-up grid for the same reason; the narrower breakpoints clamp it to
+   a full row on their own. */
+.customize-cards-grid > .card--span3 {
+  grid-column: span 3;
+}
+
 @media (max-width: 1280px) {
   .customize-cards-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .customize-cards-grid > .card--span3 { grid-column: span 2; }
 }
 @media (max-width: 980px) {
   .customize-cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

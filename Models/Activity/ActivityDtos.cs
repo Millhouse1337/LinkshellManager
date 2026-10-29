@@ -249,13 +249,8 @@ public sealed record ActivityLinkshellSettingsDto(
     // cooldown. Replaced TodMonsterTimings, which carried only the cooldown half and only for
     // monsters the linkshell had explicitly overridden.
     IReadOnlyList<ActivityMonsterSetupDto>? MonsterSetups = null,
-    // Automatic per-window attendance snapshots (both modes). When enabled, an officer running
-    // the LSM addon can ARM a live camp and the addon posts their ALLIANCE as that window's
-    // snapshot ~DelaySeconds after each window opens. Appended LAST deliberately: the
-    // `linkshell is null` early-return in HelpersMappers passes only the leading positional
-    // arguments and relies on defaults for the rest, so appending here needs no edit there.
-    bool HnmAutoSnapshotEnabled = false,
-    int HnmAutoSnapshotDelaySeconds = 20,
+    // (HnmAutoSnapshotEnabled / HnmAutoSnapshotDelaySeconds sat here, for the addon's armed
+    // Auto-Post. The feature is gone.)
     // What a REGULAR (in-between) window pays per attendee on a Standard camp — the base rate the
     // open / close bonuses ride on top of. 0 keeps the old open/close-only payout.
     double HnmStandardWindowBonus = 0,
@@ -1473,9 +1468,6 @@ public sealed record ActivityUpdateLinkshellRequest(
     // (TodMonsterTimings was here. Per-monster setups POST to their own monster-timings endpoint
     // now — precisely so this whole-payload update, which re-sends every setting on any save,
     // cannot wipe them.)
-    // Automatic per-window snapshots (null = leave unchanged). Delay clamped to [5, 300].
-    bool? HnmAutoSnapshotEnabled = null,
-    int? HnmAutoSnapshotDelaySeconds = null,
     // Standard regular-window rate and the Manual Check In open / close bonuses
     // (null = leave unchanged; clamped to >= 0).
     double? HnmStandardWindowBonus = null,
