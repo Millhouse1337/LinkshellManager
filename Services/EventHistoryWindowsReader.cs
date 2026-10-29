@@ -112,7 +112,7 @@ public static class EventHistoryWindowsReader
             .OrderBy(window => window.SequenceNumber)
             .ToListAsync(cancellationToken);
 
-        var (paidByWindow, paidTags) = await LoadPaidAsync(dbContext, history.Id, cancellationToken);
+        var (paidByWindow, paidTags) = await LoadPaidAsync(dbContext, history.Id, rows, cancellationToken);
         var tagRoster = await LoadTagRosterAsync(dbContext, history.Id, cancellationToken);
         if (tagRoster is not null && paidTags is not null)
         {
@@ -159,7 +159,7 @@ public static class EventHistoryWindowsReader
                         string.IsNullOrWhiteSpace(attendee.Zone) ? null : attendee.Zone.Trim(),
                         attendee.VerifiedAt))
                     .ToList(),
-                paidByWindow.GetValueOrDefault(window.SequenceNumber)))
+                paidByWindow.GetValueOrDefault(window.Id)))
             .ToList();
 
         return new ArchivedWindowSet(windowCount, windows, tagRoster, miscPosts);
@@ -215,7 +215,7 @@ public static class EventHistoryWindowsReader
     //
     // This is what makes a camp's own open / close / kill / tag amounts recoverable after all. The
     // board that carried the bonuses is recycled, but End Camp priced every capture on the review
-    // card it staged -- one snapshot per posted window, keyed on the window's sequence -- and Post
+    // card it staged -- one snapshot per posted window, linked back to it -- and Post
     // pays exactly the sum of those. So the amounts come from there, including anything an officer
     // re-priced during review, rather than being re-derived from today's settings.
     //
@@ -227,7 +227,8 @@ public static class EventHistoryWindowsReader
     // range and writes no capture amounts, and a camp archived before capture pricing existed has
     // none either -- both come back empty, and the window shows no figure rather than a wrong one.
     private static async Task<(Dictionary<int, DkpRange> ByWindow, DkpRange? Tags)> LoadPaidAsync(
-        ApplicationDbContext dbContext, int historyId, CancellationToken cancellationToken)
+        ApplicationDbContext dbContext, int historyId, IReadOnlyList<EventAttendanceWindow> windows,
+        CancellationToken cancellationToken)
     {
         var cardId = await dbContext.WindowEvents
             .AsNoTracking()
@@ -247,12 +248,25 @@ public static class EventHistoryWindowsReader
                 && capture.SlotKind != AttendanceSnapshotSlotKinds.Misc)
             .ToListAsync(cancellationToken);
 
+        // Each capture names the post it was built from (CampWindowId). A card handed off before
+        // that existed has none, and there WindowNumber still held the post's sequence -- so it is
+        // read that way, but only there. On a newer card WindowNumber is the spawn window, which an
+        // Open, a Close and a Kill posted inside one window all share.
+        var linked = captures.Any(capture => capture.CampWindowId.HasValue);
+        var idBySequence = windows
+            .GroupBy(window => window.SequenceNumber)
+            .ToDictionary(group => group.Key, group => group.First().Id);
+        int? WindowIdOf(AttendanceSnapshot capture) => linked
+            ? capture.CampWindowId
+            : capture.WindowNumber is int sequence && idBySequence.TryGetValue(sequence, out var id) ? id : null;
+
         var byWindow = captures
-            .Where(capture => capture.WindowNumber.HasValue)
-            .GroupBy(capture => capture.WindowNumber!.Value)
-            .Select(group => (Window: group.Key, Paid: RangeOf(group, includeZero: true)))
+            .Select(capture => (Capture: capture, WindowId: WindowIdOf(capture)))
+            .Where(row => row.WindowId.HasValue)
+            .GroupBy(row => row.WindowId!.Value)
+            .Select(group => (WindowId: group.Key, Paid: RangeOf(group.Select(row => row.Capture), includeZero: true)))
             .Where(row => row.Paid is not null)
-            .ToDictionary(row => row.Window, row => row.Paid!);
+            .ToDictionary(row => row.WindowId, row => row.Paid!);
 
         // The Tag capture also lists anyone the finalizer rostered that no window caught, at 0 --
         // they have to appear somewhere or Post would not pay them. Those rows are not what the

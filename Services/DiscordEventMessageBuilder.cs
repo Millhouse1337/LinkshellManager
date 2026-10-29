@@ -990,6 +990,12 @@ public static class DiscordEventMessageBuilder
     public static int OpenedWindow(Event ev) =>
         Math.Clamp(ev.HnmWindowNumber, 1, EffectiveWindowCount(ev));
 
+    // The spawn window a post made RIGHT NOW is taken in, for EventAttendanceWindow.SpawnWindow.
+    // Null on a camp with no window grid: there is no spawn window to name, and "window 1" would be
+    // a guess.
+    public static int? SpawnWindowNow(Event ev) =>
+        UsesWindows(ev) && EffectiveWindowCount(ev) > 1 ? OpenedWindow(ev) : null;
+
     // Whether another window is still coming: what decides the "Next window N <countdown>" line,
     // and whether FocusWindow looks ahead at all.
     public static bool HasNextWindow(Event ev) =>

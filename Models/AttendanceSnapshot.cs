@@ -57,6 +57,14 @@ public class AttendanceSnapshot
     // run no cadence, so there is no window to name. Deliberately distinct from window 1.
     public int? WindowNumber { get; set; }
 
+    // The camp post (EventAttendanceWindow.Id) End Camp built this capture from. Null on every other
+    // capture, and on handoffs made before this existed.
+    //
+    // WindowNumber can't say which post a capture was: it holds the spawn window, and an Open, a
+    // Close and a Kill posted inside one window all share it. EventHistoryWindowsReader reads what
+    // each post paid through this instead.
+    public int? CampWindowId { get; set; }
+
     // Whether this capture was filed against a numbered WINDOW or as a MISC post — people who
     // were at the camp but outside any window (the classic case: the shell did not claim the pop,
     // but members stayed in zone in case the holding group wiped).

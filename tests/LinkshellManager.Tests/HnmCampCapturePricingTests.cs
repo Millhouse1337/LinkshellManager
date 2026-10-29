@@ -167,11 +167,11 @@ public class HnmCampCapturePricingTests
     }
 
     private static async Task<WindowEvent?> EndCampAsync(
-        ApplicationDbContext db, bool claimed = false, bool killed = true)
+        ApplicationDbContext db, bool claimed = false, bool killed = true, int popWindow = 3)
     {
         var camp = await db.Events.FirstAsync(e => e.Id == EventId);
         var windowEvent = await NewHandoff(db).StageHandoffAsync(
-            camp, popWindow: 3, claimed, killed, CancellationToken.None);
+            camp, popWindow, claimed, killed, CancellationToken.None);
         await db.SaveChangesAsync();
         return windowEvent;
     }
@@ -670,7 +670,7 @@ public class HnmCampCapturePricingTests
 
         var middle = await db.AttendanceSnapshots
             .Include(s => s.Entries)
-            .SingleAsync(s => s.WindowEventId == windowEvent!.Id && s.WindowNumber == 2);
+            .SingleAsync(s => s.WindowEventId == windowEvent!.Id && s.CampWindowId == 2);
         middle.Entries.Single(e => e.CharacterName == "Beta").DkpAmount = 1d;
         await db.SaveChangesAsync();
 
@@ -678,6 +678,74 @@ public class HnmCampCapturePricingTests
         var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
 
         Assert.Equal(new DkpRange(0.5d, 1d), archive.Windows.Single(w => w.SequenceNumber == 2).Paid);
+    }
+
+    // ------------------------------------------------------- which spawn window a post was in ---
+
+    // An Open/Close camp numbers its POSTS 1 / 2 / 3. A camp that popped on window 1 took all of them
+    // inside it, so every capture reads window 1 -- not "Window 1, 2, 3", windows it never sat.
+    //
+    // The third post was stamped window 2 because the counter ticked during the fight; the pop
+    // window caps it. And with every capture sharing one window number, each post's paid amount
+    // still comes back to the right post.
+    [Fact]
+    public async Task ACampThatPoppedOnWindowOne_NumbersEveryCaptureWindowOne()
+    {
+        using var db = await SeededAsync();
+        foreach (var window in await db.EventAttendanceWindows.ToListAsync())
+        {
+            window.SpawnWindow = window.SequenceNumber == 3 ? 2 : 1;
+        }
+        await db.SaveChangesAsync();
+
+        var windowEvent = await EndCampAsync(db, popWindow: 1);
+
+        var captures = await db.AttendanceSnapshots
+            .Where(s => s.WindowEventId == windowEvent!.Id && s.CampWindowId != null)
+            .ToListAsync();
+        Assert.Equal(3, captures.Count);
+        Assert.All(captures, capture => Assert.Equal(1, capture.WindowNumber));
+
+        var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+        var paid = archive.Windows.ToDictionary(w => w.SequenceNumber, w => w.Paid);
+        Assert.Equal(new DkpRange(1d, 1d), paid[1]);       // open
+        Assert.Equal(new DkpRange(0.5d, 0.5d), paid[2]);   // regular
+        Assert.Equal(new DkpRange(2d, 2d), paid[3]);       // close
+    }
+
+    // A post with no stamp on an Open/Close camp claims no window: its sequence counts posts, and
+    // the capture's name already says which post it was.
+    [Fact]
+    public async Task AnUnstampedOpenCloseCampsCaptures_ClaimNoWindow()
+    {
+        using var db = await SeededAsync();
+        var windowEvent = await EndCampAsync(db);
+
+        var captures = await db.AttendanceSnapshots
+            .Where(s => s.WindowEventId == windowEvent!.Id && s.CampWindowId != null)
+            .ToListAsync();
+        Assert.All(captures, capture => Assert.Null(capture.WindowNumber));
+    }
+
+    // A numbered camp's sequence IS its window, so an unstamped post still reads as it always did.
+    [Fact]
+    public void AnUnstampedNumberedCampsCapture_KeepsItsSequence()
+    {
+        var window = new EventAttendanceWindow { Id = 1, SequenceNumber = 4 };
+        Assert.Equal(4, HnmCampReviewHandoffService.CaptureWindowNumber(window, popWindow: 9, postsOpenAndClose: false));
+    }
+
+    // The stamp is the window the camp is IN at the moment of posting, and only on a camp that has
+    // a window grid to name one from.
+    [Fact]
+    public void APostIsStampedWithTheWindowTheCampIsIn()
+    {
+        var gridded = LiveCamp();   // Fafnir: a 7-window grid, on window 3
+        Assert.Equal(3, DiscordEventMessageBuilder.SpawnWindowNow(gridded));
+
+        var gridless = new Event { EventName = "Serket", EventType = "HNM", AssignedMonsterName = "Serket", HnmWindowNumber = 1 };
+        Assert.Null(DiscordEventMessageBuilder.SpawnWindowNow(gridless));
     }
 
     // A second scan of the same person in one window is one payment of X, not a spread of 0 to X.

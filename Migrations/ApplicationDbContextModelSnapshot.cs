@@ -665,6 +665,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("AttInputAppendedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("CampWindowId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CapturedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -1834,6 +1837,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<int>("SequenceNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SpawnWindow")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");

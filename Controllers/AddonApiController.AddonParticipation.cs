@@ -387,6 +387,9 @@ public sealed partial class AddonApiController
                         ? "Kill"
                         : DiscordEventMessageBuilder.DefaultWindowLabel(eventEntity, windowSequence),
                     PostedAt = nowUtc,
+                    // Which spawn window this was taken in, kept apart from the sequence above.
+                    // Nothing can work it out later: the counter keeps ticking through the fight.
+                    SpawnWindow = DiscordEventMessageBuilder.SpawnWindowNow(eventEntity),
                     PostedBySource = AddonSource,
                     IsKillWindow = request.IsKillWindow
                 };

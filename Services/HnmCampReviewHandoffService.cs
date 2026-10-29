@@ -272,8 +272,10 @@ public sealed class HnmCampReviewHandoffService
                 Name = isWd
                     ? $"Check In roster · window {window.SequenceNumber}"
                     : WindowRoleLabel(window, closeWindow),
-                // What made every capture render as "Unassigned".
-                WindowNumber = window.SequenceNumber,
+                // The SPAWN window the post was taken in, not its sequence -- see
+                // CaptureWindowNumber. Which post it was is CampWindowId's job.
+                WindowNumber = CaptureWindowNumber(window, popWindow, DiscordEventMessageBuilder.PostsOpenAndClose(ev)),
+                CampWindowId = window.Id,
                 SlotKind = AttendanceSnapshotSlotKinds.Window,
                 // First alliance seen in the window. A camp fielding two alliances posts two
                 // scans per window, and the combined roster unions them anyway -- this only has
@@ -841,6 +843,25 @@ public sealed class HnmCampReviewHandoffService
 
         var label = HnmConfig.NormalizeWindowLabel(window.Label);
         return string.IsNullOrWhiteSpace(label) ? $"Window {window.SequenceNumber}" : label;
+    }
+
+    // The spawn window a camp post was taken in, for its capture's WindowNumber -- the scale that
+    // column has on every other capture, and what the review card's "Window N" chip reads.
+    //
+    // NOT the post's sequence. On an Open/Close camp that is 1 / 2 / 3 for the Open, the Close and
+    // the Kill roster, so a camp that popped on window 1 handed off captures reading Window 1, 2
+    // and 3 -- windows it never sat.
+    //
+    // Capped at the pop window: the counter keeps ticking through the fight, and nothing posted
+    // after the pop was taken in a later spawn window.
+    //
+    // Without a stamp (a post from before SpawnWindow existed, or a camp with no grid) a numbered
+    // camp falls back to its sequence, which IS its window there. An Open/Close camp gets none: its
+    // sequence counts posts, not windows, and the capture's name already says which post it was.
+    internal static int? CaptureWindowNumber(EventAttendanceWindow window, int popWindow, bool postsOpenAndClose)
+    {
+        if (window.SpawnWindow is int spawn) return Math.Min(spawn, popWindow);
+        return postsOpenAndClose ? null : window.SequenceNumber;
     }
 
     // AttendanceSnapshotEntry.MainJob/SubJob are the addon's 3-letter codes (MaxLength 8), but
