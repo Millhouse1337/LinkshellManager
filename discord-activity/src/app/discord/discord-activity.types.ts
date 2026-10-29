@@ -1995,6 +1995,9 @@ export interface ActivityEventHistory {
   // load separately (see ActivityEventHistoryWindowsResponse). Always 0 on a timed event, and on
   // anything closed before the archive existed: those windows were deleted with the camp.
   archivedWindowCount?: number;
+  // Misc posts the camp filed, which load with the windows. Counted apart so they never read as
+  // windows; a camp with misc posts and no windows still offers the section.
+  archivedMiscPostCount?: number;
   // The spawn window the monster popped on, and how many the camp cycled ("4 of 7"). Recorded at
   // End Camp; null on a timed event and on any camp archived before that existed.
   popWindow?: number | null;
@@ -2048,6 +2051,20 @@ export interface ActivityEventHistoryWindowsResponse {
   // them: a tag is read off chat, not off a party list, so a tagger can be here having appeared in
   // no window at all — and none of the window counts include it. Null when nobody tagged.
   tagRoster?: ActivityEventHistoryTagRoster | null;
+  // Misc posts — people at the camp outside any window. Beside the windows for the same reason as
+  // the tag roster: none of the window counts include them.
+  miscPosts?: ActivityEventHistoryMiscPost[];
+}
+
+export interface ActivityEventHistoryMiscPost {
+  id: number;
+  // The name it was filed under. Null when the capture was anonymous.
+  name?: string | null;
+  postedAt: string;
+  // What it paid each person, same shape as a window's. Null on a Manual Check In camp.
+  paidDkpMin?: number | null;
+  paidDkpMax?: number | null;
+  attendees: ActivityEventHistoryWindowAttendee[];
 }
 
 export interface ActivityEventHistoryTagRoster {

@@ -63,16 +63,33 @@ public sealed record ArchivedTagRoster(
     // The tag bonus as it was paid, off the review card's Tag capture.
     DkpRange? Paid = null);
 
+// One misc post the camp filed: people who were at the camp but outside any window.
+//
+// Not an ArchivedWindow either, for the same reason as the Tag roster: a misc post sits outside the
+// window grid by definition, so modelling it as one would put it into "x of N" and the per-member
+// window counts.
+public sealed record ArchivedMiscPost(
+    int Id,
+    // The name it was filed under ("stayed for ToD"). Null when the capture was anonymous.
+    string? Name,
+    DateTime PostedAt,
+    IReadOnlyList<ArchivedWindowAttendee> Attendees,
+    // What the post paid each person, off its review-card entries. Null on a Manual Check In camp,
+    // which prices no capture.
+    DkpRange? Paid = null);
+
 // A closed event's whole window record. WindowCount is what "Window 3 of N" should read against.
 public sealed record ArchivedWindowSet(
     int WindowCount,
     IReadOnlyList<ArchivedWindow> Windows,
     // Null when nobody tagged, or when the camp predates the Claim Shield archive.
-    ArchivedTagRoster? TagRoster = null)
+    ArchivedTagRoster? TagRoster = null,
+    // Null when the camp filed no misc posts.
+    IReadOnlyList<ArchivedMiscPost>? MiscPosts = null)
 {
     public static readonly ArchivedWindowSet Empty = new(0, Array.Empty<ArchivedWindow>());
 
-    public bool HasWindows => Windows.Count > 0 || TagRoster is not null;
+    public bool HasWindows => Windows.Count > 0 || TagRoster is not null || MiscPosts is { Count: > 0 };
 
     // Distinct members seen across every window — the camp's real attendance, which can exceed the
     // history's participant list (an addon scan records people who never joined on the site).
@@ -101,14 +118,16 @@ public static class EventHistoryWindowsReader
         {
             tagRoster = tagRoster with { Paid = paidTags };
         }
+        var miscPosts = await LoadMiscPostsAsync(dbContext, history.Id, cancellationToken);
 
         if (rows.Count == 0)
         {
             // A camp can still have tagged something it never posted a window for — the Claim
-            // Shield fires off chat whether or not an officer read a roster.
-            return tagRoster is null
+            // Shield fires off chat whether or not an officer read a roster — and misc posts are
+            // outside the windows by definition.
+            return tagRoster is null && miscPosts is null
                 ? ArchivedWindowSet.Empty
-                : new ArchivedWindowSet(0, Array.Empty<ArchivedWindow>(), tagRoster);
+                : new ArchivedWindowSet(0, Array.Empty<ArchivedWindow>(), tagRoster, miscPosts);
         }
 
         // The name-based count is the same CREDIT chain the close path used to pay this event, so
@@ -143,7 +162,53 @@ public static class EventHistoryWindowsReader
                 paidByWindow.GetValueOrDefault(window.SequenceNumber)))
             .ToList();
 
-        return new ArchivedWindowSet(windowCount, windows, tagRoster);
+        return new ArchivedWindowSet(windowCount, windows, tagRoster, miscPosts);
+    }
+
+    // The camp's misc posts, read off its review card.
+    //
+    // End Camp moves every capture filed against the live camp onto that card (see
+    // HnmCampReviewHandoffService), so the card is where they survive. ACTIVE only, the same rule
+    // LoadPaidAsync uses: an Ignored post paid nobody. The slot is read as it stands now, so a post
+    // an officer re-slotted into a window during review shows there, not here.
+    //
+    // Not limited to a PerCaptureDkp card the way LoadPaidAsync is: a Manual Check In camp's misc
+    // posts still record who was there. They just carry no amounts, so Paid comes back null.
+    private static async Task<IReadOnlyList<ArchivedMiscPost>?> LoadMiscPostsAsync(
+        ApplicationDbContext dbContext, int historyId, CancellationToken cancellationToken)
+    {
+        var captures = await dbContext.AttendanceSnapshots
+            .AsNoTracking()
+            .Include(capture => capture.Entries)
+            .Where(capture => capture.WindowEvent != null
+                && capture.WindowEvent.CampEventHistoryId == historyId
+                && capture.SnapshotStatus == AttendanceSnapshotStatuses.Active
+                && capture.SlotKind == AttendanceSnapshotSlotKinds.Misc)
+            .OrderBy(capture => capture.CapturedAtUtc)
+            .ToListAsync(cancellationToken);
+        if (captures.Count == 0)
+        {
+            return null;
+        }
+
+        return captures
+            .Select(capture => new ArchivedMiscPost(
+                capture.Id,
+                string.IsNullOrWhiteSpace(capture.Name) ? null : capture.Name.Trim(),
+                capture.CapturedAtUtc,
+                capture.Entries
+                    .Where(entry => !string.IsNullOrWhiteSpace(entry.CharacterName))
+                    // A name listed twice in one post is one person standing there once.
+                    .GroupBy(entry => entry.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => new ArchivedWindowAttendee(
+                        group.Key,
+                        null,
+                        group.Select(entry => entry.Zone?.Trim()).FirstOrDefault(zone => !string.IsNullOrEmpty(zone)),
+                        capture.CapturedAtUtc))
+                    .ToList(),
+                RangeOf(new[] { capture }, includeZero: true)))
+            .ToList();
     }
 
     // What each window of this camp actually paid, read back off its review card.
@@ -270,6 +335,30 @@ public static class EventHistoryWindowsReader
             .AsNoTracking()
             .Where(window => window.EventHistoryId != null && historyIds.Contains(window.EventHistoryId.Value))
             .GroupBy(window => window.EventHistoryId!.Value)
+            .Select(group => new { HistoryId = group.Key, Count = group.Count() })
+            .ToListAsync(cancellationToken);
+
+        return counts.ToDictionary(row => row.HistoryId, row => row.Count);
+    }
+
+    // How many misc posts each of the given closed events filed, for the same list. A camp that
+    // filed misc posts but never posted a window still has a record worth opening the card for.
+    public static async Task<Dictionary<int, int>> MiscPostCountsByHistoryAsync(
+        ApplicationDbContext dbContext, IReadOnlyCollection<int> historyIds, CancellationToken cancellationToken)
+    {
+        if (historyIds.Count == 0)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var counts = await dbContext.AttendanceSnapshots
+            .AsNoTracking()
+            .Where(capture => capture.WindowEvent != null
+                && capture.WindowEvent.CampEventHistoryId != null
+                && historyIds.Contains(capture.WindowEvent.CampEventHistoryId.Value)
+                && capture.SnapshotStatus == AttendanceSnapshotStatuses.Active
+                && capture.SlotKind == AttendanceSnapshotSlotKinds.Misc)
+            .GroupBy(capture => capture.WindowEvent!.CampEventHistoryId!.Value)
             .Select(group => new { HistoryId = group.Key, Count = group.Count() })
             .ToListAsync(cancellationToken);
 

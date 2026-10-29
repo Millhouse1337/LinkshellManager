@@ -9,6 +9,7 @@ import type {
   ActivityEventComment,
   ActivityEventHistory,
   ActivityEventHistoryAbsentee,
+  ActivityEventHistoryMiscPost,
   ActivityEventHistoryParticipant,
   ActivityEventHistoryTagRoster,
   ActivityEventHistoryWindow,
@@ -142,7 +143,7 @@ import type {
               <!-- HNM camps archive the attendance windows they posted; a timed event has none,
                    and neither does a camp closed before the archive existed. Contents load on
                    expand rather than with the list — a wyrm camp is 25 windows of roster. -->
-              @if ((h.archivedWindowCount ?? 0) > 0) {
+              @if (hasArchive(h)) {
                 <section class="panel">
                   <div class="section-head">
                     <h3>
@@ -161,7 +162,7 @@ import type {
                   </p>
                   @if (windowsLoading() === h.id) {
                     <p class="hint">Loading windows…</p>
-                  } @else if (windowsFor(h.id).length === 0) {
+                  } @else if (windowsFor(h.id).length === 0 && !tagRosterFor(h.id) && miscPostsFor(h.id).length === 0) {
                     <p class="hint">No window record survived for this event.</p>
                   } @else {
                     <div class="win-list">
@@ -231,6 +232,37 @@ import type {
                             <div class="win-body">
                               @for (t of tags.taggers; track t.characterName) {
                                 <span class="win-att">{{ t.characterName }}</span>
+                              }
+                            </div>
+                          }
+                        </div>
+                      }
+                      <!-- Misc posts: people at the camp outside any window. Listed with the
+                           windows for the same reason as the Tag row, and like it they count
+                           toward no window total. -->
+                      @for (m of miscPostsFor(h.id); track m.id) {
+                        <div class="win">
+                          <button type="button" class="win-head" (click)="toggleWindow(h.id, 'misc' + m.id)">
+                            <strong>{{ m.name || 'Misc post' }}</strong>
+                            <span class="tag" title="Filed as a misc post: at the camp, outside any window. Counts toward no window total.">misc</span>
+                            @if (paidLabel(m.paidDkpMin, m.paidDkpMax); as paid) {
+                              <span class="tag success" title="What this misc post paid each person on the camp's DKP post.">{{ paid }}</span>
+                            }
+                            <span class="win-meta">
+                              {{ m.attendees.length }} present · {{ m.postedAt | date:'MMM d, h:mm a' }}
+                            </span>
+                            <span class="win-chev" [class.is-open]="isWindowOpen(h.id, 'misc' + m.id)" aria-hidden="true">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                            </span>
+                          </button>
+                          @if (isWindowOpen(h.id, 'misc' + m.id)) {
+                            <div class="win-body">
+                              @if (m.attendees.length === 0) {
+                                <span class="muted">Nobody was on this post.</span>
+                              } @else {
+                                @for (a of m.attendees; track $index) {
+                                  <span class="win-att" [title]="a.zone || 'Zone not recorded'">{{ a.characterName }}</span>
+                                }
                               }
                             </div>
                           }
@@ -870,10 +902,16 @@ export class EventHistoryPanelComponent {
     };
     for (const p of h.participants) { this.dkpDraft[p.id] = p.eventDkp ?? 0; }
     void this.loadComments(h.id);
-    if ((h.archivedWindowCount ?? 0) > 0) { void this.loadWindows(h.id); }
+    if (this.hasArchive(h)) { void this.loadWindows(h.id); }
   }
 
   // ----- Archived attendance windows -----
+
+  // Whether this camp kept anything for the Attendance Windows section: windows, or misc posts
+  // filed without a single window posted.
+  protected hasArchive(h: ActivityEventHistory): boolean {
+    return (h.archivedWindowCount ?? 0) > 0 || (h.archivedMiscPostCount ?? 0) > 0;
+  }
 
   protected windowArchiveFor(historyId: number): ActivityEventHistoryWindowsResponse | null {
     return this.windowArchives()[historyId] ?? null;
@@ -887,8 +925,13 @@ export class EventHistoryPanelComponent {
     return this.windowArchives()[historyId]?.tagRoster ?? null;
   }
 
+  protected miscPostsFor(historyId: number): ActivityEventHistoryMiscPost[] {
+    return this.windowArchives()[historyId]?.miscPosts ?? [];
+  }
+
   // The Tag row shares the windows' open/closed map, so it needs an id no real window can hold.
-  // Window ids are database keys and always positive.
+  // Window ids are database keys and always positive. Misc rows key on "misc<id>" instead: their
+  // ids come from a different table and could equal a window's.
   protected readonly tagRosterRowId = -1;
 
   // The denominator for "3 of 25". Falls back to the archived count while the fetch is still in
@@ -917,11 +960,11 @@ export class EventHistoryPanelComponent {
     return Math.abs(max - min) < 0.0001 ? `${fmt(min)} DKP` : `${fmt(min)}–${fmt(max)} DKP`;
   }
 
-  protected isWindowOpen(historyId: number, windowId: number): boolean {
+  protected isWindowOpen(historyId: number, windowId: number | string): boolean {
     return this.openWindows()[`${historyId}:${windowId}`] === true;
   }
 
-  protected toggleWindow(historyId: number, windowId: number): void {
+  protected toggleWindow(historyId: number, windowId: number | string): void {
     const key = `${historyId}:${windowId}`;
     this.openWindows.update(map => ({ ...map, [key]: !map[key] }));
   }

@@ -721,4 +721,63 @@ public class HnmCampCapturePricingTests
         var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
         Assert.Null(misc.Entries.Single().DkpAmount);
     }
+
+    // A misc post survives on the review card, so the past event lists it beside the windows --
+    // who was on it once each, and what it paid -- without counting it as a window.
+    [Fact]
+    public async Task APastEvent_ListsItsMiscPosts_WithWhatEachPaid()
+    {
+        using var db = await SeededAsync();
+        db.AttendanceSnapshots.Add(MiscPost(900, "Beta", "Beta"));
+        await db.SaveChangesAsync();
+        var windowEvent = await EndCampAsync(db);
+
+        var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        var post = Assert.Single(archive.MiscPosts!);
+        Assert.Equal("Runs to the zone", post.Name);
+        Assert.Equal("Beta", Assert.Single(post.Attendees).CharacterName);
+        Assert.Equal(new DkpRange(0.75d, 0.75d), post.Paid);
+        Assert.Equal(3, archive.Windows.Count);
+
+        var counts = await EventHistoryWindowsReader.MiscPostCountsByHistoryAsync(
+            db, new[] { history.Id }, CancellationToken.None);
+        Assert.Equal(1, counts[history.Id]);
+    }
+
+    // An officer who ignored the post during review paid nobody for it, so it is not part of the record.
+    [Fact]
+    public async Task APastEvent_LeavesOutAnIgnoredMiscPost()
+    {
+        using var db = await SeededAsync();
+        db.AttendanceSnapshots.Add(MiscPost(900, "Beta"));
+        await db.SaveChangesAsync();
+        var windowEvent = await EndCampAsync(db);
+
+        (await db.AttendanceSnapshots.SingleAsync(s => s.Id == 900)).SnapshotStatus = AttendanceSnapshotStatuses.Ignored;
+        await db.SaveChangesAsync();
+
+        var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        Assert.Null(archive.MiscPosts);
+    }
+
+    // Manual Check In still lists who was on the post; it just never priced it.
+    [Fact]
+    public async Task AManualCheckInPastEvent_ListsItsMiscPosts_WithNoPayment()
+    {
+        using var db = await SeededAsync(attendanceMode: HnmAttendanceModes.Wd);
+        db.AttendanceSnapshots.Add(MiscPost(900, "Beta"));
+        await db.SaveChangesAsync();
+        var windowEvent = await EndCampAsync(db);
+
+        var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
+        var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
+
+        var post = Assert.Single(archive.MiscPosts!);
+        Assert.Equal("Beta", Assert.Single(post.Attendees).CharacterName);
+        Assert.Null(post.Paid);
+    }
 }

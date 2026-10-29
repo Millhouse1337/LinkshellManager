@@ -84,6 +84,8 @@ public sealed partial class ActivityDataController
         // rest of this payload.
         var archivedWindowCounts = await EventHistoryWindowsReader.CountsByHistoryAsync(
             _dbContext, histories.Select(h => h.Id).ToList(), cancellationToken);
+        var archivedMiscPostCounts = await EventHistoryWindowsReader.MiscPostCountsByHistoryAsync(
+            _dbContext, histories.Select(h => h.Id).ToList(), cancellationToken);
 
         var result = histories.Select(h =>
         {
@@ -106,6 +108,9 @@ public sealed partial class ActivityDataController
                 // which is what the card branches on to offer its Attendance Windows section.
                 // Always 0 for events closed before the archive existed.
                 archivedWindowCount = archivedWindowCounts.GetValueOrDefault(h.Id, 0),
+                // Misc posts filed on the camp, which load with the windows. Counted separately so
+                // they never read as windows.
+                archivedMiscPostCount = archivedMiscPostCounts.GetValueOrDefault(h.Id, 0),
                 // The spawn window the monster popped on. Null on a timed event and on any camp
                 // archived before End Camp recorded it -- see EventHistory.PopWindow.
                 popWindow = h.PopWindow,
@@ -204,7 +209,24 @@ public sealed partial class ActivityDataController
                     characterName = tagger.CharacterName,
                     verifiedAt = tagger.VerifiedAt
                 })
-            }
+            },
+            // Beside the windows for the same reason as the tag roster: a misc post is outside the
+            // window grid. Empty when the camp filed none.
+            miscPosts = (archive.MiscPosts ?? Array.Empty<ArchivedMiscPost>()).Select(post => new
+            {
+                id = post.Id,
+                name = post.Name,
+                postedAt = post.PostedAt,
+                paidDkpMin = post.Paid?.Min,
+                paidDkpMax = post.Paid?.Max,
+                attendees = post.Attendees.Select(attendee => new
+                {
+                    characterName = attendee.CharacterName,
+                    mainCharacterName = attendee.MainCharacterName,
+                    zone = attendee.Zone,
+                    verifiedAt = attendee.VerifiedAt
+                })
+            })
         });
     }
 
