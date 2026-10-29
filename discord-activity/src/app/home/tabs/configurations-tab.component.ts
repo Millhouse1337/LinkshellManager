@@ -69,7 +69,7 @@ export class ConfigurationsTabComponent {
   // three, which is why a new row starts on it.
   protected readonly monsterWindowMethods = [
     { value: 'OpenClose', label: 'Open/Close Only' },
-    { value: 'WindowN', label: 'Window N' }
+    { value: 'WindowN', label: 'Every Window' }
   ] as const;
 
   // Which section this instance renders. The parent mounts ONE component for the

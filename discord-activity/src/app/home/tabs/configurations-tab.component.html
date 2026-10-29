@@ -561,7 +561,7 @@
                     <div class="monster-setups__col-name">Monster</div>
                     <div class="monster-setups__col-windows">Windows</div>
                     <div class="monster-setups__col-method"
-                      title="Open/Close Only: only the Open and Close posts pay. Window N: every window can be posted and pays.">Window Method</div>
+                      title="Open/Close Only: only the Open and Close posts pay. Every Window: every window can be posted and pays.">Window Method</div>
                     <div class="monster-setups__col-duration">Interval</div>
                     <div class="monster-setups__col-duration">Cooldown</div>
                     <div class="monster-setups__col-seconds"
@@ -598,7 +598,7 @@
                       @if (row.windowMethod !== undefined) {
                         <select [(ngModel)]="row.windowMethod" (ngModelChange)="markMonsterTimingsDirty()"
                           [name]="'monsterWindowMethod_' + $index"
-                          title="Open/Close Only: only the Open and Close posts pay. Window N: every window can be posted and pays.">
+                          title="Open/Close Only: only the Open and Close posts pay. Every Window: every window can be posted and pays.">
                           @for (method of monsterWindowMethods; track method.value) {
                             <option [value]="method.value">{{ method.label }}</option>
                           }

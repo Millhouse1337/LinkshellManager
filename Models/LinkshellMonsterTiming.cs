@@ -7,7 +7,7 @@ namespace LinkshellManagerDiscordApp.Models;
 // Monster Setups editor.
 //   OpenClose = "Open/Close Only": an Open post and a Close post, however many spawn windows the
 //               monster sits through. Only those two pay (HNM Settings' Open and Close bonuses).
-//   WindowN   = "Window N": every window can be posted and pays the Regular window rate; window 1
+//   WindowN   = "Every Window": every window can be posted and pays the Regular window rate; window 1
 //               pays the Open bonus and the close window pays the Close bonus. A monster with no
 //               window grid posts open-ended numbered windows up to HnmConfig.MaxWindow.
 // Manual Check In camps ignore it — they are paid from check-ins, not posts.
