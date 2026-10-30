@@ -1143,6 +1143,13 @@
 /* The seconds offset on top of the cooldown: a bare number, no unit. */
 .monster-setups__col-seconds { flex: 0 0 112px; }
 .monster-setups__col-seconds input { width: 100%; min-width: 0; }
+/* Claim Shield on/off. A labelled checkbox rather than a bare one so the row still reads at a
+   glance once the header scrolls out of view on a long list. */
+.monster-setups__col-claim { flex: 0 0 96px; display: flex; align-items: center; }
+.monster-setups__col-claim .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.monster-setups__col-claim .check span { color: var(--fg-3); font-size: 12px; }
+/* (.claim-shield-off styled a server-wide-off banner above the monster table. The banner is gone —
+   the Claim Shield column is hidden entirely while the switch is off, so it announced an absence. */
 
 .monster-setups__col-actions { flex: 0 0 86px; display: flex; justify-content: flex-end; }
 .monster-setups__row input, .monster-setups__row select { font-variant-numeric: tabular-nums; }

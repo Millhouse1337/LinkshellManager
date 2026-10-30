@@ -93,6 +93,7 @@ public sealed partial class ActivityDataController
             defaults.WindowCount,
             defaults.WindowCadenceMinutes,
             defaults.CooldownMinutes,
+            row.ClaimShieldEnabled,
             Math.Max(0, row.AdditionalSeconds),
             HnmConfig.ClaimShieldSpawnMessagesFor(row.MonsterName)
                 .Select(message => new ActivityClaimShieldSpawnMessageDto(message.Monster, message.Text))
@@ -112,6 +113,7 @@ public sealed partial class ActivityDataController
                 row.CooldownValue,
                 row.CooldownUnit,
                 row.Category,
+                row.ClaimShieldEnabled,
                 row.AdditionalSeconds,
                 row.WindowMethod))
             .ToList();

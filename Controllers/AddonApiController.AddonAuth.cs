@@ -91,6 +91,16 @@ public sealed partial class AddonApiController
         var canModerate = await TokenIssuerCanModerateAsync(token, token.LinkshellId, cancellationToken);
 
         var claimShieldGloballyDisabled = await _globalSettings.IsClaimShieldGloballyDisabledAsync(cancellationToken);
+        var claimShieldDisabled = claimShieldGloballyDisabled
+            ? Array.Empty<string>()
+            : (await _dbContext.LinkshellMonsterTimings
+                    .AsNoTracking()
+                    .Where(row => row.LinkshellId == token.LinkshellId && !row.ClaimShieldEnabled)
+                    .Select(row => row.MonsterName)
+                    .ToListAsync(cancellationToken))
+                .SelectMany(name => HnmConfig.MonsterMatchNames(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
         var monsterTimings = await _monsterTimings.GetMapAsync(token.LinkshellId, cancellationToken);
 
@@ -117,23 +127,27 @@ public sealed partial class AddonApiController
             // The most alliances a poster may claim to be in. Drives the addon's selector range so
             // it cannot offer a number the server will clamp away.
             maxAllianceNumber = AttendanceSnapshotAlliances.MaxAllianceNumber,
-            // Claim Shield's master switch, owned by a super admin. There is no per-monster switch:
-            // the addon only keeps a lottery for a monster an HNM event is camping.
+            // Claim Shield. The master switch is the super-admin's; the per-monster switches are
+            // the linkshell's, and only apply while the master is on.
             //
             // Fails OPEN, unlike the auto-snapshot flag above, and deliberately: capture is a
             // read-only audit record with no DKP consequence, and the failure this whole feature
             // has repeatedly produced is a silent NON-capture. A linkshell whose rows haven't
             // loaded should record too much, not nothing.
             claimShieldEnabled = !claimShieldGloballyDisabled,
+            // Monsters this linkshell has switched OFF. Sent as the exclusion list because the
+            // default is on, so it is empty until someone opts out.
+            //
+            // EXPANDED to every alias here rather than in the addon: rows are stored merged
+            // ("Fafnir/Nidhogg") but the lottery line names one half ("Fafnir"), so an addon doing
+            // a plain string compare would never match a disabled merge pair. The server already
+            // owns that expansion (HnmConfig.MonsterMatchNames); the addon stays a lookup.
+            claimShieldDisabledMonsters = claimShieldDisabled,
             // The monsters ToD capture listens for: this linkshell's Monster Setups (the built-in
             // HNMs until the editor is first opened). Replaces the addon's own Settings list, so
             // adding a custom monster on the Configurations page is all it takes to capture it.
-            // The addon still only captures one an HNM event is camping.
-            //
-            // EXPANDED to every alias here rather than in the addon: rows are stored merged
-            // ("Fafnir/Nidhogg") but the chat line names one half ("Fafnir"), so an addon doing a
-            // plain string compare would never match a merge pair. The server already owns that
-            // expansion (HnmConfig.MonsterMatchNames); the addon stays a lookup.
+            // The addon still only captures one an HNM event is camping. Expanded to every alias
+            // for the same reason as the list above.
             todCaptureMonsters = monsterTimings.AddonCaptureNames
         });
     }

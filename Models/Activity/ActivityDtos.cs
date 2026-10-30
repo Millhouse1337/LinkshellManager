@@ -33,7 +33,11 @@ public sealed record ActivityOverviewDto(
     // (AppUser.IsSuperAdmin). Grants every permission in every linkshell the user is a
     // MEMBER of — `linkshells[].permissions` already arrives all-true, so this exists
     // for the coarse rank-string checks and the ADMIN badge. See AdminOverrideService.
-    bool AdminOverrideActive = false);
+    bool AdminOverrideActive = false,
+    // True when a super admin has globally switched Claim Shield off. The per-monster switches in
+    // Monster setups are inert while it is, so the editor has to grey them out and say why —
+    // otherwise every checkbox claims a state the addon is ignoring.
+    bool ClaimShieldGloballyDisabled = false);
 
 public sealed record ActivityAppUserDto(
     string Id,
@@ -113,6 +117,9 @@ public sealed record ActivityMonsterTimingDto(
     int? DefaultWindows,
     int? DefaultCadenceMinutes,
     int DefaultCooldownMinutes,
+    // Whether the addon captures claim-shield lotteries for this monster. Defaults on; off is for
+    // monsters the linkshell doesn't contest, whose rolls would otherwise be noise.
+    bool ClaimShieldEnabled,
     // Seconds on top of the cooldown when a ToD's repop is computed. Moved here from the Log ToD
     // form, where it was typed per kill and forgotten.
     int AdditionalSeconds = 0,
@@ -171,8 +178,10 @@ public sealed record ActivityMonsterTimingInput(
     double? CooldownValue,
     string? CooldownUnit,
     string? Category,
-    // Null = leave the stored value alone, so a client that predates the field doesn't zero it on
-    // a full-replace save.
+    // Nullable so a client that predates the column leaves the stored value alone rather than
+    // silently switching every monster off on its next save.
+    bool? ClaimShieldEnabled,
+    // Same contract: null = leave the stored value alone.
     int? AdditionalSeconds = null,
     // MonsterWindowMethods value. Same contract: null = leave the stored value alone.
     string? WindowMethod = null);
