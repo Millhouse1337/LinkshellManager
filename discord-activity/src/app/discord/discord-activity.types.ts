@@ -264,10 +264,6 @@ export interface ActivityMonsterTiming {
   defaultWindows: number | null;
   defaultCadenceMinutes: number | null;
   defaultCooldownMinutes: number;
-  // Whether the in-game addon records claim-shield lotteries for this monster. Defaults on; turn
-  // it off for monsters the linkshell doesn't contest, whose rolls are just noise in the capture
-  // panel. Overridden by the server-wide Claim Shield switch, which a super admin owns.
-  claimShieldEnabled: boolean;
   // Seconds on top of the cooldown when a ToD's repop is computed. 0 = none.
   additionalSeconds: number;
   // The chat lines this monster's pop prints, which the addon's Claim Shield watches for. Shown as
@@ -295,7 +291,6 @@ export interface ActivityMonsterTimingInput {
   cooldownValue: number | null;
   cooldownUnit: string | null;
   category: string;
-  claimShieldEnabled: boolean;
   // null = leave the stored value alone (an older client omits it entirely).
   additionalSeconds: number | null;
   // "OpenClose" / "WindowN". null = leave the stored value alone, same contract.
@@ -1848,10 +1843,6 @@ export interface ActivityOverview {
   // sends memberships. Use canManageLinkshellIn()/isLeaderTierIn() rather than reading
   // this directly, so the membership check is never skipped.
   adminOverrideActive?: boolean;
-  // True when a super admin has switched Claim Shield off server-wide (website Admin tab). While
-  // it is, the per-monster Claim Shield switches in Monster setups do nothing — the editor greys
-  // them out and says so rather than showing ticks the addon is ignoring.
-  claimShieldGloballyDisabled?: boolean;
 }
 
 export interface ActivityCreateEventInput {

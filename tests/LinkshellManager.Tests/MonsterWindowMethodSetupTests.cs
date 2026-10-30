@@ -13,7 +13,7 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 // The Monster Setups "Window Method" column: its built-in defaults, and the save contract it shares
-// with ClaimShieldEnabled (a full-replace save where null means "leave it alone").
+// with AdditionalSeconds (a full-replace save where null means "leave it alone").
 //
 // Stored as null whenever the choice equals the default, so a built-in row keeps following the
 // default rather than freezing it into the table.

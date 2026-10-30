@@ -918,9 +918,6 @@ export class ConfigurationsTabComponent {
       defaultWindows: null,
       defaultCadenceMinutes: null,
       defaultCooldownMinutes: 22 * 60,
-      // On by default, matching the column's server-side default: someone adding a monster is
-      // adding one they camp.
-      claimShieldEnabled: true,
       additionalSeconds: 0,
       // A custom monster's built-in default: an Open and a Close.
       windowMethod: 'OpenClose',
@@ -999,10 +996,8 @@ export class ConfigurationsTabComponent {
         cooldownValue: Number(row.cooldownValue) > 0 ? Number(row.cooldownValue) : null,
         cooldownUnit: row.cooldownUnit,
         category: row.category,
-        // Sent explicitly. The server treats a missing value as "leave it alone", which is what
-        // keeps an older client from switching every monster off on a full-replace save.
-        claimShieldEnabled: row.claimShieldEnabled !== false,
-        // Likewise explicit: a blank box is 0, which clears any stored offset.
+        // Sent explicitly: a blank box is 0, which clears any stored offset. The server reads a
+        // missing value as "leave it alone".
         additionalSeconds: Math.max(0, Math.floor(Number(row.additionalSeconds) || 0)),
         // null only for a row from a server that sent none, which leaves the stored value alone.
         windowMethod: row.windowMethod ?? null
@@ -1125,12 +1120,6 @@ export class ConfigurationsTabComponent {
 
   // True when a super admin has globally disabled the addon — the whole Game
   // Addon card is hidden (pairing endpoints reject requests anyway).
-  // Server-wide Claim Shield kill-switch, owned by a super admin on the website's Admin tab. Read
-  // off the polled overview, so flipping it there reaches an open Activity within a poll.
-  protected claimShieldGloballyDisabled(): boolean {
-    return this.activity.overview()?.claimShieldGloballyDisabled === true;
-  }
-
   protected addonGloballyDisabled(): boolean {
     return this.activity.overview()?.addonGloballyDisabled === true;
   }

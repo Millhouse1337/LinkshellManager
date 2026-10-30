@@ -18,10 +18,8 @@ public sealed record MonsterTimingEdit(
     double? CooldownValue,
     string? CooldownUnit,
     string? Category,
-    // Null = leave the stored value as it is. See ActivityMonsterTimingInput.
-    bool? ClaimShieldEnabled = null,
-    // Seconds on top of the cooldown. Null = leave the stored value as it is, for the same reason
-    // as ClaimShieldEnabled: an older client omits it, and a full-replace save must not zero it.
+    // Seconds on top of the cooldown. Null = leave the stored value as it is: an older client
+    // omits it, and a full-replace save must not zero it. See ActivityMonsterTimingInput.
     int? AdditionalSeconds = null,
     // MonsterWindowMethods value. Null = leave the stored value as it is, same contract again.
     string? WindowMethod = null);
@@ -142,13 +140,6 @@ public sealed class MonsterTimingEditor
             row.WindowCadenceMinutes = NormalizeCadence(edit);
             row.CooldownMinutes = NormalizeCooldown(edit, name);
             row.Category = MonsterTimingDefaults.NormalizeCategory(edit.Category);
-            // Only when the client actually sent one. An older client omits the field entirely, and
-            // a full-replace save that read null as false would switch Claim Shield off for every
-            // monster the first time anyone touched the editor.
-            if (edit.ClaimShieldEnabled is { } claimShield)
-            {
-                row.ClaimShieldEnabled = claimShield;
-            }
             if (edit.AdditionalSeconds is { } additionalSeconds)
             {
                 row.AdditionalSeconds = Math.Clamp(additionalSeconds, 0, MaxAdditionalSeconds);

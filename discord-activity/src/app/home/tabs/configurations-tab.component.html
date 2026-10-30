@@ -515,11 +515,6 @@
               interval is then just how often to re-check.
             </p>
 
-            <!-- (A "Claim Shield is switched off server-wide" notice sat here. While the switch is
-                 off the whole Claim Shield COLUMN is hidden below, so there is nothing on this card
-                 for the notice to explain — it was a banner about an absence. The admin Settings
-                 page is where that state belongs and where it is already shown.) -->
-
             @for (group of monsterTimingGroups(); track group.label) {
               <section class="monster-setups__section">
                 <header class="monster-setups__section-header">
@@ -542,10 +537,6 @@
                     <div class="monster-setups__col-duration">Cooldown</div>
                     <div class="monster-setups__col-seconds"
                       title="Seconds added on top of the cooldown when a ToD's repop is calculated.">Additional seconds</div>
-                    @if (!claimShieldGloballyDisabled()) {
-                      <div class="monster-setups__col-claim"
-                        title="Record who tagged this monster during a claim-shield lottery. Off for monsters you don't contest.">Claim Shield</div>
-                    }
                     <div class="monster-setups__col-actions"></div>
                   </div>
                 }
@@ -616,20 +607,6 @@
                         [name]="'monsterAdditionalSeconds_' + $index" placeholder="0"
                         title="Seconds added on top of the cooldown when a ToD's repop is calculated." />
                     </div>
-                    <!-- Hidden entirely while an admin has Claim Shield off server-wide: there is
-                         nothing useful to set. row.claimShieldEnabled is untouched by this and is
-                         still sent on save, so every per-monster choice comes back exactly as it was
-                         when Claim Shield is re-enabled. -->
-                    @if (!claimShieldGloballyDisabled()) {
-                      <div class="monster-setups__col-claim">
-                        <label class="check">
-                          <input type="checkbox" [(ngModel)]="row.claimShieldEnabled"
-                            (ngModelChange)="markMonsterTimingsDirty()"
-                            [name]="'monsterClaimShield_' + $index" />
-                          <span>{{ row.claimShieldEnabled ? 'On' : 'Off' }}</span>
-                        </label>
-                      </div>
-                    }
                     <div class="monster-setups__col-actions">
                       @if (row.isCustom) {
                         <button type="button" class="btn ghost sm monster-setups__delete"

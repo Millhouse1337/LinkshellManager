@@ -438,9 +438,6 @@ public sealed partial class ActivityDataController
             .AnyAsync(token => token.IssuedToAppUserId == appUser.Id && token.RevokedAt == null, cancellationToken);
 
         var addonGloballyDisabled = await _globalSettings.IsAddonGloballyDisabledAsync(cancellationToken);
-        // Rides the polled overview rather than the monster-timings GET, so the editor learns about
-        // it on the next poll instead of only when someone reopens the tab.
-        var claimShieldGloballyDisabled = await _globalSettings.IsClaimShieldGloballyDisabledAsync(cancellationToken);
 
         // The app-wide admin override, resolved once for the whole payload. The first
         // flag decides THIS user's permissions (only for linkshells listed below, which
@@ -936,8 +933,7 @@ public sealed partial class ActivityDataController
                 activeEvents.Count(evt => evt.CommencementStartTime.HasValue)),
             addonConfigured,
             addonGloballyDisabled,
-            adminOverrideActive,
-            claimShieldGloballyDisabled));
+            adminOverrideActive));
     }
 
     // The compact per-linkshell monster catalog for the polled overview. Falls back to the built-in
