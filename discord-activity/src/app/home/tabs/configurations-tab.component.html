@@ -529,7 +529,9 @@
                     <div class="monster-setups__col-seconds"
                       title="Seconds added on top of the cooldown when a ToD's repop is calculated.">Additional seconds</div>
                     @if (!claimShieldGloballyDisabled()) {
-                      <div class="monster-setups__col-claim" [title]="claimShieldHelp">Claim Shield</div>
+                      <div class="monster-setups__col-claim">
+                        <span class="monster-setups__name--hover" [title]="claimShieldHelp">Claim Shield</span>
+                      </div>
                     }
                     <div class="monster-setups__col-actions"></div>
                   </div>
