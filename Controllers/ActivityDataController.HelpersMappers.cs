@@ -21,7 +21,7 @@ public sealed partial class ActivityDataController
         if (linkshell is null)
         {
             return new ActivityLinkshellSettingsDto(
-                "Dkp", true, true, true, true, true, true, true, true, "Quarter",
+                "Dkp", true, true, true, true, true, true, true, "Quarter",
                 Array.Empty<string>(), null, null, false,
                 false, 3, 2, false);
         }
@@ -34,8 +34,7 @@ public sealed partial class ActivityDataController
             linkshell.EnableEndgame,
             linkshell.EnableEvents,
             linkshell.EnableDkp,
-            linkshell.EnableItems,
-            linkshell.EnableRevenue,
+            linkshell.EnableTreasury,
             NormalizeDkpRounding(linkshell.DkpRoundingIncrement),
             ParseHiddenTodMonsters(linkshell.HiddenTodMonsters),
             linkshell.DiscordGuildId,

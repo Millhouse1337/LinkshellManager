@@ -17,13 +17,11 @@
             <div class="stat-cell-label">Linkshell</div>
             <div class="stat-cell-value stat-cell-value--text">{{ dashboardLinkshell.name }}</div>
           </div>
-          @if (dashboardLinkshell.settings?.enableItems) {
+          @if (dashboardLinkshell.settings?.enableTreasury) {
             <div class="stat-cell">
               <div class="stat-cell-label">Items</div>
               <div class="stat-cell-value">{{ dashboardLinkshell.itemCount }}</div>
             </div>
-          }
-          @if (dashboardLinkshell.settings?.enableRevenue) {
             <div class="stat-cell">
               <!-- "Revenue" was never what this number was: it is the gil the linkshell holds. -->
               <div class="stat-cell-label">Gil on hand</div>

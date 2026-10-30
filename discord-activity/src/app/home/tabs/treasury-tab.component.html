@@ -3,42 +3,28 @@
     <!-- The view strip. Drawn into the header of whichever section is showing, top right, so it
          stays in one place while the button under it changes with the view. -->
     <ng-template #viewTabs>
-      @if (views().length > 1) {
-        <div class="view-tabs" role="tablist" aria-label="Treasury view">
-          @for (option of views(); track option.key) {
-            <button type="button" class="view-tab" role="tab"
-              [class.active]="shownView() === option.key"
-              [attr.aria-selected]="shownView() === option.key"
-              (click)="view.set(option.key)">{{ option.label }}</button>
-          }
-        </div>
-      }
+      <div class="view-tabs" role="tablist" aria-label="Treasury view">
+        @for (option of views; track option.key) {
+          <button type="button" class="view-tab" role="tab"
+            [class.active]="view() === option.key"
+            [attr.aria-selected]="view() === option.key"
+            (click)="view.set(option.key)">{{ option.label }}</button>
+        }
+      </div>
     </ng-template>
 
     <!-- Hidden rather than removed when another view is showing, so a search, a page of the
          transactions list or a half-typed entry survives a switch. One finances section serves both
          Gil views: they share its data and its Record Transaction form. -->
-    @if (showGil()) {
-      <app-finances-section [linkshellId]="id"
-        [view]="shownView() === 'transactions' ? 'transactions' : 'balance'"
-        [hidden]="shownView() === 'items'">
-        <ng-container ngProjectAs="[treasuryViews]" [ngTemplateOutlet]="viewTabs" />
-      </app-finances-section>
-    }
-    @if (showItems()) {
-      <app-items-section [linkshellId]="id" [canManage]="canManageItems()"
-        [hidden]="shownView() !== 'items'">
-        <ng-container ngProjectAs="[treasuryViews]" [ngTemplateOutlet]="viewTabs" />
-      </app-items-section>
-    }
-    @if (!showGil() && !showItems()) {
-      <div class="empty-state">
-        <div class="empty-state-desc">
-          Gil and Items are both switched off for this linkshell. A leader can turn them back on under
-          Configurations.
-        </div>
-      </div>
-    }
+    <app-finances-section [linkshellId]="id"
+      [view]="view() === 'transactions' ? 'transactions' : 'balance'"
+      [hidden]="view() === 'items'">
+      <ng-container ngProjectAs="[treasuryViews]" [ngTemplateOutlet]="viewTabs" />
+    </app-finances-section>
+    <app-items-section [linkshellId]="id" [canManage]="canManageItems()"
+      [hidden]="view() !== 'items'">
+      <ng-container ngProjectAs="[treasuryViews]" [ngTemplateOutlet]="viewTabs" />
+    </app-items-section>
   } @else {
     <div class="empty-state">
       <div class="empty-state-desc">Join a linkshell to track its gil and items.</div>

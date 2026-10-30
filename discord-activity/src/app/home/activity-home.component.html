@@ -208,13 +208,15 @@
               [attr.tabindex]="activeTab() === 'linkshell' ? 0 : -1"
               [class.active]="activeTab() === 'linkshell'"
               (click)="setActiveTab('linkshell')">Management</button>
-      <button type="button" class="tab" role="tab"
-              [id]="tabId('treasury')"
-              [attr.aria-controls]="panelId('treasury')"
-              [attr.aria-selected]="activeTab() === 'treasury'"
-              [attr.tabindex]="activeTab() === 'treasury' ? 0 : -1"
-              [class.active]="activeTab() === 'treasury'"
-              (click)="setActiveTab('treasury')">Treasury</button>
+      @if (isFeatureEnabled('enableTreasury')) {
+        <button type="button" class="tab" role="tab"
+                [id]="tabId('treasury')"
+                [attr.aria-controls]="panelId('treasury')"
+                [attr.aria-selected]="activeTab() === 'treasury'"
+                [attr.tabindex]="activeTab() === 'treasury' ? 0 : -1"
+                [class.active]="activeTab() === 'treasury'"
+                (click)="setActiveTab('treasury')">Treasury</button>
+      }
       <button type="button" class="tab" role="tab"
               [id]="tabId('profile')"
               [attr.aria-controls]="panelId('profile')"
@@ -339,7 +341,7 @@
         [rosterSearchChange]="setDashboardRosterSearch" />
     </div>
   }
-  @if (activeTab() === 'treasury') {
+  @if (activeTab() === 'treasury' && isFeatureEnabled('enableTreasury')) {
     <div role="tabpanel" [id]="panelId('treasury')" [attr.aria-labelledby]="tabId('treasury')">
       <app-treasury-tab [view]="treasuryView()" (viewChange)="setTreasuryView($event)" />
     </div>

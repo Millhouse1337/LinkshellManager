@@ -2769,13 +2769,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("EnableHnmSection")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("EnableItems")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("EnableRevenue")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("EnableToDs")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("EnableTreasury")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime?>("GoogleOAuthConnectedAt")

@@ -257,8 +257,7 @@ public sealed partial class ActivityDataController
         if (request.EnableEndgame.HasValue) linkshell.EnableEndgame = request.EnableEndgame.Value;
         if (request.EnableEvents.HasValue) linkshell.EnableEvents = request.EnableEvents.Value;
         if (request.EnableDkp.HasValue) linkshell.EnableDkp = request.EnableDkp.Value;
-        if (request.EnableItems.HasValue) linkshell.EnableItems = request.EnableItems.Value;
-        if (request.EnableRevenue.HasValue) linkshell.EnableRevenue = request.EnableRevenue.Value;
+        if (request.EnableTreasury.HasValue) linkshell.EnableTreasury = request.EnableTreasury.Value;
         if (!string.IsNullOrWhiteSpace(request.DkpRoundingIncrement))
         {
             linkshell.DkpRoundingIncrement = NormalizeDkpRounding(request.DkpRoundingIncrement);

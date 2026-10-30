@@ -206,17 +206,10 @@
                     <span>DKP tab</span>
                   </label>
                   <label class="customize-form__toggle">
-                    <input type="checkbox" name="enableItemsDraft"
-                      [ngModel]="customizeDraft.enableItems"
-                      (ngModelChange)="customizeDraft.enableItems = $event; onCustomizeFieldChange()" />
-                    <span>Items</span>
-                  </label>
-                  <label class="customize-form__toggle">
-                    <input type="checkbox" name="enableRevenueDraft"
-                      [ngModel]="customizeDraft.enableRevenue"
-                      (ngModelChange)="customizeDraft.enableRevenue = $event; onCustomizeFieldChange()" />
-                    <!-- The flag gates gil going out as well as coming in, so "Revenue" undersold it. -->
-                    <span>Finances</span>
+                    <input type="checkbox" name="enableTreasuryDraft"
+                      [ngModel]="customizeDraft.enableTreasury"
+                      (ngModelChange)="customizeDraft.enableTreasury = $event; onCustomizeFieldChange()" />
+                    <span>Treasury tab</span>
                   </label>
                 </div>
                 </div>

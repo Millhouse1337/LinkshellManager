@@ -310,8 +310,7 @@ export interface ActivityLinkshellSettings {
   enableEndgame: boolean;
   enableEvents: boolean;
   enableDkp: boolean;
-  enableItems: boolean;
-  enableRevenue: boolean;
+  enableTreasury: boolean;
   dkpRoundingIncrement: ActivityDkpRoundingIncrement;
   // Member activity tracking: opt-in Active/Inactive badge from event attendance.
   // Inactive after N consecutive uncredited counting events, back to Active after M.

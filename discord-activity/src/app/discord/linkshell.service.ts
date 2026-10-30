@@ -94,8 +94,7 @@ export class LinkshellService {
       enableEndgame?: boolean | null;
       enableEvents?: boolean | null;
       enableDkp?: boolean | null;
-      enableItems?: boolean | null;
-      enableRevenue?: boolean | null;
+      enableTreasury?: boolean | null;
       dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null;
       // Member activity tracking (null = leave unchanged).
       enableActivityTracking?: boolean | null;
@@ -139,8 +138,7 @@ export class LinkshellService {
         enableEndgame: input.enableEndgame ?? null,
         enableEvents: input.enableEvents ?? null,
         enableDkp: input.enableDkp ?? null,
-        enableItems: input.enableItems ?? null,
-        enableRevenue: input.enableRevenue ?? null,
+        enableTreasury: input.enableTreasury ?? null,
         dkpRoundingIncrement: input.dkpRoundingIncrement ?? null,
         enableActivityTracking: input.enableActivityTracking ?? null,
         inactiveAfterAbsences: input.inactiveAfterAbsences ?? null,

@@ -94,7 +94,7 @@ The **Configurations** tab (needs the "Customize linkshell" permission):
   - **Loot Council** — leader awards items; no DKP.
   - **Percentage Based** — DKP earned normally; loot deducts a % of the winner's balance.
 - **DKP rounding** — Quarter (0.25) or Half (0.5) increments.
-- **Feature toggles** — hide any section your linkshell doesn't use (Endgame, Auctions, ToDs, Events, DKP, Items tile, Finances tile).
+- **Feature toggles** — hide any section your linkshell doesn't use (Charts, Auctions, ToDs, Events, DKP, Treasury).
 - **Hide ToD Mobs** — pick monsters (grouped HNM / Sky / Other) to hide from the Tracked Windows panel on the Dashboard and the ToD views. Pop-only mobs (Sky Gods, Sea NMs, HENMs) aren't listed — they spawn from an item, not a repop timer, so they have no window to track.
 - **Addon pairing codes** — on the **Game Addon** tab: generate one-time codes the in-game addon redeems to link itself to this linkshell.
 

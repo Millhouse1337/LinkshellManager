@@ -151,9 +151,10 @@ public class Linkshell
 
     public bool EnableDkp { get; set; } = true;
 
-    public bool EnableItems { get; set; } = true;
-
-    public bool EnableRevenue { get; set; } = true;
+    // The Treasury tab (gil and items) and the Dashboard's Items / Gil on hand tiles. Replaced the
+    // separate EnableItems / EnableRevenue switches on 2026-10-30, once both halves lived in one
+    // tab; the CombineTreasuryToggle migration left it on wherever either half was on.
+    public bool EnableTreasury { get; set; } = true;
 
     // Member activity (Active/Inactive) tracking, derived from event attendance.
     // Opt-in per linkshell (off by default — not every linkshell uses it). When on,

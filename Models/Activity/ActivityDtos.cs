@@ -197,8 +197,7 @@ public sealed record ActivityLinkshellSettingsDto(
     bool EnableEndgame,
     bool EnableEvents,
     bool EnableDkp,
-    bool EnableItems,
-    bool EnableRevenue,
+    bool EnableTreasury,
     string DkpRoundingIncrement,
     // Mob names the linkshell admin has chosen to hide from the ToD Tracker.
     // Stored on the server as a single pipe-separated string; the wire DTO
@@ -1438,8 +1437,7 @@ public sealed record ActivityUpdateLinkshellRequest(
     bool? EnableEndgame,
     bool? EnableEvents,
     bool? EnableDkp,
-    bool? EnableItems,
-    bool? EnableRevenue,
+    bool? EnableTreasury,
     string? DkpRoundingIncrement,
     // null = leave unchanged, [] = clear, [...names] = replace.
     IReadOnlyList<string>? HiddenTodMonsters,

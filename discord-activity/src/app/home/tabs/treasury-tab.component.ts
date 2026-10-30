@@ -59,32 +59,14 @@ export class TreasuryTabComponent {
     return membership.permissions?.canManageInventory === true;
   });
 
-  // Feature toggles hide either half independently. Both default to shown when the settings have not
-  // loaded yet, so the tab never flashes empty on a slow overview.
-  protected readonly showGil = computed(
-    () => this.membership()?.settings?.enableRevenue !== false
-  );
-
-  protected readonly showItems = computed(
-    () => this.membership()?.settings?.enableItems !== false
-  );
-
   // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/treasury/items).
   readonly view = model<TreasuryView>('balance');
 
-  // Only the views whose half is switched on. Balance Sheet and Transactions are both Gil.
-  protected readonly views = computed(() => {
-    const views: { key: TreasuryView; label: string }[] = [];
-    if (this.showGil()) views.push({ key: 'balance', label: 'Balance Sheet' });
-    if (this.showItems()) views.push({ key: 'items', label: 'Items' });
-    if (this.showGil()) views.push({ key: 'transactions', label: 'Transactions' });
-    return views;
-  });
-
-  // The view on screen: the one asked for, or the first one switched on — a /treasury/items link
-  // for a linkshell with Items turned off lands on the balance sheet rather than on nothing.
-  protected readonly shownView = computed<TreasuryView | null>(() => {
-    const views = this.views();
-    return views.some(option => option.key === this.view()) ? this.view() : views[0]?.key ?? null;
-  });
+  // Balance Sheet and Transactions are both Gil. (Gil and Items used to have a feature toggle each;
+  // one Treasury toggle now hides the whole tab, in ActivityHomeComponent.)
+  protected readonly views: readonly { key: TreasuryView; label: string }[] = [
+    { key: 'balance', label: 'Balance Sheet' },
+    { key: 'items', label: 'Items' },
+    { key: 'transactions', label: 'Transactions' }
+  ];
 }

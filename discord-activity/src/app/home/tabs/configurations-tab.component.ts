@@ -193,8 +193,7 @@ export class ConfigurationsTabComponent {
         enableEndgame: settings?.enableEndgame ?? null,
         enableEvents: settings?.enableEvents ?? null,
         enableDkp: settings?.enableDkp ?? null,
-        enableItems: settings?.enableItems ?? null,
-        enableRevenue: settings?.enableRevenue ?? null,
+        enableTreasury: settings?.enableTreasury ?? null,
         dkpRoundingIncrement: settings?.dkpRoundingIncrement ?? null,
         enableActivityTracking: settings?.enableActivityTracking ?? null,
         inactiveAfterAbsences: settings?.inactiveAfterAbsences ?? null,
@@ -517,8 +516,7 @@ export class ConfigurationsTabComponent {
     enableEndgame: boolean;
     enableEvents: boolean;
     enableDkp: boolean;
-    enableItems: boolean;
-    enableRevenue: boolean;
+    enableTreasury: boolean;
     dkpRoundingIncrement: ActivityDkpRoundingIncrement;
     // Member activity tracking (opt-in Active/Inactive badge from attendance).
     enableActivityTracking: boolean;
@@ -552,8 +550,7 @@ export class ConfigurationsTabComponent {
     enableEndgame: true,
     enableEvents: true,
     enableDkp: true,
-    enableItems: true,
-    enableRevenue: true,
+    enableTreasury: true,
     dkpRoundingIncrement: 'Quarter',
     enableActivityTracking: false,
     inactiveAfterAbsences: 3,
@@ -1029,8 +1026,7 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.enableEndgame = settings.enableEndgame;
     this.customizeDraft.enableEvents = settings.enableEvents;
     this.customizeDraft.enableDkp = settings.enableDkp;
-    this.customizeDraft.enableItems = settings.enableItems;
-    this.customizeDraft.enableRevenue = settings.enableRevenue;
+    this.customizeDraft.enableTreasury = settings.enableTreasury;
     this.customizeDraft.dkpRoundingIncrement = settings.dkpRoundingIncrement || 'Quarter';
     this.customizeDraft.enableActivityTracking = settings.enableActivityTracking ?? false;
     this.customizeDraft.inactiveAfterAbsences = settings.inactiveAfterAbsences || 3;
@@ -1073,8 +1069,7 @@ export class ConfigurationsTabComponent {
         enableEndgame: this.customizeDraft.enableEndgame,
         enableEvents: this.customizeDraft.enableEvents,
         enableDkp: this.customizeDraft.enableDkp,
-        enableItems: this.customizeDraft.enableItems,
-        enableRevenue: this.customizeDraft.enableRevenue,
+        enableTreasury: this.customizeDraft.enableTreasury,
         dkpRoundingIncrement: this.customizeDraft.dkpRoundingIncrement,
         enableActivityTracking: this.customizeDraft.enableActivityTracking,
         inactiveAfterAbsences: this.customizeDraft.inactiveAfterAbsences,
