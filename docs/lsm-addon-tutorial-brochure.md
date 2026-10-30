@@ -2,7 +2,7 @@
 
 > A practical officer walkthrough for the in-game `lsm` addon. Use this with
 > the launcher screenshot: the main LSM Addon window is on the left, Settings
-> is on the right, the standalone ToD Tracker is near the bottom, and chat
+> is on the right, the standalone Repop Timer is near the bottom, and chat
 > confirmations appear in the game chat log.
 
 ---
@@ -18,7 +18,7 @@
 | **Attendance panel** | The live roster and posting controls. | Choose Party / Alliance and your alliance number, review attendees, then **Start & Post** or **Post Window**. |
 | **Loot Pool** | Captured drops for the current kill. | Assign winners and post loot after drops appear in chat. |
 | **Settings** | DKP defaults, panel visibility, opacity, ToD capture lists, Claim Shield messages. | Set defaults once, then save. |
-| **ToD Tracker** | Countdown view for tracked monsters. | Watch repop windows and post a ToD when a tracked mob pops/dies. |
+| **Repop Timer** | Countdown view for tracked monsters. | Watch repop windows and post a ToD when a tracked mob pops/dies. |
 | **Chat log** | Source of truth for command results. | Read the `[lsm]` confirmation after every server, link, snapshot, ToD, or post action. |
 
 ---
@@ -173,19 +173,19 @@ several officers scanning the same camp produce one roster, not double credit.
 
 ---
 
-## Panel 6 - ToD Tracker And ToD Capture
+## Panel 6 - Repop Timer And ToD Capture
 
-The standalone ToD Tracker in the screenshot is opened with:
+The standalone Repop Timer in the screenshot is opened with:
 
 ```text
-/tod
-/tod close
+/repop
+/repop close
 ```
 
 It shows tracked monsters, day suffixes such as `D1`, and countdown states such
 as `Window expired`, `Window 1/3`, `POPPED`, or `Posted`.
 
-**Display: ToD Tracker** in the Settings window turns the tracker window on or off.
+**Display: Repop Timer** in the Settings window turns the timer window on or off.
 
 The monsters the addon captures ToDs for are the ones in the **Monster Setups**
 card on the app's Configurations page. To capture a new NM, add it there with
@@ -200,7 +200,7 @@ next repop window.
 For diagnostics:
 
 ```text
-/lsm todtracker debug
+/lsm repop debug
 ```
 
 ---
@@ -276,7 +276,7 @@ At the first attendance point:
 During camp:
   Post later windows from the same launcher event
   Use Loot Pool as drops appear
-  Watch /tod or the ToD panel for tracked mobs
+  Watch /repop or the ToD panel for tracked mobs
 
 After camp:
   End or close the event
@@ -297,10 +297,10 @@ After camp:
 | `/lsm status` | Show server and pairings; auto-drops revoked tokens. |
 | `/attend` | Toggle the main launcher. |
 | `/attend close` | Close the launcher. |
-| `/tod` | Toggle the standalone ToD Tracker. |
-| `/tod close` | Close the ToD Tracker. |
-| `/lsm todtracker` | Alias for `/tod`. |
-| `/lsm todtracker debug` | Toggle verbose ToD attribution logging. |
+| `/repop` | Toggle the standalone Repop Timer. |
+| `/repop close` | Close the Repop Timer. |
+| `/lsm repop` | Alias for `/repop`. |
+| `/lsm repop debug` | Toggle verbose ToD attribution logging. |
 | `/lsm now [name] [p\|z\|a]` | Capture an immediate CSV plus web snapshot. |
 | `/lsm claimshield` | Print current Claim Shield capture status. |
 | `/lsm claimshield debug` | Toggle verbose Claim Shield logging. |
@@ -316,7 +316,7 @@ After camp:
 | Events are missing from Queued Events | Click **Refresh**; confirm the correct LS is selected in the header. |
 | Snapshot synced but local CSV failed | The web copy is still saved. Check folder permissions under `Ashita\addons\lsm\Snapshots`. |
 | Local CSV saved but web sync failed | Check `/lsm status`, server URL, and network connectivity, then capture again if needed. |
-| ToD Tracker will not open | Enable **Display: ToD Tracker** in Settings, save, then run `/tod`. |
+| Repop Timer will not open | Enable **Display: Repop Timer** in Settings, save, then run `/repop`. |
 | Two officers posted the same kill | Nothing to do — posts within the merge window fold into one snapshot holding both rosters, and DKP is credited per Window Event, so nobody is paid twice. |
 | Same monster should be a new event | Close the previous Window Event first, or add a suffix such as `Fafnir D2`. |
 
@@ -329,7 +329,7 @@ After camp:
 | Commands | `lsm/commands.lua` |
 | Launcher UI | `lsm/ui/launcher.lua` |
 | Settings UI | `lsm/ui/settings.lua` |
-| ToD Tracker window | `lsm/ui/tod_tracker_window.lua` |
+| Repop Timer window | `lsm/ui/tod_tracker_window.lua` |
 | Snapshot endpoint | `Controllers/AddonApiController.AttendanceSnapshots.cs` |
 | Monster entry-type mapping | `Models/WindowEvent.cs` |
 | Sheet integration | `Services/AttInputAppendService.cs` |

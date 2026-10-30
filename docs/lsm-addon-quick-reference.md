@@ -47,10 +47,10 @@ an officer confirms it on the web or in the Discord Activity.
 |---|---|
 | `/attend` | Toggle the main LSM launcher window. |
 | `/attend close` | Close the launcher. |
-| `/tod` | Toggle the standalone ToD Tracker window. |
-| `/tod close` | Close the ToD Tracker window. |
-| `/lsm todtracker` | Alias for `/tod`. |
-| `/lsm todtracker debug` | Toggle verbose pop-signal attribution logging. |
+| `/repop` | Toggle the standalone Repop Timer window. |
+| `/repop close` | Close the Repop Timer window. |
+| `/lsm repop` | Alias for `/repop`. |
+| `/lsm repop debug` | Toggle verbose pop-signal attribution logging. |
 
 ### Diagnostics
 
