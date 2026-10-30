@@ -1133,7 +1133,7 @@
 .monster-setups__name--hover { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .monster-setups__col-windows { flex: 0 0 92px; }
 .monster-setups__col-windows input { width: 100%; min-width: 0; }
-/* Open/Close Only vs Window N. Wide enough for the longer label without truncating it. */
+/* Open/Close vs Every Window. Wide enough for the longer label without truncating it. */
 .monster-setups__col-method { flex: 0 0 140px; }
 .monster-setups__col-method select { width: 100%; min-width: 0; }
 /* Number + unit ride together so the pair reads as one field. */
@@ -1143,11 +1143,10 @@
 /* The seconds offset on top of the cooldown: a bare number, no unit. */
 .monster-setups__col-seconds { flex: 0 0 112px; }
 .monster-setups__col-seconds input { width: 100%; min-width: 0; }
-/* Claim Shield on/off. A labelled checkbox rather than a bare one so the row still reads at a
-   glance once the header scrolls out of view on a long list. */
+/* Claim Shield Yes/No: the Feature toggles switch (.customize-form__toggle), labelled so the row
+   still reads at a glance once the header scrolls out of view on a long list. */
 .monster-setups__col-claim { flex: 0 0 96px; display: flex; align-items: center; }
-.monster-setups__col-claim .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-.monster-setups__col-claim .check span { color: var(--fg-3); font-size: 12px; }
+.monster-setups__col-claim .customize-form__toggle span { color: var(--fg-3); font-size: 12px; }
 /* (.claim-shield-off styled a server-wide-off banner above the monster table. The banner is gone —
    the Claim Shield column is hidden entirely while the switch is off, so it announced an absence. */
 

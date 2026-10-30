@@ -523,14 +523,13 @@
                     <div class="monster-setups__col-name">Monster</div>
                     <div class="monster-setups__col-windows">Windows</div>
                     <div class="monster-setups__col-method"
-                      title="Open/Close Only: only the Open and Close posts pay. Every Window: every window can be posted and pays.">Window Method</div>
+                      title="Open/Close: only the Open and Close posts pay. Every Window: every window can be posted and pays.">Window Method</div>
                     <div class="monster-setups__col-duration">Interval</div>
                     <div class="monster-setups__col-duration">Cooldown</div>
                     <div class="monster-setups__col-seconds"
                       title="Seconds added on top of the cooldown when a ToD's repop is calculated.">Additional seconds</div>
                     @if (!claimShieldGloballyDisabled()) {
-                      <div class="monster-setups__col-claim"
-                        title="Record who tagged this monster during a claim-shield lottery. Off for monsters you don't contest.">Claim Shield</div>
+                      <div class="monster-setups__col-claim" [title]="claimShieldHelp">Claim Shield</div>
                     }
                     <div class="monster-setups__col-actions"></div>
                   </div>
@@ -560,7 +559,7 @@
                       @if (row.windowMethod !== undefined) {
                         <select [(ngModel)]="row.windowMethod" (ngModelChange)="markMonsterTimingsDirty()"
                           [name]="'monsterWindowMethod_' + $index"
-                          title="Open/Close Only: only the Open and Close posts pay. Every Window: every window can be posted and pays.">
+                          title="Open/Close: only the Open and Close posts pay. Every Window: every window can be posted and pays.">
                           @for (method of monsterWindowMethods; track method.value) {
                             <option [value]="method.value">{{ method.label }}</option>
                           }
@@ -608,11 +607,11 @@
                          when Claim Shield is re-enabled. -->
                     @if (!claimShieldGloballyDisabled()) {
                       <div class="monster-setups__col-claim">
-                        <label class="check">
+                        <label class="customize-form__toggle" [title]="claimShieldHelp">
                           <input type="checkbox" [(ngModel)]="row.claimShieldEnabled"
                             (ngModelChange)="markMonsterTimingsDirty()"
                             [name]="'monsterClaimShield_' + $index" />
-                          <span>{{ row.claimShieldEnabled ? 'On' : 'Off' }}</span>
+                          <span>{{ row.claimShieldEnabled ? 'Yes' : 'No' }}</span>
                         </label>
                       </div>
                     }

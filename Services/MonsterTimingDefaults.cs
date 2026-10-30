@@ -171,7 +171,7 @@ public static class MonsterTimingDefaults
     // The Window Method a monster runs when its row doesn't choose one (MonsterWindowMethods).
     //
     // Window N for the long-window wyrms and the ToAU three (a subset of LongWindowHnms), which
-    // post every window today. Open/Close Only for everything else: the kings and dragons, the
+    // post every window today. Open/Close for everything else: the kings and dragons, the
     // timed NMs on their band, and every custom NM — which is the shape a camp with no curated
     // window table should get, rather than the single post paid by duration it used to fall into.
     public static string DefaultWindowMethod(string? monsterName) =>

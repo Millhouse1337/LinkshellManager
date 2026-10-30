@@ -491,7 +491,7 @@ export class ActivityQueuePanelComponent {
     if (this.isWdAttendanceMode()) {
       return ActivityQueuePanelComponent.MANUAL_CHECK_IN_BONUS_FIELDS;
     }
-    // An Open/Close Only monster's camp takes just an Open and a Close, so the Regular window
+    // An Open/Close monster's camp takes just an Open and a Close, so the Regular window
     // rate is never paid on it — offering the box would invite a price that changes nothing.
     return this.selectedMonsterWindowMethod() === 'OpenClose'
       ? ActivityQueuePanelComponent.STANDARD_BONUS_FIELDS.filter(field => field.key !== 'hnmPerWindowOverride')

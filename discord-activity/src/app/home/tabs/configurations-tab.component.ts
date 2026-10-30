@@ -65,12 +65,16 @@ export class ConfigurationsTabComponent {
   private monsterTimingsLoadedFor: number | null = null;
   protected readonly monsterDurationUnits = ['hours', 'mins'] as const;
   // The Window Method choices, as the server stores them (MonsterWindowMethods) with the label the
-  // officer reads. Open/Close Only is the default for every monster except the wyrms and the ToAU
+  // officer reads. Open/Close is the default for every monster except the wyrms and the ToAU
   // three, which is why a new row starts on it.
   protected readonly monsterWindowMethods = [
-    { value: 'OpenClose', label: 'Open/Close Only' },
+    { value: 'OpenClose', label: 'Open/Close' },
     { value: 'WindowN', label: 'Every Window' }
   ] as const;
+  // Hover text for the Claim Shield column header and each row's switch.
+  protected readonly claimShieldHelp =
+    'Use this to indicate whether the monster has a Claim Shield in game. '
+    + 'This feature also controls support for claim shield tagging in the addon.';
 
   // Which section this instance renders. The parent mounts ONE component for the
   // Configurations / Permissions / Game Addon tabs and swaps this input, so state is

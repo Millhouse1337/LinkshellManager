@@ -5,7 +5,7 @@ namespace LinkshellManagerDiscordApp.Models;
 
 // How a Standard-mode camp for a monster takes attendance — the "Window Method" column of the
 // Monster Setups editor.
-//   OpenClose = "Open/Close Only": an Open post and a Close post, however many spawn windows the
+//   OpenClose = "Open/Close": an Open post and a Close post, however many spawn windows the
 //               monster sits through. Only those two pay (HNM Settings' Open and Close bonuses).
 //   WindowN   = "Every Window": every window can be posted and pays the Regular window rate; window 1
 //               pays the Open bonus and the close window pays the Close bonus. A monster with no

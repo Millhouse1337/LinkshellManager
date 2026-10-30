@@ -70,7 +70,7 @@ public class WindowMethodTests
     }
 
     // The case this whole setting exists for: a custom NM with no window grid used to be one post
-    // paid by duration. Open/Close Only gives it an Open, a Close and a Kill.
+    // paid by duration. Open/Close gives it an Open, a Close and a Kill.
     [Fact]
     public void OpenClose_WithNoWindowGrid_TakesAnOpenACloseAndAKill()
     {

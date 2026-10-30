@@ -171,7 +171,7 @@ public sealed class MonsterTimingEditor
             if (row.WindowCount == 1
                 && MonsterTimingDefaults.ResolveWindowMethod(row.WindowMethod, name) == MonsterWindowMethods.WindowN)
             {
-                return $"{name} has 1 window, so Every Window has nothing to count. Leave Windows blank for open-ended windows, or use Open/Close Only.";
+                return $"{name} has 1 window, so Every Window has nothing to count. Leave Windows blank for open-ended windows, or use Open/Close.";
             }
             row.SortOrder = sortOrder++;
             row.UpdatedAtUtc = now;

@@ -1087,7 +1087,7 @@ public static class DiscordEventMessageBuilder
     // one camp ends up with two different names for the same window.
     //
     // A camp stamped with a Window Method (see WindowMethodFor) answers from the method instead:
-    //   Open/Close Only -> 2, however many spawn windows it sits through.
+    //   Open/Close -> 2, however many spawn windows it sits through.
     //   Window N        -> one post per spawn window, or HnmConfig.MaxWindow for an open-ended camp.
     public static int AttendancePostCount(Event ev) =>
         WindowMethodFor(ev) switch
