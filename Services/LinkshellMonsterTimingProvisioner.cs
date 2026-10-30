@@ -133,6 +133,7 @@ public sealed class LinkshellMonsterTimingProvisioner
                 linkshellId,
                 nowUtc);
             custom.IsCustom = true;
+            custom.ClaimShieldEnabled = false;
             ApplyLegacy(custom, entry, nowUtc);
             rows.Add(custom);
             foreach (var alias in HnmConfig.MonsterMatchNames(custom.MonsterName))

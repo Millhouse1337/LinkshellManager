@@ -916,9 +916,9 @@ export class ConfigurationsTabComponent {
       defaultWindows: null,
       defaultCadenceMinutes: null,
       defaultCooldownMinutes: 22 * 60,
-      // On by default, matching the column's server-side default: someone adding a monster is
-      // adding one they camp.
-      claimShieldEnabled: true,
+      // No by default, matching the column's server-side default. Only the built-in HNMs start on
+      // Yes; an officer switches a monster they add on if it has a Claim Shield in game.
+      claimShieldEnabled: false,
       additionalSeconds: 0,
       // A custom monster's built-in default: an Open and a Close.
       windowMethod: 'OpenClose',

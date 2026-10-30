@@ -91,18 +91,19 @@ public class LinkshellMonsterTiming
     // "is this name in the built-in list" string compare, which was how the old blob editor decided.
     public bool IsCustom { get; set; }
 
-    // Whether the in-game addon should capture claim-shield lotteries for this monster.
+    // Whether the in-game addon should capture claim-shield lotteries for this monster — the
+    // Monster Setups "Claim Shield" Yes/No, which says the monster has a Claim Shield in game.
     //
-    // Defaults TRUE, and the migration backfills every existing row to true, so turning the column
-    // on changes nothing until an officer deliberately switches a monster off. Off is for the
-    // monsters a linkshell doesn't contest — the addon still hears their lottery lines (it listens
-    // for the line, not for a monster list), and without this every stray NM roll in the zone lands
-    // in the capture panel as noise.
+    // Defaults FALSE: a monster a linkshell adds itself starts on No. The built-in HNMs are seeded
+    // on (MonsterTimingDefaults.ToEntity), and rows that existed before 2026-10-30 keep whatever
+    // they had. Off matters because the addon still hears every lottery line (it listens for the
+    // line, not for a monster list), and without this every stray NM roll in the zone lands in the
+    // capture panel as noise.
     //
     // Per MONSTER rather than per camp: the capture is keyed off the lottery line, which can arrive
     // with no camp open at all, so a camp-scoped flag would have nothing to read at the moment the
     // decision is made.
-    public bool ClaimShieldEnabled { get; set; } = true;
+    public bool ClaimShieldEnabled { get; set; } = false;
 
     // MonsterWindowMethods value, or null for "the built-in default" (MonsterTimingDefaults
     // .DefaultWindowMethod). Null rather than a backfilled value so a built-in row keeps following

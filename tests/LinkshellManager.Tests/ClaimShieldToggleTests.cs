@@ -120,9 +120,13 @@ public class ClaimShieldToggleTests
             row => Assert.True(row.ClaimShieldEnabled));
     }
 
-    // A newly added custom monster is one the linkshell camps, so it arrives on.
-    [Fact]
-    public async Task NewCustomMonster_DefaultsToOn()
+    // Only the built-in HNMs have a Claim Shield by default; a monster the linkshell adds starts on
+    // No until an officer says otherwise. `claimShield` is what the save sends for the new row.
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task NewCustomMonster_DefaultsToOff(bool? claimShield, bool expected)
     {
         await using var db = await SeededAsync();
         var existing = await db.LinkshellMonsterTimings
@@ -135,7 +139,7 @@ public class ClaimShieldToggleTests
                 row.CooldownMinutes, "mins", row.Category, true))
             .Append(new MonsterTimingEdit(
                 null, "Ouryu", null, 10, "mins", 22, "hours",
-                MonsterTimingDefaults.OtherCategory, true))
+                MonsterTimingDefaults.OtherCategory, claimShield))
             .ToList();
 
         Assert.Null(await NewEditor(db).SaveAsync(LinkshellId, edits, CancellationToken.None));
@@ -143,7 +147,21 @@ public class ClaimShieldToggleTests
         var added = await db.LinkshellMonsterTimings
             .FirstAsync(row => row.LinkshellId == LinkshellId && row.MonsterName == "Ouryu");
         Assert.True(added.IsCustom);
-        Assert.True(added.ClaimShieldEnabled);
+        Assert.Equal(expected, added.ClaimShieldEnabled);
+    }
+
+    // A custom monster kept from the old ToD blob is one the linkshell added too, so it seeds on No
+    // while the built-ins beside it seed on Yes.
+    [Fact]
+    public void LegacyCustomMonster_SeedsOff()
+    {
+        const string blob = """
+            [{"MonsterName":"Homebrew NM","CooldownHours":6,"IntervalHours":0,"IntervalMinutes":20,"Category":"Other NMs"}]
+            """;
+        var rows = LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, blob, Now);
+
+        Assert.False(rows.Single(row => row.MonsterName == "Homebrew NM").ClaimShieldEnabled);
+        Assert.All(rows.Where(row => !row.IsCustom), row => Assert.True(row.ClaimShieldEnabled));
     }
 
     // ---- spawn-message hover text on the Monster Setups names ----

@@ -264,9 +264,9 @@ export interface ActivityMonsterTiming {
   defaultWindows: number | null;
   defaultCadenceMinutes: number | null;
   defaultCooldownMinutes: number;
-  // Whether the in-game addon records claim-shield lotteries for this monster. Defaults on; turn
-  // it off for monsters the linkshell doesn't contest, whose rolls are just noise in the capture
-  // panel. Overridden by the server-wide Claim Shield switch, which a super admin owns.
+  // Whether the in-game addon records claim-shield lotteries for this monster (the monster has a
+  // Claim Shield in game). On for the built-in HNMs, off for a monster the linkshell adds.
+  // Overridden by the server-wide Claim Shield switch, which a super admin owns.
   claimShieldEnabled: boolean;
   // Seconds on top of the cooldown when a ToD's repop is computed. 0 = none.
   additionalSeconds: number;

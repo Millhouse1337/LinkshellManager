@@ -197,6 +197,9 @@ public static class MonsterTimingDefaults
         CooldownMinutes = timing.CooldownMinutes,
         Category = timing.Category,
         IsCustom = false,
+        // Every built-in HNM has a Claim Shield in game. A custom row (added later, or kept from
+        // the old blob) defaults to No instead — the entity's own default.
+        ClaimShieldEnabled = true,
         SortOrder = timing.SortOrder,
         CreatedAtUtc = nowUtc,
         UpdatedAtUtc = nowUtc,

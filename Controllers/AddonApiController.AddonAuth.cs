@@ -135,8 +135,9 @@ public sealed partial class AddonApiController
             // has repeatedly produced is a silent NON-capture. A linkshell whose rows haven't
             // loaded should record too much, not nothing.
             claimShieldEnabled = !claimShieldGloballyDisabled,
-            // Monsters this linkshell has switched OFF. Sent as the exclusion list because the
-            // default is on, so it is empty until someone opts out.
+            // Monsters this linkshell has switched OFF: any it set to No, and every monster it
+            // added (those start on No). Sent as an exclusion list so a monster with no row at all
+            // still records — the fail-open rule above.
             //
             // EXPANDED to every alias here rather than in the addon: rows are stored merged
             // ("Fafnir/Nidhogg") but the lottery line names one half ("Fafnir"), so an addon doing
