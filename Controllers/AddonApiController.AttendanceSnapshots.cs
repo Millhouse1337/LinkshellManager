@@ -166,12 +166,22 @@ public sealed partial class AddonApiController
             {
                 return NotFound(new { error = "That camp is no longer open." });
             }
-            if (filedCamp.EndTime is not null || filedCamp.CommencementStartTime is null)
+            if (filedCamp.EndTime is not null)
             {
                 return BadRequest(new
                 {
                     error = "That camp has ended. File this capture on its review card under "
                             + "Events Pending DKP Post instead.",
+                });
+            }
+            // Still queued. It used to share the "has ended" reply, which read as nonsense to an
+            // officer looking at a camp that hadn't begun. The addon now starts the camp before a
+            // Misc post, so this is for an older addon.
+            if (filedCamp.CommencementStartTime is null)
+            {
+                return BadRequest(new
+                {
+                    error = "That camp hasn't started yet. Start it first, then file this capture.",
                 });
             }
         }

@@ -771,12 +771,19 @@ public sealed partial class ActivityDataController
             }
             // A parked board (ended, waiting for the next pop) is not a camp anyone is standing at.
             // Filing against it would hand the capture to the NEXT pop's End Camp.
-            if (camp.EndTime is not null || camp.CommencementStartTime is null)
+            if (camp.EndTime is not null)
             {
                 return BadRequest(new
                 {
                     error = "That camp has ended. File this capture on its review card under "
                             + "Events Pending DKP Post instead.",
+                });
+            }
+            if (camp.CommencementStartTime is null)
+            {
+                return BadRequest(new
+                {
+                    error = "That camp hasn't started yet. Start it first, then file this capture.",
                 });
             }
 
