@@ -51,7 +51,7 @@ The top strip shows the active linkshell name and member count, a clock, a refre
 
 - **Configurations** *(officer/leader)* — see below.
 
-- **Endgame / Missions** *(optional, feature-toggled)* — navigation placeholders ("Feature Coming Soon").
+- **Charts** *(optional, feature-toggled)* — the Sky Pop Item Tracker.
 
 ## Configurations tab *(officer/leader)*
 - **Switch Linkshells** — change which linkshell is active (when you belong to more than one).

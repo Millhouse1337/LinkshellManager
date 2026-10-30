@@ -560,11 +560,6 @@ export class ActivityHomeComponent {
   }
 
   protected isFeatureEnabled(key: keyof ActivityLinkshellSettings): boolean {
-    // Missions isn't built yet — force it off everywhere (nav + panel) until it ships, regardless of
-    // the stored flag. The Feature toggles UI locks it off + "(TBA)" to match. Remove this guard
-    // when Missions lands. (Charts shipped with the Sky Pop Item Tracker and is governed by its
-    // stored enableEndgame flag like every other feature.)
-    if (key === 'enableMissions') { return false; }
     const settings = this.primaryLinkshellSettings();
     if (!settings) return true;
     const value = settings[key];

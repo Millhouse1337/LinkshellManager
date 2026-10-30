@@ -252,7 +252,6 @@ public sealed partial class ActivityDataController
         }
 
         if (request.EnableHnmSection.HasValue) linkshell.EnableHnmSection = request.EnableHnmSection.Value;
-        if (request.EnableMissions.HasValue) linkshell.EnableMissions = request.EnableMissions.Value;
         if (request.EnableAuctions.HasValue) linkshell.EnableAuctions = request.EnableAuctions.Value;
         if (request.EnableToDs.HasValue) linkshell.EnableToDs = request.EnableToDs.Value;
         if (request.EnableEndgame.HasValue) linkshell.EnableEndgame = request.EnableEndgame.Value;

@@ -188,7 +188,6 @@ export class ConfigurationsTabComponent {
         details: this.linkshellEditDraft.details.trim() || null,
         lootStructure: settings?.lootStructure ?? null,
         enableHnmSection: settings?.enableHnmSection ?? null,
-        enableMissions: settings?.enableMissions ?? null,
         enableAuctions: settings?.enableAuctions ?? null,
         enableToDs: settings?.enableToDs ?? null,
         enableEndgame: settings?.enableEndgame ?? null,
@@ -513,7 +512,6 @@ export class ConfigurationsTabComponent {
   protected readonly customizeDraft: {
     lootStructure: ActivityLootStructure;
     enableHnmSection: boolean;
-    enableMissions: boolean;
     enableAuctions: boolean;
     enableToDs: boolean;
     enableEndgame: boolean;
@@ -549,7 +547,6 @@ export class ConfigurationsTabComponent {
   } = {
     lootStructure: 'Dkp',
     enableHnmSection: true,
-    enableMissions: true,
     enableAuctions: true,
     enableToDs: true,
     enableEndgame: true,
@@ -1027,7 +1024,6 @@ export class ConfigurationsTabComponent {
     this.activeConfigurationLinkshellId = id;
     this.customizeDraft.lootStructure = settings.lootStructure;
     this.customizeDraft.enableHnmSection = settings.enableHnmSection;
-    this.customizeDraft.enableMissions = settings.enableMissions;
     this.customizeDraft.enableAuctions = settings.enableAuctions;
     this.customizeDraft.enableToDs = settings.enableToDs;
     this.customizeDraft.enableEndgame = settings.enableEndgame;
@@ -1072,7 +1068,6 @@ export class ConfigurationsTabComponent {
         details: link.details ?? null,
         lootStructure: this.customizeDraft.lootStructure,
         enableHnmSection: this.customizeDraft.enableHnmSection,
-        enableMissions: this.customizeDraft.enableMissions,
         enableAuctions: this.customizeDraft.enableAuctions,
         enableToDs: this.customizeDraft.enableToDs,
         enableEndgame: this.customizeDraft.enableEndgame,

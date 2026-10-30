@@ -305,7 +305,6 @@ export interface ActivityMonsterTimingInput {
 export interface ActivityLinkshellSettings {
   lootStructure: ActivityLootStructure;
   enableHnmSection: boolean;
-  enableMissions: boolean;
   enableAuctions: boolean;
   enableToDs: boolean;
   enableEndgame: boolean;

@@ -192,7 +192,6 @@ public sealed record ActivitySaveMonsterTimingsRequest(
 public sealed record ActivityLinkshellSettingsDto(
     string LootStructure,
     bool EnableHnmSection,
-    bool EnableMissions,
     bool EnableAuctions,
     bool EnableToDs,
     bool EnableEndgame,
@@ -1434,7 +1433,6 @@ public sealed record ActivityUpdateLinkshellRequest(
     string? Details,
     string? LootStructure,
     bool? EnableHnmSection,
-    bool? EnableMissions,
     bool? EnableAuctions,
     bool? EnableToDs,
     bool? EnableEndgame,

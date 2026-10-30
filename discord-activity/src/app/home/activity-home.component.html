@@ -119,15 +119,6 @@
               [attr.tabindex]="activeTab() === 'dashboard' ? 0 : -1"
               [class.active]="activeTab() === 'dashboard'"
               (click)="setActiveTab('dashboard')">Dashboard</button>
-      @if (isFeatureEnabled('enableMissions')) {
-        <button type="button" class="tab" role="tab"
-                [id]="tabId('missions')"
-                [attr.aria-controls]="panelId('missions')"
-                [attr.aria-selected]="activeTab() === 'missions'"
-                [attr.tabindex]="activeTab() === 'missions' ? 0 : -1"
-                [class.active]="activeTab() === 'missions'"
-                (click)="setActiveTab('missions')">Missions</button>
-      }
       @if (isFeatureEnabled('enableEndgame')) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('endgame')"
@@ -420,27 +411,6 @@
   @if (activeTab() === 'endgame' && isFeatureEnabled('enableEndgame')) {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('endgame')" [attr.aria-labelledby]="tabId('endgame')">
       <app-charts-tab [view]="chartsView()" (viewChange)="setChartsView($event)" />
-    </div>
-  }
-
-  <!-- ===== MISSIONS TAB ===== -->
-  @if (activeTab() === 'missions' && isFeatureEnabled('enableMissions')) {
-    <div class="panel-tab fade" role="tabpanel" [id]="panelId('missions')" [attr.aria-labelledby]="tabId('missions')">
-      <div class="section-head">
-        <div>
-          <div class="section-label">Content</div>
-          <div class="section-title">Missions</div>
-        </div>
-      </div>
-
-      <div class="coming-soon-banner">Feature Coming Soon!</div>
-
-      <div class="card">
-        <div class="card-head"><div class="card-title">Missions</div></div>
-        <div class="list-row"><div class="list-row-left"><div class="member-name">Rise of the Zilart</div></div><span class="list-chevron">&rsaquo;</span></div>
-        <div class="list-row"><div class="list-row-left"><div class="member-name">Chains of Promathia</div></div><span class="list-chevron">&rsaquo;</span></div>
-        <div class="list-row"><div class="list-row-left"><div class="member-name">Treasures of Aht Urhgan</div></div><span class="list-chevron">&rsaquo;</span></div>
-      </div>
     </div>
   }
 

@@ -89,7 +89,6 @@ export class LinkshellService {
     input: ActivityCreateLinkshellInput & {
       lootStructure?: ActivityLootStructure | null;
       enableHnmSection?: boolean | null;
-      enableMissions?: boolean | null;
       enableAuctions?: boolean | null;
       enableToDs?: boolean | null;
       enableEndgame?: boolean | null;
@@ -135,7 +134,6 @@ export class LinkshellService {
         details: input.details || null,
         lootStructure: input.lootStructure ?? null,
         enableHnmSection: input.enableHnmSection ?? null,
-        enableMissions: input.enableMissions ?? null,
         enableAuctions: input.enableAuctions ?? null,
         enableToDs: input.enableToDs ?? null,
         enableEndgame: input.enableEndgame ?? null,

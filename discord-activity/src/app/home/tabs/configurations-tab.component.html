@@ -181,13 +181,6 @@
                       (ngModelChange)="customizeDraft.enableEndgame = $event; onCustomizeFieldChange()" />
                     <span>Charts tab</span>
                   </label>
-                  <!-- Missions isn't built yet: locked off + (TBA). Re-enable the ngModel binding
-                       (and drop the guard in isFeatureEnabled) when it ships. -->
-                  <label class="customize-form__toggle" style="opacity:.55;cursor:not-allowed"
-                    title="Not developed yet — coming soon.">
-                    <input type="checkbox" disabled />
-                    <span>Missions tab <span class="muted">(TBA)</span></span>
-                  </label>
                   <label class="customize-form__toggle">
                     <input type="checkbox" name="enableAuctionsDraft"
                       [ngModel]="customizeDraft.enableAuctions"

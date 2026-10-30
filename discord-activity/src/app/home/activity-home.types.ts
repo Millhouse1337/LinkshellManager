@@ -21,7 +21,6 @@ export const TAB_NAMES = [
   'dkp-sheet',
   'loot',
   'endgame',
-  'missions',
   'messages',
   'configurations',
   'permissions',

@@ -2772,9 +2772,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("EnableItems")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("EnableMissions")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("EnableRevenue")
                         .HasColumnType("boolean");
 

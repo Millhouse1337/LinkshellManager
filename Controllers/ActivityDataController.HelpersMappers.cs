@@ -21,7 +21,7 @@ public sealed partial class ActivityDataController
         if (linkshell is null)
         {
             return new ActivityLinkshellSettingsDto(
-                "Dkp", true, true, true, true, true, true, true, true, true, "Quarter",
+                "Dkp", true, true, true, true, true, true, true, true, "Quarter",
                 Array.Empty<string>(), null, null, false,
                 false, 3, 2, false);
         }
@@ -29,7 +29,6 @@ public sealed partial class ActivityDataController
         return new ActivityLinkshellSettingsDto(
             string.IsNullOrWhiteSpace(linkshell.LootStructure) ? "Dkp" : linkshell.LootStructure,
             linkshell.EnableHnmSection,
-            linkshell.EnableMissions,
             linkshell.EnableAuctions,
             linkshell.EnableToDs,
             linkshell.EnableEndgame,

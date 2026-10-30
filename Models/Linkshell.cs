@@ -130,9 +130,8 @@ public class Linkshell
     // delay for the addon's armed Auto-Post. The feature was removed on 2026-10-29 and the
     // DropHnmAutoSnapshotSettings migration drops both columns.)
 
-    // Disabled by default for Beta — the Missions UI is still a placeholder.
-    // Linkshell admins can opt in via Customize to surface the tab for testers.
-    public bool EnableMissions { get; set; } = false;
+    // (EnableMissions lived here: the switch for a Missions tab that never got past a "Coming
+    // Soon" placeholder. Removed on 2026-10-30; the DropEnableMissions migration drops the column.)
 
     public bool EnableAuctions { get; set; } = true;
 
