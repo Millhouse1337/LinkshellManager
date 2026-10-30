@@ -245,6 +245,10 @@
               [attr.tabindex]="activeTab() === 'permissions' ? 0 : -1"
               [class.active]="activeTab() === 'permissions'"
               (click)="setActiveTab('permissions')">Permissions</button>
+      <!-- After the divider: tabs that aren't about one linkshell. Game Addon covers every
+           linkshell at once and shows on both hosts; Admin and Data Admin are website-only
+           (canOpenTab hides them inside Discord). -->
+      <span class="tab-divider" aria-hidden="true"></span>
       <button type="button" class="tab" role="tab"
               [id]="tabId('addon')"
               [attr.aria-controls]="panelId('addon')"
@@ -252,10 +256,6 @@
               [attr.tabindex]="activeTab() === 'addon' ? 0 : -1"
               [class.active]="activeTab() === 'addon'"
               (click)="setActiveTab('addon')">Game Addon</button>
-      <!-- Website-only tabs, after a divider. canOpenTab hides them inside Discord. -->
-      @if (canOpenTab('admin')) {
-        <span class="tab-divider" aria-hidden="true"></span>
-      }
       @if (canOpenTab('admin')) {
         <button type="button" class="tab" role="tab"
                 [id]="tabId('admin')"

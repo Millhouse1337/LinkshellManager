@@ -147,8 +147,8 @@ body {
 .identity-refresh svg.spinning { animation: identity-refresh-spin 0.9s linear infinite; }
 @keyframes identity-refresh-spin { to { transform: rotate(360deg); } }
 
-/* Website only (not inside Discord): the divider before the website-only tabs, the sign-out
-   pill and the page footer. */
+/* The divider before the tabs that aren't about one linkshell (Game Addon, plus the website-only
+   Admin and Data Admin). Shown on both hosts. */
 .tab-divider {
   flex-shrink: 0;
   align-self: stretch;
@@ -157,6 +157,7 @@ body {
   background: var(--border-2);
 }
 
+/* Website only (not inside Discord): the sign-out pill and the page footer. */
 .identity-signout {
   height: 24px;
   padding: 0 11px;
