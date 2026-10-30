@@ -67,19 +67,33 @@ public sealed partial class AddonApiController
             })
             .ToListAsync(cancellationToken);
 
+        // The spawn grid each row cycles through comes from the linkshell's Monster Setups, so the
+        // in-game tracker counts the same windows the app does. Without this the addon fell back to
+        // its own built-in table (Cerberus 25 x 60 min) whatever the officer had configured.
+        var monsterTimings = await _monsterTimings.GetMapAsync(linkshellId, cancellationToken);
+
         var tods = rows
             .Where(r => !hidden.Contains(r.MonsterName!.Trim()))
             .GroupBy(r => r.MonsterName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())   // newest per monster (source order preserved)
-            .Select(r => new
+            .Select(r =>
             {
-                id = r.Id,
-                monsterName = r.MonsterName,
-                dayNumber = r.DayNumber,
-                defeatedAtUtc = r.Time,
-                repopTimeUtc = r.RepopTime,
-                cooldown = r.Cooldown,
-                interval = r.Interval
+                var timing = monsterTimings.For(r.MonsterName);
+                return new
+                {
+                    id = r.Id,
+                    monsterName = r.MonsterName,
+                    dayNumber = r.DayNumber,
+                    defeatedAtUtc = r.Time,
+                    repopTimeUtc = r.RepopTime,
+                    cooldown = r.Cooldown,
+                    interval = r.Interval,
+                    // Always a bool, never null: the addon turns null fields into nil, so this is
+                    // what tells "no grid" (windows left blank) apart from a server too old to say.
+                    hasSpawnGrid = timing.HasSpawnGrid,
+                    windowCount = timing.HasSpawnGrid ? timing.WindowCount : null,
+                    windowCadenceSeconds = timing.HasSpawnGrid ? timing.WindowCadenceMinutes * 60 : null
+                };
             })
             .ToList();
 
