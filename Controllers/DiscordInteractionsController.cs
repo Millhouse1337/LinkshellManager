@@ -2284,11 +2284,10 @@ public sealed class DiscordInteractionsController : ControllerBase
         // them, so a date and a window picker could not both exist on a king or a dragon, which are
         // the camps that have windows in the first place.
         //
-        // The window is not lost, it just stops being typed: the ToD tracker captures the pop window
-        // at the moment of the pop, which is a better answer than an officer reconstructing it from
-        // memory an hour later. Until that capture is wired through, the pop service falls back to
-        // the board's own counter exactly as it already does for the "I don't know" answer this
-        // picker offered — see HnmCampPopService, `request.PopWindow ?? FocusWindow(ev)`.)
+        // The window is not lost, it just stops being typed: the in-game Repop Timer captures the pop
+        // window at the moment of the pop and posts it on the ToD, which is a better answer than an
+        // officer reconstructing it from memory an hour later. The pop service keeps that reading,
+        // and falls back to the board's own counter only when there is none -- see HnmCampPopService.)
 
         // The auto-re-post lead. Free text rather than a dropdown because the useful values run
         // from "half an hour" to "two days" depending on the monster, and because BLANK has to mean

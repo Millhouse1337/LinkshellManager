@@ -224,13 +224,21 @@ public sealed class HnmCampPopService
             : null;
 
         var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
-        // Default to the window the BOARD was showing when the officer hit End Camp (the awaited
-        // window), not the raw already-opened counter. Check-in records WdArrivalWindow off the
-        // same helper, so both ends of the credit range sit on one scale: total DKP is unchanged,
-        // and every number the officer saw matches the one that gets stored. Computed BEFORE
-        // NextWindowAt is cleared below — FocusWindow reads it.
+        // The officer's answer wins. With none, the window the in-game Repop Timer recorded on the
+        // ToD it posted for this camp: a reading taken AT the pop, which is what the Window
+        // frequency chart wants. Only after that the window the BOARD was showing when End Camp was
+        // hit (the awaited window, not the raw already-opened counter) -- a counter that keeps
+        // ticking after the kill, so a camp ended late used to overwrite the addon's reading with a
+        // later window. (The Discord End Camp button has no picker, so it always sent none.)
+        //
+        // FocusWindow: check-in records WdArrivalWindow off the same helper, so both ends of the
+        // credit range sit on one scale. Computed BEFORE NextWindowAt is cleared below — FocusWindow
+        // reads it.
         var popWindow = Math.Clamp(
-            request.PopWindow ?? DiscordEventMessageBuilder.FocusWindow(ev), 1, effectiveCount);
+            request.PopWindow
+                ?? (adoptedPostedTod ? tod.PopWindow : null)
+                ?? DiscordEventMessageBuilder.FocusWindow(ev),
+            1, effectiveCount);
         // Mirror it onto the ToD as well, so re-opening this pop on the ToDs tab shows the same
         // window End Camp recorded. Committed by the SaveChanges at the end of the method.
         tod.PopWindow = popWindow;

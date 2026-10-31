@@ -223,6 +223,41 @@ public class HnmCampPopServiceTests
         Assert.Equal(tod.RepopTime, result.RepopTimeUtc);
     }
 
+    // The window the addon's Repop Timer recorded at the pop rides on the ToD it posted. An End Camp
+    // that picks no window (the Discord button has no picker) keeps it, instead of overwriting it
+    // with the board's counter -- which keeps ticking after the kill. Window 2 here; the board is on 6.
+    [Fact]
+    public async Task PopAsync_NoWindowPicked_KeepsTheWindowTheAddonRecorded()
+    {
+        using var db = await SeededAsync(LiveCamp());
+        var posted = PostedFromAddon("Adamantoise", minutesIntoCamp: 40, timeUtc: Now.AddMinutes(-20));
+        posted.PopWindow = 2;
+        db.Tods.Add(posted);
+        await db.SaveChangesAsync();
+
+        var result = await NewService(db).PopAsync(PopRequest(null), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(2, (await db.Tods.SingleAsync()).PopWindow);
+    }
+
+    // ...but an officer who DID pick one is answering the question, and their answer wins.
+    [Fact]
+    public async Task PopAsync_WindowPicked_BeatsTheWindowTheAddonRecorded()
+    {
+        using var db = await SeededAsync(LiveCamp());
+        var posted = PostedFromAddon("Adamantoise", minutesIntoCamp: 40, timeUtc: Now.AddMinutes(-20));
+        posted.PopWindow = 2;
+        db.Tods.Add(posted);
+        await db.SaveChangesAsync();
+
+        var result = await NewService(db).PopAsync(
+            PopRequest(null) with { PopWindow = 4 }, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(4, (await db.Tods.SingleAsync()).PopWindow);
+    }
+
     [Fact]
     public async Task PopAsync_DoesNotAdoptAToDLoggedBeforeTheCampWentLive()
     {
