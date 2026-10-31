@@ -782,7 +782,9 @@ public static class DiscordEventMessageBuilder
                 inline = true
             });
         }
-        if (ev.DkpPerHour is { } dkpPerHour)
+        // Not on an HNM camp: it pays by window (open / close / kill bonuses), never by the hour,
+        // so a "DKP / hour" field there is a number nothing pays.
+        if (ev.DkpPerHour is { } dkpPerHour && !IsHnm(ev))
         {
             fields.Add(new { name = "DKP / hour", value = dkpPerHour.ToString(), inline = true });
         }
@@ -838,7 +840,15 @@ public static class DiscordEventMessageBuilder
         var shown = 0;
         foreach (var signup in signups)
         {
-            var job = string.IsNullOrWhiteSpace(signup.JobName) ? "—" : signup.JobName!.Trim();
+            // "PLD/WAR · Tank" -- the Sign up wizard records the sub job and role too, so the
+            // roster shows them rather than the main job alone.
+            var main = string.IsNullOrWhiteSpace(signup.JobName) ? null : signup.JobName!.Trim();
+            var sub = string.IsNullOrWhiteSpace(signup.SubJobName) ? null : signup.SubJobName!.Trim();
+            var job = main is null ? "—" : (sub is null ? main : $"{main}/{sub}");
+            if (!string.IsNullOrWhiteSpace(signup.JobType))
+            {
+                job += $" · {signup.JobType!.Trim()}";
+            }
             var line = $"• **{Escape(signup.CharacterName)}** — {Escape(job)}";
             // Embed field values cap at 1024 chars; leave room for an overflow note.
             if (sb.Length + line.Length + 1 > 950)
@@ -853,12 +863,16 @@ public static class DiscordEventMessageBuilder
         return sb.ToString();
     }
 
+    // A "Sign up" button, then the same four answers the app's sign-up form asks for: the
+    // character (only for someone with alts), role, main job and sub job -- the private step-by-step
+    // wizard a party board's "Sign Up (No Slot)" already runs (PartyJoinEventPrefix ->
+    // StartGeneralJoinAsync), which records all four on the signup.
+    //
+    // It used to be a single "Pick your job to sign up" select: one answer, the main job, signed up
+    // as whichever character the account defaulted to. Its handler (JobSelectPrefix) is kept so a
+    // click on an older copy of a board still works.
     private static object[] BuildComponents(int eventId)
     {
-        var options = EventJobCatalog.MainJobOptions
-            .Select(job => new { label = job, value = job })
-            .ToArray<object>();
-
         return new object[]
         {
             new
@@ -868,20 +882,11 @@ public static class DiscordEventMessageBuilder
                 {
                     new
                     {
-                        type = 3, // string select
-                        custom_id = $"{JobSelectPrefix}{eventId}",
-                        placeholder = "Pick your job to sign up",
-                        min_values = 1,
-                        max_values = 1,
-                        options,
+                        type = 2, // button
+                        style = 1, // primary
+                        label = "Sign up",
+                        custom_id = $"{PartyJoinEventPrefix}{eventId}",
                     },
-                },
-            },
-            new
-            {
-                type = 1, // action row
-                components = new object[]
-                {
                     new
                     {
                         type = 2, // button
@@ -902,7 +907,8 @@ public static class DiscordEventMessageBuilder
         // NB: the day number is NOT a field here — it rides on the big monster heading
         // above the embed (BuildStartHeading), next to the monster name.
         var fields = new List<object>();
-        if (ev.DkpPerHour is { } dkpPerHour)
+        // Not on an HNM camp, which pays by window -- see BuildEmbed.
+        if (ev.DkpPerHour is { } dkpPerHour && !IsHnm(ev))
         {
             fields.Add(new { name = "DKP / hour", value = dkpPerHour.ToString(), inline = true });
         }
@@ -930,7 +936,7 @@ public static class DiscordEventMessageBuilder
 
     // An HNM camp the LSM addon created and runs. Its roster is the per-window snapshot the
     // addon scans and posts from in game, so NOTHING clicked in Discord counts toward it — and a
-    // board offering "Pick your job to sign up" next to a "Signed up (N)" list reads exactly like
+    // board offering a "Sign up" button next to a "Signed up (N)" list reads exactly like
     // the way to get credit. It isn't, so those camps get a board with neither.
     //
     // Deliberately narrower than "every HNM event". An HNM board created in the app (web or

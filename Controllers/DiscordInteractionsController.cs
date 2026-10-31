@@ -4094,6 +4094,12 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("That event is no longer open.");
         }
+        // The plain board's "Sign up" lands here too now. An addon-run camp's board has no
+        // buttons, but an older copy of one might.
+        if (DiscordEventMessageBuilder.IsAddonSnapshotCamp(ev))
+        {
+            return Ephemeral(SnapshotCampNoSignupNotice);
+        }
 
         // Gate + name prompt (the role/job picks come next; the name is cached now).
         var ctx = await ResolveSignupContextAsync(ev, appUserId, $"join:{eventId}", cancellationToken);
@@ -4106,9 +4112,15 @@ public sealed class DiscordInteractionsController : ControllerBase
             .Concat(EventJobCatalog.JobTypeOptions.Select(r => (object)new { label = r, value = r }))
             .ToArray();
         return PickerResponse(
-            EventHeading(ev.EventName, "Sign Up (No Slot) — pick your role (optional):"),
+            EventHeading(ev.EventName, $"{GeneralJoinTitle(ev)} — pick your role (optional):"),
             SelectRow(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, $"{eventId}", "Pick a role", roleOptions));
     }
+
+    // What the general-join wizard calls itself: "Sign Up (No Slot)" beside a party board's slots,
+    // plain "Sign Up" on the board for an event with no party setup, where there are no slots to
+    // not take.
+    private static string GeneralJoinTitle(Event ev) =>
+        ev.PartySetupId is null ? "Sign Up" : "Sign Up (No Slot)";
 
     // "Join (no slot)" job-pick wizard: role (optional) → main job (required) →
     // sub (optional). Mirrors the slot wizard but there's no slot to claim — the
@@ -4146,7 +4158,7 @@ public sealed class DiscordInteractionsController : ControllerBase
                 .Concat(EventJobCatalog.JobTypeOptions.Select(r => (object)new { label = r, value = r }))
                 .ToArray();
             return WizardStep(
-                EventHeading(ev.EventName, "Sign Up (No Slot) — pick your role (optional):"),
+                EventHeading(ev.EventName, $"{GeneralJoinTitle(ev)} — pick your role (optional):"),
                 SelectRow(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, $"{eventId}", "Pick a role", roleOptions));
         }
 
