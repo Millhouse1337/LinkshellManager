@@ -1025,7 +1025,10 @@
                   <p class="notice">No loot entries logged yet.</p>
                 }
 
-                @if (canManageLinkshell(event.linkshellId)) {
+                <!-- Timed events only. An HNM camp ends from "End Camp/Post ToD" at the top of its
+                     card, which hands the roster to review; this generic End event beside it was a
+                     second, different way to end the same camp. -->
+                @if (canManageLinkshell(event.linkshellId) && !isHnmEvent(event)) {
                   <div class="event-action-bar">
                     <div class="event-action-copy">
                       <strong>Archive event</strong>
@@ -1123,10 +1126,11 @@
               </section>
               }
 
-              <!-- Standard camps and ordinary events keep the join form. Hidden once you're on
-                   the roster: dropping just the "you are already attached" line would have left
-                   a heading and a description promising an action with nothing underneath. -->
-              @if (!isWdCamp(event) && !event.currentParticipation) {
+              <!-- Timed events keep the join form. HNM camps don't: who was there comes from the
+                   addon's window scans, so joining here credits nothing. Hidden once you're on the
+                   roster: dropping just the "you are already attached" line would have left a
+                   heading and a description promising an action with nothing underneath. -->
+              @if (!isHnmEvent(event) && !isWdCamp(event) && !event.currentParticipation) {
               <section class="event-section event-section--late-join">
                 <div class="event-section__header">
                   <div>
