@@ -1,3 +1,4 @@
+using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
@@ -34,17 +35,23 @@ public sealed class HnmCampReviewHandoffService
     private readonly ApplicationDbContext _db;
     private readonly WdCampFinalizer _wdFinalizer;
     private readonly HnmStandardCampFinalizer _standardFinalizer;
+    private readonly DkpLedgerWriter _dkpLedger;
+    private readonly DkpPoolResolver _dkpPools;
     private readonly ILogger<HnmCampReviewHandoffService> _logger;
 
     public HnmCampReviewHandoffService(
         ApplicationDbContext db,
         WdCampFinalizer wdFinalizer,
         HnmStandardCampFinalizer standardFinalizer,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
         ILogger<HnmCampReviewHandoffService> logger)
     {
         _db = db;
         _wdFinalizer = wdFinalizer;
         _standardFinalizer = standardFinalizer;
+        _dkpLedger = dkpLedger;
+        _dkpPools = dkpPools;
         _logger = logger;
     }
 
@@ -111,6 +118,8 @@ public sealed class HnmCampReviewHandoffService
             {
                 filed.LinkedEventId = null;
             }
+            // The camp's loot is still charged -- the camp ended -- and detached from the board.
+            await SettleCampLootAsync(ev, linkshell, archive: null, DateTime.UtcNow, cancellationToken);
             _logger.LogInformation(
                 "HNM camp handoff skipped: event {EventId} ended with nobody on the roster.", ev.Id);
             return null;
@@ -530,6 +539,9 @@ public sealed class HnmCampReviewHandoffService
             window.EventId = null;
         }
 
+        // The camp's loot: charged now that the camp has ended, and moved onto the archive.
+        await SettleCampLootAsync(ev, linkshell, archive, nowUtc, cancellationToken);
+
         _logger.LogInformation(
             "HNM camp handed off for review: event {EventId} ({Monster}, mode {Mode}) staged "
             + "{Count} member(s) totalling {Total} DKP — archived as a past event, pending an "
@@ -538,6 +550,120 @@ public sealed class HnmCampReviewHandoffService
             byCharacterName.Count, byCharacterName.Values.Sum(m => m.Dkp));
 
         return windowEvent;
+    }
+
+    // THE CAMP'S LOOT, at End Camp: charge what is still owed, then move every row off the board.
+    //
+    // Loot posted to a live camp is no longer charged when it is posted (ManualLootService) -- it is
+    // charged when the event ends, and for a camp that is here. A row already charged (posted before
+    // that change) carries DkpDebitedAt and is left alone, so nobody pays twice.
+    //
+    // Every row then moves onto the camp's archive, the same way the windows and captures do: the
+    // board is recycled for the next pop, and loot left on it would show up in the next camp's Loot
+    // section and be charged by the next End Camp. With no archive (nobody on the roster) the rows
+    // are detached instead; they keep their LinkshellId, so Loot History still lists them.
+    //
+    // Same rules as the close paths (ActivityDataController.EndEventAsync / EventEndService): Loot
+    // Council charges nothing, Hybrid a percentage of the winner's pool balance, everything else the
+    // stated DKP -- from the pool the row was entered against, else the camp's -- and the overdraft is
+    // allowed, because affordability was checked when the loot was awarded and the pending spend
+    // counted against the winner until now.
+    //
+    // STAGES ONLY, like the rest of this class: the caller's save commits the debits and the moves.
+    private async Task SettleCampLootAsync(
+        Event ev, Linkshell linkshell, EventHistory? archive, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        var loot = await _db.EventLootDetails
+            .Where(detail => detail.EventId == ev.Id)
+            .OrderBy(detail => detail.Id)
+            .ToListAsync(cancellationToken);
+        if (loot.Count == 0) return;
+
+        var structure = ActivityDataController.NormalizeLootStructure(linkshell.LootStructure ?? "Dkp");
+        var owed = structure == "LootCouncil"
+            ? new List<EventLootDetail>()
+            : loot.Where(detail => detail.DkpDebitedAt is null && detail.WinningDkpSpent.GetValueOrDefault() > 0).ToList();
+
+        if (owed.Count > 0)
+        {
+            var memberships = await _db.AppUserLinkshells
+                .Include(link => link.AppUser) // alt names, so loot won on an alt finds the account
+                .Where(link => link.LinkshellId == ev.LinkshellId && link.AppUserId != null)
+                .ToListAsync(cancellationToken);
+            var membershipsByAppUserId = memberships
+                .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            var participantsByCharacterName = (await _db.AppUserEvents
+                    .Where(participation => participation.EventId == ev.Id && participation.CharacterName != null)
+                    .ToListAsync(cancellationToken))
+                .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            var roundingStep = DkpRounding.StepFor(linkshell.DkpRoundingIncrement);
+
+            foreach (var detail in owed)
+            {
+                var winner = EventEndService.ResolveLootWinnerMembership(
+                    detail.ItemWinner, membershipsByAppUserId, participantsByCharacterName, memberships);
+                if (winner?.AppUserId is null)
+                {
+                    _logger.LogWarning(
+                        "End Camp: loot #{LootDetailId} ('{Item}') on event {EventId} names '{Winner}', who is not "
+                        + "on the roster, so it was not charged.", detail.Id, detail.ItemName, ev.Id, detail.ItemWinner);
+                    continue;
+                }
+
+                var raw = detail.WinningDkpSpent.GetValueOrDefault();
+                var pool = detail.DkpPoolId is int pinned ? DkpPoolRef.Pinned(pinned) : DkpPoolRef.Derived(ev.EventType);
+                double amount;
+                string details;
+                if (structure == "Hybrid")
+                {
+                    var pct = Math.Clamp(raw, 0, 100);
+                    var poolId = detail.DkpPoolId
+                        ?? await _dkpPools.ResolveAsync(ev.LinkshellId, ev.EventType, cancellationToken);
+                    var balance = Math.Max(0, await _dkpLedger.GetPoolBalanceAsync(winner, poolId, cancellationToken));
+                    amount = -LootDkpCalculator.ComputeHybridDebit(balance, pct, roundingStep);
+                    details = $"Hybrid DKP spent ({pct}%) on loot: {detail.ItemName ?? "Unknown item"}.";
+                }
+                else
+                {
+                    amount = -raw;
+                    details = $"DKP spent on loot: {detail.ItemName ?? "Unknown item"}.";
+                }
+
+                // Stamped so Loot History edits refund exactly this, and so nothing charges it again.
+                detail.ActualDeductedDkp = Math.Abs(amount);
+                detail.DkpDebitedAt = nowUtc;
+
+                await _dkpLedger.AppendAsync(
+                    winner,
+                    "LootSpent",
+                    amount,
+                    nowUtc,
+                    pool,
+                    new DkpEntryContext(
+                        CharacterName: winner.CharacterName,
+                        EventName: ev.EventName,
+                        EventType: ev.EventType,
+                        EventLocation: ev.EventLocation,
+                        EventStartTime: ev.CommencementStartTime ?? ev.StartTime,
+                        EventEndTime: nowUtc,
+                        ItemName: detail.ItemName,
+                        Details: details,
+                        EventHistory: archive,
+                        SourceEventLootDetailId: detail.Id),
+                    cancellationToken,
+                    DkpOverdraft.Allow);
+            }
+        }
+
+        foreach (var detail in loot)
+        {
+            detail.EventHistory = archive;
+            detail.Event = null;
+            detail.EventId = null;
+            detail.LinkshellId ??= ev.LinkshellId;
+        }
     }
 
     // Captures an officer filed against this camp while it was live (ActivityDataController's

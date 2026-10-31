@@ -41,6 +41,8 @@ public class HnmCampEndTodAdoptionTests
         new(db,
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
+            new DkpLedgerWriter(db, new DkpPoolResolver(db, new DkpPoolProvisioner(db)), NullLogger<DkpLedgerWriter>.Instance),
+            new DkpPoolResolver(db, new DkpPoolProvisioner(db)),
             NullLogger<HnmCampReviewHandoffService>.Instance);
 
     // The camp the officer is standing at: live, created from the PREVIOUS pop's ToD (id 1).

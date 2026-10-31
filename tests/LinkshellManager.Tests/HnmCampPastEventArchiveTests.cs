@@ -41,6 +41,8 @@ public class HnmCampPastEventArchiveTests
         new(db,
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
+            new DkpLedgerWriter(db, new DkpPoolResolver(db, new DkpPoolProvisioner(db)), NullLogger<DkpLedgerWriter>.Instance),
+            new DkpPoolResolver(db, new DkpPoolProvisioner(db)),
             NullLogger<HnmCampReviewHandoffService>.Instance);
 
     private static WindowEventDkpLedgerService NewLedgerService(ApplicationDbContext db)
@@ -138,6 +140,70 @@ public class HnmCampPastEventArchiveTests
             camp, popWindow: 2, claimed: false, killed: true, CancellationToken.None);
         await db.SaveChangesAsync();
         return windowEvent;
+    }
+
+    // ------------------------------------------------------------- the camp's loot at End Camp ---
+
+    // Loot posted to a live camp is recorded uncharged (ManualLootService) and charged HERE, when
+    // the camp ends. A row already charged is left alone, so nobody pays twice.
+    [Fact]
+    public async Task EndingACamp_ChargesItsOwedLootOnce_AndMovesItOntoThePastEvent()
+    {
+        using var db = await SeededAsync();
+        var earlier = CampStart.AddMinutes(20);
+        db.EventLootDetails.Add(new EventLootDetail
+        {
+            Id = 1, LinkshellId = LinkshellId, EventId = EventId,
+            ItemName = "Ridill", ItemWinner = "Alpha", WinningDkpSpent = 30,
+        });
+        db.EventLootDetails.Add(new EventLootDetail
+        {
+            Id = 2, LinkshellId = LinkshellId, EventId = EventId,
+            ItemName = "Dragon Heart", ItemWinner = "Beta", WinningDkpSpent = 5,
+            ActualDeductedDkp = 5, DkpDebitedAt = earlier,
+        });
+        await db.SaveChangesAsync();
+
+        await EndCampAsync(db);
+
+        var history = await db.EventHistories.SingleAsync();
+        var spent = await db.DkpLedgerEntries.Where(e => e.EntryType == "LootSpent").ToListAsync();
+        var charge = Assert.Single(spent);
+        Assert.Equal(-30, charge.Amount);
+        Assert.Equal(1, charge.SourceEventLootDetailId);
+        Assert.Equal(history.Id, charge.EventHistoryId);
+
+        var ridill = await db.EventLootDetails.SingleAsync(l => l.Id == 1);
+        Assert.Equal(30, ridill.ActualDeductedDkp);
+        Assert.NotNull(ridill.DkpDebitedAt);
+        var heart = await db.EventLootDetails.SingleAsync(l => l.Id == 2);
+        Assert.Equal(earlier, heart.DkpDebitedAt);
+
+        // Both rows leave the recycled board for the archive, or the next pop would show (and
+        // charge) them as its own.
+        Assert.All(await db.EventLootDetails.ToListAsync(), loot =>
+        {
+            Assert.Null(loot.EventId);
+            Assert.Equal(history.Id, loot.EventHistoryId);
+        });
+    }
+
+    [Fact]
+    public async Task EndingACamp_UnderLootCouncil_ChargesNothing()
+    {
+        using var db = await SeededAsync();
+        (await db.Linkshells.SingleAsync()).LootStructure = "LootCouncil";
+        db.EventLootDetails.Add(new EventLootDetail
+        {
+            Id = 1, LinkshellId = LinkshellId, EventId = EventId,
+            ItemName = "Ridill", ItemWinner = "Alpha", WinningDkpSpent = 30,
+        });
+        await db.SaveChangesAsync();
+
+        await EndCampAsync(db);
+
+        Assert.Empty(await db.DkpLedgerEntries.Where(e => e.EntryType == "LootSpent").ToListAsync());
+        Assert.Null((await db.EventLootDetails.SingleAsync()).EventId);
     }
 
     // ------------------------------------------------------------ the archive at End Camp ---

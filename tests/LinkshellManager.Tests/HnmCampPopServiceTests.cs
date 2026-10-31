@@ -32,10 +32,13 @@ public class HnmCampPopServiceTests
 
     private static HnmCampPopService NewService(ApplicationDbContext db)
     {
+        var pools = new DkpPoolResolver(db, new DkpPoolProvisioner(db));
         var handoff = new HnmCampReviewHandoffService(
             db,
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
+            new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance),
+            pools,
             NullLogger<HnmCampReviewHandoffService>.Instance);
         return new HnmCampPopService(db, handoff, new MonsterTimingResolver(db), NullLogger<HnmCampPopService>.Instance);
     }

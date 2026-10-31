@@ -1028,14 +1028,19 @@
                         @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
                           <div class="compact-list__meta">
                             <span class="num">{{ formatLootCost(loot.winningDkpSpent, event.linkshellId) }}</span>
-                            <!-- Says the DKP is already gone. Every row here has been charged as it
-                                 was written -- in-game posts included, which is the case an officer
-                                 cannot otherwise tell apart -- so ending the camp must not be read
-                                 as the moment loot gets paid for. -->
+                            <!-- Loot on a live event is charged when the event ends (End Camp for
+                                 an HNM camp), not when it is posted -- so a row normally reads
+                                 "Charged at end". "DKP deducted" is a row that was charged earlier
+                                 (posted before that change), which ending will not charge again. -->
                             @if (loot.actualDeductedDkp != null) {
                               <span class="tag success"
-                                    [title]="'Already charged to the winner: ' + (loot.actualDeductedDkp | number:'1.0-2') + ' DKP. Ending the camp will not deduct it again.'">
+                                    [title]="'Already charged to the winner: ' + (loot.actualDeductedDkp | number:'1.0-2') + ' DKP. Ending the event will not deduct it again.'">
                                 DKP deducted
+                              </span>
+                            } @else if ((loot.winningDkpSpent ?? 0) > 0) {
+                              <span class="tag warning"
+                                    title="Not charged yet. The winner's DKP comes off when the event ends; until then it is held so they can't spend it twice.">
+                                Charged at end
                               </span>
                             }
                           </div>

@@ -628,9 +628,9 @@ public sealed partial class ActivityDataController
                     continue;
                 }
 
-                // Loot added by hand from the Loot System is charged when it is entered, and it
-                // can be attached to a LIVE event -- so without this the close would take the same
-                // DKP off the same winner twice. Null on everything added through the event flow.
+                // Already charged -- loot added to a past event, or before loot on a live event
+                // waited for the close (ManualLootService) -- so without this the close would take
+                // the same DKP off the same winner twice. Null on everything still owed here.
                 if (lootDetail.DkpDebitedAt is not null)
                 {
                     continue;
@@ -656,7 +656,8 @@ public sealed partial class ActivityDataController
                     // total. With one pool that's LinkshellDkp, exactly as before. The writer's
                     // in-request view means the second item in an event sees the first item's
                     // debit, which is what the old read of the mutated LinkshellDkp did.
-                    var poolId = await _dkpPools.ResolveAsync(eventEntity.LinkshellId, eventEntity.EventType, cancellationToken);
+                    var poolId = lootDetail.DkpPoolId
+                        ?? await _dkpPools.ResolveAsync(eventEntity.LinkshellId, eventEntity.EventType, cancellationToken);
                     var currentBalance = Math.Max(0, await _dkpLedger.GetPoolBalanceAsync(winnerMembership, poolId, cancellationToken));
                     amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct, roundingStep);
                     lootDetailsText = $"Hybrid DKP spent ({pct}%) on loot: {lootDetail.ItemName ?? "Unknown item"}.";
@@ -669,13 +670,16 @@ public sealed partial class ActivityDataController
 
                 // Stamp the actual deducted amount so Loot History edits can refund precisely.
                 lootDetail.ActualDeductedDkp = Math.Abs(amount);
+                lootDetail.DkpDebitedAt = endTimeUtc;
 
                 await _dkpLedger.AppendAsync(
                     winnerMembership,
                     "LootSpent",
                     amount,
                     endTimeUtc,
-                    eventPool,
+                    // The pool the row was entered against (hand-entered loot pins one), else the
+                    // pool the event earned into.
+                    lootDetail.DkpPoolId is int pinnedPool ? DkpPoolRef.Pinned(pinnedPool) : eventPool,
                     new DkpEntryContext(
                         CharacterName: winnerMembership.CharacterName,
                         EventName: eventEntity.EventName,

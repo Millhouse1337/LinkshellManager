@@ -82,6 +82,9 @@ public static class AuctionDkpService
             .Where(l => l.Event != null
                 && l.Event.LinkshellId == linkshellId
                 && l.Event.CommencementStartTime != null   // live: commenced, not yet ended
+                // Not charged yet. A row already charged (DkpDebitedAt) is off the balance
+                // already, and counting it here too took it off the member's spendable DKP twice.
+                && l.DkpDebitedAt == null
                 && l.WinningDkpSpent != null && l.WinningDkpSpent > 0
                 && l.ItemWinner != null)
             .Select(l => new { l.ItemWinner, Dkp = l.WinningDkpSpent!.Value })
@@ -288,6 +291,7 @@ public static class AuctionDkpService
             .Where(l => l.Event != null
                 && l.Event.LinkshellId == linkshellId
                 && l.Event.CommencementStartTime != null   // live: commenced, not yet ended
+                && l.DkpDebitedAt == null                  // not charged yet -- see the linkshell-wide twin
                 && l.WinningDkpSpent != null && l.WinningDkpSpent > 0
                 && l.ItemWinner != null)
             .Select(l => new { l.ItemWinner, Dkp = l.WinningDkpSpent!.Value, EventType = l.Event!.EventType })

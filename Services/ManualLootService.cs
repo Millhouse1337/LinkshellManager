@@ -42,10 +42,15 @@ public sealed record ManualLootResult(bool Success, string? Error, EventLootDeta
 // a monster's card. Loot is now filed against a real event (live or past) or against nothing, and
 // stored as an EventLootDetail like all other event loot.
 //
-// THE ONE THING TO KNOW: this debits the winner IMMEDIATELY. Ordinary event loot is charged when
-// the event closes; the Add loot form says it deducts now, and loot attached to a PAST event has no
-// close left to ride. So the row is stamped DkpDebitedAt and both close paths skip stamped rows —
-// otherwise attaching hand-entered loot to a live event would charge the winner twice.
+// WHEN THE WINNER IS CHARGED depends on the target:
+//   * a LIVE event -- not now. The row is recorded uncharged (DkpDebitedAt null) and the event's
+//     own end charges it: the two close paths, or End Camp for an HNM camp
+//     (HnmCampReviewHandoffService). Affordability is still checked here, and the pending spend
+//     counts against the winner's available DKP until then (AuctionDkpService). The addon's Post
+//     Loot and the live card's Add loot both land here. (Until 2026-10-31 this charged on the
+//     spot, so a camp's loot came off balances before the camp was over.)
+//   * a PAST event or no event -- immediately: there is no close left for it to ride. The row is
+//     stamped DkpDebitedAt, which every close path skips, so nothing charges it twice.
 public sealed class ManualLootService
 {
     private readonly ApplicationDbContext _db;
@@ -147,6 +152,10 @@ public sealed class ManualLootService
         var nowUtc = DateTime.UtcNow;
         detail.DkpDebitedAt = nowUtc;
 
+        // Loot on a LIVE event waits for the event to end (see the class note): checked for
+        // affordability now, charged by the close.
+        var chargeAtClose = target.Kind == ManualLootTargetKind.LiveEvent && !isLootCouncil && dkpSpent > 0;
+
         if (!isLootCouncil && dkpSpent > 0)
         {
             // Same computation the event-loot guard uses, so a hand-entered row and an event-awarded
@@ -180,6 +189,16 @@ public sealed class ManualLootService
                     $"{itemWinner} only has {available:0.##} DKP available in that pool "
                     + $"(this costs {Math.Abs(amount):0.##}).",
                     null);
+            }
+
+            if (chargeAtClose)
+            {
+                // Recorded, not charged: no ledger row, no ActualDeductedDkp, and no DkpDebitedAt --
+                // the null stamp is what tells the close (or End Camp) this one is still owed.
+                detail.DkpDebitedAt = null;
+                _db.EventLootDetails.Add(detail);
+                await _db.SaveChangesAsync(cancellationToken);
+                return new ManualLootResult(true, null, detail);
             }
 
             detail.ActualDeductedDkp = Math.Abs(amount);

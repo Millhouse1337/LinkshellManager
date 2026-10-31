@@ -258,6 +258,32 @@ public sealed class LootEditService
             return new LootEditResult(true, null, detail.Id, "Event");
         }
 
+        // Not charged yet: change the row and move no DKP. ReconcileLootDkpAsync below assumes a
+        // debit exists to refund -- on a row the close has not charged it would refund DKP nobody
+        // paid and charge the new amount early.
+        if (IsPendingCharge(detail))
+        {
+            if (await ResolveWinnerAsync(linkshellId, newItemWinner, cancellationToken) is null)
+            {
+                return new LootEditResult(false,
+                    $"Winner '{newItemWinner}' is not a member of the linkshell. Pick an active linkshell member.");
+            }
+            var pendingOldWinner = (detail.ItemWinner ?? string.Empty).Trim();
+            var pendingOldDkp = detail.WinningDkpSpent.GetValueOrDefault();
+            detail.ItemName = newItemName;
+            detail.ItemWinner = newItemWinner;
+            detail.WinningDkpSpent = request.WinningDkpSpent;
+            detail.EditedAt = occurredAtUtc;
+            detail.EditedByAppUserId = actor.Id;
+            detail.EditedByCharacterName = actor.CharacterName ?? actor.UserName;
+            detail.LastEditReason = request.Reason.Trim();
+            await _db.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation(
+                "Loot edit applied (Event #{LootDetailId}, not yet charged) by {Actor}: '{OldWinner}' ({OldDkp} DKP) -> '{NewWinner}' ({NewDkp} DKP).",
+                detail.Id, actor.Id, pendingOldWinner, pendingOldDkp, newItemWinner, request.WinningDkpSpent);
+            return new LootEditResult(true, null, detail.Id, "Event");
+        }
+
         var oldWinnerName = (detail.ItemWinner ?? string.Empty).Trim();
         var oldDkpValue = detail.WinningDkpSpent.GetValueOrDefault();
         var oldActual = detail.ActualDeductedDkp;
@@ -445,7 +471,8 @@ public sealed class LootEditService
         var itemName = (detail.ItemName ?? string.Empty).Trim();
         var dkpRaw = detail.WinningDkpSpent.GetValueOrDefault();
 
-        if (structure != "LootCouncil")
+        // A row the close has not charged yet has no debit to refund.
+        if (structure != "LootCouncil" && !IsPendingCharge(detail))
         {
             await RefundDeletedLootAsync(
                 linkshellId: linkshellId,
@@ -648,6 +675,14 @@ public sealed class LootEditService
     // render an "Edited" badge.
     // Returns the new ActualDeducted DKP amount to stamp on the loot row
     // (null when nothing was debited, e.g. when newDkpRaw is 0).
+    // Loot on a LIVE event that has not been charged yet. It is charged when the event ends -- by
+    // the close paths, or End Camp for an HNM camp -- not when it is posted (ManualLootService), so
+    // until then there is no debit behind it: an edit or a delete moves no DKP, and the close
+    // charges whatever the row says by then. A closed row (EventHistory set) or one already
+    // charged (DkpDebitedAt set) is not pending.
+    private static bool IsPendingCharge(EventLootDetail detail)
+        => detail.EventHistory is null && detail.Event is not null && detail.DkpDebitedAt is null;
+
     private async Task<double?> ReconcileLootDkpAsync(
         int linkshellId,
         string oldWinnerName,

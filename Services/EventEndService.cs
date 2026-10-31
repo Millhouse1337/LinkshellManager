@@ -1,3 +1,4 @@
+using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Utils;
@@ -197,17 +198,25 @@ public static class EventEndService
 
         dbContext.EventHistories.Add(history);
         var hasLootDeductions = false;
+        // Same loot rules as ActivityDataController.EndEventAsync: Loot Council charges nothing,
+        // Hybrid charges a percentage of the winner's pool balance, everything else the stated DKP.
+        var lootStructure = ActivityDataController.NormalizeLootStructure(
+            eventEntity.Linkshell?.LootStructure
+            ?? await dbContext.Linkshells
+                .Where(l => l.Id == eventEntity.LinkshellId)
+                .Select(l => l.LootStructure)
+                .FirstOrDefaultAsync()
+            ?? "Dkp");
         foreach (var lootDetail in eventEntity.EventLootDetails.OrderBy(detail => detail.Id))
         {
-            if (lootDetail.WinningDkpSpent.GetValueOrDefault() <= 0)
+            if (lootStructure == "LootCouncil" || lootDetail.WinningDkpSpent.GetValueOrDefault() <= 0)
             {
                 continue;
             }
 
-            // Loot added by hand from the Loot System is charged the moment it is entered, and it
-            // can be attached to a LIVE event -- so without this the close would take the same DKP
-            // off the same winner a second time. Null on everything added through the event flow,
-            // which is still owed its debit here.
+            // Already charged -- loot added to a past event, or before loot on a live event waited
+            // for the close (ManualLootService) -- so without this the close would take the same
+            // DKP off the same winner a second time. Null on everything still owed its debit here.
             if (lootDetail.DkpDebitedAt is not null)
             {
                 continue;
@@ -223,20 +232,39 @@ public static class EventEndService
                 continue;
             }
 
-            var amount = -lootDetail.WinningDkpSpent.GetValueOrDefault();
+            // The pool the row was entered against, if any; otherwise the one the event earned
+            // into -- you buy this event's loot with this event's DKP.
+            var lootPool = lootDetail.DkpPoolId is int pinned ? DkpPoolRef.Pinned(pinned) : eventPool;
+            double amount;
+            string lootDetailsText;
+            if (lootStructure == "Hybrid")
+            {
+                var pct = Math.Clamp(lootDetail.WinningDkpSpent.GetValueOrDefault(), 0, 100);
+                var poolId = lootDetail.DkpPoolId
+                    ?? await dkpPools.ResolveAsync(eventEntity.LinkshellId, eventEntity.EventType, CancellationToken.None);
+                var balance = Math.Max(0, await dkpLedger.GetPoolBalanceAsync(winnerMembership, poolId, CancellationToken.None));
+                amount = -LootDkpCalculator.ComputeHybridDebit(
+                    balance, pct, DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement));
+                lootDetailsText = $"Hybrid DKP spent ({pct}%) on loot: {lootDetail.ItemName ?? "Unknown item"}.";
+            }
+            else
+            {
+                amount = -lootDetail.WinningDkpSpent.GetValueOrDefault();
+                lootDetailsText = $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.";
+            }
 
             // Stamp the actual deducted amount onto the loot row so future
             // Loot History edits can refund precisely (matches the ToD
             // ActualDeductedDkp pattern in HelpersTods.AdjustTodLootDkpAsync).
             lootDetail.ActualDeductedDkp = Math.Abs(amount);
+            lootDetail.DkpDebitedAt = endTimeUtc;
 
-            // Same pool the event earned into: you buy this event's loot with this event's DKP.
             await dkpLedger.AppendAsync(
                 winnerMembership,
                 "LootSpent",
                 amount,
                 endTimeUtc,
-                eventPool,
+                lootPool,
                 new DkpEntryContext(
                     CharacterName: winnerMembership.CharacterName,
                     EventName: eventEntity.EventName,
@@ -245,7 +273,7 @@ public static class EventEndService
                     EventStartTime: eventEntity.StartTime,
                     EventEndTime: endTimeUtc,
                     ItemName: lootDetail.ItemName,
-                    Details: $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.",
+                    Details: lootDetailsText,
                     EventHistory: history,
                     SourceEventLootDetailId: lootDetail.Id),
                 CancellationToken.None,

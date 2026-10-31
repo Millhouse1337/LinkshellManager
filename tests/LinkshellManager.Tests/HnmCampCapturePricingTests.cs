@@ -43,6 +43,8 @@ public class HnmCampCapturePricingTests
         new(db,
             new WdCampFinalizer(db, NullLogger<WdCampFinalizer>.Instance),
             new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance),
+            new DkpLedgerWriter(db, new DkpPoolResolver(db, new DkpPoolProvisioner(db)), NullLogger<DkpLedgerWriter>.Instance),
+            new DkpPoolResolver(db, new DkpPoolProvisioner(db)),
             NullLogger<HnmCampReviewHandoffService>.Instance);
 
     private static WindowEventDkpLedgerService NewLedgerService(ApplicationDbContext db)
