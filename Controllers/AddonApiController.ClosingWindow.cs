@@ -163,7 +163,8 @@ public sealed partial class AddonApiController
             closeWindow,
             dkpValue = HnmCampPricing.WindowValueFor(
                 eventEntity, linkshell, window.SequenceNumber, closeWindow,
-                window.DkpAmount, window.IsKillWindow)
+                window.DkpAmount, window.IsKillWindow,
+                HnmStandardCampFinalizer.HasMarkedCloseWindow(siblings))
         });
     }
 

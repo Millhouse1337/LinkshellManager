@@ -443,6 +443,11 @@
                                          [disabled]="windowDkpSaving()"
                                          (change)="toggleClosingWindow(activeWindow)" />
                                   Closing window
+                                  <!-- What the tick is worth, so it reads as credit rather than as a
+                                       label. Absent when the camp pays no close bonus. -->
+                                  @if (closeBonusLabel(event); as closeBonus) {
+                                    <span class="window-close-mark__bonus">+{{ closeBonus }} DKP</span>
+                                  }
                                 </label>
                               </span>
                             }

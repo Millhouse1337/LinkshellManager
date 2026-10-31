@@ -131,7 +131,8 @@ public class HnmStandardMemberGatingTests
     //
     // Goes through WindowValue rather than the boolean Member helper, because the boolean form
     // models two DIFFERENT windows and this camp only ever had one — see the overload's own note.
-    // The close, if the officer decides the camp earned it, is theirs to add from the review page.
+    // Nobody ticked a closing window here, so the close only FELL BACK onto window 1; ticking it
+    // is how the officer says the camp earned the close too (next test).
     [Fact]
     public void PoppedOnTheOpener_TheOneWindowPaysTheOpen_NotOpenPlusClose()
     {
@@ -143,6 +144,21 @@ public class HnmStandardMemberGatingTests
             tagged: true, inKillWindow: true, claimBonus: Claim, killBonus: Kill, step: Quarter);
 
         Assert.Equal(Open + Claim + Kill, dkp, precision: 3);
+    }
+
+    // The same camp with window 1 TICKED as the closing window: it popped in the opener, the officer
+    // said so, and the one window pays open + close on top of the outcome bonuses.
+    [Fact]
+    public void PoppedOnTheOpener_TickedAsTheClose_PaysOpenPlusClose()
+    {
+        var close = HnmStandardCampFinalizer.ResolveCloseWindow(
+            new[] { 1 }, popWindow: 1, markedCloseWindow: 1);
+
+        var dkp = HnmStandardCampFinalizer.ComputeMemberDkp(
+            new[] { HnmStandardCampFinalizer.WindowValue(1, close, null, 0d, Open, Close, closeIsMarked: true) },
+            tagged: true, inKillWindow: true, claimBonus: Claim, killBonus: Kill, step: Quarter);
+
+        Assert.Equal(Open + Close + Claim + Kill, dkp, precision: 3);
     }
 
     // The complaint that produced the rule, in the smallest form that reproduces it: a linkshell

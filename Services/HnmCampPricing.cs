@@ -96,9 +96,11 @@ public static class HnmCampPricing
     //
     // `closeWindow` is what HnmStandardCampFinalizer.ResolveCloseWindow would return right now.
     // `explicitAmount` is the officer's EventAttendanceWindow.DkpAmount for this sequence.
+    // `closeIsMarked` is HnmStandardCampFinalizer.HasMarkedCloseWindow for the camp: a TICKED
+    // closing window on window 1 pays open + close, a fallback one only the open.
     public static double? WindowValueFor(
         Event ev, Linkshell? linkshell, int sequence, int closeWindow, double? explicitAmount,
-        bool isKillWindow = false)
+        bool isKillWindow = false, bool closeIsMarked = false)
     {
         // The snapshot pays NOTHING on a Manual Check In camp — credit comes from Check In /
         // Check Out, which is exactly what the Activity's card says on its face.
@@ -108,7 +110,7 @@ public static class HnmCampPricing
         {
             var (window, open, close, _, _) = StandardBonuses(ev, linkshell, claimed: false, killed: false);
             return HnmStandardCampFinalizer.WindowValue(
-                sequence, closeWindow, explicitAmount, window, open, close, isKillWindow);
+                sequence, closeWindow, explicitAmount, window, open, close, isKillWindow, closeIsMarked);
         }
 
         // Claim/Kill-style windowed events really do pay windowsAttended × DkpPerHour via

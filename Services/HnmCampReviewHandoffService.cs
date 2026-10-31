@@ -207,12 +207,14 @@ public sealed class HnmCampReviewHandoffService
         var perCapture = HnmCampPricing.HonoursWindowAmount(ev);
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
             campWindows, popWindow, DiscordEventMessageBuilder.CloseIsLatestPost(ev));
+        var closeIsMarked = HnmStandardCampFinalizer.HasMarkedCloseWindow(campWindows);
         var (_, _, _, _, killBonus) = HnmCampPricing.StandardBonuses(ev, linkshell, claimed, killed);
         var valueBySequence = perCapture
             ? campWindows.ToDictionary(
                 w => w.SequenceNumber,
                 w => HnmCampPricing.WindowValueFor(
-                    ev, linkshell, w.SequenceNumber, closeWindow, w.DkpAmount, w.IsKillWindow) ?? 0d)
+                    ev, linkshell, w.SequenceNumber, closeWindow, w.DkpAmount, w.IsKillWindow,
+                    closeIsMarked) ?? 0d)
             : new Dictionary<int, double>();
         windowEvent.PerCaptureDkp = perCapture;
 

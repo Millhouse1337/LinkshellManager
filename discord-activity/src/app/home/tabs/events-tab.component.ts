@@ -826,6 +826,12 @@ export class EventsTabComponent {
     return windows.length === 0 ? 0 : Math.max(...windows.map(window => window.sequenceNumber));
   }
 
+  // Whether an officer TICKED a closing window, rather than the close falling back to the latest
+  // post. Mirrors HnmStandardCampFinalizer.HasMarkedCloseWindow.
+  private closeIsMarked(event: ActivityEvent): boolean {
+    return this.attendanceWindowsFor(event).some(window => window.isClosingWindow && !window.isKillWindow);
+  }
+
   // What ONE window pays each attendee: the officer's explicit price when they set one, else what
   // the camp's model pays for that sequence. One place, so the cell, the note and the total cannot
   // disagree with each other.
@@ -839,14 +845,17 @@ export class EventsTabComponent {
     // A kill roster is worth 0 as a window — being in it earns the kill bonus instead, which is
     // decided at End Camp and so is excluded here like every other outcome bonus.
     if (window.isKillWindow) return 0;
-    // One amount per window, no exception. A window that is both the open and the close pays the
-    // OPEN — the camp that opened and closed in one roster read is the officer's to settle by hand,
-    // because the close falls back to "the latest window posted" and so the opening post of EVERY
-    // camp is briefly both ends of it. Open is tested first for that reason: sequence 1 is the open
-    // by definition. Same precedence as HnmStandardCampFinalizer.WindowValue.
+    // One amount per window, with one exception: window 1 TICKED as the closing window pays open +
+    // close (the camp popped in its opener). Reached only by the close FALLBACK ("the latest window
+    // posted") it pays the open alone, because the opening post of EVERY camp is briefly both ends
+    // of it. Open is tested first for that reason: sequence 1 is the open by definition. Same
+    // precedence as HnmStandardCampFinalizer.WindowValue.
     const closeWindow = this.closeWindowSequence(event);
     const isOpen = window.sequenceNumber === 1;
     const isClose = closeWindow > 0 && window.sequenceNumber === closeWindow;
+    if (isOpen && isClose && this.closeIsMarked(event)) {
+      return this.standardBonus(event, 'open') + this.standardBonus(event, 'close');
+    }
     if (isOpen) return this.standardBonus(event, 'open');
     if (isClose) return this.standardBonus(event, 'close');
     return this.standardBonus(event, 'window');
@@ -884,6 +893,13 @@ export class EventsTabComponent {
 
   protected killBonusLabel(event: ActivityEvent): string {
     return EventsTabComponent.trimDkp(this.standardBonus(event, 'kill'));
+  }
+
+  // The "+N DKP" beside the Closing window tick: what ticking a window adds for everyone on it.
+  // Null when the camp pays no close bonus, so the tick isn't advertised as earning something.
+  protected closeBonusLabel(event: ActivityEvent): string | null {
+    const close = this.standardBonus(event, 'close');
+    return close > 0 ? EventsTabComponent.trimDkp(close) : null;
   }
 
   // What one attendee earned from THIS window, or null when the window carries no credit for
@@ -999,12 +1015,18 @@ export class EventsTabComponent {
       ? 'closing window'
       : 'no closing window marked — falling back to the latest window posted';
 
-    // Said plainly when the camp opened and closed in one window, because the close bonus is
-    // visibly configured and visibly not being paid here. It is the officer's to award by hand.
+    // The camp opened and closed in one window. Ticked, that pays both and says so. Only fallen
+    // back onto (nothing ticked), it pays the open, and the note says how to claim the close.
     if (isOpen && isClose) {
-      return `${EventsTabComponent.trimDkp(this.standardBonus(event, 'open'))} DKP per attendee `
-        + `(open) — this window is also the close, and a window only ever pays one amount; `
-        + `award the close by hand if the camp earned it`;
+      const open = this.standardBonus(event, 'open');
+      if (this.closeIsMarked(event)) {
+        const close = this.standardBonus(event, 'close');
+        return `${EventsTabComponent.trimDkp(open + close)} DKP per attendee `
+          + `(open ${EventsTabComponent.trimDkp(open)} + close ${EventsTabComponent.trimDkp(close)}`
+          + ` — closing window)`;
+      }
+      return `${EventsTabComponent.trimDkp(open)} DKP per attendee (open) — `
+        + `tick Closing window if the camp also closed here`;
     }
     if (isOpen) {
       return `${EventsTabComponent.trimDkp(this.standardBonus(event, 'open'))} DKP per attendee (open)`;

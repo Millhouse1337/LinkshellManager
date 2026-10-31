@@ -28,15 +28,15 @@ namespace LinkshellManagerDiscordApp.Services;
 // 1 carrying open + close + rate. The close is now an explicit officer mark
 // (EventAttendanceWindow.IsClosingWindow) and each window names its own price.
 //
-// A window that is BOTH the open and the close pays the OPEN, alone. One window, one amount, with
-// no exception — not even for the camp that genuinely opened and closed in a single roster read.
-// That camp is the OFFICER'S to settle: they add the close by hand from the review page, where the
-// amounts are editable, because only they can say whether one scan really was both ends of a camp.
+// A window that is BOTH the open and the close pays open + close only when an officer TICKED it as
+// the closing window. When the close merely FELL BACK onto it (ResolveCloseWindow: nobody ticked
+// one, so it is "the latest window posted"), it pays the OPEN alone.
 //
-// Paying both automatically is what made posting the opening window read as 2 DKP on a linkshell
-// configured for 1 open + 1 close. The close FALLS BACK to the latest window posted whenever
-// nobody has ticked one (ResolveCloseWindow), so on a fresh camp the open window is always also
-// the close — every camp hit the exception on its first post, and the "rare" case was the norm.
+// Paying both on the fallback is what made posting the opening window read as 2 DKP on a linkshell
+// configured for 1 open + 1 close: on a fresh camp the open window is always also the fallback
+// close, so every camp's first post looked like both ends. The tick is different -- it is the
+// officer saying the camp really did close in its opener (it popped in window 1), and that camp
+// earned both. (Until 2026-10-31 even the tick paid only the open and the close was added by hand.)
 //
 // The open is tested FIRST for the same reason: sequence 1 is the open by definition, it is what
 // the officer just posted, and it must not read as anything else while the close is still a guess.
@@ -120,13 +120,11 @@ public sealed class HnmStandardCampFinalizer
     // `windowBonus` is what the in-between windows pay and defaults to 0, which is the
     // open/close-only payout most camps run on.
     //
-    // A window that is both ends at once — a single-post NM claimed and dead in one roster read, a
-    // camp that popped in its opener — is NOT an exception to that. It pays the open, and the close
-    // is the officer's to add by hand from the review page. This used to pay open + close, on the
-    // reasoning that the camp really did earn both; what that missed is that the close falls back
-    // to "the latest window posted" whenever nobody has ticked one, so EVERY camp's opening post
-    // was both ends of the camp for as long as it was the only window. Posting the open on a
-    // 1 open / 1 close linkshell read as 2 DKP, which is not a payout an officer asked for.
+    // The one exception: window 1 TICKED as the closing window (`closeIsMarked`) pays open + close.
+    // That is a camp that popped in its opener, and the officer saying so. The same window reached
+    // only by the close FALLBACK ("the latest window posted", nothing ticked) still pays the open
+    // alone -- otherwise EVERY camp's opening post would read as both ends while it was the only
+    // window, and posting the open on a 1 open / 1 close linkshell would read as 2 DKP.
     //
     // The open is tested before the close so sequence 1 always prices as the open — it is what the
     // officer posted, and the only one of the two that is a fact rather than a mark or a guess.
@@ -141,13 +139,14 @@ public sealed class HnmStandardCampFinalizer
     public static double WindowValue(
         int sequence, int closeWindow, double? explicitAmount,
         double windowBonus, double openBonus, double closeBonus,
-        bool isKillWindow = false)
+        bool isKillWindow = false, bool closeIsMarked = false)
     {
         if (explicitAmount is { } amount) return Math.Max(0d, amount);
         if (isKillWindow) return 0d;
 
         var isOpen = sequence == 1;
         var isClose = closeWindow > 0 && sequence == closeWindow;
+        if (isOpen && isClose && closeIsMarked) return openBonus + closeBonus;
         if (isOpen) return openBonus;
         if (isClose) return closeBonus;
         return windowBonus;
@@ -190,9 +189,9 @@ public sealed class HnmStandardCampFinalizer
     // payments, not one window paying twice, and the sequences below say so out loud.
     //
     // A camp whose open IS its close cannot be expressed here, and deliberately so: it has ONE
-    // window, that window prices as the open (see WindowValue), and the close is the officer's to
-    // add by hand. Pass atClose: false for it — a caller that passes both would be describing a
-    // member scanned in two windows on a camp that only ever had one.
+    // window, priced by WindowValue (open + close when the officer ticked it, the open alone when
+    // the close only fell back onto it). Pass atClose: false for it — a caller that passes both
+    // would be describing a member scanned in two windows on a camp that only ever had one.
     // ComputeMemberDkp_NoExplicitAmounts_MatchesTheBooleanOverload pins the agreement.
     public static double ComputeMemberDkp(
         bool atOpen, bool atClose, bool tagged, bool inKillWindow,
@@ -227,9 +226,9 @@ public sealed class HnmStandardCampFinalizer
     // `postedWindows` must EXCLUDE kill windows — the Post Kill roster is filed after the close and
     // would otherwise take the close bonus off the window the officer marked. Callers filter.
     //
-    // This can still answer 1 — one window posted, nothing ticked — and that answer is now inert at
-    // payout: WindowValue prices sequence 1 as the open whether or not it is also the close, so the
-    // fallback landing on the opening window costs nobody anything. It used to pay open + close.
+    // This can still answer 1 — one window posted, nothing ticked — and that answer is inert at
+    // payout: WindowValue prices sequence 1 as the open alone unless the close was TICKED there
+    // (HasMarkedCloseWindow), so the fallback landing on the opening window costs nobody anything.
     //
     // 0 when the camp has no snapshots at all — then nobody is at the open or the close.
     //
@@ -248,6 +247,12 @@ public sealed class HnmStandardCampFinalizer
         if (closeIsLatestPost) return postedWindows.Max();
         return postedWindows.Contains(popWindow) ? popWindow : postedWindows.Max();
     }
+
+    // Whether an officer TICKED a closing window, rather than the close falling back to the latest
+    // post. WindowValue's `closeIsMarked`: only a tick makes window 1 pay open + close. Kill rows
+    // are skipped for the same reason ResolveCloseWindow skips them.
+    public static bool HasMarkedCloseWindow(IEnumerable<EventAttendanceWindow> windows)
+        => windows.Any(w => w.IsClosingWindow && !w.IsKillWindow);
 
     // The same question asked of the ROWS, which is how every caller outside this file has it.
     //
@@ -337,7 +342,8 @@ public sealed class HnmStandardCampFinalizer
                 g => g.Key,
                 g => WindowValue(
                     g.Key, closeWindow, g.First().DkpAmount,
-                    windowBonus, openBonus, closeBonus, g.First().IsKillWindow));
+                    windowBonus, openBonus, closeBonus, g.First().IsKillWindow,
+                    closeIsMarked: markedCloseWindow is not null));
 
         // Which sequences are the Post Kill rosters. A camp can hold more than one if the officer
         // posted a kill, corrected it and posted again; being in ANY of them is the kill.

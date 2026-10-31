@@ -722,6 +722,7 @@ public sealed partial class AddonApiController
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
             eventEntity.AttendanceWindows, eventEntity.HnmWindowNumber,
             DiscordEventMessageBuilder.CloseIsLatestPost(eventEntity));
+        var closeIsMarked = HnmStandardCampFinalizer.HasMarkedCloseWindow(eventEntity.AttendanceWindows);
         var shape = AddonEventWindowShape.For(eventEntity);
 
         return Ok(new
@@ -753,7 +754,7 @@ public sealed partial class AddonApiController
                     dkpAmount = w.DkpAmount,
                     dkpValue = HnmCampPricing.WindowValueFor(
                         eventEntity, linkshell, w.SequenceNumber, closeWindow, w.DkpAmount,
-                        w.IsKillWindow),
+                        w.IsKillWindow, closeIsMarked),
                     // So the addon can tick the right tab and label the kill roster as its own
                     // read rather than as "window N" — see constants.window_label.
                     isClosingWindow = w.IsClosingWindow,

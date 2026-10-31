@@ -6,9 +6,10 @@ namespace LinkshellManager.Tests;
 // Pricing ONE window — HnmStandardCampFinalizer.WindowValue and the per-window ComputeMemberDkp
 // that sums it, isolated from the DB.
 //
-// A window pays ONE amount: the open, the close, or the regular window rate. They do not stack, and
-// there is no exception — a window that is both ends of the camp pays the open, and the close on it
-// is the officer's to award by hand. That is a reversal — the bonuses used to ADD to the rate, so
+// A window pays ONE amount: the open, the close, or the regular window rate. They do not stack. The
+// one exception is window 1 TICKED as the closing window (a camp that popped in its opener), which
+// pays open + close; the same window reached only by the close fallback pays the open alone. The
+// one-amount rule is a reversal — the bonuses used to ADD to the rate, so
 // window 1 paid rate + open — and it went with making the close an explicit officer mark instead of
 // a derived "newest window posted". Together those were the bug: the derived close was QUOTED to
 // the addon before every post, the addon wrote the quote back as an explicit price, and so every
@@ -87,6 +88,30 @@ public class HnmStandardWindowPricingTests
     public void WindowValue_WindowOneIsAlsoTheClose_DoesNotAlsoPayTheRegularRate()
     {
         Assert.Equal(Open, Value(sequence: 1, closeWindow: 1, windowBonus: 0.25), precision: 3);
+    }
+
+    // ...unless an officer TICKED window 1 as the closing window. That is the camp that popped in
+    // its opener, and the officer saying so, so it earns both ends -- still not the regular rate.
+    // Only the tick does this: the fallback above is what every camp's first post looks like.
+    [Fact]
+    public void WindowValue_WindowOneTickedAsTheClose_PaysOpenPlusClose()
+    {
+        Assert.Equal(Open + Close, HnmStandardCampFinalizer.WindowValue(
+            sequence: 1, closeWindow: 1, explicitAmount: null, windowBonus: 0.25,
+            openBonus: Open, closeBonus: Close, closeIsMarked: true), precision: 3);
+        // An officer's price still replaces everything, tick or no tick.
+        Assert.Equal(5.0, HnmStandardCampFinalizer.WindowValue(
+            sequence: 1, closeWindow: 1, explicitAmount: 5.0, windowBonus: 0d,
+            openBonus: Open, closeBonus: Close, closeIsMarked: true), precision: 3);
+    }
+
+    // The tick names WHICH window closed the camp. A tick on window 3 says nothing about window 1.
+    [Fact]
+    public void WindowValue_CloseTickedOnALaterWindow_WindowOneStillPaysTheOpenAlone()
+    {
+        Assert.Equal(Open, HnmStandardCampFinalizer.WindowValue(
+            sequence: 1, closeWindow: 3, explicitAmount: null, windowBonus: 0d,
+            openBonus: Open, closeBonus: Close, closeIsMarked: true), precision: 3);
     }
 
     [Fact]

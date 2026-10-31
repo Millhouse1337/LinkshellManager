@@ -482,7 +482,8 @@ public sealed partial class AddonApiController
                     HnmStandardCampFinalizer.ResolveCloseWindow(
                         campWindows, eventEntity.HnmWindowNumber,
                         DiscordEventMessageBuilder.CloseIsLatestPost(eventEntity)),
-                    attendanceWindow.DkpAmount, attendanceWindow.IsKillWindow);
+                    attendanceWindow.DkpAmount, attendanceWindow.IsKillWindow,
+                    HnmStandardCampFinalizer.HasMarkedCloseWindow(campWindows));
             }
             else
             {
