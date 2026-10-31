@@ -528,7 +528,12 @@ public sealed partial class AddonApiController
         {
             return Forbid();
         }
-        if (eventToDelete.CommencementStartTime.HasValue)
+        // A LIVE HNM camp can be canceled too: the addon's Active Events row offers Cancel (with a
+        // Confirm / Return step) in place of End. Same rule as the app's Delete
+        // (ActivityDataController.DeleteEventAsync) -- the camp is thrown away with no ToD, no
+        // history and no DKP. Any other live event still has to be ended, so its DKP is paid.
+        if (eventToDelete.CommencementStartTime.HasValue
+            && !string.Equals((eventToDelete.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest(new { error = "Live events cannot be canceled. End the event instead." });
         }
