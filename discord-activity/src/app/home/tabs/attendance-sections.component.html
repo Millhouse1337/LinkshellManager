@@ -526,7 +526,7 @@
 
              Reads the same value the name INPUT below is bound to, not the saved snapshot.name.
              The two are the same field, and showing the persisted value here meant the label and
-             the box an officer was typing in disagreed until Save name was pressed — so the tag
+             the box an officer was typing in disagreed until Save was pressed — so the tag
              looked stale, or wrong, at exactly the moment they were reading it to check their
              edit. attachName seeds itself from snapshot.name, so an untouched capture is
              unchanged; a typed one updates as it is typed. -->
@@ -622,18 +622,19 @@
           }
         </div>
       }
-      <div class="we-snapshot-actions-row">
+      <div class="we-snapshot-actions-row" [class.we-snapshot-actions-row--fill]="unlinked">
         @if (unlinked) {
           <!-- Pick an existing target first: attaching to the camp that is already
                running is the common case, and typing its name by hand only risks a
                typo that splits the payroll across two events. The free-text box
                below stays for anything with no live camp or open event to join. -->
-          <!-- One row: [pick an existing event] [Attach] | [name] [Create New Event] [Ignore].
-               Each control used to sit in its own flex wrapper, which let the select and its
-               Attach button break onto separate lines. The whole thing is one flex line now,
-               so the two paths read as the alternatives they are. -->
+          <!-- One row: Event [pick] Post Type [kind] [Attach] | Message [name] [Save]
+               [Make New Event] | Alliance [n] [Ignore]. Each label is grouped with its control so
+               the even spacing across the row never parts the two. -->
           @if (hasAttachTargets(model)) {
-            <select #attachTarget class="form-select we-unlinked-select">
+            <span class="we-unlinked-field">
+            <label class="we-unlinked-label" [attr.for]="'snapshot-event-' + snapshot.id">Event</label>
+            <select #attachTarget class="form-select we-unlinked-select" [id]="'snapshot-event-' + snapshot.id">
               <option value="">Attach to an existing event…</option>
               @if (liveHnmCamps().length > 0) {
                 <optgroup label="Live camps">
@@ -650,14 +651,16 @@
                 </optgroup>
               }
             </select>
+            </span>
             <!-- The slot is the whole filing decision now: ingest classifies nothing, so this is
                  where a capture becomes a window post or a misc post. A free number rather than a
                  per-event list — the window count differs per target and the server clamps. -->
-            <select class="form-select we-unlinked-slot"
+            <span class="we-unlinked-field">
+            <label class="we-unlinked-label" [attr.for]="'snapshot-type-' + snapshot.id">Post Type</label>
+            <select class="form-select we-unlinked-slot" [id]="'snapshot-type-' + snapshot.id"
                     [ngModel]="attachSlot(snapshot).kind"
                     [ngModelOptions]="{ standalone: true }"
-                    (ngModelChange)="setAttachSlotKind(snapshot.id, $event)"
-                    aria-label="Snapshot type">
+                    (ngModelChange)="setAttachSlotKind(snapshot.id, $event)">
               <!-- Named like its neighbour above: a select showing "Window" said nothing about
                    what it decides, and Window was a default nobody had chosen. Attach waits for
                    a real answer. -->
@@ -665,6 +668,7 @@
               <option [value]="slotWindow">Window</option>
               <option [value]="slotMisc">Misc</option>
             </select>
+            </span>
             @if (attachSlot(snapshot).kind === slotWindow) {
               <!-- No placeholder: "auto" in the box read as a value that had been entered. Blank
                    IS auto, and the tooltip says so. -->
@@ -680,22 +684,26 @@
               (click)="attachToSelection(snapshot, attachTarget.value)">Attach</button>
             <span class="we-unlinked-sep" aria-hidden="true"></span>
           }
-          <!-- Names the CAPTURE. Save name persists it on the snapshot; Make a New Event uses that
+          <!-- Names the CAPTURE. Save persists it on the snapshot; Make New Event uses that
                same name for the event it mints. They were one control, which meant an officer
                labelling a snapshot for their own sake conjured a camp. -->
-          <input type="text" class="input we-unlinked-name"
+          <span class="we-unlinked-field">
+          <label class="we-unlinked-label" [attr.for]="'snapshot-message-' + snapshot.id">Message</label>
+          <input type="text" class="input we-unlinked-name" [id]="'snapshot-message-' + snapshot.id"
             [ngModel]="attachName(snapshot)"
             (ngModelChange)="setAttachName(snapshot.id, $event)"
             placeholder="Snapshot name" />
+          </span>
           <button type="button" class="btn sm"
             [disabled]="windows.busy()"
-            (click)="renameSnapshot(snapshot)">Save name</button>
+            (click)="renameSnapshot(snapshot)">Save</button>
           <button type="button" class="btn sm primary"
             [disabled]="!attachName(snapshot).trim() || windows.busy()"
-            (click)="createNewEvent(snapshot)">Make a New Event from this Snapshot</button>
+            (click)="createNewEvent(snapshot)">Make New Event From This Post</button>
           <span class="we-unlinked-sep" aria-hidden="true"></span>
           <!-- The alliance is the one field the game cannot supply, so it is the one most likely
                to arrive wrong. Correctable here rather than only by asking for a re-capture. -->
+          <span class="we-unlinked-field">
           <label class="we-unlinked-label" [attr.for]="'snapshot-alliance-' + snapshot.id">Alliance</label>
           <select class="form-select we-unlinked-alliance" [id]="'snapshot-alliance-' + snapshot.id"
             [ngModel]="snapshot.allianceNumber ?? 1"
@@ -704,6 +712,7 @@
               <option [ngValue]="n">Alliance {{ n }}</option>
             }
           </select>
+          </span>
           <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Ignored')">Ignore</button>
         } @else {
           <button type="button" class="btn sm"
