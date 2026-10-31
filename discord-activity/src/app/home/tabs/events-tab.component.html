@@ -470,6 +470,12 @@
                                   <th>Jobs</th>
                                   <th>Zone</th>
                                   <th class="num">DKP</th>
+                                  <!-- The whole camp, not this window: what End Camp would pay them
+                                       right now. Standard camps only -- Manual Check In pays from the
+                                       check-in range, and the server sends no figure for it. -->
+                                  @if (!isWdCamp(event)) {
+                                    <th class="num" title="What this member would be paid for the whole camp if it ended now: every window they're on, the claim / kill bonuses, and misc posts.">Event Total</th>
+                                  }
                                   <th class="num"></th>
                                 </tr>
                               </thead>
@@ -504,6 +510,16 @@
                                          pays nobody, and a scanned player who never checked in on a Manual
                                          Check In camp is paid nothing for standing there. -->
                                     <td class="num">{{ attendanceWindowDkpLabel(event, activeWindow, attendee) }}</td>
+                                    @if (!isWdCamp(event)) {
+                                      <td class="num">
+                                        @if (attendee.eventTotalDkp != null) {
+                                          <strong>{{ attendee.eventTotalDkp | number:'1.0-2' }}</strong>
+                                        } @else {
+                                          <!-- A scan that matched no account has nobody to pay. -->
+                                          <span class="roster-muted">—</span>
+                                        }
+                                      </td>
+                                    }
                                     <td class="num">
                                       @if (canManageLinkshell(event.linkshellId)) {
                                         @if (pendingRemoveAttendeeId() === attendee.id) {
@@ -540,12 +556,14 @@
                             <!-- On the KILL roster the kill bonus IS the column above, so only the
                                  claim is still outstanding. Saying otherwise would contradict the
                                  table on the one tab where the bonus is visible. -->
+                            <!-- "Not in the DKP column" rather than "not above": the Event Total
+                                 column beside it DOES count them, for whoever has the evidence. -->
                             @if (activeWindow.isKillWindow) {
-                              Claim {{ claimBonusLabel(event) }} DKP is added at End Camp and isn't
-                              included above.
+                              Claim {{ claimBonusLabel(event) }} DKP is added at End Camp — not in the DKP
+                              column, but counted in Event Total.
                             } @else {
                               Claim {{ claimBonusLabel(event) }} DKP and kill {{ killBonusLabel(event) }} DKP
-                              are added at End Camp and aren't included above.
+                              are added at End Camp — not in the DKP column, but counted in Event Total.
                             }
                           </p>
                           <div class="attendance-window-pane__meta">

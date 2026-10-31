@@ -923,7 +923,12 @@ public sealed record ActivityAttendanceWindowAttendeeDto(
     string? SubJobName,
     string? Zone,
     DateTime VerifiedAt,
-    string? VerifiedBy);
+    string? VerifiedBy,
+    // What this member would be paid for the WHOLE camp if it ended now: every window they're on,
+    // the claim and kill bonuses they have the evidence for, and every capture linked to the camp
+    // they appear on. Priced by HnmStandardCampFinalizer.PriceMembers, the same code End Camp pays
+    // from. Null on anything but a Standard HNM camp, or a scan that resolved to no account.
+    double? EventTotalDkp = null);
 
 public sealed record ActivityParticipationDto(
     int Id,

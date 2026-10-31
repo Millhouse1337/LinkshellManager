@@ -1278,6 +1278,11 @@ export interface ActivityAttendanceWindowAttendee {
   zone?: string | null;
   verifiedAt: string;
   verifiedBy?: string | null;
+  // What this member would be paid for the whole camp if it ended now: every window they're on,
+  // the claim / kill bonuses they have the evidence for, and the captures linked to the camp.
+  // Computed server-side by the same code End Camp pays from. Null on a Manual Check In camp or
+  // for a scan that matched no account.
+  eventTotalDkp?: number | null;
 }
 
 export interface ActivityWindowEventsResponse {

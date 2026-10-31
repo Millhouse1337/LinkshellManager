@@ -272,6 +272,78 @@ public sealed class HnmStandardCampFinalizer
             closeIsLatestPost);
     }
 
+    // One account's scan in one window: the only facts about a window scan that pricing reads.
+    public readonly record struct MemberWindowScan(
+        string AppUserId, int SequenceNumber, double? DkpAmount, bool IsClosingWindow, bool IsKillWindow);
+
+    // The camp priced: what each ACCOUNT is owed from its window scans plus the claim and kill
+    // bonuses, and the close window and kill windows that decided it.
+    public sealed record CampPricing(
+        IReadOnlyDictionary<string, double> DkpByAppUserId, int CloseWindow, IReadOnlySet<int> KillWindows);
+
+    // The pricing half of BuildRosterAsync, with the database reads taken out. End Camp pays from
+    // it, and the Activity card projects a live camp's "Event Total" from it, so the number a member
+    // is shown is the number they are paid. Pass the bonuses already gated the way the caller means
+    // them (End Camp: by claimed / killed; the live projection: ungated).
+    //
+    // Keyed on the account, case-insensitively: a member scanned on an alt in one window and on
+    // their main in another is one person. A tagger with no scan at all is owed the claim bonus
+    // alone, the same as BuildRosterAsync's tagger rows.
+    public static CampPricing PriceMembers(
+        IReadOnlyCollection<MemberWindowScan> scans, IReadOnlySet<string> taggedAppUserIds,
+        int popWindow, bool closeIsLatestPost,
+        double windowBonus, double openBonus, double closeBonus,
+        double claimBonus, double killBonus, double step)
+    {
+        // The officer's ticked box, if there is one. Kill windows are excluded from the fallback
+        // derivation below for the reason ResolveCloseWindow gives — the Post Kill roster is filed
+        // after the close and must not take the close bonus off the window that earned it.
+        var markedCloseWindow = scans
+            .Where(s => s.IsClosingWindow && !s.IsKillWindow)
+            .Select(s => (int?)s.SequenceNumber)
+            .FirstOrDefault();
+        var closeWindow = ResolveCloseWindow(
+            scans.Where(s => !s.IsKillWindow).Select(s => s.SequenceNumber).Distinct().ToList(),
+            popWindow, markedCloseWindow, closeIsLatestPost);
+
+        // Price every posted window ONCE, up front. The amount is a property of the window, so
+        // resolving it per member would be the same lookup N times over.
+        var valueBySequence = scans
+            .GroupBy(s => s.SequenceNumber)
+            .ToDictionary(
+                g => g.Key,
+                g => WindowValue(
+                    g.Key, closeWindow, g.First().DkpAmount,
+                    windowBonus, openBonus, closeBonus, g.First().IsKillWindow,
+                    closeIsMarked: markedCloseWindow is not null));
+
+        // Which sequences are the Post Kill rosters. A camp can hold more than one if the officer
+        // posted a kill, corrected it and posted again; being in ANY of them is the kill.
+        var killWindows = scans
+            .Where(s => s.IsKillWindow)
+            .Select(s => s.SequenceNumber)
+            .ToHashSet();
+
+        var dkpByAppUserId = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var account in scans.GroupBy(s => s.AppUserId, StringComparer.OrdinalIgnoreCase))
+        {
+            var windows = account.Select(s => s.SequenceNumber).ToHashSet();
+            dkpByAppUserId[account.Key] = ComputeMemberDkp(
+                windows.Select(seq => valueBySequence.GetValueOrDefault(seq)),
+                taggedAppUserIds.Contains(account.Key), windows.Overlaps(killWindows),
+                claimBonus, killBonus, step);
+        }
+        if (claimBonus > 0)
+        {
+            foreach (var tagger in taggedAppUserIds)
+            {
+                dkpByAppUserId.TryAdd(tagger, DkpRounding.Round(claimBonus, step));
+            }
+        }
+
+        return new CampPricing(dkpByAppUserId, closeWindow, killWindows);
+    }
+
     // Who this camp owes and how much, read off the addon's window scans. Read-only: stages
     // nothing, saves nothing. MUST be called before the caller tears the roster down.
     //
@@ -321,37 +393,6 @@ public sealed class HnmStandardCampFinalizer
         // officer ever read the roster. Bailing here paid them nothing, and the officer who forgot
         // to post a window is exactly the officer who most needs the record.
 
-        // The officer's ticked box, if there is one. Kill windows are excluded from the fallback
-        // derivation below for the reason ResolveCloseWindow gives — the Post Kill roster is filed
-        // after the close and must not take the close bonus off the window that earned it.
-        var markedCloseWindow = scans
-            .Where(s => s.IsClosingWindow && !s.IsKillWindow)
-            .Select(s => (int?)s.SequenceNumber)
-            .FirstOrDefault();
-        var closeWindow = ResolveCloseWindow(
-            scans.Where(s => !s.IsKillWindow).Select(s => s.SequenceNumber).Distinct().ToList(),
-            popWindow,
-            markedCloseWindow,
-            DiscordEventMessageBuilder.CloseIsLatestPost(ev));
-
-        // Price every posted window ONCE, up front. The amount is a property of the window, so
-        // resolving it per member would be the same lookup N times over.
-        var valueBySequence = scans
-            .GroupBy(s => s.SequenceNumber)
-            .ToDictionary(
-                g => g.Key,
-                g => WindowValue(
-                    g.Key, closeWindow, g.First().DkpAmount,
-                    windowBonus, openBonus, closeBonus, g.First().IsKillWindow,
-                    closeIsMarked: markedCloseWindow is not null));
-
-        // Which sequences are the Post Kill rosters. A camp can hold more than one if the officer
-        // posted a kill, corrected it and posted again; being in ANY of them is the kill.
-        var killWindows = scans
-            .Where(s => s.IsKillWindow)
-            .Select(s => s.SequenceNumber)
-            .ToHashSet();
-
         // Who tagged the mob, straight off this camp's Claim Shield captures. Accounts only —
         // an unmatched name resolved to no membership, so there is no balance to credit and no
         // way to tell whether it was even a linkshell member. Those rows stay visible in the
@@ -367,6 +408,17 @@ public sealed class HnmStandardCampFinalizer
                 .Distinct()
                 .ToListAsync(cancellationToken))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var step = DkpRounding.StepFor(linkshell.DkpRoundingIncrement);
+
+        // Every amount below comes from here — the same pricing the Activity card's Event Total
+        // projects a live camp with.
+        var pricing = PriceMembers(
+            scans.Select(s => new MemberWindowScan(
+                    s.AppUserId, s.SequenceNumber, s.DkpAmount, s.IsClosingWindow, s.IsKillWindow))
+                .ToList(),
+            taggedAppUserIds, popWindow, DiscordEventMessageBuilder.CloseIsLatestPost(ev),
+            windowBonus, openBonus, closeBonus, claimBonus, killBonus, step);
 
         var participations = await _db.AppUserEvents
             .Where(p => p.EventId == ev.Id)
@@ -428,10 +480,8 @@ public sealed class HnmStandardCampFinalizer
             .GroupBy(m => m.AppUserId!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-        var step = DkpRounding.StepFor(linkshell.DkpRoundingIncrement);
-
         var members = new List<HnmCampMember>();
-        foreach (var (appUserId, windows) in windowsByAppUserId)
+        foreach (var appUserId in windowsByAppUserId.Keys)
         {
             // Participation may be GONE — a wyrm roster clear deletes it while the snapshots
             // survive. The scan is the evidence of presence either way, so fall back to the
@@ -444,27 +494,20 @@ public sealed class HnmStandardCampFinalizer
                 ?? membership?.CharacterName;
             if (string.IsNullOrWhiteSpace(characterName)) continue;  // nothing to review
 
-            // Only the OUTCOME bonuses are gated here now — the per-window credit is whatever
-            // each window they were scanned in is priced at (see WindowValue for why the open is
-            // gated on window 1 specifically rather than on the earliest window posted).
-            //
-            // Each outcome answers to its OWN evidence: the claim to the Claim Shield tag list, the
-            // kill to the Post Kill roster. Neither reads the close window any more.
-            var tagged = taggedAppUserIds.Contains(appUserId);
-            var inKillWindow = windows.Overlaps(killWindows);
-
             // A member who scanned but qualified for nothing is still LISTED — they were at the
             // camp, and that's what the review page is for. They just carry 0, which an officer
             // can raise. (The old pay-direct path dropped them to avoid ledger noise; a pending
             // row isn't ledger noise.)
+            //
+            // The amount is PriceMembers': the windows they were scanned in, plus the claim (their
+            // name on the Claim Shield) and the kill (on the Post Kill roster), each outcome
+            // answering to its OWN evidence.
             members.Add(new HnmCampMember(
                 AppUserId: appUserId,
                 CharacterName: characterName.Trim(),
                 JobName: participation?.JobName,
                 SubJobName: participation?.SubJobName,
-                Dkp: ComputeMemberDkp(
-                    windows.Select(seq => valueBySequence.GetValueOrDefault(seq)),
-                    tagged, inKillWindow, claimBonus, killBonus, step)));
+                Dkp: pricing.DkpByAppUserId.GetValueOrDefault(appUserId)));
         }
 
         // Someone can tag the mob and never appear in a single scan — they died on the tag, or
@@ -502,8 +545,8 @@ public sealed class HnmStandardCampFinalizer
             "Standard HNM camp roster built: event {EventId} has {Count} member(s) "
             + "(close window {Close}, {Tagged} tagged on the Claim Shield, "
             + "kill window(s) {KillWindows}, claimed={Claimed}, killed={Killed}).",
-            ev.Id, members.Count, closeWindow, taggedAppUserIds.Count,
-            killWindows.Count, claimed, killed);
+            ev.Id, members.Count, pricing.CloseWindow, taggedAppUserIds.Count,
+            pricing.KillWindows.Count, claimed, killed);
         return members;
     }
 }

@@ -358,6 +358,50 @@ public class HnmStandardWindowPricingTests
         Assert.Equal(0.25, dkp, precision: 3);
     }
 
+    // ----- PriceMembers: the whole camp, per account -----
+    //
+    // The pricing End Camp pays from AND the Activity card's "Event Total" projects with, so the
+    // number a member is shown is the number they are paid.
+
+    // One account across windows (in any casing) is one person; a tagger never scanned is owed the
+    // claim alone.
+    [Fact]
+    public void PriceMembers_SumsPerAccount_AndPaysATaggerWithNoScan()
+    {
+        var scans = new[]
+        {
+            new HnmStandardCampFinalizer.MemberWindowScan("acct-1", 1, null, false, false),
+            new HnmStandardCampFinalizer.MemberWindowScan("ACCT-1", 3, null, true, false),  // ticked close
+            new HnmStandardCampFinalizer.MemberWindowScan("acct-1", 4, null, false, true),  // kill roster
+            new HnmStandardCampFinalizer.MemberWindowScan("acct-2", 2, null, false, false), // middle window
+        };
+        var tagged = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "acct-1", "acct-3" };
+
+        var pricing = HnmStandardCampFinalizer.PriceMembers(
+            scans, tagged, popWindow: 3, closeIsLatestPost: false,
+            windowBonus: 0d, openBonus: Open, closeBonus: Close,
+            claimBonus: Claim, killBonus: Kill, step: Quarter);
+
+        Assert.Equal(3, pricing.CloseWindow);
+        Assert.Equal(Open + Close + Claim + Kill, pricing.DkpByAppUserId["acct-1"], precision: 3);
+        Assert.Equal(0d, pricing.DkpByAppUserId["acct-2"], precision: 3);
+        Assert.Equal(Claim, pricing.DkpByAppUserId["acct-3"], precision: 3);
+    }
+
+    // The camp that popped in its opener, ticked there: open + close through the camp path too.
+    [Fact]
+    public void PriceMembers_WindowOneTickedAsTheClose_PaysOpenPlusClose()
+    {
+        var scans = new[] { new HnmStandardCampFinalizer.MemberWindowScan("acct-1", 1, null, true, false) };
+
+        var pricing = HnmStandardCampFinalizer.PriceMembers(
+            scans, new HashSet<string>(), popWindow: 1, closeIsLatestPost: false,
+            windowBonus: 0d, openBonus: Open, closeBonus: Close,
+            claimBonus: Claim, killBonus: Kill, step: Quarter);
+
+        Assert.Equal(Open + Close, pricing.DkpByAppUserId["acct-1"], precision: 3);
+    }
+
     // ----- The regular-window rate: what the windows IN BETWEEN pay -----
     //
     // Before this, a middle window was worth nothing unless an officer priced it one at a time, so

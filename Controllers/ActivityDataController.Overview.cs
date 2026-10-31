@@ -397,6 +397,71 @@ public sealed partial class ActivityDataController
                     .ToList()
                 : new List<ActivityClaimShieldCaptureDto>();
 
+        // Each Standard HNM camp's "Event Total" per account: what End Camp would pay if the camp
+        // ended right now. Priced by HnmStandardCampFinalizer.PriceMembers, the code End Camp pays
+        // from, with the claim and kill bonuses UNGATED -- a live camp's outcome isn't decided yet,
+        // so anyone with the evidence (on the Claim Shield, on the Kill roster) is shown the bonus
+        // they're on track for. Plus what each capture linked to the camp pays everyone on it, which
+        // End Camp carries onto the review card beside the windows. Memoized: every attendee asks.
+        var eventTotalsByEvent = new Dictionary<int, IReadOnlyDictionary<string, double>?>();
+        IReadOnlyDictionary<string, double>? EventTotalsFor(Event evt)
+        {
+            if (eventTotalsByEvent.TryGetValue(evt.Id, out var cached)) return cached;
+
+            Dictionary<string, double>? totals = null;
+            if (HnmCampPricing.HonoursWindowAmount(evt))
+            {
+                var scans = evt.AttendanceWindows
+                    .SelectMany(window => window.Attendees
+                        .Where(att => !string.IsNullOrWhiteSpace(att.AppUserId))
+                        .Select(att => new HnmStandardCampFinalizer.MemberWindowScan(
+                            att.AppUserId!, window.SequenceNumber, window.DkpAmount,
+                            window.IsClosingWindow, window.IsKillWindow)))
+                    .ToList();
+                var taggedAppUserIds = claimShieldsByEvent.GetValueOrDefault(evt.Id, new List<ClaimShieldCapture>())
+                    .SelectMany(capture => capture.Members)
+                    .Where(member => !string.IsNullOrWhiteSpace(member.AppUserId))
+                    .Select(member => member.AppUserId!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var (windowBonus, openBonus, closeBonus, claimBonus, killBonus) =
+                    HnmCampPricing.StandardBonuses(evt, primaryLinkshell, claimed: true, killed: true);
+
+                totals = new Dictionary<string, double>(
+                    HnmStandardCampFinalizer.PriceMembers(
+                        scans, taggedAppUserIds, evt.HnmWindowNumber,
+                        DiscordEventMessageBuilder.CloseIsLatestPost(evt),
+                        windowBonus, openBonus, closeBonus, claimBonus, killBonus,
+                        DkpRounding.StepFor(primaryLinkshell?.DkpRoundingIncrement)).DkpByAppUserId,
+                    StringComparer.OrdinalIgnoreCase);
+
+                // Linked captures pay per capture, once per account on it -- the same figure the
+                // card already prints on each capture (LinkedSnapshotsFor above).
+                foreach (var snapshot in linkedSnapshotsByEvent.GetValueOrDefault(evt.Id, new List<AttendanceSnapshot>()))
+                {
+                    var each = HnmCampPricing.LinkedCaptureValueFor(
+                        evt, primaryLinkshell, snapshot.SlotKind, snapshot.WindowNumber, snapshot.DkpAmount);
+                    if (each is not > 0) continue;
+                    var onCapture = snapshot.Entries
+                        .Where(entry => !string.IsNullOrWhiteSpace(entry.AppUserId))
+                        .Select(entry => entry.AppUserId!)
+                        .Distinct(StringComparer.OrdinalIgnoreCase);
+                    foreach (var appUserId in onCapture)
+                    {
+                        totals[appUserId] = totals.GetValueOrDefault(appUserId) + each.Value;
+                    }
+                }
+            }
+
+            eventTotalsByEvent[evt.Id] = totals;
+            return totals;
+        }
+
+        double? EventTotalOf(Event evt, string? appUserId) =>
+            appUserId is not null && EventTotalsFor(evt) is { } totals
+                && totals.TryGetValue(appUserId, out var total)
+                ? total
+                : null;
+
         // Resolve creator/starter character names for each active event. Prefer
         // the user's linkshell-specific character name; fall back to their
         // top-level AppUser.CharacterName, then UserName.
@@ -852,7 +917,8 @@ public sealed partial class ActivityDataController
                                 att.AppUserEvent != null ? att.AppUserEvent.SubJobName : null,
                                 att.Zone,
                                 att.VerifiedAt,
-                                att.VerifiedBy))
+                                att.VerifiedBy,
+                                EventTotalOf(evt, att.AppUserId)))
                             .ToList(),
                         window.DkpAmount,
                         window.IsClosingWindow,
