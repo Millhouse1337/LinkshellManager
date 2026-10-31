@@ -18,7 +18,7 @@
 | **Attendance panel** | The live roster and posting controls. | Choose Party / Alliance and your alliance number, review attendees, then **Start & Post** or **Post Window**. |
 | **Loot Pool** | Captured drops for the current kill. | Assign winners and post loot after drops appear in chat. |
 | **Settings** | DKP defaults, panel visibility, opacity, ToD capture lists, Claim Shield messages. | Set defaults once, then save. |
-| **Repop Timer** | Countdown view for tracked monsters. | Watch repop windows and post a ToD when a tracked mob pops/dies. |
+| **Repop Timer** | Countdown view for tracked monsters. | Watch repop windows, and see a tracked mob turn POPPED / KILLED. Post the ToD from the ToD Capturing panel. |
 | **Chat log** | Source of truth for command results. | Read the `[lsm]` confirmation after every server, link, snapshot, ToD, or post action. |
 
 ---
