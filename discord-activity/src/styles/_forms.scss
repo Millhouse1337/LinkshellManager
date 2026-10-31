@@ -653,10 +653,14 @@
   font-size: 12px;
 }
 
+// Every dropdown on ONE row, equal widths. A column per field rather than a fixed count, because
+// the field count varies: Character only shows for someone with more than one character, so this
+// is 3 or 4 -- and a fixed 3 columns wrapped the fourth (Sub job) onto a row of its own.
 .ad-hoc-signup__grid {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
 }
 
 .ad-hoc-signup__grid label {
@@ -683,6 +687,7 @@
 
 @media (max-width: 720px) {
   .ad-hoc-signup__grid {
+    grid-auto-flow: row;
     grid-template-columns: 1fr;
   }
 }
