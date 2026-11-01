@@ -266,7 +266,9 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, tod.TodLootDetails.ToList(), DateTime.UtcNow, isRefund: true, cancellationToken);
+        // Deleting a ToD never changes anyone's DKP. Its loot rows go with it, but the DKP charged
+        // for that loot stays charged: the ledger rows keep only the loot's id (not a foreign key),
+        // so they survive the delete. Refunding loot is the Loot tab's job, one item at a time.
         _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
         DeleteUploadedTodImage(tod.ImagePath);
         _dbContext.Tods.Remove(tod);
