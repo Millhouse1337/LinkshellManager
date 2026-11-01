@@ -458,13 +458,15 @@ public sealed partial class AddonApiController
         var paysPerWindow = !(string.Equals(eventEntity.EventType, "HNM", StringComparison.OrdinalIgnoreCase)
                               && !DiscordEventMessageBuilder.IsWd(eventEntity));
         double? perWindowDkp = null;
+        // The same window before any close bonus: what the addon's per-window price box shows.
+        double? baseWindowDkp = null;
         if (attendanceWindow is not null)
         {
             if (HnmCampPricing.HonoursWindowAmount(eventEntity))
             {
                 // A Standard HNM camp pays this window by its ROLE -- the open bonus on window 1,
-                // the close bonus on the window that closes the camp out, the regular rate in
-                // between -- so resolve it through the same pricing the finalizer will use.
+                // the regular rate elsewhere, plus the close bonus on the window that closes the
+                // camp out -- so resolve it through the same pricing the finalizer will use.
                 //
                 // It used to report DkpPerHour, which such a camp does not pay, so the expression
                 // fell through to null. That is what left the addon's Open tab showing the regular
@@ -483,11 +485,15 @@ public sealed partial class AddonApiController
                         campWindows, DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity)),
                     attendanceWindow.DkpAmount, attendanceWindow.IsKillWindow,
                     HnmStandardCampFinalizer.HasMarkedCloseWindow(campWindows));
+                baseWindowDkp = HnmCampPricing.BaseWindowValueFor(
+                    eventEntity, campLinkshell, attendanceWindow.SequenceNumber,
+                    attendanceWindow.DkpAmount, attendanceWindow.IsKillWindow);
             }
             else
             {
                 perWindowDkp = attendanceWindow.DkpAmount
                     ?? (paysPerWindow ? eventEntity.DkpPerHour : null);
+                baseWindowDkp = perWindowDkp;
             }
         }
 
@@ -780,6 +786,7 @@ public sealed partial class AddonApiController
             // report its old "On Time" / "Claim/Kill" name back to the addon.
             windowLabel = HnmConfig.NormalizeWindowLabel(attendanceWindow?.Label),
             dkpPerWindow = perWindowDkp,
+            baseDkpPerWindow = baseWindowDkp,
             // Echoed so the addon can colour its local copy of this window the same way a re-read
             // from the server would. Null when the post carried no alliance -- the addon then
             // renders those rows muted rather than assuming they are the reader's own.
