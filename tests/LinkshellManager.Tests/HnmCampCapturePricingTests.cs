@@ -91,7 +91,7 @@ public class HnmCampCapturePricingTests
     // Three posted windows. Alpha is scanned in all three; Beta only in the middle one, which is
     // what proves a capture pays the person who was in IT rather than the camp's headline rate.
     //
-    // Window 3 is marked as the close, so the grid is open / regular / close = 1 / 0.5 / 2.
+    // Window 3 is marked as the close, so the grid is open / regular / close = 1 / 0.5 / 0.5 + 2.
     private static async Task<ApplicationDbContext> SeededAsync(
         string? attendanceMode = null, bool markClose = true, bool duplicateAlphaInWindowOne = false)
     {
@@ -202,7 +202,7 @@ public class HnmCampCapturePricingTests
         var byWindow = await AmountsByWindowAsync(db, "Alpha");
         Assert.Equal(1d, byWindow["Open"]);         // sequence 1
         Assert.Equal(0.5d, byWindow["Window 2"]);   // a regular window
-        Assert.Equal(2d, byWindow["Close"]);        // the marked closing window
+        Assert.Equal(2.5d, byWindow["Close"]);      // the marked closing window: regular 0.5 + close 2
     }
 
     // Each capture is NAMED for what it is paid as. "Window 1, Window 2, Window 3" a minute apart
@@ -364,7 +364,7 @@ public class HnmCampCapturePricingTests
         var camp = await db.Events.FirstAsync(e => e.Id == EventId);
         var linkshell = await db.Linkshells.FirstAsync(l => l.Id == LinkshellId);
         var expected = (await new HnmStandardCampFinalizer(db, NullLogger<HnmStandardCampFinalizer>.Instance)
-                .BuildRosterAsync(camp, linkshell, popWindow: 3, claimed: true, killed: true, CancellationToken.None))
+                .BuildRosterAsync(camp, linkshell, claimed: true, killed: true, CancellationToken.None))
             .ToDictionary(m => m.CharacterName, m => m.Dkp);
 
         await EndCampAsync(db, claimed: true, killed: true);
@@ -409,7 +409,7 @@ public class HnmCampCapturePricingTests
             .CombinedMembers
             .Single(m => m.CharacterName == "Alpha");
 
-        Assert.Equal(3.5d, row.EffectiveDkpAmount);   // 1 + 0.5 + 2
+        Assert.Equal(4d, row.EffectiveDkpAmount);   // 1 + 0.5 + (0.5 + 2)
     }
 
     // Re-pricing ONE window is the whole point of editing on the capture, and it has to reach the
@@ -433,7 +433,7 @@ public class HnmCampCapturePricingTests
             windowEvent.Id, CancellationToken.None);
 
         var alpha = await db.DkpLedgerEntries.FirstAsync(e => e.AppUserId == AlphaId);
-        Assert.Equal(7.5d, alpha.Amount);   // 5 + 0.5 + 2
+        Assert.Equal(8d, alpha.Amount);   // 5 + 0.5 + (0.5 + 2)
     }
 
     // The handoff writes no per-member rows on a priced camp: two copies of one payout, and the one
@@ -659,7 +659,7 @@ public class HnmCampCapturePricingTests
         var paid = archive.Windows.ToDictionary(w => w.SequenceNumber, w => w.Paid);
         Assert.Equal(new DkpRange(1d, 1d), paid[1]);       // open
         Assert.Equal(new DkpRange(0.5d, 0.5d), paid[2]);   // regular -- Alpha and Beta both
-        Assert.Equal(new DkpRange(2d, 2d), paid[3]);       // close
+        Assert.Equal(new DkpRange(2.5d, 2.5d), paid[3]);   // close: regular 0.5 + close 2
     }
 
     // An officer who re-prices one person during review changes what the window paid, and the
@@ -713,7 +713,7 @@ public class HnmCampCapturePricingTests
         var paid = archive.Windows.ToDictionary(w => w.SequenceNumber, w => w.Paid);
         Assert.Equal(new DkpRange(1d, 1d), paid[1]);       // open
         Assert.Equal(new DkpRange(0.5d, 0.5d), paid[2]);   // regular
-        Assert.Equal(new DkpRange(2d, 2d), paid[3]);       // close
+        Assert.Equal(new DkpRange(2.5d, 2.5d), paid[3]);   // close: regular 0.5 + close 2
     }
 
     // A post with no stamp on an Open/Close camp claims no window: its sequence counts posts, and

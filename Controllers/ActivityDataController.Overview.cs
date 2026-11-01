@@ -428,8 +428,7 @@ public sealed partial class ActivityDataController
 
                 totals = new Dictionary<string, double>(
                     HnmStandardCampFinalizer.PriceMembers(
-                        scans, taggedAppUserIds, evt.HnmWindowNumber,
-                        DiscordEventMessageBuilder.CloseIsLatestPost(evt),
+                        scans, taggedAppUserIds, DiscordEventMessageBuilder.PostsOpenAndClose(evt),
                         windowBonus, openBonus, closeBonus, claimBonus, killBonus,
                         DkpRounding.StepFor(primaryLinkshell?.DkpRoundingIncrement)).DkpByAppUserId,
                     StringComparer.OrdinalIgnoreCase);

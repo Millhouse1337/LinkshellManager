@@ -1137,12 +1137,6 @@ public static class DiscordEventMessageBuilder
     public static bool WindowsOpenEnded(Event ev) =>
         WindowMethodFor(ev) == MonsterWindowMethods.WindowN && EffectiveWindowCount(ev) < 2;
 
-    // Is the camp's close simply its LATEST post? True on an Open/Close camp (the Close ends the
-    // posting) and on an open-ended camp, whose spawn counter never moves off window 1 and so can't
-    // say which window the pop landed in. Otherwise the pop window decides (ResolveCloseWindow).
-    public static bool CloseIsLatestPost(Event ev) =>
-        PostsOpenAndClose(ev) || WindowsOpenEnded(ev);
-
     // The highest NON-kill sequence the camp accepts.
     //
     // A camp with no Window Method keeps the spawn count it was always checked against. With one,

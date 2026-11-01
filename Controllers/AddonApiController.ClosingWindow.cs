@@ -105,8 +105,7 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "A Post Kill roster cannot be the closing window." });
         }
 
-        // Load the whole camp's windows: marking one has to unmark the others, and clearing an
-        // explicit price needs the close bonus resolved off the camp.
+        // Load the whole camp's windows: marking one has to unmark the others.
         var siblings = await _dbContext.EventAttendanceWindows
             .Where(w => w.EventId == window.EventId)
             .ToListAsync(cancellationToken);
@@ -118,30 +117,10 @@ public sealed partial class AddonApiController
             sibling.IsClosingWindow = isClosing && sibling.Id == window.Id;
         }
 
-        if (isClosing)
-        {
-            // THE point of the checkbox. The window was posted at whatever it was worth at the
-            // time — the open on window 1, the regular rate elsewhere — and the addon stamped that
-            // as an explicit DkpAmount. An explicit amount REPLACES the computed value, so leaving
-            // it in place would tick the box and pay nothing extra.
-            //
-            // Clearing it is what lets the close bonus through: the window falls back to the camp's
-            // computed price, and WindowValue prices a marked close at the close bonus. That is the
-            // rule as stated — once a window is the closing window, the linkshell's close DKP
-            // becomes its value.
-            //
-            // With ONE exception, and it is WindowValue's, not this endpoint's: ticking sequence 1
-            // still prices as the OPEN, because a window never pays two amounts and sequence 1 is
-            // the open by definition. A camp that opened and closed in a single roster read is the
-            // officer's to settle — they add the close from the review page, where the amounts are
-            // editable. The tick is still recorded and still honoured; it just has nothing left to
-            // change on window 1.
-            //
-            // Destructive to a hand-typed price, deliberately. "This is the close" is the more
-            // specific statement of the two, and the officer can re-price the window afterwards if
-            // they really did mean a one-off number.
-            window.DkpAmount = null;
-        }
+        // The window's own price is left alone. The close bonus ADDS to it now
+        // (HnmStandardCampFinalizer.WindowValue), so there is nothing for the tick to clear. It used
+        // to wipe DkpAmount, back when an explicit price replaced the close bonus and would have
+        // swallowed it.
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -149,8 +128,7 @@ public sealed partial class AddonApiController
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == eventEntity.LinkshellId, cancellationToken);
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
-            siblings, eventEntity.HnmWindowNumber,
-            DiscordEventMessageBuilder.CloseIsLatestPost(eventEntity));
+            siblings, DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity));
 
         return Ok(new
         {
@@ -158,8 +136,8 @@ public sealed partial class AddonApiController
             sequenceNumber = window.SequenceNumber,
             isClosingWindow = window.IsClosingWindow,
             dkpAmount = window.DkpAmount,
-            // Echoed so both clients can repaint the whole column without a refetch: unmarking
-            // hands the close back to the derived fallback, which may land on a different row.
+            // Echoed so both clients can repaint the whole column without a refetch: marking one
+            // window unmarks another, and unmarking leaves a numbered camp with no close at all.
             closeWindow,
             dkpValue = HnmCampPricing.WindowValueFor(
                 eventEntity, linkshell, window.SequenceNumber, closeWindow,

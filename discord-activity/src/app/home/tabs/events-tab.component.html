@@ -429,12 +429,10 @@
                                        (change)="commitWindowDkp(event, activeWindow)" />
                               </span>
                             }
-                            <!-- Which window closes the camp out. Ticking it is the ONLY thing that
-                                 pays the close bonus — it used to be guessed as "the newest window
-                                 posted", which is what put a close bonus on every window of every
-                                 camp. Ticking also clears this window's hand-set price, because an
-                                 explicit amount replaces the computed one and would swallow the
-                                 bonus; the server does that, hence the round trip. -->
+                            <!-- Which window closes the camp out. On a numbered camp, ticking it is
+                                 the ONLY thing that pays the close bonus, which adds to whatever the
+                                 window already pays. Round-trips because ticking one window unticks
+                                 the others server-side. -->
                             @if (canManageLinkshell(event.linkshellId) && canMarkClosingWindow(event, activeWindow)) {
                               <span class="window-close-mark">
                                 <label>

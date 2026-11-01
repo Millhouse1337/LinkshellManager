@@ -125,18 +125,17 @@ public class HnmStandardMemberGatingTests
 
     // ----- Where the close window comes from -----
 
-    // A camp that popped in its opener. Window 1 resolves as the close as well as the open — and it
-    // still pays the OPEN alone, because a window never pays two amounts. The outcome bonuses are
-    // unaffected: they answer to the Claim Shield and the kill roster, not to the window count.
+    // A named Open/Close camp with only its Open posted. Window 1 resolves as the close as well as
+    // the open — and it still pays the OPEN alone, because the close only FELL BACK onto it. The
+    // outcome bonuses are unaffected: they answer to the Claim Shield and the kill roster.
     //
     // Goes through WindowValue rather than the boolean Member helper, because the boolean form
     // models two DIFFERENT windows and this camp only ever had one — see the overload's own note.
-    // Nobody ticked a closing window here, so the close only FELL BACK onto window 1; ticking it
-    // is how the officer says the camp earned the close too (next test).
+    // Ticking window 1 is how the officer says the camp earned the close too (next test).
     [Fact]
     public void PoppedOnTheOpener_TheOneWindowPaysTheOpen_NotOpenPlusClose()
     {
-        var close = HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 1 }, popWindow: 1);
+        var close = HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 1 }, closeIsNamedPost: true);
         Assert.Equal(1, close);
 
         var dkp = HnmStandardCampFinalizer.ComputeMemberDkp(
@@ -151,8 +150,7 @@ public class HnmStandardMemberGatingTests
     [Fact]
     public void PoppedOnTheOpener_TickedAsTheClose_PaysOpenPlusClose()
     {
-        var close = HnmStandardCampFinalizer.ResolveCloseWindow(
-            new[] { 1 }, popWindow: 1, markedCloseWindow: 1);
+        var close = HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 1 }, markedCloseWindow: 1);
 
         var dkp = HnmStandardCampFinalizer.ComputeMemberDkp(
             new[] { HnmStandardCampFinalizer.WindowValue(1, close, null, 0d, Open, Close, closeIsMarked: true) },
@@ -169,7 +167,7 @@ public class HnmStandardMemberGatingTests
     public void OpenWindowPostedAlone_PaysTheOpenOnce_NotOpenPlusClose()
     {
         const double One = 1.0;
-        var close = HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 1 }, popWindow: 4);
+        var close = HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 1 });
 
         var dkp = HnmStandardCampFinalizer.ComputeMemberDkp(
             new[] { HnmStandardCampFinalizer.WindowValue(1, close, null, 0.5d, One, One) },
@@ -178,14 +176,14 @@ public class HnmStandardMemberGatingTests
         Assert.Equal(One, dkp, precision: 3);
     }
 
-    // An officer who reached camp only for the kill posts a Close and no Open. The lone window is
-    // the close (nothing else was posted), so the camp still pays out — but there was no open
-    // roster, so nobody earns the open bonus. Open is gated on window 1 SPECIFICALLY rather than
-    // on "the earliest window posted", which is what makes this work.
+    // An officer who reached a named Open/Close camp only for the kill posts a Close and no Open.
+    // The lone window is the close, so the camp still pays out — but there was no open roster, so
+    // nobody earns the open bonus. Open is gated on window 1 SPECIFICALLY rather than on "the
+    // earliest window posted", which is what makes this work.
     [Fact]
     public void CloseOnlyCamp_LateOfficerPostedOnlyTheClose_PaysNoOpenBonus()
     {
-        var close = HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 2 }, popWindow: 2);
+        var close = HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 2 }, closeIsNamedPost: true);
         Assert.Equal(2, close);
 
         var windows = new HashSet<int> { 2 };
@@ -196,21 +194,12 @@ public class HnmStandardMemberGatingTests
         Assert.Equal(Open + Close + Claim + Kill - Open, dkp, precision: 3);
     }
 
-    // A Close-only camp whose officer-stated pop window was never scanned still closes on the one
-    // window that WAS posted (ResolveCloseWindow falls back to the highest). Without this the
-    // close window would resolve to 0 and the lone roster would earn nothing at all.
-    [Fact]
-    public void CloseOnlyCamp_PopWindowNotScanned_StillClosesOnTheLoneWindow()
-    {
-        Assert.Equal(2, HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 2 }, popWindow: 7));
-    }
-
     // A Close-only camp is not a blanket payout: someone who was around but is absent from the
     // one posted roster and never tagged earns nothing, exactly as on a camp with both windows.
     [Fact]
     public void CloseOnlyCamp_MemberNotInTheCloseScan_PaysNothing()
     {
-        var close = HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 2 }, popWindow: 2);
+        var close = HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 2 }, closeIsNamedPost: true);
         var windows = new HashSet<int>();   // scanned nowhere
 
         Assert.Equal(0.0,

@@ -6,21 +6,14 @@ namespace LinkshellManager.Tests;
 // Pricing ONE window — HnmStandardCampFinalizer.WindowValue and the per-window ComputeMemberDkp
 // that sums it, isolated from the DB.
 //
-// A window pays ONE amount: the open, the close, or the regular window rate. They do not stack. The
-// one exception is window 1 TICKED as the closing window (a camp that popped in its opener), which
-// pays open + close; the same window reached only by the close fallback pays the open alone. The
-// one-amount rule is a reversal — the bonuses used to ADD to the rate, so
-// window 1 paid rate + open — and it went with making the close an explicit officer mark instead of
-// a derived "newest window posted". Together those were the bug: the derived close was QUOTED to
-// the addon before every post, the addon wrote the quote back as an explicit price, and so every
-// window on a camp ended up frozen holding a close bonus, with window 1 holding open + close + rate.
+// A window pays its BASE amount -- the open on window 1, the regular rate elsewhere, or an officer's
+// hand-set price (EventAttendanceWindow.DkpAmount) -- plus the close bonus when it is the close. The
+// Activity shows those as its DKP and Closing window columns. (Until 2026-11-01 the close bonus
+// REPLACED the window's amount, and ticking the close wiped a hand-set price.)
 //
-// The both-ends case was the last of that stacking to go: because the close FALLS BACK to the
-// latest window posted, the opening post of every camp was also its close until a second one
-// landed, so a 1 open / 1 close linkshell was quoted 1 and shown 2 for posting the open.
-//
-// An officer can still price a window by hand (EventAttendanceWindow.DkpAmount) and it REPLACES
-// whichever of the three would otherwise apply.
+// The close is only the window an officer ticked, or a named camp's Close post; a numbered camp
+// nobody ticked has none. A close that only fell back onto window 1 (a named camp with just its Open
+// posted) adds nothing -- window 1 pays open + close only when TICKED.
 //
 // HnmStandardMemberGatingTests is the companion: it pins the gating of the four bonuses.
 public class HnmStandardWindowPricingTests
@@ -56,10 +49,7 @@ public class HnmStandardWindowPricingTests
         Assert.Equal(Close, Value(sequence: 3, closeWindow: 3), precision: 3);
     }
 
-    // THE regression this whole change exists for. The open and the close are alternatives, not
-    // addends: window 1 pays the open and nothing else. It used to pay open + close on any camp
-    // whose close resolved to window 1 — which, under the old "newest window posted" derivation,
-    // was every camp for as long as it had one window posted.
+    // Window 1 pays the open and nothing else when the close is elsewhere, or there is none.
     [Fact]
     public void WindowValue_WindowOneOnly_PaysTheOpenAlone()
     {
@@ -67,15 +57,8 @@ public class HnmStandardWindowPricingTests
         Assert.Equal(Open, Value(sequence: 1, closeWindow: 4), precision: 3);
     }
 
-    // The window that is BOTH ends of the camp — a single-post NM claimed and dead in one roster
-    // read, or a camp that popped in its opener. It pays the OPEN, alone. There is no case in which
-    // one window pays two amounts.
-    //
-    // This used to pay open + close, on the reasoning that the camp genuinely earned both. What
-    // that missed is ResolveCloseWindow's fallback: with nothing ticked, the close is "the latest
-    // window posted", so the opening post of EVERY camp is also its close for as long as it is the
-    // only window. A linkshell running 1 open / 1 close saw 2 DKP for posting the open. The camp
-    // that really did open and close at once is now the officer's to settle by hand.
+    // A close that only FELL BACK onto window 1 -- a named camp with just its Open posted -- adds
+    // nothing. Otherwise posting the Open on a 1 open / 1 close linkshell would read as 2 DKP.
     [Fact]
     public void WindowValue_WindowOneIsAlsoTheClose_PaysTheOpenAlone()
     {
@@ -99,8 +82,8 @@ public class HnmStandardWindowPricingTests
         Assert.Equal(Open + Close, HnmStandardCampFinalizer.WindowValue(
             sequence: 1, closeWindow: 1, explicitAmount: null, windowBonus: 0.25,
             openBonus: Open, closeBonus: Close, closeIsMarked: true), precision: 3);
-        // An officer's price still replaces everything, tick or no tick.
-        Assert.Equal(5.0, HnmStandardCampFinalizer.WindowValue(
+        // An officer's price replaces the open, and the ticked close still adds on top.
+        Assert.Equal(5.0 + Close, HnmStandardCampFinalizer.WindowValue(
             sequence: 1, closeWindow: 1, explicitAmount: 5.0, windowBonus: 0d,
             openBonus: Open, closeBonus: Close, closeIsMarked: true), precision: 3);
     }
@@ -163,14 +146,28 @@ public class HnmStandardWindowPricingTests
 
     // ----- WindowValue: an officer priced it -----
 
-    // THE precedence rule, and the one a future reader is most likely to get backwards. The
-    // control is labelled "DKP this window"; a box showing 5 on a window that paid 5.5 would be
-    // lying about its own name.
+    // An officer's price replaces the window's BASE amount: the open here. The close only fell back
+    // onto window 1 (nothing ticked), so nothing is added.
     [Fact]
-    public void WindowValue_ExplicitAmount_ReplacesTheBonuses_DoesNotAddToThem()
+    public void WindowValue_ExplicitAmount_ReplacesTheOpen()
     {
-        // Window 1 IS the close here, so its default would be the Open.
         Assert.Equal(5.0, Value(sequence: 1, closeWindow: 1, explicitAmount: 5.0), precision: 3);
+    }
+
+    // THE rule a future reader is most likely to get backwards: on the close, a hand-set price and
+    // the close bonus ADD. The Activity shows them as two columns, and the window pays both.
+    [Fact]
+    public void WindowValue_ExplicitAmountOnTheClose_StillAddsTheCloseBonus()
+    {
+        Assert.Equal(2.0 + Close, Value(sequence: 3, closeWindow: 3, explicitAmount: 2.0), precision: 3);
+    }
+
+    [Fact]
+    public void BaseAndCloseValues_SumToTheWindowValue()
+    {
+        Assert.Equal(2.0, HnmStandardCampFinalizer.BaseWindowValue(3, 2.0, 0d, Open), precision: 3);
+        Assert.Equal(Close, HnmStandardCampFinalizer.CloseWindowValue(3, 3, Close), precision: 3);
+        Assert.Equal(0.0, HnmStandardCampFinalizer.CloseWindowValue(2, 3, Close), precision: 3);
     }
 
     // An officer who deliberately zeroes the Open must be able to make it stick. Treating 0 as
@@ -190,28 +187,29 @@ public class HnmStandardWindowPricingTests
         Assert.Equal(0.0, Value(sequence: 2, closeWindow: 3, explicitAmount: -4.0), precision: 3);
     }
 
-    // ----- ResolveCloseWindow: the officer's tick beats the derivation -----
+    // ----- ResolveCloseWindow: only the officer's tick, or a named camp's Close post -----
 
     [Fact]
-    public void ResolveCloseWindow_MarkedWindow_WinsOverTheDerivation()
+    public void ResolveCloseWindow_MarkedWindow_Wins()
     {
-        // Windows 1..4 posted, the pop landed in 4, but the officer ticked window 2. The tick wins:
-        // it is a statement about the camp, not a guess to be second-guessed.
+        // Windows 1..4 posted and the officer ticked window 2. The tick wins, on a named camp too.
         Assert.Equal(2, HnmStandardCampFinalizer.ResolveCloseWindow(
-            new[] { 1, 2, 3, 4 }, popWindow: 4, markedCloseWindow: 2));
+            new[] { 1, 2, 3, 4 }, markedCloseWindow: 2));
+        Assert.Equal(1, HnmStandardCampFinalizer.ResolveCloseWindow(
+            new[] { 1, 2 }, markedCloseWindow: 1, closeIsNamedPost: true));
     }
 
     [Fact]
-    public void ResolveCloseWindow_NothingMarked_FallsBackToTheOldDerivation()
+    public void ResolveCloseWindow_NothingMarked_OnlyANamedCampHasAClose()
     {
-        // Kept so camps that predate the checkbox — and camps where nobody ticked it — still pay a
-        // close instead of silently paying none.
-        Assert.Equal(4, HnmStandardCampFinalizer.ResolveCloseWindow(
-            new[] { 1, 2, 3, 4 }, popWindow: 4));
+        // A numbered camp nobody ticked pays no close. It used to fall back to the pop window, else
+        // the latest window posted.
+        Assert.Equal(0, HnmStandardCampFinalizer.ResolveCloseWindow(new[] { 1, 2, 3, 4 }));
+        // A named Open/Close camp's close is its latest post.
         Assert.Equal(2, HnmStandardCampFinalizer.ResolveCloseWindow(
-            new[] { 2 }, popWindow: 7));
+            new[] { 1, 2 }, closeIsNamedPost: true));
         Assert.Equal(0, HnmStandardCampFinalizer.ResolveCloseWindow(
-            System.Array.Empty<int>(), popWindow: 3));
+            System.Array.Empty<int>(), closeIsNamedPost: true));
     }
 
     // The row overload is what every caller outside the finalizer uses, and it owns the two filters
@@ -223,15 +221,15 @@ public class HnmStandardWindowPricingTests
         {
             new LinkshellManagerDiscordApp.Models.EventAttendanceWindow { SequenceNumber = 1 },
             new LinkshellManagerDiscordApp.Models.EventAttendanceWindow { SequenceNumber = 2 },
-            // Filed after the close. Left in the derivation it would steal the close bonus off
-            // window 2 and hand it to the people who only turned up for the fight.
+            // Filed after the close. Left in a named camp's "latest post" it would steal the close
+            // bonus off window 2 and hand it to the people who only turned up for the fight.
             new LinkshellManagerDiscordApp.Models.EventAttendanceWindow
             {
                 SequenceNumber = 3, IsKillWindow = true
             },
         };
 
-        Assert.Equal(2, HnmStandardCampFinalizer.ResolveCloseWindow(windows, popWindow: 3));
+        Assert.Equal(2, HnmStandardCampFinalizer.ResolveCloseWindow(windows, closeIsNamedPost: true));
     }
 
     [Fact]
@@ -247,7 +245,7 @@ public class HnmStandardWindowPricingTests
             new LinkshellManagerDiscordApp.Models.EventAttendanceWindow { SequenceNumber = 3 },
         };
 
-        Assert.Equal(1, HnmStandardCampFinalizer.ResolveCloseWindow(windows, popWindow: 3));
+        Assert.Equal(1, HnmStandardCampFinalizer.ResolveCloseWindow(windows));
     }
 
     // ----- ComputeMemberDkp: summing the windows a member was actually scanned in -----
@@ -378,7 +376,7 @@ public class HnmStandardWindowPricingTests
         var tagged = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "acct-1", "acct-3" };
 
         var pricing = HnmStandardCampFinalizer.PriceMembers(
-            scans, tagged, popWindow: 3, closeIsLatestPost: false,
+            scans, tagged, closeIsNamedPost: false,
             windowBonus: 0d, openBonus: Open, closeBonus: Close,
             claimBonus: Claim, killBonus: Kill, step: Quarter);
 
@@ -395,11 +393,30 @@ public class HnmStandardWindowPricingTests
         var scans = new[] { new HnmStandardCampFinalizer.MemberWindowScan("acct-1", 1, null, true, false) };
 
         var pricing = HnmStandardCampFinalizer.PriceMembers(
-            scans, new HashSet<string>(), popWindow: 1, closeIsLatestPost: false,
+            scans, new HashSet<string>(), closeIsNamedPost: false,
             windowBonus: 0d, openBonus: Open, closeBonus: Close,
             claimBonus: Claim, killBonus: Kill, step: Quarter);
 
         Assert.Equal(Open + Close, pricing.DkpByAppUserId["acct-1"], precision: 3);
+    }
+
+    // A numbered camp nobody ticked: nobody earns the close, wherever the pop landed.
+    [Fact]
+    public void PriceMembers_NothingTicked_PaysNoCloseBonus()
+    {
+        var scans = new[]
+        {
+            new HnmStandardCampFinalizer.MemberWindowScan("acct-1", 1, null, false, false),
+            new HnmStandardCampFinalizer.MemberWindowScan("acct-1", 3, null, false, false),
+        };
+
+        var pricing = HnmStandardCampFinalizer.PriceMembers(
+            scans, new HashSet<string>(), closeIsNamedPost: false,
+            windowBonus: 0d, openBonus: Open, closeBonus: Close,
+            claimBonus: Claim, killBonus: Kill, step: Quarter);
+
+        Assert.Equal(0, pricing.CloseWindow);
+        Assert.Equal(Open, pricing.DkpByAppUserId["acct-1"], precision: 3);
     }
 
     // ----- The regular-window rate: what the windows IN BETWEEN pay -----
@@ -415,29 +432,28 @@ public class HnmStandardWindowPricingTests
         Assert.Equal(Regular, Value(sequence: 2, closeWindow: 3, windowBonus: Regular), precision: 3);
     }
 
-    // The rate is what a window pays when it is NEITHER end. The open and the close replace it
-    // rather than riding on top — one amount per window.
+    // The open replaces the rate on window 1. The close rides on top of it: the close window is
+    // still a window, and the close bonus is added to whatever it pays.
     [Fact]
-    public void RegularWindowRate_OpenAndCloseReplaceIt_TheyDoNotRideOnTopOfIt()
+    public void RegularWindowRate_OpenReplacesIt_CloseAddsToIt()
     {
         Assert.Equal(Open, Value(sequence: 1, closeWindow: 3, windowBonus: Regular), precision: 3);
-        Assert.Equal(Close, Value(sequence: 3, closeWindow: 3, windowBonus: Regular), precision: 3);
-        // Both ends at once still excludes the rate — it is what a window pays when it is NEITHER.
+        Assert.Equal(Regular + Close, Value(sequence: 3, closeWindow: 3, windowBonus: Regular), precision: 3);
+        // A close that only fell back onto window 1 adds nothing, and the open still replaces the rate.
         Assert.Equal(Open, Value(sequence: 1, closeWindow: 1, windowBonus: Regular), precision: 3);
     }
 
-    // An officer's explicit amount still REPLACES the whole thing, rate included. The box is
-    // labelled "DKP this window" and has to mean it.
+    // An officer's explicit amount replaces the rate too.
     [Fact]
-    public void RegularWindowRate_ExplicitAmount_StillReplacesEverything()
+    public void RegularWindowRate_ExplicitAmount_ReplacesTheRate()
     {
         Assert.Equal(5.0,
-            Value(sequence: 1, closeWindow: 1, explicitAmount: 5.0, windowBonus: Regular), precision: 3);
+            Value(sequence: 2, closeWindow: 3, explicitAmount: 5.0, windowBonus: Regular), precision: 3);
     }
 
     // Where the rate actually shows up in a payout: someone scanned across a camp earns it for
-    // every MIDDLE window they were in. Eight windows of a wyrm camp = the open, six at the rate,
-    // and the close.
+    // every window after the open, and the close adds its bonus. Eight windows of a wyrm camp = the
+    // open, seven at the rate, and the close bonus.
     [Fact]
     public void RegularWindowRate_PaysPerMiddleWindowScanned()
     {
@@ -450,6 +466,6 @@ public class HnmStandardWindowPricingTests
         var dkp = HnmStandardCampFinalizer.ComputeMemberDkp(
             earned, tagged: false, inKillWindow: false, claimBonus: 0, killBonus: 0, step: Quarter);
 
-        Assert.Equal(Open + 6 * Regular + Close, dkp, precision: 3);
+        Assert.Equal(Open + 7 * Regular + Close, dkp, precision: 3);
     }
 }

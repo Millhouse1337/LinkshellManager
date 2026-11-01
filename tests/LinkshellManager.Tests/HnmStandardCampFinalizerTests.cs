@@ -73,60 +73,57 @@ public class HnmStandardCampFinalizerTests
     }
 }
 
-// Which window closes the camp. The pop window when the officer actually scanned it; otherwise the
-// last window that HAS a scan, so an officer who stopped scanning early still closes out the people
-// in that final scan.
+// Which window closes the camp: the one an officer ticked, or on a named Open/Close camp its
+// latest post. A numbered camp nobody ticked has no close.
 public class HnmStandardCloseWindowTests
 {
     [Fact]
-    public void ResolveCloseWindow_PopWindowScanned_UsesPopWindow()
+    public void ResolveCloseWindow_TickedWindow_Wins()
     {
         var posted = new[] { 1, 2, 3, 4 };
-        Assert.Equal(4, HnmStandardCampFinalizer.ResolveCloseWindow(posted, popWindow: 4));
+        Assert.Equal(3, HnmStandardCampFinalizer.ResolveCloseWindow(posted, markedCloseWindow: 3));
     }
 
     [Fact]
-    public void ResolveCloseWindow_TwoPostCamp_IgnoresTheSpawnCounter()
+    public void ResolveCloseWindow_NumberedCampNothingTicked_HasNoClose()
     {
-        // Open and Close posted while the dragon was still in spawn window 1. The Close is post 2,
-        // not whichever post happens to share the spawn counter's number.
+        // It used to fall back to the pop window, else the latest window posted. Now the officer
+        // ticks the close, and the addon will not end the camp until they do.
+        var posted = new[] { 1, 2, 3, 4 };
+        Assert.Equal(0, HnmStandardCampFinalizer.ResolveCloseWindow(posted));
+    }
+
+    [Fact]
+    public void ResolveCloseWindow_TwoPostCamp_IsTheLatestPost()
+    {
+        // A named Open/Close camp: pressing Post Close already said which post closes it.
         var posted = new[] { 1, 2 };
         Assert.Equal(2, HnmStandardCampFinalizer.ResolveCloseWindow(
-            posted, popWindow: 1, markedCloseWindow: null, closeIsLatestPost: true));
+            posted, markedCloseWindow: null, closeIsNamedPost: true));
     }
 
     [Fact]
-    public void ResolveCloseWindow_PopWindowNotScanned_FallsBackToLastScan()
-    {
-        // Scanning stopped at window 3 but the monster popped on 7 — window 3 is the close.
-        var posted = new[] { 1, 2, 3 };
-        Assert.Equal(3, HnmStandardCampFinalizer.ResolveCloseWindow(posted, popWindow: 7));
-    }
-
-    [Fact]
-    public void ResolveCloseWindow_ScansOutOfOrder_UsesHighest()
+    public void ResolveCloseWindow_NamedCampScansOutOfOrder_UsesHighest()
     {
         // Posts can arrive in any order (a corrected re-post of an earlier window).
-        var posted = new[] { 5, 1, 3 };
-        Assert.Equal(5, HnmStandardCampFinalizer.ResolveCloseWindow(posted, popWindow: 9));
+        var posted = new[] { 2, 1 };
+        Assert.Equal(2, HnmStandardCampFinalizer.ResolveCloseWindow(posted, closeIsNamedPost: true));
     }
 
     [Fact]
     public void ResolveCloseWindow_NoScans_IsZero()
     {
         // Nobody was ever scanned — there is no open and no close to pay.
-        Assert.Equal(0, HnmStandardCampFinalizer.ResolveCloseWindow(Array.Empty<int>(), popWindow: 7));
+        Assert.Equal(0, HnmStandardCampFinalizer.ResolveCloseWindow(
+            Array.Empty<int>(), closeIsNamedPost: true));
     }
 
     [Fact]
-    public void ResolveCloseWindow_SingleScan_IsBothOpenAndClose()
+    public void ResolveCloseWindow_NamedCampOpenOnly_LandsOnWindowOne()
     {
-        // One scan, taken at window 1: that window is simultaneously the open and the close.
-        //
-        // Which is now inert at payout — WindowValue prices sequence 1 as the OPEN whether or not
-        // it also resolves as the close, so this answer costs nobody anything. It used to pay both,
-        // which is how posting the opening window on a 1 open / 1 close linkshell read as 2 DKP.
+        // Only the Open posted so far. That answer is inert at payout: CloseWindowValue adds the
+        // close to window 1 only when an officer TICKED it there.
         var posted = new[] { 1 };
-        Assert.Equal(1, HnmStandardCampFinalizer.ResolveCloseWindow(posted, popWindow: 1));
+        Assert.Equal(1, HnmStandardCampFinalizer.ResolveCloseWindow(posted, closeIsNamedPost: true));
     }
 }

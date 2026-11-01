@@ -60,7 +60,6 @@ public class WindowMethodTests
         Assert.Equal(DiscordEventMessageBuilder.AttendancePostCount(legacy), DiscordEventMessageBuilder.AttendancePostCount(stamped));
         Assert.Equal(DiscordEventMessageBuilder.EffectiveWindowCount(legacy), DiscordEventMessageBuilder.EffectiveWindowCount(stamped));
         Assert.Equal(DiscordEventMessageBuilder.PostsOpenAndClose(legacy), DiscordEventMessageBuilder.PostsOpenAndClose(stamped));
-        Assert.Equal(DiscordEventMessageBuilder.CloseIsLatestPost(legacy), DiscordEventMessageBuilder.CloseIsLatestPost(stamped));
         for (var sequence = 1; sequence <= 3; sequence++)
         {
             Assert.Equal(
@@ -79,7 +78,6 @@ public class WindowMethodTests
         Assert.Equal(1, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
         Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(camp));
         Assert.True(DiscordEventMessageBuilder.PostsOpenAndClose(camp));
-        Assert.True(DiscordEventMessageBuilder.CloseIsLatestPost(camp));
         Assert.Equal(2, DiscordEventMessageBuilder.MaxPostSequence(camp));
         Assert.Equal(3, DiscordEventMessageBuilder.KillPostCeiling(camp));
         Assert.Equal("Open", DiscordEventMessageBuilder.DefaultWindowLabel(camp, 1));
@@ -106,7 +104,6 @@ public class WindowMethodTests
         Assert.Equal(7, DiscordEventMessageBuilder.AttendancePostCount(camp));
         Assert.False(DiscordEventMessageBuilder.PostsOpenAndClose(camp));
         Assert.False(DiscordEventMessageBuilder.WindowsOpenEnded(camp));
-        Assert.False(DiscordEventMessageBuilder.CloseIsLatestPost(camp));
         Assert.Equal(7, DiscordEventMessageBuilder.MaxPostSequence(camp));
         Assert.Equal(8, DiscordEventMessageBuilder.KillPostCeiling(camp));
         Assert.Null(DiscordEventMessageBuilder.DefaultWindowLabel(camp, 1));
@@ -131,18 +128,22 @@ public class WindowMethodTests
 
         Assert.True(DiscordEventMessageBuilder.WindowsOpenEnded(camp));
         Assert.Equal(HnmConfig.MaxWindow, DiscordEventMessageBuilder.AttendancePostCount(camp));
-        Assert.True(DiscordEventMessageBuilder.CloseIsLatestPost(camp));
         Assert.Equal(HnmConfig.MaxWindow, DiscordEventMessageBuilder.MaxPostSequence(camp));
         Assert.Equal(HnmConfig.MaxWindow + 1, DiscordEventMessageBuilder.KillPostCeiling(camp));
     }
 
-    // The open-ended camp's spawn counter never leaves 1, so the close is its latest post.
+    // An open-ended camp posts numbered windows, so like any numbered camp it closes only on the
+    // window an officer ticks.
     [Fact]
-    public void OpenEndedCamp_ClosesOnItsLatestPost()
+    public void OpenEndedCamp_ClosesOnlyOnATickedWindow()
     {
+        var camp = Camp("King Vinegarroon", MonsterWindowMethods.WindowN, windowCountOverride: 1);
         var posted = new[] { 1, 2, 3, 4 };
-        Assert.Equal(4, HnmStandardCampFinalizer.ResolveCloseWindow(
-            posted, popWindow: 1, markedCloseWindow: null, closeIsLatestPost: true));
+        var named = DiscordEventMessageBuilder.PostsOpenAndClose(camp);
+
+        Assert.Equal(0, HnmStandardCampFinalizer.ResolveCloseWindow(posted, closeIsNamedPost: named));
+        Assert.Equal(3, HnmStandardCampFinalizer.ResolveCloseWindow(
+            posted, markedCloseWindow: 3, closeIsNamedPost: named));
     }
 
     // A camp with no stamp keeps the range it was always checked against: its spawn count.

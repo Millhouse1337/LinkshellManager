@@ -72,7 +72,7 @@ public sealed class HnmCampReviewHandoffService
         // off ClaimShieldCapture.EventId, which the re-parent at the end of this method clears.
         var members = isWd
             ? await _wdFinalizer.BuildRosterAsync(ev, linkshell, popWindow, claimed, killed, cancellationToken)
-            : await _standardFinalizer.BuildRosterAsync(ev, linkshell, popWindow, claimed, killed, cancellationToken);
+            : await _standardFinalizer.BuildRosterAsync(ev, linkshell, claimed, killed, cancellationToken);
 
         // This camp's lotteries, to be handed to the archive below.
         //
@@ -215,7 +215,7 @@ public sealed class HnmCampReviewHandoffService
         // no honest per-capture number to write. They keep the per-member rows below.
         var perCapture = HnmCampPricing.HonoursWindowAmount(ev);
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
-            campWindows, popWindow, DiscordEventMessageBuilder.CloseIsLatestPost(ev));
+            campWindows, DiscordEventMessageBuilder.PostsOpenAndClose(ev));
         var closeIsMarked = HnmStandardCampFinalizer.HasMarkedCloseWindow(campWindows);
         var (_, _, _, _, killBonus) = HnmCampPricing.StandardBonuses(ev, linkshell, claimed, killed);
         var valueBySequence = perCapture

@@ -480,8 +480,7 @@ public sealed partial class AddonApiController
                 perWindowDkp = HnmCampPricing.WindowValueFor(
                     eventEntity, campLinkshell, attendanceWindow.SequenceNumber,
                     HnmStandardCampFinalizer.ResolveCloseWindow(
-                        campWindows, eventEntity.HnmWindowNumber,
-                        DiscordEventMessageBuilder.CloseIsLatestPost(eventEntity)),
+                        campWindows, DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity)),
                     attendanceWindow.DkpAmount, attendanceWindow.IsKillWindow,
                     HnmStandardCampFinalizer.HasMarkedCloseWindow(campWindows));
             }
