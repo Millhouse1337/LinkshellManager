@@ -461,6 +461,15 @@
                                        the tick. -->
                                   @if (!isWdCamp(event)) {
                                     <th class="num" title="The close bonus this window adds. 0 unless it is the closing window; editing it changes the camp's close bonus.">Closing window</th>
+                                    <!-- Misc and Tag are paid once for the whole camp, not per window,
+                                         so every window repeats the same figure. "One time" under the
+                                         heading says so before anyone adds them up per window. -->
+                                    <th class="num" title="What the linked snapshots (misc posts) pay this member. Paid once for the camp, not per window.">
+                                      Misc<span class="roster-th-note">One time</span>
+                                    </th>
+                                    <th class="num" title="The tag (claim) bonus for being on the Claim Shield. Paid once for the camp, not per window, and only if the camp ends claimed.">
+                                      Tag<span class="roster-th-note">One time</span>
+                                    </th>
                                   }
                                   <!-- The whole camp, not this window: what End Camp would pay them
                                        right now. Standard camps only -- Manual Check In pays from the
@@ -546,6 +555,14 @@
                                           <span class="roster-muted" title="Tick Closing window to pay the close bonus on this window.">0</span>
                                         }
                                       </td>
+                                      <!-- One-time amounts: the same on every window. A dash for a scan
+                                           with no account, like Event Total. -->
+                                      <td class="num">
+                                        <ng-container *ngTemplateOutlet="oneTimeDkpCell; context: { dkp: attendee.miscDkp }" />
+                                      </td>
+                                      <td class="num">
+                                        <ng-container *ngTemplateOutlet="oneTimeDkpCell; context: { dkp: attendee.tagDkp }" />
+                                      </td>
                                     }
                                     @if (!isWdCamp(event)) {
                                       <td class="num">
@@ -595,12 +612,24 @@
                                  table on the one tab where the bonus is visible. -->
                             <!-- "Not in the DKP column" rather than "not above": the Event Total
                                  column beside it DOES count them, for whoever has the evidence. -->
-                            @if (activeWindow.isKillWindow) {
-                              Claim {{ claimBonusLabel(event) }} DKP is added at End Camp — not in the DKP
-                              column, but counted in Event Total.
+                            <!-- A Standard camp shows the claim bonus in its Tag column, so only the
+                                 kill bonus is left without one. -->
+                            @if (isWdCamp(event)) {
+                              @if (activeWindow.isKillWindow) {
+                                Claim {{ claimBonusLabel(event) }} DKP is added at End Camp — not in the DKP
+                                column.
+                              } @else {
+                                Claim {{ claimBonusLabel(event) }} DKP and kill {{ killBonusLabel(event) }} DKP
+                                are added at End Camp — not in the DKP column.
+                              }
                             } @else {
-                              Claim {{ claimBonusLabel(event) }} DKP and kill {{ killBonusLabel(event) }} DKP
-                              are added at End Camp — not in the DKP column, but counted in Event Total.
+                              @if (!activeWindow.isKillWindow) {
+                                Kill {{ killBonusLabel(event) }} DKP is added at End Camp — not in a column, but
+                                counted in Event Total.
+                                <br />
+                              }
+                              Misc and Tag are one-time: paid once for the camp, so every window shows the
+                              same amount.
                             }
                           </p>
                           <div class="attendance-window-pane__meta">
@@ -1311,6 +1340,18 @@
      Mirrors the same template in attendance-sections so a zone reads identically in the camp
      card and in the Event System. Kept as a local copy rather than shared: Angular templates
      don't cross component boundaries, and a one-icon cell isn't worth a component of its own. -->
+<!-- A one-time (Misc / Tag) amount on the attendance window table: muted when nothing is owed,
+     a dash when the scan has no account to pay. -->
+<ng-template #oneTimeDkpCell let-dkp="dkp">
+  @if (dkp == null) {
+    <span class="roster-muted">—</span>
+  } @else if (dkp > 0) {
+    {{ dkp | number:'1.0-2' }}
+  } @else {
+    <span class="roster-muted">0</span>
+  }
+</ng-template>
+
 <ng-template #zoneCell let-zone="zone">
   @if (zone) {
     <span class="roster-zone">

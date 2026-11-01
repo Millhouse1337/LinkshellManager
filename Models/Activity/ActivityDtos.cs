@@ -933,7 +933,12 @@ public sealed record ActivityAttendanceWindowAttendeeDto(
     // the claim and kill bonuses they have the evidence for, and every capture linked to the camp
     // they appear on. Priced by HnmStandardCampFinalizer.PriceMembers, the same code End Camp pays
     // from. Null on anything but a Standard HNM camp, or a scan that resolved to no account.
-    double? EventTotalDkp = null);
+    double? EventTotalDkp = null,
+    // The two ONE-TIME parts of EventTotalDkp, paid once per camp rather than per window, so every
+    // window shows the same figure: what the linked captures (misc posts) pay this member, and
+    // the claim (tag) bonus when they're on the Claim Shield. Null exactly when EventTotalDkp is.
+    double? MiscDkp = null,
+    double? TagDkp = null);
 
 public sealed record ActivityParticipationDto(
     int Id,

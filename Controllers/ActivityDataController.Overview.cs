@@ -399,18 +399,41 @@ public sealed partial class ActivityDataController
                     .ToList()
                 : new List<ActivityClaimShieldCaptureDto>();
 
+        // Addon "/lsm now" captures (misc posts) store character names only, no account. End Camp
+        // credits those by name (WindowEventDkpLedgerService), so the Event Total has to as well or
+        // a misc post never shows in it. Same four names: the membership's character, the account's
+        // character and its two alts. Membership names are indexed first so they win over an alt
+        // that happens to share the name.
+        var appUserIdByCharacterName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var member in primaryLinkshellMembers.Where(member => !string.IsNullOrWhiteSpace(member.AppUserId)))
+        {
+            if (!string.IsNullOrWhiteSpace(member.CharacterName))
+                appUserIdByCharacterName.TryAdd(member.CharacterName.Trim(), member.AppUserId!);
+        }
+        foreach (var member in primaryLinkshellMembers.Where(member => !string.IsNullOrWhiteSpace(member.AppUserId)))
+        {
+            foreach (var name in new[] { member.AppUser?.CharacterName, member.AppUser?.AltCharacterName1, member.AppUser?.AltCharacterName2 })
+            {
+                if (!string.IsNullOrWhiteSpace(name))
+                    appUserIdByCharacterName.TryAdd(name.Trim(), member.AppUserId!);
+            }
+        }
+
         // Each Standard HNM camp's "Event Total" per account: what End Camp would pay if the camp
         // ended right now. Priced by HnmStandardCampFinalizer.PriceMembers, the code End Camp pays
         // from, with the claim and kill bonuses UNGATED -- a live camp's outcome isn't decided yet,
         // so anyone with the evidence (on the Claim Shield, on the Kill roster) is shown the bonus
         // they're on track for. Plus what each capture linked to the camp pays everyone on it, which
         // End Camp carries onto the review card beside the windows. Memoized: every attendee asks.
-        var eventTotalsByEvent = new Dictionary<int, IReadOnlyDictionary<string, double>?>();
-        IReadOnlyDictionary<string, double>? EventTotalsFor(Event evt)
+        //
+        // Misc and Tag are the two ONE-TIME parts of the total, shown in their own columns: what
+        // the linked captures pay, and the claim (tag) bonus for a member on the Claim Shield.
+        var eventTotalsByEvent = new Dictionary<int, IReadOnlyDictionary<string, (double Total, double Misc, double Tag)>?>();
+        IReadOnlyDictionary<string, (double Total, double Misc, double Tag)>? EventTotalsFor(Event evt)
         {
             if (eventTotalsByEvent.TryGetValue(evt.Id, out var cached)) return cached;
 
-            Dictionary<string, double>? totals = null;
+            Dictionary<string, (double Total, double Misc, double Tag)>? totals = null;
             if (HnmCampPricing.HonoursWindowAmount(evt))
             {
                 var scans = evt.AttendanceWindows
@@ -427,28 +450,39 @@ public sealed partial class ActivityDataController
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var (windowBonus, openBonus, closeBonus, claimBonus, killBonus) =
                     HnmCampPricing.StandardBonuses(evt, primaryLinkshell, claimed: true, killed: true);
+                var step = DkpRounding.StepFor(primaryLinkshell?.DkpRoundingIncrement);
+                // What a tagger is owed for the tag alone -- the figure PriceMembers folds into
+                // their total, and pays on its own to a tagger who was in no window.
+                var tagEach = claimBonus > 0 ? DkpRounding.Round(claimBonus, step) : 0d;
 
-                totals = new Dictionary<string, double>(
-                    HnmStandardCampFinalizer.PriceMembers(
+                totals = HnmStandardCampFinalizer.PriceMembers(
                         scans, taggedAppUserIds, DiscordEventMessageBuilder.PostsOpenAndClose(evt),
-                        windowBonus, openBonus, closeBonus, claimBonus, killBonus,
-                        DkpRounding.StepFor(primaryLinkshell?.DkpRoundingIncrement)).DkpByAppUserId,
-                    StringComparer.OrdinalIgnoreCase);
+                        windowBonus, openBonus, closeBonus, claimBonus, killBonus, step)
+                    .DkpByAppUserId
+                    .ToDictionary(
+                        pair => pair.Key,
+                        pair => (Total: pair.Value, Misc: 0d, Tag: taggedAppUserIds.Contains(pair.Key) ? tagEach : 0d),
+                        StringComparer.OrdinalIgnoreCase);
 
                 // Linked captures pay per capture, once per account on it -- the same figure the
-                // card already prints on each capture (LinkedSnapshotsFor above).
+                // card already prints on each capture (LinkedSnapshotsFor above). An entry without
+                // an account is matched by name, the way End Camp credits it.
                 foreach (var snapshot in linkedSnapshotsByEvent.GetValueOrDefault(evt.Id, new List<AttendanceSnapshot>()))
                 {
                     var each = HnmCampPricing.LinkedCaptureValueFor(
                         evt, primaryLinkshell, snapshot.SlotKind, snapshot.WindowNumber, snapshot.DkpAmount);
                     if (each is not > 0) continue;
                     var onCapture = snapshot.Entries
-                        .Where(entry => !string.IsNullOrWhiteSpace(entry.AppUserId))
-                        .Select(entry => entry.AppUserId!)
+                        .Select(entry => !string.IsNullOrWhiteSpace(entry.AppUserId)
+                            ? entry.AppUserId
+                            : appUserIdByCharacterName.GetValueOrDefault(entry.CharacterName.Trim()))
+                        .Where(appUserId => !string.IsNullOrWhiteSpace(appUserId))
+                        .Select(appUserId => appUserId!)
                         .Distinct(StringComparer.OrdinalIgnoreCase);
                     foreach (var appUserId in onCapture)
                     {
-                        totals[appUserId] = totals.GetValueOrDefault(appUserId) + each.Value;
+                        var current = totals.GetValueOrDefault(appUserId);
+                        totals[appUserId] = (current.Total + each.Value, current.Misc + each.Value, current.Tag);
                     }
                 }
             }
@@ -457,7 +491,9 @@ public sealed partial class ActivityDataController
             return totals;
         }
 
-        double? EventTotalOf(Event evt, string? appUserId) =>
+        // Null for a scan with no account, or a camp that isn't priced (Manual Check In) -- there's
+        // nobody to pay.
+        (double Total, double Misc, double Tag)? EventTotalOf(Event evt, string? appUserId) =>
             appUserId is not null && EventTotalsFor(evt) is { } totals
                 && totals.TryGetValue(appUserId, out var total)
                 ? total
@@ -919,7 +955,9 @@ public sealed partial class ActivityDataController
                                 att.Zone,
                                 att.VerifiedAt,
                                 att.VerifiedBy,
-                                EventTotalOf(evt, att.AppUserId)))
+                                EventTotalOf(evt, att.AppUserId)?.Total,
+                                EventTotalOf(evt, att.AppUserId)?.Misc,
+                                EventTotalOf(evt, att.AppUserId)?.Tag))
                             .ToList(),
                         window.DkpAmount,
                         window.IsClosingWindow,

@@ -1279,6 +1279,11 @@ export interface ActivityAttendanceWindowAttendee {
   // Computed server-side by the same code End Camp pays from. Null on a Manual Check In camp or
   // for a scan that matched no account.
   eventTotalDkp?: number | null;
+  // The two one-time parts of eventTotalDkp (paid once per camp, so every window shows the same
+  // figure): the linked captures / misc posts, and the claim (tag) bonus. Null exactly when
+  // eventTotalDkp is.
+  miscDkp?: number | null;
+  tagDkp?: number | null;
 }
 
 export interface ActivityWindowEventsResponse {

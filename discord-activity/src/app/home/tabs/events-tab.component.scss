@@ -210,6 +210,16 @@
   color: var(--fg-3);
 }
 
+// "One time" under the Misc / Tag headings: those columns are camp-wide, not per window.
+.roster-th-note {
+  display: block;
+  margin-top: 2px;
+  color: var(--fg-4);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
 .roster-zone {
   display: inline-flex;
   align-items: center;
