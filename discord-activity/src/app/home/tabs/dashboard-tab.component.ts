@@ -25,7 +25,7 @@ import {
   todCountdownLabel,
   todSortKey
 } from '../activity-home.helpers';
-import { type TabName } from '../activity-home.types';
+import { hasHqVariant, type TabName } from '../activity-home.types';
 import { JobsRosterStore } from '../jobs-roster.store';
 import { RULE_CATEGORY_OPTIONS, categoryBadge, parseRuleDetails } from '../rule-content.helpers';
 
@@ -679,24 +679,8 @@ export class DashboardTabComponent {
     const tods = (this.activity.overview()?.recentTods ?? []).filter(tod => tod.linkshellId === selectedId);
     for (const tod of tods) {
       const when = parseDate(tod.time) ?? 0;
-      if (tod.claim && tod.lootDetails?.length) {
-        for (const loot of tod.lootDetails) {
-          const winner = (loot.itemWinner ?? '').trim();
-          // The winner pays the bid, so show it as a spend (-N DKP).
-          const dkp = loot.winningDkpSpent != null ? -loot.winningDkpSpent : null;
-          const detail = `${loot.itemName || 'Loot'}${winner ? ` → ${winner}` : ''}`;
-          items.push({
-            kind: 'loot',
-            name: tod.monsterName,
-            action: 'defeated',
-            detail,
-            dkp,
-            categoryLabel: 'Loot',
-            relative: this.longPastRelative(when),
-            when
-          });
-        }
-      } else if (tod.claim) {
+      // A ToD is a claim or not, never loot: loot belongs to the event and shows from there below.
+      if (tod.claim) {
         const linkshell = this.activity.overview()?.linkshells?.find(ls => ls.id === tod.linkshellId);
         items.push({
           kind: 'claim',
@@ -900,16 +884,10 @@ export class DashboardTabComponent {
     this.expandedTodGroups.set(next);
   }
 
-  protected readonly expandedTodLoot = signal<Set<number>>(new Set());
-
-  protected isTodLootExpanded(todId: number): boolean {
-    return this.expandedTodLoot().has(todId);
-  }
-
-  protected toggleTodLoot(todId: number): void {
-    const next = new Set(this.expandedTodLoot());
-    if (next.has(todId)) next.delete(todId); else next.add(todId);
-    this.expandedTodLoot.set(next);
+  // A Day only for the HQ/NQ pairs, where the day count decides which one pops. Same rule as the
+  // ToDs tab.
+  protected showsDay(tod: { monsterName?: string | null }): boolean {
+    return hasHqVariant(tod.monsterName);
   }
 
   // The claim / window tags behind the card's "⋯" button. Phone widths only — wider screens

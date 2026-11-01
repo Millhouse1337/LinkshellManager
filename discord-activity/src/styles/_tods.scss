@@ -222,50 +222,9 @@
   white-space: nowrap;
 }
 
-.tod-history-chip--loot {
-  color: var(--accent);
-  border-color: rgba(79, 124, 255, 0.3);
-  background: var(--accent-weak);
-}
-
 .tod-history-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-}
-
-/* ===== Loot list (shared between latest tod and history rows) ===== */
-.tod-loot-list {
-  display: grid;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  font-size: 12px;
-}
-
-.tod-loot-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 4px 0;
-
-  & + & {
-    border-top: 1px solid var(--border);
-    padding-top: 8px;
-    margin-top: 4px;
-  }
-}
-
-.tod-loot-name {
-  font-weight: 500;
-  color: var(--fg);
-}
-
-.tod-loot-item .muted {
-  color: var(--fg-3);
 }

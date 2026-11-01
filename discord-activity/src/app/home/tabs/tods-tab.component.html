@@ -57,12 +57,12 @@
                 </div>
                 <div class="tod-countdown num" [class.open]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
               </div>
-              <div class="tod-sub">Day {{ group.latest.dayNumber ?? '-' }} &middot; {{ group.latest.cooldown || '22 Hour' }} &middot; {{ group.latest.interval || '10 Min' }} &middot; {{ group.latest.lootCount }} loot</div>
+              <!-- No loot here: a ToD carries none (loot belongs to the event). The day is shown only
+                   for the HQ/NQ pairs, the only HNMs whose day count means anything. -->
+              <div class="tod-sub">@if (showsDay(group.latest)) {Day {{ group.latest.dayNumber ?? '-' }} &middot; }{{ group.latest.cooldown || '22 Hour' }} &middot; {{ group.latest.interval || '10 Min' }}</div>
+              <!-- Read left to right as the timeline: when it died, when it repops, how long until
+                   then. Same order on the Dashboard's ToD Tracker. -->
               <div class="tod-meta-grid">
-                <div class="tod-meta-cell">
-                  <div class="tod-meta-label">Countdown</div>
-                  <div class="tod-meta-value" [class.success-text]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
-                </div>
                 <!-- "Not entered" = the camp ended without anyone seeing it die, so no time and
                      no repop were recorded. Never show a synthesized timestamp here. -->
                 <div class="tod-meta-cell">
@@ -72,6 +72,10 @@
                 <div class="tod-meta-cell">
                   <div class="tod-meta-label">Repop starts</div>
                   <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || notEntered }}</div>
+                </div>
+                <div class="tod-meta-cell">
+                  <div class="tod-meta-label">Countdown</div>
+                  <div class="tod-meta-value" [class.success-text]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
                 </div>
               </div>
               @if (group.latest.imagePath) {
@@ -88,11 +92,6 @@
                     {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History (' + group.history.length + ')' }}
                   </button>
                 }
-                @if (group.latest.lootCount > 0) {
-                  <button type="button" class="btn sm" (click)="toggleTodLoot(group.latest.id)">
-                    {{ isTodLootExpanded(group.latest.id) ? 'Hide loot' : 'View Loot (' + group.latest.lootCount + ')' }}
-                  </button>
-                }
                 @if (setupForMonster(group.latest.monsterName); as setup) {
                   <button type="button" class="btn sm" (click)="toggleSetup(group.key)">
                     {{ isSetupExpanded(group.key) ? 'Hide party' : 'Party Setup' }}
@@ -105,19 +104,6 @@
                   {{ activity.busyTodId() === group.latest.id ? 'Deleting...' : 'Delete' }}
                 </button>
               </div>
-              @if (isTodLootExpanded(group.latest.id)) {
-                <div class="tod-loot-list">
-                  @for (loot of group.latest.lootDetails; track loot.id) {
-                    <div class="tod-loot-item">
-                      <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
-                      <span class="muted">{{ loot.itemWinner || 'No winner' }}</span>
-                      @if (loot.winningDkpSpent != null) {
-                        <span class="tag default num">{{ loot.winningDkpSpent }} DKP</span>
-                      }
-                    </div>
-                  }
-                </div>
-              }
               @if (setupForMonster(group.latest.monsterName); as setup) {
                 @if (isSetupExpanded(group.key)) {
                   <div class="tod-setup-panel">
@@ -131,27 +117,23 @@
                     <div class="tod-history-item">
                       <div class="tod-history-row">
                         <div class="tod-history-main">
-                          <span class="tod-history-label">
-                            @if (hist.dayNumber != null) {
-                              Day {{ hist.dayNumber }}
-                            } @else {
-                              Day (Not Specified)
-                            }
-                          </span>
+                          @if (showsDay(hist)) {
+                            <span class="tod-history-label">
+                              @if (hist.dayNumber != null) {
+                                Day {{ hist.dayNumber }}
+                              } @else {
+                                Day (Not Specified)
+                              }
+                            </span>
+                          }
                           <span class="tod-history-time num">{{ activity.formatDateTimeWithSeconds(hist.time) || notEntered }}</span>
                         </div>
                         <div class="tod-history-meta">
                           <span class="tod-history-stats">
                             <span class="tod-history-chip">{{ hist.cooldown || '22 Hour' }}</span>
                             <span class="tod-history-chip">{{ hist.interval || '10 Min' }}</span>
-                            <span class="tod-history-chip tod-history-chip--loot">{{ hist.lootCount }} loot</span>
                           </span>
                           <span class="tod-history-actions">
-                            @if (hist.lootCount > 0) {
-                              <button type="button" class="btn ghost sm" (click)="toggleTodLoot(hist.id)">
-                                {{ isTodLootExpanded(hist.id) ? 'Hide loot' : 'View Loot' }}
-                              </button>
-                            }
                             <button type="button" class="btn ghost sm" (click)="todForm.openEdit(hist)">Edit</button>
                             <button type="button" class="btn sm danger-outline"
                               [disabled]="activity.busyTodId() === hist.id"
@@ -161,19 +143,6 @@
                           </span>
                         </div>
                       </div>
-                      @if (isTodLootExpanded(hist.id)) {
-                        <div class="tod-loot-list">
-                          @for (loot of hist.lootDetails; track loot.id) {
-                            <div class="tod-loot-item">
-                              <span class="tod-loot-name">{{ loot.itemName || 'Unknown item' }}</span>
-                              <span class="muted">{{ loot.itemWinner || 'No winner' }}</span>
-                              @if (loot.winningDkpSpent != null) {
-                                <span class="tag default num">{{ loot.winningDkpSpent }} DKP</span>
-                              }
-                            </div>
-                          }
-                        </div>
-                      }
                     </div>
                   }
                 </div>

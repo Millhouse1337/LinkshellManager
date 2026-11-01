@@ -11,6 +11,7 @@ import { PartySetupPanelComponent } from './party-setup-panel.component';
 import { PendingSubmissionsSectionComponent } from './pending-submissions-section.component';
 import { TodFormComponent } from './tod-form.component';
 import { TOD_NOT_ENTERED, canReviewSubmissionsIn, isTodReady, mergedMonsterName, todCountdownLabel, todSortKey } from '../activity-home.helpers';
+import { hasHqVariant } from '../activity-home.types';
 
 @Component({
   selector: 'app-tods-tab',
@@ -190,16 +191,11 @@ export class TodsTabComponent {
     this.expandedTodGroups.set(next);
   }
 
-  protected readonly expandedTodLoot = signal<Set<number>>(new Set());
-
-  protected isTodLootExpanded(todId: number): boolean {
-    return this.expandedTodLoot().has(todId);
-  }
-
-  protected toggleTodLoot(todId: number): void {
-    const next = new Set(this.expandedTodLoot());
-    if (next.has(todId)) next.delete(todId); else next.add(todId);
-    this.expandedTodLoot.set(next);
+  // The day count only means something for the HQ/NQ pairs (Adamantoise/Aspidochelone,
+  // Behemoth/King Behemoth, Fafnir/Nidhogg), where it decides which one pops. Every other
+  // monster shows no Day at all.
+  protected showsDay(tod: { monsterName?: string | null }): boolean {
+    return hasHqVariant(tod.monsterName);
   }
 
   // The claim / HQ / window tags behind the card's "⋯" button. Phone widths only — wider
