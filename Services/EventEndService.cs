@@ -254,8 +254,7 @@ public static class EventEndService
             }
 
             // Stamp the actual deducted amount onto the loot row so future
-            // Loot History edits can refund precisely (matches the ToD
-            // ActualDeductedDkp pattern in HelpersTods.AdjustTodLootDkpAsync).
+            // Loot History edits can refund precisely.
             lootDetail.ActualDeductedDkp = Math.Abs(amount);
             lootDetail.DkpDebitedAt = endTimeUtc;
 

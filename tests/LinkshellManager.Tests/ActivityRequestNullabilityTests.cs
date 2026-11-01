@@ -15,10 +15,9 @@ namespace LinkshellManager.Tests;
 /// NonNullableReferenceTypes is left at its default of false). A request that sends null for
 /// such a property never reaches the action: MVC short-circuits with a ProblemDetails 400.
 ///
-/// The ToD form stopped carrying loot -- it now always sends `lootDetails: null`, and the update
-/// action reads null as "leave the existing loot alone". With LootDetails declared non-nullable
-/// that was rejected before the action body ran, and because ProblemDetails carries `errors`
-/// rather than the app's own `{ error }`, the Activity could only report
+/// It bit the ToD form's old `lootDetails: null` (the field is gone now, along with ToD loot):
+/// declared non-nullable, it was rejected before the action body ran, and because ProblemDetails
+/// carries `errors` rather than the app's own `{ error }`, the Activity could only report
 /// "The server returned an unexpected response (status 400)".
 ///
 /// So: any body field the client may legitimately send as null MUST be declared nullable.
@@ -33,22 +32,20 @@ public class ActivityRequestNullabilityTests
         return services.BuildServiceProvider().GetRequiredService<IModelMetadataProvider>();
     }
 
-    private static bool IsImplicitlyRequired(System.Type requestType, string propertyName)
-    {
-        var metadata = BuildMetadataProvider().GetMetadataForType(requestType);
-        var property = metadata.Properties.Single(p => p.Name == propertyName);
-        return property.IsRequired;
-    }
-
+    // Every reference-typed field on the ToD requests is one the Activity may send as null.
     [Theory]
     [InlineData(typeof(ActivityCreateTodRequest))]
     [InlineData(typeof(ActivityUpdateTodRequest))]
-    public void TodRequest_LootDetails_IsOptional(System.Type requestType)
+    public void TodRequest_NoReferenceFieldIsImplicitlyRequired(System.Type requestType)
     {
-        Assert.False(
-            IsImplicitlyRequired(requestType, nameof(ActivityCreateTodRequest.LootDetails)),
-            $"{requestType.Name}.LootDetails is implicitly [Required] -- the Activity always sends "
-                + "it as null, so every ToD save would be rejected with a ProblemDetails 400 before "
-                + "the action runs. Declare it as IReadOnlyList<...>? to keep null bindable.");
+        var required = BuildMetadataProvider().GetMetadataForType(requestType).Properties
+            .Where(p => p.IsRequired && !p.ModelType.IsValueType)
+            .Select(p => p.Name)
+            .ToList();
+
+        Assert.True(required.Count == 0,
+            $"{requestType.Name} has implicitly [Required] fields ({string.Join(", ", required)}) -- "
+                + "a null from the Activity would be rejected with a ProblemDetails 400 before the "
+                + "action runs. Declare them nullable.");
     }
 }

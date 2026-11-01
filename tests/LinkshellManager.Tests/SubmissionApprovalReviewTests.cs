@@ -22,15 +22,8 @@ public class SubmissionApprovalReviewTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static SubmissionApprovalService NewService(ApplicationDbContext db)
-    {
-        var pools = new DkpPoolResolver(db, new DkpPoolProvisioner(db));
-        return new SubmissionApprovalService(
-            db,
-            new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance),
-            pools,
-            NullLogger<SubmissionApprovalService>.Instance);
-    }
+    private static SubmissionApprovalService NewService(ApplicationDbContext db) =>
+        new(db, NullLogger<SubmissionApprovalService>.Instance);
 
     private static async Task<PendingTodSubmission> SeedTodAsync(ApplicationDbContext db, int linkshellId)
     {
@@ -65,11 +58,35 @@ public class SubmissionApprovalReviewTests
     {
         await using var db = NewInMemoryContext();
         var submission = await SeedTodAsync(db, OtherLinkshell);
-        var edits = new PendingTodEdits("Nidhogg", null, null, null, null, null, null, null);
+        var edits = new PendingTodEdits("Nidhogg", null, null, null, null, null, null);
 
         var result = await NewService(db).ApproveTodWithEditsAsync(HomeLinkshell, submission.Id, edits, CancellationToken.None);
 
         Assert.Equal(ApprovalResult.NotFound, result);
         Assert.Equal("Fafnir", db.PendingTodSubmissions.Single().MonsterName);
+    }
+
+    // A ToD carries no loot. A submission queued before that, still holding loot rows, is approved
+    // as a plain ToD: no loot rows are created and nobody's DKP moves.
+    [Fact]
+    public async Task Approve_ALegacySubmissionWithLoot_CreatesTheTodWithoutLoot()
+    {
+        await using var db = NewInMemoryContext();
+        var submission = await SeedTodAsync(db, HomeLinkshell);
+        submission.LootRows.Add(new PendingTodLootSubmission
+        {
+            ItemName = "Cerberus Claw", ItemWinner = "Millhouse", WinningDkpSpent = 2,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await NewService(db).ApproveTodWithEditsAsync(
+            HomeLinkshell, submission.Id,
+            new PendingTodEdits(null, null, true, null, null, null, null), CancellationToken.None);
+
+        Assert.Equal(ApprovalResult.Approved, result);
+        Assert.Single(db.Tods);
+        Assert.Empty(db.TodLootDetails);
+        Assert.Empty(db.DkpLedgerEntries);
+        Assert.Empty(db.PendingTodSubmissions);
     }
 }

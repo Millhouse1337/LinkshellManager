@@ -25,9 +25,9 @@ public sealed record LootEditResult(
 // stamps, and writes a refund/spend ledger pair so DKP history surfaces the
 // edit with the officer's reason.
 //
-// The DKP math mirrors the existing create-time helpers exactly:
-//   - ToD: ActivityDataController.HelpersTods.AdjustTodLootDkpAsync (handles
-//     DKP / Hybrid / LootCouncil structures via the linkshell's LootStructure).
+// The DKP math mirrors how each kind of loot was charged when it was created:
+//   - ToD: DKP / Hybrid / LootCouncil structures via the linkshell's LootStructure. (ToD loot can no
+//     longer be created -- a ToD carries no loot -- but older rows can still be edited here.)
 //   - Event: EventEndService.EndEventCoreAsync (flat DKP only;
 //     event loot has no Hybrid variant by design).
 //
@@ -669,8 +669,7 @@ public sealed class LootEditService
     }
 
     // Performs the refund/spend ledger pair + AppUserLinkshell.LinkshellDkp
-    // updates that an edit implies. Mirrors AdjustTodLootDkpAsync's structure
-    // but operates on a single row with explicit old/new fields, and tags
+    // updates that an edit implies. Operates on a single row with explicit old/new fields, and tags
     // each ledger entry with the edit reason so the DKP history view can
     // render an "Edited" badge.
     // Returns the new ActualDeducted DKP amount to stamp on the loot row

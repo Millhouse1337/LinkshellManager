@@ -1480,7 +1480,6 @@ public sealed partial class AddonApiController
                 interval,
                 repopTimeUtc,
                 null,
-                Array.Empty<TodSubmissionLootInput>(),
                 // Carried into the queue, not dropped: the tracker stamped this when the mob
                 // popped, and it is no less true for the submitter lacking ToD-manage rights.
                 popWindow);

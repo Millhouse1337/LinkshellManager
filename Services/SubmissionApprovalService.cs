@@ -5,33 +5,26 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Encapsulates the queue-pending-row + approve-materializes-real-row pattern for ToDs (with loot
-// detail rows) that members without the add-ToD permission submit for review.
+// Encapsulates the queue-pending-row + approve-materializes-real-row pattern for ToDs that members
+// without the add-ToD permission submit for review.
+//
+// A ToD carries no loot. Submissions used to queue loot rows and approval charged DKP for them;
+// loot is recorded in the Loot tab against an event instead. PendingTodLootSubmission rows left
+// over from before that are ignored, and go with their submission when it is approved or rejected.
 //
 // Attendance used to be queued here too. It is not any more: addon attendance is either posted
 // directly by a member with "Manage attendance with the addon", or, for a `/lsm now` capture by
 // anyone else, lands as a Pending snapshot an officer confirms in Unlinked Snapshots.
-//
-// Approval calls into existing logic where possible
-// (ActivityDataController.AdjustTodLootDkpAsync for ToD loot DKP) so DKP math
-// stays in lockstep with the immediate-create paths.
 public sealed class SubmissionApprovalService
 {
     private readonly ApplicationDbContext _db;
     private readonly ILogger<SubmissionApprovalService> _logger;
 
-    private readonly DkpLedgerWriter _dkpLedger;
-    private readonly DkpPoolResolver _dkpPools;
-
     public SubmissionApprovalService(
         ApplicationDbContext db,
-        DkpLedgerWriter dkpLedger,
-        DkpPoolResolver dkpPools,
         ILogger<SubmissionApprovalService> logger)
     {
         _db = db;
-        _dkpLedger = dkpLedger;
-        _dkpPools = dkpPools;
         _logger = logger;
     }
 
@@ -56,17 +49,6 @@ public sealed class SubmissionApprovalService
             PopWindow = input.PopWindow is { } pw && pw > 0 ? pw : null,
         };
 
-        foreach (var loot in input.LootRows ?? Enumerable.Empty<TodSubmissionLootInput>())
-        {
-            if (string.IsNullOrWhiteSpace(loot.ItemName) && string.IsNullOrWhiteSpace(loot.ItemWinner) && !loot.WinningDkpSpent.HasValue) continue;
-            submission.LootRows.Add(new PendingTodLootSubmission
-            {
-                ItemName = loot.ItemName?.Trim(),
-                ItemWinner = loot.ItemWinner?.Trim(),
-                WinningDkpSpent = loot.WinningDkpSpent,
-            });
-        }
-
         _db.PendingTodSubmissions.Add(submission);
         await _db.SaveChangesAsync(cancellationToken);
         return submission.Id;
@@ -77,7 +59,6 @@ public sealed class SubmissionApprovalService
     public async Task<ApprovalResult> ApproveTodAsync(int submissionId, CancellationToken cancellationToken)
     {
         var pending = await _db.PendingTodSubmissions
-            .Include(s => s.LootRows)
             .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
         if (pending is null) return ApprovalResult.NotFound;
 
@@ -101,48 +82,11 @@ public sealed class SubmissionApprovalService
             // Recorded when the pop was seen, not when the officer got round to approving it.
             PopWindow = pending.PopWindow,
         };
-        // TodId is stamped after the Tod is saved below; the affordability pre-check doesn't need
-        // it, so the rows are built first in order to run that check before anything is persisted.
-        var lootDetails = pending.LootRows
-            .Where(r => !string.IsNullOrWhiteSpace(r.ItemName) || !string.IsNullOrWhiteSpace(r.ItemWinner) || r.WinningDkpSpent.HasValue)
-            .Select(r => new TodLootDetail
-            {
-                ItemName = r.ItemName,
-                ItemWinner = r.ItemWinner,
-                WinningDkpSpent = r.WinningDkpSpent,
-            })
-            .ToList();
-
-        // Reject BEFORE materializing anything. Approving into an overdraft would either mint
-        // negative DKP or strand a half-approved ToD with the submission still queued; leaving the
-        // submission untouched lets the officer fix the DKP (or edit the loot down) and retry.
-        if (lootDetails.Count > 0)
-        {
-            var insufficient = await ActivityDataController.AdjustTodLootDkpAsync(
-                _db, _dkpLedger, _dkpPools, tod, lootDetails, occurredAt, isRefund: false, cancellationToken,
-                checkOnly: true);
-            if (insufficient is not null)
-            {
-                return ApprovalResult.InsufficientDkp;
-            }
-        }
 
         _db.Tods.Add(tod);
         await _db.SaveChangesAsync(cancellationToken);
 
-        if (lootDetails.Count > 0)
-        {
-            foreach (var lootDetail in lootDetails)
-            {
-                lootDetail.TodId = tod.Id;
-            }
-            await _db.TodLootDetails.AddRangeAsync(lootDetails, cancellationToken);
-            await ActivityDataController.AdjustTodLootDkpAsync(
-                _db, _dkpLedger, _dkpPools, tod, lootDetails, occurredAt, isRefund: false, cancellationToken);
-            await _db.SaveChangesAsync(cancellationToken);
-        }
-
-        // Delete the pending submission and its loot child rows (cascade).
+        // Delete the pending submission (any legacy loot child rows cascade with it).
         _db.PendingTodSubmissions.Remove(pending);
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -157,19 +101,15 @@ public sealed class SubmissionApprovalService
     }
 
     // ---------- Review: the reviewer's corrections, then approve ----------
-    // A reviewer may correct a pending ToD and its loot before approving it. This applies the
-    // corrections to the pending rows, then runs the normal approve above. Used by the Activity's
-    // ToD Submissions Needing Approval section.
+    // A reviewer may correct a pending ToD before approving it. This applies the corrections to the
+    // pending row, then runs the normal approve above. Used by the Activity's ToD Submissions
+    // Needing Approval section.
     // Scoped to linkshellId: a submission from another linkshell is NotFound and never touched.
-    //
-    // The corrections are saved before approving, so when approve answers InsufficientDkp the
-    // pending row keeps them and the reviewer can fix the loot and approve again.
 
     public async Task<ApprovalResult> ApproveTodWithEditsAsync(
         int linkshellId, int submissionId, PendingTodEdits edits, CancellationToken cancellationToken)
     {
         var submission = await _db.PendingTodSubmissions
-            .Include(s => s.LootRows)
             .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
         if (submission is null) return ApprovalResult.NotFound;
 
@@ -180,20 +120,6 @@ public sealed class SubmissionApprovalService
         submission.Cooldown = string.IsNullOrWhiteSpace(edits.Cooldown) ? submission.Cooldown : edits.Cooldown.Trim();
         submission.Interval = string.IsNullOrWhiteSpace(edits.Interval) ? submission.Interval : edits.Interval.Trim();
         submission.RepopTime = edits.RepopTime;
-
-        // Replace loot rows wholesale with the edited list so removed rows disappear before
-        // materialization. A row with nothing in it is a blank form line, not loot.
-        _db.PendingTodLootSubmissions.RemoveRange(submission.LootRows);
-        foreach (var row in edits.LootRows ?? Array.Empty<TodSubmissionLootInput>())
-        {
-            if (string.IsNullOrWhiteSpace(row.ItemName) && string.IsNullOrWhiteSpace(row.ItemWinner) && !row.WinningDkpSpent.HasValue) continue;
-            submission.LootRows.Add(new PendingTodLootSubmission
-            {
-                ItemName = row.ItemName?.Trim(),
-                ItemWinner = row.ItemWinner?.Trim(),
-                WinningDkpSpent = row.WinningDkpSpent,
-            });
-        }
         await _db.SaveChangesAsync(cancellationToken);
 
         return await ApproveTodAsync(submissionId, cancellationToken);
@@ -221,8 +147,7 @@ public sealed class SubmissionApprovalService
         Controllers.ActivityDataController.ResolveTodCooldownHours(cooldown);
 }
 
-// InsufficientDkp: the submission is intact and still queued — a loot winner can't afford it.
-public enum ApprovalResult { Approved, Rejected, NotFound, InsufficientDkp }
+public enum ApprovalResult { Approved, Rejected, NotFound }
 
 public sealed record TodSubmissionInput(
     string? MonsterName,
@@ -233,15 +158,12 @@ public sealed record TodSubmissionInput(
     string? Interval,
     DateTime? RepopTime,
     string? ImagePath,
-    IReadOnlyList<TodSubmissionLootInput>? LootRows,
     // Which spawn window it popped on. Optional so the surfaces that have no such field (the
     // Activity ToD form posts it directly) keep their existing call shape.
     int? PopWindow = null);
 
-public sealed record TodSubmissionLootInput(string? ItemName, string? ItemWinner, int? WinningDkpSpent);
-
 // A reviewer's corrections to a pending ToD (ApproveTodWithEditsAsync). A blank monster, cooldown
-// or interval keeps what was submitted; LootRows replaces the submitted loot wholesale.
+// or interval keeps what was submitted.
 public sealed record PendingTodEdits(
     string? MonsterName,
     int? DayNumber,
@@ -249,5 +171,4 @@ public sealed record PendingTodEdits(
     DateTime? Time,
     string? Cooldown,
     string? Interval,
-    DateTime? RepopTime,
-    IReadOnlyList<TodSubmissionLootInput>? LootRows);
+    DateTime? RepopTime);

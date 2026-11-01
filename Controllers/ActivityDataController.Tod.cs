@@ -82,55 +82,6 @@ public sealed partial class ActivityDataController
             ? request.AdditionalSeconds
             : timing.AdditionalSeconds;
 
-        var linkshellEntity = await _dbContext.Linkshells
-            .AsNoTracking()
-            .FirstOrDefaultAsync(ls => ls.Id == request.LinkshellId, cancellationToken);
-        var linkshellStructure = NormalizeLootStructure(linkshellEntity?.LootStructure ?? "Dkp");
-
-        var normalizedLootDetails = request.Claim == true && !request.NoLoot && linkshellStructure != "LootCouncil"
-            ? NormalizeTodLootDetails(request.LootDetails)
-            : new List<TodLootDetail>();
-
-        var validCharacterNames = await _dbContext.AppUserLinkshells
-            .Where(link => link.LinkshellId == request.LinkshellId)
-            .Select(link => link.CharacterName)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name!)
-            .ToListAsync(cancellationToken);
-
-        foreach (var lootDetail in normalizedLootDetails)
-        {
-            if (string.IsNullOrWhiteSpace(lootDetail.ItemName))
-            {
-                return BadRequest(new { error = "Each ToD loot row needs an item name." });
-            }
-
-            if (string.IsNullOrWhiteSpace(lootDetail.ItemWinner))
-            {
-                return BadRequest(new { error = "Each ToD loot row needs an item winner." });
-            }
-
-            if (!validCharacterNames.Contains(lootDetail.ItemWinner.Trim(), StringComparer.OrdinalIgnoreCase))
-            {
-                return BadRequest(new { error = "Choose a loot winner from the current linkshell roster." });
-            }
-
-            if (!lootDetail.WinningDkpSpent.HasValue || lootDetail.WinningDkpSpent <= 0)
-            {
-                return BadRequest(new
-                {
-                    error = linkshellStructure == "Hybrid"
-                        ? "Each ToD loot row needs a deduction % (1-100)."
-                        : "Each ToD loot row needs a positive DKP spent value."
-                });
-            }
-
-            if (linkshellStructure == "Hybrid" && lootDetail.WinningDkpSpent > 100)
-            {
-                return BadRequest(new { error = "Deduction % cannot exceed 100." });
-            }
-        }
-
         // Three-tier permission check:
         //   CanManageTods            -> immediate create (today's behaviour)
         //   CanSubmitTodForApproval  -> queue as a pending submission
@@ -156,10 +107,7 @@ public sealed partial class ActivityDataController
                 cooldown,
                 interval,
                 todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(Math.Max(0, requestedAdditionalSeconds)),
-                SanitizeUploadedImagePath(request.ImagePath),
-                normalizedLootDetails
-                    .Select(l => new TodSubmissionLootInput(l.ItemName, l.ItemWinner, l.WinningDkpSpent))
-                    .ToList());
+                SanitizeUploadedImagePath(request.ImagePath));
             var submissionId = await approvalSvc.QueueTodAsync(request.LinkshellId, appUser.Id, input, cancellationToken);
             return Ok(new { pending = true, submissionId });
         }
@@ -186,27 +134,6 @@ public sealed partial class ActivityDataController
 
         _dbContext.Tods.Add(tod);
         await _dbContext.SaveChangesAsync(cancellationToken);
-
-        if (normalizedLootDetails.Count > 0)
-        {
-            foreach (var lootDetail in normalizedLootDetails)
-            {
-                lootDetail.TodId = tod.Id;
-            }
-
-            await _dbContext.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            // The ToD itself is already committed above and stays — the kill happened. Only the
-            // unaffordable loot is rejected; the officer can re-add it from Loot History once the
-            // winner's DKP is sorted.
-            var insufficient = await AdjustTodLootDkpAsync(
-                _dbContext, _dkpLedger, _dkpPools, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
-            if (insufficient is not null)
-            {
-                return BadRequest(new { error = $"{insufficient} The ToD was recorded without its loot." });
-            }
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            tod.TodLootDetails = normalizedLootDetails;
-        }
 
         // A new ToD = a new pop window, so reset any party sign-ups assigned to
         // this monster (the old roster is for the pop that just happened).
@@ -363,8 +290,6 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        var linkshellStructure = NormalizeLootStructure(tod.Linkshell?.LootStructure ?? "Dkp");
-
         var monsterName = request.MonsterName?.Trim();
         if (string.IsNullOrWhiteSpace(monsterName))
         {
@@ -400,68 +325,9 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Select a valid interval." });
         }
 
-        var normalizedLootDetails = request.Claim == true && !request.NoLoot && linkshellStructure != "LootCouncil"
-            ? NormalizeTodLootDetails(request.LootDetails)
-            : new List<TodLootDetail>();
-
-        var validCharacterNames = await _dbContext.AppUserLinkshells
-            .Where(link => link.LinkshellId == tod.LinkshellId)
-            .Select(link => link.CharacterName)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name!)
-            .ToListAsync(cancellationToken);
-
-        foreach (var lootDetail in normalizedLootDetails)
-        {
-            if (string.IsNullOrWhiteSpace(lootDetail.ItemName))
-            {
-                return BadRequest(new { error = "Each ToD loot row needs an item name." });
-            }
-
-            if (string.IsNullOrWhiteSpace(lootDetail.ItemWinner))
-            {
-                return BadRequest(new { error = "Each ToD loot row needs an item winner." });
-            }
-
-            if (!validCharacterNames.Contains(lootDetail.ItemWinner.Trim(), StringComparer.OrdinalIgnoreCase))
-            {
-                return BadRequest(new { error = "Choose a loot winner from the current linkshell roster." });
-            }
-
-            if (!lootDetail.WinningDkpSpent.HasValue || lootDetail.WinningDkpSpent <= 0)
-            {
-                return BadRequest(new
-                {
-                    error = linkshellStructure == "Hybrid"
-                        ? "Each ToD loot row needs a deduction % (1-100)."
-                        : "Each ToD loot row needs a positive DKP spent value."
-                });
-            }
-
-            if (linkshellStructure == "Hybrid" && lootDetail.WinningDkpSpent > 100)
-            {
-                return BadRequest(new { error = "Deduction % cannot exceed 100." });
-            }
-        }
-
+        // Loot is never edited here. A ToD carries no loot any more, and an older ToD that still has
+        // some keeps it untouched -- along with the DKP charged for it -- through any edit.
         var nowUtc = DateTime.UtcNow;
-
-        // A request that carries NO loot list at all means "leave the loot alone", not "delete it".
-        //
-        // That distinction exists because loot can no longer be entered from a ToD -- the form
-        // stopped sending a list. Without this, editing the time on an old ToD that still carries
-        // legacy loot would refund and destroy it as a side effect of fixing a typo.
-        //
-        // An explicit list (including an empty one) still replaces, which is what an older client
-        // and the submission-approval path both send.
-        var replaceLoot = request.LootDetails is not null;
-
-        // Reverse DKP impact from existing loot, remove it, then apply the new set.
-        if (replaceLoot && tod.TodLootDetails.Count > 0)
-        {
-            await AdjustTodLootDkpAsync(_dbContext, _dkpLedger, _dkpPools, tod, tod.TodLootDetails.ToList(), nowUtc, isRefund: true, cancellationToken);
-            _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
-        }
 
         tod.MonsterName = monsterName;
         tod.DayNumber = request.DayNumber;
@@ -481,30 +347,6 @@ public sealed partial class ActivityDataController
         tod.ImagePath = newImage;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-
-        if (normalizedLootDetails.Count > 0)
-        {
-            foreach (var lootDetail in normalizedLootDetails)
-            {
-                lootDetail.TodId = tod.Id;
-            }
-
-            await _dbContext.TodLootDetails.AddRangeAsync(normalizedLootDetails, cancellationToken);
-            // The edit to the ToD itself is already committed above. Only the unaffordable loot is
-            // rejected — the old loot was already refunded at the top of this method.
-            var insufficient = await AdjustTodLootDkpAsync(
-                _dbContext, _dkpLedger, _dkpPools, tod, normalizedLootDetails, nowUtc, isRefund: false, cancellationToken);
-            if (insufficient is not null)
-            {
-                return BadRequest(new { error = $"{insufficient} The ToD was updated without its loot." });
-            }
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            tod.TodLootDetails = normalizedLootDetails;
-        }
-        else if (replaceLoot)
-        {
-            tod.TodLootDetails = new List<TodLootDetail>();
-        }
 
         // A corrected repop has to reach any board parked waiting on it: re-point its displayed
         // pop / re-post time, and re-open the cycle if the poller had already given up on it.

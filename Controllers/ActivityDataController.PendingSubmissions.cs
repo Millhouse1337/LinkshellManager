@@ -28,29 +28,19 @@ public sealed partial class ActivityDataController
                 .AsNoTracking()
                 .Where(s => s.LinkshellId == linkshellId)
                 .Include(s => s.SubmittedBy)
-                .Include(s => s.LootRows)
                 .OrderBy(s => s.SubmittedAtUtc)
                 .ToListAsync(cancellationToken))
             .Select(s => new ActivityPendingTodDto(
                 s.Id, SubmitterName(s.SubmittedBy), s.SubmittedAtUtc,
-                s.MonsterName, s.DayNumber, s.Claim, s.Time, s.Cooldown, s.Interval, s.RepopTime, s.ImagePath,
-                s.LootRows.OrderBy(r => r.Id)
-                    .Select(r => new ActivityPendingTodLootDto(r.ItemName, r.ItemWinner, r.WinningDkpSpent))
-                    .ToList()))
+                s.MonsterName, s.DayNumber, s.Claim, s.Time, s.Cooldown, s.Interval, s.RepopTime, s.ImagePath))
             .ToList();
 
         // The ToD editor's pick-lists.
-        var rosterNames = await _dbContext.AppUserLinkshells
-            .AsNoTracking()
-            .Where(m => m.LinkshellId == linkshellId && m.CharacterName != null)
-            .Select(m => m.CharacterName!)
-            .OrderBy(n => n)
-            .ToListAsync(cancellationToken);
         var monsterOptions = (await _monsterTimings.GetMapAsync(linkshellId, cancellationToken)).EventMonsterOptions;
 
         return Ok(new ActivityPendingSubmissionsResponse(
             tods,
-            monsterOptions, TodCatalog.SupportedCooldowns, TodCatalog.SupportedIntervals, rosterNames));
+            monsterOptions, TodCatalog.SupportedCooldowns, TodCatalog.SupportedIntervals));
     }
 
     [HttpPost("linkshells/{linkshellId:int}/pending-submissions/tod/{submissionId:int}/approve")]
@@ -71,10 +61,7 @@ public sealed partial class ActivityDataController
 
         var edits = new PendingTodEdits(
             request.MonsterName, request.DayNumber, request.Claim, time,
-            request.Cooldown, request.Interval, repopTime,
-            (request.LootRows ?? new List<ActivityPendingTodLootDto>())
-                .Select(row => new TodSubmissionLootInput(row.ItemName, row.ItemWinner, row.WinningDkpSpent))
-                .ToList());
+            request.Cooldown, request.Interval, repopTime);
         return ReviewOutcome(await approvals.ApproveTodWithEditsAsync(linkshellId, submissionId, edits, cancellationToken),
             "ToD submission approved.");
     }
@@ -111,12 +98,6 @@ public sealed partial class ActivityDataController
     private IActionResult ReviewOutcome(ApprovalResult result, string success) => result switch
     {
         ApprovalResult.NotFound => NotFound(new { error = "That submission is gone — someone may have reviewed it already." }),
-        // The submission (with the reviewer's edits) stays queued.
-        ApprovalResult.InsufficientDkp => Conflict(new
-        {
-            error = "Approval blocked: a loot winner doesn't have enough DKP for their item. "
-                + "Adjust their DKP or edit the submission's loot, then approve again."
-        }),
         _ => Ok(new { message = success })
     };
 
@@ -124,24 +105,20 @@ public sealed partial class ActivityDataController
         user is null ? "(unknown)" : user.CharacterName ?? user.UserName ?? user.Id;
 }
 
-public sealed record ActivityPendingTodLootDto(string? ItemName, string? ItemWinner, int? WinningDkpSpent);
-
+// No loot: a ToD carries none. Loot is recorded in the Loot tab, against an event.
 public sealed record ActivityPendingTodDto(
     int Id, string SubmittedBy, DateTime SubmittedAtUtc,
     string? MonsterName, int? DayNumber, bool? Claim, DateTime? Time,
-    string? Cooldown, string? Interval, DateTime? RepopTime, string? ImagePath,
-    IReadOnlyList<ActivityPendingTodLootDto> LootRows);
+    string? Cooldown, string? Interval, DateTime? RepopTime, string? ImagePath);
 
 public sealed record ActivityPendingSubmissionsResponse(
     IReadOnlyList<ActivityPendingTodDto> Tods,
     IReadOnlyList<string> MonsterOptions,
     IReadOnlyList<string> CooldownOptions,
-    IReadOnlyList<string> IntervalOptions,
-    IReadOnlyList<string> RosterNames);
+    IReadOnlyList<string> IntervalOptions);
 
 // TimeLocal / RepopTimeLocal: datetime-local values in the reviewer's profile zone, like every
 // other Activity form (datetimeLocalToUtcIso on the client); blank clears the time.
 public sealed record ActivityApprovePendingTodRequest(
     string? MonsterName, int? DayNumber, bool? Claim, string? TimeLocal,
-    string? Cooldown, string? Interval, string? RepopTimeLocal,
-    List<ActivityPendingTodLootDto>? LootRows);
+    string? Cooldown, string? Interval, string? RepopTimeLocal);

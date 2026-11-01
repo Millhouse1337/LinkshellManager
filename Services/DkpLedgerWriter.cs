@@ -36,8 +36,8 @@ public enum DkpOverdraft
 }
 
 // Thrown when a Block debit would overdraw. This is the backstop, not the user-facing check —
-// callers that can produce this should pre-validate and return a friendly message (LootDkpGuard,
-// AdjustTodLootDkpAsync). Reaching this exception means a path forgot to.
+// callers that can produce this should pre-validate and return a friendly message (LootDkpGuard).
+// Reaching this exception means a path forgot to.
 public sealed class DkpOverdraftException : InvalidOperationException
 {
     public DkpOverdraftException(string message) : base(message) { }

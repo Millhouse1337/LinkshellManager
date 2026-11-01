@@ -1530,13 +1530,8 @@ public sealed record ActivityCreateTodRequest(
     string? TimeLocal,
     string? Cooldown,
     string? Interval,
-    bool NoLoot,
-    // NULLABLE on purpose. The ToD form no longer carries loot, so the client sends null, and on
-    // update null means "leave the existing loot alone" (an explicit list, empty included, still
-    // replaces it). It must ALSO stay nullable because [ApiController] + <Nullable>enable gives a
-    // non-nullable reference property an IMPLICIT [Required] -- which rejected every ToD save with
-    // a ProblemDetails 400 before the action body ever ran.
-    IReadOnlyList<ActivityCreateTodLootRequest>? LootDetails,
+    // No loot fields: a ToD never carries loot. Loot is recorded in the Loot tab, against an event.
+    // A client that still sends noLoot / lootDetails has them ignored.
     string? ImagePath,
     bool Hq = false,
     int AdditionalSeconds = 0,
@@ -1551,23 +1546,12 @@ public sealed record ActivityUpdateTodRequest(
     string? TimeLocal,
     string? Cooldown,
     string? Interval,
-    bool NoLoot,
-    // NULLABLE on purpose. The ToD form no longer carries loot, so the client sends null, and on
-    // update null means "leave the existing loot alone" (an explicit list, empty included, still
-    // replaces it). It must ALSO stay nullable because [ApiController] + <Nullable>enable gives a
-    // non-nullable reference property an IMPLICIT [Required] -- which rejected every ToD save with
-    // a ProblemDetails 400 before the action body ever ran.
-    IReadOnlyList<ActivityCreateTodLootRequest>? LootDetails,
+    // No loot fields, as on create. An edit never touches loot an older ToD already carries.
     string? ImagePath,
     bool Hq = false,
     int AdditionalSeconds = 0,
     // Which pop window the monster showed up on. null/0 = not recorded.
     int? PopWindow = null);
-
-public sealed record ActivityCreateTodLootRequest(
-    string? ItemName,
-    string? ItemWinner,
-    int? WinningDkpSpent);
 
 // Logs (or edits) a ToD from an HNM signup board's "Post ToD" / "Edit ToD" button. The
 // monster + linkshell come from the event (path id), so the board form only sends the
