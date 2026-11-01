@@ -639,13 +639,14 @@ export class TodFormComponent {
       this.todRepopLocalValue = '';
       return;
     }
-    todLocalTime.setHours(todLocalTime.getHours() + cooldownHours);
     // Fine repop offset: the monster's configured "Additional seconds" (Monster setups).
     const extraSeconds = Math.max(0, Math.floor(Number(this.todDraft.additionalSeconds) || 0));
-    if (extraSeconds > 0) {
-      todLocalTime.setSeconds(todLocalTime.getSeconds() + extraSeconds);
-    }
-    this.todRepopLocalValue = toDateTimeLocalValue(todLocalTime);
+    // ELAPSED time, not clock time: the respawn runs on real hours, the way the server computes
+    // the repop it stores. setHours(getHours() + 48) moved the wall clock instead, so a cooldown
+    // spanning a daylight-saving change previewed an hour off what was saved (and a fractional
+    // cooldown like 22.5h lost its half hour).
+    const repop = new Date(todLocalTime.getTime() + cooldownHours * 3_600_000 + extraSeconds * 1000);
+    this.todRepopLocalValue = toDateTimeLocalValue(repop);
   }
 
   protected todRepopSummary(): string {
