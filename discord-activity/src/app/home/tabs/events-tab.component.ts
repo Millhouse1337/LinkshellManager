@@ -851,15 +851,19 @@ export class EventsTabComponent {
       : this.standardBonus(event, 'window');
   }
 
-  // The close bonus this window adds: the camp's close bonus on the close, 0 elsewhere. A close
-  // that only fell back onto window 1 (a named camp with just its Open posted) adds nothing —
-  // window 1 pays open + close only when TICKED.
-  private closeWindowValue(event: ActivityEvent, window: ActivityAttendanceWindow): number {
-    if (window.isKillWindow) return 0;
+  // The close bonus this window adds — the Closing window column: the camp's close bonus on the
+  // close, 0 elsewhere.
+  protected closeWindowValue(event: ActivityEvent, window: ActivityAttendanceWindow): number {
+    return this.isCloseWindow(event, window) ? this.standardBonus(event, 'close') : 0;
+  }
+
+  // Whether this window is the camp's close. A close that only fell back onto window 1 (a named
+  // camp with just its Open posted) does not count — window 1 is the close only when TICKED.
+  protected isCloseWindow(event: ActivityEvent, window: ActivityAttendanceWindow): boolean {
+    if (window.isKillWindow) return false;
     const closeWindow = this.closeWindowSequence(event);
-    if (closeWindow <= 0 || window.sequenceNumber !== closeWindow) return 0;
-    if (window.sequenceNumber === 1 && !this.closeIsMarked(event)) return 0;
-    return this.standardBonus(event, 'close');
+    if (closeWindow <= 0 || window.sequenceNumber !== closeWindow) return false;
+    return window.sequenceNumber !== 1 || this.closeIsMarked(event);
   }
 
   // Per-camp override first, else the linkshell default — the precedence both finalizers apply.
@@ -903,11 +907,12 @@ export class EventsTabComponent {
     return close > 0 ? EventsTabComponent.trimDkp(close) : null;
   }
 
-  // What one attendee earned from THIS window, or null when the window carries no credit for
-  // them. Null renders as an em dash rather than 0 — "this window pays nothing here" and "this
-  // window is priced at zero" read identically otherwise, and only one of them is a settings
-  // problem an officer can fix. An explicitly-priced window is never null: pricing a window is
-  // what makes it pay everyone on it, including a middle window that used to pay nobody.
+  // The DKP column: what one attendee earned from THIS window before any close bonus (that is the
+  // Closing window column beside it), or null when the window carries no credit for them. Null
+  // renders as an em dash rather than 0 — "this window pays nothing here" and "this window is
+  // priced at zero" read identically otherwise, and only one of them is a settings problem an
+  // officer can fix. An explicitly-priced window is never null: pricing a window is what makes it
+  // pay everyone on it, including a middle window that used to pay nobody.
   protected attendanceWindowDkp(
     event: ActivityEvent,
     window: ActivityAttendanceWindow,
@@ -930,10 +935,10 @@ export class EventsTabComponent {
 
     // An officer priced this window by hand, so it pays everyone scanned in it — that IS what
     // pricing a window means, and it's the one case where a middle window is worth something.
-    if (window.dkpAmount != null) return this.windowValue(event, window);
+    if (window.dkpAmount != null) return this.baseWindowValue(event, window);
 
-    // The kill roster's column is the CAMP'S KILL BONUS -- the same number the "Kill DKP" box
-    // above the table now edits, and what everyone listed here actually earns for being on it.
+    // The kill roster's column is the CAMP'S KILL BONUS -- the number its DKP cells edit, and what
+    // everyone listed here actually earns for being on it.
     //
     // It used to return null and render as a dash, on the reasoning that a kill roster pays
     // nothing AS A WINDOW. True of the window, useless to the officer: the column sat empty on
@@ -942,16 +947,10 @@ export class EventsTabComponent {
     // the table says so -- but it is the member's, and the table is where members' amounts go.
     if (window.isKillWindow) return this.standardBonus(event, 'kill');
 
-    // Standard: window 1 pays the open bonus and everything else the camp's regular window rate,
-    // with the close bonus added on the ticked closing window.
-    //
-    // A middle window on a camp with NO per-window rate still returns null so it renders as an em
-    // dash rather than a 0 — "this window pays nobody" and "this window is priced at zero" read
-    // identically otherwise, and only one of them is a settings problem an officer can fix.
-    const isOpen = window.sequenceNumber === 1;
-    const isClose = this.closeWindowValue(event, window) > 0;
-    if (!isOpen && !isClose && this.standardBonus(event, 'window') <= 0) return null;
-    return this.windowValue(event, window);
+    // Standard: window 1 pays the open bonus and everything else the camp's regular window rate.
+    // A later window on a camp with NO regular rate returns null, for the em dash above.
+    if (window.sequenceNumber !== 1 && this.standardBonus(event, 'window') <= 0) return null;
+    return this.baseWindowValue(event, window);
   }
 
   // Display form of the above. A separate helper because 0 is FALSY and 0 is a real answer here:
@@ -972,9 +971,12 @@ export class EventsTabComponent {
     return Number(value.toFixed(2)).toString();
   }
 
-  // Sum of the column, so the window reads as a single payout instead of a list of rows to add up.
+  // Sum of the DKP and Closing window columns, so the window reads as a single payout instead of a
+  // list of rows to add up.
   protected attendanceWindowDkpTotal(event: ActivityEvent, window: ActivityAttendanceWindow): number {
-    return window.attendees.reduce((sum, attendee) => sum + (this.attendanceWindowDkp(event, window, attendee) ?? 0), 0);
+    const close = this.isWdCamp(event) ? 0 : this.closeWindowValue(event, window);
+    return window.attendees.reduce(
+      (sum, attendee) => sum + (this.attendanceWindowDkp(event, window, attendee) ?? 0) + close, 0);
   }
 
   // One line of "why is the column that number" under the table. Standard names the gates the
@@ -1189,6 +1191,9 @@ export class EventsTabComponent {
 
   // ----- Pricing one window by hand -----
   //
+  // The DKP column's cells. Every row of a window shows the same box, because the price belongs to
+  // the window: typing in any row prices it for everyone on it.
+  //
   // No Apply button and no Use default button: whatever is in the box IS this window's DKP. There
   // is nothing to "confirm" because nothing here is final — the amounts stay editable through
   // review, and the event being ended and posted to the sheet is what settles them.
@@ -1197,7 +1202,7 @@ export class EventsTabComponent {
   // the difference between one write of 1.25 and three writes of 1, 12 and 125 on the way there.
   //
   // An empty box is the instruction the removed "Use default" button used to carry: no price of
-  // its own, fall back to the camp's open / close / regular-window value.
+  // its own, fall back to the camp's open / regular-window value.
   //
   // Drafts are keyed by window id and only exist for windows the officer has actually typed in —
   // an absent entry means "show what the server holds", so a refresh elsewhere isn't fought by a
@@ -1208,43 +1213,35 @@ export class EventsTabComponent {
   // The box is never blank. An empty field used to be how "this window has no price of its own"
   // showed, leaning on a `default` placeholder to say it — which left the one control on the card
   // that names a DKP amount as the only thing on the card not showing one, on exactly the windows
-  // an officer opens it to read. So it always holds what this window actually pays: the officer's
-  // explicit price when they set one, else what the camp's model pays for this sequence. It goes
-  // through the same windowValue as the DKP column and the note beneath it, so the three cannot
-  // disagree about what the window is worth.
+  // an officer opens it to read. So it always holds what this window pays before any close bonus:
+  // the officer's explicit price when they set one, else the open or the regular rate. It goes
+  // through the same baseWindowValue as the note beneath the table, so the two cannot disagree.
   //
   // Showing the default does NOT write it — see commitWindowDkp. A window nobody priced stays
-  // unpriced, so it keeps following the camp's open / close / window bonus when that changes.
+  // unpriced, so it keeps following the camp's open / window bonus when that changes.
   protected windowDkpDraft(event: ActivityEvent, window: ActivityAttendanceWindow): string {
     const draft = this.windowDkpDrafts()[window.id];
     if (draft !== undefined) return draft;
-    // A kill roster shows the CAMP'S KILL BONUS, not windowValue -- which returns 0 for one, by
-    // design, because the roster pays through that bonus rather than as a window. The box read
-    // "0" on every camp with a kill bonus configured, which is the one number it could not have
-    // meant. See killDkpLabel / commitWindowDkp for the write side.
+    // A kill roster shows the CAMP'S KILL BONUS, not baseWindowValue -- which returns 0 for one,
+    // by design, because the roster pays through that bonus rather than as a window. See
+    // commitWindowDkp for the write side.
     if (window.isKillWindow) {
       return EventsTabComponent.trimDkp(this.standardBonus(event, 'kill'));
     }
-    return EventsTabComponent.trimDkp(this.windowValue(event, window));
+    return EventsTabComponent.trimDkp(this.baseWindowValue(event, window));
   }
 
-  // The Kill tab's box is not "DKP this window" -- it edits the camp's kill bonus, and naming it
-  // for the window would promise a per-window payment that does not exist.
-  protected windowDkpLabel(window: ActivityAttendanceWindow): string {
-    return window.isKillWindow ? 'Kill DKP' : 'DKP this window';
-  }
-
-  // Hand-set and inherited now look identical, both being a number in the same box, so the tooltip
-  // is what tells them apart — and it names the way back to the default, which an empty box used
-  // to be the visible sign of.
+  // Hand-set and inherited look identical, both being a number in the same box, so the tooltip is
+  // what tells them apart — and it names the way back to the default.
   protected windowDkpHint(window: ActivityAttendanceWindow): string {
     if (window.isKillWindow) {
       return 'What everyone on the kill roster earns at End Camp. This is the camp\'s kill bonus, '
         + 'not a window price — clear the box to go back to the linkshell default.';
     }
     return window.dkpAmount == null
-      ? 'Camp default for this window — type an amount to price it by hand.'
-      : 'Priced by hand — clear the box to go back to the camp default.';
+      ? 'Camp default for this window — type an amount to price it by hand. '
+        + 'Applies to everyone on this window.'
+      : 'Priced by hand for everyone on this window — clear the box to go back to the camp default.';
   }
 
   protected setWindowDkpDraft(window: ActivityAttendanceWindow, event: Event): void {
@@ -1294,11 +1291,11 @@ export class EventsTabComponent {
 
     // The box shows the camp's own number on a window nobody has priced, so tabbing through the
     // field now arrives here as "write that number down explicitly". Don't: an explicit amount
-    // FREEZES the window at it, and a later change to the camp's open / close / window bonus would
-    // then stop reaching a window the officer never actually priced. Typing the number the default
+    // FREEZES the window at it, and a later change to the camp's open / window bonus would then
+    // stop reaching a window the officer never actually priced. Typing the number the default
     // already shows means the same thing as leaving it alone, so it is treated the same way.
     if (current === null && amount !== null
-        && Math.abs(this.windowValue(event, window) - amount) < 0.0001) {
+        && Math.abs(this.baseWindowValue(event, window) - amount) < 0.0001) {
       this.dropWindowDkpDraft(window);
       return;
     }
@@ -1350,12 +1347,120 @@ export class EventsTabComponent {
       const ok = await this.activity.setAttendanceWindowClosing(window.id, !window.isClosingWindow);
       if (ok) {
         // Full refresh rather than a local flag flip — marking one window UNMARKS another, and the
-        // whole DKP column repaints when the close moves.
+        // whole Closing window column repaints when the close moves.
         await this.activity.refreshOverview();
       }
     } finally {
       this.windowDkpSaving.set(false);
     }
+  }
+
+  // ----- The Closing window column -----
+  //
+  // On the close, the cell edits the CAMP'S close bonus (Event.HnmCloseBonusOverride): a camp has
+  // one close, so its bonus belongs to the camp rather than to the window. Every other window shows
+  // a plain 0. Drafts are keyed by event id for that reason, and commit on change like the DKP cells.
+  private readonly closeBonusDrafts = signal<Record<number, string>>({});
+
+  protected closeBonusDraft(event: ActivityEvent): string {
+    const draft = this.closeBonusDrafts()[event.id];
+    if (draft !== undefined) return draft;
+    return EventsTabComponent.trimDkp(this.standardBonus(event, 'close'));
+  }
+
+  protected setCloseBonusDraft(event: ActivityEvent, input: Event): void {
+    const value = (input.target as HTMLInputElement).value;
+    this.closeBonusDrafts.update(map => ({ ...map, [event.id]: value }));
+  }
+
+  protected async commitCloseBonus(event: ActivityEvent): Promise<void> {
+    const raw = this.closeBonusDraft(event).trim();
+    const amount = raw === '' ? null : Number(raw);
+    const unchanged = amount === null
+      ? event.hnmCloseBonusOverride == null
+      : Math.abs(this.standardBonus(event, 'close') - amount) < 0.0001;
+    if (unchanged || (amount !== null && (!Number.isFinite(amount) || amount < 0))) {
+      this.dropCloseBonusDraft(event);
+      return;
+    }
+
+    if (this.windowDkpSaving()) return;
+    this.windowDkpSaving.set(true);
+    try {
+      if (await this.activity.setCampCloseBonus(event.id, amount)) {
+        this.dropCloseBonusDraft(event);
+        await this.activity.refreshOverview();
+      }
+    } finally {
+      this.windowDkpSaving.set(false);
+    }
+  }
+
+  private dropCloseBonusDraft(event: ActivityEvent): void {
+    this.closeBonusDrafts.update(map => {
+      const next = { ...map };
+      delete next[event.id];
+      return next;
+    });
+  }
+
+  // ----- Pricing a misc post by hand -----
+  //
+  // The Linked Snapshots table's DKP cells on a Misc post: what that post pays each person on it
+  // (AttendanceSnapshot.DkpAmount), replacing the linkshell's Misc post rate. Same rules as the
+  // window cells: commit on change, empty puts it back on the rate, and typing the number already
+  // shown on an unpriced post writes nothing. Shares windowDkpSaving so only one price write is
+  // ever in flight.
+  private readonly miscDkpDrafts = signal<Record<number, string>>({});
+
+  protected miscDkpDraft(snapshot: ActivityLinkedSnapshot): string {
+    const draft = this.miscDkpDrafts()[snapshot.id];
+    if (draft !== undefined) return draft;
+    return EventsTabComponent.trimDkp(snapshot.dkpPerMember ?? 0);
+  }
+
+  protected setMiscDkpDraft(snapshot: ActivityLinkedSnapshot, input: Event): void {
+    const value = (input.target as HTMLInputElement).value;
+    this.miscDkpDrafts.update(map => ({ ...map, [snapshot.id]: value }));
+  }
+
+  protected async commitMiscDkp(snapshot: ActivityLinkedSnapshot): Promise<void> {
+    const raw = this.miscDkpDraft(snapshot).trim();
+    const amount = raw === '' ? null : Number(raw);
+    const current = snapshot.dkpOverride ?? null;
+    const unchanged = amount === null
+      ? current === null
+      : Math.abs((current ?? snapshot.dkpPerMember ?? 0) - amount) < 0.0001;
+    if (unchanged || (amount !== null && (!Number.isFinite(amount) || amount < 0))) {
+      this.dropMiscDkpDraft(snapshot);
+      return;
+    }
+
+    if (this.windowDkpSaving()) return;
+    this.windowDkpSaving.set(true);
+    try {
+      if (await this.activity.setMiscPostDkp(snapshot.id, amount)) {
+        this.dropMiscDkpDraft(snapshot);
+        await this.activity.refreshOverview();
+      }
+    } finally {
+      this.windowDkpSaving.set(false);
+    }
+  }
+
+  private dropMiscDkpDraft(snapshot: ActivityLinkedSnapshot): void {
+    this.miscDkpDrafts.update(map => {
+      const next = { ...map };
+      delete next[snapshot.id];
+      return next;
+    });
+  }
+
+  protected miscDkpHint(snapshot: ActivityLinkedSnapshot): string {
+    return snapshot.dkpOverride == null
+      ? 'The linkshell\'s Misc post rate — type an amount to price this post by hand. '
+        + 'Applies to everyone on it.'
+      : 'Priced by hand for everyone on this post — clear the box to go back to the Misc post rate.';
   }
 
   // ----- Claim Shield: who the claim bonus goes to -----

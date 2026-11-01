@@ -641,8 +641,9 @@ export class EventService {
   }
 
   // Prices ONE posted attendance window: what it pays each attendee, replacing the camp's default
-  // open / close bonus for that window. `null` clears the price and puts the window back on the
-  // default — a real instruction, which is why it is sent rather than omitted.
+  // (the open on window 1, the regular rate elsewhere). The close bonus still adds on top when the
+  // window is the close. `null` clears the price and puts the window back on the default — a real
+  // instruction, which is why it is sent rather than omitted.
   //
   // Same route family and the same bearer + cookie shape as the remove above; the server refuses
   // camps that don't pay off this column (Manual Check In, timed events) and returns the reason,
@@ -677,12 +678,38 @@ export class EventService {
     }
   }
 
-  // Marks (or unmarks) ONE posted window as the camp's close — the only thing that decides the
-  // close bonus now that it is no longer derived from "the newest window posted".
+  // Sets this CAMP's close bonus -- what the Closing window cell on the ticked window edits. A camp
+  // has one close, so its bonus is a property of the camp: this writes Event.HnmCloseBonusOverride.
   //
-  // The server enforces the one-close-per-camp rule and CLEARS the window's explicit price on the
-  // way, so the close bonus can come through: an explicit amount replaces the computed value, and
-  // the addon stamps one on every window it posts. That is why this cannot be a client-side flag
+  // null clears the override and puts the camp back on the linkshell's close bonus.
+  async setCampCloseBonus(eventId: number, closeBonus: number | null): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.sendActivityRequest('PATCH', `/api/addon/management/events/${eventId}/close-bonus`, { closeBonus });
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, "Setting the camp's close bonus failed."));
+      return false;
+    }
+  }
+
+  // Prices ONE misc post linked to a live camp: what it pays each person on it, replacing the
+  // linkshell's Misc post rate. null puts it back on that rate.
+  async setMiscPostDkp(snapshotId: number, dkpAmount: number | null): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.sendActivityRequest('PATCH', `/api/addon/management/attendance-snapshots/${snapshotId}/dkp`, { dkpAmount });
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, "Setting this misc post's DKP failed."));
+      return false;
+    }
+  }
+
+  // Marks (or unmarks) ONE posted window as the camp's close. On a numbered camp that is the only
+  // thing that pays the close bonus, which adds to whatever the window already pays.
+  //
+  // The server enforces the one-close-per-camp rule, which is why this cannot be a client-side flag
   // flip — see AddonApiController.SetClosingWindowAsync.
   async setAttendanceWindowClosing(windowId: number, isClosingWindow: boolean): Promise<boolean> {
     this.auth.setActionError(null);

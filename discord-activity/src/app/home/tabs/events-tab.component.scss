@@ -88,28 +88,18 @@
   margin-left: auto;
 }
 
-// The per-window price editor, sharing the "Posted ..." line rather than taking a row of its own:
-// it is a fact ABOUT this window, next to the other one.
-.window-dkp-edit {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-
-  label {
-    font-size: 11px;
-    color: var(--fg-3);
-  }
-
-  input {
-    width: 76px;
-    padding: 2px 6px;
-    font-size: 12px;
-  }
+// The editable DKP / Closing window cells in the roster tables. Every row of a window shares one
+// number (the window's price, the camp's close bonus, a misc post's rate), so editing any row edits
+// them all. Right-aligned so it lines up with the plain figures in the same .num column.
+.roster-dkp-input {
+  width: 64px;
+  padding: 2px 6px;
+  font-size: 12px;
+  text-align: right;
 }
 
-// "Closing window" tick, sat beside the price box it supersedes. Same muted scale as that
-// control's label so the two read as one row of window settings rather than as a warning.
+// "Closing window" tick on the "Posted ..." line. Muted, so it reads as a window setting rather
+// than as a warning.
 .window-close-mark {
   display: inline-flex;
   align-items: center;
