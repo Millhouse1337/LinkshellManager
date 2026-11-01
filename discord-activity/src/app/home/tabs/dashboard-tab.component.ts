@@ -682,7 +682,8 @@ export class DashboardTabComponent {
       if (tod.claim && tod.lootDetails?.length) {
         for (const loot of tod.lootDetails) {
           const winner = (loot.itemWinner ?? '').trim();
-          const dkp = loot.winningDkpSpent ?? null;
+          // The winner pays the bid, so show it as a spend (-N DKP).
+          const dkp = loot.winningDkpSpent != null ? -loot.winningDkpSpent : null;
           const detail = `${loot.itemName || 'Loot'}${winner ? ` → ${winner}` : ''}`;
           items.push({
             kind: 'loot',
@@ -734,7 +735,7 @@ export class DashboardTabComponent {
           name: event.name || 'Event',
           action: 'loot',
           detail: `${loot.itemName || 'Loot'}${winner ? ` → ${winner}` : ''}`,
-          dkp: loot.winningDkpSpent ?? null,
+          dkp: loot.winningDkpSpent != null ? -loot.winningDkpSpent : null,
           categoryLabel: 'Loot',
           relative: this.longPastRelative(when),
           when

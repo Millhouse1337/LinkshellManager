@@ -728,8 +728,8 @@
                   </div>
                   <div class="activity-right">
                     @if (item.dkp != null) {
-                      <span class="activity-dkp" [class.activity-dkp--neg]="item.dkp < 0" [class.activity-dkp--pos]="item.dkp >= 0">
-                        {{ item.dkp >= 0 ? '+' : '' }}{{ item.dkp }} DKP
+                      <span class="activity-dkp" [class.activity-dkp--neg]="item.dkp < 0" [class.activity-dkp--pos]="item.dkp > 0">
+                        {{ item.dkp > 0 ? '+' : '' }}{{ item.dkp }} DKP
                       </span>
                     }
                     <span class="activity-badge activity-badge--{{ item.kind }}">{{ item.categoryLabel }}</span>
