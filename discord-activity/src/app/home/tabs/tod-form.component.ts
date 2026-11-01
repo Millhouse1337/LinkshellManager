@@ -6,7 +6,6 @@ import {
   DiscordActivityService
 } from '../../discord/discord-activity.service';
 import {
-  createEmptyTodLootRow,
   formatElapsed,
   parseLocalDateTime,
   toDateTimeLocalValue
@@ -54,9 +53,7 @@ export class TodFormComponent {
     hq: false,
     additionalSeconds: 0,
     claim: true,
-    timeLocal: '',
-    noLoot: true,
-    lootDetails: [{ itemName: '', itemWinner: '', winningDkpSpent: null }]
+    timeLocal: ''
   };
   protected todTimeLocalValue = '';
   protected todRepopLocalValue = '';
@@ -413,15 +410,6 @@ export class TodFormComponent {
     return this.activity.overview()?.linkshells?.find(l => l.id === this.todDraft.linkshellId)?.name ?? null;
   }
 
-  // Loot-winner suggestions come from the draft linkshell's roster (only the primary
-  // linkshell ships a full member list in the overview, same as the ToDs tab).
-  protected todCharacterNames(): string[] {
-    const primary = this.activity.overview()?.primaryLinkshell;
-    const members = primary && primary.id === this.todDraft.linkshellId ? (primary.members ?? []) : [];
-    return [...new Set(members.map(member => member.characterName).filter(name => name.trim().length > 0))]
-      .sort((left, right) => left.localeCompare(right));
-  }
-
   // ----- Form field handlers -----
 
   protected onTodMonsterChange(monsterName: string): void {
@@ -618,10 +606,6 @@ export class TodFormComponent {
 
   protected onTodClaimChange(claim: boolean): void {
     this.todDraft.claim = claim;
-    if (!claim) {
-      this.todDraft.noLoot = true;
-      this.todDraft.lootDetails = [createEmptyTodLootRow()];
-    }
   }
 
   // The ToDs-tab "Day" input. Blank (or 0/negative) = the officer didn't record a day, which is
@@ -783,11 +767,8 @@ export class TodFormComponent {
 
     const dayNumber = this.todDayNumberNotSpecified ? null : this.todDraft.dayNumber;
     const interval = this.todIntervalLabel();
-    // Loot is NEVER posted from a ToD any more. It is recorded in the Loot tab and filed against a
-    // live or past event -- which is what stopped every ToD-recorded drop landing in the history as
-    // source "ToD" with no event behind it. Sent empty rather than dropped from the payload so an
-    // older server still parses the request.
-    const lootDetails: { itemName: string | null; itemWinner: string | null; winningDkpSpent: number | null }[] = [];
+    // No loot: a ToD never carries any. Loot is recorded in the Loot tab and filed against a live or
+    // past event.
 
     try {
       if (this.editingTodId !== null) {
@@ -802,8 +783,6 @@ export class TodFormComponent {
           timeLocal: this.todDraft.timeLocal,
           cooldown,
           interval,
-          noLoot: this.todDraft.noLoot,
-          lootDetails,
           imagePath: this.todImagePath
         });
       } else {
@@ -818,8 +797,6 @@ export class TodFormComponent {
           timeLocal: this.todDraft.timeLocal,
           cooldown,
           interval,
-          noLoot: this.todDraft.noLoot,
-          lootDetails,
           imagePath: this.todImagePath
         });
       }
@@ -855,14 +832,6 @@ export class TodFormComponent {
 
     this.applyDurationLabel(tod.cooldown ?? '22 Hour', 'cooldown');
     this.applyDurationLabel(tod.interval ?? null, 'interval');
-    this.todDraft.noLoot = !(tod.lootDetails && tod.lootDetails.length > 0);
-    this.todDraft.lootDetails = (tod.lootDetails && tod.lootDetails.length > 0
-      ? tod.lootDetails.map((loot: any) => ({
-          itemName: loot.itemName ?? '',
-          itemWinner: loot.itemWinner ?? '',
-          winningDkpSpent: loot.winningDkpSpent ?? null
-        }))
-      : [createEmptyTodLootRow()]);
 
     if (tod.time) {
       const d = new Date(tod.time);
@@ -900,8 +869,6 @@ export class TodFormComponent {
     this.todCooldownUnit = 'hours';
     this.todIntervalValue = 10;
     this.todIntervalUnit = 'mins';
-    this.todDraft.noLoot = true;
-    this.todDraft.lootDetails = [createEmptyTodLootRow()];
     this.todTimeLocalValue = '';
     this.todRepopLocalValue = '';
     this.todMonsterSearch = this.todDraft.monsterName;

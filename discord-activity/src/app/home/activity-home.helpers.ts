@@ -7,8 +7,7 @@
 
 import type {
   ActivityEventParticipant,
-  ActivityStatusLedgerEntry,
-  ActivityTodLootInput
+  ActivityStatusLedgerEntry
 } from '../discord/discord-activity.service';
 import type { ActivityLinkshellSettings, ActivityOverview } from '../discord/discord-activity.types';
 
@@ -68,14 +67,6 @@ export function formatBreakDuration(ms: number): string {
     return `${minutes}m ${seconds}s`;
   }
   return `${seconds}s`;
-}
-
-export function createEmptyTodLootRow(): ActivityTodLootInput {
-  return {
-    itemName: '',
-    itemWinner: '',
-    winningDkpSpent: null
-  };
 }
 
 export function toDateTimeLocalValue(date: Date): string {

@@ -5,8 +5,7 @@ import { datetimeLocalToUtcIso } from '../../discord/discord-activity.helpers';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import type {
   ActivityPendingTod,
-  ActivityPendingTodEdits,
-  ActivityPendingTodLoot
+  ActivityPendingTodEdits
 } from '../../discord/discord-activity.types';
 import { PendingSubmissionsService } from '../../discord/pending-submissions.service';
 
@@ -20,12 +19,11 @@ interface TodDraft {
   cooldown: string;
   interval: string;
   repopTimeLocal: string;
-  lootRows: ActivityPendingTodLoot[];
 }
 
 // "ToD Submissions Needing Approval", at the top of the ToDs tab, inside Discord and on the
 // website: the ToDs members without the right to post them directly submitted (the ToDs tab's form
-// or the addon's capture), editable, with their loot, to Approve or Reject. Only ToDs: members'
+// or the addon's capture), editable, to Approve or Reject. No loot: a ToD carries none. Only ToDs: members'
 // /lsm now attendance captures wait in the Event System's Unlinked Snapshots ("Awaiting
 // confirmation"). TodsTabComponent mounts this only for reviewers; the API checks again
 // (CanManageTods). The top bar's Refresh reloads it (AutoRefreshService).
@@ -70,8 +68,7 @@ export class PendingSubmissionsSectionComponent {
         timeLocal: this.activity.toViewerLocalInputValue(tod.time, true),
         cooldown: tod.cooldown ?? '',
         interval: tod.interval ?? '',
-        repopTimeLocal: this.activity.toViewerLocalInputValue(tod.repopTime, true),
-        lootRows: tod.lootRows.map(row => ({ ...row }))
+        repopTimeLocal: this.activity.toViewerLocalInputValue(tod.repopTime, true)
       };
       this.todDrafts.set(tod.id, draft);
     }
@@ -84,14 +81,6 @@ export class PendingSubmissionsSectionComponent {
     return tod.monsterName && !options.includes(tod.monsterName) ? [tod.monsterName, ...options] : options;
   }
 
-  protected addLootRow(draft: TodDraft): void {
-    draft.lootRows.push({ itemName: '', itemWinner: '', winningDkpSpent: null });
-  }
-
-  protected removeLootRow(draft: TodDraft, index: number): void {
-    draft.lootRows.splice(index, 1);
-  }
-
   protected approveTod(tod: ActivityPendingTod): void {
     const draft = this.todDraft(tod);
     const edits: ActivityPendingTodEdits = {
@@ -101,8 +90,7 @@ export class PendingSubmissionsSectionComponent {
       timeLocal: datetimeLocalToUtcIso(draft.timeLocal),
       cooldown: draft.cooldown || null,
       interval: draft.interval || null,
-      repopTimeLocal: datetimeLocalToUtcIso(draft.repopTimeLocal),
-      lootRows: draft.lootRows
+      repopTimeLocal: datetimeLocalToUtcIso(draft.repopTimeLocal)
     };
     void this.pending.approveTod(this.linkshellId(), tod.id, edits).then(() => this.todDrafts.delete(tod.id));
   }

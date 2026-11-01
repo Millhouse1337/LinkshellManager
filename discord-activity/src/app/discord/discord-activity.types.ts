@@ -58,12 +58,7 @@ export interface ActivityDkpImportPreview {
 }
 
 // The ToD Submissions Needing Approval queue (ToDs tab): ToDs members submitted for approval.
-export interface ActivityPendingTodLoot {
-  itemName: string | null;
-  itemWinner: string | null;
-  winningDkpSpent: number | null;
-}
-
+// No loot: a ToD carries none.
 export interface ActivityPendingTod {
   id: number;
   submittedBy: string;
@@ -76,7 +71,6 @@ export interface ActivityPendingTod {
   interval: string | null;
   repopTime: string | null;
   imagePath: string | null;
-  lootRows: ActivityPendingTodLoot[];
 }
 
 export interface ActivityPendingSubmissions {
@@ -84,7 +78,6 @@ export interface ActivityPendingSubmissions {
   monsterOptions: string[];
   cooldownOptions: string[];
   intervalOptions: string[];
-  rosterNames: string[];
 }
 
 // A reviewer's corrections to a pending ToD. Times are datetime-local values in the viewer's
@@ -97,7 +90,6 @@ export interface ActivityPendingTodEdits {
   cooldown: string | null;
   interval: string | null;
   repopTimeLocal: string | null;
-  lootRows: ActivityPendingTodLoot[];
 }
 
 export type DiscordSdkContextSource = DiscordSDK & {
@@ -1911,12 +1903,6 @@ export interface ActivityLootInput {
   winningDkpSpent?: number | null;
 }
 
-export interface ActivityTodLootInput {
-  itemName?: string | null;
-  itemWinner?: string | null;
-  winningDkpSpent?: number | null;
-}
-
 export interface ActivityCreateTodInput {
   linkshellId: number;
   monsterName: string;
@@ -1929,8 +1915,6 @@ export interface ActivityCreateTodInput {
   timeLocal: string;
   cooldown?: string | null;
   interval?: string | null;
-  noLoot: boolean;
-  lootDetails: ActivityTodLootInput[];
   imagePath?: string | null;
 }
 
@@ -1946,8 +1930,6 @@ export interface ActivityUpdateTodInput {
   timeLocal: string;
   cooldown?: string | null;
   interval?: string | null;
-  noLoot: boolean;
-  lootDetails: ActivityTodLootInput[];
   imagePath?: string | null;
 }
 

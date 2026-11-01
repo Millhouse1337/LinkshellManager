@@ -36,17 +36,6 @@ export class TodService {
         timeLocal: input.timeLocal,
         cooldown: input.cooldown || null,
         interval: input.interval || null,
-        noLoot: input.noLoot,
-        // NULL, not an empty array. Loot can no longer be entered from a ToD, and on update the
-        // server reads null as "leave the loot alone" -- an empty array means "replace with
-        // nothing", which would refund and delete the loot on any legacy ToD an officer edited.
-        lootDetails: input.lootDetails.length > 0
-          ? input.lootDetails.map(detail => ({
-              itemName: detail.itemName || null,
-              itemWinner: detail.itemWinner || null,
-              winningDkpSpent: detail.winningDkpSpent ?? null
-            }))
-          : null,
         imagePath: input.imagePath ?? null
       });
       await this.auth.refreshOverview();
@@ -95,17 +84,6 @@ export class TodService {
         timeLocal: input.timeLocal,
         cooldown: input.cooldown || null,
         interval: input.interval || null,
-        noLoot: input.noLoot,
-        // NULL, not an empty array. Loot can no longer be entered from a ToD, and on update the
-        // server reads null as "leave the loot alone" -- an empty array means "replace with
-        // nothing", which would refund and delete the loot on any legacy ToD an officer edited.
-        lootDetails: input.lootDetails.length > 0
-          ? input.lootDetails.map(detail => ({
-              itemName: detail.itemName || null,
-              itemWinner: detail.itemWinner || null,
-              winningDkpSpent: detail.winningDkpSpent ?? null
-            }))
-          : null,
         imagePath: input.imagePath ?? null
       });
       await this.auth.refreshOverview();

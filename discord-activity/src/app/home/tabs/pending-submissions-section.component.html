@@ -69,25 +69,6 @@
               </label>
             </div>
 
-            <div style="display:flex;flex-direction:column;gap:8px">
-              <span class="muted">Loot</span>
-              @for (row of draft.lootRows; track $index) {
-                <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,2fr) minmax(0,1fr) auto;gap:8px;align-items:center">
-                  <input type="text" placeholder="Item" [(ngModel)]="row.itemName" />
-                  <input type="text" placeholder="Winner" [attr.list]="'roster-' + tod.id"
-                         [(ngModel)]="row.itemWinner" />
-                  <input type="number" min="0" placeholder="DKP" [(ngModel)]="row.winningDkpSpent" />
-                  <button type="button" class="btn ghost sm" (click)="removeLootRow(draft, $index)">Remove</button>
-                </div>
-              }
-              <datalist [id]="'roster-' + tod.id">
-                @for (name of q.rosterNames; track name) {
-                  <option [value]="name"></option>
-                }
-              </datalist>
-              <div><button type="button" class="btn ghost sm" (click)="addLootRow(draft)">+ Add loot row</button></div>
-            </div>
-
             @if (tod.imagePath) {
               <a class="muted" [href]="tod.imagePath" target="_blank" rel="noopener">View the submitted screenshot</a>
             }

@@ -117,7 +117,6 @@ export type {
   ActivityRule,
   ActivityStatusLedgerEntry,
   ActivityTodEntry,
-  ActivityTodLootInput,
   ActivityUpdateProfileInput,
   ActivityUpdateTodInput,
   ActivityUserSearchResult,
