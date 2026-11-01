@@ -197,6 +197,17 @@ public sealed partial class ActivityDataController
         // for that loot stays charged: the ledger rows keep only the loot's id (not a foreign key),
         // so they survive the delete. Refunding loot is the Loot tab's job, one item at a time.
         _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
+
+        // Events posted from this ToD point back at it, and that FK has no delete rule, so the
+        // database refuses the delete while any of them still do. Unlink them; the events stay.
+        var linkedEvents = await _dbContext.Events
+            .Where(item => item.SourceTodId == tod.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var linkedEvent in linkedEvents)
+        {
+            linkedEvent.SourceTodId = null;
+        }
+
         DeleteUploadedTodImage(tod.ImagePath);
         _dbContext.Tods.Remove(tod);
         await _dbContext.SaveChangesAsync(cancellationToken);
