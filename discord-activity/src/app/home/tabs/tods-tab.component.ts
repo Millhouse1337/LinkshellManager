@@ -185,7 +185,9 @@ export class TodsTabComponent {
         // 'Fafnir' on a group that also holds tonight's Nidhogg.
         displayName: mergedMonsterName(ordered[0]?.monsterName),
         latest: ordered[0],
-        history: ordered.slice(1, 10),
+        // Starts WITH the latest kill: the History list is the one place a kill's claim and pop
+        // window are shown, so the current one has to be in it too.
+        history: ordered.slice(0, 10),
         // Supplies the window count the row needs to show when the spawn window closes.
         setup: monsterSetupForTod(setups, ordered[0]?.monsterName)
       };

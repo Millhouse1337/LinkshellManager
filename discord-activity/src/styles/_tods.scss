@@ -251,11 +251,6 @@
   white-space: nowrap;
 }
 
-.tod-row-badge--claimed {
-  border-color: color-mix(in srgb, var(--success) 35%, transparent);
-  color: var(--success);
-}
-
 .tod-row-badge--hq {
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--accent-hover);
@@ -347,18 +342,38 @@
   transform: translateX(-1px);
 }
 
+// TOD / Repop / Closes as three labelled boxes. Two when the monster has no window grid; they
+// stack on a narrow screen.
 .tod-row-times {
-  display: flex;
-  justify-content: space-between;
-  gap: 4px 12px;
-  flex-wrap: wrap;
-  color: var(--fg-3);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
 }
 
-.tod-row-times-repop {
-  color: var(--fg-2);
+.tod-row-time {
+  display: grid;
+  gap: 4px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-hot);
+  border-radius: var(--r-sm);
+}
+
+.tod-row-time-label {
+  color: var(--fg-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tod-row-time-label--accent {
+  color: var(--tod-accent);
+}
+
+.tod-row-time-value {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
 }
 
 .tod-row > .tod-image-thumb {
@@ -502,6 +517,17 @@
   color: var(--fg-2);
   font-size: 11px;
   white-space: nowrap;
+}
+
+.tod-history-chip--claimed {
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+  color: var(--success);
+}
+
+// The current kill, listed first so its claim and window have somewhere to live.
+.tod-history-chip--latest {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent-hover);
 }
 
 .tod-history-actions {

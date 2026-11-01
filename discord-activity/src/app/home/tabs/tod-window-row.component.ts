@@ -51,8 +51,10 @@ export class TodWindowRowComponent {
         big = formatElapsed(closeMs! - now);
         break;
       case 'up':
-        statusLabel = 'Ready';
-        big = `Up ${formatShortDuration(now - repopMs!)}`;
+        // Every window has passed (or, with no window grid, the repop has), so it has popped by
+        // now. Says what passed and how long ago, rather than a bare "Up 46h".
+        statusLabel = closeMs !== null ? 'Last window passed' : 'Repop passed';
+        big = `${formatShortDuration(now - (closeMs ?? repopMs!))} ago`;
         break;
       default:
         // No time of death was recorded, so there is nothing to count down to.
@@ -92,9 +94,23 @@ export class TodWindowRowComponent {
       big,
       details,
       bar,
-      todLabel: this.activity.formatDateTimeWithSeconds(tod.time) || TOD_NOT_ENTERED,
-      repopLabel: this.activity.formatDateTimeWithSeconds(tod.repopTime) || TOD_NOT_ENTERED,
-      closeLabel: closeMs !== null ? this.activity.formatDateTimeWithSeconds(new Date(closeMs).toISOString()) : null
+      todLabel: this.formatTime(todMs) ?? TOD_NOT_ENTERED,
+      repopLabel: this.formatTime(repopMs) ?? TOD_NOT_ENTERED,
+      closeLabel: this.formatTime(closeMs)
     };
   });
+
+  // "Oct 31, 10:27:15 PM" in the viewer's zone: no year (always this one or the next), but the
+  // seconds stay, because a ToD is timed to the second.
+  private formatTime(ms: number | null): string | null {
+    if (ms === null) return null;
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: this.activity.viewerTimeZone(),
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit'
+    }).format(ms);
+  }
 }

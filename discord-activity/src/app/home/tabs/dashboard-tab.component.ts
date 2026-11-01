@@ -859,7 +859,9 @@ export class DashboardTabComponent {
         // 'Fafnir' on a group that also holds tonight's Nidhogg.
         displayName: mergedMonsterName(ordered[0]?.monsterName),
         latest: ordered[0],
-        history: ordered.slice(1, 10)
+        // Starts WITH the latest kill, same as the ToDs tab: the History list is where a kill's
+        // claim and pop window are shown.
+        history: ordered.slice(0, 10)
       };
     });
     // Order the Tracked Windows list by next repop ascending so the mob

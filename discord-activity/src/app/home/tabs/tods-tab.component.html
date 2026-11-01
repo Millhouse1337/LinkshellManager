@@ -52,11 +52,11 @@
                 </a>
               }
               <div class="tod-row-actions">
-                @if (group.history.length > 0) {
-                  <button type="button" class="tod-row-btn" (click)="toggleTodGroup(group.key)">
-                    {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History · ' + group.history.length }}
-                  </button>
-                }
+                <!-- Always offered: the list starts with the latest kill, which is where its
+                     claim and pop window are shown. -->
+                <button type="button" class="tod-row-btn" (click)="toggleTodGroup(group.key)">
+                  {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History · ' + group.history.length }}
+                </button>
                 @if (setupForMonster(group.latest.monsterName); as setup) {
                   <button type="button" class="tod-row-btn" (click)="toggleSetup(group.key)">
                     {{ isSetupExpanded(group.key) ? 'Hide party' : 'Party Setup' }}
@@ -95,17 +95,32 @@
                         </div>
                         <div class="tod-history-meta">
                           <span class="tod-history-stats">
+                            @if (hist.id === group.latest.id) {
+                              <span class="tod-history-chip tod-history-chip--latest">Latest</span>
+                            }
+                            <!-- Claim is tri-state: nothing for "Not specified". -->
+                            @if (hist.claim === true) {
+                              <span class="tod-history-chip tod-history-chip--claimed">Claimed</span>
+                            } @else if (hist.claim === false) {
+                              <span class="tod-history-chip">Unclaimed</span>
+                            }
+                            @if (hist.popWindow) {
+                              <span class="tod-history-chip num">Popped W{{ hist.popWindow }}</span>
+                            }
                             <span class="tod-history-chip">{{ hist.cooldown || '22 Hour' }}</span>
                             <span class="tod-history-chip">{{ hist.interval || '10 Min' }}</span>
                           </span>
-                          <span class="tod-history-actions">
-                            <button type="button" class="btn ghost sm" (click)="todForm.openEdit(hist)">Edit</button>
-                            <button type="button" class="btn sm danger-outline"
-                              [disabled]="activity.busyTodId() === hist.id"
-                              (click)="deleteTod(hist.id, hist.monsterName)">
-                              {{ activity.busyTodId() === hist.id ? 'Deleting…' : 'Delete' }}
-                            </button>
-                          </span>
+                          <!-- The latest kill's Edit / Delete are the row's own buttons above. -->
+                          @if (hist.id !== group.latest.id) {
+                            <span class="tod-history-actions">
+                              <button type="button" class="btn ghost sm" (click)="todForm.openEdit(hist)">Edit</button>
+                              <button type="button" class="btn sm danger-outline"
+                                [disabled]="activity.busyTodId() === hist.id"
+                                (click)="deleteTod(hist.id, hist.monsterName)">
+                                {{ activity.busyTodId() === hist.id ? 'Deleting…' : 'Delete' }}
+                              </button>
+                            </span>
+                          }
                         </div>
                       </div>
                     </div>

@@ -432,11 +432,11 @@
               <!-- Same row as the ToDs tab's Tracked Windows (TodWindowRowComponent). -->
               <app-tod-window-row [tod]="group.latest" [displayName]="group.displayName" [setup]="todSetupFor(group.latest)" [now]="now()">
                 <div class="tod-row-actions">
-                  @if (group.history.length > 0) {
-                    <button type="button" class="tod-row-btn" (click)="toggleTodGroup(group.key)">
-                      {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History · ' + group.history.length }}
-                    </button>
-                  }
+                  <!-- Always offered: the list starts with the latest kill, which is where its
+                       claim and pop window are shown (same as the ToDs tab). -->
+                  <button type="button" class="tod-row-btn" (click)="toggleTodGroup(group.key)">
+                    {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History · ' + group.history.length }}
+                  </button>
                   <button type="button" class="tod-row-btn tod-row-btn--danger"
                     [disabled]="activity.busyTodId() === group.latest.id"
                     (click)="deleteTod(group.latest.id, group.latest.monsterName)">
@@ -447,14 +447,30 @@
                   <div class="tod-history-list">
                     @for (hist of group.history; track hist.id) {
                       <div class="tod-history-item">
-                        <div class="tod-history-main">
-                          @if (showsDay(hist)) {
-                            <span class="tod-history-label">Day {{ hist.dayNumber ?? '-' }}</span>
-                          }
-                          <span class="num">{{ activity.formatDateTimeWithSeconds(hist.time) || notEntered }}</span>
-                        </div>
-                        <div class="tod-history-meta">
-                          <span>{{ hist.cooldown || '22 Hour' }} &middot; {{ hist.interval || '10 Min' }}</span>
+                        <div class="tod-history-row">
+                          <div class="tod-history-main">
+                            @if (showsDay(hist)) {
+                              <span class="tod-history-label">Day {{ hist.dayNumber ?? '-' }}</span>
+                            }
+                            <span class="tod-history-time num">{{ activity.formatDateTimeWithSeconds(hist.time) || notEntered }}</span>
+                          </div>
+                          <div class="tod-history-meta">
+                            <span class="tod-history-stats">
+                              @if (hist.id === group.latest.id) {
+                                <span class="tod-history-chip tod-history-chip--latest">Latest</span>
+                              }
+                              @if (hist.claim === true) {
+                                <span class="tod-history-chip tod-history-chip--claimed">Claimed</span>
+                              } @else if (hist.claim === false) {
+                                <span class="tod-history-chip">Unclaimed</span>
+                              }
+                              @if (hist.popWindow) {
+                                <span class="tod-history-chip num">Popped W{{ hist.popWindow }}</span>
+                              }
+                              <span class="tod-history-chip">{{ hist.cooldown || '22 Hour' }}</span>
+                              <span class="tod-history-chip">{{ hist.interval || '10 Min' }}</span>
+                            </span>
+                          </div>
                         </div>
                       </div>
                     }

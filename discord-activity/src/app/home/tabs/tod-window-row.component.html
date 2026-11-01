@@ -3,19 +3,10 @@
     <div class="tod-row-name-line">
       <span class="tod-row-dot" aria-hidden="true"></span>
       <span class="tod-row-name">{{ displayName() }}</span>
-      <!-- Claim is tri-state: nothing is shown for "Not specified". -->
-      @if (tod().claim === true) {
-        <span class="tod-row-badge tod-row-badge--claimed">Claimed</span>
-      } @else if (tod().claim === false) {
-        <span class="tod-row-badge">Unclaimed</span>
-      }
+      <!-- Claimed / Unclaimed and the window it popped on are per kill, so they live in the
+           History list (which includes this latest kill) rather than up here. -->
       @if (tod().hq) {
         <span class="tod-row-badge tod-row-badge--hq">HQ</span>
-      }
-      <!-- The window it popped on. Absent on monsters with no window grid and on ToDs logged
-           before it was captured. -->
-      @if (tod().popWindow) {
-        <span class="tod-row-badge num">Popped W{{ tod().popWindow }}</span>
       }
     </div>
     @if (view().details.length > 0) {
@@ -43,11 +34,21 @@
   </div>
 }
 
-<div class="tod-row-times num">
-  <span>TOD {{ view().todLabel }}</span>
-  <span class="tod-row-times-repop">Repop {{ view().repopLabel }}</span>
+<div class="tod-row-times">
+  <div class="tod-row-time">
+    <div class="tod-row-time-label">TOD</div>
+    <div class="tod-row-time-value num">{{ view().todLabel }}</div>
+  </div>
+  <div class="tod-row-time">
+    <!-- Repop's label takes the row's colour: it's the time the status above counts to. -->
+    <div class="tod-row-time-label tod-row-time-label--accent">Repop</div>
+    <div class="tod-row-time-value num">{{ view().repopLabel }}</div>
+  </div>
   @if (view().closeLabel) {
-    <span>Closes {{ view().closeLabel }}</span>
+    <div class="tod-row-time">
+      <div class="tod-row-time-label">Closes</div>
+      <div class="tod-row-time-value num">{{ view().closeLabel }}</div>
+    </div>
   }
 </div>
 
