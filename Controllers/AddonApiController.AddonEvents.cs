@@ -5,6 +5,7 @@ using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
@@ -614,9 +615,20 @@ public sealed partial class AddonApiController
     // Ends a running event from the addon (writes EventHistory + DkpLedgerEntry
     // rows, removes the live Event / Jobs / participants / loot details), through
     // EventEndService.EndEventCoreAsync.
+    //
+    // The body is optional (older addons send none). It carries the End Camp "Repost event?"
+    // choice, the same one the Activity's End Camp form sends: null leaves the monster's standing
+    // Repeat-on-ToD board alone, true turns it on (RepostLeadHours before the next pop), false
+    // turns it off. HnmRecurringBoardBackgroundService schedules from the monster's newest ToD, so
+    // a choice made here, after the addon already posted the ToD, re-posts the same way.
+    public sealed record AddonEndEventRequest(bool? Repost, double? RepostLeadHours);
+
     [HttpPost("events/{eventId:int}/end")]
     [AddonApiAuth]
-    public async Task<IActionResult> EndEventAsync(int eventId, CancellationToken cancellationToken)
+    public async Task<IActionResult> EndEventAsync(
+        int eventId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] AddonEndEventRequest? request,
+        CancellationToken cancellationToken)
     {
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
         var eventEntity = await _dbContext.Events
@@ -650,6 +662,18 @@ public sealed partial class AddonApiController
         // which is why the bug showed up there first.
         if (HnmCampReviewHandoffService.EndsThroughCampPath(eventEntity))
         {
+            // Applied BEFORE the handoff: the board template is copied from this event row, which
+            // the handoff tears down. A lead that isn't a positive number keeps the existing one.
+            var monster = eventEntity.AssignedMonsterName?.Trim();
+            if (request?.Repost is { } repost && !string.IsNullOrWhiteSpace(monster))
+            {
+                var lead = request.RepostLeadHours is { } hours && double.IsFinite(hours) && hours > 0
+                    ? Math.Min(hours, 168)
+                    : (double?)null;
+                await HnmRecurringBoardService.ApplyEndCampChoiceAsync(
+                    _dbContext, eventEntity, monster, repost, lead, cancellationToken);
+            }
+
             var handoff = HttpContext.RequestServices.GetService(typeof(HnmCampReviewHandoffService))
                 as HnmCampReviewHandoffService;
             var staged = handoff is not null
