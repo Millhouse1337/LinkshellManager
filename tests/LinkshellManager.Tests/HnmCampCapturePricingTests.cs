@@ -202,7 +202,30 @@ public class HnmCampCapturePricingTests
         var byWindow = await AmountsByWindowAsync(db, "Alpha");
         Assert.Equal(1d, byWindow["Open"]);         // sequence 1
         Assert.Equal(0.5d, byWindow["Window 2"]);   // a regular window
-        Assert.Equal(2.5d, byWindow["Close"]);      // the marked closing window: regular 0.5 + close 2
+        // The marked closing window pays its own regular 0.5, and the close bonus is a capture of
+        // its own instead of being folded into it.
+        Assert.Equal(0.5d, byWindow["Window 3"]);
+        Assert.Equal(2d, byWindow["Close"]);
+    }
+
+    // A camp that popped in its opener: window 1 ticked as the close. The card used to show one
+    // "Open" paying open + close; the close is its own post now.
+    [Fact]
+    public async Task ACloseTickedOnTheOpen_IsPaidAsItsOwnCloseCapture()
+    {
+        using var db = await SeededAsync();
+        foreach (var window in await db.EventAttendanceWindows.ToListAsync())
+        {
+            window.IsClosingWindow = window.SequenceNumber == 1;
+        }
+        await db.SaveChangesAsync();
+
+        await EndCampAsync(db);
+
+        var byWindow = await AmountsByWindowAsync(db, "Alpha");
+        Assert.Equal(1d, byWindow["Open"]);    // the open alone
+        Assert.Equal(2d, byWindow["Close"]);   // the close bonus, separately
+        Assert.Equal(0.5d, byWindow["Window 3"]);
     }
 
     // Each capture is NAMED for what it is paid as. "Window 1, Window 2, Window 3" a minute apart
@@ -216,7 +239,7 @@ public class HnmCampCapturePricingTests
         await EndCampAsync(db, claimed: true, killed: true);
 
         var names = (await AmountsByWindowAsync(db, "Alpha")).Keys.OrderBy(n => n).ToArray();
-        Assert.Equal(new[] { "Close", "Kill", "Open", "Tag", "Window 2" }, names);
+        Assert.Equal(new[] { "Close", "Kill", "Open", "Tag", "Window 2", "Window 3" }, names);
     }
 
     // The kill post is its own capture and pays the KILL bonus. It is priced at 0 as a window
@@ -705,7 +728,8 @@ public class HnmCampCapturePricingTests
         var captures = await db.AttendanceSnapshots
             .Where(s => s.WindowEventId == windowEvent!.Id && s.CampWindowId != null)
             .ToListAsync();
-        Assert.Equal(3, captures.Count);
+        // Three posts, plus the close bonus split off the ticked third one onto its own capture.
+        Assert.Equal(4, captures.Count);
         Assert.All(captures, capture => Assert.Equal(1, capture.WindowNumber));
 
         var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);

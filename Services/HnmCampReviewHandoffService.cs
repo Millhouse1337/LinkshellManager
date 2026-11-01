@@ -225,6 +225,16 @@ public sealed class HnmCampReviewHandoffService
                     ev, linkshell, w.SequenceNumber, closeWindow, w.DkpAmount, w.IsKillWindow,
                     closeIsMarked) ?? 0d)
             : new Dictionary<int, double>();
+        // The close bonus inside each window's value: 0 everywhere but the close. Taken as the
+        // value less the window's own amount, so the two parts always add back up to what the
+        // finalizer prices the window at.
+        var closeBySequence = perCapture
+            ? campWindows.ToDictionary(
+                w => w.SequenceNumber,
+                w => Math.Max(0d, valueBySequence[w.SequenceNumber]
+                    - (HnmCampPricing.BaseWindowValueFor(
+                        ev, linkshell, w.SequenceNumber, w.DkpAmount, w.IsKillWindow) ?? 0d)))
+            : new Dictionary<int, double>();
         windowEvent.PerCaptureDkp = perCapture;
 
         // What each member has been priced for so far, so the Tags capture below can carry the rest
@@ -259,6 +269,17 @@ public sealed class HnmCampReviewHandoffService
                 continue;   // a window nobody was scanned in has nothing to show
             }
 
+            // A CLOSE ON A WINDOW THAT HAS A ROLE OF ITS OWN is paid as two captures: the window
+            // ("Open", or "Window N") at its own amount, and a "Close" carrying just the close
+            // bonus. Folded together, a camp that popped in its opener showed one "Open" paying
+            // open + close, and nothing on the card said where the close went. A window that is
+            // already a Close post (a named Open/Close camp's second post) stays one capture.
+            var closePart = closeBySequence.GetValueOrDefault(window.SequenceNumber);
+            var ownRole = WindowRoleLabel(window, closeWindow: 0);
+            var splitClose = closePart > 0
+                && !string.Equals(ownRole, HnmConfig.CloseWindowLabel, StringComparison.OrdinalIgnoreCase);
+            var closeEntries = new List<AttendanceSnapshotEntry>();
+
             var windowSnapshot = new AttendanceSnapshot
             {
                 LinkshellId = ev.LinkshellId,
@@ -282,7 +303,7 @@ public sealed class HnmCampReviewHandoffService
                 // middle windows, where it is the addon's own wording.
                 Name = isWd
                     ? $"Check In roster · window {window.SequenceNumber}"
-                    : WindowRoleLabel(window, closeWindow),
+                    : splitClose ? ownRole : WindowRoleLabel(window, closeWindow),
                 // The SPAWN window the post was taken in, not its sequence -- see
                 // CaptureWindowNumber. Which post it was is CampWindowId's job.
                 WindowNumber = CaptureWindowNumber(window, popWindow, DiscordEventMessageBuilder.PostsOpenAndClose(ev)),
@@ -326,8 +347,22 @@ public sealed class HnmCampReviewHandoffService
                     var priceKey = PriceKey(accountId, name);
                     entryAmount = window.IsKillWindow
                         ? (killPaidKeys.Add(priceKey) ? killBonus : 0d)
-                        : valueBySequence.GetValueOrDefault(window.SequenceNumber);
+                        : valueBySequence.GetValueOrDefault(window.SequenceNumber) - (splitClose ? closePart : 0d);
                     pricedByKey[priceKey] = pricedByKey.GetValueOrDefault(priceKey) + entryAmount.Value;
+
+                    if (splitClose)
+                    {
+                        closeEntries.Add(new AttendanceSnapshotEntry
+                        {
+                            CharacterName = name,
+                            AppUserId = scan.AppUserId ?? rosterRow?.AppUserId,
+                            MainJob = TruncateJob(rosterRow?.JobName),
+                            SubJob = TruncateJob(rosterRow?.SubJobName),
+                            Zone = scan.Zone,
+                            DkpAmount = closePart,
+                        });
+                        pricedByKey[priceKey] += closePart;
+                    }
                 }
 
                 windowSnapshot.Entries.Add(new AttendanceSnapshotEntry
@@ -346,6 +381,36 @@ public sealed class HnmCampReviewHandoffService
                     // nothing per capture.
                     DkpAmount = entryAmount,
                 });
+            }
+
+            // The close bonus split off this window, as its own capture over the same members. It
+            // points at the same post (CampWindowId), so Past Events still totals the window as
+            // window + close.
+            if (closeEntries.Count > 0)
+            {
+                var closeSnapshot = new AttendanceSnapshot
+                {
+                    LinkshellId = ev.LinkshellId,
+                    WindowEvent = windowEvent,
+                    LinkedEventId = ev.Id,
+                    CapturedAtUtc = window.PostedAt,
+                    CreatedAtUtc = nowUtc,
+                    SnapshotStatus = AttendanceSnapshotStatuses.Active,
+                    Name = HnmConfig.CloseWindowLabel,
+                    WindowNumber = windowSnapshot.WindowNumber,
+                    CampWindowId = window.Id,
+                    SlotKind = AttendanceSnapshotSlotKinds.Window,
+                    AllianceNumber = windowSnapshot.AllianceNumber,
+                    AllianceKey = windowSnapshot.AllianceKey,
+                    CapturedByCharacterName = windowSnapshot.CapturedByCharacterName,
+                    EntryCount = closeEntries.Count,
+                };
+                _db.AttendanceSnapshots.Add(closeSnapshot);
+                foreach (var entry in closeEntries)
+                {
+                    entry.Snapshot = closeSnapshot;
+                    closeSnapshot.Entries.Add(entry);
+                }
             }
         }
 
