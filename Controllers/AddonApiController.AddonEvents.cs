@@ -233,6 +233,10 @@ public sealed partial class AddonApiController
             // been claimed or killed yet, so the gated pair is 0 right up until it stops mattering.
             claimBonus = HnmCampPricing.OutcomeBonuses(evt, linkshell).Claim,
             killBonus = HnmCampPricing.OutcomeBonuses(evt, linkshell).Kill,
+            // What ticking the closing window adds (null when the camp does not price windows).
+            // The addon greys out End Camp on a numbered camp with no close ticked when this is
+            // above 0 — an unticked close pays nobody the bonus.
+            closeBonus = HnmCampPricing.CloseBonusFor(evt, linkshell),
             // When the next window opens (null on the final window or an untimed monster),
             // so the addon can show the same live countdown the board does.
             nextWindowAt = evt.NextWindowAt,
@@ -753,12 +757,15 @@ public sealed partial class AddonApiController
                     sequenceNumber = w.SequenceNumber,
                     label = w.Label,
                     postedAt = w.PostedAt,
-                    // The officer's explicit price for this window (null = none), and what it
-                    // actually pays each attendee once the camp's defaults are applied.
+                    // The officer's explicit price for this window (null = none), what it
+                    // actually pays each attendee once the camp's defaults are applied, and that
+                    // amount before the close bonus — which is what the addon's price box edits.
                     dkpAmount = w.DkpAmount,
                     dkpValue = HnmCampPricing.WindowValueFor(
                         eventEntity, linkshell, w.SequenceNumber, closeWindow, w.DkpAmount,
                         w.IsKillWindow, closeIsMarked),
+                    baseDkpValue = HnmCampPricing.BaseWindowValueFor(
+                        eventEntity, linkshell, w.SequenceNumber, w.DkpAmount, w.IsKillWindow),
                     // So the addon can tick the right tab and label the kill roster as its own
                     // read rather than as "window N" — see constants.window_label.
                     isClosingWindow = w.IsClosingWindow,

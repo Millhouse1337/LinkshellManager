@@ -851,8 +851,8 @@ public sealed record ActivityAttendanceWindowDto(
 
 // An attendance snapshot an officer attached to this camp (AttendanceSnapshot.LinkedEventId).
 // Shown on the camp's own card so a roster reviewed over in the Event System doesn't have to be
-// hunted for here. The link is presentational — payroll still runs off the snapshot's attendance
-// event, not off this — which is why nothing on this DTO is editable.
+// hunted for here. Only a misc post's DKP is editable from it (IsMisc / DkpOverride); the roster
+// itself is still edited over there.
 public sealed record ActivityLinkedSnapshotDto(
     int Id,
     string? Name,
@@ -867,7 +867,12 @@ public sealed record ActivityLinkedSnapshotDto(
     // so the quote and the credit cannot disagree. Null means the camp does not price captures at
     // all — a Manual Check In camp credits the check-in range instead, and a non-HNM event has no
     // window rate — and the client must render that as nothing rather than as 0.
-    double? DkpPerMember = null);
+    double? DkpPerMember = null,
+    // A Misc post: the one kind of capture whose DKP can be set by hand (AttendanceSnapshot.
+    // DkpAmount, PATCH management/attendance-snapshots/{id}/dkp).
+    bool IsMisc = false,
+    // That hand-set price, or null when the post is on the linkshell's Misc post rate.
+    double? DkpOverride = null);
 
 public sealed record ActivityLinkedSnapshotEntryDto(
     int Id,

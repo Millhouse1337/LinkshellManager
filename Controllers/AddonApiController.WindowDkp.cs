@@ -9,8 +9,9 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // Pricing ONE posted attendance window.
 //
 // EventAttendanceWindow.DkpAmount is what an officer says this particular window pays each
-// attendee, replacing the camp's default (open bonus on window 1, close bonus on the close, and
-// nothing in between). It exists because "we sat this window for two hours and the pop was a
+// attendee, replacing the camp's default (the open bonus on window 1, the regular rate elsewhere).
+// The close bonus still adds on top when the window is the close. It exists because "we sat this
+// window for two hours and the pop was a
 // no-show, pay them something" has no other answer — the four linkshell bonuses price the SHAPE of
 // a camp, not one bad window inside it.
 //
@@ -119,6 +120,10 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Cannot re-price a window on a closed event." });
         }
 
+        var linkshell = await _dbContext.Linkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(l => l.Id == eventEntity.LinkshellId, cancellationToken);
+
         double? resolved = null;
         if (amount is { } value)
         {
@@ -138,20 +143,33 @@ public sealed partial class AddonApiController
             // Snap on WRITE, not just at payout. The finalizer rounds the member's total anyway,
             // but storing off-grid would leave the addon's preview and the Activity's cell showing
             // a number neither of them will ever pay.
-            var linkshell = await _dbContext.Linkshells
-                .AsNoTracking()
-                .FirstOrDefaultAsync(l => l.Id == eventEntity.LinkshellId, cancellationToken);
             resolved = DkpRounding.Round(value, DkpRounding.StepFor(linkshell?.DkpRoundingIncrement));
         }
 
         window.DkpAmount = resolved;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var siblings = await _dbContext.EventAttendanceWindows
+            .AsNoTracking()
+            .Where(w => w.EventId == window.EventId)
+            .ToListAsync(cancellationToken);
+        var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
+            siblings, DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity));
+
         return Ok(new
         {
             eventId = window.EventId,
             sequenceNumber = window.SequenceNumber,
-            dkpAmount = window.DkpAmount
+            dkpAmount = window.DkpAmount,
+            // What the window now pays, and that amount before the close bonus -- the number the
+            // price box shows. Both resolved here so a cleared price comes back as the camp's
+            // default rather than as a blank.
+            dkpValue = HnmCampPricing.WindowValueFor(
+                eventEntity, linkshell, window.SequenceNumber, closeWindow,
+                window.DkpAmount, window.IsKillWindow,
+                HnmStandardCampFinalizer.HasMarkedCloseWindow(siblings)),
+            baseDkpValue = HnmCampPricing.BaseWindowValueFor(
+                eventEntity, linkshell, window.SequenceNumber, window.DkpAmount, window.IsKillWindow)
         });
     }
 

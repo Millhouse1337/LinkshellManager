@@ -1225,6 +1225,10 @@ export interface ActivityLinkedSnapshot {
   // absent means the camp does not price captures at all — a Manual Check In camp credits the
   // check-in range instead — and must render as nothing rather than as 0.
   dkpPerMember?: number | null;
+  // A Misc post: the one kind of capture whose DKP can be set by hand, and that hand-set price
+  // (null = on the linkshell's Misc post rate).
+  isMisc?: boolean;
+  dkpOverride?: number | null;
 }
 
 export interface ActivityLinkedSnapshotEntry {

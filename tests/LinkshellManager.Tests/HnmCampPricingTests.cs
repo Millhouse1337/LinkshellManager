@@ -64,8 +64,7 @@ public class HnmCampPricingTests
     // THE bug this whole change came out of. The quote used to price the window being posted as if
     // it were the close (closeWindow := sequence), so window 1 quoted open + close and every later
     // window quoted the close again. The addon writes its quote back as the window's explicit
-    // price, and an explicit price REPLACES the computed one — so that moving prediction got frozen
-    // into every window on the camp.
+    // price, so that moving prediction got frozen into every window on the camp.
     //
     // The quote must never contain a close bonus: the close is an officer's checkbox and is not
     // knowable at post time.
@@ -105,6 +104,34 @@ public class HnmCampPricingTests
             0.5,
             HnmCampPricing.WindowValueFor(StandardCamp(), ls, sequence: 1, closeWindow: 3, explicitAmount: null)!.Value,
             precision: 3);
+    }
+
+    // The amount before the close bonus is what the addon's price box and the Activity's DKP column
+    // edit. On the ticked close it leaves the bonus out; WindowValueFor adds it back.
+    [Fact]
+    public void BaseWindowValueFor_StandardCamp_LeavesOutTheCloseBonus()
+    {
+        var ls = Ls();   // open 0.5, close 1.5, no regular rate
+        Assert.Equal(0d,
+            HnmCampPricing.BaseWindowValueFor(StandardCamp(), ls, sequence: 3, explicitAmount: null)!.Value,
+            precision: 3);
+        Assert.Equal(2.0,
+            HnmCampPricing.BaseWindowValueFor(StandardCamp(), ls, sequence: 3, explicitAmount: 2.0)!.Value,
+            precision: 3);
+        Assert.Equal(2.0 + 1.5,
+            HnmCampPricing.WindowValueFor(StandardCamp(), ls, sequence: 3, closeWindow: 3, explicitAmount: 2.0)!.Value,
+            precision: 3);
+    }
+
+    // The close bonus the addon reads to decide whether End Camp needs a close ticked first.
+    [Fact]
+    public void CloseBonusFor_PrefersTheCampOverride_AndIsNullOnAManualCheckInCamp()
+    {
+        var ev = StandardCamp();
+        Assert.Equal(1.5, HnmCampPricing.CloseBonusFor(ev, Ls())!.Value, precision: 3);
+        ev.HnmCloseBonusOverride = 3.0;
+        Assert.Equal(3.0, HnmCampPricing.CloseBonusFor(ev, Ls())!.Value, precision: 3);
+        Assert.Null(HnmCampPricing.CloseBonusFor(WdCamp(), Ls()));
     }
 
     // A Post Kill roster is worth 0 as a window — the kill bonus pays it instead.

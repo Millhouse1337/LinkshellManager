@@ -11,6 +11,9 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // AttendanceSnapshot.DkpAmount is what an officer says this post pays each person on it,
 // replacing the linkshell's Misc post rate. Same rules as a window price: moderators only, live
 // Standard HNM camps only, snapped to the linkshell's DKP grid on write, and null clears it.
+//
+// Two routes over one body, like WindowDkp: the addon posts with a pairing token, the web and the
+// Activity with a cookie or bearer.
 public sealed partial class AddonApiController
 {
     // PATCH /api/addon/attendance-snapshots/{id}/dkp   (in-game addon, token auth)
@@ -33,6 +36,39 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
+        return await SetMiscPostDkpAsync(snapshot, request.DkpAmount, cancellationToken);
+    }
+
+    // PATCH /api/addon/management/attendance-snapshots/{id}/dkp   (web + Activity, cookie/bearer)
+    //
+    // The Activity's Linked Snapshots table edits a misc post's DKP in place.
+    [HttpPatch("management/attendance-snapshots/{id:int}/dkp")]
+    public async Task<IActionResult> SetMiscPostDkpManagementAsync(
+        int id,
+        [FromBody] AddonSetWindowDkpRequest request,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveManagementUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
+
+        var snapshot = await _dbContext.AttendanceSnapshots
+            .Include(s => s.LinkedEvent)
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+        if (snapshot is null) return NotFound(new { error = "Misc post not found." });
+
+        var membership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(
+                m => m.AppUserId == appUser.Id && m.LinkshellId == snapshot.LinkshellId,
+                cancellationToken);
+        if (!CanManageLinkshell(membership)) return Forbid();
+
+        return await SetMiscPostDkpAsync(snapshot, request.DkpAmount, cancellationToken);
+    }
+
+    // The shared body. Callers have already authorized; this owns validation and the write.
+    private async Task<IActionResult> SetMiscPostDkpAsync(
+        AttendanceSnapshot snapshot, double? amount, CancellationToken cancellationToken)
+    {
         if (!AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind))
         {
             return BadRequest(new { error = "Only a misc post is priced this way. A window is priced on its own tab." });
@@ -68,7 +104,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(l => l.Id == snapshot.LinkshellId, cancellationToken);
 
         double? resolved = null;
-        if (request.DkpAmount is { } value)
+        if (amount is { } value)
         {
             if (double.IsNaN(value) || double.IsInfinity(value))
             {

@@ -30,9 +30,9 @@ public static class HnmCampPricing
     // Standard-mode amounts, already gated on the camp outcome. Lifted verbatim from
     // HnmStandardCampFinalizer.BuildRosterAsync, which now calls this instead.
     //
-    // `Window` is what a REGULAR window pays — the ones that are neither the open nor the close.
-    // The three do not stack: see HnmStandardCampFinalizer.WindowValue, which owns that rule. It
-    // shares Event.HnmPerWindowOverride with the Manual Check In rate — one column, and the camp's
+    // `Window` is what every window after the open pays. The open replaces it on window 1 and the
+    // close bonus adds to it on the close: see HnmStandardCampFinalizer.WindowValue, which owns that
+    // rule. It shares Event.HnmPerWindowOverride with the Manual Check In rate — one column, and the camp's
     // mode decides which linkshell default it falls back to, exactly as the claim / kill overrides
     // have always worked across both modes.
     public static (double Window, double Open, double Close, double Claim, double Kill) StandardBonuses(
@@ -137,6 +137,30 @@ public static class HnmCampPricing
     // moves: what is quoted is what is paid.
     public static double? DefaultWindowValue(Event ev, Linkshell? linkshell, int sequence)
         => WindowValueFor(ev, linkshell, sequence, closeWindow: 0, explicitAmount: null);
+
+    // What one window pays BEFORE any close bonus (HnmStandardCampFinalizer.BaseWindowValue), or
+    // null when the camp does not price windows. This is the number the addon's per-window DKP box
+    // and the Activity's DKP column edit; WindowValueFor adds the close bonus on top of it.
+    //
+    // A camp with no close bonus (anything but a Standard HNM camp) has nothing to split off, so
+    // there it is simply WindowValueFor.
+    public static double? BaseWindowValueFor(
+        Event ev, Linkshell? linkshell, int sequence, double? explicitAmount, bool isKillWindow = false)
+    {
+        if (!HonoursWindowAmount(ev))
+        {
+            return WindowValueFor(ev, linkshell, sequence, closeWindow: 0, explicitAmount, isKillWindow);
+        }
+        var (window, open, _, _, _) = StandardBonuses(ev, linkshell, claimed: false, killed: false);
+        return HnmStandardCampFinalizer.BaseWindowValue(sequence, explicitAmount, window, open, isKillWindow);
+    }
+
+    // The close bonus this camp adds to its closing window, or null when the camp does not price
+    // windows. Sent to the addon so it knows whether End Camp needs a closing window ticked first.
+    public static double? CloseBonusFor(Event ev, Linkshell? linkshell)
+        => HonoursWindowAmount(ev)
+            ? StandardBonuses(ev, linkshell, claimed: false, killed: false).Close
+            : null;
 
     // What a MISC post pays each person on it: the linkshell's "Misc post" rate
     // (Linkshell.HnmStandardMiscBonus), or the officer's price for that one post when they set one.
