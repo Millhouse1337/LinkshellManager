@@ -241,21 +241,6 @@
   font-weight: 600;
 }
 
-.tod-row-badge {
-  padding: 2px 7px;
-  border: 1px solid var(--border-2);
-  border-radius: 4px;
-  color: var(--fg-2);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.tod-row-badge--hq {
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  color: var(--accent-hover);
-}
-
 .tod-row-details {
   display: flex;
   flex-wrap: wrap;
@@ -522,6 +507,12 @@
 .tod-history-chip--claimed {
   border-color: color-mix(in srgb, var(--success) 35%, transparent);
   color: var(--success);
+}
+
+// Gold, so it can't be mistaken for the blue "Latest" beside it.
+.tod-history-chip--hq {
+  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
+  color: var(--warning);
 }
 
 // The current kill, listed first so its claim and window have somewhere to live.

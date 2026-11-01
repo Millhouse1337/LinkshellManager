@@ -459,6 +459,9 @@
                               @if (hist.id === group.latest.id) {
                                 <span class="tod-history-chip tod-history-chip--latest">Latest</span>
                               }
+                              @if (hist.hq) {
+                                <span class="tod-history-chip tod-history-chip--hq">HQ</span>
+                              }
                               @if (hist.claim === true) {
                                 <span class="tod-history-chip tod-history-chip--claimed">Claimed</span>
                               } @else if (hist.claim === false) {

@@ -3,11 +3,8 @@
     <div class="tod-row-name-line">
       <span class="tod-row-dot" aria-hidden="true"></span>
       <span class="tod-row-name">{{ displayName() }}</span>
-      <!-- Claimed / Unclaimed and the window it popped on are per kill, so they live in the
+      <!-- HQ, Claimed / Unclaimed and the window it popped on are per kill, so they live in the
            History list (which includes this latest kill) rather than up here. -->
-      @if (tod().hq) {
-        <span class="tod-row-badge tod-row-badge--hq">HQ</span>
-      }
     </div>
     @if (view().details.length > 0) {
       <div class="tod-row-details">
