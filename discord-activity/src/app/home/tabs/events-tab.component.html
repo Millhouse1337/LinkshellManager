@@ -115,12 +115,25 @@
                     </span>
                   }
                   @if (isHnmEvent(event) && canEndCamp(event.linkshellId)) {
-                    <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
-                      [disabled]="activity.busyEventId() === event.id"
-                      (click)="openEndCamp(event)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4M4 4h13l-2 4 2 4H4"/></svg>
-                      🏁 End Camp/Post ToD
-                    </button>
+                    <!-- No closing window ticked: say so before the ToD form opens, since ending
+                         now pays nobody the close bonus. Same inline confirm shape as Delete Camp. -->
+                    @if (pendingEndCampWarningEventId() === event.id) {
+                      <span style="font-size:12px;color:var(--warning)">No closing window is ticked, so nobody on this camp gets the close bonus (+{{ closeBonusLabel(event) }} DKP). Tick one under Attendance Windows first.</span>
+                      <span class="event-card__edit event-card__confirm">
+                        <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
+                          (click)="abortEndCamp()">Go back</button>
+                        <button type="button" class="evt-btn evt-btn--small evt-btn--danger"
+                          [disabled]="activity.busyEventId() === event.id"
+                          (click)="openEndCamp(event)">End anyway</button>
+                      </span>
+                    } @else {
+                      <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
+                        [disabled]="activity.busyEventId() === event.id"
+                        (click)="openEndCamp(event)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V4M4 4h13l-2 4 2 4H4"/></svg>
+                        🏁 End Camp/Post ToD
+                      </button>
+                    }
                   }
                   @if (isHnmEvent(event) && canManageLinkshell(event.linkshellId)) {
                     @if (pendingDeleteEventId() === event.id) {

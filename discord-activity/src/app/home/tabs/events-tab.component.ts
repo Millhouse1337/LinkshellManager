@@ -382,8 +382,29 @@ export class EventsTabComponent {
     await this.activity.deleteEvent(eventId);
   }
 
+  // End Camp on a camp with no closing window ticked asks first, because nobody would get the close
+  // bonus. Inline Go back / End anyway rather than confirm(), which the Discord iframe blocks. (The
+  // addon refuses outright; here the officer may know better, e.g. a camp that never got going.)
+  protected readonly pendingEndCampWarningEventId = signal<number | null>(null);
+  protected abortEndCamp(): void { this.pendingEndCampWarningEventId.set(null); }
+
+  // Whether ending this camp now would pay nobody the close bonus for want of a tick. Numbered
+  // Standard camps only, with at least one window posted and a close bonus to lose: a named camp's
+  // Close post is its close without a tick, and the addon applies the same test before End Camp.
+  protected missingClosingWindow(event: ActivityEvent): boolean {
+    if (this.isWdCamp(event) || this.postsOpenAndClose(event)) return false;
+    if (this.standardBonus(event, 'close') <= 0) return false;
+    const windows = this.attendanceWindowsFor(event).filter(window => !window.isKillWindow);
+    return windows.length > 0 && !windows.some(window => window.isClosingWindow);
+  }
+
   // Open the shared board ToD form in "End Camp" mode (pop window pre-filled to the current window).
   protected openEndCamp(event: ActivityEvent): void {
+    if (this.missingClosingWindow(event) && this.pendingEndCampWarningEventId() !== event.id) {
+      this.pendingEndCampWarningEventId.set(event.id);
+      return;
+    }
+    this.pendingEndCampWarningEventId.set(null);
     const monster = event.assignedMonsterName ?? event.partySetupAssignedMonsterName ?? null;
     if (!monster) {
       this.activity.actionError.set('This HNM camp has no monster assigned, so it can’t be ended here.');
@@ -1011,7 +1032,11 @@ export class EventsTabComponent {
     const parts = close > 0
       ? `${EventsTabComponent.trimDkp(base)} ${baseName} + ${EventsTabComponent.trimDkp(close)} close`
       : baseName;
-    return `${EventsTabComponent.trimDkp(base + close)} DKP per attendee (${parts})`;
+    const note = `${EventsTabComponent.trimDkp(base + close)} DKP per attendee (${parts})`;
+    // Said here too, not only at End Camp: the officer should hear it while the windows are on screen.
+    return this.missingClosingWindow(event)
+      ? `${note} — no closing window ticked yet, so nobody gets the close bonus`
+      : note;
   }
 
   // ----- Manual Check In: late arrivals -----
