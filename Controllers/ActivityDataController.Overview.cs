@@ -273,6 +273,37 @@ public sealed partial class ActivityDataController
         // Snapshots an officer attached to one of these camps. Same one-query-then-group shape as
         // the claim shields below, and for the same reason: most events have none.
         var linkedEventIds = activeEvents.Select(evt => evt.Id).ToList();
+
+        // Who has signed up to each event: the people who joined (AppUserEvents) plus the people
+        // holding a party-setup slot. A board with a party setup signs up through its slots, so
+        // counting joins alone read "0 participants" on a board with a full alliance. Each person
+        // counts once -- by account, else Discord id, else character name.
+        var slotSignups = linkedEventIds.Count > 0
+            ? await _dbContext.EventPartySlotSignups
+                .AsNoTracking()
+                .Where(signup => linkedEventIds.Contains(signup.EventId))
+                .Select(signup => new { signup.EventId, signup.AppUserId, signup.DiscordUserId, signup.CharacterName })
+                .ToListAsync(cancellationToken)
+            : [];
+        int SignedUpCount(Event evt)
+        {
+            static string? Key(string? appUserId, string? discordUserId, string? characterName)
+                => !string.IsNullOrWhiteSpace(appUserId) ? $"user:{appUserId}"
+                    : !string.IsNullOrWhiteSpace(discordUserId) ? $"discord:{discordUserId}"
+                    : !string.IsNullOrWhiteSpace(characterName) ? $"name:{characterName.Trim()}"
+                    : null;
+            var people = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var participation in evt.AppUserEvents)
+            {
+                people.Add(Key(participation.AppUserId, null, participation.CharacterName) ?? $"row:{participation.Id}");
+            }
+            foreach (var signup in slotSignups.Where(signup => signup.EventId == evt.Id))
+            {
+                if (Key(signup.AppUserId, signup.DiscordUserId, signup.CharacterName) is { } key) people.Add(key);
+            }
+            return people.Count;
+        }
+
         var linkedSnapshotsByEvent = linkedEventIds.Count > 0
             ? (await _dbContext.AttendanceSnapshots
                     .AsNoTracking()
@@ -820,7 +851,7 @@ public sealed partial class ActivityDataController
                 evt.Details,
                 evt.AutoStart,
                 evt.CountsTowardActive,
-                evt.AppUserEvents.Count,
+                SignedUpCount(evt),
                 evt.AppUserEvents
                     .Where(participation => participation.AppUserId == appUser.Id)
                     .Select(participation => new ActivityParticipationDto(
