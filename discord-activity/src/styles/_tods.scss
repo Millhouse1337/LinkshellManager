@@ -133,6 +133,288 @@
   color: var(--fg-3);
 }
 
+/* ===== Tracked Windows rows (TodWindowRowComponent — ToDs tab and Dashboard) ===== */
+.tod-card-head-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tod-filters {
+  display: flex;
+  gap: 6px;
+}
+
+.tod-filter {
+  padding: 4px 11px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tod-filter:hover {
+  border-color: var(--border-hot);
+  color: var(--fg);
+}
+
+.tod-filter.active {
+  border-color: var(--fg);
+  background: var(--fg);
+  color: var(--surface-2);
+}
+
+// Each tone sets the row's accent (dot + status label), the dot's halo and the window segment's
+// fill. "Not entered" ToDs keep the neutral defaults.
+.tod-row {
+  --tod-accent: var(--fg-3);
+  --tod-halo: transparent;
+  --tod-fill: var(--border-2);
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tod-row:last-child {
+  border-bottom: 0;
+}
+
+.tod-row[data-tone='pending'] {
+  --tod-accent: var(--warning);
+  --tod-halo: var(--warning-weak);
+  --tod-fill: color-mix(in srgb, var(--warning) 40%, transparent);
+}
+
+.tod-row[data-tone='open'],
+.tod-row[data-tone='up'] {
+  --tod-accent: var(--success);
+  --tod-halo: var(--success-weak);
+  background: color-mix(in srgb, var(--success) 6%, transparent);
+}
+
+.tod-row[data-tone='open'] {
+  --tod-fill: var(--success);
+}
+
+.tod-row[data-tone='up'] {
+  --tod-fill: color-mix(in srgb, var(--success) 45%, transparent);
+}
+
+.tod-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.tod-row-title {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.tod-row-name-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tod-row-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--tod-accent);
+  box-shadow: 0 0 0 4px var(--tod-halo);
+}
+
+.tod-row-name {
+  color: var(--fg);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.tod-row-badge {
+  padding: 2px 7px;
+  border: 1px solid var(--border-2);
+  border-radius: 4px;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tod-row-badge--claimed {
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+  color: var(--success);
+}
+
+.tod-row-badge--hq {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent-hover);
+}
+
+.tod-row-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--fg-3);
+  font-size: 13px;
+}
+
+.tod-row-details span {
+  white-space: nowrap;
+}
+
+.tod-row-status {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+
+.tod-row-status-label {
+  color: var(--tod-accent);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tod-row-big {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.tod-row[data-tone='unknown'] .tod-row-big {
+  color: var(--fg-2);
+}
+
+// Grey from the time of death to the repop, then the spawn window, with a marker at "now". The
+// segments sit in their own clipped track so the marker can overhang it.
+.tod-bar {
+  position: relative;
+  height: 6px;
+}
+
+.tod-bar-track {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
+
+.tod-bar-respawn,
+.tod-bar-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.tod-bar-respawn {
+  left: 0;
+  background: var(--border-hot);
+}
+
+// No window grid: once it's up, the whole bar lights.
+.tod-bar-respawn--done {
+  background: var(--tod-fill);
+}
+
+.tod-bar-window {
+  right: 0;
+  background: var(--tod-fill);
+}
+
+.tod-bar-now {
+  position: absolute;
+  top: -5px;
+  width: 2px;
+  height: 16px;
+  border-radius: 1px;
+  background: var(--fg);
+  transform: translateX(-1px);
+}
+
+.tod-row-times {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tod-row-times-repop {
+  color: var(--fg-2);
+}
+
+.tod-row > .tod-image-thumb {
+  justify-self: start;
+  margin-top: 0;
+}
+
+.tod-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.tod-row-btn {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tod-row-btn:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--fg);
+}
+
+.tod-row-btn--danger {
+  color: var(--danger);
+}
+
+.tod-row-btn--danger:hover:not(:disabled) {
+  background: var(--danger-weak);
+  color: var(--danger);
+}
+
+.tod-row-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+// The row's own gap spaces the panels that open under it.
+.tod-row > .tod-history-list,
+.tod-row > .tod-setup-panel {
+  margin-top: 0;
+}
+
+@media (max-width: 520px) {
+  .tod-row {
+    padding: 14px;
+  }
+}
+
 /* ===== Tracker history list (expanded under each Tracked Window) ===== */
 .tod-history-list {
   display: grid;

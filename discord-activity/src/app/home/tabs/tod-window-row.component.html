@@ -1,0 +1,54 @@
+<div class="tod-row-head">
+  <div class="tod-row-title">
+    <div class="tod-row-name-line">
+      <span class="tod-row-dot" aria-hidden="true"></span>
+      <span class="tod-row-name">{{ displayName() }}</span>
+      <!-- Claim is tri-state: nothing is shown for "Not specified". -->
+      @if (tod().claim === true) {
+        <span class="tod-row-badge tod-row-badge--claimed">Claimed</span>
+      } @else if (tod().claim === false) {
+        <span class="tod-row-badge">Unclaimed</span>
+      }
+      @if (tod().hq) {
+        <span class="tod-row-badge tod-row-badge--hq">HQ</span>
+      }
+      <!-- The window it popped on. Absent on monsters with no window grid and on ToDs logged
+           before it was captured. -->
+      @if (tod().popWindow) {
+        <span class="tod-row-badge num">Popped W{{ tod().popWindow }}</span>
+      }
+    </div>
+    @if (view().details.length > 0) {
+      <div class="tod-row-details">
+        @for (detail of view().details; track detail) {
+          <span>{{ detail }}</span>
+        }
+      </div>
+    }
+  </div>
+  <div class="tod-row-status">
+    <div class="tod-row-status-label">{{ view().statusLabel }}</div>
+    <div class="tod-row-big num">{{ view().big }}</div>
+  </div>
+</div>
+
+<!-- "Not entered" ToDs have no times, so they get no bar rather than a made-up one. -->
+@if (view().bar; as bar) {
+  <div class="tod-bar" aria-hidden="true">
+    <div class="tod-bar-track">
+      <div class="tod-bar-respawn" [class.tod-bar-respawn--done]="bar.respawnDone" [style.width.%]="bar.respawnPct"></div>
+      <div class="tod-bar-window" [style.left.%]="bar.respawnPct"></div>
+    </div>
+    <div class="tod-bar-now" [style.left.%]="bar.nowPct"></div>
+  </div>
+}
+
+<div class="tod-row-times num">
+  <span>TOD {{ view().todLabel }}</span>
+  <span class="tod-row-times-repop">Repop {{ view().repopLabel }}</span>
+  @if (view().closeLabel) {
+    <span>Closes {{ view().closeLabel }}</span>
+  }
+</div>
+
+<ng-content />

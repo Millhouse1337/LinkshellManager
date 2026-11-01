@@ -16,22 +16,22 @@ import {
   TOD_NOT_ENTERED,
   canManageLinkshellIn,
   formatAlts,
-  isTodReady,
   memberAvatarClass,
   memberInitials,
   memberStatusClass,
   mergedMonsterName,
+  monsterSetupForTod,
   parseDate,
-  todCountdownLabel,
   todSortKey
 } from '../activity-home.helpers';
 import { hasHqVariant, type TabName } from '../activity-home.types';
 import { JobsRosterStore } from '../jobs-roster.store';
 import { RULE_CATEGORY_OPTIONS, categoryBadge, parseRuleDetails } from '../rule-content.helpers';
+import { TodWindowRowComponent } from './tod-window-row.component';
 
 @Component({
   selector: 'app-dashboard-tab',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TodWindowRowComponent],
   templateUrl: './dashboard-tab.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -49,7 +49,7 @@ export class DashboardTabComponent {
   protected readonly memberStatusClass = memberStatusClass;
   protected readonly ADMIN_BADGE = ADMIN_BADGE;
   private readonly destroyRef = inject(DestroyRef);
-  private readonly now = signal(Date.now());
+  protected readonly now = signal(Date.now());
 
   // Parent-owned modal trigger — opening the modal lives in the parent so a
   // single instance is shared between the Dashboard and ToDs tabs.
@@ -890,31 +890,13 @@ export class DashboardTabComponent {
     return hasHqVariant(tod.monsterName);
   }
 
-  // The claim / window tags behind the card's "⋯" button. Phone widths only — wider screens
-  // always show the tags and never render the button (see .tod-tags in _tabs-shell).
-  protected readonly expandedTodTags = signal<Set<string>>(new Set());
-
-  protected isTodTagsExpanded(key: string): boolean {
-    return this.expandedTodTags().has(key);
+  // The row itself is TodWindowRowComponent, shared with the ToDs tab; it needs the monster's
+  // setup for the window count. This label is only for the history list underneath.
+  protected todSetupFor(tod: ActivityTodEntry) {
+    return monsterSetupForTod(this.selectedDashboardLinkshell()?.settings?.monsterSetups, tod.monsterName);
   }
 
-  protected toggleTodTags(key: string): void {
-    const next = new Set(this.expandedTodTags());
-    if (next.has(key)) next.delete(key); else next.add(key);
-    this.expandedTodTags.set(next);
-  }
-
-  // Countdown / ready state / the "Not entered" label all live in activity-home.helpers so this
-  // tab and the ToDs tab can't drift apart — they render the same card from the same data.
   protected readonly notEntered = TOD_NOT_ENTERED;
-
-  protected todCountdownLabel(tod: { repopTime?: string | null }): string {
-    return todCountdownLabel(tod.repopTime, this.now());
-  }
-
-  protected isTodReady(tod: { repopTime?: string | null }): boolean {
-    return isTodReady(tod.repopTime, this.now());
-  }
 
   // ----- Roster rank editing (only used here in the dashboard's read-only roster?
   // Actually only the linkshell tab uses the editing UI; the dashboard view is

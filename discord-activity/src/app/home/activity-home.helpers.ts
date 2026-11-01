@@ -9,7 +9,8 @@ import type {
   ActivityEventParticipant,
   ActivityStatusLedgerEntry
 } from '../discord/discord-activity.service';
-import type { ActivityLinkshellSettings, ActivityOverview } from '../discord/discord-activity.types';
+import type { ActivityLinkshellSettings, ActivityMonsterSetup, ActivityOverview } from '../discord/discord-activity.types';
+import { hasSpawnWindowCadence } from './activity-home.types';
 
 // ----- Linkshell type -----
 //
@@ -109,37 +110,95 @@ export function formatElapsed(totalMilliseconds: number): string {
 // "Ready", which read as "it's poppable now" when the truth is "we don't know".
 export const TOD_NOT_ENTERED = 'Not entered';
 
-// Milliseconds until a ToD's repop, or null when it has no repop to count down to.
-// Distinct from "0 ms remaining": null means not-entered, 0 means the window is open.
-export function todRemainingMs(repopTime: string | null | undefined, nowMs: number): number | null {
-  const targetTime = parseDate(repopTime);
-  if (targetTime === null) {
-    return null;
-  }
-
-  return Math.max(0, targetTime - nowMs);
-}
-
-export function todCountdownLabel(repopTime: string | null | undefined, nowMs: number): string {
-  const remaining = todRemainingMs(repopTime, nowMs);
-  if (remaining === null) {
-    return TOD_NOT_ENTERED;
-  }
-
-  return remaining <= 0 ? 'Ready' : formatElapsed(remaining);
-}
-
-// Only a real repop that has already arrived counts as ready — a not-entered ToD must not
-// light up the green "window open" treatment.
-export function isTodReady(repopTime: string | null | undefined, nowMs: number): boolean {
-  return todRemainingMs(repopTime, nowMs) === 0;
-}
-
 // Sort key for "which ToD is this monster's most recent". A not-entered ToD has no `time`, but
 // it's still the newest thing that happened to that monster, so fall back to when the row was
 // written — otherwise the pop it superseded would keep showing as current with a stale countdown.
 export function todSortKey(tod: { time?: string | null; timeStamp?: string | null }): number {
   return parseDate(tod.time) ?? parseDate(tod.timeStamp) ?? 0;
+}
+
+// Windows to assume when a gridded monster's setup carries no window count (the short band's 7).
+export const DEFAULT_POP_WINDOWS = 7;
+
+// Reads a stored "22 Hour" / "45 Min" / "1 Hour 30 Min" label as minutes. A bare number means
+// hours for a cooldown and minutes for an interval, matching the server's TodDurationFormat.
+export function parseTodDurationMinutes(label: string | null | undefined, bareUnit: 'hours' | 'mins'): number | null {
+  const text = (label ?? '').trim();
+  if (!text) return null;
+
+  const bare = /^\s*(\d+(?:\.\d+)?)\s*$/.exec(text);
+  if (bare) {
+    const amount = parseFloat(bare[1]);
+    return amount > 0 ? Math.round(bareUnit === 'hours' ? amount * 60 : amount) : null;
+  }
+
+  const pair = /^\s*(?:(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b)?\s*(?:(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)\b)?\s*$/i.exec(text);
+  if (!pair || (!pair[1] && !pair[2])) return null;
+  const total = (pair[1] ? parseFloat(pair[1]) * 60 : 0) + (pair[2] ? parseFloat(pair[2]) : 0);
+  return total > 0 ? Math.round(total) : null;
+}
+
+// "22h", "1h 30m", "45m" — the tracker's short durations.
+export function formatShortDuration(totalMilliseconds: number): string {
+  const totalMinutes = Math.max(0, Math.round(totalMilliseconds / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+}
+
+// The linkshell's setup for a ToD's monster. Setups are stored under the merged "Base/Stronger"
+// name while a ToD keeps the exact half that died, so both sides are compared merged.
+export function monsterSetupForTod(
+  setups: readonly ActivityMonsterSetup[] | null | undefined,
+  monsterName: string | null | undefined
+): ActivityMonsterSetup | null {
+  const wanted = mergedMonsterName(monsterName).toLowerCase();
+  if (!wanted || !setups) return null;
+  return setups.find(setup => mergedMonsterName(setup.monsterName).toLowerCase() === wanted) ?? null;
+}
+
+// Where a tracked ToD is in its cycle:
+//   pending — counting down to the repop
+//   open    — inside the spawn window (repop has passed, the last window hasn't opened yet)
+//   up      — past the last window, or past the repop for a monster with no window grid
+//   unknown — no repop was recorded ("Not entered")
+export type TodWindowTone = 'pending' | 'open' | 'up' | 'unknown';
+
+export interface TodWindowState {
+  tone: TodWindowTone;
+  todMs: number | null;
+  repopMs: number | null;
+  // When the LAST window opens: the point the Log ToD form's countdown flips from "Open" to
+  // "Passed". Null for a monster with no window grid (Sky gods, untimed NMs) — no close to show.
+  closeMs: number | null;
+}
+
+export function todWindowState(
+  tod: { monsterName?: string | null; time?: string | null; repopTime?: string | null; interval?: string | null },
+  setup: ActivityMonsterSetup | null,
+  nowMs: number
+): TodWindowState {
+  const todMs = parseDate(tod.time);
+  const repopMs = parseDate(tod.repopTime);
+  if (repopMs === null) {
+    return { tone: 'unknown', todMs, repopMs, closeMs: null };
+  }
+
+  let closeMs: number | null = null;
+  if (hasSpawnWindowCadence(tod.monsterName)) {
+    // Same window count as the form's tiles; the ToD's own logged interval before the setup's.
+    const windows = (setup?.windows ?? 0) > 0 ? setup!.windows! : DEFAULT_POP_WINDOWS;
+    const interval = parseTodDurationMinutes(tod.interval, 'mins') ?? setup?.cadenceMinutes ?? null;
+    if (interval && interval > 0 && windows > 1) {
+      closeMs = repopMs + (windows - 1) * interval * 60_000;
+    }
+  }
+
+  const tone: TodWindowTone = nowMs < repopMs
+    ? 'pending'
+    : closeMs !== null && nowMs < closeMs ? 'open' : 'up';
+  return { tone, todMs, repopMs, closeMs };
 }
 
 // Base monster -> stronger counterpart. Mirrors HnmConfig.MonsterMergePairs on the server and

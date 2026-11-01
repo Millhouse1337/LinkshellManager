@@ -23,61 +23,26 @@
       <!-- Tracked Windows -->
       <div class="card">
         <div class="card-head">
-          <div class="card-title">Tracked Windows</div>
-          <span class="tag default num">{{ selectedDashboardTods().length }}</span>
+          <div class="tod-card-head-left">
+            <div class="card-title">Tracked Windows</div>
+            <span class="tag default num">{{ selectedDashboardTods().length }}</span>
+          </div>
+          @if (selectedDashboardTods().length > 0) {
+            <div class="tod-filters" role="group" aria-label="Filter tracked windows">
+              @for (filter of todFilters; track filter) {
+                <button type="button" class="tod-filter"
+                  [class.active]="todFilter() === filter"
+                  [attr.aria-pressed]="todFilter() === filter"
+                  (click)="todFilter.set(filter)">{{ filter }}</button>
+              }
+            </div>
+          }
         </div>
         @if (selectedDashboardTods().length > 0) {
-          @for (group of groupedDashboardTods(); track group.key) {
-            <div class="tod-entry" [class.window-open]="isTodReady(group.latest)">
-              <div class="tod-head">
-                <div class="tod-head-left">
-                  <div class="tod-mob-name">{{ group.displayName }}</div>
-                  <!-- Phone only: the tags fold behind this button (CSS hides it on wider screens). -->
-                  <button type="button" class="tod-tags-toggle"
-                    [attr.aria-expanded]="isTodTagsExpanded(group.key)"
-                    aria-label="Show ToD details"
-                    (click)="toggleTodTags(group.key)">
-                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                  </button>
-                  <div class="tod-tags" [class.open]="isTodTagsExpanded(group.key)">
-                    <span class="tag" [class.success]="group.latest.claim === true" [class.default]="group.latest.claim !== true">{{ group.latest.claim === true ? 'Claimed' : (group.latest.claim === false ? 'Unclaimed' : 'Not Specified') }}</span>
-                    @if (group.latest.hq) {
-                      <span class="tag accent">HQ</span>
-                    }
-                    <!-- Which spawn window it popped on. This slot used to hold a bare ToD COUNT
-                         (history + 1), which sat between Claimed and HQ reading like it belonged to
-                         them and duplicated the "History (n)" button below. The window is the thing
-                         worth seeing here, and End Camp now records it on every windowed camp.
-                         Absent on monsters with no window grid (Sky gods, farm NMs) and on ToDs
-                         logged before it was captured — no badge rather than a guessed "Window 1". -->
-                    @if (group.latest.popWindow) {
-                      <span class="tag default num">Window {{ group.latest.popWindow }}</span>
-                    }
-                  </div>
-                </div>
-                <div class="tod-countdown num" [class.open]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
-              </div>
-              <!-- No loot here: a ToD carries none (loot belongs to the event). The day is shown only
-                   for the HQ/NQ pairs, the only HNMs whose day count means anything. -->
-              <div class="tod-sub">@if (showsDay(group.latest)) {Day {{ group.latest.dayNumber ?? '-' }} &middot; }{{ group.latest.cooldown || '22 Hour' }} &middot; {{ group.latest.interval || '10 Min' }}</div>
-              <!-- Read left to right as the timeline: when it died, when it repops, how long until
-                   then. Same order on the Dashboard's ToD Tracker. -->
-              <div class="tod-meta-grid">
-                <!-- "Not entered" = the camp ended without anyone seeing it die, so no time and
-                     no repop were recorded. Never show a synthesized timestamp here. -->
-                <div class="tod-meta-cell">
-                  <div class="tod-meta-label">Time of death</div>
-                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || notEntered }}</div>
-                </div>
-                <div class="tod-meta-cell">
-                  <div class="tod-meta-label">Repop starts</div>
-                  <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || notEntered }}</div>
-                </div>
-                <div class="tod-meta-cell">
-                  <div class="tod-meta-label">Countdown</div>
-                  <div class="tod-meta-value" [class.success-text]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
-                </div>
-              </div>
+          @for (group of filteredTodGroups(); track group.key) {
+            <!-- Same row as the Dashboard's ToD Tracker (TodWindowRowComponent); this tab adds the
+                 screenshot, Party Setup, Edit and the full history underneath. -->
+            <app-tod-window-row [tod]="group.latest" [displayName]="group.displayName" [setup]="group.setup" [now]="now()">
               @if (group.latest.imagePath) {
                 <a class="tod-image-thumb"
                    href="#"
@@ -86,19 +51,19 @@
                   <img [src]="displayImagePath(group.latest.imagePath)" alt="ToD screenshot" />
                 </a>
               }
-              <div class="tod-entry-actions">
+              <div class="tod-row-actions">
                 @if (group.history.length > 0) {
-                  <button type="button" class="btn sm" (click)="toggleTodGroup(group.key)">
-                    {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History (' + group.history.length + ')' }}
+                  <button type="button" class="tod-row-btn" (click)="toggleTodGroup(group.key)">
+                    {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History · ' + group.history.length }}
                   </button>
                 }
                 @if (setupForMonster(group.latest.monsterName); as setup) {
-                  <button type="button" class="btn sm" (click)="toggleSetup(group.key)">
+                  <button type="button" class="tod-row-btn" (click)="toggleSetup(group.key)">
                     {{ isSetupExpanded(group.key) ? 'Hide party' : 'Party Setup' }}
                   </button>
                 }
-                <button type="button" class="btn sm" (click)="todForm.openEdit(group.latest)">Edit</button>
-                <button type="button" class="btn sm danger-outline"
+                <button type="button" class="tod-row-btn" (click)="todForm.openEdit(group.latest)">Edit</button>
+                <button type="button" class="tod-row-btn tod-row-btn--danger"
                   [disabled]="activity.busyTodId() === group.latest.id"
                   (click)="deleteTod(group.latest.id, group.latest.monsterName)">
                   {{ activity.busyTodId() === group.latest.id ? 'Deleting...' : 'Delete' }}
@@ -147,6 +112,10 @@
                   }
                 </div>
               }
+            </app-tod-window-row>
+          } @empty {
+            <div class="empty-state empty-state--compact">
+              <div class="empty-state-desc">{{ todFilter() === 'Ready' ? 'Nothing is ready right now.' : 'Nothing is waiting on a repop.' }}</div>
             </div>
           }
         } @else {

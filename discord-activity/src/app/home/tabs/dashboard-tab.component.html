@@ -429,56 +429,15 @@
           <div class="tod-scroll">
           @if (selectedDashboardTods().length > 0) {
             @for (group of groupedDashboardTods(); track group.key) {
-              <div class="tod-entry" [class.window-open]="isTodReady(group.latest)">
-                <div class="tod-head">
-                  <div class="tod-head-left">
-                    <div class="tod-mob-name">{{ group.displayName }}</div>
-                    <!-- Phone only: the tags fold behind this button (CSS hides it on wider screens). -->
-                    <button type="button" class="tod-tags-toggle"
-                      [attr.aria-expanded]="isTodTagsExpanded(group.key)"
-                      aria-label="Show ToD details"
-                      (click)="toggleTodTags(group.key)">
-                      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
-                    </button>
-                    <div class="tod-tags" [class.open]="isTodTagsExpanded(group.key)">
-                      <span class="tag" [class.success]="group.latest.claim === true" [class.default]="group.latest.claim !== true">{{ group.latest.claim === true ? 'Claimed' : (group.latest.claim === false ? 'Unclaimed' : 'Not Specified') }}</span>
-                      <!-- The window it popped on, matching the ToDs tab's card. Was a bare ToD
-                           count, which read as belonging to the Claimed tag beside it. -->
-                      @if (group.latest.popWindow) {
-                        <span class="tag default num">Window {{ group.latest.popWindow }}</span>
-                      }
-                    </div>
-                  </div>
-                  <div class="tod-countdown num" [class.open]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
-                </div>
-                <!-- No loot (a ToD carries none), and a Day only for the HQ/NQ pairs — same as the ToDs tab. -->
-                <div class="tod-sub">@if (showsDay(group.latest)) {Day {{ group.latest.dayNumber ?? '-' }} &middot; }{{ group.latest.cooldown || '22 Hour' }} &middot; {{ group.latest.interval || '10 Min' }}</div>
-                <!-- Time of death, repop, then the countdown — same order as the ToDs tab. -->
-                <div class="tod-meta-grid">
-                  <!-- "Not entered" = the camp ended without anyone seeing it die, so no time and
-                       no repop were recorded. Never show a synthesized timestamp here. -->
-                  <div class="tod-meta-cell">
-                    <div class="tod-meta-label">Time of death</div>
-                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.time) || notEntered }}</div>
-                  </div>
-                  <div class="tod-meta-cell">
-                    <div class="tod-meta-label">Repop starts</div>
-                    <div class="tod-meta-value">{{ activity.formatDateTimeWithSeconds(group.latest.repopTime) || notEntered }}</div>
-                  </div>
-                  <div class="tod-meta-cell">
-                    <div class="tod-meta-label">Countdown</div>
-                    <div class="tod-meta-value" [class.success-text]="isTodReady(group.latest)">{{ todCountdownLabel(group.latest) }}</div>
-                  </div>
-                </div>
-                <div class="tod-entry-actions">
+              <!-- Same row as the ToDs tab's Tracked Windows (TodWindowRowComponent). -->
+              <app-tod-window-row [tod]="group.latest" [displayName]="group.displayName" [setup]="todSetupFor(group.latest)" [now]="now()">
+                <div class="tod-row-actions">
                   @if (group.history.length > 0) {
-                    <button type="button" class="btn sm" (click)="toggleTodGroup(group.key)">
-                      {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History (' + group.history.length + ')' }}
+                    <button type="button" class="tod-row-btn" (click)="toggleTodGroup(group.key)">
+                      {{ isTodGroupExpanded(group.key) ? 'Hide history' : 'History · ' + group.history.length }}
                     </button>
                   }
-                  <button
-                    type="button"
-                    class="btn sm danger-outline"
+                  <button type="button" class="tod-row-btn tod-row-btn--danger"
                     [disabled]="activity.busyTodId() === group.latest.id"
                     (click)="deleteTod(group.latest.id, group.latest.monsterName)">
                     {{ activity.busyTodId() === group.latest.id ? 'Deleting...' : 'Delete' }}
@@ -501,7 +460,7 @@
                     }
                   </div>
                 }
-              </div>
+              </app-tod-window-row>
             }
           } @else {
             <div class="empty-state empty-state--compact">

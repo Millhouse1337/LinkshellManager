@@ -5,17 +5,20 @@ import {
   ActivityLinkshellSettings,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import type { ActivityPartySetupListRow } from '../../discord/discord-activity.types';
+import type { ActivityMonsterSetup, ActivityPartySetupListRow } from '../../discord/discord-activity.types';
 import { PartySetupService } from '../../discord/party-setup.service';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
 import { PendingSubmissionsSectionComponent } from './pending-submissions-section.component';
 import { TodFormComponent } from './tod-form.component';
-import { TOD_NOT_ENTERED, canReviewSubmissionsIn, isTodReady, mergedMonsterName, todCountdownLabel, todSortKey } from '../activity-home.helpers';
+import { TodWindowRowComponent } from './tod-window-row.component';
+import { TOD_NOT_ENTERED, canReviewSubmissionsIn, mergedMonsterName, monsterSetupForTod, todSortKey, todWindowState } from '../activity-home.helpers';
 import { hasHqVariant } from '../activity-home.types';
+
+type TodFilter = 'All' | 'Ready' | 'Pending';
 
 @Component({
   selector: 'app-tods-tab',
-  imports: [CommonModule, FormsModule, PartySetupPanelComponent, PendingSubmissionsSectionComponent, TodFormComponent],
+  imports: [CommonModule, FormsModule, PartySetupPanelComponent, PendingSubmissionsSectionComponent, TodFormComponent, TodWindowRowComponent],
   templateUrl: './tods-tab.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
@@ -23,7 +26,7 @@ export class TodsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetup = inject(PartySetupService);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly now = signal(Date.now());
+  protected readonly now = signal(Date.now());
 
   // The single-instance ToD delete confirmation modal lives in the parent so
   // it remains mounted regardless of which tab is active.
@@ -143,7 +146,23 @@ export class TodsTabComponent {
 
   protected readonly expandedTodGroups = signal<Set<string>>(new Set());
 
-  protected groupedDashboardTods(): { key: string; displayName: string; latest: any; history: any[] }[] {
+  // The All / Ready / Pending pills on Tracked Windows. Ready = the repop has passed (window open
+  // or up); Pending = still counting down. A "Not entered" ToD is neither, so only All shows it.
+  protected readonly todFilters: readonly TodFilter[] = ['All', 'Ready', 'Pending'];
+  protected readonly todFilter = signal<TodFilter>('All');
+
+  protected filteredTodGroups() {
+    const filter = this.todFilter();
+    const now = this.now();
+    return this.groupedDashboardTods().filter(group => {
+      if (filter === 'All') return true;
+      const tone = todWindowState(group.latest, group.setup, now).tone;
+      return filter === 'Ready' ? tone === 'open' || tone === 'up' : tone === 'pending';
+    });
+  }
+
+  protected groupedDashboardTods(): { key: string; displayName: string; latest: any; history: any[]; setup: ActivityMonsterSetup | null }[] {
+    const setups = this.linkshellSettingsFor(this.selectedDashboardLinkshellId())?.monsterSetups;
     // Keyed on the MERGED spawn name, not the raw monster name. The feed returns the newest ToD
     // per name and a merge pair has two of them, so Fafnir and Fafnir/Nidhogg used to open two
     // cards for one dragon, each counting down to a different repop. Whichever a camper read
@@ -166,7 +185,9 @@ export class TodsTabComponent {
         // 'Fafnir' on a group that also holds tonight's Nidhogg.
         displayName: mergedMonsterName(ordered[0]?.monsterName),
         latest: ordered[0],
-        history: ordered.slice(1, 10)
+        history: ordered.slice(1, 10),
+        // Supplies the window count the row needs to show when the spawn window closes.
+        setup: monsterSetupForTod(setups, ordered[0]?.monsterName)
       };
     });
     // Order the Tracked Windows list by next repop ascending so the mob
@@ -198,31 +219,9 @@ export class TodsTabComponent {
     return hasHqVariant(tod.monsterName);
   }
 
-  // The claim / HQ / window tags behind the card's "⋯" button. Phone widths only — wider
-  // screens always show the tags and never render the button (see .tod-tags in _tabs-shell).
-  protected readonly expandedTodTags = signal<Set<string>>(new Set());
-
-  protected isTodTagsExpanded(key: string): boolean {
-    return this.expandedTodTags().has(key);
-  }
-
-  protected toggleTodTags(key: string): void {
-    const next = new Set(this.expandedTodTags());
-    if (next.has(key)) next.delete(key); else next.add(key);
-    this.expandedTodTags.set(next);
-  }
-
-  // Countdown / ready state / the "Not entered" label all live in activity-home.helpers so this
-  // tab and the dashboard tab can't drift apart — they render the same card from the same data.
+  // The row itself (countdown, ready state, bar) is TodWindowRowComponent, shared with the
+  // Dashboard. This label is only for the history list underneath.
   protected readonly notEntered = TOD_NOT_ENTERED;
-
-  protected todCountdownLabel(tod: { repopTime?: string | null }): string {
-    return todCountdownLabel(tod.repopTime, this.now());
-  }
-
-  protected isTodReady(tod: { repopTime?: string | null }): boolean {
-    return isTodReady(tod.repopTime, this.now());
-  }
 
   protected deleteTod(todId: number, monsterName: string): void {
     this.deleteTodFn(todId, monsterName);

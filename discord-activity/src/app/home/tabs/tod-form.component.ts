@@ -6,8 +6,10 @@ import {
   DiscordActivityService
 } from '../../discord/discord-activity.service';
 import {
+  DEFAULT_POP_WINDOWS,
   formatElapsed,
   parseLocalDateTime,
+  parseTodDurationMinutes,
   toDateTimeLocalValue
 } from '../activity-home.helpers';
 import {
@@ -15,9 +17,6 @@ import {
   hasSpawnWindowCadence
 } from '../activity-home.types';
 import type { ActivityMonsterSetup } from '../../discord/discord-activity.types';
-
-// Window tiles to draw when the monster's setup carries no window count (the short band's 7).
-const DEFAULT_POP_WINDOWS = 7;
 
 // Standalone, reusable "Log ToD" form rendered in a native <dialog>. Extracted from
 // TodsTabComponent so it can ALSO be opened from the Events tab's "Post ToD" button on
@@ -481,31 +480,14 @@ export class TodFormComponent {
   }
 
   // Reads a stored "22 Hour" / "45 Min" / "1 Hour 30 Min" label back into the number + unit the
-  // form binds to. A bare number means hours for a cooldown and minutes for an interval, matching
-  // the server's TodDurationFormat.
+  // form binds to (parsing shared with the ToD tracker).
   private applyDurationLabel(label: string | null, field: 'cooldown' | 'interval'): void {
-    const minutes = this.parseDurationMinutes(label, field === 'cooldown' ? 'hours' : 'mins');
+    const minutes = parseTodDurationMinutes(label, field === 'cooldown' ? 'hours' : 'mins');
     if (field === 'cooldown') {
       this.applyCooldownMinutes(minutes ?? 22 * 60);
     } else {
       this.applyIntervalMinutes(minutes);
     }
-  }
-
-  private parseDurationMinutes(label: string | null, bareUnit: string): number | null {
-    const text = (label ?? '').trim();
-    if (!text) return null;
-
-    const bare = /^\s*(\d+(?:\.\d+)?)\s*$/.exec(text);
-    if (bare) {
-      const amount = parseFloat(bare[1]);
-      return amount > 0 ? Math.round(bareUnit === 'hours' ? amount * 60 : amount) : null;
-    }
-
-    const pair = /^\s*(?:(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b)?\s*(?:(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|m)\b)?\s*$/i.exec(text);
-    if (!pair || (!pair[1] && !pair[2])) return null;
-    const total = (pair[1] ? parseFloat(pair[1]) * 60 : 0) + (pair[2] ? parseFloat(pair[2]) : 0);
-    return total > 0 ? Math.round(total) : null;
   }
 
   // "Other" is EXEMPT from the search filter and always sits last. The whole point of it is the
