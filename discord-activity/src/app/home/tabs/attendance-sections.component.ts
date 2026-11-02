@@ -340,6 +340,9 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const name = this.attachName(snapshot).trim();
     if (!id || !name) return;
+    // The server keeps a capture's existing name, so a retyped one is saved first or the chip
+    // and the new event would disagree.
+    await this.saveAttachName(snapshot);
     // A brand-new event starts as an ordinary window capture; an officer who meant Misc moves it
     // with the slot control on the card.
     await this.windows.attachSnapshot(snapshot.id, id, { name, createNew: true, slotKind: SLOT_WINDOW });
@@ -353,13 +356,16 @@ export class AttendanceSectionsComponent {
       snapshot.id, id, { windowEventId, slotKind: slot.kind, windowNumber: slot.window });
   }
 
-  // Persists the typed name onto the SNAPSHOT without creating or attaching anything. Blank is
-  // allowed and clears it — an officer who mislabelled a capture should be able to undo that
-  // without inventing a placeholder name.
-  protected async renameSnapshot(snapshot: ActivityWindowSnapshot): Promise<void> {
+  // Persists the Message box onto the SNAPSHOT without creating or attaching anything, when it
+  // differs from what is saved. There is no Save button: the box saves when it loses focus or on
+  // Enter, and Attach / Make New Event call this first. Blank is allowed and clears it — an
+  // officer who mislabelled a capture should be able to undo that without inventing a
+  // placeholder name.
+  protected async saveAttachName(snapshot: ActivityWindowSnapshot): Promise<void> {
     const id = this.primaryLinkshellId();
     if (!id) return;
     const name = this.attachName(snapshot).trim();
+    if (name === (snapshot.name ?? '').trim()) return;
     await this.windows.renameSnapshot(snapshot.id, id, name.length > 0 ? name : null);
   }
 
@@ -412,6 +418,7 @@ export class AttendanceSectionsComponent {
   protected async attachToSelection(snapshot: ActivityWindowSnapshot, selection: string): Promise<void> {
     const linkshellId = this.primaryLinkshellId();
     if (!linkshellId || !selection) return;
+    await this.saveAttachName(snapshot);
 
     if (selection.startsWith('we:')) {
       const windowEventId = Number(selection.slice(3));

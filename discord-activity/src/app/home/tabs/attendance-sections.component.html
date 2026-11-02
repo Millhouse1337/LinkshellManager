@@ -523,12 +523,12 @@
              bonus. The window number alone doesn't say which of a camp's captures earned the open
              and which the close, which is what an officer reviewing the money is looking for.
 
-             Reads the same value the name INPUT below is bound to, not the saved snapshot.name.
+             Reads the same value the Message box below is bound to, not the saved snapshot.name.
              The two are the same field, and showing the persisted value here meant the label and
-             the box an officer was typing in disagreed until Save was pressed — so the tag
-             looked stale, or wrong, at exactly the moment they were reading it to check their
-             edit. attachName seeds itself from snapshot.name, so an untouched capture is
-             unchanged; a typed one updates as it is typed. -->
+             the box an officer was typing in disagreed until it was saved — so the tag looked
+             stale, or wrong, at exactly the moment they were reading it to check their edit.
+             attachName seeds itself from snapshot.name, so an untouched capture is unchanged; a
+             typed one updates as it is typed, and is saved when the box loses focus. -->
         @if (attachName(snapshot); as captureName) {
           <span class="tag we-snapshot__role">{{ captureName }}</span>
         }
@@ -627,9 +627,24 @@
                running is the common case, and typing its name by hand only risks a
                typo that splits the payroll across two events. The free-text box
                below stays for anything with no live camp or open event to join. -->
-          <!-- One row: Event [pick] Post Type [kind] [Attach] | Message [name] [Save]
-               [Make New Event] | Alliance [n] [Ignore]. Each label is grouped with its control so
-               the even spacing across the row never parts the two. -->
+          <!-- One row: Event [pick] Post Type [kind] Message [name] [Attach] | [Make New Event] |
+               Alliance [n] [Ignore]. Each label is grouped with its control so the even spacing
+               across the row never parts the two. -->
+          <!-- Names the CAPTURE: the chip in the header reads this same value. It saves itself on
+               blur or Enter, and Attach / Make New Event save it first. Those two buttons stop
+               mousedown from moving focus: a blur save would disable them mid-click and swallow
+               the click. Make New Event also uses the name for the event it mints. -->
+          <ng-template #messageField>
+            <span class="we-unlinked-field">
+            <label class="we-unlinked-label" [attr.for]="'snapshot-message-' + snapshot.id">Message</label>
+            <input #messageBox type="text" class="input we-unlinked-name" [id]="'snapshot-message-' + snapshot.id"
+              [ngModel]="attachName(snapshot)"
+              (ngModelChange)="setAttachName(snapshot.id, $event)"
+              (blur)="saveAttachName(snapshot)"
+              (keydown.enter)="messageBox.blur()"
+              placeholder="Snapshot name" />
+            </span>
+          </ng-template>
           @if (hasAttachTargets(model)) {
             <span class="we-unlinked-field">
             <label class="we-unlinked-label" [attr.for]="'snapshot-event-' + snapshot.id">Event</label>
@@ -678,26 +693,18 @@
                      aria-label="Window number"
                      title="Leave blank to place it by capture time." />
             }
+            <ng-container *ngTemplateOutlet="messageField" />
             <button type="button" class="btn sm"
               [disabled]="!attachTarget.value || !attachSlot(snapshot).kind || windows.busy()"
+              (mousedown)="$event.preventDefault()"
               (click)="attachToSelection(snapshot, attachTarget.value)">Attach</button>
             <span class="we-unlinked-sep" aria-hidden="true"></span>
+          } @else {
+            <ng-container *ngTemplateOutlet="messageField" />
           }
-          <!-- Names the CAPTURE. Save persists it on the snapshot; Make New Event uses that
-               same name for the event it mints. They were one control, which meant an officer
-               labelling a snapshot for their own sake conjured a camp. -->
-          <span class="we-unlinked-field">
-          <label class="we-unlinked-label" [attr.for]="'snapshot-message-' + snapshot.id">Message</label>
-          <input type="text" class="input we-unlinked-name" [id]="'snapshot-message-' + snapshot.id"
-            [ngModel]="attachName(snapshot)"
-            (ngModelChange)="setAttachName(snapshot.id, $event)"
-            placeholder="Snapshot name" />
-          </span>
-          <button type="button" class="btn sm"
-            [disabled]="windows.busy()"
-            (click)="renameSnapshot(snapshot)">Save</button>
           <button type="button" class="btn sm primary"
             [disabled]="!attachName(snapshot).trim() || windows.busy()"
+            (mousedown)="$event.preventDefault()"
             (click)="createNewEvent(snapshot)">Make New Event From This Post</button>
           <span class="we-unlinked-sep" aria-hidden="true"></span>
           <!-- The alliance is the one field the game cannot supply, so it is the one most likely
