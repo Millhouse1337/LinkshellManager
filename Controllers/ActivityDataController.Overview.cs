@@ -530,6 +530,35 @@ public sealed partial class ActivityDataController
                 ? total
                 : null;
 
+        // The whole camp's payout if it ended now: the sum of the same per-account totals the
+        // attendee rows show, so the panel and the rows cannot disagree. Kill is the kill bonus once
+        // per account on a Post Kill roster, the way PriceMembers adds it.
+        ActivityCampPayoutDto? CampPayoutOf(Event evt)
+        {
+            if (EventTotalsFor(evt) is not { } totals) return null;
+
+            var paid = totals.Values.Where(value => value.Total > 0).ToList();
+            var (_, _, _, _, killBonus) =
+                HnmCampPricing.StandardBonuses(evt, primaryLinkshell, claimed: true, killed: true);
+            var step = DkpRounding.StepFor(primaryLinkshell?.DkpRoundingIncrement);
+            var killEach = killBonus > 0 ? DkpRounding.Round(killBonus, step) : 0d;
+            var killAccounts = evt.AttendanceWindows
+                .Where(window => window.IsKillWindow)
+                .SelectMany(window => window.Attendees)
+                .Select(att => att.AppUserId)
+                .Where(appUserId => !string.IsNullOrWhiteSpace(appUserId)
+                    && totals.TryGetValue(appUserId, out var total) && total.Total > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+
+            return new ActivityCampPayoutDto(
+                paid.Sum(value => value.Total),
+                paid.Count,
+                killAccounts * killEach,
+                paid.Sum(value => value.Misc),
+                paid.Sum(value => value.Tag));
+        }
+
         // Resolve creator/starter character names for each active event. Prefer
         // the user's linkshell-specific character name; fall back to their
         // top-level AppUser.CharacterName, then UserName.
@@ -1021,7 +1050,8 @@ public sealed partial class ActivityDataController
                 evt.HnmKillBonusOverride,
                 evt.HnmPerWindowOverride,
                 DiscordEventMessageBuilder.PostsOpenAndClose(evt),
-                DiscordEventMessageBuilder.WindowMethodFor(evt))).ToList(),
+                DiscordEventMessageBuilder.WindowMethodFor(evt),
+                CampPayoutOf(evt))).ToList(),
             pendingInvites.Select(invite => new ActivityInviteDto(
                 invite.Id,
                 invite.AppUserId,

@@ -827,7 +827,21 @@ public sealed record ActivityEventDto(
     // The card asks this instead of testing AttendancePostCount against 2, which Window N with
     // two windows makes wrong.
     bool PostsOpenAndClose = false,
-    string? WindowMethod = null);
+    string? WindowMethod = null,
+    // What End Camp would pay out if the camp ended now, for the live card's payout panel. Null on
+    // anything but a Standard HNM camp. See ActivityCampPayoutDto.
+    ActivityCampPayoutDto? HnmPayout = null);
+
+// A live Standard HNM camp's payout, summed over every account the camp prices: the same per-account
+// totals the attendee rows show as EventTotalDkp, plus the taggers and capture-only members who have
+// no window row. Only accounts owed something are counted. Kill, Misc and Tag are the parts of
+// TotalDkp those awards make up; whatever is left is window credit.
+public sealed record ActivityCampPayoutDto(
+    double TotalDkp,
+    int MemberCount,
+    double KillDkp,
+    double MiscDkp,
+    double TagDkp);
 
 public sealed record ActivityAttendanceWindowDto(
     int Id,

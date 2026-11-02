@@ -1175,6 +1175,19 @@ export interface ActivityEvent {
   wdAwaitingProcessingSince?: string | null;
   wdFinalizedAt?: string | null;
   wdPopWindow?: number | null;
+  // What End Camp would pay out if the camp ended now. Null on anything but a Standard HNM camp.
+  hnmPayout?: ActivityCampPayout | null;
+}
+
+// A live Standard HNM camp's payout, summed over every account the camp pays (including taggers and
+// capture-only members, who have no window row). Kill / Misc / Tag are parts of totalDkp; the rest
+// is window credit.
+export interface ActivityCampPayout {
+  totalDkp: number;
+  memberCount: number;
+  killDkp: number;
+  miscDkp: number;
+  tagDkp: number;
 }
 
 export interface ActivityAttendanceWindow {
