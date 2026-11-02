@@ -1,0 +1,1084 @@
+// Live HNM camp card (events tab). A layout of its own: header bar, the camp with a "Next step" box,
+// an attendance strip, one detail panel, and a payout + loot column. Timed events keep .event-card.
+//
+// A global partial rather than events-tab.component.scss, which is close to its style budget.
+// Everything is prefixed hnm- so nothing here reaches another card.
+//
+// Sized off the CARD, not the viewport: the Discord Activity panel is often far narrower than the
+// window, so the two-column parts fold on a container query.
+
+.hnm-camp {
+  container: hnm-camp / inline-size;
+  padding: 0;
+  background: var(--bg-elev);
+  border-color: var(--border-2);
+  // Tones the strip, badges and payout share. Tokens only; these just name them per role.
+  --hnm-kill: var(--orange);
+  --hnm-kill-weak: var(--orange-weak);
+  --hnm-snapshot: var(--violet);
+  --hnm-snapshot-weak: var(--violet-weak);
+}
+
+.hnm-camp.event-card--collapsed {
+  padding-bottom: 0;
+}
+
+.hnm-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.hnm-muted {
+  color: var(--fg-2);
+  font-size: 12px;
+}
+
+.hnm-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.hnm-note {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+
+.hnm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+// ----- Header bar -----
+
+.hnm-camp__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 52px;
+  padding: 8px 12px 8px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hnm-camp__crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+
+.hnm-camp__crumb-sep {
+  color: var(--fg-4);
+}
+
+.hnm-camp__crumb-current {
+  color: var(--fg);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hnm-camp__bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.hnm-camp__participants {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  font-size: 13px;
+  color: var(--fg-2);
+
+  svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+.hnm-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  color: var(--fg-1);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--border-hot);
+    background: var(--surface-2);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+}
+
+// The roster's remove ×: borderless until hovered, so a column of them doesn't shout.
+.hnm-icon-btn--danger {
+  width: 28px;
+  height: 28px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--fg-3);
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: transparent;
+    background: var(--danger-weak);
+    color: var(--danger);
+  }
+}
+
+.hnm-camp__collapse svg {
+  transition: transform 0.15s ease;
+}
+
+.hnm-camp__collapse:not(.collapsed) svg {
+  transform: rotate(180deg);
+}
+
+// ----- Dropdown menus ("..." and New post) -----
+
+.hnm-menu {
+  position: relative;
+}
+
+.hnm-menu__list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+}
+
+.hnm-menu__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    outline: none;
+    background: var(--surface-3);
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.hnm-menu__item--danger {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--danger);
+
+  &:hover,
+  &:focus-visible {
+    background: var(--danger-weak);
+  }
+}
+
+.hnm-menu__hint {
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+
+// Delete camp's inline confirm, under the bar.
+.hnm-camp__confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--danger-weak);
+  font-size: 13px;
+  color: var(--fg-1);
+}
+
+.hnm-camp__confirm-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+// ----- Hero: the camp, and the Next step box -----
+
+.hnm-camp__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 24px;
+  align-items: end;
+  padding: 22px 20px 20px;
+}
+
+.hnm-camp__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.hnm-camp__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hnm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--fg-1);
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+.hnm-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--success-weak);
+  color: var(--success);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.hnm-live__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: hnm-live-pulse 1.8s ease-out infinite;
+}
+
+.hnm-live__clock {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-1);
+}
+
+@keyframes hnm-live-pulse {
+  0% { box-shadow: 0 0 0 0 var(--success-weak); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hnm-live__dot { animation: none; }
+}
+
+.hnm-camp__title {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.hnm-camp__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-size: 13px;
+  color: var(--fg-2);
+
+  strong {
+    font-weight: 500;
+    color: var(--fg);
+  }
+}
+
+.hnm-camp__window {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--fg-2);
+
+  svg {
+    width: 14px;
+    height: 14px;
+    color: var(--fg-3);
+  }
+
+  strong {
+    font-weight: 600;
+    color: var(--fg);
+  }
+}
+
+.hnm-next {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.hnm-next__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hnm-next__killed {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--hnm-kill);
+}
+
+.hnm-next__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--fg-1);
+  text-wrap: pretty;
+
+  strong {
+    font-weight: 600;
+    color: var(--fg);
+  }
+}
+
+.hnm-next__text--warning {
+  font-size: 13px;
+  color: var(--warning);
+}
+
+.hnm-next__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hnm-next__cta {
+  justify-content: center;
+  width: 100%;
+  height: 38px;
+  font-size: 13.5px;
+}
+
+// ----- Panels that open in the card (New post, Add a member, Late join) -----
+
+.hnm-panel {
+  margin: 0 20px 16px;
+  padding: 16px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.hnm-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+
+  h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+}
+
+.hnm-segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+
+  button {
+    height: 28px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--fg-2);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  button.is-on {
+    background: var(--surface-3);
+    color: var(--fg);
+  }
+}
+
+.hnm-camp .live-party-setup-row {
+  margin: 0 20px 16px;
+}
+
+// ----- Attendance strip -----
+
+.hnm-camp__attendance {
+  padding: 0 20px;
+}
+
+.hnm-camp__attendance-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.hnm-camp__attendance-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+
+  h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+}
+
+// One row of steps. They share the width when there's room and scroll sideways when there isn't,
+// so a 25-window wyrm camp never wraps into a wall of boxes.
+.hnm-steps {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 2px 6px;
+  list-style: none;
+  overflow-x: auto;
+
+  > li {
+    flex: 1 0 148px;
+    min-width: 0;
+  }
+}
+
+.hnm-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+
+  &:hover:not(:disabled):not(.is-active) {
+    border-color: var(--border-hot);
+    background: var(--surface-2);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  &.is-active {
+    border-color: var(--accent);
+    background: var(--accent-weak);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  // A window reached with no roster: still pickable, but reads as a gap.
+  &.is-missed:not(.is-active) {
+    border-style: dashed;
+    border-color: var(--warning-weak);
+  }
+
+  // Windows not reached yet: not a step anyone can open.
+  &.is-upcoming {
+    border-style: dashed;
+    background: transparent;
+    color: var(--fg-3);
+    cursor: default;
+  }
+}
+
+// The badge drops under the title rather than cutting it short when the step is narrow.
+.hnm-step__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.hnm-step__title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hnm-step__time {
+  min-height: 1em;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.hnm-step__sub {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.hnm-step.is-upcoming .hnm-step__time,
+.hnm-step.is-upcoming .hnm-step__sub {
+  color: var(--fg-3);
+}
+
+// Small status label. Tone comes from data-tone so the template never builds class names.
+.hnm-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  background: var(--surface-3);
+  color: var(--fg-2);
+
+  &[data-tone='accent'] { background: var(--accent-weak); color: var(--accent-hover); }
+  &[data-tone='success'] { background: var(--success-weak); color: var(--success); }
+  &[data-tone='danger'] { background: var(--danger-weak); color: var(--danger); }
+  &[data-tone='warning'] { background: var(--warning-weak); color: var(--warning); }
+  &[data-tone='kill'] { background: var(--hnm-kill-weak); color: var(--hnm-kill); }
+  &[data-tone='snapshot'] { background: var(--hnm-snapshot-weak); color: var(--hnm-snapshot); }
+}
+
+// ----- Detail panel + side column -----
+
+.hnm-camp__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+  padding: 12px 20px 20px;
+}
+
+.hnm-detail {
+  min-width: 0;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.hnm-detail--empty {
+  padding: 16px;
+}
+
+.hnm-detail__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 18px 12px;
+}
+
+.hnm-detail__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.hnm-detail__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.hnm-detail__sub {
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+.hnm-detail__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hnm-detail__note {
+  margin: 0;
+  padding: 12px 18px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-3);
+}
+
+.hnm-detail__warning {
+  margin: 0;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--warning-weak);
+  font-size: 12px;
+  color: var(--warning);
+}
+
+// "1 Regular + 1 Open bonus = 2 per attendee × 9 = 18 DKP": what one attendee earns, built up from
+// its parts, then the step's total.
+.hnm-formula {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 11px 18px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 12.5px;
+  color: var(--fg-2);
+
+  b {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--fg);
+  }
+}
+
+.hnm-formula__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.hnm-formula__op {
+  font-family: var(--font-mono);
+  color: var(--fg-3);
+}
+
+.hnm-formula__per {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.hnm-formula__total {
+  margin-left: auto;
+}
+
+// The roster tables inside the detail panel: edge-to-edge with the panel's own padding.
+.hnm-roster {
+  th:first-child,
+  td:first-child {
+    padding-left: 18px;
+  }
+
+  th:last-child,
+  td:last-child {
+    padding-right: 18px;
+  }
+
+  tbody tr:hover td {
+    background: var(--surface-2);
+  }
+}
+
+.hnm-roster__name {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hnm-roster__zone {
+  margin-top: 2px;
+  font-size: 11.5px;
+}
+
+.hnm-roster__subtotal {
+  color: var(--fg-2);
+}
+
+.hnm-roster__remove {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.hnm-roster__confirm {
+  display: inline-flex;
+  gap: 6px;
+}
+
+// The Closing bonus switch, top right of a window.
+.hnm-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 5px 12px 5px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  font-size: 12.5px;
+  color: var(--fg-1);
+  cursor: pointer;
+
+  input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+  }
+
+  &:focus-within {
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  &:has(input:disabled) {
+    opacity: 0.6;
+    cursor: progress;
+  }
+}
+
+.hnm-switch__track {
+  position: relative;
+  display: block;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  transition: background 0.15s ease;
+}
+
+.hnm-switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg);
+  transition: left 0.15s ease;
+}
+
+.hnm-switch.is-on .hnm-switch__track {
+  background: var(--accent);
+}
+
+.hnm-switch.is-on .hnm-switch__knob {
+  left: 14px;
+}
+
+.hnm-switch__value {
+  font-family: var(--font-mono);
+  color: var(--success);
+}
+
+// ----- Side column: payout + loot -----
+
+.hnm-camp__side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.hnm-card {
+  padding: 16px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.hnm-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.hnm-card__empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-md);
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--fg-3);
+}
+
+.hnm-payout__total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.hnm-payout__value {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--fg);
+}
+
+.hnm-payout__unit {
+  font-size: 14px;
+  color: var(--fg-2);
+}
+
+.hnm-payout__bar {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  margin: 16px 0 14px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.hnm-payout__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--fg-2);
+  }
+
+  li.is-zero {
+    color: var(--fg-3);
+  }
+}
+
+.hnm-payout__amount {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.hnm-payout__legend li.is-zero .hnm-payout__amount {
+  color: var(--fg-3);
+}
+
+.hnm-payout__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+// The bar's slices and the legend's swatches share one colour per slice.
+.hnm-payout__bar > span,
+.hnm-payout__swatch {
+  &[data-tone='windows'] { background: var(--accent); }
+  &[data-tone='kill'] { background: var(--hnm-kill); }
+  &[data-tone='misc'] { background: var(--hnm-snapshot); }
+  &[data-tone='tag'] { background: var(--success); }
+}
+
+.hnm-loot__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+
+  input,
+  select {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.hnm-loot__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px auto;
+  gap: 8px;
+}
+
+.hnm-loot__row--no-dkp {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.hnm-loot__list {
+  margin: 0 -16px -16px;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+.hnm-loot__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  strong {
+    font-weight: 500;
+    color: var(--fg);
+  }
+}
+
+.hnm-loot__cost {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: none;
+  font-size: 13px;
+  color: var(--fg-1);
+}
+
+// ----- Narrow cards -----
+
+@container hnm-camp (max-width: 880px) {
+  .hnm-camp__hero,
+  .hnm-camp__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hnm-camp__hero {
+    align-items: stretch;
+  }
+}
+
+@container hnm-camp (max-width: 520px) {
+  .hnm-camp__bar,
+  .hnm-camp__hero,
+  .hnm-camp__attendance,
+  .hnm-camp__grid {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .hnm-panel,
+  .hnm-camp .live-party-setup-row {
+    margin-left: 14px;
+    margin-right: 14px;
+  }
+
+  .hnm-camp__title {
+    font-size: 24px;
+  }
+
+  .hnm-camp__participants {
+    display: none;
+  }
+
+  .hnm-formula__total {
+    margin-left: 0;
+  }
+}

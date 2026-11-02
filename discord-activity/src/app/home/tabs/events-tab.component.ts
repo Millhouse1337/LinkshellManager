@@ -54,12 +54,37 @@ interface AttendanceWindowTab {
   attendeeCount: number;
 }
 
+// One stop on a live HNM camp's attendance strip: a window (posted, or reached with no roster), a
+// Claim Shield lottery, a linked snapshot, the kill roster, or the windows still to come. All but
+// the last open in the detail panel under the strip. See campSteps().
+interface CampStep {
+  key: string;
+  kind: 'window' | 'missed' | 'kill' | 'claim' | 'snapshot' | 'upcoming';
+  title: string;
+  time: string | null;
+  sub: string;
+  badge: string | null;
+  tone: 'neutral' | 'accent' | 'success' | 'danger' | 'warning' | 'kill' | 'snapshot';
+  window: ActivityAttendanceWindow | null;
+  capture: ActivityClaimShieldCapture | null;
+  snapshot: ActivityLinkedSnapshot | null;
+}
+
+// One slice of the "Payout at end camp" panel.
+interface CampPayoutPart {
+  label: string;
+  value: number;
+  tone: 'windows' | 'kill' | 'misc' | 'tag';
+}
+
 @Component({
   selector: 'app-events-tab',
   imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, PartySetupPanelComponent, EventHistoryPanelComponent, TodFormComponent, AttendanceSectionsComponent],
   templateUrl: './events-tab.component.html',
   styleUrl: './events-tab.component.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  // A click outside them, or Escape, closes the HNM camp card's dropdown menus.
+  host: { '(document:click)': 'onDocumentClick($event)', '(document:keydown.escape)': 'closeCampMenus()' }
 })
 export class EventsTabComponent {
   private static readonly MAX_ADD_MEMBER_RESULTS = 10;
@@ -711,6 +736,217 @@ export class EventsTabComponent {
     } finally {
       this.newPostSaving.set(false);
     }
+  }
+
+  // ----- Live HNM camp card -----
+  //
+  // A live HNM camp has its own card: a header bar, the camp's title with a "Next step" box, a strip
+  // of everything the camp has recorded (windows, claim, snapshots, kill), one detail panel for the
+  // picked step, and a payout + loot column. Timed events keep the generic card.
+
+  // Which strip step the detail panel shows, per camp. Absent = the newest roster (campDefaultStep).
+  protected readonly campStepByEvent = signal<Record<number, string>>({});
+  // The open dropdown, if any: the "..." menu or the New post menu, for one camp.
+  protected readonly campMenu = signal<{ eventId: number; menu: 'more' | 'post' } | null>(null);
+
+  protected isCampMenuOpen(eventId: number, menu: 'more' | 'post'): boolean {
+    const open = this.campMenu();
+    return open?.eventId === eventId && open.menu === menu;
+  }
+
+  protected toggleCampMenu(eventId: number, menu: 'more' | 'post'): void {
+    this.campMenu.set(this.isCampMenuOpen(eventId, menu) ? null : { eventId, menu });
+  }
+
+  protected closeCampMenus(): void {
+    if (this.campMenu() !== null) this.campMenu.set(null);
+  }
+
+  // Clicks inside a menu (its button or its items) are the menu's own business: the button
+  // toggles it, and each item closes it.
+  protected onDocumentClick(click: MouseEvent): void {
+    if (click.target instanceof Element && click.target.closest('.hnm-menu')) return;
+    this.closeCampMenus();
+  }
+
+  // New post menu → the Add New Post panel, opened on the chosen kind.
+  protected async startCampPost(event: ActivityEvent, kind: 'window' | 'misc'): Promise<void> {
+    this.campMenu.set(null);
+    if (this.newPostEventId() !== event.id) {
+      await this.toggleNewPost(event);
+    }
+    this.newPostKind.set(kind);
+  }
+
+  // Every step on the strip, in reading order: the camp's windows by number (a reached window with
+  // no roster stays in as a gap to fill), then the Claim Shield lotteries and linked snapshots by
+  // time, then the kill roster, then whatever windows are still to come.
+  protected campSteps(event: ActivityEvent): CampStep[] {
+    const blank = { window: null, capture: null, snapshot: null };
+    const windows: CampStep[] = [];
+    const kills: CampStep[] = [];
+
+    for (const tab of this.attendanceWindowTabs(event)) {
+      const window = tab.window;
+      const key = `w:${tab.sequenceNumber}`;
+      if (!window) {
+        windows.push({ ...blank, key, kind: 'missed', title: tab.label, time: null,
+          sub: 'No roster posted', badge: 'No roster', tone: 'warning' });
+        continue;
+      }
+      const per = this.windowPerAttendee(event, window);
+      const sub = EventsTabComponent.countLabel(window.attendees.length, 'member')
+        + (per > 0 ? ` · +${EventsTabComponent.trimDkp(per)}` : '');
+      if (window.isKillWindow) {
+        kills.push({ ...blank, window, key, kind: 'kill', title: 'Kill', time: window.postedAt, sub,
+          badge: 'Killed', tone: 'kill' });
+        continue;
+      }
+      const closing = !this.isWdCamp(event) && this.isCloseWindow(event, window);
+      windows.push({ ...blank, window, key, kind: 'window', title: tab.label, time: window.postedAt, sub,
+        badge: closing ? 'Closing' : 'Posted', tone: closing ? 'accent' : 'neutral' });
+    }
+
+    const tag = this.claimBonusAmount(event);
+    const claims: CampStep[] = this.claimShieldsFor(event).map(capture => {
+      const tagged = capture.members.filter(member => member.matched).length;
+      return {
+        ...blank, capture, key: `c:${capture.id}`, kind: 'claim', title: 'Claim Shield',
+        time: capture.capturedAtUtc,
+        sub: `${tagged} tagged` + (tag > 0 ? ` · +${EventsTabComponent.trimDkp(tag)}` : ''),
+        badge: capture.won ? 'Won' : 'Lost', tone: capture.won ? 'success' : 'danger',
+      };
+    });
+    const snapshots: CampStep[] = this.linkedSnapshotTabs(event).map(snapshot => ({
+      ...blank, snapshot, key: `s:${snapshot.id}`, kind: 'snapshot',
+      title: this.linkedSnapshotTabLabel(snapshot), time: snapshot.capturedAtUtc,
+      sub: EventsTabComponent.countLabel(snapshot.entries.length, 'member')
+        + ((snapshot.dkpPerMember ?? 0) > 0 ? ` · +${EventsTabComponent.trimDkp(snapshot.dkpPerMember ?? 0)}` : ''),
+      badge: snapshot.isMisc ? 'Misc' : snapshot.windowLabel?.trim() || 'Snapshot', tone: 'snapshot',
+    }));
+    const extras = [...claims, ...snapshots]
+      .sort((a, b) => (parseDate(a.time) ?? 0) - (parseDate(b.time) ?? 0));
+
+    const upcoming = this.campUpcomingStep(event, kills.length > 0);
+    return [...windows, ...extras, ...kills, ...(upcoming ? [upcoming] : [])];
+  }
+
+  // The camp's windows not reached yet, as one greyed step: "Windows 4–7" (or "Close" on a named
+  // camp). After a kill they are "Not needed"; before it, "Upcoming". Null once every window is in.
+  private campUpcomingStep(event: ActivityEvent, killed: boolean): CampStep | null {
+    const named = this.postsOpenAndClose(event);
+    const reached = named ? 0 : Math.max(0, ...this.attendanceWindowTabs(event)
+      .filter(tab => !tab.window?.isKillWindow)
+      .map(tab => tab.sequenceNumber));
+    const posted = new Set(this.attendanceWindowsFor(event)
+      .filter(window => !window.isKillWindow)
+      .map(window => window.sequenceNumber));
+    const remaining: number[] = [];
+    for (let seq = reached + 1; seq <= this.postCount(event); seq++) {
+      if (!posted.has(seq)) remaining.push(seq);
+    }
+    if (remaining.length === 0) return null;
+
+    const name = (seq: number) => named ? (seq === 1 ? 'Open' : 'Close') : `Window ${seq}`;
+    const first = remaining[0];
+    const last = remaining[remaining.length - 1];
+    const title = remaining.length === 1 ? name(first)
+      : named ? remaining.map(name).join(' & ') : `Windows ${first}–${last}`;
+    return {
+      key: 'upcoming', kind: 'upcoming', title, time: null, sub: killed ? 'Not needed' : 'Upcoming',
+      badge: null, tone: 'neutral', window: null, capture: null, snapshot: null,
+    };
+  }
+
+  // The step the detail panel shows: the one picked, else the newest roster (kill roster included),
+  // which is what an officer opening the card has usually come to check.
+  protected selectedCampStep(event: ActivityEvent): CampStep | null {
+    const steps = this.campSteps(event).filter(step => step.kind !== 'upcoming');
+    if (steps.length === 0) return null;
+    const wanted = this.campStepByEvent()[event.id];
+    const match = wanted ? steps.find(step => step.key === wanted) : undefined;
+    if (match) return match;
+    const rosters = steps.filter(step => step.kind === 'window' || step.kind === 'kill');
+    return rosters.length > 0 ? rosters[rosters.length - 1] : steps[steps.length - 1];
+  }
+
+  protected selectCampStep(eventId: number, step: CampStep): void {
+    if (step.kind === 'upcoming') return;
+    this.campStepByEvent.update(map => ({ ...map, [eventId]: step.key }));
+  }
+
+  // What one window pays each attendee on it: the window's own amount plus its open and close
+  // bonuses (windowValue), the kill bonus on a kill roster, or the flat rate on a Manual Check In
+  // camp. The figure on the strip and in the detail panel's formula row.
+  protected windowPerAttendee(event: ActivityEvent, window: ActivityAttendanceWindow): number {
+    if (this.isWdCamp(event)) return this.wdPerWindowRate(event);
+    if (window.isKillWindow) return this.standardBonus(event, 'kill');
+    return this.windowValue(event, window);
+  }
+
+  // The window's own amount before either bonus — the formula row's first chip. Public twin of
+  // baseWindowValue.
+  protected windowBaseValue(event: ActivityEvent, window: ActivityAttendanceWindow): number {
+    return this.baseWindowValue(event, window);
+  }
+
+  // One attendee's credit from this window: the DKP column plus the open and close bonuses. The
+  // Subtotal column.
+  protected attendeeWindowSubtotal(
+    event: ActivityEvent,
+    window: ActivityAttendanceWindow,
+    attendee: { characterName?: string | null },
+  ): number {
+    const own = this.attendanceWindowDkp(event, window, attendee) ?? 0;
+    if (this.isWdCamp(event) || window.isKillWindow) return own;
+    return own + this.openWindowValue(event, window) + this.closeWindowValue(event, window);
+  }
+
+  // The kill roster, if one is posted — the newest, when an officer posted it twice.
+  protected campKillWindow(event: ActivityEvent): ActivityAttendanceWindow | null {
+    const kills = this.attendanceWindowsFor(event).filter(window => window.isKillWindow);
+    return kills.length > 0 ? kills[kills.length - 1] : null;
+  }
+
+  // The payout panel's four slices. Windows is whatever of the total the three awards don't make
+  // up, never below zero.
+  protected campPayoutParts(event: ActivityEvent): CampPayoutPart[] {
+    const payout = event.hnmPayout;
+    if (!payout) return [];
+    const windows = Math.max(0, payout.totalDkp - payout.killDkp - payout.miscDkp - payout.tagDkp);
+    return [
+      { label: 'Windows', value: windows, tone: 'windows' },
+      { label: 'Kill', value: payout.killDkp, tone: 'kill' },
+      { label: 'Misc', value: payout.miscDkp, tone: 'misc' },
+      { label: 'Tag', value: payout.tagDkp, tone: 'tag' },
+    ];
+  }
+
+  // One slice's share of the bar, as a width percentage.
+  protected campPayoutShare(event: ActivityEvent, part: CampPayoutPart): number {
+    const total = event.hnmPayout?.totalDkp ?? 0;
+    return total > 0 ? (part.value / total) * 100 : 0;
+  }
+
+  // Members on one lottery who resolved to a roster member — the ones its tag bonus can pay.
+  protected claimTaggedCount(capture: ActivityClaimShieldCapture): number {
+    return capture.members.filter(member => member.matched).length;
+  }
+
+  // "12 members", "1 member".
+  protected countLabel(count: number, noun: string): string {
+    return EventsTabComponent.countLabel(count, noun);
+  }
+
+  private static countLabel(count: number, noun: string): string {
+    return `${count} ${noun}${count === 1 ? '' : 's'}`;
+  }
+
+  // The DKP the loot list has spent, for the Loot card's heading. Null where loot isn't priced in
+  // DKP (Loot Council, or Hybrid's percentages).
+  protected lootDkpSpent(event: ActivityEvent): number | null {
+    if (this.lootStructureFor(event.linkshellId) !== 'Dkp') return null;
+    return event.loot.reduce((sum, loot) => sum + (loot.winningDkpSpent ?? 0), 0);
   }
 
   // ----- Participant grouping -----
