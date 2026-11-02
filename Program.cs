@@ -308,6 +308,8 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<ApplicationDbContext>("database", tags: new[] { "ready" });
 builder.Services.AddScoped<WindowEventDkpLedgerService>();
 builder.Services.AddScoped<WindowEventLinkService>();
+// Files an unlinked capture onto a camp or attendance event; shared by the Activity and the addon.
+builder.Services.AddScoped<SnapshotFilingService>();
 builder.Services.AddScoped<MemberActivityService>();
 // The two HNM earn formulas — "what did this camp owe?", per attendance mode. Neither pays any
 // more: End Camp hands the roster to HnmCampReviewHandoffService, which stages it as a pending row

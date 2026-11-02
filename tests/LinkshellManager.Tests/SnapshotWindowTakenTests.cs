@@ -1,6 +1,6 @@
-using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
@@ -36,10 +36,10 @@ public class SnapshotWindowTakenTests
     };
 
     private static Task<bool> CampTaken(ApplicationDbContext db, int window) =>
-        ActivityDataController.CampWindowTakenAsync(db, CampId, window, Filing, CancellationToken.None);
+        SnapshotFilingService.CampWindowTakenAsync(db, CampId, window, Filing, CancellationToken.None);
 
     private static Task<bool> EventTaken(ApplicationDbContext db, int window, string? alliance) =>
-        ActivityDataController.EventWindowTakenAsync(db, EventId, window, alliance, Filing, CancellationToken.None);
+        SnapshotFilingService.EventWindowTakenAsync(db, EventId, window, alliance, Filing, CancellationToken.None);
 
     // ---- live camps ----
 
@@ -106,6 +106,57 @@ public class SnapshotWindowTakenTests
         await db.SaveChangesAsync();
 
         Assert.False(await CampTaken(db, 2));
+    }
+
+    // ---- filing through the service (the Activity row and the addon panel both use it) ----
+
+    private static SnapshotFilingService NewFiling(ApplicationDbContext db) =>
+        new(db, new WindowEventLinkService(db, new MonsterTimingResolver(db)), new AllianceIdentityService(db));
+
+    private static void SeedLiveCamp(ApplicationDbContext db) =>
+        db.Events.Add(new Event
+        {
+            Id = CampId, LinkshellId = 1, EventName = "Cerberus", EventType = "HNM",
+            CommencementStartTime = new DateTime(2026, 11, 2, 20, 0, 0, DateTimeKind.Utc),
+        });
+
+    [Fact]
+    public async Task Filing_OntoALiveCamp_ParksItInThatSlot()
+    {
+        using var db = NewDb();
+        SeedLiveCamp(db);
+        db.AttendanceSnapshots.Add(Capture(Filing, windowNumber: null));
+        await db.SaveChangesAsync();
+        var snapshot = await db.AttendanceSnapshots.SingleAsync(s => s.Id == Filing);
+
+        var result = await NewFiling(db).FileAsync(snapshot,
+            new SnapshotFilingService.Request(null, null, CampId, false, AttendanceSnapshotSlotKinds.Misc, null),
+            CancellationToken.None);
+
+        Assert.Null(result.Error);
+        Assert.True(result.FiledAgainstCamp);
+        var saved = await db.AttendanceSnapshots.AsNoTracking().SingleAsync(s => s.Id == Filing);
+        Assert.Equal(CampId, saved.LinkedEventId);
+        Assert.Equal(AttendanceSnapshotSlotKinds.Misc, saved.SlotKind);
+    }
+
+    [Fact]
+    public async Task Filing_AWindowTheCampAlreadyHas_IsRefusedAndNothingIsSaved()
+    {
+        using var db = NewDb();
+        SeedLiveCamp(db);
+        db.EventAttendanceWindows.Add(new EventAttendanceWindow { Id = 1, EventId = CampId, SequenceNumber = 1 });
+        db.AttendanceSnapshots.Add(Capture(Filing, windowNumber: null));
+        await db.SaveChangesAsync();
+        var snapshot = await db.AttendanceSnapshots.SingleAsync(s => s.Id == Filing);
+
+        var result = await NewFiling(db).FileAsync(snapshot,
+            new SnapshotFilingService.Request(null, null, CampId, false, AttendanceSnapshotSlotKinds.Window, 1),
+            CancellationToken.None);
+
+        Assert.Equal(400, result.StatusCode);
+        Assert.Contains("already posted", result.Error);
+        Assert.Null((await db.AttendanceSnapshots.AsNoTracking().SingleAsync(s => s.Id == Filing)).LinkedEventId);
     }
 
     // ---- attendance events ----
