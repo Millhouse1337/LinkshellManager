@@ -5,7 +5,11 @@ using Microsoft.EntityFrameworkCore;
 namespace LinkshellManagerDiscordApp.Services;
 
 // Files an unlinked capture: onto a LIVE camp, onto an open attendance event, or onto a brand-new
-// attendance event named after it.
+// attendance event named after it. Always as a MISC post.
+//
+// There is no post type to choose any more (decided 2026-11-02). A /lsm now capture is a misc
+// post wherever it lands: window attendance is what the addon's own window posts record, and a
+// capture filed as a window could pay that window twice.
 //
 // Two callers, one set of rules: the Activity's Unlinked Snapshots row (cookie/bearer) and the
 // addon's Unlinked Posts panel (pairing token). Each authorizes and loads the snapshot (with its
@@ -29,8 +33,7 @@ public sealed class SnapshotFilingService
     // LinkedEventId (with no WindowEventId) = a live camp. WindowEventId = an open attendance event.
     // Neither = find-or-create an attendance event under Name (falling back to the capture's own
     // name); CreateNew forces a fresh one rather than folding into an open one of the same name.
-    public sealed record Request(
-        int? WindowEventId, string? Name, int? LinkedEventId, bool CreateNew, string? SlotKind, int? WindowNumber);
+    public sealed record Request(int? WindowEventId, string? Name, int? LinkedEventId, bool CreateNew);
 
     // Error null = filed. StatusCode is 400 or 404 when it was refused.
     public sealed record Result(int StatusCode, string? Error, bool FiledAgainstCamp = false)
@@ -47,7 +50,7 @@ public sealed class SnapshotFilingService
         // the camp -- a second card under the live board -- and End Camp, which builds the camp's
         // real review card from its posted windows, never picked that second card up. Parked on
         // the Event row instead, the capture rides onto the review card at End Camp in the slot
-        // chosen here. See WindowEventLinkService.ApplyCampSlot.
+        // Misc slot. See WindowEventLinkService.ApplyCampSlot.
         if (!request.WindowEventId.HasValue && request.LinkedEventId is int campId && campId > 0)
         {
             var camp = await _dbContext.Events
@@ -73,19 +76,8 @@ public sealed class SnapshotFilingService
             WindowEventLinkService.ApplyCampSlot(
                 snapshot,
                 DiscordEventMessageBuilder.EffectiveWindowCount(camp),
-                request.SlotKind,
-                request.WindowNumber);
-
-            // A window the camp already has: its posted roster, or another capture filed as it.
-            // A capture filed as Window N pays that window's value on its own, so a second one
-            // would pay everyone on it twice. Refused before anything is saved.
-            if (snapshot.SlotKind == AttendanceSnapshotSlotKinds.Window && snapshot.WindowNumber is int campWindow
-                && await CampWindowTakenAsync(_dbContext, camp.Id, campWindow, snapshot.Id, cancellationToken))
-            {
-                var label = DiscordEventMessageBuilder.DefaultWindowLabel(camp, campWindow) ?? $"Window {campWindow}";
-                return Result.Refused($"{label} is already posted on this camp. Pick a window it doesn't have yet, "
-                                      + "or file this capture as Misc.");
-            }
+                AttendanceSnapshotSlotKinds.Misc,
+                windowNumber: null);
 
             await _dbContext.SaveChangesAsync(cancellationToken);
             return new Result(StatusCodes.Status200OK, null, FiledAgainstCamp: true);
@@ -133,20 +125,7 @@ public sealed class SnapshotFilingService
             }
         }
 
-        WindowEventLinkService.ApplySlot(snapshot, windowEvent, request.SlotKind, request.WindowNumber);
-
-        // A window this event already has FOR THIS ALLIANCE. Two alliances each posting the same
-        // window is normal (each client only sees its own alliance), so only the same alliance
-        // counts. Refused before anything is saved.
-        if (windowEvent.Id > 0
-            && snapshot.SlotKind == AttendanceSnapshotSlotKinds.Window
-            && snapshot.WindowNumber is int eventWindow
-            && await EventWindowTakenAsync(
-                _dbContext, windowEvent.Id, eventWindow, snapshot.AllianceKey, snapshot.Id, cancellationToken))
-        {
-            return Result.Refused($"Window {eventWindow} is already posted on this event for this alliance. "
-                                  + "Pick a window it doesn't have yet, or file this capture as Misc.");
-        }
+        WindowEventLinkService.ApplySlot(snapshot, windowEvent, AttendanceSnapshotSlotKinds.Misc, windowNumber: null);
 
         // The alliance NUMBER is an ordinal within THIS camp, so it is assigned on attach rather
         // than at ingest -- until a capture is filed there is no camp to be first or second on.
@@ -160,36 +139,6 @@ public sealed class SnapshotFilingService
         await _dbContext.SaveChangesAsync(cancellationToken);
         return new Result(StatusCodes.Status200OK, null);
     }
-
-    // Whether a live camp already has window `windowNumber`: a roster the addon posted for it (kill
-    // rosters aside), or another live capture filed on the camp as that window. Either way a capture
-    // filed there too would pay the window twice. `snapshotId` is the capture being filed.
-    internal static async Task<bool> CampWindowTakenAsync(
-        ApplicationDbContext db, int campId, int windowNumber, int snapshotId, CancellationToken cancellationToken)
-        => await db.EventAttendanceWindows
-               .AnyAsync(w => w.EventId == campId && w.SequenceNumber == windowNumber && !w.IsKillWindow,
-                   cancellationToken)
-           || await db.AttendanceSnapshots
-               .AnyAsync(s => s.Id != snapshotId
-                   && s.LinkedEventId == campId
-                   && s.WindowEventId == null
-                   && s.SlotKind == AttendanceSnapshotSlotKinds.Window
-                   && s.WindowNumber == windowNumber
-                   && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored,
-                   cancellationToken);
-
-    // Whether an attendance event already has window `windowNumber` from the same alliance. Two
-    // alliances each posting the same window is normal, so only the same AllianceKey counts.
-    internal static Task<bool> EventWindowTakenAsync(
-        ApplicationDbContext db, int windowEventId, int windowNumber, string? allianceKey, int snapshotId,
-        CancellationToken cancellationToken)
-        => db.AttendanceSnapshots.AnyAsync(s => s.Id != snapshotId
-                && s.WindowEventId == windowEventId
-                && s.SlotKind == AttendanceSnapshotSlotKinds.Window
-                && s.WindowNumber == windowNumber
-                && s.AllianceKey == allianceKey
-                && s.SnapshotStatus != AttendanceSnapshotStatuses.Ignored,
-                cancellationToken);
 
     internal static string? TrimToNull(string? value, int maxLength)
     {

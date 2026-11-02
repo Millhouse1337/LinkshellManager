@@ -8,14 +8,16 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 // The addon's Unlinked Posts panel: the captures nobody has filed yet, and the two ways to file
 // one -- onto a live camp or open attendance event, or onto a new attendance event made from it.
+// Either way it lands as a misc post; there is no post type to choose.
 // The in-game twin of the Activity's Unlinked Snapshots row; both file through
 // SnapshotFilingService, so the rules cannot drift.
 public sealed partial class AddonApiController
 {
-    // A capture's name, the event or camp to file it on, and the slot. Name is the POST's name
-    // (the label the app shows on it); Make New Event also names the new event after it.
+    // A capture's name and the event or camp to file it on. Name is the POST's name (the label the
+    // app shows on it); Make New Event also names the new event after it. An older addon that still
+    // sends slotKind / windowNumber is fine: unknown fields are ignored, and the post lands as Misc.
     public sealed record AddonAttachSnapshotRequest(
-        int? WindowEventId, int? LinkedEventId, bool CreateNew, string? Name, string? SlotKind, int? WindowNumber);
+        int? WindowEventId, int? LinkedEventId, bool CreateNew, string? Name);
 
     // GET /api/addon/attendance-snapshots/unlinked
     //
@@ -106,8 +108,7 @@ public sealed partial class AddonApiController
         }
 
         var result = await filing.FileAsync(snapshot, new SnapshotFilingService.Request(
-            request.WindowEventId, snapshot.Name, request.LinkedEventId, request.CreateNew,
-            request.SlotKind, request.WindowNumber), cancellationToken);
+            request.WindowEventId, snapshot.Name, request.LinkedEventId, request.CreateNew), cancellationToken);
         if (result.Error is not null) return StatusCode(result.StatusCode, new { error = result.Error });
         return Ok(new { success = true, filedAgainstCamp = result.FiledAgainstCamp });
     }

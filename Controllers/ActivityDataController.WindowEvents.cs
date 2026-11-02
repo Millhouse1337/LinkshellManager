@@ -167,13 +167,9 @@ public sealed partial class ActivityDataController
     // the link puts it on the camp.
     // CreateNew forces a brand-new attendance event instead of folding into an open one of the
     // same name — what the "Create New Event" button means, as opposed to the dropdown's attach.
-    // SlotKind/WindowNumber are the officer filing decision. Ingest classifies nothing any more,
-    // so this is where a capture first becomes a window post or a misc post.
+    // There is no slot to pick: a filed capture is always a misc post (SnapshotFilingService).
     public sealed record ActivityAttachWindowSnapshotRequest(
-        int? WindowEventId, string? Name, int? LinkedEventId = null, bool CreateNew = false,
-        string? SlotKind = null, int? WindowNumber = null);
-    // Moves an already-filed capture between a window and Misc without detaching it.
-    public sealed record ActivityWindowSnapshotSlotRequest(string? SlotKind, int? WindowNumber);
+        int? WindowEventId, string? Name, int? LinkedEventId = null, bool CreateNew = false);
     public sealed record ActivityWindowEventRenameRequest(string? Name);
     public sealed record ActivityWindowSnapshotStatusRequest(string Status);
     public sealed record ActivityWindowSnapshotAllianceRequest(int AllianceNumber);
@@ -753,11 +749,10 @@ public sealed partial class ActivityDataController
         var manageResult = await RequireWindowEventManagerAsync(snapshot.LinkshellId, cancellationToken);
         if (manageResult is not null) return manageResult;
 
-        // The rules (live camp vs attendance event, the window-already-posted refusal) are shared
-        // with the addon's Unlinked Posts panel. See SnapshotFilingService.
+        // The rules (live camp vs attendance event, always as a misc post) are shared with the
+        // addon's Unlinked Posts panel. See SnapshotFilingService.
         var result = await filing.FileAsync(snapshot, new SnapshotFilingService.Request(
-            request.WindowEventId, request.Name, request.LinkedEventId, request.CreateNew,
-            request.SlotKind, request.WindowNumber), cancellationToken);
+            request.WindowEventId, request.Name, request.LinkedEventId, request.CreateNew), cancellationToken);
         if (result.Error is not null) return StatusCode(result.StatusCode, new { error = result.Error });
         return result.FiledAgainstCamp
             ? Ok(new { success = true, filedAgainstCamp = true })
@@ -807,46 +802,6 @@ public sealed partial class ActivityDataController
         if (manageResult is not null) return manageResult;
 
         snapshot.Name = TrimToNull(request.Name, 128);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
-    }
-
-    // Moves an already-filed capture between a numbered window and Misc, in place.
-    //
-    // Filing is entirely manual now, so mis-filing is not an edge case — it is the expected cost of
-    // the trade. Detach-and-refile works but throws the link away and makes the officer hunt for
-    // the capture again in the triage queue.
-    [HttpPost("window-events/snapshots/{snapshotId:int}/slot")]
-    public async Task<IActionResult> SetWindowSnapshotSlotAsync(
-        int snapshotId,
-        [FromBody] ActivityWindowSnapshotSlotRequest request,
-        CancellationToken cancellationToken)
-    {
-        var snapshot = await _dbContext.AttendanceSnapshots
-            .Include(s => s.WindowEvent)
-            .FirstOrDefaultAsync(s => s.Id == snapshotId, cancellationToken);
-        if (snapshot is null) return NotFound(new { error = "Snapshot not found." });
-
-        var manageResult = await RequireWindowEventManagerAsync(snapshot.LinkshellId, cancellationToken);
-        if (manageResult is not null) return manageResult;
-
-        if (snapshot.WindowEvent is null)
-        {
-            return BadRequest(new { error = "File this capture to an event before choosing a slot." });
-        }
-
-        // Re-slotting a POSTED event would move members between the window rate and the misc rate
-        // after the DKP was paid, and this action does not reconcile the ledger. Update the posted
-        // event instead, which does.
-        if (snapshot.WindowEvent.PostedToSheetAt.HasValue)
-        {
-            return BadRequest(new
-            {
-                error = "This event is already posted. Use Update on the event to change DKP after a re-slot.",
-            });
-        }
-
-        WindowEventLinkService.ApplySlot(snapshot, snapshot.WindowEvent, request.SlotKind, request.WindowNumber);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
