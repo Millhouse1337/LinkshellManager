@@ -852,24 +852,35 @@ export class EventsTabComponent {
     return this.attendanceWindowsFor(event).some(window => window.isClosingWindow && !window.isKillWindow);
   }
 
-  // What ONE window pays each attendee: its base amount plus, on the close, the close bonus. One
-  // place, so the cells, the note and the total cannot disagree with each other.
+  // What ONE window pays each attendee: its own amount, plus the open bonus on window 1, plus the
+  // close bonus on the close. One place, so the cells, the note and the total cannot disagree.
   //
-  // MIRROR of HnmStandardCampFinalizer.WindowValue (BaseWindowValue + CloseWindowValue) — the same
-  // rule in two languages. The two must move together.
+  // MIRROR of HnmStandardCampFinalizer.WindowValue (BaseWindowValue + OpenWindowValue +
+  // CloseWindowValue) — the same rule in two languages. The two must move together.
   private windowValue(event: ActivityEvent, window: ActivityAttendanceWindow): number {
-    return this.baseWindowValue(event, window) + this.closeWindowValue(event, window);
+    return this.baseWindowValue(event, window)
+      + this.openWindowValue(event, window)
+      + this.closeWindowValue(event, window);
   }
 
-  // The window's amount before any close bonus: the officer's hand-set price, else the open on
-  // window 1 and the regular rate elsewhere. A kill roster is worth 0 as a window — being in it
-  // earns the kill bonus instead, which is decided at End Camp.
+  // The window's OWN amount, before either bonus — the DKP column: the officer's hand-set price,
+  // else the regular rate, on every window including window 1. A kill roster is worth 0 as a
+  // window — being in it earns the kill bonus instead, which is decided at End Camp.
   private baseWindowValue(event: ActivityEvent, window: ActivityAttendanceWindow): number {
     if (window.dkpAmount != null) return Math.max(0, window.dkpAmount);
     if (window.isKillWindow) return 0;
-    return window.sequenceNumber === 1
-      ? this.standardBonus(event, 'open')
-      : this.standardBonus(event, 'window');
+    return this.standardBonus(event, 'window');
+  }
+
+  // The open bonus this window adds — the Open bonus column: the camp's open bonus on window 1,
+  // 0 elsewhere.
+  protected openWindowValue(event: ActivityEvent, window: ActivityAttendanceWindow): number {
+    return this.isOpenWindow(window) ? this.standardBonus(event, 'open') : 0;
+  }
+
+  // Window 1 is the open, whatever else it turns out to be. Never the kill roster.
+  protected isOpenWindow(window: ActivityAttendanceWindow): boolean {
+    return !window.isKillWindow && window.sequenceNumber === 1;
   }
 
   // The close bonus this window adds — the Closing window column: the camp's close bonus on the
@@ -928,8 +939,9 @@ export class EventsTabComponent {
     return close > 0 ? EventsTabComponent.trimDkp(close) : null;
   }
 
-  // The DKP column: what one attendee earned from THIS window before any close bonus (that is the
-  // Closing window column beside it), or null when the window carries no credit for them. Null
+  // The DKP column: what one attendee earned from THIS window before either bonus (those are the
+  // Open bonus and Closing window columns beside it), or null when the window carries no credit for
+  // them. Null
   // renders as an em dash rather than 0 — "this window pays nothing here" and "this window is
   // priced at zero" read identically otherwise, and only one of them is a settings problem an
   // officer can fix. An explicitly-priced window is never null: pricing a window is what makes it
@@ -968,9 +980,9 @@ export class EventsTabComponent {
     // the table says so -- but it is the member's, and the table is where members' amounts go.
     if (window.isKillWindow) return this.standardBonus(event, 'kill');
 
-    // Standard: window 1 pays the open bonus and everything else the camp's regular window rate.
-    // A later window on a camp with NO regular rate returns null, for the em dash above.
-    if (window.sequenceNumber !== 1 && this.standardBonus(event, 'window') <= 0) return null;
+    // Standard: every window pays the camp's regular window rate (window 1's open bonus is its own
+    // column). A camp with NO regular rate returns null, for the em dash above.
+    if (this.standardBonus(event, 'window') <= 0) return null;
     return this.baseWindowValue(event, window);
   }
 
@@ -992,12 +1004,14 @@ export class EventsTabComponent {
     return Number(value.toFixed(2)).toString();
   }
 
-  // Sum of the DKP and Closing window columns, so the window reads as a single payout instead of a
-  // list of rows to add up.
+  // Sum of the DKP, Open bonus and Closing window columns, so the window reads as a single payout
+  // instead of a list of rows to add up.
   protected attendanceWindowDkpTotal(event: ActivityEvent, window: ActivityAttendanceWindow): number {
-    const close = this.isWdCamp(event) ? 0 : this.closeWindowValue(event, window);
+    const bonuses = this.isWdCamp(event)
+      ? 0
+      : this.openWindowValue(event, window) + this.closeWindowValue(event, window);
     return window.attendees.reduce(
-      (sum, attendee) => sum + (this.attendanceWindowDkp(event, window, attendee) ?? 0) + close, 0);
+      (sum, attendee) => sum + (this.attendanceWindowDkp(event, window, attendee) ?? 0) + bonuses, 0);
   }
 
   // One line of "why is the column that number" under the table. Standard names the gates the
@@ -1019,20 +1033,21 @@ export class EventsTabComponent {
         : 'Kill roster — this camp has no kill bonus configured, so being on it earns nothing';
     }
 
-    // Named for what makes up the amount: the base (a hand-set price, the open, or the regular
-    // rate), plus the close bonus when this window is the close.
+    // Named for what makes up the amount, in column order: the window's own amount (a hand-set
+    // price or the regular rate), the open bonus on window 1, and the close bonus on the close.
     const base = this.baseWindowValue(event, window);
+    const open = this.openWindowValue(event, window);
     const close = this.closeWindowValue(event, window);
-    if (window.dkpAmount == null && window.sequenceNumber !== 1 && base <= 0 && close <= 0) {
+    if (window.dkpAmount == null && base <= 0 && open <= 0 && close <= 0) {
       return 'Middle windows carry no bonus — only the open and the close pay';
     }
-    const baseName = window.dkpAmount != null
-      ? 'set for this window'
-      : window.sequenceNumber === 1 ? 'open' : 'regular window';
-    const parts = close > 0
-      ? `${EventsTabComponent.trimDkp(base)} ${baseName} + ${EventsTabComponent.trimDkp(close)} close`
-      : baseName;
-    const note = `${EventsTabComponent.trimDkp(base + close)} DKP per attendee (${parts})`;
+    const parts: string[] = [];
+    if (window.dkpAmount != null || base > 0) {
+      parts.push(`${EventsTabComponent.trimDkp(base)} ${window.dkpAmount != null ? 'set for this window' : 'regular'}`);
+    }
+    if (open > 0) parts.push(`${EventsTabComponent.trimDkp(open)} open`);
+    if (close > 0) parts.push(`${EventsTabComponent.trimDkp(close)} close`);
+    const note = `${EventsTabComponent.trimDkp(base + open + close)} DKP per attendee (${parts.join(' + ')})`;
     // Said here too, not only at End Camp: the officer should hear it while the windows are on screen.
     return this.missingClosingWindow(event)
       ? `${note} — no closing window ticked yet, so nobody gets the close bonus`
@@ -1423,6 +1438,55 @@ export class EventsTabComponent {
 
   private dropCloseBonusDraft(event: ActivityEvent): void {
     this.closeBonusDrafts.update(map => {
+      const next = { ...map };
+      delete next[event.id];
+      return next;
+    });
+  }
+
+  // ----- The Open bonus column -----
+  //
+  // Twin of the Closing window column. On window 1 the cell edits the CAMP'S open bonus
+  // (Event.HnmOpenBonusOverride): a camp has one open, so its bonus belongs to the camp. Every other
+  // window shows a plain 0.
+  private readonly openBonusDrafts = signal<Record<number, string>>({});
+
+  protected openBonusDraft(event: ActivityEvent): string {
+    const draft = this.openBonusDrafts()[event.id];
+    if (draft !== undefined) return draft;
+    return EventsTabComponent.trimDkp(this.standardBonus(event, 'open'));
+  }
+
+  protected setOpenBonusDraft(event: ActivityEvent, input: Event): void {
+    const value = (input.target as HTMLInputElement).value;
+    this.openBonusDrafts.update(map => ({ ...map, [event.id]: value }));
+  }
+
+  protected async commitOpenBonus(event: ActivityEvent): Promise<void> {
+    const raw = this.openBonusDraft(event).trim();
+    const amount = raw === '' ? null : Number(raw);
+    const unchanged = amount === null
+      ? event.hnmOpenBonusOverride == null
+      : Math.abs(this.standardBonus(event, 'open') - amount) < 0.0001;
+    if (unchanged || (amount !== null && (!Number.isFinite(amount) || amount < 0))) {
+      this.dropOpenBonusDraft(event);
+      return;
+    }
+
+    if (this.windowDkpSaving()) return;
+    this.windowDkpSaving.set(true);
+    try {
+      if (await this.activity.setCampOpenBonus(event.id, amount)) {
+        this.dropOpenBonusDraft(event);
+        await this.activity.refreshOverview();
+      }
+    } finally {
+      this.windowDkpSaving.set(false);
+    }
+  }
+
+  private dropOpenBonusDraft(event: ActivityEvent): void {
+    this.openBonusDrafts.update(map => {
       const next = { ...map };
       delete next[event.id];
       return next;

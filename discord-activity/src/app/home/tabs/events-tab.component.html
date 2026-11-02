@@ -460,6 +460,9 @@
                                        (ticked, or a named camp's Close post). Standard camps only, like
                                        the tick. -->
                                   @if (!isWdCamp(event)) {
+                                    <!-- Window 1 pays its DKP plus the open bonus; editing it changes
+                                         the camp's open bonus. -->
+                                    <th class="num" title="The open bonus window 1 adds on top of its DKP. 0 on every other window; editing it changes the camp's open bonus.">Open bonus</th>
                                     <th class="num" title="The close bonus this window adds. 0 unless it is the closing window; editing it changes the camp's close bonus.">Closing window</th>
                                     <!-- Misc and Tag are paid once for the whole camp, not per window,
                                          so every window repeats the same figure. "One time" under the
@@ -538,6 +541,26 @@
                                          other window, and a dash on the kill roster, which can never be
                                          the close. -->
                                     @if (!isWdCamp(event)) {
+                                      <!-- The open bonus: editable on window 1 (it is the CAMP'S open
+                                           bonus, so every row edits the same number), a plain 0 on every
+                                           other window, a dash on the kill roster. -->
+                                      <td class="num">
+                                        @if (activeWindow.isKillWindow) {
+                                          <span class="roster-muted">—</span>
+                                        } @else if (isOpenWindow(activeWindow) && canManageLinkshell(event.linkshellId)) {
+                                          <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                                 [attr.aria-label]="'Open bonus for ' + (attendee.characterName || 'attendee')"
+                                                 [disabled]="windowDkpSaving()"
+                                                 [value]="openBonusDraft(event)"
+                                                 title="This camp's open bonus, added to window 1's DKP. Clear the box to go back to the linkshell default."
+                                                 (input)="setOpenBonusDraft(event, $event)"
+                                                 (change)="commitOpenBonus(event)" />
+                                        } @else if (isOpenWindow(activeWindow)) {
+                                          {{ openWindowValue(event, activeWindow) | number:'1.0-2' }}
+                                        } @else {
+                                          <span class="roster-muted" title="Only window 1 pays the open bonus.">0</span>
+                                        }
+                                      </td>
                                       <td class="num">
                                         @if (activeWindow.isKillWindow) {
                                           <span class="roster-muted">—</span>

@@ -67,22 +67,26 @@ public sealed partial class AddonApiController
         //
         // A numbered camp is unchanged: there the opened window IS the role. Except an open-ended
         // one, whose spawn counter never leaves 1 -- its next post is simply one past the last.
-        double? NextPostDkp(Event evt)
+        //
+        // Two numbers, because the addon needs two: the post's OWN amount (the regular rate -- what
+        // its "Dkp this window" box edits, and what a changed box is saved as) and its TOTAL, which
+        // adds the open bonus when the post is window 1. The close bonus is in neither: it is an
+        // officer's tick, not knowable at post time.
+        int NextPostSequence(Event evt)
         {
             postedSequences.TryGetValue(evt.Id, out var filed);
             if (!DiscordEventMessageBuilder.PostsOpenAndClose(evt))
             {
-                var next = DiscordEventMessageBuilder.WindowsOpenEnded(evt)
+                return DiscordEventMessageBuilder.WindowsOpenEnded(evt)
                     ? (filed is { Count: > 0 } ? filed.Max() + 1 : 1)
                     : Math.Clamp(evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt));
-                return HnmCampPricing.DefaultWindowValue(evt, linkshell, next);
             }
-
-            var openFiled = filed is not null && filed.Contains(1);
-            return openFiled
-                ? HnmCampPricing.WindowValueFor(evt, linkshell, sequence: 2, closeWindow: 2, explicitAmount: null)
-                : HnmCampPricing.WindowValueFor(evt, linkshell, sequence: 1, closeWindow: 0, explicitAmount: null);
+            return filed is not null && filed.Contains(1) ? 2 : 1;
         }
+        double? NextPostDkp(Event evt)
+            => HnmCampPricing.BaseWindowValueFor(evt, linkshell, NextPostSequence(evt), explicitAmount: null);
+        double? NextPostTotalDkp(Event evt)
+            => HnmCampPricing.DefaultWindowValue(evt, linkshell, NextPostSequence(evt));
 
         // This linkshell's ENABLED Repeat-on-ToD leads, keyed by lower-cased monster, so each camp
         // below can report whether ending it is supposed to be followed by a re-posted board.
@@ -216,9 +220,17 @@ public sealed partial class AddonApiController
             // window N made N the close, so window 1 quoted open+close and dropped to open once a
             // later window landed — and because the addon writes its quote back as the window's
             // explicit price, every window kept the close bonus it had briefly been quoted. The
-            // close is an officer's checkbox now, so this quotes the open on window 1 and the
-            // regular window rate everywhere else, and what is quoted is what is paid.
+            // close is an officer's checkbox now, and what is quoted is what is paid.
+            //
+            // The window's OWN amount (the regular rate), which is what the box edits. The open
+            // bonus on window 1 is added on top, not part of it: see openedWindowTotalDkp.
             openedWindowDkp = NextPostDkp(evt),
+            // What the next post pays in all: openedWindowDkp plus the open bonus when it is window
+            // 1. The addon's "+N DKP" preview before a post reads this.
+            openedWindowTotalDkp = NextPostTotalDkp(evt),
+            // What window 1 adds on top of its own amount (null when the camp does not price
+            // windows). The addon's window-1 DKP box says so beside it.
+            openBonus = HnmCampPricing.OpenBonusFor(evt, linkshell),
             // The camp's OUTCOME bonuses, resolved server-side like openedWindowDkp above and for
             // the same reason -- the addon cannot apply the override-then-linkshell precedence
             // itself, and a client that re-derives server pricing is what the note at the top of

@@ -161,8 +161,9 @@ public class HnmStandardMemberGatingTests
 
     // The complaint that produced the rule, in the smallest form that reproduces it: a linkshell
     // running 1 open / 1 close, an officer posting the opening window and nothing else. That is one
-    // window, so it pays one amount — the open — not the 2 the old both-ends rule handed out on
-    // every camp's first post, before anyone had ticked a closing window.
+    // window, so it pays the window's regular 0.5 plus the open -- not the close as well, which the
+    // old both-ends rule handed out on every camp's first post, before anyone had ticked a closing
+    // window.
     [Fact]
     public void OpenWindowPostedAlone_PaysTheOpenOnce_NotOpenPlusClose()
     {
@@ -173,7 +174,7 @@ public class HnmStandardMemberGatingTests
             new[] { HnmStandardCampFinalizer.WindowValue(1, close, null, 0.5d, One, One) },
             tagged: false, inKillWindow: false, claimBonus: One, killBonus: One, step: Quarter);
 
-        Assert.Equal(One, dkp, precision: 3);
+        Assert.Equal(0.5 + One, dkp, precision: 3);
     }
 
     // An officer who reached a named Open/Close camp only for the kill posts a Close and no Open.

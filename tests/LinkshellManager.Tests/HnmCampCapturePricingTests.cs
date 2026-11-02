@@ -200,7 +200,7 @@ public class HnmCampCapturePricingTests
         await EndCampAsync(db);
 
         var byWindow = await AmountsByWindowAsync(db, "Alpha");
-        Assert.Equal(1d, byWindow["Open"]);         // sequence 1
+        Assert.Equal(1.5d, byWindow["Open"]);       // sequence 1: regular 0.5 + open 1
         Assert.Equal(0.5d, byWindow["Window 2"]);   // a regular window
         // The marked closing window pays its own regular 0.5, and the close bonus is a capture of
         // its own instead of being folded into it.
@@ -223,7 +223,7 @@ public class HnmCampCapturePricingTests
         await EndCampAsync(db);
 
         var byWindow = await AmountsByWindowAsync(db, "Alpha");
-        Assert.Equal(1d, byWindow["Open"]);    // the open alone
+        Assert.Equal(1.5d, byWindow["Open"]);  // regular 0.5 + open 1, without the close
         Assert.Equal(2d, byWindow["Close"]);   // the close bonus, separately
         Assert.Equal(0.5d, byWindow["Window 3"]);
     }
@@ -412,7 +412,7 @@ public class HnmCampCapturePricingTests
             .FirstAsync(s => s.Name == "Open");
         var alphaRows = windowOne.Entries.Where(e => e.CharacterName == "Alpha").ToList();
         Assert.Equal(2, alphaRows.Count);
-        Assert.Equal(1d, alphaRows.Sum(e => e.DkpAmount ?? 0d));
+        Assert.Equal(1.5d, alphaRows.Sum(e => e.DkpAmount ?? 0d));
     }
 
     // --------------------------------------------------------------- what the card and Post read ---
@@ -432,7 +432,7 @@ public class HnmCampCapturePricingTests
             .CombinedMembers
             .Single(m => m.CharacterName == "Alpha");
 
-        Assert.Equal(4d, row.EffectiveDkpAmount);   // 1 + 0.5 + (0.5 + 2)
+        Assert.Equal(4.5d, row.EffectiveDkpAmount);   // (0.5 + 1) + 0.5 + (0.5 + 2)
     }
 
     // Re-pricing ONE window is the whole point of editing on the capture, and it has to reach the
@@ -648,7 +648,7 @@ public class HnmCampCapturePricingTests
         Assert.True(card.PerCaptureDkp);
 
         var alpha = await AmountsByWindowAsync(db, "Alpha");
-        Assert.Equal(1d, alpha["Open"]);                  // the money is still on the captures
+        Assert.Equal(1.5d, alpha["Open"]);                  // the money is still on the captures
         Assert.NotNull(await db.EventHistories.SingleAsync(h => h.Id == card.CampEventHistoryId));
     }
 
@@ -680,7 +680,7 @@ public class HnmCampCapturePricingTests
         var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
 
         var paid = archive.Windows.ToDictionary(w => w.SequenceNumber, w => w.Paid);
-        Assert.Equal(new DkpRange(1d, 1d), paid[1]);       // open
+        Assert.Equal(new DkpRange(1.5d, 1.5d), paid[1]);   // regular + open
         Assert.Equal(new DkpRange(0.5d, 0.5d), paid[2]);   // regular -- Alpha and Beta both
         Assert.Equal(new DkpRange(2.5d, 2.5d), paid[3]);   // close: regular 0.5 + close 2
     }
@@ -735,7 +735,7 @@ public class HnmCampCapturePricingTests
         var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
         var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
         var paid = archive.Windows.ToDictionary(w => w.SequenceNumber, w => w.Paid);
-        Assert.Equal(new DkpRange(1d, 1d), paid[1]);       // open
+        Assert.Equal(new DkpRange(1.5d, 1.5d), paid[1]);   // regular + open
         Assert.Equal(new DkpRange(0.5d, 0.5d), paid[2]);   // regular
         Assert.Equal(new DkpRange(2.5d, 2.5d), paid[3]);   // close: regular 0.5 + close 2
     }
@@ -784,7 +784,7 @@ public class HnmCampCapturePricingTests
         var history = await db.EventHistories.SingleAsync(h => h.Id == windowEvent!.CampEventHistoryId);
         var archive = await EventHistoryWindowsReader.LoadAsync(db, history, CancellationToken.None);
 
-        Assert.Equal(new DkpRange(1d, 1d), archive.Windows.Single(w => w.SequenceNumber == 1).Paid);
+        Assert.Equal(new DkpRange(1.5d, 1.5d), archive.Windows.Single(w => w.SequenceNumber == 1).Paid);
     }
 
     // Manual Check In writes no capture amounts, so there is nothing to read back -- no figure,

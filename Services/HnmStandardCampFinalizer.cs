@@ -90,8 +90,10 @@ public sealed class HnmStandardCampFinalizer
         double openBonus, double closeBonus, double claimBonus, double killBonus, double step)
         => DkpRounding.Round(openBonus + closeBonus + claimBonus + killBonus, step);
 
-    // What ONE window pays each member scanned in it: its base amount plus, on the close, the
-    // close bonus. The Activity shows the two as its DKP and Closing window columns.
+    // What ONE window pays each member scanned in it: its own amount, plus the open bonus on window
+    // 1, plus the close bonus on the close. The Activity shows the three as its DKP, Open bonus and
+    // Closing window columns. So window 1 of a camp that popped in its opener pays regular + open +
+    // close.
     //
     // Mirrored in the Activity by EventsTabComponent.windowValue — the same rule in two languages.
     // They must move together.
@@ -99,37 +101,43 @@ public sealed class HnmStandardCampFinalizer
         int sequence, int closeWindow, double? explicitAmount,
         double windowBonus, double openBonus, double closeBonus,
         bool isKillWindow = false, bool closeIsMarked = false)
-        => BaseWindowValue(sequence, explicitAmount, windowBonus, openBonus, isKillWindow)
+        => BaseWindowValue(explicitAmount, windowBonus, isKillWindow)
+         + OpenWindowValue(sequence, openBonus, isKillWindow)
          + CloseWindowValue(sequence, closeWindow, closeBonus, isKillWindow, closeIsMarked);
 
-    // The window's amount before any close bonus: what the "DKP this window" box and the
-    // Activity's DKP column edit.
+    // The window's OWN amount, before either bonus: what the "DKP this window" box and the
+    // Activity's DKP column edit. The regular window rate, on every window -- window 1 included.
     //
-    // An officer's explicit amount replaces the default (the open on window 1, the regular rate
-    // elsewhere). An explicit 0 is a REAL zero, not "unset": an officer who deliberately zeroes the
-    // Open must be able to make it stick.
+    // It used to be the open bonus on window 1, REPLACING the regular rate there, so the open paid
+    // less than a plain window whenever the rate was higher than the bonus. Window 1 is a window
+    // like any other now, and the open bonus is added on top (OpenWindowValue).
     //
-    // The open bonus is gated on window 1 SPECIFICALLY, not on "the earliest window posted": a camp
-    // can hold a Close with no Open at all (an officer who only reached camp for the kill posts one
-    // window, and the addon files it as 2), and that roster was never observed at the open. Pinned
-    // by CloseOnlyCamp_* in HnmStandardMemberGatingTests.
+    // An officer's explicit amount replaces the regular rate. An explicit 0 is a REAL zero, not
+    // "unset": an officer who deliberately zeroes a window must be able to make it stick.
     //
     // A kill window is worth 0 as a window. It is the record of who was standing there when the
     // mob died, and the kill bonus pays for that (ComputeMemberDkp). Pricing it as a regular window
     // on top would pay the late arrivals twice for one appearance.
-    public static double BaseWindowValue(
-        int sequence, double? explicitAmount, double windowBonus, double openBonus,
-        bool isKillWindow = false)
+    public static double BaseWindowValue(double? explicitAmount, double windowBonus, bool isKillWindow = false)
     {
         if (explicitAmount is { } amount) return Math.Max(0d, amount);
         if (isKillWindow) return 0d;
-        return sequence == 1 ? openBonus : windowBonus;
+        return windowBonus;
     }
+
+    // The open bonus this window adds: the camp's open bonus on window 1, 0 everywhere else.
+    //
+    // Gated on window 1 SPECIFICALLY, not on "the earliest window posted": a camp can hold a Close
+    // with no Open at all (an officer who only reached camp for the kill posts one window, and the
+    // addon files it as 2), and that roster was never observed at the open. Pinned by
+    // CloseOnlyCamp_* in HnmStandardMemberGatingTests.
+    public static double OpenWindowValue(int sequence, double openBonus, bool isKillWindow = false)
+        => !isKillWindow && sequence == 1 ? openBonus : 0d;
 
     // The close bonus this window adds: the camp's close bonus on the close, 0 everywhere else.
     //
     // One exception: a close that only FELL BACK onto window 1 (a named Open/Close camp with just
-    // its Open posted) adds nothing. Window 1 pays open + close only when an officer TICKED it
+    // its Open posted) adds nothing. Window 1 adds the close only when an officer TICKED it
     // (`closeIsMarked`) -- the camp popped in its opener.
     public static double CloseWindowValue(
         int sequence, int closeWindow, double closeBonus,

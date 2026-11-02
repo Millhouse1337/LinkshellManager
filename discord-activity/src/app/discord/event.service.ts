@@ -693,6 +693,19 @@ export class EventService {
     }
   }
 
+  // Sets the camp's OPEN bonus — what window 1 adds on top of its own amount. null puts the camp
+  // back on the linkshell's open bonus.
+  async setCampOpenBonus(eventId: number, openBonus: number | null): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.sendActivityRequest('PATCH', `/api/addon/management/events/${eventId}/open-bonus`, { openBonus });
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, "Setting the camp's open bonus failed."));
+      return false;
+    }
+  }
+
   // Prices ONE misc post linked to a live camp: what it pays each person on it, replacing the
   // linkshell's Misc post rate. null puts it back on that rate.
   async setMiscPostDkp(snapshotId: number, dkpAmount: number | null): Promise<boolean> {

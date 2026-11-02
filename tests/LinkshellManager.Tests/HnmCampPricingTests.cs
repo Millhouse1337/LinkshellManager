@@ -251,10 +251,11 @@ public class HnmCampPricingTests
         var ls = Ls();
         ls.HnmStandardWindowBonus = 0.25;
 
-        // One amount per window, and never the close: window 4 quotes the regular rate, window 1
-        // quotes the open. The rate does NOT ride underneath either of them.
+        // Never the close: window 4 quotes the regular rate, window 1 the regular rate plus the
+        // open. The window's OWN amount -- what the addon's box edits -- is the rate on both.
         Assert.Equal(0.25, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 4)!.Value, precision: 3);
-        Assert.Equal(0.5, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 1)!.Value, precision: 3);
+        Assert.Equal(0.25 + 0.5, HnmCampPricing.DefaultWindowValue(StandardCamp(), ls, sequence: 1)!.Value, precision: 3);
+        Assert.Equal(0.25, HnmCampPricing.BaseWindowValueFor(StandardCamp(), ls, sequence: 1, explicitAmount: null)!.Value, precision: 3);
     }
 
     // The Manual Check In open / close bonuses share Event.HnmOpen/CloseBonusOverride with their

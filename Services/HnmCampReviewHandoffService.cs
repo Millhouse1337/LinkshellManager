@@ -226,14 +226,17 @@ public sealed class HnmCampReviewHandoffService
                     closeIsMarked) ?? 0d)
             : new Dictionary<int, double>();
         // The close bonus inside each window's value: 0 everywhere but the close. Taken as the
-        // value less the window's own amount, so the two parts always add back up to what the
-        // finalizer prices the window at.
+        // value less the window's own amount and its open bonus, so the parts always add back up to
+        // what the finalizer prices the window at. The open bonus stays on window 1's capture --
+        // only the close is split off.
+        var openBonus = HnmCampPricing.OpenBonusFor(ev, linkshell) ?? 0d;
         var closeBySequence = perCapture
             ? campWindows.ToDictionary(
                 w => w.SequenceNumber,
                 w => Math.Max(0d, valueBySequence[w.SequenceNumber]
                     - (HnmCampPricing.BaseWindowValueFor(
-                        ev, linkshell, w.SequenceNumber, w.DkpAmount, w.IsKillWindow) ?? 0d)))
+                        ev, linkshell, w.SequenceNumber, w.DkpAmount, w.IsKillWindow) ?? 0d)
+                    - HnmStandardCampFinalizer.OpenWindowValue(w.SequenceNumber, openBonus, w.IsKillWindow)))
             : new Dictionary<int, double>();
         windowEvent.PerCaptureDkp = perCapture;
 

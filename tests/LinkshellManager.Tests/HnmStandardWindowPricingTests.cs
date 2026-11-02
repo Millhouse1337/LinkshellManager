@@ -65,25 +65,26 @@ public class HnmStandardWindowPricingTests
         Assert.Equal(Open, Value(sequence: 1, closeWindow: 1), precision: 3);
     }
 
-    // ...and the regular-window rate does not join in either. Window 1 is the open, and the open
-    // replaces the rate rather than riding on top of it.
+    // Window 1 is a window like any other: it pays the regular rate, and the open bonus rides on
+    // top of it. (It used to REPLACE the rate, so the open paid less than a plain window whenever
+    // the rate was higher than the bonus.)
     [Fact]
-    public void WindowValue_WindowOneIsAlsoTheClose_DoesNotAlsoPayTheRegularRate()
+    public void WindowValue_WindowOne_PaysTheRegularRatePlusTheOpen()
     {
-        Assert.Equal(Open, Value(sequence: 1, closeWindow: 1, windowBonus: 0.25), precision: 3);
+        Assert.Equal(0.25 + Open, Value(sequence: 1, closeWindow: 1, windowBonus: 0.25), precision: 3);
     }
 
-    // ...unless an officer TICKED window 1 as the closing window. That is the camp that popped in
-    // its opener, and the officer saying so, so it earns both ends -- still not the regular rate.
-    // Only the tick does this: the fallback above is what every camp's first post looks like.
+    // ...and when an officer TICKED window 1 as the closing window -- the camp that popped in its
+    // opener -- it earns the close too: regular + open + close. Only the tick does this: the
+    // fallback above is what every camp's first post looks like.
     [Fact]
-    public void WindowValue_WindowOneTickedAsTheClose_PaysOpenPlusClose()
+    public void WindowValue_WindowOneTickedAsTheClose_PaysRegularPlusOpenPlusClose()
     {
-        Assert.Equal(Open + Close, HnmStandardCampFinalizer.WindowValue(
+        Assert.Equal(0.25 + Open + Close, HnmStandardCampFinalizer.WindowValue(
             sequence: 1, closeWindow: 1, explicitAmount: null, windowBonus: 0.25,
             openBonus: Open, closeBonus: Close, closeIsMarked: true), precision: 3);
-        // An officer's price replaces the open, and the ticked close still adds on top.
-        Assert.Equal(5.0 + Close, HnmStandardCampFinalizer.WindowValue(
+        // An officer's price replaces the regular rate; the open and the ticked close still add.
+        Assert.Equal(5.0 + Open + Close, HnmStandardCampFinalizer.WindowValue(
             sequence: 1, closeWindow: 1, explicitAmount: 5.0, windowBonus: 0d,
             openBonus: Open, closeBonus: Close, closeIsMarked: true), precision: 3);
     }
@@ -146,12 +147,13 @@ public class HnmStandardWindowPricingTests
 
     // ----- WindowValue: an officer priced it -----
 
-    // An officer's price replaces the window's BASE amount: the open here. The close only fell back
-    // onto window 1 (nothing ticked), so nothing is added.
+    // An officer's price replaces the window's OWN amount -- the regular rate -- and the open bonus
+    // still rides on top of it on window 1. The close only fell back onto window 1 (nothing
+    // ticked), so it adds nothing.
     [Fact]
-    public void WindowValue_ExplicitAmount_ReplacesTheOpen()
+    public void WindowValue_ExplicitAmountOnWindowOne_ReplacesTheRate_TheOpenStillAdds()
     {
-        Assert.Equal(5.0, Value(sequence: 1, closeWindow: 1, explicitAmount: 5.0), precision: 3);
+        Assert.Equal(5.0 + Open, Value(sequence: 1, closeWindow: 1, explicitAmount: 5.0, windowBonus: 0.25), precision: 3);
     }
 
     // THE rule a future reader is most likely to get backwards: on the close, a hand-set price and
@@ -162,21 +164,28 @@ public class HnmStandardWindowPricingTests
         Assert.Equal(2.0 + Close, Value(sequence: 3, closeWindow: 3, explicitAmount: 2.0), precision: 3);
     }
 
+    // The three parts the Activity shows as its DKP, Open bonus and Closing window columns.
     [Fact]
-    public void BaseAndCloseValues_SumToTheWindowValue()
+    public void BaseOpenAndCloseValues_SumToTheWindowValue()
     {
-        Assert.Equal(2.0, HnmStandardCampFinalizer.BaseWindowValue(3, 2.0, 0d, Open), precision: 3);
+        Assert.Equal(2.0, HnmStandardCampFinalizer.BaseWindowValue(2.0, 0.25), precision: 3);
+        Assert.Equal(0.25, HnmStandardCampFinalizer.BaseWindowValue(null, 0.25), precision: 3);
+        Assert.Equal(Open, HnmStandardCampFinalizer.OpenWindowValue(1, Open), precision: 3);
+        Assert.Equal(0.0, HnmStandardCampFinalizer.OpenWindowValue(2, Open), precision: 3);
+        Assert.Equal(0.0, HnmStandardCampFinalizer.OpenWindowValue(1, Open, isKillWindow: true), precision: 3);
         Assert.Equal(Close, HnmStandardCampFinalizer.CloseWindowValue(3, 3, Close), precision: 3);
         Assert.Equal(0.0, HnmStandardCampFinalizer.CloseWindowValue(2, 3, Close), precision: 3);
     }
 
-    // An officer who deliberately zeroes the Open must be able to make it stick. Treating 0 as
+    // An officer who deliberately zeroes a window must be able to make it stick. Treating 0 as
     // "unset" is exactly the bug the addon's migrations.lua carried, where a saved 0 was silently
-    // rewritten to 1 on every reload.
+    // rewritten to 1 on every reload. (On window 1 the open bonus still adds: zeroing the open is
+    // the camp's open bonus, the Open bonus column, not the window's price.)
     [Fact]
     public void WindowValue_ExplicitZero_IsARealZero_NotUnset()
     {
-        Assert.Equal(0.0, Value(sequence: 1, closeWindow: 1, explicitAmount: 0.0), precision: 3);
+        Assert.Equal(0.0, Value(sequence: 2, closeWindow: 3, explicitAmount: 0.0, windowBonus: 0.25), precision: 3);
+        Assert.Equal(Open, Value(sequence: 1, closeWindow: 3, explicitAmount: 0.0, windowBonus: 0.25), precision: 3);
     }
 
     // The endpoints reject negatives, so this only guards a hand-edited row — but the finalizer
@@ -432,15 +441,15 @@ public class HnmStandardWindowPricingTests
         Assert.Equal(Regular, Value(sequence: 2, closeWindow: 3, windowBonus: Regular), precision: 3);
     }
 
-    // The open replaces the rate on window 1. The close rides on top of it: the close window is
-    // still a window, and the close bonus is added to whatever it pays.
+    // Both bonuses ride on top of the rate: window 1 is still a window and adds the open, the close
+    // window is still a window and adds the close.
     [Fact]
-    public void RegularWindowRate_OpenReplacesIt_CloseAddsToIt()
+    public void RegularWindowRate_OpenAndCloseBothAddToIt()
     {
-        Assert.Equal(Open, Value(sequence: 1, closeWindow: 3, windowBonus: Regular), precision: 3);
+        Assert.Equal(Regular + Open, Value(sequence: 1, closeWindow: 3, windowBonus: Regular), precision: 3);
         Assert.Equal(Regular + Close, Value(sequence: 3, closeWindow: 3, windowBonus: Regular), precision: 3);
-        // A close that only fell back onto window 1 adds nothing, and the open still replaces the rate.
-        Assert.Equal(Open, Value(sequence: 1, closeWindow: 1, windowBonus: Regular), precision: 3);
+        // A close that only fell back onto window 1 adds nothing; the open still adds.
+        Assert.Equal(Regular + Open, Value(sequence: 1, closeWindow: 1, windowBonus: Regular), precision: 3);
     }
 
     // An officer's explicit amount replaces the rate too.
@@ -452,8 +461,8 @@ public class HnmStandardWindowPricingTests
     }
 
     // Where the rate actually shows up in a payout: someone scanned across a camp earns it for
-    // every window after the open, and the close adds its bonus. Eight windows of a wyrm camp = the
-    // open, seven at the rate, and the close bonus.
+    // every window, and the open and close add their bonuses. Eight windows of a wyrm camp = eight
+    // at the rate, the open bonus and the close bonus.
     [Fact]
     public void RegularWindowRate_PaysPerMiddleWindowScanned()
     {
@@ -466,6 +475,6 @@ public class HnmStandardWindowPricingTests
         var dkp = HnmStandardCampFinalizer.ComputeMemberDkp(
             earned, tagged: false, inKillWindow: false, claimBonus: 0, killBonus: 0, step: Quarter);
 
-        Assert.Equal(Open + 7 * Regular + Close, dkp, precision: 3);
+        Assert.Equal(8 * Regular + Open + Close, dkp, precision: 3);
     }
 }
