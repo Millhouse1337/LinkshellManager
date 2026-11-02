@@ -118,7 +118,7 @@
                     <!-- No closing window ticked: say so before the ToD form opens, since ending
                          now pays nobody the close bonus. Same inline confirm shape as Delete Camp. -->
                     @if (pendingEndCampWarningEventId() === event.id) {
-                      <span style="font-size:12px;color:var(--warning)">No closing window is ticked, so nobody on this camp gets the close bonus (+{{ closeBonusLabel(event) }} DKP). Tick one under Attendance Windows first.</span>
+                      <span style="font-size:12px;color:var(--warning)">No closing window is ticked, so nobody on this camp gets the close bonus (+{{ closeBonusLabel(event) }} DKP). Tick Closing bonus on one under Attendance Windows first.</span>
                       <span class="event-card__edit event-card__confirm">
                         <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
                           (click)="abortEndCamp()">Go back</button>
@@ -167,12 +167,24 @@
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                       Edit Live Event
                     </button>
-                    <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
-                      [disabled]="activity.busyEventId() === event.id || addMemberLoading(event.id)"
-                      (click)="toggleAddMember(event.id)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
-                      {{ isAddMemberExpanded(event.id) ? 'Hide Add Member' : 'Add a Member' }}
-                    </button>
+                    <!-- A live Standard HNM camp is paid from its posts, so it gets Add New Post
+                         (a Window or Misc post with the members on it). Signing someone up, which
+                         is all Add a Member did, pays nothing there. Other events keep it. -->
+                    @if (offersNewPost(event)) {
+                      <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
+                        [disabled]="activity.busyEventId() === event.id || addMemberLoading(event.id)"
+                        (click)="toggleNewPost(event)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                        {{ newPostEventId() === event.id ? 'Hide New Post' : 'Add New Post' }}
+                      </button>
+                    } @else {
+                      <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
+                        [disabled]="activity.busyEventId() === event.id || addMemberLoading(event.id)"
+                        (click)="toggleAddMember(event.id)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+                        {{ isAddMemberExpanded(event.id) ? 'Hide Add Member' : 'Add a Member' }}
+                      </button>
+                    }
                   }
                   <!-- Withdraw parks a LIVE member in the Break Room, which a windowed camp has no
                        concept of — so it's hidden once such a camp starts. Pre-start it's still
@@ -216,6 +228,66 @@
               </button>
 
               @if (!isLiveEventCollapsed(event.id)) {
+              @if (canManageLinkshell(event.linkshellId) && newPostEventId() === event.id) {
+                <section class="event-section event-section--add-member">
+                  <div class="event-section__header">
+                    <h3>Add New Post</h3>
+                  </div>
+                  <div class="new-post">
+                    <div class="new-post__row" role="group" aria-label="Post type">
+                      <button type="button" class="btn sm" [class.primary]="newPostKind() === 'window'" (click)="newPostKind.set('window')">Window post</button>
+                      <button type="button" class="btn sm" [class.primary]="newPostKind() === 'misc'" (click)="newPostKind.set('misc')">Misc post</button>
+                    </div>
+                    @if (newPostKind() === 'window') {
+                      <label class="new-post__row">
+                        <span class="roster-muted">Window</span>
+                        <select [ngModel]="newPostWindow()" (ngModelChange)="newPostWindow.set(+$event)" [name]="'newPostWindow' + event.id">
+                          @for (option of newPostWindowOptions(event); track option.sequence) {
+                            <option [ngValue]="option.sequence">{{ option.label }}</option>
+                          }
+                        </select>
+                      </label>
+                    } @else {
+                      <label class="new-post__row">
+                        <span class="roster-muted">Name</span>
+                        <input type="text" placeholder="Misc post" maxlength="128"
+                          [ngModel]="newPostName()" (ngModelChange)="newPostName.set($event)" [name]="'newPostName' + event.id" />
+                        <span class="roster-muted">Pays the Misc rate once per person; change it on the post after.</span>
+                      </label>
+                    }
+                    <div class="new-post__row">
+                      <input type="text" placeholder="Search members..." autocomplete="off"
+                        [ngModel]="newPostSearch()" (ngModelChange)="newPostSearch.set($event)" [name]="'newPostSearch' + event.id" />
+                      <span class="roster-muted">{{ newPostSelected().size }} selected</span>
+                    </div>
+                    @if (addMemberLoading(event.id)) {
+                      <p class="notice">Loading linkshell members…</p>
+                    } @else {
+                      <ul class="new-post__members">
+                        @for (candidate of newPostCandidates(event.id); track candidate.appUserId) {
+                          <li>
+                            <label>
+                              <input type="checkbox" [checked]="isNewPostSelected(candidate.appUserId)"
+                                (change)="toggleNewPostMember(candidate.appUserId)" />
+                              {{ addMemberCandidateLabel(candidate) }}
+                            </label>
+                          </li>
+                        } @empty {
+                          <li class="roster-muted">No members match.</li>
+                        }
+                      </ul>
+                    }
+                    <div class="new-post__row">
+                      <button type="button" class="btn primary sm"
+                        [disabled]="newPostSelected().size === 0 || newPostSaving()"
+                        (click)="submitNewPost(event)">
+                        {{ newPostSaving() ? 'Posting...' : 'Create post' }}
+                      </button>
+                      <button type="button" class="btn ghost sm" (click)="closeNewPost()">Cancel</button>
+                    </div>
+                  </div>
+                </section>
+              }
               @if (canManageLinkshell(event.linkshellId) && isAddMemberExpanded(event.id)) {
                 <section class="event-section event-section--add-member">
                   <div class="event-section__header">
@@ -429,7 +501,7 @@
                                          [checked]="activeWindow.isClosingWindow"
                                          [disabled]="windowDkpSaving()"
                                          (change)="toggleClosingWindow(activeWindow)" />
-                                  Closing window
+                                  Closing bonus
                                   <!-- What the tick is worth, so it reads as credit rather than as a
                                        label. Absent when the camp pays no close bonus. -->
                                   @if (closeBonusLabel(event); as closeBonus) {
@@ -463,7 +535,7 @@
                                     <!-- Window 1 pays its DKP plus the open bonus; editing it changes
                                          the camp's open bonus. -->
                                     <th class="num" title="The open bonus window 1 adds on top of its DKP. 0 on every other window; editing it changes the camp's open bonus.">Open bonus</th>
-                                    <th class="num" title="The close bonus this window adds. 0 unless it is the closing window; editing it changes the camp's close bonus.">Closing window</th>
+                                    <th class="num" title="The close bonus this window adds. 0 unless it is the closing window; editing it changes the camp's close bonus.">Closing bonus</th>
                                     <!-- Misc and Tag are paid once for the whole camp, not per window,
                                          so every window repeats the same figure. "One time" under the
                                          heading says so before anyone adds them up per window. -->
@@ -575,7 +647,7 @@
                                         } @else if (isCloseWindow(event, activeWindow)) {
                                           {{ closeWindowValue(event, activeWindow) | number:'1.0-2' }}
                                         } @else {
-                                          <span class="roster-muted" title="Tick Closing window to pay the close bonus on this window.">0</span>
+                                          <span class="roster-muted" title="Tick Closing bonus to pay the close bonus on this window.">0</span>
                                         }
                                       </td>
                                       <!-- One-time amounts: the same on every window. A dash for a scan

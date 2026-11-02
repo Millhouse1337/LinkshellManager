@@ -621,6 +621,98 @@ export class EventsTabComponent {
     return candidate.rank ? `${candidate.characterName} · ${candidate.rank}` : candidate.characterName;
   }
 
+  // ----- Add New Post -----
+  //
+  // Replaces "Add a Member" on a live Standard HNM camp, where signing someone up pays nothing:
+  // camp DKP comes from its posts. An officer picks a Window post (credited into one of the camp's
+  // windows — a new one, or added to one already posted) or a Misc post (paid the Misc rate once per
+  // person), then the members on it. One panel open at a time.
+  protected readonly newPostEventId = signal<number | null>(null);
+  protected readonly newPostKind = signal<'window' | 'misc'>('window');
+  protected readonly newPostWindow = signal(1);
+  protected readonly newPostName = signal('');
+  protected readonly newPostSearch = signal('');
+  protected readonly newPostSelected = signal<ReadonlySet<string>>(new Set());
+  protected readonly newPostSaving = signal(false);
+
+  protected offersNewPost(event: ActivityEvent): boolean {
+    return this.isHnmEvent(event) && !this.isWdCamp(event) && !!event.commencementStartTime;
+  }
+
+  protected async toggleNewPost(event: ActivityEvent): Promise<void> {
+    if (this.newPostEventId() === event.id) {
+      this.closeNewPost();
+      return;
+    }
+    this.newPostEventId.set(event.id);
+    this.newPostKind.set('window');
+    this.newPostName.set('');
+    this.newPostSearch.set('');
+    this.newPostSelected.set(new Set());
+    // The first window not posted yet, else the last one (adding to it).
+    const options = this.newPostWindowOptions(event);
+    this.newPostWindow.set((options.find(option => !option.posted) ?? options[options.length - 1])?.sequence ?? 1);
+    if (!this.addMemberCandidatesByEvent()[event.id]) {
+      await this.loadAddMemberCandidates(event.id);
+    }
+  }
+
+  protected closeNewPost(): void {
+    this.newPostEventId.set(null);
+  }
+
+  // Every window the camp can take, named like its tabs. A posted one is still offered: posting
+  // into it adds the picked members to it.
+  protected newPostWindowOptions(event: ActivityEvent): { sequence: number; label: string; posted: boolean }[] {
+    const named = this.postsOpenAndClose(event);
+    const posted = new Map(this.attendanceWindowsFor(event)
+      .filter(window => !window.isKillWindow)
+      .map(window => [window.sequenceNumber, window] as const));
+    return Array.from({ length: this.postCount(event) }, (_, index) => {
+      const sequence = index + 1;
+      const existing = posted.get(sequence);
+      const name = existing
+        ? this.attendanceWindowLabel(existing)
+        : named ? (sequence === 1 ? 'Open' : 'Close') : `Window ${sequence}`;
+      return { sequence, label: existing ? `${name} (posted, adds to it)` : name, posted: !!existing };
+    });
+  }
+
+  // The whole linkshell roster, not addMemberCandidates: that one drops anyone already signed up,
+  // and being signed up has nothing to do with whether someone is on a post.
+  protected newPostCandidates(eventId: number): ActivityEventAddMemberCandidate[] {
+    const query = this.newPostSearch().trim().toLowerCase();
+    const all = this.addMemberCandidatesByEvent()[eventId] ?? [];
+    return query ? all.filter(candidate => candidate.characterName.toLowerCase().includes(query)) : all;
+  }
+
+  protected isNewPostSelected(appUserId: string): boolean {
+    return this.newPostSelected().has(appUserId);
+  }
+
+  protected toggleNewPostMember(appUserId: string): void {
+    const next = new Set(this.newPostSelected());
+    if (next.has(appUserId)) next.delete(appUserId); else next.add(appUserId);
+    this.newPostSelected.set(next);
+  }
+
+  protected async submitNewPost(event: ActivityEvent): Promise<void> {
+    const ids = [...this.newPostSelected()];
+    if (ids.length === 0 || this.newPostSaving()) return;
+    this.newPostSaving.set(true);
+    try {
+      const ok = this.newPostKind() === 'window'
+        ? await this.activity.addCampWindowPost(event.id, this.newPostWindow(), ids)
+        : await this.activity.addCampMiscPost(event.id, this.newPostName().trim() || null, ids);
+      if (ok) {
+        this.closeNewPost();
+        await this.activity.refreshOverview();
+      }
+    } finally {
+      this.newPostSaving.set(false);
+    }
+  }
+
   // ----- Participant grouping -----
 
   protected attendanceParticipants(event: { participants: ActivityEventParticipant[] }): ActivityEventParticipant[] {

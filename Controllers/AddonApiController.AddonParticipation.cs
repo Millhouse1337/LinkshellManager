@@ -311,103 +311,16 @@ public sealed partial class AddonApiController
         EventAttendanceWindow? attendanceWindow = null;
         if (request.WindowSequence is int windowSequence)
         {
-            // Same effective count the board, the Activity DTO and the addon's event list use.
-            // The old expression (WindowCountOverride ?? GetWindowCount(EventName)) returned 2 for
-            // kings/dragons, so an addon-created board that never stamped WindowCountOverride
-            // rejected every post past window 2 with "out of range".
-            //
-            // Range check only. A snapshot is filed against the SPAWN window it was taken in —
-            // window 1 is the pop, window 5 is fifty minutes later — so the ceiling is the spawn
-            // count, or the camp's Window Method where one is stamped (MaxPostSequence). Whether the
-            // Close ends the posting is the separate question below.
-            //
-            // The kill roster is allowed ONE sequence past that. It is filed after the last window
-            // by definition, and on a camp whose spawn count is also its post count (a 2-window NM)
-            // there is no in-range sequence left for it — the range check would reject the very
-            // post the Post Kill button exists to make. Everything else still has to name a real
-            // window.
-            var postsOpenAndClose = DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity);
-            var ceiling = request.IsKillWindow
-                ? DiscordEventMessageBuilder.KillPostCeiling(eventEntity)
-                : DiscordEventMessageBuilder.MaxPostSequence(eventEntity);
-            if (windowSequence < 1 || windowSequence > ceiling)
+            // The window row: found, or created on the first post to it. Shared with the Activity's
+            // Add New Post (AddonApiController.WindowPosts) so the range check and the "the Close
+            // has been posted" guard are one rule.
+            var (foundWindow, windowError) = await FindOrCreateAttendanceWindowAsync(
+                eventEntity, windowSequence, request.IsKillWindow, nowUtc, AddonSource, cancellationToken);
+            if (windowError is not null)
             {
-                return BadRequest(new { error = $"Window sequence {windowSequence} is out of range for this event (max {ceiling})." });
+                return BadRequest(new { error = windowError });
             }
-
-            attendanceWindow = await _dbContext.EventAttendanceWindows
-                .FirstOrDefaultAsync(
-                    w => w.EventId == eventId && w.SequenceNumber == windowSequence,
-                    cancellationToken);
-
-            if (attendanceWindow is null)
-            {
-                // On a 2-post camp the Close is the end of the camp, so it ends the posting.
-                //
-                // The addon stops offering the buttons, but that is not enough on its own: a
-                // second officer's client only refreshes its event list, never its per-window
-                // rosters (those rehydrate on event RE-SELECTION), so their launcher keeps
-                // offering [Post Open] indefinitely after someone else posts the Close. Without
-                // this, their click silently creates the Open the first officer deliberately
-                // did not post — and hands everyone on it an open bonus.
-                //
-                // Deliberately scoped twice over:
-                //   * to the CREATE path — a non-null attendanceWindow means this batch is
-                //     landing in a window that already exists, which is the addon's per-window
-                //     "add a member" backfill. That must keep working, including on the Close.
-                //   * to a 2-POST camp — one that takes an Open and a Close. On a camp that posts
-                //     per window a later window is routine and an earlier one is a legitimate
-                //     correction. This reads the post count, not the spawn count: a king/dragon
-                //     is a 2-post camp with 7 spawn windows, and testing it against the spawn
-                //     count meant the guard never fired on exactly the camps it was written for.
-                //   * and NOT to the Post Kill roster, which is filed after the Close by design.
-                //     The kill read is the point of that button: people turn up for the fight who
-                //     never sat the window, and on a 2-post camp there is no later sequence for
-                //     them to land in. Excluding it here is what lets a king/dragon camp record a
-                //     kill roster at all.
-                if (postsOpenAndClose && !request.IsKillWindow
-                    && await _dbContext.EventAttendanceWindows.AnyAsync(
-                        w => w.EventId == eventId && w.SequenceNumber == 2, cancellationToken))
-                {
-                    return BadRequest(new
-                    {
-                        error = "The Close window has been posted, so this camp accepts no further "
-                              + "windows. To credit someone who was missed, add them to the Close window."
-                    });
-                }
-
-                attendanceWindow = new EventAttendanceWindow
-                {
-                    EventId = eventId,
-                    SequenceNumber = windowSequence,
-                    // A kill roster is named for what it is. Running it through the positional
-                    // labeller would call it "Window 3" or, worse, "Close" — the one name it must
-                    // never carry, since the close is the window an officer ticked.
-                    Label = request.IsKillWindow
-                        ? "Kill"
-                        : DiscordEventMessageBuilder.DefaultWindowLabel(eventEntity, windowSequence),
-                    PostedAt = nowUtc,
-                    // Which spawn window this was taken in, kept apart from the sequence above.
-                    // Nothing can work it out later: the counter keeps ticking through the fight.
-                    SpawnWindow = DiscordEventMessageBuilder.SpawnWindowNow(eventEntity),
-                    PostedBySource = AddonSource,
-                    IsKillWindow = request.IsKillWindow
-                };
-                _dbContext.EventAttendanceWindows.Add(attendanceWindow);
-                await _dbContext.SaveChangesAsync(cancellationToken);
-            }
-            else if (request.IsKillWindow && !attendanceWindow.IsKillWindow)
-            {
-                // Post Kill landing in a row that already exists — a second kill post correcting
-                // the first, or a retry. Promote it rather than silently filing the kill roster as
-                // an ordinary window, which would pay it the window rate and pay nobody the kill.
-                //
-                // Never demotes: an ordinary post into a kill row must not strip the flag, or the
-                // per-window "add a member" backfill would turn the kill roster back into a window.
-                attendanceWindow.IsKillWindow = true;
-                attendanceWindow.IsClosingWindow = false;   // a kill roster can never be the close
-                await _dbContext.SaveChangesAsync(cancellationToken);
-            }
+            attendanceWindow = foundWindow!;   // no error means a row came back
 
             // What the officer typed into "Dkp this window" before pressing Post. It rides on the
             // post rather than a separate PATCH because THIS request is what creates the window

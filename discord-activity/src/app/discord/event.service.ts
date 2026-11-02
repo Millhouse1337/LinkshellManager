@@ -693,6 +693,31 @@ export class EventService {
     }
   }
 
+  // Add New Post, WINDOW: credits the picked members into the camp's window `windowSequence`
+  // (created if it isn't posted yet; added to if it is).
+  async addCampWindowPost(eventId: number, windowSequence: number, appUserIds: string[]): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.sendActivityRequest('POST', `/api/addon/management/events/${eventId}/window-posts`, { windowSequence, appUserIds });
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Adding the window post failed.'));
+      return false;
+    }
+  }
+
+  // Add New Post, MISC: files a new Misc post on the camp with the picked members.
+  async addCampMiscPost(eventId: number, name: string | null, appUserIds: string[]): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.sendActivityRequest('POST', `/api/addon/management/events/${eventId}/misc-posts`, { name, appUserIds });
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Adding the misc post failed.'));
+      return false;
+    }
+  }
+
   // Sets the camp's OPEN bonus — what window 1 adds on top of its own amount. null puts the camp
   // back on the linkshell's open bonus.
   async setCampOpenBonus(eventId: number, openBonus: number | null): Promise<boolean> {
