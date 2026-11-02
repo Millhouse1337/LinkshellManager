@@ -854,6 +854,33 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
+    // Undoes filing a capture against a LIVE camp: it goes back to Unlinked Snapshots exactly as it
+    // arrived -- no camp, no window or Misc slot, no per-post DKP price -- so it stops paying anyone
+    // on this camp and can be filed again. Only while the camp is running and the capture is still
+    // parked on it; once End Camp has moved it onto the review card it is edited there instead.
+    [HttpPost("window-events/snapshots/{snapshotId:int}/unlink")]
+    public async Task<IActionResult> UnlinkCampSnapshotAsync(int snapshotId, CancellationToken cancellationToken)
+    {
+        var snapshot = await _dbContext.AttendanceSnapshots
+            .FirstOrDefaultAsync(s => s.Id == snapshotId, cancellationToken);
+        if (snapshot is null) return NotFound(new { error = "Snapshot not found." });
+
+        var manageResult = await RequireWindowEventManagerAsync(snapshot.LinkshellId, cancellationToken);
+        if (manageResult is not null) return manageResult;
+
+        if (snapshot.LinkedEventId is null || snapshot.WindowEventId is not null)
+        {
+            return BadRequest(new { error = "This snapshot isn't linked to a live camp." });
+        }
+
+        snapshot.LinkedEventId = null;
+        snapshot.SlotKind = AttendanceSnapshotSlotKinds.Window;
+        snapshot.WindowNumber = null;
+        snapshot.DkpAmount = null;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
     // Renames the SNAPSHOT itself, and nothing else. Separate from attach's name field, which
     // conflated naming a capture with creating an event to file it under.
     [HttpPost("window-events/snapshots/{snapshotId:int}/rename")]

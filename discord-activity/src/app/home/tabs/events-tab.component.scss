@@ -270,6 +270,14 @@
   margin-bottom: 6px;
 }
 
+// Unlink, pushed to the row's right end.
+.linked-snapshots__unlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 // Claim Shield, at the foot of the Attendance Windows card. Separated by a rule
 // rather than its own card: it is evidence about the windows above it, not a
 // second subject, and boxing it would read as unrelated.

@@ -1473,6 +1473,25 @@ export class EventsTabComponent {
     }
   }
 
+  // Unlink: sends a linked snapshot back to Unlinked Snapshots. Two clicks, through an inline
+  // confirm (the Discord iframe blocks confirm()), because it changes what the camp pays.
+  protected readonly pendingUnlinkSnapshotId = signal<number | null>(null);
+  protected readonly unlinkingSnapshotId = signal<number | null>(null);
+
+  protected async confirmUnlinkSnapshot(snapshot: ActivityLinkedSnapshot): Promise<void> {
+    if (this.unlinkingSnapshotId() !== null) return;
+    this.unlinkingSnapshotId.set(snapshot.id);
+    try {
+      if (await this.activity.unlinkCampSnapshot(snapshot.id)) {
+        this.pendingUnlinkSnapshotId.set(null);
+        this.dropMiscDkpDraft(snapshot);
+        await this.activity.refreshOverview();
+      }
+    } finally {
+      this.unlinkingSnapshotId.set(null);
+    }
+  }
+
   private dropMiscDkpDraft(snapshot: ActivityLinkedSnapshot): void {
     this.miscDkpDrafts.update(map => {
       const next = { ...map };

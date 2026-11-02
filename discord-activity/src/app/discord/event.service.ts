@@ -706,6 +706,19 @@ export class EventService {
     }
   }
 
+  // Undoes linking a capture to a live camp: it goes back to Unlinked Snapshots, unfiled, and stops
+  // paying anyone on the camp.
+  async unlinkCampSnapshot(snapshotId: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.sendActivityRequest('POST', `/api/activity/window-events/snapshots/${snapshotId}/unlink`);
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Unlinking this snapshot failed.'));
+      return false;
+    }
+  }
+
   // Marks (or unmarks) ONE posted window as the camp's close. On a numbered camp that is the only
   // thing that pays the close bonus, which adds to whatever the window already pays.
   //

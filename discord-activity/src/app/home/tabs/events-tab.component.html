@@ -695,6 +695,23 @@
                             @if (snapshot.dkpPerMember != null) {
                               <span class="tag success">+{{ snapshot.dkpPerMember }} DKP each</span>
                             }
+                            <!-- Undo the link: back to Unlinked Snapshots, unfiled, paying nobody here.
+                                 Inline confirm because it changes what the camp pays. -->
+                            @if (canManageLinkshell(event.linkshellId)) {
+                              <span class="linked-snapshots__unlink">
+                                @if (pendingUnlinkSnapshotId() === snapshot.id) {
+                                  <span class="roster-muted">Send back to Unlinked Snapshots?</span>
+                                  <button type="button" class="btn danger-fill sm"
+                                    [disabled]="unlinkingSnapshotId() === snapshot.id"
+                                    (click)="confirmUnlinkSnapshot(snapshot)">
+                                    {{ unlinkingSnapshotId() === snapshot.id ? 'Unlinking...' : 'Unlink' }}
+                                  </button>
+                                  <button type="button" class="btn ghost sm" (click)="pendingUnlinkSnapshotId.set(null)">Keep</button>
+                                } @else {
+                                  <button type="button" class="btn ghost sm" (click)="pendingUnlinkSnapshotId.set(snapshot.id)">Unlink</button>
+                                }
+                              </span>
+                            }
                           </div>
                           <div class="roster-table__scroll">
                             <table class="roster-table">
