@@ -778,6 +778,17 @@ export class EventsTabComponent {
     this.newPostKind.set(kind);
   }
 
+  // The collapsed card's Add New Post / Add a Member. Both panels live in the expanded card, so the
+  // button opens the card too; otherwise it would open a panel nobody can see.
+  protected async openCampPanelFromCollapsed(event: ActivityEvent, panel: 'post' | 'member'): Promise<void> {
+    if (this.isLiveEventCollapsed(event.id)) this.toggleLiveEventCollapsed(event.id);
+    if (panel === 'post') {
+      await this.startCampPost(event, 'window');
+    } else if (!this.isAddMemberExpanded(event.id)) {
+      await this.toggleAddMember(event.id);
+    }
+  }
+
   // Every step on the strip, in reading order: the camp's windows by number (a reached window with
   // no roster stays in as a gap to fill), then the Claim Shield lotteries and linked snapshots by
   // time, then the kill roster, then whatever windows are still to come.

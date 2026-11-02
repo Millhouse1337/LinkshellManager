@@ -19,10 +19,6 @@
   --hnm-snapshot-weak: var(--violet-weak);
 }
 
-.hnm-camp.event-card--collapsed {
-  padding-bottom: 0;
-}
-
 .hnm-mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -163,11 +159,8 @@
   }
 }
 
+// Always points up: this card is only shown expanded (collapsed, a camp uses the classic card).
 .hnm-camp__collapse svg {
-  transition: transform 0.15s ease;
-}
-
-.hnm-camp__collapse:not(.collapsed) svg {
   transform: rotate(180deg);
 }
 
