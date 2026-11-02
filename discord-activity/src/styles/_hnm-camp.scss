@@ -1,17 +1,15 @@
-// Live HNM camp card (events tab). A layout of its own: header bar, the camp with a "Next step" box,
-// an attendance strip, one detail panel, and a payout + loot column. Timed events keep .event-card.
+// Live HNM camp card (events tab). The top of the card is the classic live card (.event-card--live);
+// opened, its attendance uses the layout here: a step strip, one detail panel, and a payout + loot
+// column. Timed events keep the plain .event-card throughout.
 //
 // A global partial rather than events-tab.component.scss, which is close to its style budget.
 // Everything is prefixed hnm- so nothing here reaches another card.
 //
 // Sized off the CARD, not the viewport: the Discord Activity panel is often far narrower than the
-// window, so the two-column parts fold on a container query.
+// window, so the two-column part folds on a container query.
 
 .hnm-camp {
   container: hnm-camp / inline-size;
-  padding: 0;
-  background: var(--bg-elev);
-  border-color: var(--border-2);
   // Tones the strip, badges and payout share. Tokens only; these just name them per role.
   --hnm-kill: var(--orange);
   --hnm-kill-weak: var(--orange-weak);
@@ -54,83 +52,24 @@
   white-space: nowrap;
 }
 
-// ----- Header bar -----
-
-.hnm-camp__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  min-height: 52px;
-  padding: 8px 12px 8px 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.hnm-camp__crumbs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-size: 13px;
-  color: var(--fg-2);
-}
-
-.hnm-camp__crumb-sep {
-  color: var(--fg-4);
-}
-
-.hnm-camp__crumb-current {
-  color: var(--fg);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.hnm-camp__bar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.hnm-camp__participants {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-right: 4px;
-  font-size: 13px;
-  color: var(--fg-2);
-
-  svg {
-    width: 15px;
-    height: 15px;
-  }
-}
-
+// The roster's remove ×: borderless until hovered, so a column of them doesn't shout.
 .hnm-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: 1px solid var(--border-2);
+  border: 0;
   border-radius: var(--r-md);
-  background: var(--surface-3);
-  color: var(--fg-1);
+  background: transparent;
+  color: var(--fg-3);
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease;
 
   svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  &:hover:not(:disabled) {
-    border-color: var(--border-hot);
-    background: var(--surface-2);
+    width: 14px;
+    height: 14px;
   }
 
   &:focus-visible {
@@ -139,298 +78,16 @@
   }
 }
 
-// The roster's remove ×: borderless until hovered, so a column of them doesn't shout.
-.hnm-icon-btn--danger {
-  width: 28px;
-  height: 28px;
-  border-color: transparent;
-  background: transparent;
-  color: var(--fg-3);
-
-  svg {
-    width: 14px;
-    height: 14px;
-  }
-
-  &:hover:not(:disabled) {
-    border-color: transparent;
-    background: var(--danger-weak);
-    color: var(--danger);
-  }
-}
-
-// Always points up: this card is only shown expanded (collapsed, a camp uses the classic card).
-.hnm-camp__collapse svg {
-  transform: rotate(180deg);
-}
-
-// ----- Dropdown menus ("..." and New post) -----
-
-.hnm-menu {
-  position: relative;
-}
-
-.hnm-menu__list {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  min-width: 210px;
-  padding: 6px;
-  background: var(--surface);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-pop);
-}
-
-.hnm-menu__item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--fg);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-
-  &:hover,
-  &:focus-visible {
-    outline: none;
-    background: var(--surface-3);
-  }
-
-  svg {
-    width: 14px;
-    height: 14px;
-  }
-}
-
-.hnm-menu__item--danger {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  color: var(--danger);
-
-  &:hover,
-  &:focus-visible {
-    background: var(--danger-weak);
-  }
-}
-
-.hnm-menu__hint {
-  font-size: 11.5px;
-  color: var(--fg-3);
-}
-
-// Delete camp's inline confirm, under the bar.
-.hnm-camp__confirm {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--border);
+.hnm-icon-btn--danger:hover:not(:disabled) {
   background: var(--danger-weak);
-  font-size: 13px;
-  color: var(--fg-1);
-}
-
-.hnm-camp__confirm-actions {
-  display: inline-flex;
-  gap: 8px;
-}
-
-// ----- Hero: the camp, and the Next step box -----
-
-.hnm-camp__hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
-  gap: 24px;
-  align-items: end;
-  padding: 22px 20px 20px;
-}
-
-.hnm-camp__intro {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-}
-
-.hnm-camp__chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.hnm-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  padding: 0 9px;
-  border: 1px solid var(--border-2);
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--fg-1);
-
-  svg {
-    width: 12px;
-    height: 12px;
-  }
-}
-
-.hnm-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--success-weak);
-  color: var(--success);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-}
-
-.hnm-live__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--success);
-  animation: hnm-live-pulse 1.8s ease-out infinite;
-}
-
-.hnm-live__clock {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  letter-spacing: 0;
-  font-variant-numeric: tabular-nums;
-  color: var(--fg-1);
-}
-
-@keyframes hnm-live-pulse {
-  0% { box-shadow: 0 0 0 0 var(--success-weak); }
-  70% { box-shadow: 0 0 0 6px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hnm-live__dot { animation: none; }
-}
-
-.hnm-camp__title {
-  margin: 0;
-  font-size: 30px;
-  line-height: 1.1;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--fg);
-  overflow-wrap: anywhere;
-}
-
-.hnm-camp__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 18px;
-  font-size: 13px;
-  color: var(--fg-2);
-
-  strong {
-    font-weight: 500;
-    color: var(--fg);
-  }
-}
-
-.hnm-camp__window {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--fg-2);
-
-  svg {
-    width: 14px;
-    height: 14px;
-    color: var(--fg-3);
-  }
-
-  strong {
-    font-weight: 600;
-    color: var(--fg);
-  }
-}
-
-.hnm-next {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-}
-
-.hnm-next__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.hnm-next__killed {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--hnm-kill);
-}
-
-.hnm-next__text {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--fg-1);
-  text-wrap: pretty;
-
-  strong {
-    font-weight: 600;
-    color: var(--fg);
-  }
-}
-
-.hnm-next__text--warning {
-  font-size: 13px;
-  color: var(--warning);
-}
-
-.hnm-next__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.hnm-next__cta {
-  justify-content: center;
-  width: 100%;
-  height: 38px;
-  font-size: 13.5px;
+  color: var(--danger);
 }
 
 // ----- Panels that open in the card (New post, Add a member, Late join) -----
 
+// Spaced like the classic card's own sections: inside its padding, a gap above each.
 .hnm-panel {
-  margin: 0 20px 16px;
+  margin-top: 12px;
   padding: 16px;
   border: 1px solid var(--border-2);
   border-radius: var(--r-lg);
@@ -479,13 +136,13 @@
 }
 
 .hnm-camp .live-party-setup-row {
-  margin: 0 20px 16px;
+  margin: 12px 0 0;
 }
 
 // ----- Attendance strip -----
 
 .hnm-camp__attendance {
-  padding: 0 20px;
+  margin-top: 16px;
 }
 
 .hnm-camp__attendance-head {
@@ -638,7 +295,7 @@
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 16px;
   align-items: start;
-  padding: 12px 20px 20px;
+  margin-top: 12px;
 }
 
 .hnm-detail {
@@ -1038,39 +695,12 @@
 // ----- Narrow cards -----
 
 @container hnm-camp (max-width: 880px) {
-  .hnm-camp__hero,
   .hnm-camp__grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .hnm-camp__hero {
-    align-items: stretch;
   }
 }
 
 @container hnm-camp (max-width: 520px) {
-  .hnm-camp__bar,
-  .hnm-camp__hero,
-  .hnm-camp__attendance,
-  .hnm-camp__grid {
-    padding-left: 14px;
-    padding-right: 14px;
-  }
-
-  .hnm-panel,
-  .hnm-camp .live-party-setup-row {
-    margin-left: 14px;
-    margin-right: 14px;
-  }
-
-  .hnm-camp__title {
-    font-size: 24px;
-  }
-
-  .hnm-camp__participants {
-    display: none;
-  }
-
   .hnm-formula__total {
     margin-left: 0;
   }

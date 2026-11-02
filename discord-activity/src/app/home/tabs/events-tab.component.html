@@ -79,10 +79,11 @@
             @let busy = activity.busyEventId() === event.id;
             @let wd = isWdCamp(event);
             @let killWindow = campKillWindow(event);
-            <!-- Collapsed, a camp keeps the classic card: name, window status and the action stack.
-                 Expanding it opens the new layout below. -->
-            @if (isLiveEventCollapsed(event.id)) {
-            <article class="event-card event-card--live event-card--collapsed">
+            @let collapsed = isLiveEventCollapsed(event.id);
+            <!-- The top of the card is the classic live card, collapsed or not. Opened, the
+                 attendance below it uses the new layout: a step strip, one detail panel, and a
+                 payout + loot column. -->
+            <article class="event-card event-card--live hnm-camp" [class.event-card--collapsed]="collapsed">
               <div class="event-card__hero">
                 <div>
                   <div class="event-card__title-row">
@@ -159,20 +160,22 @@
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                       Edit Live Event
                     </button>
-                    <!-- Both panels live in the expanded card, so these open it as well. -->
+                    <!-- A live Standard camp is paid from its posts, so it gets Add New Post; a Manual
+                         Check In camp keeps Add a Member. Both panels live in the opened card, so on
+                         a collapsed card these open it as well. -->
                     @if (offersNewPost(event)) {
                       <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
                         [disabled]="busy || addMemberLoading(event.id)"
-                        (click)="openCampPanelFromCollapsed(event, 'post')">
+                        (click)="toggleCampPanel(event, 'post')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                        Add New Post
+                        {{ !collapsed && newPostEventId() === event.id ? 'Hide New Post' : 'Add New Post' }}
                       </button>
                     } @else {
                       <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
                         [disabled]="busy || addMemberLoading(event.id)"
-                        (click)="openCampPanelFromCollapsed(event, 'member')">
+                        (click)="toggleCampPanel(event, 'member')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
-                        Add a Member
+                        {{ !collapsed && isAddMemberExpanded(event.id) ? 'Hide Add Member' : 'Add a Member' }}
                       </button>
                     }
                   }
@@ -180,1031 +183,852 @@
               </div>
               <button
                 type="button"
-                class="card-collapse-toggle card-collapse-toggle--center collapsed"
-                aria-expanded="false"
-                aria-label="Expand camp"
-                (click)="toggleLiveEventCollapsed(event.id)">
+                class="card-collapse-toggle card-collapse-toggle--center"
+                [class.collapsed]="collapsed"
+                (click)="toggleLiveEventCollapsed(event.id)"
+                [attr.aria-expanded]="!collapsed"
+                [attr.aria-label]="collapsed ? 'Expand camp' : 'Collapse camp'">
                 <svg class="card-collapse-toggle__chevron" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                      aria-hidden="true">
                   <polyline points="6 9 12 15 18 9"/>
                 </svg>
               </button>
-            </article>
-            } @else {
-            <article class="event-card hnm-camp">
-              <header class="hnm-camp__bar">
-                <div class="hnm-camp__crumbs">
-                  <span>HNM camp</span>
-                  @if (event.dayNumber) {
-                    <span class="hnm-camp__crumb-sep" aria-hidden="true">/</span>
-                    <span>Day {{ event.dayNumber }}</span>
-                  }
-                  <span class="hnm-camp__crumb-sep" aria-hidden="true">/</span>
-                  <span class="hnm-camp__crumb-current">{{ event.assignedMonsterName || event.partySetupAssignedMonsterName || event.name || 'Untitled camp' }}</span>
-                </div>
-                <div class="hnm-camp__bar-actions">
-                  <span class="hnm-camp__participants" title="Signed up for this camp">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    {{ countLabel(event.participantCount, 'participant') }}
-                  </span>
-                  @if (manage) {
-                    <button type="button" class="evt-btn evt-btn--secondary evt-btn--small"
-                      [disabled]="busy" (click)="openEditLiveEventForm(event)">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                      Edit event
-                    </button>
-                    <div class="hnm-menu">
-                      <button type="button" class="hnm-icon-btn" aria-label="More actions" aria-haspopup="menu"
-                        [attr.aria-expanded]="isCampMenuOpen(event.id, 'more')"
-                        (click)="toggleCampMenu(event.id, 'more')">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
-                      </button>
-                      @if (isCampMenuOpen(event.id, 'more')) {
-                        <div class="hnm-menu__list" role="menu">
-                          <button type="button" class="hnm-menu__item hnm-menu__item--danger" role="menuitem"
-                            (click)="closeCampMenus(); requestDeleteCamp(event.id)">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                            Delete camp…
-                          </button>
-                        </div>
-                      }
+
+              @if (!collapsed) {
+                @if (manage && newPostEventId() === event.id) {
+                  <section class="hnm-panel">
+                    <div class="hnm-panel__head">
+                      <h3>New {{ newPostKind() === 'window' ? 'window' : 'misc' }} post</h3>
+                      <div class="hnm-segmented" role="group" aria-label="Post type">
+                        <button type="button" [class.is-on]="newPostKind() === 'window'" (click)="newPostKind.set('window')">Window post</button>
+                        <button type="button" [class.is-on]="newPostKind() === 'misc'" (click)="newPostKind.set('misc')">Misc post</button>
+                      </div>
                     </div>
-                  }
-                  <!-- Collapsing goes back to the classic card above. -->
-                  <button type="button" class="hnm-icon-btn hnm-camp__collapse"
-                    aria-expanded="true"
-                    aria-label="Collapse camp"
-                    (click)="toggleLiveEventCollapsed(event.id)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-                  </button>
-                </div>
-              </header>
-
-              <!-- Delete is two clicks (the Discord iframe blocks confirm()). -->
-              @if (pendingDeleteEventId() === event.id) {
-                <div class="hnm-camp__confirm" role="alert">
-                  <span>Delete this camp entirely? No ToD, no history — the board and its sign-ups are removed.</span>
-                  <span class="hnm-camp__confirm-actions">
-                    <button type="button" class="evt-btn evt-btn--small evt-btn--danger"
-                      [disabled]="busy" (click)="confirmDeleteCamp(event.id)">Confirm delete</button>
-                    <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
-                      (click)="abortDeleteCamp()">Keep</button>
-                  </span>
-                </div>
-              }
-
-              <div class="hnm-camp__hero">
-                <div class="hnm-camp__intro">
-                  <div class="hnm-camp__chips">
-                    <span class="hnm-live">
-                      <span class="hnm-live__dot" aria-hidden="true"></span>LIVE
-                      <span class="hnm-live__clock" title="Time since the camp started">{{ liveEventTimerLabel(event) }}</span>
-                    </span>
-                    <span class="hnm-chip">HNM</span>
-                    @if (event.location) {
-                      <span class="hnm-chip">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                        {{ event.location }}
-                      </span>
-                    }
-                    @if (wd) {
-                      <span class="hnm-chip">Manual Check In</span>
-                    }
-                    @if (event.dkpPoolName) {
-                      <span class="hnm-chip">{{ event.dkpPoolName }} pool</span>
-                    }
-                  </div>
-                  <h2 class="hnm-camp__title">{{ event.name || 'Untitled camp' }}</h2>
-                  <div class="hnm-camp__meta">
-                    @if (activity.formatDateTimeWithSeconds(event.startTime || event.commencementStartTime); as liveStart) {
-                      <span>Started <strong>{{ liveStart }}</strong></span>
-                    }
-                    @if (event.creatorCharacterName) {
-                      <span>Created by <strong>{{ event.creatorCharacterName }}</strong></span>
-                    }
-                    @if (event.starterCharacterName) {
-                      <span>Started by <strong>{{ event.starterCharacterName }}</strong></span>
-                    }
-                  </div>
-                  <div class="hnm-camp__window">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-                    <strong>{{ campWindowLabel(event) }}</strong>
-                    <span>· {{ campWindowStatus(event) }}</span>
-                  </div>
-                </div>
-
-                <!-- What to do next, and what it pays. End Camp lives here, not in a button row. -->
-                <aside class="hnm-next" aria-label="Next step">
-                  <div class="hnm-next__head">
-                    <span class="hnm-eyebrow">Next step</span>
-                    @if (killWindow) {
-                      <span class="hnm-next__killed">Kill posted {{ killWindow.postedAt | date:'shortTime' }}</span>
-                    }
-                  </div>
-                  <!-- No closing window ticked: say so before the ToD form opens, since ending now pays
-                       nobody the close bonus. -->
-                  @if (pendingEndCampWarningEventId() === event.id) {
-                    <p class="hnm-next__text hnm-next__text--warning">
-                      No closing window is ticked, so nobody on this camp gets the close bonus
-                      (+{{ closeBonusLabel(event) }} DKP). Tick Closing bonus on the window that closed the camp first.
-                    </p>
-                    <div class="hnm-next__actions">
-                      <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
-                        (click)="abortEndCamp()">Go back</button>
-                      <button type="button" class="evt-btn evt-btn--small evt-btn--danger"
-                        [disabled]="busy" (click)="openEndCamp(event)">End anyway</button>
-                    </div>
-                  } @else {
-                    <p class="hnm-next__text">
-                      @if (!killWindow) {
-                        When it pops, post the kill roster from the lsm addon.
-                      }
-                      @if (event.hnmPayout; as payout) {
-                        {{ killWindow ? 'End the camp to post the ToD and pay out' : 'Ending now pays out' }}
-                        <strong>{{ payout.totalDkp | number:'1.0-2' }} DKP</strong>
-                        to {{ countLabel(payout.memberCount, 'member') }}.
-                      } @else if (wd) {
-                        End the camp to post the ToD. DKP is credited from Check In / Check Out.
+                    <div class="new-post">
+                      @if (newPostKind() === 'window') {
+                        <label class="new-post__row">
+                          <span class="roster-muted">Window</span>
+                          <select [ngModel]="newPostWindow()" (ngModelChange)="newPostWindow.set(+$event)" [name]="'campPostWindow' + event.id">
+                            @for (option of newPostWindowOptions(event); track option.sequence) {
+                              <option [ngValue]="option.sequence">{{ option.label }}</option>
+                            }
+                          </select>
+                        </label>
                       } @else {
-                        End the camp to post the ToD.
+                        <label class="new-post__row">
+                          <span class="roster-muted">Name</span>
+                          <input type="text" placeholder="Misc post" maxlength="128"
+                            [ngModel]="newPostName()" (ngModelChange)="newPostName.set($event)" [name]="'campPostName' + event.id" />
+                          <span class="roster-muted">Pays the Misc rate once per person; change it on the post after.</span>
+                        </label>
                       }
-                    </p>
-                    @if (canEndCamp(event.linkshellId)) {
-                      <button type="button" class="evt-btn evt-btn--primary hnm-next__cta"
-                        [disabled]="busy" (click)="openEndCamp(event)">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg>
-                        End camp · Post ToD
-                      </button>
-                    }
-                  }
-                </aside>
-              </div>
-
-              @if (manage && newPostEventId() === event.id) {
-                <section class="hnm-panel">
-                  <div class="hnm-panel__head">
-                    <h3>New {{ newPostKind() === 'window' ? 'window' : 'misc' }} post</h3>
-                    <div class="hnm-segmented" role="group" aria-label="Post type">
-                      <button type="button" [class.is-on]="newPostKind() === 'window'" (click)="newPostKind.set('window')">Window post</button>
-                      <button type="button" [class.is-on]="newPostKind() === 'misc'" (click)="newPostKind.set('misc')">Misc post</button>
-                    </div>
-                  </div>
-                  <div class="new-post">
-                    @if (newPostKind() === 'window') {
-                      <label class="new-post__row">
-                        <span class="roster-muted">Window</span>
-                        <select [ngModel]="newPostWindow()" (ngModelChange)="newPostWindow.set(+$event)" [name]="'campPostWindow' + event.id">
-                          @for (option of newPostWindowOptions(event); track option.sequence) {
-                            <option [ngValue]="option.sequence">{{ option.label }}</option>
+                      <div class="new-post__row">
+                        <input type="text" placeholder="Search members..." autocomplete="off"
+                          [ngModel]="newPostSearch()" (ngModelChange)="newPostSearch.set($event)" [name]="'campPostSearch' + event.id" />
+                        <span class="roster-muted">{{ newPostSelected().size }} selected</span>
+                      </div>
+                      @if (addMemberLoading(event.id)) {
+                        <p class="notice">Loading linkshell members…</p>
+                      } @else {
+                        <ul class="new-post__members">
+                          @for (candidate of newPostCandidates(event.id); track candidate.appUserId) {
+                            <li>
+                              <label>
+                                <input type="checkbox" [checked]="isNewPostSelected(candidate.appUserId)"
+                                  (change)="toggleNewPostMember(candidate.appUserId)" />
+                                {{ addMemberCandidateLabel(candidate) }}
+                              </label>
+                            </li>
+                          } @empty {
+                            <li class="roster-muted">No members match.</li>
                           }
-                        </select>
-                      </label>
-                    } @else {
-                      <label class="new-post__row">
-                        <span class="roster-muted">Name</span>
-                        <input type="text" placeholder="Misc post" maxlength="128"
-                          [ngModel]="newPostName()" (ngModelChange)="newPostName.set($event)" [name]="'campPostName' + event.id" />
-                        <span class="roster-muted">Pays the Misc rate once per person; change it on the post after.</span>
-                      </label>
-                    }
-                    <div class="new-post__row">
-                      <input type="text" placeholder="Search members..." autocomplete="off"
-                        [ngModel]="newPostSearch()" (ngModelChange)="newPostSearch.set($event)" [name]="'campPostSearch' + event.id" />
-                      <span class="roster-muted">{{ newPostSelected().size }} selected</span>
+                        </ul>
+                      }
+                      <div class="new-post__row">
+                        <button type="button" class="btn primary sm"
+                          [disabled]="newPostSelected().size === 0 || newPostSaving()"
+                          (click)="submitNewPost(event)">
+                          {{ newPostSaving() ? 'Posting...' : 'Create post' }}
+                        </button>
+                        <button type="button" class="btn ghost sm" (click)="closeNewPost()">Cancel</button>
+                      </div>
+                    </div>
+                  </section>
+                }
+
+                <!-- Manual Check In camps sign people up rather than posting them. -->
+                @if (manage && isAddMemberExpanded(event.id)) {
+                  <section class="hnm-panel">
+                    <div class="hnm-panel__head">
+                      <h3>Add a member</h3>
+                      <span class="hnm-muted">{{ addMemberCandidates(event.id).length }} available</span>
                     </div>
                     @if (addMemberLoading(event.id)) {
                       <p class="notice">Loading linkshell members…</p>
+                    } @else if (addMemberCandidates(event.id).length === 0) {
+                      <p class="notice">No linkshell members are available to add right now.</p>
                     } @else {
-                      <ul class="new-post__members">
-                        @for (candidate of newPostCandidates(event.id); track candidate.appUserId) {
-                          <li>
-                            <label>
-                              <input type="checkbox" [checked]="isNewPostSelected(candidate.appUserId)"
-                                (change)="toggleNewPostMember(candidate.appUserId)" />
-                              {{ addMemberCandidateLabel(candidate) }}
-                            </label>
-                          </li>
-                        } @empty {
-                          <li class="roster-muted">No members match.</li>
-                        }
-                      </ul>
+                      <form class="loot-form live-add-member-form" (ngSubmit)="submitAddMember(event.id)">
+                        <div class="live-add-member-typeahead">
+                          <input type="text"
+                            [ngModel]="addMemberSearchDraft(event.id)"
+                            [name]="'campAddMemberSearch' + event.id"
+                            placeholder="Search members..."
+                            autocomplete="off"
+                            (ngModelChange)="setAddMemberSearchDraft(event.id, $event)"
+                            (focus)="openAddMemberTypeahead(event.id)"
+                            (blur)="closeAddMemberTypeahead()"
+                            (keydown.escape)="closeAddMemberTypeahead()" />
+                          @if (openAddMemberTypeaheadEventId() === event.id) {
+                            @if (filteredAddMemberCandidates(event.id); as matches) {
+                              @if (matches.length > 0) {
+                                <ul class="live-add-member-typeahead__menu" role="listbox">
+                                  @for (candidate of matches; track candidate.appUserId) {
+                                    <li role="option" aria-selected="false">
+                                      <button type="button"
+                                        class="live-add-member-typeahead__option"
+                                        (mousedown)="$event.preventDefault()"
+                                        (click)="chooseAddMemberCandidate(event.id, candidate)">
+                                        {{ addMemberCandidateLabel(candidate) }}
+                                      </button>
+                                    </li>
+                                  }
+                                </ul>
+                              }
+                            }
+                          }
+                        </div>
+                        <select [(ngModel)]="getAddMemberDraft(event.id).jobType" [name]="'campAddMemberRole' + event.id">
+                          <option value="">Select role</option>
+                          @for (role of jobTypeOptions; track role) {
+                            <option [value]="role">{{ role }}</option>
+                          }
+                        </select>
+                        <select [(ngModel)]="getAddMemberDraft(event.id).jobName" [name]="'campAddMemberMain' + event.id">
+                          <option value="">Select main job</option>
+                          @for (job of mainJobOptions; track job) {
+                            <option [value]="job">{{ job }}</option>
+                          }
+                        </select>
+                        <select [(ngModel)]="getAddMemberDraft(event.id).subJobName" [name]="'campAddMemberSub' + event.id">
+                          <option value="">Select sub job</option>
+                          @for (job of subJobOptions; track job) {
+                            <option [value]="job">{{ job }}</option>
+                          }
+                        </select>
+                        <button type="submit" class="btn primary sm live-add-member-form__submit" [disabled]="busy">Add member</button>
+                      </form>
                     }
-                    <div class="new-post__row">
-                      <button type="button" class="btn primary sm"
-                        [disabled]="newPostSelected().size === 0 || newPostSaving()"
-                        (click)="submitNewPost(event)">
-                        {{ newPostSaving() ? 'Posting...' : 'Create post' }}
+                  </section>
+                }
+
+                @if (event.partySetupId) {
+                  <div class="jobs-needed-row live-party-setup-row">
+                    <div class="live-party-setup-row__details">
+                      <span class="jobs-needed-row__label">Party Setup:</span>
+                      <strong>{{ event.partySetupName || '(unnamed setup)' }}</strong>
+                      @if (event.partySetupAssignedMonsterName) {
+                        <span class="num">· {{ event.partySetupAssignedMonsterName }}</span>
+                      }
+                    </div>
+                    <div class="live-party-setup-row__action">
+                      <button type="button" class="action-button live-party-setup-row__button"
+                        (click)="toggleLiveEventPartySetupExpanded(event.id, event.partySetupId, event.linkshellId)">
+                        {{ isLiveEventPartySetupExpanded(event.id) ? 'Hide Party Setup' : 'View / Join Party Setup' }}
                       </button>
-                      <button type="button" class="btn ghost sm" (click)="closeNewPost()">Cancel</button>
                     </div>
                   </div>
-                </section>
-              }
+                  @if (isLiveEventPartySetupExpanded(event.id)) {
+                    <app-party-setup-panel
+                      [setupId]="event.partySetupId"
+                      [linkshellId]="event.linkshellId"
+                      [eventId]="event.id"
+                      [readOnly]="false"
+                      [live]="true" />
+                  }
+                }
 
-              <!-- Manual Check In camps sign people up rather than posting them. -->
-              @if (manage && isAddMemberExpanded(event.id)) {
-                <section class="hnm-panel">
-                  <div class="hnm-panel__head">
-                    <h3>Add a member</h3>
-                    <span class="hnm-muted">{{ addMemberCandidates(event.id).length }} available</span>
+                <!-- Leftover break state from a build before windowed camps refused breaks. Undo-only;
+                     disappears once the last row is cleared. -->
+                @if (manage && stuckBreakParticipants(event).length > 0) {
+                  <section class="hnm-panel">
+                    <div class="hnm-panel__head">
+                      <h3>Stuck break state</h3>
+                      <span class="hnm-muted">{{ stuckBreakParticipants(event).length }}</span>
+                    </div>
+                    <p class="hnm-note">
+                      These members are stuck in a Break Room state from an earlier build. Camps credit
+                      per posted window and have no breaks — clearing it is safe and keeps their attendance.
+                    </p>
+                    <ul class="participant-list">
+                      @for (participant of stuckBreakParticipants(event); track participant.id) {
+                        <li>
+                          <div class="participant-list__copy">
+                            <strong>{{ participant.characterName || 'Unknown member' }}</strong>
+                            <span>{{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}</span>
+                          </div>
+                          <button type="button" class="btn ghost sm" [disabled]="busy"
+                            (click)="activity.resumeParticipantFromBreak(event.id, participant.id)">
+                            Clear break state
+                          </button>
+                        </li>
+                      }
+                    </ul>
+                  </section>
+                }
+
+                <!-- ----- Attendance: the strip, then one detail panel beside payout + loot ----- -->
+                <div class="hnm-camp__attendance">
+                  <div class="hnm-camp__attendance-head">
+                    <div class="hnm-camp__attendance-title">
+                      <h3>Attendance</h3>
+                      <!-- Counted against the POST count, not the spawn count: a Standard king/dragon
+                           is "1 of 2", not "1 of 7". The kill roster is not one of the camp's windows. -->
+                      <span class="hnm-mono hnm-muted">
+                        {{ postedWindowCount(event) }} of {{ postCount(event) }} windows posted{{ killWindow ? ' · kill posted' : '' }}
+                      </span>
+                    </div>
+                    <!-- (Adding a post or a member is the Add New Post / Add a Member button at the
+                         top of the card.) -->
                   </div>
-                  @if (addMemberLoading(event.id)) {
-                    <p class="notice">Loading linkshell members…</p>
-                  } @else if (addMemberCandidates(event.id).length === 0) {
-                    <p class="notice">No linkshell members are available to add right now.</p>
+
+                  <!-- Manual Check In credits from Check In / Check Out only; the window rosters are a
+                       record. Say so, or an officer assumes a missing roster cost someone DKP. -->
+                  @if (wd) {
+                    <p class="hnm-note">
+                      Informational only — DKP comes from Check In / Check Out. These rosters record who was
+                      at camp each window, so you can correct a bad check-in by hand.
+                    </p>
+                  }
+
+                  @let steps = campSteps(event);
+                  @let selected = selectedCampStep(event);
+                  @if (steps.length === 0) {
+                    <p class="notice">Steps appear here as windows are posted from the lsm addon.</p>
                   } @else {
-                    <form class="loot-form live-add-member-form" (ngSubmit)="submitAddMember(event.id)">
-                      <div class="live-add-member-typeahead">
-                        <input type="text"
-                          [ngModel]="addMemberSearchDraft(event.id)"
-                          [name]="'campAddMemberSearch' + event.id"
-                          placeholder="Search members..."
-                          autocomplete="off"
-                          (ngModelChange)="setAddMemberSearchDraft(event.id, $event)"
-                          (focus)="openAddMemberTypeahead(event.id)"
-                          (blur)="closeAddMemberTypeahead()"
-                          (keydown.escape)="closeAddMemberTypeahead()" />
-                        @if (openAddMemberTypeaheadEventId() === event.id) {
-                          @if (filteredAddMemberCandidates(event.id); as matches) {
-                            @if (matches.length > 0) {
-                              <ul class="live-add-member-typeahead__menu" role="listbox">
-                                @for (candidate of matches; track candidate.appUserId) {
-                                  <li role="option" aria-selected="false">
-                                    <button type="button"
-                                      class="live-add-member-typeahead__option"
-                                      (mousedown)="$event.preventDefault()"
-                                      (click)="chooseAddMemberCandidate(event.id, candidate)">
-                                      {{ addMemberCandidateLabel(candidate) }}
-                                    </button>
-                                  </li>
-                                }
-                              </ul>
-                            }
-                          }
-                        }
-                      </div>
-                      <select [(ngModel)]="getAddMemberDraft(event.id).jobType" [name]="'campAddMemberRole' + event.id">
-                        <option value="">Select role</option>
-                        @for (role of jobTypeOptions; track role) {
-                          <option [value]="role">{{ role }}</option>
-                        }
-                      </select>
-                      <select [(ngModel)]="getAddMemberDraft(event.id).jobName" [name]="'campAddMemberMain' + event.id">
-                        <option value="">Select main job</option>
-                        @for (job of mainJobOptions; track job) {
-                          <option [value]="job">{{ job }}</option>
-                        }
-                      </select>
-                      <select [(ngModel)]="getAddMemberDraft(event.id).subJobName" [name]="'campAddMemberSub' + event.id">
-                        <option value="">Select sub job</option>
-                        @for (job of subJobOptions; track job) {
-                          <option [value]="job">{{ job }}</option>
-                        }
-                      </select>
-                      <button type="submit" class="btn primary sm live-add-member-form__submit" [disabled]="busy">Add member</button>
-                    </form>
-                  }
-                </section>
-              }
-
-              @if (event.partySetupId) {
-                <div class="jobs-needed-row live-party-setup-row">
-                  <div class="live-party-setup-row__details">
-                    <span class="jobs-needed-row__label">Party Setup:</span>
-                    <strong>{{ event.partySetupName || '(unnamed setup)' }}</strong>
-                    @if (event.partySetupAssignedMonsterName) {
-                      <span class="num">· {{ event.partySetupAssignedMonsterName }}</span>
-                    }
-                  </div>
-                  <div class="live-party-setup-row__action">
-                    <button type="button" class="action-button live-party-setup-row__button"
-                      (click)="toggleLiveEventPartySetupExpanded(event.id, event.partySetupId, event.linkshellId)">
-                      {{ isLiveEventPartySetupExpanded(event.id) ? 'Hide Party Setup' : 'View / Join Party Setup' }}
-                    </button>
-                  </div>
-                </div>
-                @if (isLiveEventPartySetupExpanded(event.id)) {
-                  <app-party-setup-panel
-                    [setupId]="event.partySetupId"
-                    [linkshellId]="event.linkshellId"
-                    [eventId]="event.id"
-                    [readOnly]="false"
-                    [live]="true" />
-                }
-              }
-
-              <!-- Leftover break state from a build before windowed camps refused breaks. Undo-only;
-                   disappears once the last row is cleared. -->
-              @if (manage && stuckBreakParticipants(event).length > 0) {
-                <section class="hnm-panel">
-                  <div class="hnm-panel__head">
-                    <h3>Stuck break state</h3>
-                    <span class="hnm-muted">{{ stuckBreakParticipants(event).length }}</span>
-                  </div>
-                  <p class="hnm-note">
-                    These members are stuck in a Break Room state from an earlier build. Camps credit
-                    per posted window and have no breaks — clearing it is safe and keeps their attendance.
-                  </p>
-                  <ul class="participant-list">
-                    @for (participant of stuckBreakParticipants(event); track participant.id) {
-                      <li>
-                        <div class="participant-list__copy">
-                          <strong>{{ participant.characterName || 'Unknown member' }}</strong>
-                          <span>{{ participant.jobName || 'Job' }}/{{ participant.subJobName || 'Sub' }}</span>
-                        </div>
-                        <button type="button" class="btn ghost sm" [disabled]="busy"
-                          (click)="activity.resumeParticipantFromBreak(event.id, participant.id)">
-                          Clear break state
-                        </button>
-                      </li>
-                    }
-                  </ul>
-                </section>
-              }
-
-              <!-- ----- Attendance: the strip, then one detail panel beside payout + loot ----- -->
-              <div class="hnm-camp__attendance">
-                <div class="hnm-camp__attendance-head">
-                  <div class="hnm-camp__attendance-title">
-                    <h3>Attendance</h3>
-                    <!-- Counted against the POST count, not the spawn count: a Standard king/dragon
-                         is "1 of 2", not "1 of 7". The kill roster is not one of the camp's windows. -->
-                    <span class="hnm-mono hnm-muted">
-                      {{ postedWindowCount(event) }} of {{ postCount(event) }} windows posted{{ killWindow ? ' · kill posted' : '' }}
-                    </span>
-                  </div>
-                  @if (manage) {
-                    @if (offersNewPost(event)) {
-                      <div class="hnm-menu">
-                        <button type="button" class="evt-btn evt-btn--secondary evt-btn--small" aria-haspopup="menu"
-                          [disabled]="busy || addMemberLoading(event.id)"
-                          [attr.aria-expanded]="isCampMenuOpen(event.id, 'post')"
-                          (click)="toggleCampMenu(event.id, 'post')">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                          New post
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                        </button>
-                        @if (isCampMenuOpen(event.id, 'post')) {
-                          <div class="hnm-menu__list" role="menu">
-                            <button type="button" class="hnm-menu__item" role="menuitem" (click)="startCampPost(event, 'window')">
-                              Window post
-                              <span class="hnm-menu__hint">Add members to a window</span>
-                            </button>
-                            <button type="button" class="hnm-menu__item" role="menuitem" (click)="startCampPost(event, 'misc')">
-                              Misc post
-                              <span class="hnm-menu__hint">Pays the Misc rate once per person</span>
-                            </button>
-                          </div>
-                        }
-                      </div>
-                    } @else {
-                      <button type="button" class="evt-btn evt-btn--secondary evt-btn--small"
-                        [disabled]="busy || addMemberLoading(event.id)"
-                        (click)="toggleAddMember(event.id)">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
-                        {{ isAddMemberExpanded(event.id) ? 'Hide add member' : 'Add a member' }}
-                      </button>
-                    }
+                    <ol class="hnm-steps" aria-label="Camp timeline">
+                      @for (step of steps; track step.key) {
+                        <li>
+                          <button type="button" class="hnm-step"
+                            [attr.data-tone]="step.tone"
+                            [class.is-active]="selected?.key === step.key"
+                            [class.is-upcoming]="step.kind === 'upcoming'"
+                            [class.is-missed]="step.kind === 'missed'"
+                            [disabled]="step.kind === 'upcoming'"
+                            [attr.aria-pressed]="step.kind === 'upcoming' ? null : selected?.key === step.key"
+                            (click)="selectCampStep(event.id, step)">
+                            <span class="hnm-step__top">
+                              <span class="hnm-step__title">{{ step.title }}</span>
+                              @if (step.badge) {
+                                <span class="hnm-badge" [attr.data-tone]="step.tone">{{ step.badge }}</span>
+                              }
+                            </span>
+                            <span class="hnm-step__time">{{ step.time ? (step.time | date:'shortTime') : (step.kind === 'upcoming' ? '' : '—') }}</span>
+                            <span class="hnm-step__sub">{{ step.sub }}</span>
+                          </button>
+                        </li>
+                      }
+                    </ol>
                   }
                 </div>
 
-                <!-- Manual Check In credits from Check In / Check Out only; the window rosters are a
-                     record. Say so, or an officer assumes a missing roster cost someone DKP. -->
-                @if (wd) {
-                  <p class="hnm-note">
-                    Informational only — DKP comes from Check In / Check Out. These rosters record who was
-                    at camp each window, so you can correct a bad check-in by hand.
-                  </p>
-                }
-
-                @let steps = campSteps(event);
-                @let selected = selectedCampStep(event);
-                @if (steps.length === 0) {
-                  <p class="notice">Steps appear here as windows are posted from the lsm addon.</p>
-                } @else {
-                  <ol class="hnm-steps" aria-label="Camp timeline">
-                    @for (step of steps; track step.key) {
-                      <li>
-                        <button type="button" class="hnm-step"
-                          [attr.data-tone]="step.tone"
-                          [class.is-active]="selected?.key === step.key"
-                          [class.is-upcoming]="step.kind === 'upcoming'"
-                          [class.is-missed]="step.kind === 'missed'"
-                          [disabled]="step.kind === 'upcoming'"
-                          [attr.aria-pressed]="step.kind === 'upcoming' ? null : selected?.key === step.key"
-                          (click)="selectCampStep(event.id, step)">
-                          <span class="hnm-step__top">
-                            <span class="hnm-step__title">{{ step.title }}</span>
-                            @if (step.badge) {
-                              <span class="hnm-badge" [attr.data-tone]="step.tone">{{ step.badge }}</span>
-                            }
-                          </span>
-                          <span class="hnm-step__time">{{ step.time ? (step.time | date:'shortTime') : (step.kind === 'upcoming' ? '' : '—') }}</span>
-                          <span class="hnm-step__sub">{{ step.sub }}</span>
-                        </button>
-                      </li>
-                    }
-                  </ol>
-                }
-              </div>
-
-              <div class="hnm-camp__grid">
-                <section class="hnm-detail" [class.hnm-detail--empty]="!selected">
-                  @if (selected; as step) {
-                    @switch (step.kind) {
-                      @case ('missed') {
-                        <div class="hnm-detail__head">
-                          <div class="hnm-detail__heading">
-                            <div class="hnm-detail__title">
-                              {{ step.title }}
-                              <span class="hnm-badge" data-tone="warning">No roster</span>
-                            </div>
-                          </div>
-                        </div>
-                        <p class="hnm-detail__note">
-                          No roster was posted for {{ step.title }} — this window came and went without a
-                          snapshot. Post it from the lsm addon's window tab to record who was there.
-                          @if (offersNewPost(event)) {
-                            You can also add it here with New post › Window post.
-                          }
-                        </p>
-                      }
-
-                      @case ('claim') {
-                        @if (step.capture; as capture) {
-                          <div class="hnm-detail__head">
-                            <div class="hnm-detail__heading">
-                              <div class="hnm-detail__title">
-                                Claim Shield · {{ capture.monsterName }}
-                                <span class="hnm-badge" [attr.data-tone]="capture.won ? 'success' : 'danger'">{{ capture.won ? 'WON' : 'LOST' }}</span>
-                              </div>
-                              <div class="hnm-detail__sub">
-                                {{ capture.capturedAtUtc | date:'shortTime' }}
-                                @if (capture.nearestWindowSequence !== null && capture.nearestWindowSequence !== undefined) {
-                                  · {{ claimWindowLabel(event, capture) }}
-                                }
-                                · {{ capture.members.length }} of ours · {{ capture.totalPlayers }} in the lottery
-                              </div>
-                            </div>
-                          </div>
-                          @if (claimBonusAmount(event) > 0) {
-                            <div class="hnm-formula">
-                              <span class="hnm-formula__chip"><b>{{ claimBonusAmount(event) | number:'1.0-2' }}</b> Tag bonus</span>
-                              <span class="hnm-formula__op">=</span>
-                              <span class="hnm-formula__per"><b>{{ claimBonusAmount(event) | number:'1.0-2' }}</b> per tagger</span>
-                              <span class="hnm-formula__total">
-                                × {{ claimTaggedCount(capture) }} =
-                                <b>{{ claimBonusAmount(event) * claimTaggedCount(capture) | number:'1.0-2' }} DKP</b>
-                              </span>
-                            </div>
-                          }
-                          @if (capture.members.length === 0) {
-                            <p class="hnm-detail__note">No linkshell member landed an action before the lottery resolved.</p>
-                          } @else {
-                            <div class="roster-table__scroll">
-                              <table class="roster-table hnm-roster">
-                                <thead>
-                                  <tr>
-                                    <th>Character</th>
-                                    <th>Action</th>
-                                    <th class="num" title="Tag bonus, paid once per member when the camp is ended claimed — tagging in several lotteries still pays once.">Tag</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  @for (member of capture.members; track member.characterName) {
-                                    <tr>
-                                      <td><strong>{{ member.characterName }}</strong></td>
-                                      <!-- The game's own sentence is the record; mono so it reads as quoted. -->
-                                      <td><span class="claim-shield__action">{{ member.actionMessage || '—' }}</span></td>
-                                      <td class="num">
-                                        @if (!member.matched) {
-                                          <span class="tag default">not on roster</span>
-                                        } @else if (claimBonusAmount(event) > 0) {
-                                          {{ claimBonusAmount(event) | number:'1.0-2' }}
-                                        } @else {
-                                          <span class="roster-muted">0</span>
-                                        }
-                                      </td>
-                                    </tr>
-                                  }
-                                </tbody>
-                              </table>
-                            </div>
-                          }
-                          <p class="hnm-detail__note">
-                            The tag bonus goes to everyone whose action landed before the lottery resolved —
-                            paid once per member, even across several lotteries, when the camp ends claimed.
-                          </p>
-                        }
-                      }
-
-                      @case ('snapshot') {
-                        @if (step.snapshot; as snapshot) {
+                <div class="hnm-camp__grid">
+                  <section class="hnm-detail" [class.hnm-detail--empty]="!selected">
+                    @if (selected; as step) {
+                      @switch (step.kind) {
+                        @case ('missed') {
                           <div class="hnm-detail__head">
                             <div class="hnm-detail__heading">
                               <div class="hnm-detail__title">
                                 {{ step.title }}
-                                <span class="hnm-badge" data-tone="snapshot">{{ step.badge }}</span>
-                                @if (snapshot.snapshotStatus !== 'Active') {
-                                  <span class="hnm-badge" data-tone="warning">{{ snapshot.snapshotStatus }}</span>
-                                }
-                              </div>
-                              <div class="hnm-detail__sub">
-                                Linked snapshot · {{ snapshot.capturedAtUtc | date:'shortTime' }}
-                                · posted by {{ snapshot.capturedByCharacterName || '—' }}
+                                <span class="hnm-badge" data-tone="warning">No roster</span>
                               </div>
                             </div>
-                            <!-- Unlink sends it back to Unlinked Snapshots, paying nobody here. Two clicks,
-                                 because it changes what the camp pays. -->
-                            @if (manage) {
-                              <div class="hnm-detail__actions">
-                                @if (pendingUnlinkSnapshotId() === snapshot.id) {
-                                  <span class="hnm-muted">Send back to Unlinked Snapshots?</span>
-                                  <button type="button" class="evt-btn evt-btn--small evt-btn--danger"
-                                    [disabled]="unlinkingSnapshotId() === snapshot.id"
-                                    (click)="confirmUnlinkSnapshot(snapshot)">
-                                    {{ unlinkingSnapshotId() === snapshot.id ? 'Unlinking...' : 'Unlink' }}
-                                  </button>
-                                  <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
-                                    (click)="pendingUnlinkSnapshotId.set(null)">Keep</button>
-                                } @else {
-                                  <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
-                                    (click)="pendingUnlinkSnapshotId.set(snapshot.id)">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M8 2v3M2 8h3M16 22v-3M22 16h-3"/></svg>
-                                    Unlink snapshot
-                                  </button>
-                                }
-                              </div>
-                            }
-                          </div>
-                          <!-- What the capture pays each person on it. Absent (not 0) when the camp
-                               doesn't price captures — a Manual Check In camp credits the check-in range. -->
-                          @if (snapshot.dkpPerMember != null) {
-                            <div class="hnm-formula">
-                              <span class="hnm-formula__chip"><b>{{ snapshot.dkpPerMember | number:'1.0-2' }}</b> {{ snapshot.isMisc ? 'Misc post' : 'Capture' }}</span>
-                              <span class="hnm-formula__op">=</span>
-                              <span class="hnm-formula__per"><b>{{ snapshot.dkpPerMember | number:'1.0-2' }}</b> per member</span>
-                              <span class="hnm-formula__total">
-                                × {{ snapshot.entries.length }} =
-                                <b>{{ snapshot.dkpPerMember * snapshot.entries.length | number:'1.0-2' }} DKP</b>
-                              </span>
-                            </div>
-                          }
-                          <div class="roster-table__scroll">
-                            <table class="roster-table hnm-roster">
-                              <thead>
-                                <tr>
-                                  <th>Character</th>
-                                  <th>Jobs</th>
-                                  <th class="num">DKP</th>
-                                  <th>Zone</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                @for (entry of snapshot.entries; track entry.id) {
-                                  <!-- Tinted: a name an officer typed must never read as one the addon scanned. -->
-                                  <tr [class.roster-row--manual]="entry.addedManually">
-                                    <td><strong>{{ entry.characterName }}</strong></td>
-                                    <td>
-                                      @if (entry.mainJob) {
-                                        <span class="job-pill">{{ entry.mainJob }}{{ entry.mainJobLevel ? ' ' + entry.mainJobLevel : '' }}</span>
-                                      }
-                                      @if (entry.subJob) {
-                                        <span class="job-pill job-pill--sub">{{ entry.subJob }}{{ entry.subJobLevel ? ' ' + entry.subJobLevel : '' }}</span>
-                                      }
-                                      @if (!entry.mainJob && !entry.subJob && !entry.addedManually) {
-                                        <span class="roster-muted">Anon</span>
-                                      }
-                                    </td>
-                                    <!-- A Misc post's price is editable in place: one price for the whole
-                                         post, so every row edits the same number. -->
-                                    <td class="num">
-                                      @if (snapshot.dkpPerMember == null) {
-                                        <span class="roster-muted">-</span>
-                                      } @else if (snapshot.isMisc && manage) {
-                                        <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
-                                               [attr.aria-label]="'DKP for ' + entry.characterName"
-                                               [disabled]="windowDkpSaving()"
-                                               [value]="miscDkpDraft(snapshot)"
-                                               [title]="miscDkpHint(snapshot)"
-                                               (input)="setMiscDkpDraft(snapshot, $event)"
-                                               (change)="commitMiscDkp(snapshot)" />
-                                      } @else {
-                                        {{ snapshot.dkpPerMember }}
-                                      }
-                                    </td>
-                                    <td>
-                                      <ng-container *ngTemplateOutlet="zoneCell; context: { zone: entry.zone }" />
-                                    </td>
-                                  </tr>
-                                }
-                              </tbody>
-                            </table>
                           </div>
                           <p class="hnm-detail__note">
-                            Snapshot awards are paid once, when the camp ends. Unlinking takes them out of this
-                            camp's payout.
+                            No roster was posted for {{ step.title }} — this window came and went without a
+                            snapshot. Post it from the lsm addon's window tab to record who was there.
+                            @if (offersNewPost(event)) {
+                              You can also add it here with Add New Post.
+                            }
                           </p>
                         }
-                      }
 
-                      <!-- A posted window or the kill roster. -->
-                      @default {
-                        @if (step.window; as win) {
-                          @let isKill = !!win.isKillWindow;
-                          <div class="hnm-detail__head">
-                            <div class="hnm-detail__heading">
-                              <div class="hnm-detail__title">
-                                {{ isKill ? 'Kill roster' : step.title }}
-                                @if (isKill) {
-                                  <span class="hnm-badge" data-tone="kill">Killed</span>
-                                } @else if (step.tone === 'accent') {
-                                  <span class="hnm-badge" data-tone="accent">Closing</span>
-                                }
-                              </div>
-                              <div class="hnm-detail__sub">
-                                Posted {{ win.postedAt | date:'shortTime' }}
-                                @if (win.attendees.length > 0) {
-                                  · verified {{ win.attendees[0].verifiedAt | date:'shortTime' }}
-                                  @if (win.attendees[0].verifiedBy) {
-                                    by {{ win.attendees[0].verifiedBy }}
+                        @case ('claim') {
+                          @if (step.capture; as capture) {
+                            <div class="hnm-detail__head">
+                              <div class="hnm-detail__heading">
+                                <div class="hnm-detail__title">
+                                  Claim Shield · {{ capture.monsterName }}
+                                  <span class="hnm-badge" [attr.data-tone]="capture.won ? 'success' : 'danger'">{{ capture.won ? 'WON' : 'LOST' }}</span>
+                                </div>
+                                <div class="hnm-detail__sub">
+                                  {{ capture.capturedAtUtc | date:'shortTime' }}
+                                  @if (capture.nearestWindowSequence !== null && capture.nearestWindowSequence !== undefined) {
+                                    · {{ claimWindowLabel(event, capture) }}
                                   }
-                                }
+                                  · {{ capture.members.length }} of ours · {{ capture.totalPlayers }} in the lottery
+                                </div>
                               </div>
                             </div>
-                            <!-- Which window closes the camp out. On a numbered camp ticking it is the ONLY
-                                 thing that pays the close bonus. Ticking one unticks the others server-side. -->
-                            @if (manage && canMarkClosingWindow(event, win)) {
-                              <label class="hnm-switch" [class.is-on]="win.isClosingWindow">
-                                <input type="checkbox" role="switch"
-                                  [checked]="win.isClosingWindow"
-                                  [disabled]="windowDkpSaving()"
-                                  (change)="toggleClosingWindow(win)" />
-                                <span class="hnm-switch__track" aria-hidden="true"><span class="hnm-switch__knob"></span></span>
-                                Closing bonus
-                                @if (closeBonusLabel(event); as closeBonus) {
-                                  <span class="hnm-switch__value">+{{ closeBonus }}</span>
-                                }
-                              </label>
+                            @if (claimBonusAmount(event) > 0) {
+                              <div class="hnm-formula">
+                                <span class="hnm-formula__chip"><b>{{ claimBonusAmount(event) | number:'1.0-2' }}</b> Tag bonus</span>
+                                <span class="hnm-formula__op">=</span>
+                                <span class="hnm-formula__per"><b>{{ claimBonusAmount(event) | number:'1.0-2' }}</b> per tagger</span>
+                                <span class="hnm-formula__total">
+                                  × {{ claimTaggedCount(capture) }} =
+                                  <b>{{ claimBonusAmount(event) * claimTaggedCount(capture) | number:'1.0-2' }} DKP</b>
+                                </span>
+                              </div>
                             }
-                          </div>
-
-                          <!-- What one attendee earns here, built up from its parts, then the window's total. -->
-                          @if (wd) {
-                            <div class="hnm-formula">
-                              <span>{{ attendanceWindowDkpNote(event, win) }}</span>
-                            </div>
-                          } @else {
-                            <div class="hnm-formula">
-                              @if (isKill) {
-                                <span class="hnm-formula__chip"><b>{{ windowPerAttendee(event, win) | number:'1.0-2' }}</b> Kill bonus</span>
-                              } @else {
-                                <span class="hnm-formula__chip"><b>{{ windowBaseValue(event, win) | number:'1.0-2' }}</b> {{ win.dkpAmount != null ? 'Set for this window' : 'Regular' }}</span>
-                                @if (openWindowValue(event, win) > 0) {
-                                  <span class="hnm-formula__op">+</span>
-                                  <span class="hnm-formula__chip"><b>{{ openWindowValue(event, win) | number:'1.0-2' }}</b> Open bonus</span>
-                                }
-                                @if (closeWindowValue(event, win) > 0) {
-                                  <span class="hnm-formula__op">+</span>
-                                  <span class="hnm-formula__chip"><b>{{ closeWindowValue(event, win) | number:'1.0-2' }}</b> Closing bonus</span>
-                                }
-                              }
-                              <span class="hnm-formula__op">=</span>
-                              <span class="hnm-formula__per"><b>{{ windowPerAttendee(event, win) | number:'1.0-2' }}</b> per attendee</span>
-                              <span class="hnm-formula__total">
-                                × {{ win.attendees.length }} =
-                                <b>{{ attendanceWindowDkpTotal(event, win) | number:'1.0-2' }} DKP</b>
-                              </span>
-                            </div>
-                            @if (!isKill && missingClosingWindow(event)) {
-                              <p class="hnm-detail__warning">
-                                No closing window ticked yet — tick Closing bonus on the window that closed the
-                                camp, or nobody gets the close bonus.
-                              </p>
+                            @if (capture.members.length === 0) {
+                              <p class="hnm-detail__note">No linkshell member landed an action before the lottery resolved.</p>
+                            } @else {
+                              <div class="roster-table__scroll">
+                                <table class="roster-table hnm-roster">
+                                  <thead>
+                                    <tr>
+                                      <th>Character</th>
+                                      <th>Action</th>
+                                      <th class="num" title="Tag bonus, paid once per member when the camp is ended claimed — tagging in several lotteries still pays once.">Tag</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (member of capture.members; track member.characterName) {
+                                      <tr>
+                                        <td><strong>{{ member.characterName }}</strong></td>
+                                        <!-- The game's own sentence is the record; mono so it reads as quoted. -->
+                                        <td><span class="claim-shield__action">{{ member.actionMessage || '—' }}</span></td>
+                                        <td class="num">
+                                          @if (!member.matched) {
+                                            <span class="tag default">not on roster</span>
+                                          } @else if (claimBonusAmount(event) > 0) {
+                                            {{ claimBonusAmount(event) | number:'1.0-2' }}
+                                          } @else {
+                                            <span class="roster-muted">0</span>
+                                          }
+                                        </td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </div>
                             }
+                            <p class="hnm-detail__note">
+                              The tag bonus goes to everyone whose action landed before the lottery resolved —
+                              paid once per member, even across several lotteries, when the camp ends claimed.
+                            </p>
                           }
+                        }
 
-                          @if (win.attendees.length === 0) {
-                            <p class="hnm-detail__note">No attendees recorded for this window.</p>
-                          } @else {
+                        @case ('snapshot') {
+                          @if (step.snapshot; as snapshot) {
+                            <div class="hnm-detail__head">
+                              <div class="hnm-detail__heading">
+                                <div class="hnm-detail__title">
+                                  {{ step.title }}
+                                  <span class="hnm-badge" data-tone="snapshot">{{ step.badge }}</span>
+                                  @if (snapshot.snapshotStatus !== 'Active') {
+                                    <span class="hnm-badge" data-tone="warning">{{ snapshot.snapshotStatus }}</span>
+                                  }
+                                </div>
+                                <div class="hnm-detail__sub">
+                                  Linked snapshot · {{ snapshot.capturedAtUtc | date:'shortTime' }}
+                                  · posted by {{ snapshot.capturedByCharacterName || '—' }}
+                                </div>
+                              </div>
+                              <!-- Unlink sends it back to Unlinked Snapshots, paying nobody here. Two clicks,
+                                   because it changes what the camp pays. -->
+                              @if (manage) {
+                                <div class="hnm-detail__actions">
+                                  @if (pendingUnlinkSnapshotId() === snapshot.id) {
+                                    <span class="hnm-muted">Send back to Unlinked Snapshots?</span>
+                                    <button type="button" class="evt-btn evt-btn--small evt-btn--danger"
+                                      [disabled]="unlinkingSnapshotId() === snapshot.id"
+                                      (click)="confirmUnlinkSnapshot(snapshot)">
+                                      {{ unlinkingSnapshotId() === snapshot.id ? 'Unlinking...' : 'Unlink' }}
+                                    </button>
+                                    <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
+                                      (click)="pendingUnlinkSnapshotId.set(null)">Keep</button>
+                                  } @else {
+                                    <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
+                                      (click)="pendingUnlinkSnapshotId.set(snapshot.id)">
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M8 2v3M2 8h3M16 22v-3M22 16h-3"/></svg>
+                                      Unlink snapshot
+                                    </button>
+                                  }
+                                </div>
+                              }
+                            </div>
+                            <!-- What the capture pays each person on it. Absent (not 0) when the camp
+                                 doesn't price captures — a Manual Check In camp credits the check-in range. -->
+                            @if (snapshot.dkpPerMember != null) {
+                              <div class="hnm-formula">
+                                <span class="hnm-formula__chip"><b>{{ snapshot.dkpPerMember | number:'1.0-2' }}</b> {{ snapshot.isMisc ? 'Misc post' : 'Capture' }}</span>
+                                <span class="hnm-formula__op">=</span>
+                                <span class="hnm-formula__per"><b>{{ snapshot.dkpPerMember | number:'1.0-2' }}</b> per member</span>
+                                <span class="hnm-formula__total">
+                                  × {{ snapshot.entries.length }} =
+                                  <b>{{ snapshot.dkpPerMember * snapshot.entries.length | number:'1.0-2' }} DKP</b>
+                                </span>
+                              </div>
+                            }
                             <div class="roster-table__scroll">
                               <table class="roster-table hnm-roster">
                                 <thead>
                                   <tr>
                                     <th>Character</th>
                                     <th>Jobs</th>
-                                    @if (wd) {
-                                      <th class="num">DKP</th>
-                                    } @else if (isKill) {
-                                      <th class="num" title="What everyone on the kill roster earns at End Camp — the camp's kill bonus. Editing any row changes it for everyone.">Kill</th>
-                                      <th class="num" title="What this member would be paid for the whole camp if it ended now.">Event total</th>
-                                    } @else {
-                                      <th class="num" title="What this window pays each attendee before either bonus. Editing any row changes it for everyone on this window.">Regular</th>
-                                      <th class="num" title="The open bonus window 1 adds. Editing it changes the camp's open bonus.">Open</th>
-                                      <th class="num" title="The close bonus this window adds — 0 unless it is the closing window. Editing it changes the camp's close bonus.">Close</th>
-                                      <th class="num" title="What this window pays this member.">Subtotal</th>
-                                      <th class="num" title="What this member would be paid for the whole camp if it ended now: every window, the kill, and the one-time Misc and Tag awards.">Event total</th>
-                                    }
-                                    @if (manage) {
-                                      <th class="num"><span class="hnm-sr-only">Remove</span></th>
-                                    }
+                                    <th class="num">DKP</th>
+                                    <th>Zone</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  @for (attendee of win.attendees; track attendee.id) {
-                                    <tr>
-                                      <!-- The character the scan SAW, with their main when it was an alt,
-                                           and where they were standing. -->
+                                  @for (entry of snapshot.entries; track entry.id) {
+                                    <!-- Tinted: a name an officer typed must never read as one the addon scanned. -->
+                                    <tr [class.roster-row--manual]="entry.addedManually">
+                                      <td><strong>{{ entry.characterName }}</strong></td>
                                       <td>
-                                        <div class="hnm-roster__name">
-                                          <strong>{{ attendee.characterName || 'Unknown attendee' }}</strong>
-                                          @if (attendee.mainCharacterName) {
-                                            <span class="roster-muted">(alt of {{ attendee.mainCharacterName }})</span>
-                                          }
-                                        </div>
-                                        @if (attendee.zone) {
-                                          <div class="hnm-roster__zone">
-                                            <ng-container *ngTemplateOutlet="zoneCell; context: { zone: attendee.zone }" />
-                                          </div>
+                                        @if (entry.mainJob) {
+                                          <span class="job-pill">{{ entry.mainJob }}{{ entry.mainJobLevel ? ' ' + entry.mainJobLevel : '' }}</span>
                                         }
-                                      </td>
-                                      <td>
-                                        @if (attendee.jobName) {
-                                          <span class="job-pill">{{ attendee.jobName }}</span>
+                                        @if (entry.subJob) {
+                                          <span class="job-pill job-pill--sub">{{ entry.subJob }}{{ entry.subJobLevel ? ' ' + entry.subJobLevel : '' }}</span>
                                         }
-                                        @if (attendee.subJobName) {
-                                          <span class="job-pill job-pill--sub">{{ attendee.subJobName }}</span>
-                                        }
-                                        @if (!attendee.jobName && !attendee.subJobName) {
+                                        @if (!entry.mainJob && !entry.subJob && !entry.addedManually) {
                                           <span class="roster-muted">Anon</span>
                                         }
                                       </td>
-                                      @if (wd) {
-                                        <td class="num">{{ attendanceWindowDkpLabel(event, win, attendee) }}</td>
-                                      } @else {
-                                        <!-- The window's own amount (the kill bonus on the kill roster). One
-                                             price for the window, so every row edits the same number. Commits
-                                             on change (blur / Enter), not per keystroke. -->
-                                        <td class="num">
-                                          @if (manage) {
-                                            <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
-                                                   [attr.aria-label]="(isKill ? 'Kill bonus for ' : 'DKP for ') + (attendee.characterName || 'attendee')"
-                                                   [disabled]="windowDkpSaving()"
-                                                   [value]="windowDkpDraft(event, win)"
-                                                   [title]="windowDkpHint(win)"
-                                                   (input)="setWindowDkpDraft(win, $event)"
-                                                   (change)="commitWindowDkp(event, win)" />
-                                          } @else {
-                                            {{ attendanceWindowDkpLabel(event, win, attendee) }}
-                                          }
-                                        </td>
-                                        @if (!isKill) {
-                                          <!-- The camp's open bonus: editable on window 1, 0 elsewhere. -->
-                                          <td class="num">
-                                            @if (isOpenWindow(win) && manage) {
-                                              <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
-                                                     [attr.aria-label]="'Open bonus for ' + (attendee.characterName || 'attendee')"
-                                                     [disabled]="windowDkpSaving()"
-                                                     [value]="openBonusDraft(event)"
-                                                     title="This camp's open bonus, added to window 1's DKP. Clear the box to go back to the linkshell default."
-                                                     (input)="setOpenBonusDraft(event, $event)"
-                                                     (change)="commitOpenBonus(event)" />
-                                            } @else if (isOpenWindow(win)) {
-                                              {{ openWindowValue(event, win) | number:'1.0-2' }}
-                                            } @else {
-                                              <span class="roster-muted" title="Only window 1 pays the open bonus.">0</span>
-                                            }
-                                          </td>
-                                          <!-- The camp's close bonus: editable on the close, 0 elsewhere. -->
-                                          <td class="num">
-                                            @if (isCloseWindow(event, win) && manage) {
-                                              <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
-                                                     [attr.aria-label]="'Close bonus for ' + (attendee.characterName || 'attendee')"
-                                                     [disabled]="windowDkpSaving()"
-                                                     [value]="closeBonusDraft(event)"
-                                                     title="This camp's close bonus. Applies to everyone on the closing window; clear the box to go back to the linkshell default."
-                                                     (input)="setCloseBonusDraft(event, $event)"
-                                                     (change)="commitCloseBonus(event)" />
-                                            } @else if (isCloseWindow(event, win)) {
-                                              {{ closeWindowValue(event, win) | number:'1.0-2' }}
-                                            } @else {
-                                              <span class="roster-muted" title="Tick Closing bonus to pay the close bonus on this window.">0</span>
-                                            }
-                                          </td>
-                                          <td class="num hnm-roster__subtotal">{{ attendeeWindowSubtotal(event, win, attendee) | number:'1.0-2' }}</td>
+                                      <!-- A Misc post's price is editable in place: one price for the whole
+                                           post, so every row edits the same number. -->
+                                      <td class="num">
+                                        @if (snapshot.dkpPerMember == null) {
+                                          <span class="roster-muted">-</span>
+                                        } @else if (snapshot.isMisc && manage) {
+                                          <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                                 [attr.aria-label]="'DKP for ' + entry.characterName"
+                                                 [disabled]="windowDkpSaving()"
+                                                 [value]="miscDkpDraft(snapshot)"
+                                                 [title]="miscDkpHint(snapshot)"
+                                                 (input)="setMiscDkpDraft(snapshot, $event)"
+                                                 (change)="commitMiscDkp(snapshot)" />
+                                        } @else {
+                                          {{ snapshot.dkpPerMember }}
                                         }
-                                        <td class="num">
-                                          @if (attendee.eventTotalDkp != null) {
-                                            <strong>{{ attendee.eventTotalDkp | number:'1.0-2' }}</strong>
-                                          } @else {
-                                            <!-- A scan that matched no account has nobody to pay. -->
-                                            <span class="roster-muted" title="No account matched this character, so nobody is paid.">—</span>
-                                          }
-                                        </td>
-                                      }
-                                      @if (manage) {
-                                        <td class="num hnm-roster__remove">
-                                          @if (pendingRemoveAttendeeId() === attendee.id) {
-                                            <span class="hnm-roster__confirm">
-                                              <button type="button" class="btn danger-fill sm" (click)="confirmRemoveAttendee(attendee.id)">Remove</button>
-                                              <button type="button" class="btn ghost sm" (click)="abortRemoveAttendee()">Keep</button>
-                                            </span>
-                                          } @else {
-                                            <button type="button" class="hnm-icon-btn hnm-icon-btn--danger"
-                                              [attr.aria-label]="'Remove ' + (attendee.characterName || 'attendee') + ' from this roster'"
-                                              title="Remove from this roster"
-                                              (click)="requestRemoveAttendee(attendee.id)">
-                                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                                            </button>
-                                          }
-                                        </td>
-                                      }
+                                      </td>
+                                      <td>
+                                        <ng-container *ngTemplateOutlet="zoneCell; context: { zone: entry.zone }" />
+                                      </td>
                                     </tr>
                                   }
                                 </tbody>
                               </table>
                             </div>
-                          }
-
-                          <p class="hnm-detail__note">
-                            @if (wd) {
-                              Open, close, claim ({{ claimBonusLabel(event) }} DKP) and kill ({{ killBonusLabel(event) }} DKP)
-                              bonuses are added at End Camp.
-                            } @else if (isKill) {
-                              Paid as the camp's kill bonus when the camp ends.
-                            } @else {
-                              @if (windowPerAttendee(event, win) <= 0) {
-                                Middle windows carry no bonus — only the open and the close pay.
-                              }
-                              Event total adds the kill bonus and the one-time Misc and Tag awards — each paid once,
-                              when the camp ends.
-                              @if (manage) {
-                                Edit a value to change it for everyone on this window.
-                              }
-                            }
-                          </p>
-                        }
-                      }
-                    }
-                  } @else {
-                    <p class="hnm-detail__note">Pick a step above to see who was on it and what it pays.</p>
-                  }
-                </section>
-
-                <aside class="hnm-camp__side">
-                  @if (event.hnmPayout; as payout) {
-                    <section class="hnm-card" aria-label="Payout at end camp">
-                      <div class="hnm-card__head">
-                        <span class="hnm-eyebrow">Payout at end camp</span>
-                        <span class="hnm-muted">{{ countLabel(payout.memberCount, 'member') }}</span>
-                      </div>
-                      <div class="hnm-payout__total">
-                        <span class="hnm-payout__value">{{ payout.totalDkp | number:'1.0-2' }}</span>
-                        <span class="hnm-payout__unit">DKP</span>
-                      </div>
-                      <div class="hnm-payout__bar" aria-hidden="true">
-                        @for (part of campPayoutParts(event); track part.tone) {
-                          @if (part.value > 0) {
-                            <span [attr.data-tone]="part.tone" [style.width.%]="campPayoutShare(event, part)"></span>
+                            <p class="hnm-detail__note">
+                              Snapshot awards are paid once, when the camp ends. Unlinking takes them out of this
+                              camp's payout.
+                            </p>
                           }
                         }
-                      </div>
-                      <ul class="hnm-payout__legend">
-                        @for (part of campPayoutParts(event); track part.tone) {
-                          <li [class.is-zero]="part.value <= 0">
-                            <span class="hnm-payout__swatch" [attr.data-tone]="part.tone" aria-hidden="true"></span>
-                            {{ part.label }}
-                            <span class="hnm-payout__amount">{{ part.value | number:'1.0-2' }}</span>
-                          </li>
-                        }
-                      </ul>
-                    </section>
-                  }
 
-                  <!-- Loot on a live camp is charged when the camp ends, not when it is posted. -->
-                  <section class="hnm-card" aria-label="Loot">
-                    <div class="hnm-card__head">
-                      <span class="hnm-eyebrow">Loot · {{ event.loot.length }}</span>
-                      @if (lootDkpSpent(event); as spent) {
-                        <span class="hnm-muted">{{ spent | number:'1.0-2' }} DKP spent</span>
-                      }
-                    </div>
-                    @if (manage) {
-                      <form class="hnm-loot__form" (ngSubmit)="submitLoot(event.id)">
-                        <input [(ngModel)]="getLootDraft(event.id).itemName" [name]="'campLootItem' + event.id" placeholder="Item name" required />
-                        <div class="hnm-loot__row" [class.hnm-loot__row--no-dkp]="lootStructureFor(event.linkshellId) === 'LootCouncil'">
-                          <select [(ngModel)]="getLootDraft(event.id).itemWinner" [name]="'campLootWinner' + event.id" aria-label="Winner">
-                            <option value="">Member</option>
-                            @for (participant of lootEligibleParticipants(event); track participant.id) {
-                              @if (participant.characterName) {
-                                <option [value]="participant.characterName">{{ participant.characterName }}</option>
+                        <!-- A posted window or the kill roster. -->
+                        @default {
+                          @if (step.window; as win) {
+                            @let isKill = !!win.isKillWindow;
+                            <div class="hnm-detail__head">
+                              <div class="hnm-detail__heading">
+                                <div class="hnm-detail__title">
+                                  {{ isKill ? 'Kill roster' : step.title }}
+                                  @if (isKill) {
+                                    <span class="hnm-badge" data-tone="kill">Killed</span>
+                                  } @else if (step.tone === 'accent') {
+                                    <span class="hnm-badge" data-tone="accent">Closing</span>
+                                  }
+                                </div>
+                                <div class="hnm-detail__sub">
+                                  Posted {{ win.postedAt | date:'shortTime' }}
+                                  @if (win.attendees.length > 0) {
+                                    · verified {{ win.attendees[0].verifiedAt | date:'shortTime' }}
+                                    @if (win.attendees[0].verifiedBy) {
+                                      by {{ win.attendees[0].verifiedBy }}
+                                    }
+                                  }
+                                </div>
+                              </div>
+                              <!-- Which window closes the camp out. On a numbered camp ticking it is the ONLY
+                                   thing that pays the close bonus. Ticking one unticks the others server-side. -->
+                              @if (manage && canMarkClosingWindow(event, win)) {
+                                <label class="hnm-switch" [class.is-on]="win.isClosingWindow">
+                                  <input type="checkbox" role="switch"
+                                    [checked]="win.isClosingWindow"
+                                    [disabled]="windowDkpSaving()"
+                                    (change)="toggleClosingWindow(win)" />
+                                  <span class="hnm-switch__track" aria-hidden="true"><span class="hnm-switch__knob"></span></span>
+                                  Closing bonus
+                                  @if (closeBonusLabel(event); as closeBonus) {
+                                    <span class="hnm-switch__value">+{{ closeBonus }}</span>
+                                  }
+                                </label>
                               }
-                            }
-                          </select>
-                          @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
-                            <input [(ngModel)]="getLootDraft(event.id).winningDkpSpent" [name]="'campLootDkp' + event.id"
-                              type="number" min="0"
-                              [attr.max]="lootInputMax(event.linkshellId)"
-                              [attr.aria-label]="lootInputPlaceholder(event.linkshellId)"
-                              [placeholder]="lootStructureFor(event.linkshellId) === 'Hybrid' ? '%' : 'DKP'" />
-                          }
-                          <button type="submit" class="btn primary sm" [disabled]="busy">Add</button>
-                        </div>
-                      </form>
-                    }
-                    @if (event.loot.length > 0) {
-                      <ul class="hnm-loot__list">
-                        @for (loot of event.loot; track loot.id) {
-                          <li>
-                            <div class="hnm-loot__item">
-                              <strong>{{ loot.itemName || 'Loot item' }}</strong>
-                              <span class="hnm-muted">{{ loot.itemWinner || 'Unassigned' }}</span>
                             </div>
-                            @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
-                              <div class="hnm-loot__cost">
-                                <span class="hnm-mono">{{ formatLootCost(loot.winningDkpSpent, event.linkshellId) }}</span>
-                                <!-- "DKP deducted": a row charged before loot moved to End Camp, which
-                                     ending will not charge again. -->
-                                @if (loot.actualDeductedDkp != null) {
-                                  <span class="hnm-badge" data-tone="success"
-                                    [title]="'Already charged to the winner: ' + (loot.actualDeductedDkp | number:'1.0-2') + ' DKP. Ending the camp will not deduct it again.'">Deducted</span>
-                                } @else if ((loot.winningDkpSpent ?? 0) > 0) {
-                                  <span class="hnm-badge" data-tone="warning"
-                                    title="Not charged yet. The winner's DKP comes off when the camp ends; until then it is held so they can't spend it twice.">At end</span>
+
+                            <!-- What one attendee earns here, built up from its parts, then the window's total. -->
+                            @if (wd) {
+                              <div class="hnm-formula">
+                                <span>{{ attendanceWindowDkpNote(event, win) }}</span>
+                              </div>
+                            } @else {
+                              <div class="hnm-formula">
+                                @if (isKill) {
+                                  <span class="hnm-formula__chip"><b>{{ windowPerAttendee(event, win) | number:'1.0-2' }}</b> Kill bonus</span>
+                                } @else {
+                                  <span class="hnm-formula__chip"><b>{{ windowBaseValue(event, win) | number:'1.0-2' }}</b> {{ win.dkpAmount != null ? 'Set for this window' : 'Regular' }}</span>
+                                  @if (openWindowValue(event, win) > 0) {
+                                    <span class="hnm-formula__op">+</span>
+                                    <span class="hnm-formula__chip"><b>{{ openWindowValue(event, win) | number:'1.0-2' }}</b> Open bonus</span>
+                                  }
+                                  @if (closeWindowValue(event, win) > 0) {
+                                    <span class="hnm-formula__op">+</span>
+                                    <span class="hnm-formula__chip"><b>{{ closeWindowValue(event, win) | number:'1.0-2' }}</b> Closing bonus</span>
+                                  }
                                 }
+                                <span class="hnm-formula__op">=</span>
+                                <span class="hnm-formula__per"><b>{{ windowPerAttendee(event, win) | number:'1.0-2' }}</b> per attendee</span>
+                                <span class="hnm-formula__total">
+                                  × {{ win.attendees.length }} =
+                                  <b>{{ attendanceWindowDkpTotal(event, win) | number:'1.0-2' }} DKP</b>
+                                </span>
+                              </div>
+                              @if (!isKill && missingClosingWindow(event)) {
+                                <p class="hnm-detail__warning">
+                                  No closing window ticked yet — tick Closing bonus on the window that closed the
+                                  camp, or nobody gets the close bonus.
+                                </p>
+                              }
+                            }
+
+                            @if (win.attendees.length === 0) {
+                              <p class="hnm-detail__note">No attendees recorded for this window.</p>
+                            } @else {
+                              <div class="roster-table__scroll">
+                                <table class="roster-table hnm-roster">
+                                  <thead>
+                                    <tr>
+                                      <th>Character</th>
+                                      <th>Jobs</th>
+                                      @if (wd) {
+                                        <th class="num">DKP</th>
+                                      } @else if (isKill) {
+                                        <th class="num" title="What everyone on the kill roster earns at End Camp — the camp's kill bonus. Editing any row changes it for everyone.">Kill</th>
+                                        <th class="num" title="What this member would be paid for the whole camp if it ended now.">Event total</th>
+                                      } @else {
+                                        <th class="num" title="What this window pays each attendee before either bonus. Editing any row changes it for everyone on this window.">Regular</th>
+                                        <th class="num" title="The open bonus window 1 adds. Editing it changes the camp's open bonus.">Open</th>
+                                        <th class="num" title="The close bonus this window adds — 0 unless it is the closing window. Editing it changes the camp's close bonus.">Close</th>
+                                        <th class="num" title="What this window pays this member.">Subtotal</th>
+                                        <th class="num" title="What this member would be paid for the whole camp if it ended now: every window, the kill, and the one-time Misc and Tag awards.">Event total</th>
+                                      }
+                                      @if (manage) {
+                                        <th class="num"><span class="hnm-sr-only">Remove</span></th>
+                                      }
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (attendee of win.attendees; track attendee.id) {
+                                      <tr>
+                                        <!-- The character the scan SAW, with their main when it was an alt,
+                                             and where they were standing. -->
+                                        <td>
+                                          <div class="hnm-roster__name">
+                                            <strong>{{ attendee.characterName || 'Unknown attendee' }}</strong>
+                                            @if (attendee.mainCharacterName) {
+                                              <span class="roster-muted">(alt of {{ attendee.mainCharacterName }})</span>
+                                            }
+                                          </div>
+                                          @if (attendee.zone) {
+                                            <div class="hnm-roster__zone">
+                                              <ng-container *ngTemplateOutlet="zoneCell; context: { zone: attendee.zone }" />
+                                            </div>
+                                          }
+                                        </td>
+                                        <td>
+                                          @if (attendee.jobName) {
+                                            <span class="job-pill">{{ attendee.jobName }}</span>
+                                          }
+                                          @if (attendee.subJobName) {
+                                            <span class="job-pill job-pill--sub">{{ attendee.subJobName }}</span>
+                                          }
+                                          @if (!attendee.jobName && !attendee.subJobName) {
+                                            <span class="roster-muted">Anon</span>
+                                          }
+                                        </td>
+                                        @if (wd) {
+                                          <td class="num">{{ attendanceWindowDkpLabel(event, win, attendee) }}</td>
+                                        } @else {
+                                          <!-- The window's own amount (the kill bonus on the kill roster). One
+                                               price for the window, so every row edits the same number. Commits
+                                               on change (blur / Enter), not per keystroke. -->
+                                          <td class="num">
+                                            @if (manage) {
+                                              <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                                     [attr.aria-label]="(isKill ? 'Kill bonus for ' : 'DKP for ') + (attendee.characterName || 'attendee')"
+                                                     [disabled]="windowDkpSaving()"
+                                                     [value]="windowDkpDraft(event, win)"
+                                                     [title]="windowDkpHint(win)"
+                                                     (input)="setWindowDkpDraft(win, $event)"
+                                                     (change)="commitWindowDkp(event, win)" />
+                                            } @else {
+                                              {{ attendanceWindowDkpLabel(event, win, attendee) }}
+                                            }
+                                          </td>
+                                          @if (!isKill) {
+                                            <!-- The camp's open bonus: editable on window 1, 0 elsewhere. -->
+                                            <td class="num">
+                                              @if (isOpenWindow(win) && manage) {
+                                                <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                                       [attr.aria-label]="'Open bonus for ' + (attendee.characterName || 'attendee')"
+                                                       [disabled]="windowDkpSaving()"
+                                                       [value]="openBonusDraft(event)"
+                                                       title="This camp's open bonus, added to window 1's DKP. Clear the box to go back to the linkshell default."
+                                                       (input)="setOpenBonusDraft(event, $event)"
+                                                       (change)="commitOpenBonus(event)" />
+                                              } @else if (isOpenWindow(win)) {
+                                                {{ openWindowValue(event, win) | number:'1.0-2' }}
+                                              } @else {
+                                                <span class="roster-muted" title="Only window 1 pays the open bonus.">0</span>
+                                              }
+                                            </td>
+                                            <!-- The camp's close bonus: editable on the close, 0 elsewhere. -->
+                                            <td class="num">
+                                              @if (isCloseWindow(event, win) && manage) {
+                                                <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                                       [attr.aria-label]="'Close bonus for ' + (attendee.characterName || 'attendee')"
+                                                       [disabled]="windowDkpSaving()"
+                                                       [value]="closeBonusDraft(event)"
+                                                       title="This camp's close bonus. Applies to everyone on the closing window; clear the box to go back to the linkshell default."
+                                                       (input)="setCloseBonusDraft(event, $event)"
+                                                       (change)="commitCloseBonus(event)" />
+                                              } @else if (isCloseWindow(event, win)) {
+                                                {{ closeWindowValue(event, win) | number:'1.0-2' }}
+                                              } @else {
+                                                <span class="roster-muted" title="Tick Closing bonus to pay the close bonus on this window.">0</span>
+                                              }
+                                            </td>
+                                            <td class="num hnm-roster__subtotal">{{ attendeeWindowSubtotal(event, win, attendee) | number:'1.0-2' }}</td>
+                                          }
+                                          <td class="num">
+                                            @if (attendee.eventTotalDkp != null) {
+                                              <strong>{{ attendee.eventTotalDkp | number:'1.0-2' }}</strong>
+                                            } @else {
+                                              <!-- A scan that matched no account has nobody to pay. -->
+                                              <span class="roster-muted" title="No account matched this character, so nobody is paid.">—</span>
+                                            }
+                                          </td>
+                                        }
+                                        @if (manage) {
+                                          <td class="num hnm-roster__remove">
+                                            @if (pendingRemoveAttendeeId() === attendee.id) {
+                                              <span class="hnm-roster__confirm">
+                                                <button type="button" class="btn danger-fill sm" (click)="confirmRemoveAttendee(attendee.id)">Remove</button>
+                                                <button type="button" class="btn ghost sm" (click)="abortRemoveAttendee()">Keep</button>
+                                              </span>
+                                            } @else {
+                                              <button type="button" class="hnm-icon-btn hnm-icon-btn--danger"
+                                                [attr.aria-label]="'Remove ' + (attendee.characterName || 'attendee') + ' from this roster'"
+                                                title="Remove from this roster"
+                                                (click)="requestRemoveAttendee(attendee.id)">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                              </button>
+                                            }
+                                          </td>
+                                        }
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
                               </div>
                             }
-                          </li>
+
+                            <p class="hnm-detail__note">
+                              @if (wd) {
+                                Open, close, claim ({{ claimBonusLabel(event) }} DKP) and kill ({{ killBonusLabel(event) }} DKP)
+                                bonuses are added at End Camp.
+                              } @else if (isKill) {
+                                Paid as the camp's kill bonus when the camp ends.
+                              } @else {
+                                @if (windowPerAttendee(event, win) <= 0) {
+                                  Middle windows carry no bonus — only the open and the close pay.
+                                }
+                                Event total adds the kill bonus and the one-time Misc and Tag awards — each paid once,
+                                when the camp ends.
+                                @if (manage) {
+                                  Edit a value to change it for everyone on this window.
+                                }
+                              }
+                            </p>
+                          }
                         }
-                      </ul>
+                      }
                     } @else {
-                      <p class="hnm-card__empty">No loot logged yet.</p>
+                      <p class="hnm-detail__note">Pick a step above to see who was on it and what it pays.</p>
                     }
                   </section>
-                </aside>
-              </div>
 
-              <!-- Manual Check In: who checked in after the camp opened, and what they have earned so far. -->
-              @if (wd) {
-                <section class="hnm-panel">
-                  <div class="hnm-panel__head">
-                    <h3>Late join</h3>
-                    <span class="hnm-muted">{{ wdLateArrivals(event).length }}</span>
-                  </div>
-                  @if (wdLateArrivals(event).length === 0) {
-                    <p class="hnm-note">No late arrivals — everyone checked in at the open.</p>
-                  } @else {
-                    <div class="roster-table__scroll">
-                      <table class="roster-table">
-                        <thead>
-                          <tr>
-                            <th>Character</th>
-                            <th>Jobs</th>
-                            <th>Joined</th>
-                            <th class="num">Windows</th>
-                            <th class="num">DKP so far</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          @for (participant of wdLateArrivals(event); track participant.id) {
-                            <tr>
-                              <td><strong>{{ participant.characterName || 'Unknown' }}</strong></td>
-                              <td>
-                                @if (participant.jobName) {
-                                  <span class="job-pill">{{ participant.jobName }}</span>
-                                }
-                                @if (participant.subJobName) {
-                                  <span class="job-pill job-pill--sub">{{ participant.subJobName }}</span>
-                                }
-                                @if (!participant.jobName && !participant.subJobName) {
-                                  <span class="roster-muted">Anon</span>
-                                }
-                              </td>
-                              <td>
-                                <span class="tag default">{{ wdArrivalLabel(event, participant) }}</span>
-                                @if (participant.wdDepartureWindow) {
-                                  <span class="roster-muted">· left W{{ participant.wdDepartureWindow }}</span>
-                                }
-                              </td>
-                              <td class="num">{{ wdWindowsCredited(event, participant) }}</td>
-                              <td class="num">{{ wdDkpSoFar(event, participant) | number:'1.0-2' }}</td>
-                            </tr>
+                  <aside class="hnm-camp__side">
+                    @if (event.hnmPayout; as payout) {
+                      <section class="hnm-card" aria-label="Payout at end camp">
+                        <div class="hnm-card__head">
+                          <span class="hnm-eyebrow">Payout at end camp</span>
+                          <span class="hnm-muted">{{ countLabel(payout.memberCount, 'member') }}</span>
+                        </div>
+                        <div class="hnm-payout__total">
+                          <span class="hnm-payout__value">{{ payout.totalDkp | number:'1.0-2' }}</span>
+                          <span class="hnm-payout__unit">DKP</span>
+                        </div>
+                        <div class="hnm-payout__bar" aria-hidden="true">
+                          @for (part of campPayoutParts(event); track part.tone) {
+                            @if (part.value > 0) {
+                              <span [attr.data-tone]="part.tone" [style.width.%]="campPayoutShare(event, part)"></span>
+                            }
                           }
-                        </tbody>
-                      </table>
-                    </div>
-                  }
-                  <p class="hnm-detail__note">
-                    {{ wdPerWindowRate(event) | number:'1.0-2' }} DKP per window · currently on window {{ event.hnmWindowNumber ?? 1 }}
-                    @if (wdOnTimeCount(event) > 0) {
-                      · {{ wdOnTimeCount(event) }} checked in at the open
+                        </div>
+                        <ul class="hnm-payout__legend">
+                          @for (part of campPayoutParts(event); track part.tone) {
+                            <li [class.is-zero]="part.value <= 0">
+                              <span class="hnm-payout__swatch" [attr.data-tone]="part.tone" aria-hidden="true"></span>
+                              {{ part.label }}
+                              <span class="hnm-payout__amount">{{ part.value | number:'1.0-2' }}</span>
+                            </li>
+                          }
+                        </ul>
+                      </section>
                     }
-                  </p>
-                </section>
-              }
+
+                    <!-- Loot on a live camp is charged when the camp ends, not when it is posted. -->
+                    <section class="hnm-card" aria-label="Loot">
+                      <div class="hnm-card__head">
+                        <span class="hnm-eyebrow">Loot · {{ event.loot.length }}</span>
+                        @if (lootDkpSpent(event); as spent) {
+                          <span class="hnm-muted">{{ spent | number:'1.0-2' }} DKP spent</span>
+                        }
+                      </div>
+                      @if (manage) {
+                        <form class="hnm-loot__form" (ngSubmit)="submitLoot(event.id)">
+                          <input [(ngModel)]="getLootDraft(event.id).itemName" [name]="'campLootItem' + event.id" placeholder="Item name" required />
+                          <div class="hnm-loot__row" [class.hnm-loot__row--no-dkp]="lootStructureFor(event.linkshellId) === 'LootCouncil'">
+                            <select [(ngModel)]="getLootDraft(event.id).itemWinner" [name]="'campLootWinner' + event.id" aria-label="Winner">
+                              <option value="">Member</option>
+                              @for (participant of lootEligibleParticipants(event); track participant.id) {
+                                @if (participant.characterName) {
+                                  <option [value]="participant.characterName">{{ participant.characterName }}</option>
+                                }
+                              }
+                            </select>
+                            @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
+                              <input [(ngModel)]="getLootDraft(event.id).winningDkpSpent" [name]="'campLootDkp' + event.id"
+                                type="number" min="0"
+                                [attr.max]="lootInputMax(event.linkshellId)"
+                                [attr.aria-label]="lootInputPlaceholder(event.linkshellId)"
+                                [placeholder]="lootStructureFor(event.linkshellId) === 'Hybrid' ? '%' : 'DKP'" />
+                            }
+                            <button type="submit" class="btn primary sm" [disabled]="busy">Add</button>
+                          </div>
+                        </form>
+                      }
+                      @if (event.loot.length > 0) {
+                        <ul class="hnm-loot__list">
+                          @for (loot of event.loot; track loot.id) {
+                            <li>
+                              <div class="hnm-loot__item">
+                                <strong>{{ loot.itemName || 'Loot item' }}</strong>
+                                <span class="hnm-muted">{{ loot.itemWinner || 'Unassigned' }}</span>
+                              </div>
+                              @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
+                                <div class="hnm-loot__cost">
+                                  <span class="hnm-mono">{{ formatLootCost(loot.winningDkpSpent, event.linkshellId) }}</span>
+                                  <!-- "DKP deducted": a row charged before loot moved to End Camp, which
+                                       ending will not charge again. -->
+                                  @if (loot.actualDeductedDkp != null) {
+                                    <span class="hnm-badge" data-tone="success"
+                                      [title]="'Already charged to the winner: ' + (loot.actualDeductedDkp | number:'1.0-2') + ' DKP. Ending the camp will not deduct it again.'">Deducted</span>
+                                  } @else if ((loot.winningDkpSpent ?? 0) > 0) {
+                                    <span class="hnm-badge" data-tone="warning"
+                                      title="Not charged yet. The winner's DKP comes off when the camp ends; until then it is held so they can't spend it twice.">At end</span>
+                                  }
+                                </div>
+                              }
+                            </li>
+                          }
+                        </ul>
+                      } @else {
+                        <p class="hnm-card__empty">No loot logged yet.</p>
+                      }
+                    </section>
+                  </aside>
+                </div>
+
+                <!-- Manual Check In: who checked in after the camp opened, and what they have earned so far. -->
+                @if (wd) {
+                  <section class="hnm-panel">
+                    <div class="hnm-panel__head">
+                      <h3>Late join</h3>
+                      <span class="hnm-muted">{{ wdLateArrivals(event).length }}</span>
+                    </div>
+                    @if (wdLateArrivals(event).length === 0) {
+                      <p class="hnm-note">No late arrivals — everyone checked in at the open.</p>
+                    } @else {
+                      <div class="roster-table__scroll">
+                        <table class="roster-table">
+                          <thead>
+                            <tr>
+                              <th>Character</th>
+                              <th>Jobs</th>
+                              <th>Joined</th>
+                              <th class="num">Windows</th>
+                              <th class="num">DKP so far</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (participant of wdLateArrivals(event); track participant.id) {
+                              <tr>
+                                <td><strong>{{ participant.characterName || 'Unknown' }}</strong></td>
+                                <td>
+                                  @if (participant.jobName) {
+                                    <span class="job-pill">{{ participant.jobName }}</span>
+                                  }
+                                  @if (participant.subJobName) {
+                                    <span class="job-pill job-pill--sub">{{ participant.subJobName }}</span>
+                                  }
+                                  @if (!participant.jobName && !participant.subJobName) {
+                                    <span class="roster-muted">Anon</span>
+                                  }
+                                </td>
+                                <td>
+                                  <span class="tag default">{{ wdArrivalLabel(event, participant) }}</span>
+                                  @if (participant.wdDepartureWindow) {
+                                    <span class="roster-muted">· left W{{ participant.wdDepartureWindow }}</span>
+                                  }
+                                </td>
+                                <td class="num">{{ wdWindowsCredited(event, participant) }}</td>
+                                <td class="num">{{ wdDkpSoFar(event, participant) | number:'1.0-2' }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    }
+                    <p class="hnm-detail__note">
+                      {{ wdPerWindowRate(event) | number:'1.0-2' }} DKP per window · currently on window {{ event.hnmWindowNumber ?? 1 }}
+                      @if (wdOnTimeCount(event) > 0) {
+                        · {{ wdOnTimeCount(event) }} checked in at the open
+                      }
+                    </p>
+                  </section>
+                }
+              } <!-- /camp body -->
             </article>
-            } <!-- /expanded HNM camp -->
           } @else {
             <article class="event-card event-card--live"
                      [class.event-card--collapsed]="isLiveEventCollapsed(event.id)">

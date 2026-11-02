@@ -82,9 +82,7 @@ interface CampPayoutPart {
   imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, PartySetupPanelComponent, EventHistoryPanelComponent, TodFormComponent, AttendanceSectionsComponent],
   templateUrl: './events-tab.component.html',
   styleUrl: './events-tab.component.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  // A click outside them, or Escape, closes the HNM camp card's dropdown menus.
-  host: { '(document:click)': 'onDocumentClick($event)', '(document:keydown.escape)': 'closeCampMenus()' }
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EventsTabComponent {
   private static readonly MAX_ADD_MEMBER_RESULTS = 10;
@@ -740,51 +738,25 @@ export class EventsTabComponent {
 
   // ----- Live HNM camp card -----
   //
-  // A live HNM camp has its own card: a header bar, the camp's title with a "Next step" box, a strip
-  // of everything the camp has recorded (windows, claim, snapshots, kill), one detail panel for the
-  // picked step, and a payout + loot column. Timed events keep the generic card.
+  // A live HNM camp keeps the classic card on top (name, window status, the action stack), collapsed
+  // or not. Opened, its attendance uses its own layout: a strip of everything the camp has recorded
+  // (windows, claim, snapshots, kill), one detail panel for the picked step, and a payout + loot
+  // column. Timed events keep the generic card throughout.
 
-  // Which strip step the detail panel shows, per camp. Absent = the newest roster (campDefaultStep).
+  // Which strip step the detail panel shows, per camp. Absent = the newest roster (selectedCampStep).
   protected readonly campStepByEvent = signal<Record<number, string>>({});
-  // The open dropdown, if any: the "..." menu or the New post menu, for one camp.
-  protected readonly campMenu = signal<{ eventId: number; menu: 'more' | 'post' } | null>(null);
 
-  protected isCampMenuOpen(eventId: number, menu: 'more' | 'post'): boolean {
-    const open = this.campMenu();
-    return open?.eventId === eventId && open.menu === menu;
-  }
-
-  protected toggleCampMenu(eventId: number, menu: 'more' | 'post'): void {
-    this.campMenu.set(this.isCampMenuOpen(eventId, menu) ? null : { eventId, menu });
-  }
-
-  protected closeCampMenus(): void {
-    if (this.campMenu() !== null) this.campMenu.set(null);
-  }
-
-  // Clicks inside a menu (its button or its items) are the menu's own business: the button
-  // toggles it, and each item closes it.
-  protected onDocumentClick(click: MouseEvent): void {
-    if (click.target instanceof Element && click.target.closest('.hnm-menu')) return;
-    this.closeCampMenus();
-  }
-
-  // New post menu → the Add New Post panel, opened on the chosen kind.
-  protected async startCampPost(event: ActivityEvent, kind: 'window' | 'misc'): Promise<void> {
-    this.campMenu.set(null);
-    if (this.newPostEventId() !== event.id) {
-      await this.toggleNewPost(event);
-    }
-    this.newPostKind.set(kind);
-  }
-
-  // The collapsed card's Add New Post / Add a Member. Both panels live in the expanded card, so the
-  // button opens the card too; otherwise it would open a panel nobody can see.
-  protected async openCampPanelFromCollapsed(event: ActivityEvent, panel: 'post' | 'member'): Promise<void> {
-    if (this.isLiveEventCollapsed(event.id)) this.toggleLiveEventCollapsed(event.id);
+  // The top section's Add New Post / Add a Member. On an open card they toggle their panel, as they
+  // always did. Both panels live in the opened card, so on a collapsed one they open the card as well
+  // — and only ever open the panel, never close it out of sight.
+  protected async toggleCampPanel(event: ActivityEvent, panel: 'post' | 'member'): Promise<void> {
+    const wasCollapsed = this.isLiveEventCollapsed(event.id);
+    if (wasCollapsed) this.toggleLiveEventCollapsed(event.id);
     if (panel === 'post') {
-      await this.startCampPost(event, 'window');
-    } else if (!this.isAddMemberExpanded(event.id)) {
+      if (wasCollapsed && this.newPostEventId() === event.id) return;
+      await this.toggleNewPost(event);
+    } else {
+      if (wasCollapsed && this.isAddMemberExpanded(event.id)) return;
       await this.toggleAddMember(event.id);
     }
   }
