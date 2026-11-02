@@ -41,7 +41,8 @@ public class LinkshellChannelRoute
     public bool PostEvents { get; set; }
     public bool PostLoot { get; set; }
     public bool PostAuctions { get; set; }
-    public bool PostAttendance { get; set; }
+    // (PostAttendance lived here: an embed of every attendance capture the addon filed. Removed
+    // 2026-11-01 -- the Event System page and the camp's End Camp summary are the record.)
     public bool PostTodBoard { get; set; }
 
     // The live, edit-in-place DKP sheet (full table PNG + the .xlsx) posts to the route
@@ -91,19 +92,18 @@ public static class ChannelPostTypes
     public const string Events = "Events";
     public const string Loot = "Loot";
     public const string Auctions = "Auctions";
-    public const string Attendance = "Attendance";
     public const string TodBoard = "TodBoard";
     public const string DkpSheet = "DkpSheet";
 
     public static readonly IReadOnlyList<string> All = new[]
     {
-        Events, Loot, Auctions, Attendance, TodBoard, DkpSheet
+        Events, Loot, Auctions, TodBoard, DkpSheet
     };
 
     // Non-event post types: exactly one route per linkshell may own each.
     public static readonly IReadOnlyList<string> NonEvent = new[]
     {
-        Loot, Auctions, Attendance, TodBoard, DkpSheet
+        Loot, Auctions, TodBoard, DkpSheet
     };
 
     public static string Label(string postType) => postType switch
@@ -111,7 +111,6 @@ public static class ChannelPostTypes
         Events => "Events",
         Loot => "Loot",
         Auctions => "Auctions",
-        Attendance => "Attendance",
         TodBoard => "ToD",
         DkpSheet => "DKP",
         _ => postType

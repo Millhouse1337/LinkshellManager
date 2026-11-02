@@ -38,7 +38,6 @@ public sealed class ChannelRouteResolver
         {
             ChannelPostTypes.Loot => query.Where(route => route.PostLoot),
             ChannelPostTypes.Auctions => query.Where(route => route.PostAuctions),
-            ChannelPostTypes.Attendance => query.Where(route => route.PostAttendance),
             ChannelPostTypes.TodBoard => query.Where(route => route.PostTodBoard),
             ChannelPostTypes.DkpSheet => query.Where(route => route.PostDkpSheet),
             _ => query.Where(_ => false),

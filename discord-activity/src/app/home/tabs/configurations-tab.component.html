@@ -873,7 +873,6 @@
                             @case ('Events') { <input type="checkbox" [name]="'pe_' + $index" [(ngModel)]="route.postEvents" (ngModelChange)="markRouteDirty(route)" /> }
                             @case ('Loot') { <input type="checkbox" [name]="'pl_' + $index" [(ngModel)]="route.postLoot" (ngModelChange)="markRouteDirty(route)" /> }
                             @case ('Auctions') { <input type="checkbox" [name]="'pa_' + $index" [(ngModel)]="route.postAuctions" (ngModelChange)="markRouteDirty(route)" /> }
-                            @case ('Attendance') { <input type="checkbox" [name]="'pt_' + $index" [(ngModel)]="route.postAttendance" (ngModelChange)="markRouteDirty(route)" /> }
                             @case ('TodBoard') { <input type="checkbox" [name]="'pd_' + $index" [(ngModel)]="route.postTodBoard" (ngModelChange)="markRouteDirty(route)" /> }
                             @case ('DkpSheet') { <input type="checkbox" [name]="'pk_' + $index" [(ngModel)]="route.postDkpSheet" (ngModelChange)="markRouteDirty(route)" /> }
                           }

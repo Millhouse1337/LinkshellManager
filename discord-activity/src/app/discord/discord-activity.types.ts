@@ -814,7 +814,6 @@ export interface ActivityChannelRoute {
   postEvents: boolean;
   postLoot: boolean;
   postAuctions: boolean;
-  postAttendance: boolean;
   postTodBoard: boolean;
   postDkpSheet: boolean;
   eventTypeFilter: string[];
@@ -839,7 +838,6 @@ export interface ActivityChannelRouteInput {
   postEvents: boolean;
   postLoot: boolean;
   postAuctions: boolean;
-  postAttendance: boolean;
   postTodBoard: boolean;
   postDkpSheet: boolean;
   eventTypeFilter: string[];

@@ -320,9 +320,6 @@ builder.Services.AddScoped<HnmCampReviewHandoffService>();
 // Shared "pop / end an HNM camp" (log ToD, re-point to next repop, stop the camp) — used by the
 // Discord Pop/End Camp modal and the Activity End-Camp form so both behave identically.
 builder.Services.AddScoped<HnmCampPopService>();
-builder.Services.AddSingleton<DiscordWebhookQueue>();
-builder.Services.AddScoped<DiscordSnapshotPublisher>();
-builder.Services.AddHostedService<DiscordWebhookBackgroundService>();
 builder.Services.AddSingleton<DiscordTodBoardQueue>();
 builder.Services.AddScoped<DiscordTodBoardPublisher>();
 builder.Services.AddHostedService<DiscordTodBoardBackgroundService>();

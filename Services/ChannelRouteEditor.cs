@@ -14,7 +14,6 @@ public sealed record ChannelRouteEdit(
     bool PostEvents,
     bool PostLoot,
     bool PostAuctions,
-    bool PostAttendance,
     bool PostTodBoard,
     bool PostDkpSheet,
     IReadOnlyList<string>? EventTypeFilter,
@@ -115,7 +114,6 @@ public sealed class ChannelRouteEditor
             route.PostEvents = edit.PostEvents;
             route.PostLoot = edit.PostLoot;
             route.PostAuctions = edit.PostAuctions;
-            route.PostAttendance = edit.PostAttendance;
             route.PostTodBoard = edit.PostTodBoard;
             route.PostDkpSheet = edit.PostDkpSheet;
             route.EventTypeFilter = filter;
@@ -139,7 +137,6 @@ public sealed class ChannelRouteEditor
     {
         if (routes.Count(r => r.PostLoot) > 1) return "Only one channel route can post Loot.";
         if (routes.Count(r => r.PostAuctions) > 1) return "Only one channel route can post Auctions.";
-        if (routes.Count(r => r.PostAttendance) > 1) return "Only one channel route can post Attendance.";
         if (routes.Count(r => r.PostTodBoard) > 1) return "Only one channel route can post the ToD board.";
         if (routes.Count(r => r.PostDkpSheet) > 1) return "Only one channel route can post the DKP sheet.";
         return null;

@@ -295,25 +295,8 @@ public sealed partial class AddonApiController
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        // Fire-and-forget post to the linkshell's Discord channel (no-op if
-        // no webhook URL is configured). Enqueued after the snapshot is
-        // committed so the background worker can reload it; never blocks or
-        // fails this addon request if Discord is slow/unreachable.
-        //
-        // A MISC capture is not announced. The channel post exists to tell the linkshell a
-        // window's roster was read -- it is the public record of who was credited for that
-        // window. A Misc post is the opposite kind of thing: an off-window read an officer takes
-        // for their own bookkeeping, filed against a camp that has not been priced or sent to the
-        // DKP sheet yet. Broadcasting it published a roster nobody had reviewed and put an embed
-        // in the channel for every stray read taken during a camp.
-        //
-        // Checked on the SAVED SlotKind rather than on request.SlotKind, so a fold into an
-        // existing Misc snapshot is silent too -- otherwise a second read against the same Misc
-        // slot would announce the row the first read already kept out of the channel.
-        if (!AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind))
-        {
-            await _discordWebhook.EnqueueSnapshotAsync(snapshot.Id, cancellationToken);
-        }
+        // (Each window capture used to be posted to the linkshell's Attendance Discord channel
+        // here. That post type was removed 2026-11-01; the capture is read in the app.)
 
         // Sheet sync is officer-initiated on the Event System page (Post to DKP
         // Sheet button) so the officer can review the combined roster and set

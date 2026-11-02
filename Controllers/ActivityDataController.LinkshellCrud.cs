@@ -696,7 +696,6 @@ public sealed partial class ActivityDataController
                 postEvents = route.PostEvents,
                 postLoot = route.PostLoot,
                 postAuctions = route.PostAuctions,
-                postAttendance = route.PostAttendance,
                 postTodBoard = route.PostTodBoard,
                 postDkpSheet = route.PostDkpSheet,
                 eventTypeFilter = SplitEventTypeFilter(route.EventTypeFilter),
@@ -738,7 +737,7 @@ public sealed partial class ActivityDataController
         var edits = (request.Routes ?? Array.Empty<ActivityChannelRouteInput>())
             .Select(r => new ChannelRouteEdit(
                 r.Id, r.Name, r.ChannelId,
-                r.PostEvents, r.PostLoot, r.PostAuctions, r.PostAttendance, r.PostTodBoard, r.PostDkpSheet,
+                r.PostEvents, r.PostLoot, r.PostAuctions, r.PostTodBoard, r.PostDkpSheet,
                 r.EventTypeFilter, r.HnmMonsterFilter))
             .ToList();
 

@@ -1655,7 +1655,6 @@ public sealed record ActivityChannelRouteInput(
     bool PostEvents,
     bool PostLoot,
     bool PostAuctions,
-    bool PostAttendance,
     bool PostTodBoard,
     bool PostDkpSheet,
     IReadOnlyList<string>? EventTypeFilter,

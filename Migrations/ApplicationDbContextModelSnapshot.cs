@@ -2933,9 +2933,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.Property<bool>("PostAttendance")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("PostAuctions")
                         .HasColumnType("boolean");
 

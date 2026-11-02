@@ -28,7 +28,6 @@ interface RouteDraft {
   postEvents: boolean;
   postLoot: boolean;
   postAuctions: boolean;
-  postAttendance: boolean;
   postTodBoard: boolean;
   postDkpSheet: boolean;
   eventTypeFilter: string[];
@@ -737,7 +736,6 @@ export class ConfigurationsTabComponent {
       postEvents: route.postEvents,
       postLoot: route.postLoot,
       postAuctions: route.postAuctions,
-      postAttendance: route.postAttendance,
       postTodBoard: route.postTodBoard,
       postDkpSheet: route.postDkpSheet,
       eventTypeFilter: [...route.eventTypeFilter],
@@ -753,7 +751,7 @@ export class ConfigurationsTabComponent {
       {
         id: null, name: '', channelId: '',
         postEvents: false, postLoot: false, postAuctions: false,
-        postAttendance: false, postTodBoard: false, postDkpSheet: false, eventTypeFilter: [],
+        postTodBoard: false, postDkpSheet: false, eventTypeFilter: [],
         hnmMonsterFilter: [],
         dirty: true,
         expanded: true
@@ -821,7 +819,6 @@ export class ConfigurationsTabComponent {
       this.channelRoutes.filter(r => r.channelId && pick(r)).length;
     if (count(r => r.postLoot) > 1) return 'Only one route can post Loot.';
     if (count(r => r.postAuctions) > 1) return 'Only one route can post Auctions.';
-    if (count(r => r.postAttendance) > 1) return 'Only one route can post Attendance.';
     if (count(r => r.postTodBoard) > 1) return 'Only one route can post the ToD board.';
     if (count(r => r.postDkpSheet) > 1) return 'Only one route can post the DKP sheet.';
     return null;
@@ -841,7 +838,6 @@ export class ConfigurationsTabComponent {
         postEvents: r.postEvents,
         postLoot: r.postLoot,
         postAuctions: r.postAuctions,
-        postAttendance: r.postAttendance,
         postTodBoard: r.postTodBoard,
         postDkpSheet: r.postDkpSheet,
         eventTypeFilter: r.eventTypeFilter,
