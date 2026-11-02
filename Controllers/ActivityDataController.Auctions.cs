@@ -579,6 +579,42 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
+    // Throws an auction away -- a mistake, a duplicate, a test. Unlike Close it writes no history,
+    // charges no winner and draws no inventory down (inventory only moves on Close, so there is
+    // nothing to give back). Any state, creator only, same as End and Close. Deleting the row also
+    // takes its Discord cards down (ApplicationDbContext.CollectDeletedAuctionCards).
+    [HttpPost("auctions/{auctionId:int}/delete")]
+    public async Task<IActionResult> DeleteAuctionAsync(int auctionId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to delete auctions." });
+        }
+
+        var auction = await _dbContext.Auctions
+            .Include(item => item.AuctionItems)
+                .ThenInclude(item => item.Bids)
+            .FirstOrDefaultAsync(item => item.Id == auctionId, cancellationToken);
+
+        if (auction is null)
+        {
+            return NotFound(new { error = "Auction not found." });
+        }
+
+        if (!IsAuctionCreator(appUser.Id, auction))
+        {
+            return Forbid();
+        }
+
+        _dbContext.Bids.RemoveRange(auction.AuctionItems.SelectMany(item => item.Bids));
+        _dbContext.AuctionItems.RemoveRange(auction.AuctionItems);
+        _dbContext.Auctions.Remove(auction);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { success = true });
+    }
+
     [HttpPost("auctions/{auctionId:int}/close")]
     public async Task<IActionResult> CloseAuctionAsync(
         int auctionId,

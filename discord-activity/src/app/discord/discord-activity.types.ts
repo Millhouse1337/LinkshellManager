@@ -1679,6 +1679,8 @@ export interface ActivityAuction {
   canStart: boolean;
   canEnd: boolean;
   canClose: boolean;
+  // Creator-only, any state: throws the auction away (no history, no DKP charged).
+  canDelete: boolean;
   items: ActivityAuctionItem[];
   // Viewer's available DKP for THIS auction — the balance in the pool it draws from, minus DKP
   // locked by bids they're currently winning on it. Set by the list endpoint.

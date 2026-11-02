@@ -305,6 +305,7 @@ public sealed partial class ActivityDataController
             // CanClose: only after the timer expires. Closing runs the delivery
             // confirmation + archive + inventory-removal flow.
             isCreator && HasAuctionEnded(auction, nowUtc),
+            isCreator,
             auction.AuctionItems
                 .OrderBy(item => item.Id)
                 .Select(item => new ActivityAuctionItemDto(

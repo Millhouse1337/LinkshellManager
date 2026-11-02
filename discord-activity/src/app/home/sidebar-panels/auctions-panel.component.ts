@@ -653,6 +653,19 @@ export class AuctionsPanelComponent {
     }
   }
 
+  // Same two-stage inline confirm as End: Delete -> "Confirm delete" / "Keep".
+  protected readonly pendingDeleteAuctionId = signal<number | null>(null);
+
+  protected async deleteAuction(auctionId: number): Promise<void> {
+    this.pendingDeleteAuctionId.set(null);
+    if (!this.selectedLinkshellId) return;
+    try {
+      await this.activity.deleteAuction(auctionId, this.selectedLinkshellId);
+    } catch {
+      // message set by service
+    }
+  }
+
   protected beginCloseAuction(auctionId: number): void {
     const auction = this.auctions().find(a => a.id === auctionId);
     if (!auction) return;

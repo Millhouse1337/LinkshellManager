@@ -239,6 +239,25 @@ export class AuctionService {
     }
   }
 
+  // Throws the auction away: no history, no DKP charged, no inventory drawn down.
+  async deleteAuction(auctionId: number, linkshellId: number): Promise<void> {
+    this.busyAuctionId.set(auctionId);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+
+    try {
+      await this.http.postActivityAction(`/api/activity/auctions/${auctionId}/delete`);
+      await this.auth.refreshOverview();
+      await this.loadAuctions(linkshellId);
+      this.auth.setActionMessage('Auction deleted.');
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Deleting the auction failed.'));
+      throw error;
+    } finally {
+      this.busyAuctionId.set(null);
+    }
+  }
+
   async markAuctionHistoryItemReceived(itemId: number, linkshellId: number): Promise<void> {
     this.busyAuctionItemId.set(itemId);
     this.auth.setActionError(null);

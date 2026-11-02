@@ -1198,6 +1198,9 @@ public sealed record ActivityAuctionDto(
     // archives to history, and removes any inventory-sourced items that the
     // creator marks as delivered.
     bool CanClose,
+    // Creator-only, in any state: throws the auction away with no history, no DKP charged and no
+    // inventory drawn down (POST auctions/{id}/delete).
+    bool CanDelete,
     IReadOnlyList<ActivityAuctionItemDto> Items,
     // The viewer's available DKP for THIS auction — the balance in the pool the auction draws
     // from, minus DKP locked by bids they're currently winning on it. Null when not computed
