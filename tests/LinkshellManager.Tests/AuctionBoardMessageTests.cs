@@ -9,8 +9,9 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The auction card is a text embed: a status line, one line per item with its bid, the item's
-// type / notes beneath it, and a Bid button per item.
+// The auction card is a text embed: the details (status, times, host) and then one numbered line
+// per item with its bid and its type / notes, an item picker that opens the bid modal, and
+// My bids / Open in app buttons.
 public class AuctionBoardMessageTests
 {
     // Mirrors DiscordBotClient.JsonOptions so assertions see the on-the-wire JSON.
@@ -49,10 +50,25 @@ public class AuctionBoardMessageTests
 
         var text = Description(AuctionBoardMessageBuilder.BuildLivePayload(auction, null, Now));
 
-        Assert.StartsWith("🟢 **Live** · 3 items", text);
-        Assert.Contains("• **Ridill** — **120 DKP** · leading Alpha", text);
-        Assert.Contains("• **Kraken Club** — starts at 50 DKP · no bids yet", text);
-        Assert.Contains("• **Haubergeon** — no bids yet", text);
+        Assert.StartsWith("🟢 **Live** · ends <t:", text);
+        Assert.Contains("Host **Millh** · 3 items", text);
+        Assert.Contains("`1` **Ridill** · 120 DKP, Alpha", text);
+        Assert.Contains("`2` **Kraken Club** · opens 50 DKP", text);
+        Assert.Contains("`3` **Haubergeon** · no bids yet", text);
+    }
+
+    // The items sit UNDER the details, which is why both live in the description: Discord draws
+    // fields after it, so Starts / Ends as fields landed below the list.
+    [Fact]
+    public void Items_SitUnderTheDetails()
+    {
+        var payload = Render(AuctionBoardMessageBuilder.BuildLivePayload(
+            LiveAuction(new AuctionItem { Id = 1, ItemName = "Ridill" }), null, Now));
+        var text = payload.GetProperty("embeds")[0].GetProperty("description").GetString()!;
+
+        Assert.True(text.IndexOf("Starts <t:", StringComparison.Ordinal) < text.IndexOf("`1`", StringComparison.Ordinal));
+        Assert.True(text.IndexOf("Host **Millh**", StringComparison.Ordinal) < text.IndexOf("`1`", StringComparison.Ordinal));
+        Assert.False(payload.GetProperty("embeds")[0].TryGetProperty("fields", out _));
     }
 
     [Theory]
@@ -71,14 +87,14 @@ public class AuctionBoardMessageTests
     }
 
     [Fact]
-    public void ItemTypeAndNotes_SitUnderTheItem()
+    public void ItemTypeAndNotes_SitOnTheItemsLine()
     {
         var auction = LiveAuction(
             new AuctionItem { Id = 1, ItemName = "Ridill", ItemType = "Weapon", Notes = "From Ouryu" });
 
         var text = Description(AuctionBoardMessageBuilder.BuildLivePayload(auction, null, Now));
 
-        Assert.Contains("• **Ridill** — no bids yet\n↳ _Weapon · From Ouryu_", text);
+        Assert.Contains("`1` **Ridill** · no bids yet · _Weapon · From Ouryu_", text);
     }
 
     [Fact]
@@ -93,24 +109,82 @@ public class AuctionBoardMessageTests
 
         Assert.True(text.Length <= 4096, $"description is {text.Length} chars");
         Assert.Matches(@"_…and \d+ more — see the app\._", text);
-        Assert.Contains("• **Item 1** —", text);
-        Assert.DoesNotContain("• **Item 60** —", text);
+        Assert.Contains("`1` **Item 1** ·", text);
+        Assert.DoesNotContain("`60` **Item 60**", text);
+    }
+
+    // One picker instead of a button per item, then My bids and Open in app.
+    [Fact]
+    public void LiveCard_HasAnItemPickerAndMyBids()
+    {
+        var auction = LiveAuction(
+            new AuctionItem { Id = 11, ItemName = "Ridill", CurrentHighestBid = 120, CurrentHighestBidder = "Alpha" },
+            new AuctionItem { Id = 12, ItemName = "Kraken Club", StartingBidDkp = 50 });
+
+        var rows = Render(AuctionBoardMessageBuilder.BuildLivePayload(auction, "https://lsm.example/Auction", Now))
+            .GetProperty("components").EnumerateArray().ToList();
+
+        Assert.Equal(2, rows.Count);
+        var select = rows[0].GetProperty("components")[0];
+        Assert.Equal(3, select.GetProperty("type").GetInt32());
+        Assert.Equal("auc:pick:5", select.GetProperty("custom_id").GetString());
+        var options = select.GetProperty("options").EnumerateArray().ToList();
+        Assert.Equal("1. Ridill", options[0].GetProperty("label").GetString());
+        Assert.Equal("11", options[0].GetProperty("value").GetString());
+        Assert.Equal("120 DKP, Alpha", options[0].GetProperty("description").GetString());
+        Assert.Equal("opens 50 DKP", options[1].GetProperty("description").GetString());
+
+        var buttons = rows[1].GetProperty("components").EnumerateArray().ToList();
+        Assert.Equal("My bids", buttons[0].GetProperty("label").GetString());
+        Assert.Equal("auc:mybids:5", buttons[0].GetProperty("custom_id").GetString());
+        Assert.Equal("Open in app", buttons[1].GetProperty("label").GetString());
     }
 
     [Fact]
-    public void MoreThanTwentyItems_SaysTheRestAreBidInTheApp()
+    public void MoreThan25Items_SaysTheRestAreBidInTheApp()
     {
-        var items = Enumerable.Range(1, 22)
+        var items = Enumerable.Range(1, 27)
             .Select(i => new AuctionItem { Id = i, ItemName = $"Item {i}" })
             .ToArray();
 
-        var payload = Render(AuctionBoardMessageBuilder.BuildLivePayload(LiveAuction(items), "https://lsm.example/Auction", Now));
+        var payload = Render(AuctionBoardMessageBuilder.BuildLivePayload(LiveAuction(items), null, Now));
 
-        Assert.Contains("have no button here — bid on them in the app", payload.GetProperty("embeds")[0].GetProperty("description").GetString());
-        var rows = payload.GetProperty("components").EnumerateArray().ToList();
-        Assert.Equal(5, rows.Count); // 4 rows of 5 Bid buttons + the app link row
-        Assert.Equal(AuctionBoardMessageBuilder.MaxBidButtons,
-            rows.Take(4).Sum(row => row.GetProperty("components").GetArrayLength()));
+        Assert.Contains("aren't in the picker — bid on them in the app", payload.GetProperty("embeds")[0].GetProperty("description").GetString());
+        var select = payload.GetProperty("components")[0].GetProperty("components")[0];
+        Assert.Equal(AuctionBoardMessageBuilder.MaxPickerItems, select.GetProperty("options").GetArrayLength());
+    }
+
+    [Fact]
+    public void AnEndedAuction_HasNoPicker()
+    {
+        var auction = LiveAuction(new AuctionItem { Id = 1, ItemName = "Ridill" });
+        auction.EndTime = Now.AddMinutes(-5);
+
+        var rows = Render(AuctionBoardMessageBuilder.BuildLivePayload(auction, null, Now))
+            .GetProperty("components").EnumerateArray().ToList();
+
+        Assert.Single(rows);
+        Assert.Equal("My bids", rows[0].GetProperty("components")[0].GetProperty("label").GetString());
+    }
+
+    [Fact]
+    public void MyBids_ListsOnlyTheMembersBidsNumberedLikeTheCard()
+    {
+        var items = new List<AuctionItem>
+        {
+            new() { Id = 1, ItemName = "Ridill", CurrentHighestBid = 120, CurrentHighestBidderAppUserId = "me",
+                Bids = { new Bid { AppUserId = "me", BidAmount = 100 }, new Bid { AppUserId = "me", BidAmount = 120 } } },
+            new() { Id = 2, ItemName = "Kraken Club" },
+            new() { Id = 3, ItemName = "Haubergeon", CurrentHighestBid = 60, CurrentHighestBidderAppUserId = "other",
+                Bids = { new Bid { AppUserId = "me", BidAmount = 40 } } },
+        };
+
+        var text = AuctionBoardMessageBuilder.BuildMyBidsText(items, "me");
+
+        Assert.Contains("`1` **Ridill** · your bid 120 DKP · ✅ leading", text);
+        Assert.Contains("`3` **Haubergeon** · your bid 40 DKP · outbid — 60 DKP now", text);
+        Assert.DoesNotContain("Kraken Club", text);
+        Assert.Contains("haven't bid", AuctionBoardMessageBuilder.BuildMyBidsText(items, "nobody"));
     }
 
     // A card first posted when it carried a rendered PNG keeps that file unless the edit says

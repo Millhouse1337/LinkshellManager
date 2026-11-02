@@ -3,8 +3,9 @@ using LinkshellManagerDiscordApp.Models;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Builds the Discord payloads for an auction's card: the live card (one embed + a "Bid: {item}"
-// button per item) and the results card posted when the auction closes.
+// Builds the Discord payloads for an auction's card: the live card (one embed, an item picker
+// that opens the bid modal, and My bids / Open in app buttons) and the results card posted when
+// the auction closes.
 //
 // Pure (no DB, no config) so it can be tested: the caller passes the loaded auction, the "open
 // in app" link (null when no public base URL is configured) and, for the live card, the time to
@@ -18,10 +19,10 @@ public static class AuctionBoardMessageBuilder
     private const int DescriptionBudget = 3500;
     private const int NotesMax = 100;
 
-    // Discord allows 5 action rows of 5 buttons; one row is kept for the "Bid in app" link.
-    public const int MaxBidButtons = 20;
+    // A Discord select menu holds at most 25 options.
+    public const int MaxPickerItems = 25;
 
-    public const string BidHelp = "Bid with an item's button or in the app · highest bid when the timer ends wins";
+    public const string BidHelp = "Pick an item below to bid · highest bid when the timer ends wins";
 
     // The live card. `components` is always sent — an empty array is what clears buttons off a
     // card on edit — and so is `attachments`, so a card first posted back when it carried a PNG
@@ -29,7 +30,7 @@ public static class AuctionBoardMessageBuilder
     public static object BuildLivePayload(Auction auction, string? appLink, DateTime nowUtc) => new
     {
         embeds = new[] { BuildLiveEmbed(auction, appLink, nowUtc) },
-        components = BuildLiveComponents(auction, appLink),
+        components = BuildLiveComponents(auction, appLink, nowUtc),
         attachments = Array.Empty<object>(),
         allowed_mentions = new { parse = Array.Empty<string>() },
     };
@@ -56,53 +57,57 @@ public static class AuctionBoardMessageBuilder
         return auction.EndTime is { } end && AsUtc(end) <= nowUtc ? "Ended" : "Live";
     }
 
+    // The details first -- status, when it starts and ends, who is running it -- and the items
+    // UNDER them, one numbered line each. Everything sits in the description so the order is
+    // fixed: Discord always draws fields after the description, which put the item list above
+    // the Starts / Ends / Created by it belongs under.
     private static object BuildLiveEmbed(Auction auction, string? appLink, DateTime nowUtc)
     {
         var items = auction.AuctionItems.OrderBy(i => i.Id).ToList();
         var status = Status(auction, nowUtc);
-        var statusIcon = status switch
-        {
-            "Live" => "🟢",
-            "Queued" => "⏳",
-            _ => "⏹️",
-        };
 
-        var sb = new StringBuilder($"{statusIcon} **{status}** · {ItemCount(items.Count)}");
-        var notes = new List<string>();
-        if (items.Count > MaxBidButtons)
-        {
-            notes.Add($"_Items after the first {MaxBidButtons} have no button here — bid on them in the app._");
-        }
-        AppendItems(sb, items, notes, LiveLine);
-
-        var fields = new List<object>();
+        var sb = new StringBuilder(StatusLine(auction, status));
+        var times = new List<string>();
         if (auction.StartTime.HasValue)
         {
-            fields.Add(new { name = "Starts", value = TimestampMarkup(auction.StartTime.Value), inline = true });
+            times.Add($"Starts {Timestamp(auction.StartTime.Value, 'f')}");
         }
         if (auction.EndTime.HasValue)
         {
-            fields.Add(new { name = "Ends", value = TimestampMarkup(auction.EndTime.Value), inline = true });
+            times.Add($"Ends {Timestamp(auction.EndTime.Value, 'f')}");
         }
-        if (!string.IsNullOrWhiteSpace(auction.CreatedBy))
+        if (times.Count > 0)
         {
-            fields.Add(new { name = "Created by", value = Escape(auction.CreatedBy!), inline = true });
+            sb.Append('\n').Append(string.Join(" · ", times));
         }
-        if (appLink is not null)
+        var host = string.IsNullOrWhiteSpace(auction.CreatedBy) ? null : $"Host **{Escape(auction.CreatedBy!.Trim())}**";
+        sb.Append('\n').Append(host is null ? ItemCount(items.Count) : $"{host} · {ItemCount(items.Count)}");
+
+        var notes = new List<string>();
+        if (items.Count > MaxPickerItems && status != "Ended")
         {
-            fields.Add(new { name = "App", value = $"[Open auctions]({appLink})", inline = false });
+            notes.Add($"_Items after the first {MaxPickerItems} aren't in the picker — bid on them in the app._");
         }
+        sb.Append('\n');
+        AppendItems(sb, items, notes, (item, index) => LiveLine(item, index + 1));
 
         return new
         {
-            title = Truncate($"🪙 {auction.AuctionTitle ?? $"Auction #{auction.Id}"}", 250),
+            title = Truncate(auction.AuctionTitle ?? $"Auction #{auction.Id}", 250),
             description = sb.ToString(),
             color = LiveColor,
-            fields = fields.ToArray(),
-            footer = new { text = BidHelp },
+            footer = new { text = status == "Ended" ? "Bidding has ended · highest bid wins" : BidHelp },
             timestamp = DateTime.UtcNow.ToString("o"),
         };
     }
+
+    // "🟢 **Live** · ends in 2 days" -- the one line a member reads first.
+    private static string StatusLine(Auction auction, string status) => status switch
+    {
+        "Live" => auction.EndTime is { } end ? $"🟢 **Live** · ends {Timestamp(end, 'R')}" : "🟢 **Live**",
+        "Queued" => auction.StartTime is { } start ? $"⏳ **Queued** · starts {Timestamp(start, 'R')}" : "⏳ **Queued**",
+        _ => auction.EndTime is { } ended ? $"⏹️ **Ended** {Timestamp(ended, 'R')}" : "⏹️ **Ended**",
+    };
 
     private static object BuildClosedEmbed(AuctionHistory history)
     {
@@ -110,7 +115,8 @@ public static class AuctionBoardMessageBuilder
         var sold = items.Count(IsSold);
 
         var sb = new StringBuilder($"**{ItemCount(items.Count)}** · {sold} sold");
-        AppendItems(sb, items, new List<string>(), ClosedLine);
+        AppendItems(sb, items, new List<string>(),
+            (item, _) => DetailLine(item) is { } detail ? $"{ClosedLine(item)}\n{detail}" : ClosedLine(item));
 
         var fields = new List<object>();
         if (!string.IsNullOrWhiteSpace(history.CreatedBy))
@@ -129,11 +135,11 @@ public static class AuctionBoardMessageBuilder
         };
     }
 
-    // One block per item: the item line, then its type / notes beneath it. Stops at the
+    // One block per item (`block` gets the item and its 0-based position). Stops at the
     // description budget and says how many items didn't fit, so a big auction never just
     // silently loses its tail. `notes` are appended last and their room is kept free.
     private static void AppendItems(
-        StringBuilder sb, IReadOnlyList<AuctionItem> items, List<string> notes, Func<AuctionItem, string> line)
+        StringBuilder sb, IReadOnlyList<AuctionItem> items, List<string> notes, Func<AuctionItem, int, string> block)
     {
         if (items.Count == 0)
         {
@@ -146,18 +152,13 @@ public static class AuctionBoardMessageBuilder
         var reserved = notes.Sum(n => n.Length + 2) + 48;
         for (var i = 0; i < items.Count; i++)
         {
-            var block = "\n" + line(items[i]);
-            var detail = DetailLine(items[i]);
-            if (detail is not null)
-            {
-                block += "\n" + detail;
-            }
-            if (sb.Length + block.Length + reserved > DescriptionBudget)
+            var text = "\n" + block(items[i], i);
+            if (sb.Length + text.Length + reserved > DescriptionBudget)
             {
                 notes.Insert(0, $"_…and {items.Count - i} more — see the app._");
                 break;
             }
-            sb.Append(block);
+            sb.Append(text);
         }
 
         foreach (var note in notes)
@@ -166,19 +167,25 @@ public static class AuctionBoardMessageBuilder
         }
     }
 
-    private static string LiveLine(AuctionItem item)
+    // "`1` **Kirin's Pole** · 10 DKP, Millhouse · _abc_" -- number, name, where the bidding
+    // stands, then the type / notes on the same line. The number matches the item picker's.
+    private static string LiveLine(AuctionItem item, int number)
     {
-        var name = $"• **{Escape(ItemName(item))}**";
+        var line = $"`{number}` **{Escape(ItemName(item))}** · {Escape(BidState(item))}";
+        return DetailText(item) is { } detail ? $"{line} · _{detail}_" : line;
+    }
+
+    // Where an item's bidding stands, in plain text (the picker's option description uses it
+    // too): "10 DKP, Millhouse", "opens 10 DKP", or "no bids yet".
+    private static string BidState(AuctionItem item)
+    {
         if (item.CurrentHighestBid is > 0)
         {
-            var leader = string.IsNullOrWhiteSpace(item.CurrentHighestBidder)
-                ? string.Empty
-                : $" · leading {Escape(item.CurrentHighestBidder!.Trim())}";
-            return $"{name} — **{item.CurrentHighestBid} DKP**{leader}";
+            return string.IsNullOrWhiteSpace(item.CurrentHighestBidder)
+                ? $"{item.CurrentHighestBid} DKP"
+                : $"{item.CurrentHighestBid} DKP, {item.CurrentHighestBidder!.Trim()}";
         }
-        return item.StartingBidDkp is > 0
-            ? $"{name} — starts at {item.StartingBidDkp} DKP · no bids yet"
-            : $"{name} — no bids yet";
+        return item.StartingBidDkp is > 0 ? $"opens {item.StartingBidDkp} DKP" : "no bids yet";
     }
 
     private static string ClosedLine(AuctionItem item)
@@ -189,8 +196,12 @@ public static class AuctionBoardMessageBuilder
             : $"{name} — _no bids_";
     }
 
-    // "Weapon · Dropped by Ouryu" under the item, or null when it has neither.
+    // "↳ _Weapon · Dropped by Ouryu_" under the item on the results card, or null.
     private static string? DetailLine(AuctionItem item)
+        => DetailText(item) is { } detail ? $"↳ _{detail}_" : null;
+
+    // "Weapon · Dropped by Ouryu" (escaped), or null when the item has neither.
+    private static string? DetailText(AuctionItem item)
     {
         var bits = new List<string>();
         if (!string.IsNullOrWhiteSpace(item.ItemType))
@@ -201,7 +212,7 @@ public static class AuctionBoardMessageBuilder
         {
             bits.Add(Escape(Truncate(item.Notes!.Trim().ReplaceLineEndings(" "), NotesMax)));
         }
-        return bits.Count == 0 ? null : $"↳ _{string.Join(" · ", bits)}_";
+        return bits.Count == 0 ? null : string.Join(" · ", bits);
     }
 
     private static bool IsSold(AuctionItem item)
@@ -212,38 +223,89 @@ public static class AuctionBoardMessageBuilder
 
     private static string ItemCount(int count) => count == 1 ? "1 item" : $"{count} items";
 
-    // A "Bid: {item}" button per item (each opens the inline bid modal), plus a "Bid in app" link
-    // button. Capped to stay within Discord's 5-action-row limit (4 rows of item buttons + 1 link).
-    private static object[] BuildLiveComponents(Auction auction, string? appLink)
+    // Row 1: "Pick an item to bid on…", a select whose options are the numbered items; picking
+    // one opens the bid modal (it replaced a "Bid: {item}" button per item, which took up to four
+    // rows). Gone once bidding has ended. Row 2: My bids (an ephemeral list of the clicker's
+    // bids on this auction) and Open in app when there is a link.
+    private static object[] BuildLiveComponents(Auction auction, string? appLink, DateTime nowUtc)
     {
         var rows = new List<object>();
-        var current = new List<object>();
-        foreach (var item in auction.AuctionItems.OrderBy(i => i.Id).Take(MaxBidButtons))
+        var items = auction.AuctionItems.OrderBy(i => i.Id).ToList();
+        if (items.Count > 0 && Status(auction, nowUtc) != "Ended")
         {
-            current.Add(new
+            var options = items
+                .Take(MaxPickerItems)
+                .Select((item, index) => new
+                {
+                    // Discord caps an option's label and description at 100 characters.
+                    label = Truncate($"{index + 1}. {ItemName(item)}", 100),
+                    value = item.Id.ToString(),
+                    description = Truncate(BidState(item), 100),
+                })
+                .ToArray();
+            rows.Add(new
             {
-                type = 2,   // button
-                style = 1,  // primary
-                label = Truncate($"Bid: {item.ItemName ?? "item"}", 80),
-                custom_id = $"{AuctionBidService.BidButtonPrefix}{item.Id}",
+                type = 1,
+                components = new object[]
+                {
+                    new
+                    {
+                        type = 3, // string select
+                        custom_id = $"{AuctionBidService.PickSelectPrefix}{auction.Id}",
+                        placeholder = "Pick an item to bid on…",
+                        min_values = 1,
+                        max_values = 1,
+                        options,
+                    },
+                },
             });
-            if (current.Count == 5)
-            {
-                rows.Add(new { type = 1, components = current.ToArray() });
-                current = new List<object>();
-            }
-        }
-        if (current.Count > 0)
-        {
-            rows.Add(new { type = 1, components = current.ToArray() });
         }
 
-        var link = BuildLinkRow("Bid in app", appLink);
-        if (link is not null && rows.Count < 5)
+        var buttons = new List<object>
         {
-            rows.Add(link[0]);
+            new
+            {
+                type = 2,   // button
+                style = 2,  // secondary
+                label = "My bids",
+                custom_id = $"{AuctionBidService.MyBidsPrefix}{auction.Id}",
+            },
+        };
+        if (appLink is not null)
+        {
+            buttons.Add(new { type = 2, style = 5, label = "Open in app", url = appLink });
         }
+        rows.Add(new { type = 1, components = buttons.ToArray() });
         return rows.ToArray();
+    }
+
+    // The ephemeral "My bids" reply: each item this member has bid on, numbered like the card,
+    // with their best bid and whether they still lead. `items` is the whole auction in card
+    // order, each carrying (at least) this member's own bids.
+    public static string BuildMyBidsText(IReadOnlyList<AuctionItem> items, string appUserId)
+    {
+        var lines = new List<string>();
+        var ordered = items.OrderBy(i => i.Id).ToList();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var item = ordered[i];
+            var mine = item.Bids
+                .Where(b => string.Equals(b.AppUserId, appUserId, StringComparison.OrdinalIgnoreCase))
+                .Select(b => (int?)b.BidAmount)
+                .Max();
+            if (mine is null)
+            {
+                continue;
+            }
+            var leading = string.Equals(item.CurrentHighestBidderAppUserId, appUserId, StringComparison.OrdinalIgnoreCase);
+            var standing = leading
+                ? "✅ leading"
+                : $"outbid — {item.CurrentHighestBid ?? mine} DKP now";
+            lines.Add($"`{i + 1}` **{Escape(ItemName(item))}** · your bid {mine} DKP · {standing}");
+        }
+        return lines.Count == 0
+            ? "You haven't bid on anything in this auction yet. Pick an item on the card to bid."
+            : "**Your bids**\n" + string.Join("\n", lines);
     }
 
     // A single-row "open in app" link button (style 5 = URL; no interaction). Null when there
@@ -264,11 +326,9 @@ public static class AuctionBoardMessageBuilder
         };
     }
 
-    private static string TimestampMarkup(DateTime utc)
-    {
-        var unix = ((DateTimeOffset)AsUtc(utc)).ToUnixTimeSeconds();
-        return $"<t:{unix}:f> (<t:{unix}:R>)";
-    }
+    // Discord renders <t:unix:style> in each viewer's own time zone: f = date + time, R = "in 2 days".
+    private static string Timestamp(DateTime utc, char style)
+        => $"<t:{((DateTimeOffset)AsUtc(utc)).ToUnixTimeSeconds()}:{style}>";
 
     private static DateTime AsUtc(DateTime value) =>
         value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);

@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace LinkshellManagerDiscordApp.Services;
 
 // Posts the auction card to the linkshell's Auctions channel route via the bot — a text
-// embed (status, items with their bids, start/end as fields; see AuctionBoardMessageBuilder)
-// carrying "Bid: {item}" buttons + an "open in app" link:
+// embed (status, start/end and host, then the numbered items with their bids; see
+// AuctionBoardMessageBuilder) carrying an item picker, My bids and an "Open in app" link:
 //  • Create — post the card (one message).
 //  • Update — EDIT that same message in place (a new bid, or the auction started / ended), so
 //             a live auction is one evolving card, not a stack of per-bid messages.

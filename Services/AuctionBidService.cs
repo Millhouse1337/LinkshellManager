@@ -15,8 +15,13 @@ public sealed record AuctionBidResult(bool Success, string? Error, string? ItemN
 public static class AuctionBidService
 {
     // custom_id prefixes routed by DiscordInteractionsController:
-    //   auc:bid:{auctionItemId}      — button → opens the bid modal
+    //   auc:pick:{auctionId}         — the card's item select → opens the bid modal for the pick
+    //   auc:mybids:{auctionId}       — button → the clicker's bids on this auction (ephemeral)
+    //   auc:bid:{auctionItemId}      — the old per-item button (cards posted before the select;
+    //                                  they switch over on their next edit) → opens the bid modal
     //   auc:bidmodal:{auctionItemId} — modal submit → places the bid
+    public const string PickSelectPrefix = "auc:pick:";
+    public const string MyBidsPrefix = "auc:mybids:";
     public const string BidButtonPrefix = "auc:bid:";
     public const string BidModalPrefix = "auc:bidmodal:";
     public const string BidAmountFieldId = "amount";

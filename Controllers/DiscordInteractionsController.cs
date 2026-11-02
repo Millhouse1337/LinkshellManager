@@ -777,6 +777,20 @@ public sealed class DiscordInteractionsController : ControllerBase
                 eventId, slotId, role, main, SelectedValue(data), true, appUserId, isLeaderSub, cancellationToken);
         }
 
+        // The auction card's item picker → the bid-amount modal for the picked item, the same one
+        // the old per-item buttons opened. The option's value is the auction item id.
+        if (customId.StartsWith(AuctionBidService.PickSelectPrefix, StringComparison.Ordinal))
+        {
+            var itemId = int.TryParse(SelectedValue(data), out var picked) ? picked : 0;
+            return await BidModalAsync(itemId, appUserId, cancellationToken);
+        }
+
+        if (customId.StartsWith(AuctionBidService.MyBidsPrefix, StringComparison.Ordinal))
+        {
+            var auctionId = ParseTrailingId(customId, AuctionBidService.MyBidsPrefix);
+            return await MyAuctionBidsAsync(auctionId, appUserId, cancellationToken);
+        }
+
         // Auction bid button → open the bid-amount modal. The bid itself is
         // placed on modal submit (handled in HandleModalSubmitAsync).
         if (customId.StartsWith(AuctionBidService.BidButtonPrefix, StringComparison.Ordinal))
@@ -1449,6 +1463,29 @@ public sealed class DiscordInteractionsController : ControllerBase
                 }
             }
         });
+    }
+
+    // The auction card's "My bids": an ephemeral list of the clicker's bids on that auction and
+    // whether each still leads. Needs a linked account -- bids are recorded against it.
+    private async Task<IActionResult> MyAuctionBidsAsync(int auctionId, string? appUserId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(appUserId))
+        {
+            return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
+        }
+
+        // Only this member's own bids are loaded; the card's numbering needs every item.
+        var items = await _db.AuctionItems
+            .AsNoTracking()
+            .Include(item => item.Bids.Where(bid => bid.AppUserId == appUserId))
+            .Where(item => item.AuctionId == auctionId)
+            .ToListAsync(cancellationToken);
+        if (items.Count == 0)
+        {
+            return Ephemeral("That auction has closed — see its results in the app.");
+        }
+
+        return Ephemeral(AuctionBoardMessageBuilder.BuildMyBidsText(items, appUserId));
     }
 
     private static string Truncate(string value, int maxLength)
