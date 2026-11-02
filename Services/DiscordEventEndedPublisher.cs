@@ -49,9 +49,10 @@ public sealed class DiscordEventEndedPublisher
                 return;
             }
 
-            // EventHistory carries no monster, so HNM end-summaries (rare — HNM is 0-DKP and
-            // usually canceled, not ended) route via the catch-all HNM/Other route.
-            var channelId = await _routes.ResolveEventChannelIdAsync(history.LinkshellId, history.EventType, null, cancellationToken);
+            // EventHistory carries no monster, so an HNM camp's is looked up: without it a summary
+            // could only reach a catch-all HNM route, never the monster's own channel.
+            var monsterName = await CampMonsterNameAsync(history, cancellationToken);
+            var channelId = await _routes.ResolveEventChannelIdAsync(history.LinkshellId, history.EventType, monsterName, cancellationToken);
             if (string.IsNullOrEmpty(channelId))
             {
                 _logger.LogInformation(
@@ -96,6 +97,31 @@ public sealed class DiscordEventEndedPublisher
         {
             _logger.LogWarning(ex, "Event-ended summary for history {HistoryId} failed.", eventHistoryId);
         }
+    }
+
+    // The monster an HNM camp's archive belongs to, or null. From the camp's review card, whose
+    // SourceEvent is the camp row (End Camp recycles it for the next pop, so it is still there);
+    // else from a Claim Shield capture filed on the archive. Not HNM -> null, no lookups.
+    private async Task<string?> CampMonsterNameAsync(EventHistory history, CancellationToken cancellationToken)
+    {
+        if (!string.Equals(history.EventType?.Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+        var fromCamp = await _db.WindowEvents
+            .AsNoTracking()
+            .Where(card => card.CampEventHistoryId == history.Id && card.SourceEvent != null)
+            .Select(card => card.SourceEvent!.AssignedMonsterName)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(fromCamp))
+        {
+            return fromCamp;
+        }
+        return await _db.ClaimShieldCaptures
+            .AsNoTracking()
+            .Where(capture => capture.EventHistoryId == history.Id && capture.MonsterName != "")
+            .Select(capture => capture.MonsterName)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     // One Claim Shield name as stored. Matched says whether it resolved to a current linkshell

@@ -71,8 +71,9 @@ public sealed class ChannelRouteResolver
         var matchType = isNamed ? type : "Other";
 
         // HNM can be routed per-monster: an HNM route whose HnmMonsterFilter lists THIS
-        // monster wins; else an HNM route with no monster filter (catch-all HNM); else the
-        // legacy "Other" route (HNM used to ride the "Other" bucket).
+        // monster wins; else an HNM route with no monster filter (catch-all HNM); else nothing.
+        // (It used to fall back to the "Other" route, from when HNM rode that bucket -- which
+        // posted every HNM camp with no route of its own into a channel that had HNM unticked.)
         if (string.Equals(matchType, "HNM", StringComparison.OrdinalIgnoreCase))
         {
             var monster = (monsterName ?? string.Empty).Trim();
@@ -84,7 +85,6 @@ public sealed class ChannelRouteResolver
                 ? hnmRoutes.FirstOrDefault(route => monsterSegments.Any(seg => FilterContains(route.HnmMonsterFilter, seg)))
                 : null;
             hnmMatch ??= hnmRoutes.FirstOrDefault(route => string.IsNullOrWhiteSpace(route.HnmMonsterFilter));
-            hnmMatch ??= rows.FirstOrDefault(route => FilterContains(route.EventTypeFilter, "Other"));
             return string.IsNullOrEmpty(hnmMatch?.ChannelId) ? null : hnmMatch!.ChannelId;
         }
 
