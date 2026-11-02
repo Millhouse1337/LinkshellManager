@@ -926,8 +926,6 @@ public sealed class HnmCampReviewHandoffService
         // visible under Past Events. Re-querying and removing them here would undo that -- the
         // query reads the pre-save database rows and EF hands back the same tracked instances.
 
-        await _db.SaveChangesAsync(cancellationToken);
-
         // WHETHER THE BOARD COMES BACK is the create form's call, and nothing else's: "Repeat post
         // when ToD is updated", and how many hours before the pop. That switch is stored as the
         // monster's HnmRecurringBoard, so it is read from there.
@@ -939,13 +937,24 @@ public sealed class HnmCampReviewHandoffService
         //     itself is untouched: its review card, Past Event, windows and captures were all moved
         //     off this row above, and every reference still pointing at it is SetNull.
         //
+        // Deleted in the SAME save as the handoff, not a second one: the "Event ended" summary is
+        // queued off this commit and skips itself while the board is parked as the defeated note
+        // (which carries it). With a second save it could read the board in between, skip, and
+        // then the board was gone -- no summary anywhere.
+        //
         // Off used to fall through to HnmAutoEventService, which revived the board for the next pop
         // on the spot. That put a fresh board straight back into the channel for a camp whose
         // officer had said not to repeat it.
-        if (!await RepeatsOnTodAsync(ev, cancellationToken))
+        var repeats = await RepeatsOnTodAsync(ev, cancellationToken);
+        if (!repeats)
         {
             _db.Events.Remove(ev);
-            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        if (!repeats)
+        {
             _logger.LogInformation(
                 "HNM camp {EventId} ('{Monster}') ended with Repeat-on-ToD off; its board was removed.",
                 ev.Id, ev.AssignedMonsterName);

@@ -73,9 +73,13 @@ public sealed class DiscordEventChannelPublisher
             // the board was never posted (nothing to edit in Discord).
             if (ev.HnmDefeatedAt != null)
             {
-                await _hnmBoardNotice.PostDefeatedNoticeAsync(
-                    ev, cancellationToken,
-                    await ResolveCampArchiveIdAsync(ev.Id, cancellationToken));
+                // The camp's "Event ended" summary rides at the top of the note -- see
+                // DiscordEventEndedPublisher.CarriedByCampBoardAsync, which skips posting it alone.
+                var archiveId = await ResolveCampArchiveIdAsync(ev.Id, cancellationToken);
+                var summary = archiveId is { } id
+                    ? await DiscordEventEndedPublisher.BuildSummaryEmbedAsync(_db, id, cancellationToken)
+                    : null;
+                await _hnmBoardNotice.PostDefeatedNoticeAsync(ev, cancellationToken, archiveId, summary);
 
                 // SAVE. The notice can repoint DiscordMessageId (a note it had to re-post) and
                 // clears DiscordExtraMessageIds after deleting those messages, but it only stages

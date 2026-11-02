@@ -49,6 +49,16 @@ public sealed class DiscordEventEndedPublisher
                 return;
             }
 
+            // An HNM camp whose board is now its "defeated" note shows this summary ON that note
+            // (HnmBoardNoticeService), so ending a camp posts one message, not two.
+            if (await CarriedByCampBoardAsync(_db, eventHistoryId, cancellationToken))
+            {
+                _logger.LogInformation(
+                    "Event-ended summary for history {HistoryId} is shown on the camp's defeated board note; not posted separately.",
+                    eventHistoryId);
+                return;
+            }
+
             // EventHistory carries no monster, so an HNM camp's is looked up: without it a summary
             // could only reach a catch-all HNM route, never the monster's own channel.
             var monsterName = await CampMonsterNameAsync(history, cancellationToken);
@@ -62,22 +72,9 @@ public sealed class DiscordEventEndedPublisher
                 return;
             }
 
-            // Who tagged the mob on this camp's Claim Shield. Read off the ARCHIVE
-            // (Capture.EventHistoryId), because End Camp clears Capture.EventId onto it -- the
-            // live-event id is gone by the time this summary is built.
-            //
-            // Every capture on the camp contributes names, won or lost: a tag is a tag whether or
-            // not the lottery went our way, which is the same rule HnmStandardCampFinalizer
-            // applies when it decides who the claim bonus reaches.
-            var taggers = await _db.ClaimShieldCaptureMembers
-                .AsNoTracking()
-                .Where(m => m.Capture!.EventHistoryId == eventHistoryId)
-                .Select(m => new TaggerRow(m.CharacterName, m.Matched))
-                .ToListAsync(cancellationToken);
-
             var payload = new
             {
-                embeds = new[] { BuildEmbed(history, taggers) },
+                embeds = new[] { await BuildEmbedAsync(_db, history, cancellationToken) },
                 allowed_mentions = new { parse = Array.Empty<string>() }
             };
             var messageId = await _bot.PostMessageAsync(channelId, payload, cancellationToken);
@@ -122,6 +119,52 @@ public sealed class DiscordEventEndedPublisher
             .Where(capture => capture.EventHistoryId == history.Id && capture.MonsterName != "")
             .Select(capture => capture.MonsterName)
             .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    // The summary embed for a Past Event, or null when it is gone. Shared with the HNM defeated
+    // note, which carries it at the top in place of a second message.
+    public static async Task<object?> BuildSummaryEmbedAsync(
+        ApplicationDbContext db, int eventHistoryId, CancellationToken cancellationToken)
+    {
+        var history = await db.EventHistories
+            .AsNoTracking()
+            .Include(h => h.AppUserEventHistories)
+            .FirstOrDefaultAsync(h => h.Id == eventHistoryId, cancellationToken);
+        return history is null ? null : await BuildEmbedAsync(db, history, cancellationToken);
+    }
+
+    // True when this Past Event is an HNM camp whose board is parked as its "defeated" note -- the
+    // note shows the summary, so it is not posted on its own. The same link the note uses to find
+    // its archive (DiscordEventChannelPublisher.ResolveCampArchiveIdAsync): the review card's
+    // SourceEvent. A camp whose board was removed at End Camp (repost off) has no SourceEvent left,
+    // so its summary still posts.
+    public static Task<bool> CarriedByCampBoardAsync(
+        ApplicationDbContext db, int eventHistoryId, CancellationToken cancellationToken)
+        => db.WindowEvents
+            .AsNoTracking()
+            .AnyAsync(card => card.CampEventHistoryId == eventHistoryId
+                && card.SourceEvent != null
+                && card.SourceEvent.HnmDefeatedAt != null
+                && card.SourceEvent.DiscordMessageId != null
+                && card.SourceEvent.DiscordMessageId != "",
+                cancellationToken);
+
+    private static async Task<object> BuildEmbedAsync(
+        ApplicationDbContext db, EventHistory history, CancellationToken cancellationToken)
+    {
+        // Who tagged the mob on this camp's Claim Shield. Read off the ARCHIVE
+        // (Capture.EventHistoryId), because End Camp clears Capture.EventId onto it -- the
+        // live-event id is gone by the time this summary is built.
+        //
+        // Every capture on the camp contributes names, won or lost: a tag is a tag whether or
+        // not the lottery went our way, which is the same rule HnmStandardCampFinalizer
+        // applies when it decides who the claim bonus reaches.
+        var taggers = await db.ClaimShieldCaptureMembers
+            .AsNoTracking()
+            .Where(m => m.Capture!.EventHistoryId == history.Id)
+            .Select(m => new TaggerRow(m.CharacterName, m.Matched))
+            .ToListAsync(cancellationToken);
+        return BuildEmbed(history, taggers);
     }
 
     // One Claim Shield name as stored. Matched says whether it resolved to a current linkshell

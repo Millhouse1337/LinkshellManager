@@ -28,9 +28,14 @@ public sealed class HnmBoardNoticeService
     // board is gone: the roster, the DKP, the loot and the ToD all live on a page nobody in
     // Discord has a link to, and the board that used to carry them has just been replaced by
     // these three lines. Null leaves the note exactly as it was.
+    //
+    // summaryEmbed is that camp's "🏁 Event ended" summary (DiscordEventEndedPublisher), drawn
+    // ABOVE the defeated part so ending a camp leaves one message instead of two. The publisher
+    // skips its own post for a camp whose board carries it.
     public async Task<bool> PostDefeatedNoticeAsync(
         Event ev, CancellationToken cancellationToken,
-        int? eventHistoryId = null)
+        int? eventHistoryId = null,
+        object? summaryEmbed = null)
     {
         if (string.IsNullOrWhiteSpace(ev.DiscordChannelId) || string.IsNullOrWhiteSpace(ev.DiscordMessageId))
         {
@@ -62,18 +67,16 @@ public sealed class HnmBoardNoticeService
         }
 
         var title = $"💀 {monster} defeated";
+        object defeated = new
+        {
+            title,
+            description = description.ToString(),
+            color = 0x6B7280
+        };
         var payload = new
         {
             content = string.Empty,
-            embeds = new[]
-            {
-                new
-                {
-                    title,
-                    description = description.ToString(),
-                    color = 0x6B7280
-                }
-            },
+            embeds = summaryEmbed is null ? new[] { defeated } : new[] { summaryEmbed, defeated },
             // This REPLACES the board's sign-up buttons rather than adding to them (Discord
             // keeps fields that are omitted, so the array must be sent explicitly). It is
             // empty unless the camp has an archive to open, which is the pre-existing
