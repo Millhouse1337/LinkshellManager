@@ -170,7 +170,11 @@ import type {
                         <div class="win">
                           <button type="button" class="win-head" (click)="toggleWindow(h.id, w.id)">
                             <strong>{{ w.label }}</strong>
-                            <span class="tag">{{ w.sequenceNumber }} of {{ windowCountFor(h.id) }}</span>
+                            <!-- No "N of M" on the Kill row: the kill roster is filed one past the
+                                 last window, so it read "6 of 6" for a camp of 5 windows. -->
+                            @if (!w.isKillWindow) {
+                              <span class="tag">{{ w.sequenceNumber }} of {{ windowCountFor(h.id) }}</span>
+                            }
                             @if (w.isClosingWindow) {
                               <span class="tag accent" title="The window the officer marked as closing the camp out — the one the close bonus paid on.">Closing</span>
                             }
@@ -306,7 +310,11 @@ import type {
                             <th>Attendee</th>
                             <th>Job</th>
                             @if (showWindowsColumn(h)) {
-                              <th class="ctr" title="Attendance windows this member was scanned in, where the camp counted them. On an HNM camp priced per window, the spawn window the monster popped on.">Windows</th>
+                              @if (showsPopWindow(h)) {
+                                <th class="ctr" title="The spawn window the monster popped on.">Pop Window</th>
+                              } @else {
+                                <th class="ctr" title="Attendance windows this member was scanned in, where the camp counted them.">Windows</th>
+                              }
                             }
                             <th class="ctr">Active Credit</th>
                             <th class="ctr">Absent</th>
@@ -334,9 +342,7 @@ import type {
                                     <!-- A camp priced per window keeps no per-member tally (the money
                                          is on the captures above), so the column carries the one
                                          window fact that camp has: where the monster came out. -->
-                                    <span class="win-count" title="The spawn window the monster popped on.">
-                                      Popped {{ h.popWindow }}@if (h.popWindowCount) { of {{ h.popWindowCount }}}
-                                    </span>
+                                    <span class="win-count" title="The spawn window the monster popped on.">{{ h.popWindow }}</span>
                                   } @else {
                                     <span class="muted">—</span>
                                   }
@@ -949,6 +955,12 @@ export class EventHistoryPanelComponent {
     return (h.archivedWindowCount ?? 0) > 0
       || h.popWindow != null
       || h.participants.some(p => p.windowsAttended != null);
+  }
+
+  // The column shows where the monster popped (and is headed "Pop Window") on a camp priced per
+  // window, which keeps no per-member window tally.
+  protected showsPopWindow(h: ActivityEventHistory): boolean {
+    return h.popWindow != null && !h.participants.some(p => p.windowsAttended != null);
   }
 
   // "1 DKP", or "0.5–1 DKP" when an officer re-priced somebody in that window during review.
