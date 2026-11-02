@@ -146,10 +146,7 @@ export class WindowEventService {
       name?: string | null;
       linkedEventId?: number | null;
       createNew?: boolean;
-      // The filing decision. Ingest classifies nothing now, so this is where a capture first
-      // becomes a window post or a misc post.
-      slotKind?: string | null;
-      windowNumber?: number | null;
+      // No slot: the server files every capture as a misc post.
     },
   ): Promise<void> {
     await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/attach`, input, 'Snapshot attached.');
@@ -171,15 +168,6 @@ export class WindowEventService {
   async setSnapshotAlliance(snapshotId: number, linkshellId: number, allianceNumber: number): Promise<void> {
     await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/alliance`,
       { allianceNumber }, 'Snapshot alliance updated.');
-  }
-
-  // Moves an already-filed capture between a numbered window and Misc, without detaching it.
-  // Filing is entirely manual now, so mis-filing is routine rather than exceptional.
-  async setSnapshotSlot(
-    snapshotId: number, linkshellId: number, slotKind: string, windowNumber?: number | null,
-  ): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/slot`,
-      { slotKind, windowNumber: windowNumber ?? null }, "Snapshot moved.");
   }
 
   // Confirm (verified: true) or Reject (verified: false) a member-posted capture. Confirming is

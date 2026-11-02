@@ -549,43 +549,6 @@
       </span>
       @if (model.canManage) {
         <span class="we-snapshot__actions" (click)="$event.stopPropagation()">
-          <!-- Re-file in place. Filing is entirely manual now, so mis-filing is routine rather
-               than exceptional; the server refuses this on a posted event, where it would move
-               members between the window and misc rates after the DKP was already paid. -->
-          @if (event && !closed && !isPosted(event)) {
-            <span class="we-slot-picker">
-              <select class="form-select we-slot-picker__kind" [ngModel]="snapshot.slotKind"
-                      [ngModelOptions]="{ standalone: true }"
-                      (ngModelChange)="setSnapshotSlot(snapshot, $event, snapshot.windowNumber ?? null)"
-                      aria-label="Slot kind">
-                <!-- Named for THIS capture rather than for the group it sits in: "Captures" told an
-                     officer nothing the heading above didn't, while "Open" says which one they are
-                     about to move.
-
-                     Each option carries the capture's own name only for the slot it CURRENTLY
-                     occupies, and the generic slot word for the other. A misc post named "test2"
-                     used to sit in a box reading "Misc" -- the one word shared by every misc
-                     capture on the camp, so two of them were indistinguishable here even though
-                     the chip beside them already said which was which. Naming both options from
-                     snapshot.name instead would be its own bug: the dropdown would offer "test2"
-                     twice and say nothing about where either choice puts the capture. -->
-                <option [value]="slotWindow">{{ (!snapshot.isMisc && snapshot.name) || windowGroupTitle(event) }}</option>
-                <option [value]="slotMisc">{{ (snapshot.isMisc && snapshot.name) || 'Misc' }}</option>
-              </select>
-              @if (event.hasWindowGrid && !snapshot.isMisc) {
-                <select class="form-select we-slot-picker__window" [ngModel]="snapshot.windowNumber"
-                        [ngModelOptions]="{ standalone: true }"
-                        (ngModelChange)="setSnapshotSlot(snapshot, slotWindow, $event)"
-                        aria-label="Window number">
-                  @for (n of windowNumbers(event); track n) {
-                    <!-- ngValue, not value: value stringifies, so the select would never match the
-                         numeric windowNumber it is bound to and would post "3" to an int? field. -->
-                    <option [ngValue]="n">Window {{ n }}</option>
-                  }
-                </select>
-              }
-            </span>
-          }
           @if (confirmDeleteSnapshotId() === snapshot.id) {
             <button type="button" class="btn sm danger-outline"
               (click)="deleteSnapshot(snapshot)" [disabled]="windows.busy()">Confirm delete</button>
@@ -627,9 +590,9 @@
                running is the common case, and typing its name by hand only risks a
                typo that splits the payroll across two events. The free-text box
                below stays for anything with no live camp or open event to join. -->
-          <!-- One row: Event [pick] Post Type [kind] Message [name] [Attach] | [Make New Event] |
-               Alliance [n] [Ignore]. Each label is grouped with its control so the even spacing
-               across the row never parts the two. -->
+          <!-- One row: Event [pick] Message [name] [Attach] | [Make New Event] | Alliance [n]
+               [Ignore]. Each label is grouped with its control so the even spacing across the row
+               never parts the two. There is no post type: a filed capture is always a misc post. -->
           <!-- Names the CAPTURE: the chip in the header reads this same value. It saves itself on
                blur or Enter, and Attach / Make New Event save it first. Those two buttons stop
                mousedown from moving focus: a blur save would disable them mid-click and swallow
@@ -648,7 +611,10 @@
           @if (hasAttachTargets(model)) {
             <span class="we-unlinked-field">
             <label class="we-unlinked-label" [attr.for]="'snapshot-event-' + snapshot.id">Event</label>
-            <select #attachTarget class="form-select we-unlinked-select" [id]="'snapshot-event-' + snapshot.id">
+            <select class="form-select we-unlinked-select" [id]="'snapshot-event-' + snapshot.id"
+                    [ngModel]="attachTarget(snapshot.id)"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="setAttachTarget(snapshot.id, $event)">
               <option value="">Attach to an existing event…</option>
               @if (liveHnmCamps().length > 0) {
                 <optgroup label="Live camps">
@@ -666,38 +632,11 @@
               }
             </select>
             </span>
-            <!-- The slot is the whole filing decision now: ingest classifies nothing, so this is
-                 where a capture becomes a window post or a misc post. A free number rather than a
-                 per-event list — the window count differs per target and the server clamps. -->
-            <span class="we-unlinked-field">
-            <label class="we-unlinked-label" [attr.for]="'snapshot-type-' + snapshot.id">Post Type</label>
-            <select class="form-select we-unlinked-slot" [id]="'snapshot-type-' + snapshot.id"
-                    [ngModel]="attachSlot(snapshot).kind"
-                    [ngModelOptions]="{ standalone: true }"
-                    (ngModelChange)="setAttachSlotKind(snapshot.id, $event)">
-              <!-- Named like its neighbour above: a select showing "Window" said nothing about
-                   what it decides, and Window was a default nobody had chosen. Attach waits for
-                   a real answer. -->
-              <option [value]="slotUnset" disabled>Snapshot type</option>
-              <option [value]="slotWindow">Window</option>
-              <option [value]="slotMisc">Misc</option>
-            </select>
-            </span>
-            @if (attachSlot(snapshot).kind === slotWindow) {
-              <!-- No placeholder: "auto" in the box read as a value that had been entered. Blank
-                   IS auto, and the tooltip says so. -->
-              <input class="input we-unlinked-window" type="number" min="1"
-                     [ngModel]="attachSlot(snapshot).window"
-                     [ngModelOptions]="{ standalone: true }"
-                     (ngModelChange)="setAttachSlotWindow(snapshot.id, $event)"
-                     aria-label="Window number"
-                     title="Leave blank to place it by capture time." />
-            }
             <ng-container *ngTemplateOutlet="messageField" />
             <button type="button" class="btn sm"
-              [disabled]="!attachTarget.value || !attachSlot(snapshot).kind || windows.busy()"
+              [disabled]="!attachTarget(snapshot.id) || windows.busy()"
               (mousedown)="$event.preventDefault()"
-              (click)="attachToSelection(snapshot, attachTarget.value)">Attach</button>
+              (click)="attachToSelection(snapshot, attachTarget(snapshot.id))">Attach</button>
             <span class="we-unlinked-sep" aria-hidden="true"></span>
           } @else {
             <ng-container *ngTemplateOutlet="messageField" />

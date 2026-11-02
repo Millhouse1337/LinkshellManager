@@ -462,11 +462,6 @@
   .we-dkp-input { width: 84px; text-align: right; height: 30px; }
 }
 
-.we-slot-picker { display: inline-flex; align-items: center; gap: 4px; }
-.we-slot-picker__kind, .we-slot-picker__window { width: 124px; flex: none; height: 30px; }
-.we-unlinked-slot { width: 120px; flex: none; }
-.we-unlinked-window { width: 96px; flex: none; }
-
 /* Why one member on the combined roster is priced differently from the one above them. */
 .we-credit-chip {
   font-size: 10px; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap;

@@ -18,14 +18,10 @@ import type {
 // Baseline DKP per member when neither a saved override nor an event default
 // exists yet.
 const FALLBACK_DKP = 1.5;
-// Mirrors AttendanceSnapshotSlotKinds on the server. Window is the fail-closed default: it is what
-// every capture means until an officer says otherwise.
+// Mirrors AttendanceSnapshotSlotKinds on the server, for the roster's credit chips. Filing no
+// longer picks one: a filed capture is always Misc (SnapshotFilingService).
 const SLOT_WINDOW = "Window";
 const SLOT_MISC = "Misc";
-// No type chosen yet. The slot dropdown opens here so it can show what it is FOR ("Snapshot
-// type") instead of defaulting to Window and reading as a decision nobody made -- filing a
-// capture is the one thing ingest deliberately does not guess, so the officer picks it.
-const SLOT_UNSET = "";
 
 interface MemberDkpDraft {
   value: number | null;
@@ -62,11 +58,11 @@ export class AttendanceSectionsComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly windows = inject(WindowEventService);
   protected readonly attachNames: Record<number, string> = {};
-  // Snapshot id -> the slot an officer picked while filing it. Ingest classifies nothing now, so
-  // this choice is the whole filing decision.
-  protected readonly attachSlots: Record<number, { kind: string; window: number | null }> = {};
-  // Snapshot id -> why its last Attach / Make New Event was refused ("Window 1 is already posted on
-  // this camp..."). Shown on the row itself: the page's error banner sits at the top, out of sight
+  // Snapshot id -> the event picked in its Event dropdown. Kept here rather than read off the
+  // <select>, so picking one re-checks the Attach button.
+  protected readonly attachTargets: Record<number, string> = {};
+  // Snapshot id -> why its last Attach / Make New Event was refused ("That camp has ended...").
+  // Shown on the row itself: the page's error banner sits at the top, out of sight
   // from the Unlinked Snapshots list.
   protected readonly snapshotErrors = signal<Record<number, string>>({});
   // Per-event, per-character DKP draft. Reset whenever the underlying combined
@@ -266,20 +262,13 @@ export class AttendanceSectionsComponent {
     this.attachNames[snapshotId] = value;
   }
 
-  protected attachSlot(snapshot: ActivityWindowSnapshot): { kind: string; window: number | null } {
-    this.attachSlots[snapshot.id] ??= { kind: SLOT_UNSET, window: null };
-    return this.attachSlots[snapshot.id];
+  // The Event dropdown's pick ("camp:<id>" / "we:<id>", '' = none yet).
+  protected attachTarget(snapshotId: number): string {
+    return this.attachTargets[snapshotId] ?? '';
   }
 
-  protected setAttachSlotKind(snapshotId: number, kind: string): void {
-    const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_UNSET, window: null });
-    slot.kind = kind;
-    this.setSnapshotError(snapshotId, null);
-  }
-
-  protected setAttachSlotWindow(snapshotId: number, value: number | null): void {
-    const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_UNSET, window: null });
-    slot.window = value;
+  protected setAttachTarget(snapshotId: number, value: string): void {
+    this.attachTargets[snapshotId] = value;
     this.setSnapshotError(snapshotId, null);
   }
 
@@ -306,7 +295,6 @@ export class AttendanceSectionsComponent {
 
   protected readonly slotWindow = SLOT_WINDOW;
   protected readonly slotMisc = SLOT_MISC;
-  protected readonly slotUnset = SLOT_UNSET;
 
   // The two groups a card renders its captures in. Split server-side and mirrored here.
   protected windowSnapshots(event: ActivityWindowEvent): ActivityWindowSnapshot[] {
@@ -317,28 +305,10 @@ export class AttendanceSectionsComponent {
     return event.snapshots.filter(s => s.isMisc);
   }
 
-  // 1..N for the window picker. Built from the camp own grid rather than HnmConfig.MaxWindow so a
-  // linkshell that configured a shorter cadence cannot be offered a window it never runs.
-  protected windowNumbers(event: ActivityWindowEvent): number[] {
-    const count = Math.max(1, event.windowCount || 1);
-    return Array.from({ length: count }, (_, i) => i + 1);
-  }
-
   // An ungridded camp (Sky gods, farm NMs) has no window numbers to show, so calling its captures
   // "Windows" would promise a distinction it does not have.
   protected windowGroupTitle(event: ActivityWindowEvent): string {
     return event.hasWindowGrid ? 'Windows' : 'Captures';
-  }
-
-  // Moves an already-filed capture between a numbered window and Misc, in place. The server
-  // refuses it on a posted event: that would move members between the window and misc rates
-  // after the DKP was already paid.
-  protected async setSnapshotSlot(
-    snapshot: ActivityWindowSnapshot, kind: string, windowNumber: number | null,
-  ): Promise<void> {
-    const id = this.primaryLinkshellId();
-    if (!id) return;
-    await this.windows.setSnapshotSlot(snapshot.id, id, kind, windowNumber);
   }
 
   protected async close(event: ActivityWindowEvent): Promise<void> {
@@ -372,18 +342,9 @@ export class AttendanceSectionsComponent {
       // The server keeps a capture's existing name, so a retyped one is saved first or the chip
       // and the new event would disagree.
       await this.saveAttachName(snapshot);
-      // A brand-new event starts as an ordinary window capture; an officer who meant Misc moves it
-      // with the slot control on the card.
-      await this.windows.attachSnapshot(snapshot.id, id, { name, createNew: true, slotKind: SLOT_WINDOW });
+      // The post lands on the new event as a misc post, like every filed capture.
+      await this.windows.attachSnapshot(snapshot.id, id, { name, createNew: true });
     });
-  }
-
-  protected async attachExisting(snapshot: ActivityWindowSnapshot, windowEventId: number): Promise<void> {
-    const id = this.primaryLinkshellId();
-    if (!id || !windowEventId) return;
-    const slot = this.attachSlot(snapshot);
-    await this.windows.attachSnapshot(
-      snapshot.id, id, { windowEventId, slotKind: slot.kind, windowNumber: slot.window });
   }
 
   // Persists the Message box onto the SNAPSHOT without creating or attaching anything, when it
@@ -444,7 +405,7 @@ export class AttendanceSectionsComponent {
   // never picked that second card up, so a misc post filed this way never reached
   // Events Pending DKP Post. The server now parks the capture on the camp itself
   // (it shows on the camp's card in Current Field Activity) and End Camp carries it
-  // onto the review card in the slot chosen here.
+  // onto the review card as a misc post.
   protected async attachToSelection(snapshot: ActivityWindowSnapshot, selection: string): Promise<void> {
     await this.fileSnapshotRow(snapshot, () => this.fileToSelection(snapshot, selection));
   }
@@ -457,18 +418,14 @@ export class AttendanceSectionsComponent {
     if (selection.startsWith('we:')) {
       const windowEventId = Number(selection.slice(3));
       if (!windowEventId) return;
-      const slot = this.attachSlot(snapshot);
-      await this.windows.attachSnapshot(
-        snapshot.id, linkshellId, { windowEventId, slotKind: slot.kind, windowNumber: slot.window });
+      await this.windows.attachSnapshot(snapshot.id, linkshellId, { windowEventId });
       return;
     }
 
     if (selection.startsWith('camp:')) {
       const campId = Number(selection.slice(5));
       if (!campId) return;
-      const slot = this.attachSlot(snapshot);
-      await this.windows.attachSnapshot(snapshot.id, linkshellId,
-        { linkedEventId: campId, slotKind: slot.kind, windowNumber: slot.window });
+      await this.windows.attachSnapshot(snapshot.id, linkshellId, { linkedEventId: campId });
       // The camp card reads from the overview, not the window-events payload, so it
       // needs its own refresh or the snapshot won't appear until the next poll.
       await this.activity.refreshOverview();
