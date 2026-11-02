@@ -106,15 +106,24 @@ public sealed class HnmCampReviewHandoffService
             }
             byCharacterName[key] = member with { CharacterName = key };
         }
-        if (byCharacterName.Count == 0)
+        // `/lsm now` captures an officer filed against this camp while it was live (always as misc
+        // posts). They are attendance in their own right: the roster above is built from window
+        // posts and taggers only, so a camp whose attendance was ALL misc posts came out "empty",
+        // was never handed off, and its posts went back to Unlinked. Any filed capture with people
+        // on it, short of an Ignored one, is enough to stage the review card.
+        var campFiled = await LoadCampFiledCapturesAsync(ev.Id, cancellationToken);
+        var hasFiledAttendance = campFiled.Any(filed =>
+            filed.SnapshotStatus != AttendanceSnapshotStatuses.Ignored && filed.Entries.Count > 0);
+
+        if (byCharacterName.Count == 0 && !hasFiledAttendance)
         {
             // Nobody to review, so no archive to hand the captures to — but they still must not
             // follow the board into the next pop. Detached and left as linkshell-level records,
             // which is where a capture taken with no camp open already lives.
             foreach (var capture in captures) capture.EventId = null;
-            // Same for any `/lsm now` capture an officer filed against this camp: back to the
-            // unlinked queue, rather than riding into the next pop's handoff on the recycled board.
-            foreach (var filed in await LoadCampFiledCapturesAsync(ev.Id, cancellationToken))
+            // Same for any (Ignored or empty) capture filed against this camp: back to the unlinked
+            // queue, rather than riding into the next pop's handoff on the recycled board.
+            foreach (var filed in campFiled)
             {
                 filed.LinkedEventId = null;
             }
@@ -532,7 +541,7 @@ public sealed class HnmCampReviewHandoffService
         // inside it: that dictionary answers "how much of the FINALIZER's total has been handed
         // out", and the finalizer never counted misc posts. Feeding them in would drive the Tags
         // remainder negative and take the money straight back off the member.
-        foreach (var filed in await LoadCampFiledCapturesAsync(ev.Id, cancellationToken))
+        foreach (var filed in campFiled)
         {
             filed.WindowEvent = windowEvent;
             if (perCapture && AttendanceSnapshotSlotKinds.IsMisc(filed.SlotKind))

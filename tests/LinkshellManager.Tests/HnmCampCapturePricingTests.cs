@@ -548,6 +548,43 @@ public class HnmCampCapturePricingTests
         Assert.Equal(2d, misc.Entries.Single().DkpAmount);
     }
 
+    // A camp whose ONLY attendance is misc posts still goes to review. Every `/lsm now` is filed as
+    // a misc post now, and the roster End Camp builds counts window posts and taggers only -- so
+    // this camp used to read as empty, was never handed off, and its posts fell back to Unlinked.
+    [Fact]
+    public async Task ACampWithOnlyMiscPosts_IsStillHandedToReview()
+    {
+        using var db = NewInMemoryContext();
+        db.Linkshells.Add(TestLinkshell());
+        db.Events.Add(LiveCamp());
+        db.AttendanceSnapshots.Add(MiscPost(900, "Beta"));
+        await db.SaveChangesAsync();
+
+        var windowEvent = await EndCampAsync(db);
+
+        Assert.NotNull(windowEvent);
+        Assert.Null(windowEvent!.PostedToSheetAt);   // pending an officer's Post
+        var misc = await db.AttendanceSnapshots.Include(s => s.Entries).SingleAsync(s => s.Id == 900);
+        Assert.Equal(windowEvent.Id, misc.WindowEventId);
+        Assert.Equal(0.75d, misc.Entries.Single().DkpAmount);
+    }
+
+    // ...but a camp with nothing at all, an Ignored post included, still leaves no review row.
+    [Fact]
+    public async Task ACampWithOnlyAnIgnoredPost_IsNotHandedToReview()
+    {
+        using var db = NewInMemoryContext();
+        db.Linkshells.Add(TestLinkshell());
+        db.Events.Add(LiveCamp());
+        var ignored = MiscPost(900, "Beta");
+        ignored.SnapshotStatus = AttendanceSnapshotStatuses.Ignored;
+        db.AttendanceSnapshots.Add(ignored);
+        await db.SaveChangesAsync();
+
+        Assert.Null(await EndCampAsync(db));
+        Assert.Null((await db.AttendanceSnapshots.SingleAsync(s => s.Id == 900)).LinkedEventId);
+    }
+
     // ITS OWN money. Beta stood one regular window (0.5) and is on one misc post (0.75), and the
     // card owes them both -- the same way two windows pay twice. This is what used to be worth
     // nothing at all: the post arrived unpriced, and on a per-capture card the captures ARE the

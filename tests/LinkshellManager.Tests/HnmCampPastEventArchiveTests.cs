@@ -652,11 +652,13 @@ public class HnmCampPastEventArchiveTests
         Assert.Equal(2, filed.WindowNumber);
     }
 
-    // Nobody on the roster means no review card, so the capture cannot ride onto one. It goes
-    // back to the unlinked queue rather than staying on the recycled board, where the NEXT pop's
-    // End Camp would have collected it.
+    // Nobody on the ROSTER (no window posts, no taggers), but a misc post filed on the camp: that
+    // post is attendance, so the camp still gets its review card and the post rides onto it. This
+    // used to send the post back to Unlinked and leave no card -- and since every `/lsm now` is
+    // filed as a misc post now, a camp attended only that way is ordinary. (A camp with truly
+    // nothing on it still leaves no card: see HnmCampCapturePricingTests.)
     [Fact]
-    public async Task EndingACampNobodyAttended_ReturnsAFiledCaptureToTheQueue()
+    public async Task EndingACampWhoseOnlyAttendanceIsAFiledPost_HandsItToReview()
     {
         using var db = await SeededAsync(scans: new Dictionary<string, string>());
         db.AttendanceSnapshots.Add(FiledCapture(id: 902, AttendanceSnapshotSlotKinds.Misc));
@@ -664,10 +666,9 @@ public class HnmCampPastEventArchiveTests
 
         var windowEvent = await EndCampAsync(db);
 
-        Assert.Null(windowEvent);
+        Assert.NotNull(windowEvent);
         var filed = await db.AttendanceSnapshots.SingleAsync(s => s.Id == 902);
-        Assert.Null(filed.LinkedEventId);
-        Assert.Null(filed.WindowEventId);
+        Assert.Equal(windowEvent!.Id, filed.WindowEventId);
     }
 
     // The slot an officer picks when filing against a live camp, with no Window Event to clamp
