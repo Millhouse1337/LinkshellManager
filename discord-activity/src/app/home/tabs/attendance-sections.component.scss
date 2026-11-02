@@ -332,6 +332,8 @@
 .we-snapshot-actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 2px 14px 12px; }
 /* The unlinked row spreads its controls evenly across the full width. */
 .we-snapshot-actions-row--fill { justify-content: space-between; }
+/* A refused Attach / Make New Event, lined up under the row's controls. */
+.we-unlinked-error { margin: -4px 14px 12px; }
 /* A label and its control, kept side by side. */
 .we-unlinked-field { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .we-unlinked-form { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

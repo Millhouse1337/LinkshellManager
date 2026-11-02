@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { formatActionError } from '../../discord/discord-activity.helpers';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { WindowEventService } from '../../discord/window-event.service';
 import type {
@@ -64,6 +65,10 @@ export class AttendanceSectionsComponent {
   // Snapshot id -> the slot an officer picked while filing it. Ingest classifies nothing now, so
   // this choice is the whole filing decision.
   protected readonly attachSlots: Record<number, { kind: string; window: number | null }> = {};
+  // Snapshot id -> why its last Attach / Make New Event was refused ("Window 1 is already posted on
+  // this camp..."). Shown on the row itself: the page's error banner sits at the top, out of sight
+  // from the Unlinked Snapshots list.
+  protected readonly snapshotErrors = signal<Record<number, string>>({});
   // Per-event, per-character DKP draft. Reset whenever the underlying combined
   // roster changes (handled lazily on read so newly-added/removed people
   // pick up sane defaults).
@@ -269,11 +274,34 @@ export class AttendanceSectionsComponent {
   protected setAttachSlotKind(snapshotId: number, kind: string): void {
     const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_UNSET, window: null });
     slot.kind = kind;
+    this.setSnapshotError(snapshotId, null);
   }
 
   protected setAttachSlotWindow(snapshotId: number, value: number | null): void {
     const slot = (this.attachSlots[snapshotId] ??= { kind: SLOT_UNSET, window: null });
     slot.window = value;
+    this.setSnapshotError(snapshotId, null);
+  }
+
+  private setSnapshotError(snapshotId: number, message: string | null): void {
+    this.snapshotErrors.update(errors => {
+      const next = { ...errors };
+      if (message) next[snapshotId] = message;
+      else delete next[snapshotId];
+      return next;
+    });
+  }
+
+  // Runs a filing action for one row and puts a refusal on that row, taking it off the banner so
+  // it isn't shown twice.
+  private async fileSnapshotRow(snapshot: ActivityWindowSnapshot, action: () => Promise<void>): Promise<void> {
+    this.setSnapshotError(snapshot.id, null);
+    try {
+      await action();
+    } catch (error) {
+      this.activity.clearActionState();
+      this.setSnapshotError(snapshot.id, formatActionError(error, 'Filing this snapshot failed.'));
+    }
   }
 
   protected readonly slotWindow = SLOT_WINDOW;
@@ -340,12 +368,14 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const name = this.attachName(snapshot).trim();
     if (!id || !name) return;
-    // The server keeps a capture's existing name, so a retyped one is saved first or the chip
-    // and the new event would disagree.
-    await this.saveAttachName(snapshot);
-    // A brand-new event starts as an ordinary window capture; an officer who meant Misc moves it
-    // with the slot control on the card.
-    await this.windows.attachSnapshot(snapshot.id, id, { name, createNew: true, slotKind: SLOT_WINDOW });
+    await this.fileSnapshotRow(snapshot, async () => {
+      // The server keeps a capture's existing name, so a retyped one is saved first or the chip
+      // and the new event would disagree.
+      await this.saveAttachName(snapshot);
+      // A brand-new event starts as an ordinary window capture; an officer who meant Misc moves it
+      // with the slot control on the card.
+      await this.windows.attachSnapshot(snapshot.id, id, { name, createNew: true, slotKind: SLOT_WINDOW });
+    });
   }
 
   protected async attachExisting(snapshot: ActivityWindowSnapshot, windowEventId: number): Promise<void> {
@@ -416,6 +446,10 @@ export class AttendanceSectionsComponent {
   // (it shows on the camp's card in Current Field Activity) and End Camp carries it
   // onto the review card in the slot chosen here.
   protected async attachToSelection(snapshot: ActivityWindowSnapshot, selection: string): Promise<void> {
+    await this.fileSnapshotRow(snapshot, () => this.fileToSelection(snapshot, selection));
+  }
+
+  private async fileToSelection(snapshot: ActivityWindowSnapshot, selection: string): Promise<void> {
     const linkshellId = this.primaryLinkshellId();
     if (!linkshellId || !selection) return;
     await this.saveAttachName(snapshot);

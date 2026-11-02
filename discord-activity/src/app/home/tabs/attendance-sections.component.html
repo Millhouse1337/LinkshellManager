@@ -730,6 +730,11 @@
           <button type="button" class="btn sm ghost" (click)="setSnapshotStatus(snapshot, 'Ignored')">Ignore</button>
         }
       </div>
+      <!-- Why Attach / Make New Event was refused, on the row it is about rather than in the
+           banner at the top of the page. -->
+      @if (unlinked && snapshotErrors()[snapshot.id]; as rowError) {
+        <p class="form-error we-unlinked-error" role="alert">{{ rowError }}</p>
+      }
       <ng-container *ngTemplateOutlet="editableSnapshotTable; context: { snapshot: snapshot, event: event, closed: closed }" />
     } @else {
       <ng-container *ngTemplateOutlet="snapshotTable; context: { snapshot: snapshot }" />
