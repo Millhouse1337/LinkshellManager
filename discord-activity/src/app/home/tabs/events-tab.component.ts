@@ -14,6 +14,7 @@ import {
   DiscordActivityService
 } from '../../discord/discord-activity.service';
 import {
+  ActivityCampShare,
   ActivityClaimShieldCapture,
   ActivityEvent,
   ActivityLinkedSnapshot,
@@ -891,23 +892,44 @@ export class EventsTabComponent {
     return kills.length > 0 ? kills[kills.length - 1] : null;
   }
 
+  // The payout panel's Mine / Event toggle, per camp. Absent = Mine: what a member opens the card
+  // to check is their own DKP.
+  protected readonly campPayoutViewByEvent = signal<Record<number, 'mine' | 'event'>>({});
+
+  protected campPayoutView(event: ActivityEvent): 'mine' | 'event' {
+    return this.campPayoutViewByEvent()[event.id] ?? 'mine';
+  }
+
+  protected setCampPayoutView(event: ActivityEvent, view: 'mine' | 'event'): void {
+    this.campPayoutViewByEvent.update(views => ({ ...views, [event.id]: view }));
+  }
+
+  // The figures the panel shows: the member's own share, or the whole camp's. Mine is all zeros
+  // when they are owed nothing yet.
+  protected campPayoutFigures(event: ActivityEvent): ActivityCampShare | null {
+    const payout = event.hnmPayout;
+    if (!payout) return null;
+    if (this.campPayoutView(event) === 'event') return payout;
+    return payout.mine ?? { totalDkp: 0, killDkp: 0, miscDkp: 0, tagDkp: 0 };
+  }
+
   // The payout panel's four slices. Windows is whatever of the total the three awards don't make
   // up, never below zero.
   protected campPayoutParts(event: ActivityEvent): CampPayoutPart[] {
-    const payout = event.hnmPayout;
-    if (!payout) return [];
-    const windows = Math.max(0, payout.totalDkp - payout.killDkp - payout.miscDkp - payout.tagDkp);
+    const figures = this.campPayoutFigures(event);
+    if (!figures) return [];
+    const windows = Math.max(0, figures.totalDkp - figures.killDkp - figures.miscDkp - figures.tagDkp);
     return [
       { label: 'Windows', value: windows, tone: 'windows' },
-      { label: 'Kill', value: payout.killDkp, tone: 'kill' },
-      { label: 'Misc', value: payout.miscDkp, tone: 'misc' },
-      { label: 'Tag', value: payout.tagDkp, tone: 'tag' },
+      { label: 'Kill', value: figures.killDkp, tone: 'kill' },
+      { label: 'Misc', value: figures.miscDkp, tone: 'misc' },
+      { label: 'Tag', value: figures.tagDkp, tone: 'tag' },
     ];
   }
 
   // One slice's share of the bar, as a width percentage.
   protected campPayoutShare(event: ActivityEvent, part: CampPayoutPart): number {
-    const total = event.hnmPayout?.totalDkp ?? 0;
+    const total = this.campPayoutFigures(event)?.totalDkp ?? 0;
     return total > 0 ? (part.value / total) * 100 : 0;
   }
 

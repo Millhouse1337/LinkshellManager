@@ -836,12 +836,18 @@ public sealed record ActivityEventDto(
 // totals the attendee rows show as EventTotalDkp, plus the taggers and capture-only members who have
 // no window row. Only accounts owed something are counted. Kill, Misc and Tag are the parts of
 // TotalDkp those awards make up; whatever is left is window credit.
+//
+// Mine is the signed-in member's own share in the same four parts, for the card's Mine / Event
+// toggle. Null when they are owed nothing on this camp.
 public sealed record ActivityCampPayoutDto(
     double TotalDkp,
     int MemberCount,
     double KillDkp,
     double MiscDkp,
-    double TagDkp);
+    double TagDkp,
+    ActivityCampShareDto? Mine = null);
+
+public sealed record ActivityCampShareDto(double TotalDkp, double KillDkp, double MiscDkp, double TagDkp);
 
 public sealed record ActivityAttendanceWindowDto(
     int Id,

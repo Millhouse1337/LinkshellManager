@@ -878,15 +878,31 @@
 
                   <aside class="hnm-camp__side">
                     @if (event.hnmPayout; as payout) {
+                      @let payoutView = campPayoutView(event);
                       <section class="hnm-card" aria-label="Payout at end camp">
-                        <div class="hnm-card__head">
+                        <div class="hnm-card__head hnm-card__head--toggle">
                           <span class="hnm-eyebrow">Payout at end camp</span>
-                          <span class="hnm-muted">{{ countLabel(payout.memberCount, 'member') }}</span>
+                          <!-- Mine by default: a member opens the card to see their own DKP. -->
+                          <div class="hnm-segmented hnm-segmented--sm" role="group" aria-label="Whose payout">
+                            <button type="button" [class.is-on]="payoutView === 'mine'" [attr.aria-pressed]="payoutView === 'mine'"
+                                    (click)="setCampPayoutView(event, 'mine')">Mine</button>
+                            <button type="button" [class.is-on]="payoutView === 'event'" [attr.aria-pressed]="payoutView === 'event'"
+                                    (click)="setCampPayoutView(event, 'event')">Event</button>
+                          </div>
                         </div>
                         <div class="hnm-payout__total">
-                          <span class="hnm-payout__value">{{ payout.totalDkp | number:'1.0-2' }}</span>
+                          <span class="hnm-payout__value">{{ campPayoutFigures(event)?.totalDkp ?? 0 | number:'1.0-2' }}</span>
                           <span class="hnm-payout__unit">DKP</span>
                         </div>
+                        <p class="hnm-payout__caption">
+                          @if (payoutView === 'event') {
+                            {{ countLabel(payout.memberCount, 'member') }}
+                          } @else if (payout.mine) {
+                            Your share
+                          } @else {
+                            You aren't on this camp yet.
+                          }
+                        </p>
                         <div class="hnm-payout__bar" aria-hidden="true">
                           @for (part of campPayoutParts(event); track part.tone) {
                             @if (part.value > 0) {

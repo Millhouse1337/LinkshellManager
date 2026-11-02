@@ -1181,10 +1181,14 @@ export interface ActivityEvent {
 
 // A live Standard HNM camp's payout, summed over every account the camp pays (including taggers and
 // capture-only members, who have no window row). Kill / Misc / Tag are parts of totalDkp; the rest
-// is window credit.
-export interface ActivityCampPayout {
-  totalDkp: number;
+// is window credit. `mine` is the signed-in member's own share, null when they are owed nothing.
+export interface ActivityCampPayout extends ActivityCampShare {
   memberCount: number;
+  mine?: ActivityCampShare | null;
+}
+
+export interface ActivityCampShare {
+  totalDkp: number;
   killDkp: number;
   miscDkp: number;
   tagDkp: number;

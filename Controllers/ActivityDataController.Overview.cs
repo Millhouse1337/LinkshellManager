@@ -532,7 +532,8 @@ public sealed partial class ActivityDataController
 
         // The whole camp's payout if it ended now: the sum of the same per-account totals the
         // attendee rows show, so the panel and the rows cannot disagree. Kill is the kill bonus once
-        // per account on a Post Kill roster, the way PriceMembers adds it.
+        // per account on a Post Kill roster, the way PriceMembers adds it. Mine is the signed-in
+        // member's own row of those totals.
         ActivityCampPayoutDto? CampPayoutOf(Event evt)
         {
             if (EventTotalsFor(evt) is not { } totals) return null;
@@ -548,15 +549,23 @@ public sealed partial class ActivityDataController
                 .Select(att => att.AppUserId)
                 .Where(appUserId => !string.IsNullOrWhiteSpace(appUserId)
                     && totals.TryGetValue(appUserId, out var total) && total.Total > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count();
+                .Select(appUserId => appUserId!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            ActivityCampShareDto? mine = null;
+            if (totals.TryGetValue(appUser.Id, out var own) && own.Total > 0)
+            {
+                mine = new ActivityCampShareDto(
+                    own.Total, killAccounts.Contains(appUser.Id) ? killEach : 0d, own.Misc, own.Tag);
+            }
 
             return new ActivityCampPayoutDto(
                 paid.Sum(value => value.Total),
                 paid.Count,
-                killAccounts * killEach,
+                killAccounts.Count * killEach,
                 paid.Sum(value => value.Misc),
-                paid.Sum(value => value.Tag));
+                paid.Sum(value => value.Tag),
+                mine);
         }
 
         // Resolve creator/starter character names for each active event. Prefer
