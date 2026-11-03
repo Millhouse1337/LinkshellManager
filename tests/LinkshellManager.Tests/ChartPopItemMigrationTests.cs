@@ -31,6 +31,11 @@ public class ChartPopItemMigrationTests
 
     private static ChartBoard BoardFor(string key) => ChartBoardCatalog.Find(key)!;
 
+    /// <summary>Both of a card's lists. The refiles predate the pop/drop split, so a row they moved
+    /// may now sit in either one - Sky's gems and seals are drops since ReclassifySkyChartItems.</summary>
+    private static ChartPopItemOption[] ItemsOn(ChartBoard board, string boss) =>
+        board.PopItemsFor(boss).Concat(board.DropItemsFor(boss)).ToArray();
+
     [Theory]
     [MemberData(nameof(Refiles))]
     public void EveryMove_LandsOnTheCardThatNowListsTheItem(
@@ -49,12 +54,12 @@ public class ChartPopItemMigrationTests
             // catches a swapped pair — "Winterstone" onto Zipacna instead of Olla Grande, or a Phuabo
             // organ onto Xzomit.
             Assert.Contains(
-                board.PopItemsFor(newBoss),
+                ItemsOn(board, newBoss),
                 option => string.Equals(option.Name, item, StringComparison.OrdinalIgnoreCase));
 
             // And it is NOT still offered by the card it came from, or the move would be pointless.
             Assert.DoesNotContain(
-                board.PopItemsFor(oldBoss),
+                ItemsOn(board, oldBoss),
                 option => string.Equals(option.Name, item, StringComparison.OrdinalIgnoreCase));
         }
     }
@@ -77,31 +82,77 @@ public class ChartPopItemMigrationTests
     }
 
     /// <summary>
-    /// The Sky mapping is COMPLETE: every item any Sky card now lists is either moved or was already
-    /// filed correctly. Curtana is the only one in the second category — Suzaku dropped it before the
-    /// restructure and still does — so anything else appearing here is an item the migration forgot,
-    /// and rows of it would be stranded on whichever card used to hold them.
+    /// The Sky mapping is COMPLETE: every drop any Sky card lists was refiled onto exactly that card.
+    /// Sky's POP items are not the refile's business — Curtana reached Brigandish Blade through
+    /// ReclassifySkyChartItems, and Diorite and Ro'Maeve Water arrived with it, so no old row of
+    /// either ever sat on the wrong card.
     /// </summary>
     [Fact]
-    public void EverySkyItem_IsEitherMovedOrWasAlreadyInPlace()
+    public void EverySkyDrop_WasRefiledOntoTheCardThatListsIt()
     {
-        var moved = RefileSkyPopItemsOntoTheirDroppers.Moves
-            .Select(move => move.Item)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var onTheBoard = Sky.Bosses
-            .SelectMany(boss => boss.PopItems ?? Array.Empty<ChartPopItemOption>())
-            .Select(option => option.Name)
-            .ToList();
-
         Assert.Equal(
-            new[] { "Curtana" },
-            onTheBoard.Where(name => !moved.Contains(name)).ToArray());
+            SkyDropPairs(),
+            RefileSkyPopItemsOntoTheirDroppers.Moves
+                .Select(move => $"{move.NewBoss} / {move.Item}")
+                .OrderBy(pair => pair, StringComparer.Ordinal));
+    }
+
+    /// <summary>"Boss / Item" for every drop on Sky, sorted, so two sets compare with one Equal.</summary>
+    private static IOrderedEnumerable<string> SkyDropPairs() =>
+        Sky.Bosses
+            .SelectMany(boss => (boss.DropItems ?? Array.Empty<ChartPopItemOption>())
+                .Select(option => $"{boss.Name} / {option.Name}"))
+            .OrderBy(pair => pair, StringComparer.Ordinal);
+
+    /// <summary>
+    /// ReclassifySkyChartItems flips exactly the rows whose item is now on a card's DROP list. One
+    /// missing here leaves its old rows under "Pop Item" forever, since an edit never changes Kind;
+    /// one extra flips rows the catalog still calls pop items.
+    /// </summary>
+    [Fact]
+    public void Reclassify_FlipsExactlyTheSkyDrops()
+    {
+        Assert.Equal(
+            SkyDropPairs(),
+            ReclassifySkyChartItems.NowDrops
+                .Select(drop => $"{drop.Boss} / {drop.Item}")
+                .OrderBy(pair => pair, StringComparer.Ordinal));
+    }
+
+    /// <summary>Curtana lands on the card whose POP list offers it, and leaves Suzaku's lists entirely.</summary>
+    [Fact]
+    public void Reclassify_MovesCurtanaOntoTheCardItPops()
+    {
+        var (oldBoss, item, newBoss) = ReclassifySkyChartItems.CurtanaMove;
+
+        Assert.Contains(Sky.PopItemsFor(newBoss), option => option.Name == item);
+        Assert.DoesNotContain(ItemsOn(Sky, oldBoss), option => option.Name == item);
     }
 
     /// <summary>
-    /// Sea's mapping is complete with NO exception: unlike Sky, where Curtana already sat on the god
-    /// that drops it, every single item on the old Sea board was filed under the boss it is spent on.
+    /// The new migration interpolates names into single-quoted SQL with no escaping, the same as the
+    /// Sky refile. Ro'Maeve Water has an apostrophe, which is fine only because no old row of it
+    /// exists to move — this fails the moment someone adds it to either list without escaping.
+    /// </summary>
+    [Fact]
+    public void Reclassify_NamesNeedNoQuoteEscapingAndCarryNoLikeWildcard()
+    {
+        var (oldBoss, curtana, newBoss) = ReclassifySkyChartItems.CurtanaMove;
+        var values = ReclassifySkyChartItems.NowDrops
+            .SelectMany(drop => new[] { drop.Boss, drop.Item })
+            .Concat(new[] { oldBoss, curtana, newBoss });
+
+        Assert.All(values, value =>
+        {
+            Assert.DoesNotContain('\'', value);
+            Assert.DoesNotContain('%', value);
+            Assert.DoesNotContain('_', value);
+        });
+    }
+
+    /// <summary>
+    /// Sea's mapping is complete with NO exception: every single item on the old Sea board was filed
+    /// under the boss it is spent on.
     /// So the moves and the board's items are the same set, in both directions — an item on the board
     /// and not in the list is one the migration forgot, and one in the list and not on the board is a
     /// move to a card whose picker will not offer it.

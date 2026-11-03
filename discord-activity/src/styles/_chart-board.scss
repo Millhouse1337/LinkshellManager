@@ -439,6 +439,8 @@
   border-bottom: 1px solid var(--border);
 }
 .panel-tab .chart-item-table tbody tr:last-child td { border-bottom: 0; }
+/* A card's Drop Item table sits straight under its Pop Item one. */
+.panel-tab .chart-item-table + .chart-item-table { border-top: 1px solid var(--border); }
 .panel-tab .chart-item-table tbody tr:hover { background: var(--surface-2); }
 .panel-tab .chart-item-table .chart-item__name { font-weight: 500; color: var(--fg); }
 .panel-tab .chart-item-table .chart-item__qty {
@@ -973,8 +975,8 @@
 /* ---- Charts: drop items, item requests, key items -------------------------------
    Tokens only - nothing here carries a literal colour. */
 
-/* Only DROP rows wear a pill. Pop is the default and the common case, so the badge marks
-   the exception rather than labelling every row on Sky. */
+/* On a board that tracks both kinds, every row wears its kind. Boards with no drop form show
+   no pill at all - every row there is a pop item. */
 .panel-tab .chart-holdings__kind {
   display: inline-block;
   margin-left: 6px;

@@ -170,9 +170,9 @@ public sealed record ChartBoss(
     /// A separate list rather than more entries in PopItems, for two reasons. One, the pop list is
     /// what NormalizeDraft canonicalises a pop row's name against, and a name in both lists would
     /// make that canonicalisation depend on which form was used - a coin flip at edit time, which
-    /// ChartBoardCatalogTests.NoBoardListsAnItemAsBothAPopAndADrop refuses. Two, the two Refile
-    /// migrations are pinned against Sky's and Sea's PopItems by set equality, so an addition there
-    /// would be a failing test rather than a silent reclassification of somebody's rows.
+    /// ChartBoardCatalogTests.NoBoardListsAnItemAsBothAPopAndADrop refuses. Two, the migrations that
+    /// moved rows are pinned against these lists by set equality (Sea's PopItems, Sky's DropItems),
+    /// so an addition would be a failing test rather than a silent reclassification of somebody's rows.
     ///
     /// LAST, after EndsRow, for the reason spelled out at Group and LeadsTo: a new optional member
     /// anywhere earlier compiles clean and silently captures the value meant for the one after it.
@@ -338,9 +338,10 @@ public static class ChartBoardCatalog
     private static string SkyPathRun(string god) => $"{god} Path";
     private const string SkyFinalRun = "Final stage";
 
-    /// <summary>A farm NM's card, minus its name: how it is themed, the ONE thing it drops, and the
-    /// god that drop pops.</summary>
-    private sealed record SkyFarmNmCard(string ThemeKey, string EmblemFile, string Drop, string Feeds);
+    /// <summary>A farm NM's card, minus its name: how it is themed, the ONE thing it drops, the god
+    /// that drop pops, and - for the three that are popped with a trade - what is traded to it.</summary>
+    private sealed record SkyFarmNmCard(
+        string ThemeKey, string EmblemFile, string Drop, string Feeds, string? Pop = null);
 
     /// <summary>
     /// The eight Sky farm NMs. Keyed by NM so it cannot drift out of step with
@@ -356,6 +357,9 @@ public static class ChartBoardCatalog
     /// Brigandish Blade" in a picker sitting beside a boss select that already says Brigandish
     /// Blade. What the item is FOR is a different fact, and it belongs to the card once, as LeadsTo,
     /// rather than to every option on it.
+    ///
+    /// Drop goes on the card's DROP list and Pop on its POP list. The other five are popped some
+    /// other way, so their cards have no pop item at all.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, SkyFarmNmCard> SkyFarmNmCards =
         new Dictionary<string, SkyFarmNmCard>(StringComparer.OrdinalIgnoreCase)
@@ -366,14 +370,15 @@ public static class ChartBoardCatalog
             // Delivered as PNG and re-encoded to JPEG: these are photos, and PNG cost ten times the
             // bytes for the same 256px thumbnail. Art dropped in later must be .jpg too, or these
             // eight lines need the new extension.
-            ["Brigandish Blade"] = new("brigandish-blade", "Brigandish_Blade.jpg", "Gem of the South", "Suzaku"),
+            ["Brigandish Blade"] = new("brigandish-blade", "Brigandish_Blade.jpg", "Gem of the South", "Suzaku", Pop: "Curtana"),
             ["Faust"]            = new("faust",            "Faust.jpg",            "Summerstone",      "Suzaku"),
             ["Zipacna"]          = new("zipacna",          "Zipacna.jpg",          "Gem of the North", "Genbu"),
-            ["Olla Grande"]      = new("olla-grande",      "Olla_Grande.jpg",      "Winterstone",      "Genbu"),
+            // Traded to the ??? that starts the Olla chain (Pequena, then Media, then Grande).
+            ["Olla Grande"]      = new("olla-grande",      "Olla_Grande.jpg",      "Winterstone",      "Genbu",  Pop: "Ro'Maeve Water"),
             ["Steam Cleaner"]    = new("steam-cleaner",    "Steam_Cleaner.jpg",    "Gem of the East",  "Seiryu"),
             ["Mother Globe"]     = new("mother-globe",     "Mother_Globe.jpg",     "Springstone",      "Seiryu"),
             ["Despot"]           = new("despot",           "Despot.jpg",           "Gem of the West",  "Byakko"),
-            ["Ullikummi"]        = new("ullikummi",        "Ullikummi.jpg",        "Autumnstone",      "Byakko"),
+            ["Ullikummi"]        = new("ullikummi",        "Ullikummi.jpg",        "Autumnstone",      "Byakko", Pop: "Diorite"),
         };
 
     /// <summary>A Sky God's card, minus its name.</summary>
@@ -387,18 +392,13 @@ public static class ChartBoardCatalog
     /// The five cards HnmConfig calls Sky Gods. Same keyed-by-name guard as SkyFarmNmCards, and the
     /// same DECLARATION ORDER MATTERS caveat.
     ///
-    /// A card's items are what falls OFF it, so a seal lives on the god that drops it rather than on
-    /// Kirin, which is what it pops. That is the whole board's rule, and it is what lets the farm
-    /// NMs above hold the gems.
+    /// A seal is a DROP, and it lives on the god that drops it rather than on Kirin, which is what it
+    /// pops. No god takes a tracked pop item: what pops a god is the farm NMs' drops above it.
     /// </summary>
     private static readonly IReadOnlyDictionary<string, SkyGodCard> SkyGodCards =
         new Dictionary<string, SkyGodCard>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Suzaku"] = new(new[]
-            {
-                new ChartPopItemOption("Seal of Suzaku"),
-                new ChartPopItemOption("Curtana"),
-            }),
+            ["Suzaku"] = new(new[] { new ChartPopItemOption("Seal of Suzaku") }),
             ["Genbu"]  = new(new[] { new ChartPopItemOption("Seal of Genbu") }),
             ["Seiryu"] = new(new[] { new ChartPopItemOption("Seal of Seiryu") }),
             ["Byakko"] = new(new[] { new ChartPopItemOption("Seal of Byakko") }),
@@ -441,8 +441,9 @@ public static class ChartBoardCatalog
                             // — the same call Jailer of Fortitude and Limbus's chip areas make.
                             ChartBossKinds.MiniNm,
                             Group: run,
-                            PopItems: new[] { new ChartPopItemOption(card.Drop) },
-                            LeadsTo: card.Feeds);
+                            PopItems: card.Pop is null ? null : new[] { new ChartPopItemOption(card.Pop) },
+                            LeadsTo: card.Feeds,
+                            DropItems: new[] { new ChartPopItemOption(card.Drop) });
                     });
 
                 var godCard = SkyGodCards[god];
@@ -452,14 +453,14 @@ public static class ChartBoardCatalog
                     $"{god}.jpg",
                     Subtitle: godCard.Subtitle,
                     Group: run,
-                    PopItems: godCard.Drops));
+                    DropItems: godCard.Drops));
             })
             .ToList())
     {
         // The four path runs are drawn as columns; anything else — Kirin's run — falls below them.
-        // Gear and currency that falls off these cards is tracked too, on a second add form over the
-        // same rows. Sky's PopItems already hold what each card DROPS - that is this board's rule -
-        // so nothing moves; DropItems is the list for everything that is loot rather than pop fodder.
+        // Pop items are what is traded TO a card (Curtana, Diorite, Ro'Maeve Water) and drop items
+        // are what falls OFF it (the gems, stones and seals). ReclassifySkyChartItems moved the rows
+        // written before the two were split.
         Features = ChartBoardFeatures.PopItems | ChartBoardFeatures.DropItems,
         PathColumns = HnmConfig.SkyGodOrder
             .Where(god => god != "Kirin")

@@ -31,16 +31,27 @@ public class ChartItemKindTests
     public void NormalizeDraft_CanonicalisesAPopNameAgainstThePopList()
     {
         var draft = ChartBoardService.NormalizeDraft(
-            "sky", "Olla Grande", "  winterstone ", null, null, 1, null, ChartItemKinds.Pop);
+            "sky", "Brigandish Blade", "  curtana ", null, null, 1, null, ChartItemKinds.Pop);
 
         Assert.NotNull(draft);
-        Assert.Equal("Winterstone", draft!.ItemName);
+        Assert.Equal("Curtana", draft!.ItemName);
         Assert.Equal(ChartItemKinds.Pop, draft.Kind);
     }
 
-    // A DROP draft is canonicalised against the DROP list, which is empty on every board today - so
-    // the name passes through as typed, exactly as a free-text pop item does on a board with no
-    // list. That is the same contract, reached by a different list.
+    // And the drop list canonicalises drop names, the same way.
+    [Fact]
+    public void NormalizeDraft_CanonicalisesADropNameAgainstTheDropList()
+    {
+        var draft = ChartBoardService.NormalizeDraft(
+            "sky", "Olla Grande", "  winterstone ", null, null, 1, null, ChartItemKinds.Drop);
+
+        Assert.NotNull(draft);
+        Assert.Equal("Winterstone", draft!.ItemName);
+        Assert.Equal(ChartItemKinds.Drop, draft.Kind);
+    }
+
+    // A drop the card does not list passes through as typed, exactly as a free-text pop item does
+    // on a board with no list. That is the same contract, reached by a different list.
     [Fact]
     public void NormalizeDraft_PassesAnUnlistedDropNameThroughAsTyped()
     {
@@ -52,16 +63,16 @@ public class ChartItemKindTests
         Assert.Equal(ChartItemKinds.Drop, draft.Kind);
     }
 
-    // A pop item name is NOT canonicalised by the drop list. Nothing declares drop items yet, so
-    // this is really pinning that the two lists are consulted separately rather than merged.
+    // A pop item name typed into the DROP form is not canonicalised by the pop list. This pins that
+    // the two lists are consulted separately rather than merged.
     [Fact]
     public void NormalizeDraft_DoesNotCanonicaliseADropNameAgainstThePopList()
     {
         var draft = ChartBoardService.NormalizeDraft(
-            "sky", "Olla Grande", "winterstone", null, null, 1, null, ChartItemKinds.Drop);
+            "sky", "Brigandish Blade", "curtana", null, null, 1, null, ChartItemKinds.Drop);
 
         Assert.NotNull(draft);
-        Assert.Equal("winterstone", draft!.ItemName);
+        Assert.Equal("curtana", draft!.ItemName);
     }
 
     // Every caller written before drop items existed omits the argument entirely.
@@ -109,17 +120,17 @@ public class ChartItemKindTests
 
         var items = new[]
         {
-            Row(1, "Byakko", "Seal of Byakko", ChartItemKinds.Pop, "Aeris"),
-            Row(2, "Byakko", "Byakko's Haidate", ChartItemKinds.Drop, "Aeris"),
+            Row(1, "Ullikummi", "Diorite", ChartItemKinds.Pop, "Aeris"),
+            Row(2, "Ullikummi", "Autumnstone", ChartItemKinds.Drop, "Aeris"),
         };
 
         var ledger = ChartBoardService.BuildLedger(board, items, roster);
         var row = Assert.Single(ledger.Rows);
-        var byakko = Assert.Single(row.Cells, cell => cell.Boss == "Byakko");
+        var ullikummi = Assert.Single(row.Cells, cell => cell.Boss == "Ullikummi");
 
-        Assert.Equal(2, byakko.TotalItems);
-        Assert.Equal(2, byakko.CreditedItems);
-        Assert.Equal(ChartCreditStatuses.Credited, byakko.Status);
+        Assert.Equal(2, ullikummi.TotalItems);
+        Assert.Equal(2, ullikummi.CreditedItems);
+        Assert.Equal(ChartCreditStatuses.Credited, ullikummi.Status);
     }
 
     private static ChartPopItem Row(int id, string boss, string name, string kind, string creditedTo)

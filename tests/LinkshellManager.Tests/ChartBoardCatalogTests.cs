@@ -104,33 +104,42 @@ public class ChartBoardCatalogTests
     }
 
     /// <summary>
-    /// The whole farm layer: what each NM drops and which god that drop pops. The drop names are
-    /// STORED on ChartPopItem.ItemName when an officer picks one, and the god name decides where a
-    /// card's arrow points and what colour it is — so both halves are pinned here.
+    /// The whole farm layer: what each NM drops, which god that drop pops, and - for the three popped
+    /// with a trade - what is traded to it. The item names are STORED on ChartPopItem.ItemName when an
+    /// officer picks one, and the god name decides where a card's arrow points and what colour it is —
+    /// so all of it is pinned here.
     /// </summary>
     [Fact]
     public void SkyFarmNms_EachDropOneItemAndFeedOneGod()
     {
         var sky = ChartBoardCatalog.Find(ChartBoardCatalog.Sky)!;
 
-        var expected = new (string Nm, string Drop, string God)[]
+        var expected = new (string Nm, string? Pop, string Drop, string God)[]
         {
-            ("Faust",            "Summerstone",      "Suzaku"),
-            ("Brigandish Blade", "Gem of the South", "Suzaku"),
-            ("Zipacna",          "Gem of the North", "Genbu"),
-            ("Olla Grande",      "Winterstone",      "Genbu"),
-            ("Steam Cleaner",    "Gem of the East",  "Seiryu"),
-            ("Mother Globe",     "Springstone",      "Seiryu"),
-            ("Despot",           "Gem of the West",  "Byakko"),
-            ("Ullikummi",        "Autumnstone",      "Byakko"),
+            ("Faust",            null,             "Summerstone",      "Suzaku"),
+            ("Brigandish Blade", "Curtana",        "Gem of the South", "Suzaku"),
+            ("Zipacna",          null,             "Gem of the North", "Genbu"),
+            ("Olla Grande",      "Ro'Maeve Water", "Winterstone",      "Genbu"),
+            ("Steam Cleaner",    null,             "Gem of the East",  "Seiryu"),
+            ("Mother Globe",     null,             "Springstone",      "Seiryu"),
+            ("Despot",           null,             "Gem of the West",  "Byakko"),
+            ("Ullikummi",        "Diorite",        "Autumnstone",      "Byakko"),
         };
 
-        foreach (var (nm, drop, god) in expected)
+        foreach (var (nm, pop, drop, god) in expected)
         {
             var card = sky.Find(nm)!;
             // Farmed rather than popped once, so the card headlines stock, not item count.
             Assert.Equal(ChartBossKinds.MiniNm, card.Kind);
-            Assert.Equal(drop, Assert.Single(card.PopItems!).Name);
+            Assert.Equal(drop, Assert.Single(card.DropItems!).Name);
+            if (pop is null)
+            {
+                Assert.Empty(sky.PopItemsFor(nm));
+            }
+            else
+            {
+                Assert.Equal(pop, Assert.Single(card.PopItems!).Name);
+            }
             Assert.Equal(god, card.LeadsTo);
 
             // A feeder sits in its god's column, above the god — which is what makes the arrow badge
@@ -391,10 +400,9 @@ public class ChartBoardCatalogTests
     }
 
     /// <summary>
-    /// A card's items are what falls OFF it, so a seal lives on the god that drops it rather than on
-    /// Kirin, which is what it pops. That is the rule the whole board turns on — it is what lets the
-    /// farm NMs hold the gems. The names are STORED on ChartPopItem.ItemName when an officer picks
-    /// one, so a rename here leaves existing rows spelled the old way.
+    /// A seal is a DROP, and it lives on the god that drops it rather than on Kirin, which is what it
+    /// pops. No god takes a tracked pop item. The names are STORED on ChartPopItem.ItemName when an
+    /// officer picks one, so a rename here leaves existing rows spelled the old way.
     /// </summary>
     [Fact]
     public void SkyBoard_EachGodDropsItsOwnSeal_AndKirinDropsNothing()
@@ -402,26 +410,35 @@ public class ChartBoardCatalogTests
         var sky = ChartBoardCatalog.Find(ChartBoardCatalog.Sky)!;
 
         static string[] Names(ChartBoard board, string boss) =>
-            board.PopItemsFor(boss).Select(option => option.Name).ToArray();
+            board.DropItemsFor(boss).Select(option => option.Name).ToArray();
 
-        Assert.Equal(new[] { "Seal of Suzaku", "Curtana" }, Names(sky, "Suzaku"));
+        // Curtana is NOT here any more: it is traded to Brigandish Blade, so it is that card's pop item.
+        Assert.Equal(new[] { "Seal of Suzaku" }, Names(sky, "Suzaku"));
         Assert.Equal(new[] { "Seal of Genbu" }, Names(sky, "Genbu"));
         Assert.Equal(new[] { "Seal of Seiryu" }, Names(sky, "Seiryu"));
         Assert.Equal(new[] { "Seal of Byakko" }, Names(sky, "Byakko"));
 
+        foreach (var god in HnmConfig.SkyGodOrder)
+        {
+            Assert.Empty(sky.PopItemsFor(god));
+        }
+
         // Kirin is the terminus: popped WITH the four seals, but nothing is tracked as dropping FROM
         // it, so its card documents the fight in a subtitle and holds no items.
-        Assert.Empty(sky.PopItemsFor("Kirin"));
+        Assert.Empty(sky.DropItemsFor("Kirin"));
         Assert.Equal("Popped with one seal from each of the four gods", sky.Find("Kirin")!.Subtitle);
 
         // No Source anywhere on Sky: an item's drop source IS the card it sits on, so naming it
         // again would repeat the boss select the picker sits beside.
         Assert.All(
-            sky.Bosses.SelectMany(boss => boss.PopItems ?? Array.Empty<ChartPopItemOption>()),
+            sky.Bosses.SelectMany(boss =>
+                (boss.PopItems ?? Array.Empty<ChartPopItemOption>())
+                    .Concat(boss.DropItems ?? Array.Empty<ChartPopItemOption>())),
             option => Assert.Null(option.Source));
 
-        // Sky MIXES now, exactly as Sea does — which is why HasPopItemOptions asks Any, not All.
+        // Sky MIXES, exactly as Sea does — which is why both Has*Options ask Any, not All.
         Assert.True(sky.HasPopItemOptions);
+        Assert.True(sky.HasDropItemOptions);
     }
 
     /// <summary>
@@ -445,7 +462,7 @@ public class ChartBoardCatalogTests
         // Both live boards name no Source, so every label the catalog actually renders is a bare name
         // or a name and a count.
         var sky = ChartBoardCatalog.Find(ChartBoardCatalog.Sky)!;
-        Assert.Equal("Gem of the North", sky.PopItemsFor("Zipacna").Single().Label);
+        Assert.Equal("Gem of the North", sky.DropItemsFor("Zipacna").Single().Label);
 
         var sea = ChartBoardCatalog.Find(ChartBoardCatalog.Sea)!;
         Assert.Equal("Fourth Virtue", sea.PopItemsFor("Jailer of Justice").Single().Label);
@@ -478,17 +495,19 @@ public class ChartBoardCatalogTests
     }
 
     [Theory]
-    [InlineData("Olla Grande", "  winterstone ", "Winterstone")]
-    [InlineData("Zipacna", "GEM OF THE NORTH", "Gem of the North")]
-    [InlineData("Genbu", "seal of genbu", "Seal of Genbu")]
+    [InlineData("Olla Grande", "  winterstone ", ChartItemKinds.Drop, "Winterstone")]
+    [InlineData("Zipacna", "GEM OF THE NORTH", ChartItemKinds.Drop, "Gem of the North")]
+    [InlineData("Genbu", "seal of genbu", ChartItemKinds.Drop, "Seal of Genbu")]
+    [InlineData("Brigandish Blade", "curtana", ChartItemKinds.Pop, "Curtana")]
+    [InlineData("Olla Grande", " ro'maeve water", ChartItemKinds.Pop, "Ro'Maeve Water")]
     // Not one of this card's items, so it passes through as typed rather than being rejected: boards
     // with no list still take free text, and rows saved before Sky was restructured have to stay
     // editable under the name they were saved with.
-    [InlineData("Zipacna", "Shard of Apollyon", "Shard of Apollyon")]
-    public void NormalizePopItemName_CanonicalisesWhatTheCatalogKnows(
-        string boss, string typed, string expected)
+    [InlineData("Zipacna", "Shard of Apollyon", ChartItemKinds.Drop, "Shard of Apollyon")]
+    public void NormalizeItemName_CanonicalisesWhatTheCatalogKnows(
+        string boss, string typed, string kind, string expected)
     {
-        Assert.Equal(expected, ChartBoardCatalog.NormalizePopItemName(ChartBoardCatalog.Sky, boss, typed));
+        Assert.Equal(expected, ChartBoardCatalog.NormalizeItemName(ChartBoardCatalog.Sky, boss, typed, kind));
     }
 
     [Fact]

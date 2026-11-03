@@ -32,6 +32,16 @@ interface ChartBossGroup {
 interface ChartConsolidatedItem {
   name: string;
   quantity: number;
+  /** False for a catalog item nobody has a row for yet. It is still listed, at 0, so the card says
+   *  what the boss takes and drops before anyone holds one. */
+  tracked: boolean;
+}
+
+/** A card's lines of one kind, under that kind's own heading. */
+interface ChartItemSection {
+  kind: ChartItemKind;
+  heading: string;
+  items: ChartConsolidatedItem[];
 }
 
 /**
@@ -127,36 +137,59 @@ export class ChartBoardSectionComponent {
    * saying the same word. A card answers "what does this boss need and how many do we have"; who
    * holds which copy is a question the wide table answers.
    *
+   * Split by KIND, pop items first: what is traded to a boss and what falls off it are different
+   * questions, and Brigandish Blade answers both. Each section starts with the catalog's own items
+   * for that kind, at 0 until a row says otherwise, then anything else officers have typed in.
+   * A kind with nothing listed and nothing held is left out, so Faust shows no empty Pop heading.
+   *
    * Keyed by boss and memoised, so the template can ask per card without re-folding on every pass.
-   * First-seen spelling and first-seen position win: officers order their own rows.
+   * Catalog order comes first; after that, first-seen spelling and position win.
    */
-  protected readonly consolidatedItems = computed<Record<string, ChartConsolidatedItem[]>>(() => {
-    const byBoss: Record<string, ChartConsolidatedItem[]> = {};
+  protected readonly consolidatedItems = computed<Record<string, ChartItemSection[]>>(() => {
+    const byBoss: Record<string, ChartItemSection[]> = {};
 
     for (const boss of this.bosses()) {
-      const order: ChartConsolidatedItem[] = [];
-      const seen = new Map<string, ChartConsolidatedItem>();
+      byBoss[boss.boss] = (['Pop', 'Drop'] as const)
+        .map(kind => {
+          const order: ChartConsolidatedItem[] = [];
+          const seen = new Map<string, ChartConsolidatedItem>();
 
-      for (const item of boss.items) {
-        const key = item.itemName.trim().toLowerCase();
-        const found = seen.get(key);
-        if (found) {
-          found.quantity += item.quantity;
-        } else {
-          const line = { name: item.itemName, quantity: item.quantity };
-          seen.set(key, line);
-          order.push(line);
-        }
-      }
+          const options = (kind === 'Drop' ? boss.dropItemOptions : boss.popItemOptions) ?? [];
+          for (const option of options) {
+            const line = { name: option.name, quantity: 0, tracked: false };
+            seen.set(option.name.trim().toLowerCase(), line);
+            order.push(line);
+          }
 
-      byBoss[boss.boss] = order;
+          for (const item of boss.items.filter(row => (row.kind ?? 'Pop') === kind)) {
+            const key = item.itemName.trim().toLowerCase();
+            const found = seen.get(key);
+            if (found) {
+              found.quantity += item.quantity;
+              found.tracked = true;
+            } else {
+              const line = { name: item.itemName, quantity: item.quantity, tracked: true };
+              seen.set(key, line);
+              order.push(line);
+            }
+          }
+
+          return { kind, heading: kind === 'Drop' ? 'Drop Item' : 'Pop Item', items: order };
+        })
+        .filter(section => section.items.length > 0);
     }
 
     return byBoss;
   });
 
-  protected itemsFor(boss: string): ChartConsolidatedItem[] {
+  protected sectionsFor(boss: string): ChartItemSection[] {
     return this.consolidatedItems()[boss] ?? [];
+  }
+
+  /** Distinct items with at least one row. A catalog line still at 0 lists nothing anyone holds. */
+  protected trackedItemCount(boss: string): number {
+    return this.sectionsFor(boss)
+      .reduce((count, section) => count + section.items.filter(item => item.tracked).length, 0);
   }
 
   /** Group labels drawn as columns rather than rows. Empty for every board but Sky. */

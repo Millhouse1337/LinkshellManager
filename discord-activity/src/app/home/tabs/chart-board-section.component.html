@@ -3,36 +3,46 @@
   the board's Final encounter). They differ in their chrome, never in how a pop item is shown.
 -->
 <ng-template #itemTable let-boss>
-  @if (boss.items.length === 0) {
+  @if (sectionsFor(boss.boss).length === 0) {
     <!-- No "Add one" here: adding is the one button at the top right, so there is one way in rather
          than one per empty card, and an empty card stays the same height as a full one. -->
-    <div class="chart-card__empty">No pop items tracked yet.</div>
+    <div class="chart-card__empty">No items tracked yet.</div>
   } @else {
     <!--
       WHAT IT IS and HOW MANY, nothing else — and one line per item, with the copies summed. A card
       is one of five in a row: a column per fact squeezed the item's own name into three wrapped
       lines, and three people holding a Gem of the South printed the same word three times.
 
-      Who holds which copy, who is credited for it, and every button that edits a row live in the Pop
-      Item Holdings table below, which has the whole page width to say them in. This is the
-      at-a-glance view; that is the detail view, and the only one that writes.
+      One table per KIND, each under its own heading, so a card that is popped with one item and
+      drops another (Brigandish Blade) says which is which. A catalog item nobody holds yet still
+      gets its line, at 0 and muted.
+
+      Who holds which copy, who is credited for it, and every button that edits a row live in the
+      Holdings table below, which has the whole page width to say them in. This is the at-a-glance
+      view; that is the detail view, and the only one that writes.
     -->
-    <table class="chart-item-table">
-      <thead>
-        <tr>
-          <th>Pop Item</th>
-          <th>Qty</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (item of itemsFor(boss.boss); track item.name) {
+    @for (section of sectionsFor(boss.boss); track section.kind) {
+      <table class="chart-item-table">
+        <thead>
           <tr>
-            <td data-label="Pop Item"><span class="chart-item__name">{{ item.name }}</span></td>
-            <td data-label="Qty"><span class="chart-item__qty">{{ item.quantity }}</span></td>
+            <th>{{ section.heading }}</th>
+            <th>Qty</th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (item of section.items; track item.name) {
+            <tr>
+              <td [attr.data-label]="section.heading">
+                <span class="chart-item__name" [class.chart-item__muted]="!item.tracked">{{ item.name }}</span>
+              </td>
+              <td data-label="Qty">
+                <span class="chart-item__qty" [class.chart-item__muted]="!item.tracked">{{ item.quantity }}</span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
   }
 </ng-template>
 
@@ -292,7 +302,7 @@
             } @else {
               <!-- Distinct items, matching the lines on the card — totalItems counts ROWS, and the
                    card folds several rows of one item into one line. -->
-              <span class="tag chart-count">{{ itemsFor(boss.boss).length }} {{ itemsFor(boss.boss).length === 1 ? 'Item' : 'Items' }}</span>
+              <span class="tag chart-count">{{ trackedItemCount(boss.boss) }} {{ trackedItemCount(boss.boss) === 1 ? 'Item' : 'Items' }}</span>
             }
           </div>
 
@@ -313,7 +323,7 @@
                headlines stock, so "Total Qty" repeats that one number — a card the same shape as its
                neighbours is worth the repetition. -->
           <div class="chart-card__footer">
-            <span>Total Items: <strong>{{ itemsFor(boss.boss).length }}</strong></span>
+            <span>Total Items: <strong>{{ trackedItemCount(boss.boss) }}</strong></span>
             <span>Total Qty: <strong>{{ boss.totalQuantity }}</strong></span>
           </div>
 
