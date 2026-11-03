@@ -370,18 +370,15 @@
                       <p class="muted">
                         Specify what each camp window offers
                       </p>
-                      <!-- Centred so the WRAPPED line reads as part of the same block: six fields
-                           over three columns leaves the last two hanging off the left edge, which
-                           looks like a different group rather than the tail of this one. A full
-                           line has no slack to centre, so this only ever moves the short one. -->
-                      <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                      <!-- One row: the fields share the width (see .customize-form__bonus-row). -->
+                      <div class="customize-form__bonus-row">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Open bonus</span>
                           <input type="number" min="0" step="0.05" name="hnmStandardOpenBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardOpenBonus"
                             (ngModelChange)="customizeDraft.hnmStandardOpenBonus = $event; onCustomizeFieldChange()" />
                         </label>
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Regular window</span>
                           <input type="number" min="0" step="0.05" name="hnmStandardWindowBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardWindowBonus"
@@ -389,25 +386,25 @@
                         </label>
                         <!-- Its own rate, not the regular window's: a read taken at the camp outside
                              any window. One post can still be re-priced from the addon. -->
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Misc post</span>
                           <input type="number" min="0" step="0.05" name="hnmStandardMiscBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardMiscBonus"
                             (ngModelChange)="customizeDraft.hnmStandardMiscBonus = $event; onCustomizeFieldChange()" />
                         </label>
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Close bonus</span>
                           <input type="number" min="0" step="0.05" name="hnmStandardCloseBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardCloseBonus"
                             (ngModelChange)="customizeDraft.hnmStandardCloseBonus = $event; onCustomizeFieldChange()" />
                         </label>
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Tag bonus</span>
                           <input type="number" min="0" step="0.05" name="hnmStandardClaimBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardClaimBonus"
                             (ngModelChange)="customizeDraft.hnmStandardClaimBonus = $event; onCustomizeFieldChange()" />
                         </label>
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Kill bonus</span>
                           <input type="number" min="0" step="0.05" name="hnmStandardKillBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardKillBonus"
@@ -424,34 +421,33 @@
                         anyone still checked in at the camp's last window. Leave a bonus at 0 to switch
                         it off.
                       </p>
-                      <!-- Centred for the same reason as the Standard row above: this mode also
-                           carries five fields, so the wrap leaves a short last line. -->
-                      <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center">
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                      <!-- One row, like the Standard fields above. -->
+                      <div class="customize-form__bonus-row">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">DKP / window</span>
                           <input type="number" min="0" step="0.05" name="wdDkpPerWindowDraft"
                             [ngModel]="customizeDraft.wdDkpPerWindow"
                             (ngModelChange)="customizeDraft.wdDkpPerWindow = $event; onCustomizeFieldChange()" />
                         </label>
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Open bonus</span>
                           <input type="number" min="0" step="0.05" name="wdOpenBonusDraft"
                             [ngModel]="customizeDraft.wdOpenBonus"
                             (ngModelChange)="customizeDraft.wdOpenBonus = $event; onCustomizeFieldChange()" />
                         </label>
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Close bonus</span>
                           <input type="number" min="0" step="0.05" name="wdCloseBonusDraft"
                             [ngModel]="customizeDraft.wdCloseBonus"
                             (ngModelChange)="customizeDraft.wdCloseBonus = $event; onCustomizeFieldChange()" />
                         </label>
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Tag bonus</span>
                           <input type="number" min="0" step="0.05" name="wdClaimBonusDraft"
                             [ngModel]="customizeDraft.wdClaimBonus"
                             (ngModelChange)="customizeDraft.wdClaimBonus = $event; onCustomizeFieldChange()" />
                         </label>
-                        <label class="customize-form__field" style="flex:0 0 120px">
+                        <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Kill bonus</span>
                           <input type="number" min="0" step="0.05" name="wdKillBonusDraft"
                             [ngModel]="customizeDraft.wdKillBonus"

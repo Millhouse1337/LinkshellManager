@@ -444,6 +444,21 @@
   max-width: 240px;
 }
 
+// HNM Settings scoring fields (Open bonus, Regular window, ...): one row, each field an equal share.
+// A number input has a built-in width of about 185px, which made six of them wrap onto two lines,
+// so the inputs fill their column instead. On a narrow card the row still wraps rather than
+// squeezing the boxes too small to read.
+.customize-form__bonus-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 12px;
+
+  input {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 // Native <select> styling inside the customize form. Drops the default OS
 // dropdown appearance and replaces the chevron with an inlined SVG so the
 // control matches the rest of the form fields (border, padding, focus ring).
