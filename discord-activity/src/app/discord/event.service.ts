@@ -693,20 +693,7 @@ export class EventService {
     }
   }
 
-  // Add New Post, WINDOW: credits the picked members into the camp's window `windowSequence`
-  // (created if it isn't posted yet; added to if it is).
-  async addCampWindowPost(eventId: number, windowSequence: number, appUserIds: string[]): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('POST', `/api/addon/management/events/${eventId}/window-posts`, { windowSequence, appUserIds });
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Adding the window post failed.'));
-      return false;
-    }
-  }
-
-  // Add New Post, MISC: files a new Misc post on the camp with the picked members.
+  // Add New Post (always a Misc post): files a new Misc post on the camp with the picked members.
   async addCampMiscPost(eventId: number, name: string | null, appUserIds: string[]): Promise<boolean> {
     this.auth.setActionError(null);
     try {

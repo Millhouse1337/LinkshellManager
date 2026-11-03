@@ -198,31 +198,17 @@
               @if (!collapsed) {
                 @if (manage && newPostEventId() === event.id) {
                   <section class="hnm-panel">
+                    <!-- Misc posts only: window posts come from the lsm addon. -->
                     <div class="hnm-panel__head">
-                      <h3>New {{ newPostKind() === 'window' ? 'window' : 'misc' }} post</h3>
-                      <div class="hnm-segmented" role="group" aria-label="Post type">
-                        <button type="button" [class.is-on]="newPostKind() === 'window'" (click)="newPostKind.set('window')">Window post</button>
-                        <button type="button" [class.is-on]="newPostKind() === 'misc'" (click)="newPostKind.set('misc')">Misc post</button>
-                      </div>
+                      <h3>New misc post</h3>
                     </div>
                     <div class="new-post">
-                      @if (newPostKind() === 'window') {
-                        <label class="new-post__row">
-                          <span class="roster-muted">Window</span>
-                          <select [ngModel]="newPostWindow()" (ngModelChange)="newPostWindow.set(+$event)" [name]="'campPostWindow' + event.id">
-                            @for (option of newPostWindowOptions(event); track option.sequence) {
-                              <option [ngValue]="option.sequence">{{ option.label }}</option>
-                            }
-                          </select>
-                        </label>
-                      } @else {
-                        <label class="new-post__row">
-                          <span class="roster-muted">Name</span>
-                          <input type="text" placeholder="Misc post" maxlength="128"
-                            [ngModel]="newPostName()" (ngModelChange)="newPostName.set($event)" [name]="'campPostName' + event.id" />
-                          <span class="roster-muted">Pays the Misc rate once per person; change it on the post after.</span>
-                        </label>
-                      }
+                      <label class="new-post__row">
+                        <span class="roster-muted">Name</span>
+                        <input type="text" placeholder="Misc post" maxlength="128"
+                          [ngModel]="newPostName()" (ngModelChange)="newPostName.set($event)" [name]="'campPostName' + event.id" />
+                        <span class="roster-muted">Pays the Misc rate once per person; change it on the post after.</span>
+                      </label>
                       <div class="new-post__row">
                         <input type="text" placeholder="Search members..." autocomplete="off"
                           [ngModel]="newPostSearch()" (ngModelChange)="newPostSearch.set($event)" [name]="'campPostSearch' + event.id" />

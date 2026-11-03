@@ -953,7 +953,6 @@ export class DiscordActivityService {
   setCampKillBonus(eventId: number, killBonus: number | null): Promise<boolean> { return this.eventService.setCampKillBonus(eventId, killBonus); }
   setCampCloseBonus(eventId: number, closeBonus: number | null): Promise<boolean> { return this.eventService.setCampCloseBonus(eventId, closeBonus); }
   setCampOpenBonus(eventId: number, openBonus: number | null): Promise<boolean> { return this.eventService.setCampOpenBonus(eventId, openBonus); }
-  addCampWindowPost(eventId: number, windowSequence: number, appUserIds: string[]): Promise<boolean> { return this.eventService.addCampWindowPost(eventId, windowSequence, appUserIds); }
   addCampMiscPost(eventId: number, name: string | null, appUserIds: string[]): Promise<boolean> { return this.eventService.addCampMiscPost(eventId, name, appUserIds); }
   setMiscPostDkp(snapshotId: number, dkpAmount: number | null): Promise<boolean> { return this.eventService.setMiscPostDkp(snapshotId, dkpAmount); }
   unlinkCampSnapshot(snapshotId: number): Promise<boolean> { return this.eventService.unlinkCampSnapshot(snapshotId); }

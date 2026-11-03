@@ -649,12 +649,10 @@ export class EventsTabComponent {
   // ----- Add New Post -----
   //
   // Replaces "Add a Member" on a live Standard HNM camp, where signing someone up pays nothing:
-  // camp DKP comes from its posts. An officer picks a Window post (credited into one of the camp's
-  // windows — a new one, or added to one already posted) or a Misc post (paid the Misc rate once per
-  // person), then the members on it. One panel open at a time.
+  // camp DKP comes from its posts. Every post made here is a Misc post (paid the Misc rate once per
+  // person); window posts come from the lsm addon. An officer names it, then picks the members on
+  // it. One panel open at a time.
   protected readonly newPostEventId = signal<number | null>(null);
-  protected readonly newPostKind = signal<'window' | 'misc'>('window');
-  protected readonly newPostWindow = signal(1);
   protected readonly newPostName = signal('');
   protected readonly newPostSearch = signal('');
   protected readonly newPostSelected = signal<ReadonlySet<string>>(new Set());
@@ -670,13 +668,9 @@ export class EventsTabComponent {
       return;
     }
     this.newPostEventId.set(event.id);
-    this.newPostKind.set('window');
     this.newPostName.set('');
     this.newPostSearch.set('');
     this.newPostSelected.set(new Set());
-    // The first window not posted yet, else the last one (adding to it).
-    const options = this.newPostWindowOptions(event);
-    this.newPostWindow.set((options.find(option => !option.posted) ?? options[options.length - 1])?.sequence ?? 1);
     if (!this.addMemberCandidatesByEvent()[event.id]) {
       await this.loadAddMemberCandidates(event.id);
     }
@@ -684,23 +678,6 @@ export class EventsTabComponent {
 
   protected closeNewPost(): void {
     this.newPostEventId.set(null);
-  }
-
-  // Every window the camp can take, named like its tabs. A posted one is still offered: posting
-  // into it adds the picked members to it.
-  protected newPostWindowOptions(event: ActivityEvent): { sequence: number; label: string; posted: boolean }[] {
-    const named = this.postsOpenAndClose(event);
-    const posted = new Map(this.attendanceWindowsFor(event)
-      .filter(window => !window.isKillWindow)
-      .map(window => [window.sequenceNumber, window] as const));
-    return Array.from({ length: this.postCount(event) }, (_, index) => {
-      const sequence = index + 1;
-      const existing = posted.get(sequence);
-      const name = existing
-        ? this.attendanceWindowLabel(existing)
-        : named ? (sequence === 1 ? 'Open' : 'Close') : `Window ${sequence}`;
-      return { sequence, label: existing ? `${name} (posted, adds to it)` : name, posted: !!existing };
-    });
   }
 
   // The whole linkshell roster, not addMemberCandidates: that one drops anyone already signed up,
@@ -726,9 +703,7 @@ export class EventsTabComponent {
     if (ids.length === 0 || this.newPostSaving()) return;
     this.newPostSaving.set(true);
     try {
-      const ok = this.newPostKind() === 'window'
-        ? await this.activity.addCampWindowPost(event.id, this.newPostWindow(), ids)
-        : await this.activity.addCampMiscPost(event.id, this.newPostName().trim() || null, ids);
+      const ok = await this.activity.addCampMiscPost(event.id, this.newPostName().trim() || null, ids);
       if (ok) {
         this.closeNewPost();
         await this.activity.refreshOverview();
