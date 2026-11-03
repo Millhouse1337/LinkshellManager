@@ -74,14 +74,140 @@
 .auctions-panel .auction.live { border-color: rgba(74, 222, 128, 0.15); }
 .auctions-panel .auction.ending { border-color: rgba(245, 158, 11, 0.15); }
 
-/* Auction header */
+.auctions-panel .auction.ended { opacity: 0.85; }
+
+/* Auction header: title + status, the time window, then the auction-level actions on the right. */
 .auctions-panel .auction-header {
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.auctions-panel .auction-header__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.auctions-panel .auction-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 11px;
+  color: var(--fg-3);
+}
+.auctions-panel .auction-header__remaining {
+  color: var(--fg);
+  font-weight: 600;
+}
+.auctions-panel .auction-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* Item cards: as many per row as fit, each with its own stats, bid box and bid history. */
+.auctions-panel .auction-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 10px;
+  padding: 12px 14px 14px;
+}
+.auctions-panel .auction-items__empty {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 12px;
+}
+.auctions-panel .auction-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.auctions-panel .auction-item--ended { opacity: 0.75; }
+.auctions-panel .auction-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.auctions-panel .auction-item__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  strong {
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--fg);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+.auctions-panel .auction-item__notes {
+  margin: -6px 0 0;
+  font-size: 11px;
+}
+.auctions-panel .auction-item__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+
+  dt {
+    font-size: 10px;
+    color: var(--fg-3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  dd {
+    margin: 2px 0 0;
+    overflow: hidden;
+    font-size: 13px;
+    color: var(--fg);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+.auctions-panel .auction-item__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+}
+.auctions-panel .auction-item__bid {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+
+  .bid-input {
+    width: 90px;
+    min-width: 0;
+  }
+}
+/* Bid history and the close panel sit inside the cards, so they lose their table-row framing. */
+.auctions-panel .auction-item .bid-history {
+  margin: 0 -12px -12px;
+}
+.auctions-panel .auction .auction-close-panel {
+  margin: 0 14px 14px;
 }
 .auctions-panel .auction-title-row {
   display: flex;

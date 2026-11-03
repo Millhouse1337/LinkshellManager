@@ -73,176 +73,177 @@
     } @else if (auctionsView() === 'active') {
       <!-- Only show the loading notice on the *first* load (no data yet).
            The auto-refresh poller flips auctionsBusy on every background
-           tick (5s while an auction is Live); swapping the table out for
+           tick (5s while an auction is Live); swapping the board out for
            the notice on each tick made the whole panel flicker and stole
-           focus from the bid inputs. With data present we keep the table
+           focus from the bid inputs. With data present we keep the board
            rendered and let the refreshed values update in place. -->
       @if (activity.auctionsBusy() && auctions().length === 0) {
         <p class="notice">Loading auctions...</p>
       } @else if (auctions().length > 0) {
-        <div class="table-wrap">
-          <table class="data-table auction-active-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Type</th>
-                <th class="num">Start</th>
-                <th class="num">Current</th>
-                <th>Leader</th>
-                <th>Bid</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (auction of pagedActiveAuctions(); track auction.id) {
-                <!-- Auction header row: title, status, time window, and
-                     auction-level controls (Edit / Start / End / Close).
-                     Spans the full table width so it visually groups the
-                     item rows that follow underneath. -->
-                <tr class="auction-header-row">
-                  <td colspan="7">
-                    <div class="auction-header">
-                      <div class="auction-header__title">
-                        <strong>{{ auction.title || 'Untitled auction' }}</strong>
-                        @if (auctionStatusTagClass(auction)) {
-                          <span class="tag {{ auctionStatusTagClass(auction) }}">{{ auctionStatusLabel(auction) }}</span>
-                        } @else {
-                          <span class="tag">{{ auctionStatusLabel(auction) }}</span>
-                        }
-                        <!-- Only set when the linkshell has more than one DKP pool, so a linkshell
-                             that hasn't split its DKP sees no chip at all. -->
-                        @if (auction.dkpPoolName) {
-                          <span class="tag accent"
-                            [title]="'Bids on this auction are paid from your ' + auction.dkpPoolName + ' DKP.'">
-                            {{ auction.dkpPoolName }} DKP
-                          </span>
-                        }
-                      </div>
-                      <div class="auction-header__meta muted">
-                        <span>{{ auctionTimeWindowLabel(auction) }}</span>
-                        <span>By {{ auction.createdBy || 'Unknown' }}</span>
-                        @if (auctionState(auction) !== 'ended') {
-                          <span class="auction-header__remaining">{{ auctionRemainingLabel(auction) }}: {{ auctionTimerValue(auction) }}</span>
-                        }
-                      </div>
-                      <div class="auction-header__actions">
-                        @if (auction.canEdit) {
-                          <button type="button" class="btn sm" (click)="openEditAuctionForm(auction)">Edit</button>
-                        }
-                        @if (auction.canStart) {
-                          <button
-                            type="button"
-                            class="btn primary sm"
-                            [disabled]="activity.busyAuctionId() === auction.id"
-                            (click)="startAuction(auction.id)">
-                            {{ activity.busyAuctionId() === auction.id ? '…' : 'Start' }}
-                          </button>
-                        }
-                        @if (auction.canEnd) {
-                          @if (pendingEndAuctionId() === auction.id) {
-                            <button
-                              type="button"
-                              class="btn danger-fill sm"
-                              [disabled]="activity.busyAuctionId() === auction.id"
-                              (click)="endAuction(auction.id)">
-                              Confirm end
-                            </button>
-                            <button
-                              type="button"
-                              class="btn ghost sm"
-                              [disabled]="activity.busyAuctionId() === auction.id"
-                              (click)="cancelEndAuction()"
-                              style="margin-left:6px">
-                              Keep
-                            </button>
-                          } @else {
-                            <button
-                              type="button"
-                              class="btn warning-fill sm"
-                              [disabled]="activity.busyAuctionId() === auction.id"
-                              (click)="requestEndAuction(auction.id)">
-                              End Auction
-                            </button>
-                          }
-                        }
-                        @if (auction.canClose && closingAuctionId !== auction.id) {
-                          <button
-                            type="button"
-                            class="btn danger-outline sm"
-                            [disabled]="activity.busyAuctionId() === auction.id"
-                            (click)="beginCloseAuction(auction.id)">
-                            Close auction
-                          </button>
-                        }
-                        <!-- Delete throws the auction away: no history, nobody charged. Inline
-                             confirm because the Discord iframe blocks confirm(). -->
-                        @if (auction.canDelete) {
-                          @if (pendingDeleteAuctionId() === auction.id) {
-                            <button
-                              type="button"
-                              class="btn danger-fill sm"
-                              [disabled]="activity.busyAuctionId() === auction.id"
-                              title="Removes the auction and its bids. No history is kept and nobody is charged DKP."
-                              (click)="deleteAuction(auction.id)">
-                              Confirm delete
-                            </button>
-                            <button
-                              type="button"
-                              class="btn ghost sm"
-                              [disabled]="activity.busyAuctionId() === auction.id"
-                              (click)="pendingDeleteAuctionId.set(null)">
-                              Keep
-                            </button>
-                          } @else {
-                            <button
-                              type="button"
-                              class="btn danger-outline sm"
-                              [disabled]="activity.busyAuctionId() === auction.id"
-                              (click)="pendingDeleteAuctionId.set(auction.id)">
-                              Delete
-                            </button>
-                          }
-                        }
-                      </div>
-                    </div>
-                  </td>
-                </tr>
+        <!-- One card per auction: its header (title, status, time window, auction-level actions),
+             then its items as cards of their own. Each item card carries everything a table row
+             did -- start, current, leader, the bid box, View Bids -- and opens its bid history
+             inside itself. -->
+        <div class="auction-cards">
+          @for (auction of pagedActiveAuctions(); track auction.id) {
+            <section class="auction" [class.live]="auctionState(auction) === 'live'"
+              [class.ending]="auctionState(auction) === 'ending'"
+              [class.ended]="auctionState(auction) === 'ended'">
+              <div class="auction-header">
+                <div class="auction-header__title">
+                  <strong>{{ auction.title || 'Untitled auction' }}</strong>
+                  @if (auctionStatusTagClass(auction)) {
+                    <span class="tag {{ auctionStatusTagClass(auction) }}">{{ auctionStatusLabel(auction) }}</span>
+                  } @else {
+                    <span class="tag">{{ auctionStatusLabel(auction) }}</span>
+                  }
+                  <!-- Only set when the linkshell has more than one DKP pool, so a linkshell
+                       that hasn't split its DKP sees no chip at all. -->
+                  @if (auction.dkpPoolName) {
+                    <span class="tag accent"
+                      [title]="'Bids on this auction are paid from your ' + auction.dkpPoolName + ' DKP.'">
+                      {{ auction.dkpPoolName }} DKP
+                    </span>
+                  }
+                </div>
+                <div class="auction-header__meta muted">
+                  <span>{{ auctionTimeWindowLabel(auction) }}</span>
+                  <span>By {{ auction.createdBy || 'Unknown' }}</span>
+                  @if (auctionState(auction) !== 'ended') {
+                    <span class="auction-header__remaining">{{ auctionRemainingLabel(auction) }}: {{ auctionTimerValue(auction) }}</span>
+                  }
+                </div>
+                <div class="auction-header__actions">
+                  @if (auction.canEdit) {
+                    <button type="button" class="btn sm" (click)="openEditAuctionForm(auction)">Edit</button>
+                  }
+                  @if (auction.canStart) {
+                    <button
+                      type="button"
+                      class="btn primary sm"
+                      [disabled]="activity.busyAuctionId() === auction.id"
+                      (click)="startAuction(auction.id)">
+                      {{ activity.busyAuctionId() === auction.id ? '…' : 'Start' }}
+                    </button>
+                  }
+                  @if (auction.canEnd) {
+                    @if (pendingEndAuctionId() === auction.id) {
+                      <button
+                        type="button"
+                        class="btn danger-fill sm"
+                        [disabled]="activity.busyAuctionId() === auction.id"
+                        (click)="endAuction(auction.id)">
+                        Confirm end
+                      </button>
+                      <button
+                        type="button"
+                        class="btn ghost sm"
+                        [disabled]="activity.busyAuctionId() === auction.id"
+                        (click)="cancelEndAuction()">
+                        Keep
+                      </button>
+                    } @else {
+                      <button
+                        type="button"
+                        class="btn warning-fill sm"
+                        [disabled]="activity.busyAuctionId() === auction.id"
+                        (click)="requestEndAuction(auction.id)">
+                        End Auction
+                      </button>
+                    }
+                  }
+                  @if (auction.canClose && closingAuctionId !== auction.id) {
+                    <button
+                      type="button"
+                      class="btn danger-outline sm"
+                      [disabled]="activity.busyAuctionId() === auction.id"
+                      (click)="beginCloseAuction(auction.id)">
+                      Close auction
+                    </button>
+                  }
+                  <!-- Delete throws the auction away: no history, nobody charged. Inline
+                       confirm because the Discord iframe blocks confirm(). -->
+                  @if (auction.canDelete) {
+                    @if (pendingDeleteAuctionId() === auction.id) {
+                      <button
+                        type="button"
+                        class="btn danger-fill sm"
+                        [disabled]="activity.busyAuctionId() === auction.id"
+                        title="Removes the auction and its bids. No history is kept and nobody is charged DKP."
+                        (click)="deleteAuction(auction.id)">
+                        Confirm delete
+                      </button>
+                      <button
+                        type="button"
+                        class="btn ghost sm"
+                        [disabled]="activity.busyAuctionId() === auction.id"
+                        (click)="pendingDeleteAuctionId.set(null)">
+                        Keep
+                      </button>
+                    } @else {
+                      <button
+                        type="button"
+                        class="btn danger-outline sm"
+                        [disabled]="activity.busyAuctionId() === auction.id"
+                        (click)="pendingDeleteAuctionId.set(auction.id)">
+                        Delete
+                      </button>
+                    }
+                  }
+                </div>
+              </div>
 
-                @if (auction.items.length === 0) {
-                  <tr class="auction-empty-row">
-                    <td colspan="7"><span class="muted">No items.</span></td>
-                  </tr>
-                } @else {
+              @if (auction.items.length === 0) {
+                <p class="auction-items__empty muted">No items.</p>
+              } @else {
+                <div class="auction-items">
                   @for (item of auction.items; track item.id) {
-                    <tr class="auction-item-row" [class.auction-row-ended]="auctionState(auction) === 'ended'">
-                      <td>
-                        <span class="item-type-dot {{ itemDotClass(item.itemType) }}" aria-hidden="true" style="margin-right:6px"></span>
-                        {{ item.itemName || 'Item' }}
-                        @if (item.notes) {
-                          <div class="muted" style="font-size:11px">{{ item.notes }}</div>
+                    <article class="auction-item" [class.auction-item--ended]="auctionState(auction) === 'ended'">
+                      <div class="auction-item__head">
+                        <div class="auction-item__name">
+                          <span class="item-type-dot {{ itemDotClass(item.itemType) }}" aria-hidden="true"></span>
+                          <strong>{{ item.itemName || 'Item' }}</strong>
+                        </div>
+                        @if (item.itemType) {
+                          <span class="tag default">{{ item.itemType }}</span>
                         }
-                      </td>
-                      <td>{{ item.itemType || '—' }}</td>
-                      <td class="num">{{ item.startingBidDkp ?? 0 }}</td>
-                      <td class="num">
-                        @if ((item.currentHighestBid ?? 0) > 0) {
-                          {{ item.currentHighestBid }}
-                        } @else {
-                          <span class="muted">—</span>
-                        }
-                      </td>
-                      <td>
-                        @if (item.currentHighestBidder) {
-                          <span [class.text-success]="isCurrentUserWinning(item)">
-                            {{ isCurrentUserWinning(item) ? 'You' : item.currentHighestBidder }}
-                          </span>
-                        } @else {
-                          <span class="muted">No bids yet</span>
-                        }
-                      </td>
-                      <td>
+                      </div>
+                      @if (item.notes) {
+                        <p class="auction-item__notes muted">{{ item.notes }}</p>
+                      }
+
+                      <dl class="auction-item__stats">
+                        <div>
+                          <dt>Start</dt>
+                          <dd class="num">{{ item.startingBidDkp ?? 0 }}</dd>
+                        </div>
+                        <div>
+                          <dt>Current</dt>
+                          <dd class="num">
+                            @if ((item.currentHighestBid ?? 0) > 0) {
+                              {{ item.currentHighestBid }}
+                            } @else {
+                              <span class="muted">—</span>
+                            }
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Leader</dt>
+                          <dd>
+                            @if (item.currentHighestBidder) {
+                              <span [class.text-success]="isCurrentUserWinning(item)">
+                                {{ isCurrentUserWinning(item) ? 'You' : item.currentHighestBidder }}
+                              </span>
+                            } @else {
+                              <span class="muted">No bids yet</span>
+                            }
+                          </dd>
+                        </div>
+                      </dl>
+
+                      <div class="auction-item__foot">
                         @if (auctionState(auction) !== 'ended' && auction.status === 'Live' && !auctionsLocked()) {
-                          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+                          <div class="auction-item__bid">
                             <input
                               class="bid-input"
                               [ngModel]="getAuctionBidDraft(item.id)"
@@ -250,7 +251,8 @@
                               [name]="'auctionBidDraft' + item.id"
                               type="number"
                               [min]="itemMinBid(item)"
-                              [placeholder]="'Min ' + itemMinBid(item)" />
+                              [placeholder]="'Min ' + itemMinBid(item)"
+                              aria-label="Your bid" />
                             <button
                               type="button"
                               [class]="auctionState(auction) === 'ending' ? 'btn warning-fill sm' : 'btn primary sm'"
@@ -262,87 +264,79 @@
                         } @else if (auctionsLocked() && auctionState(auction) !== 'ended') {
                           <span class="muted">🔒 Locked</span>
                         } @else {
-                          <span class="muted">—</span>
+                          <span></span>
                         }
-                      </td>
-                      <td>
                         <button type="button" class="btn ghost sm" (click)="toggleAuctionBids(item.id)">
                           {{ expandedAuctionBidItems[item.id] ? 'Hide Bids' : 'View Bids' }}
                         </button>
-                      </td>
-                    </tr>
-                    @if (expandedAuctionBidItems[item.id]) {
-                      <tr class="auction-bid-history-row">
-                        <td colspan="7">
-                          <div class="bid-history">
-                            @if (auctionBids(item.id).length > 0) {
-                              @for (bid of auctionBids(item.id); track bid.id; let bidIdx = $index) {
-                                <div class="bid-row" [class.top]="bidIdx === 0">
-                                  <div class="bid-rank num">#{{ bidIdx + 1 }}</div>
-                                  <div class="bidder">
-                                    <div class="bidder-av {{ bidderAvatarVariant(bid.characterName) }}">{{ bidderInitials(bid.characterName) }}</div>
-                                    <div class="bid-who">{{ bid.characterName }}</div>
-                                  </div>
-                                  <div class="bid-val num">{{ bid.bidAmount }} DKP</div>
-                                  <div class="bid-when">{{ timeAgo(bid.createdAt) }}</div>
+                      </div>
+
+                      @if (expandedAuctionBidItems[item.id]) {
+                        <div class="bid-history">
+                          @if (auctionBids(item.id).length > 0) {
+                            @for (bid of auctionBids(item.id); track bid.id; let bidIdx = $index) {
+                              <div class="bid-row" [class.top]="bidIdx === 0">
+                                <div class="bid-rank num">#{{ bidIdx + 1 }}</div>
+                                <div class="bidder">
+                                  <div class="bidder-av {{ bidderAvatarVariant(bid.characterName) }}">{{ bidderInitials(bid.characterName) }}</div>
+                                  <div class="bid-who">{{ bid.characterName }}</div>
                                 </div>
-                              }
+                                <div class="bid-val num">{{ bid.bidAmount }} DKP</div>
+                                <div class="bid-when">{{ timeAgo(bid.createdAt) }}</div>
+                              </div>
+                            }
+                          } @else {
+                            <div class="no-bids">No bids yet.</div>
+                          }
+                        </div>
+                      }
+                    </article>
+                  }
+                </div>
+              }
+
+              @if (closingAuctionId === auction.id) {
+                <div class="auction-close-panel">
+                  <div class="auction-close-panel__head">
+                    <strong>Close auction &amp; record item delivery</strong>
+                    <p class="muted">Check off items you've handed to each winner. Checked items linked to inventory will be removed from the linkshell stockpile.</p>
+                  </div>
+                  @for (item of auction.items; track item.id) {
+                    <div class="auction-close-panel__row">
+                      <div>
+                        <strong>{{ item.itemName || 'Item' }}</strong>
+                        @if (item.currentHighestBidderAppUserId) {
+                          <div class="muted">Won by {{ item.currentHighestBidder }} for {{ item.currentHighestBid }} DKP
+                            @if (item.sourceItemId) {
+                              <span class="tag accent">From inventory</span>
                             } @else {
-                              <div class="no-bids">No bids yet.</div>
+                              <span class="tag default">Not from inventory</span>
                             }
                           </div>
-                        </td>
-                      </tr>
-                    }
+                        } @else {
+                          <div class="muted">No winner</div>
+                        }
+                      </div>
+                      <label class="auction-close-panel__toggle">
+                        <input type="checkbox"
+                          [ngModel]="auctionCloseDelivered[item.id] === true"
+                          (ngModelChange)="toggleAuctionItemDelivered(item.id, $event)"
+                          [disabled]="!item.currentHighestBidderAppUserId"
+                          [name]="'auctionDelivered' + item.id" />
+                        <span>Delivered to winner</span>
+                      </label>
+                    </div>
                   }
-                  @if (closingAuctionId === auction.id) {
-                    <tr class="auction-close-row">
-                      <td colspan="7">
-                        <div class="auction-close-panel">
-                          <div class="auction-close-panel__head">
-                            <strong>Close auction &amp; record item delivery</strong>
-                            <p class="muted">Check off items you've handed to each winner. Checked items linked to inventory will be removed from the linkshell stockpile.</p>
-                          </div>
-                          @for (item of auction.items; track item.id) {
-                            <div class="auction-close-panel__row">
-                              <div>
-                                <strong>{{ item.itemName || 'Item' }}</strong>
-                                @if (item.currentHighestBidderAppUserId) {
-                                  <div class="muted">Won by {{ item.currentHighestBidder }} for {{ item.currentHighestBid }} DKP
-                                    @if (item.sourceItemId) {
-                                      <span class="tag accent">From inventory</span>
-                                    } @else {
-                                      <span class="tag default">Not from inventory</span>
-                                    }
-                                  </div>
-                                } @else {
-                                  <div class="muted">No winner</div>
-                                }
-                              </div>
-                              <label class="auction-close-panel__toggle">
-                                <input type="checkbox"
-                                  [ngModel]="auctionCloseDelivered[item.id] === true"
-                                  (ngModelChange)="toggleAuctionItemDelivered(item.id, $event)"
-                                  [disabled]="!item.currentHighestBidderAppUserId"
-                                  [name]="'auctionDelivered' + item.id" />
-                                <span>Delivered to winner</span>
-                              </label>
-                            </div>
-                          }
-                          <div class="auction-close-panel__actions">
-                            <button type="button" class="btn ghost sm" (click)="cancelCloseAuction()" [disabled]="activity.busyAuctionId() === auction.id">Cancel</button>
-                            <button type="button" class="btn danger-outline sm" (click)="confirmCloseAuction(auction.id)" [disabled]="activity.busyAuctionId() === auction.id">
-                              {{ activity.busyAuctionId() === auction.id ? 'Closing...' : 'Close auction' }}
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  }
-                }
+                  <div class="auction-close-panel__actions">
+                    <button type="button" class="btn ghost sm" (click)="cancelCloseAuction()" [disabled]="activity.busyAuctionId() === auction.id">Cancel</button>
+                    <button type="button" class="btn danger-outline sm" (click)="confirmCloseAuction(auction.id)" [disabled]="activity.busyAuctionId() === auction.id">
+                      {{ activity.busyAuctionId() === auction.id ? 'Closing...' : 'Close auction' }}
+                    </button>
+                  </div>
+                </div>
               }
-            </tbody>
-          </table>
+            </section>
+          }
         </div>
 
         @if (auctionsActivePageCount() > 1) {

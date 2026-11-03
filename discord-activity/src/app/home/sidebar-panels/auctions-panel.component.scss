@@ -149,13 +149,6 @@ $auction-modal-bottom-offset-mobile: 0px;
   padding-right: 4px;
 }
 
-// Remaining-countdown chip in the auction header row — emphasised so
-// users can see at a glance how long until the auction ends.
-.panel-tab .auction-active-table tbody tr.auction-header-row .auction-header__remaining {
-  color: var(--fg);
-  font-weight: 600;
-}
-
 // On phone, the auction create/edit form is rendered INLINE at the
 // bottom of the panel instead of as a floating modal. Trying to use a
 // fixed-position overlay inside the Discord iframe on a phone fights
