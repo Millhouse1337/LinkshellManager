@@ -77,6 +77,9 @@
 .we-card[open] > .we-card__head .we-card__caret { transform: rotate(180deg); }
 .we-card__title-group { justify-self: start; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .we-card__title { font-size: 17px; font-weight: 800; color: var(--fg); margin: 0; }
+/* An event made from a snapshot (Make New Event From This Post), not from ending a camp. */
+.we-from-snapshot { display: inline-flex; align-items: center; gap: 4px; background: var(--violet-weak); color: var(--violet); border-color: transparent; }
+.we-from-snapshot svg { width: 12px; height: 12px; }
 .we-card__meta, .we-count {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 10px; border-radius: 999px; font-size: 12px;

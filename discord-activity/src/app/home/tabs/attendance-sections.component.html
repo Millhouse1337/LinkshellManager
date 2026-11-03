@@ -206,6 +206,16 @@
         </span>
         @if (event.isCamp || event.sourceEventId) {
           <span class="tag accent" title="Created by ending an HNM camp — each member's DKP is already filled in from the camp's scoring. Review it, then Post to pay.">Camp</span>
+        } @else {
+          <!-- The only other way an attendance event is made: Make New Event From This Post, on an
+               unlinked /lsm now snapshot (app or addon). -->
+          <span class="tag we-from-snapshot" title="Made from a /lsm now snapshot with Make New Event From This Post, not by ending a camp.">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 8h3l2-3h6l2 3h3v11H4z"/>
+              <circle cx="12" cy="13" r="3.5"/>
+            </svg>
+            From snapshot
+          </span>
         }
         @if (event.allianceNumbers.length > 1) {
           <!-- More than one is the healthy shape for a big camp: every alliance fielded its own
