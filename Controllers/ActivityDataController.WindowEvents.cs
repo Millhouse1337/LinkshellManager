@@ -59,7 +59,8 @@ public sealed partial class ActivityDataController
         // The captures filed as Misc, and how many. Split server-side so the two clients cannot
         // disagree about what counts as Misc.
         int MiscSnapshotCount,
-        // Per-member DKP for anyone credited ONLY by Misc posts. Null = same as a window attendee.
+        // Per-member DKP for anyone credited ONLY by Misc posts: the event's own, else the
+        // linkshell's Misc post rate. Null only on a card that prices its captures.
         double? MiscDkpAmount,
         // This camp own window grid, for the slot picker. HasWindowGrid false means there are no
         // numbers to offer (Sky gods, farm NMs); Misc is still selectable.
@@ -300,15 +301,11 @@ public sealed partial class ActivityDataController
         // not. One query for the whole response — the mappers take the set, never the DbContext.
         var roster = await LinkshellRosterNames.LoadAsync(_dbContext, linkshellId, cancellationToken);
 
-        var miscPostRate = await _dbContext.Linkshells
-            .AsNoTracking()
-            .Where(l => l.Id == linkshellId)
-            .Select(l => (double?)l.HnmStandardMiscBonus)
-            .FirstOrDefaultAsync(cancellationToken);
+        var miscPostRate = await MiscPostRateAsync(linkshellId, cancellationToken);
 
         return Ok(new ActivityWindowEventsResponse(
-            openEvents.Select(e => MapActivityWindowEvent(e, roster)).ToList(),
-            closedEvents.Select(e => MapActivityWindowEvent(e, roster)).ToList(),
+            openEvents.Select(e => MapActivityWindowEvent(e, roster, miscPostRate)).ToList(),
+            closedEvents.Select(e => MapActivityWindowEvent(e, roster, miscPostRate)).ToList(),
             // No parent event, so no window grid and no window label — deliberately: an unlinked
             // snapshot has no camp.
             unlinkedSnapshots
@@ -359,7 +356,8 @@ public sealed partial class ActivityDataController
         // Resolved BEFORE the assignment, or the stored-value fallback would read the value we are
         // about to overwrite and a save carrying no misc field would silently reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(
-            request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount, resolvedDkp);
+            request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount,
+            await MiscPostRateAsync(windowEvent.Value.LinkshellId, cancellationToken) ?? resolvedDkp);
         windowEvent.Value.MiscDkpAmount = request.MiscDkpAmount;
         // Skipped on a card that prices its captures: the Misc rate materializes itself as
         // per-member override rows, and those are not what such a card is paid from.
@@ -421,7 +419,8 @@ public sealed partial class ActivityDataController
         // Resolved BEFORE the assignment, or the stored-value fallback would read the value we are
         // about to overwrite and a save carrying no misc field would silently reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(
-            request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount, resolvedDkp);
+            request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount,
+            await MiscPostRateAsync(windowEvent.Value.LinkshellId, cancellationToken) ?? resolvedDkp);
         windowEvent.Value.MiscDkpAmount = request.MiscDkpAmount;
         // Skipped on a card that prices its captures: the Misc rate materializes itself as
         // per-member override rows, and those are not what such a card is paid from.
@@ -474,7 +473,8 @@ public sealed partial class ActivityDataController
         // Resolved BEFORE the assignment, or the stored-value fallback would read the value we are
         // about to overwrite and a save carrying no misc field would silently reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(
-            request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount, resolvedDkp);
+            request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount,
+            await MiscPostRateAsync(windowEvent.Value.LinkshellId, cancellationToken) ?? resolvedDkp);
         windowEvent.Value.MiscDkpAmount = request.MiscDkpAmount;
         // Skipped on a card that prices its captures: the Misc rate materializes itself as
         // per-member override rows, and those are not what such a card is paid from.
@@ -944,10 +944,23 @@ public sealed partial class ActivityDataController
         return null;
     }
 
+    // The linkshell's Misc post rate (HNM Settings). It is what a blank Misc DKP pays: an event
+    // that never set its own pays misc-only members this rate, not the window amount.
+    private Task<double?> MiscPostRateAsync(int linkshellId, CancellationToken cancellationToken)
+        => _dbContext.Linkshells
+            .AsNoTracking()
+            .Where(l => l.Id == linkshellId)
+            .Select(l => (double?)l.HnmStandardMiscBonus)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    // `miscPostRate` fills in an event's blank Misc DKP, so the card's Misc DKP box and the roster
+    // show the rate it will pay. A card that prices its captures keeps its own value: it is paid
+    // per capture, not from the Misc rate.
     internal static ActivityWindowEventDto MapActivityWindowEvent(
-        WindowEvent item, RosterNameSet? roster = null)
+        WindowEvent item, RosterNameSet? roster = null, double? miscPostRate = null)
     {
         var rosterNames = roster ?? RosterNameSet.Unknown;
+        var miscDkp = item.PerCaptureDkp ? item.MiscDkpAmount : item.MiscDkpAmount ?? miscPostRate;
 
         // Pass the event itself: each snapshot needs its cadence (for "of 25") and its grid anchor
         // (to name the window of a capture taken before window numbering existed).
@@ -961,7 +974,7 @@ public sealed partial class ActivityDataController
             .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
         var combined = BuildActivityCombinedMembers(
-            item.Snapshots, overrides, item.DkpAmount, item.MiscDkpAmount, item.PerCaptureDkp,
+            item.Snapshots, overrides, item.DkpAmount, miscDkp, item.PerCaptureDkp,
             rosterNames);
         return new ActivityWindowEventDto(
             item.Id,
@@ -991,7 +1004,7 @@ public sealed partial class ActivityDataController
             item.PostedToSheetAt,
             item.SourceEventId,
             snapshots.Count(s => s.IsMisc),
-            item.MiscDkpAmount,
+            miscDkp,
             WindowEventWindowGrid.WindowCount(item),
             WindowEventWindowGrid.Minutes(item) > 0,
             item.PerCaptureDkp,

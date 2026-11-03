@@ -460,8 +460,9 @@
             <span class="we-snapshots__group-count">{{ miscSnapshots(event).length }}</span>
             <span class="we-snapshots__group-help">At the camp, outside any window.</span>
             @if (model.canManage && !closed && !event.perCaptureDkp) {
-              <!-- Blank means misc-only members are paid exactly what a window attendee is, which
-                   is the default. Carried by Save / Post / Update like every other value.
+              <!-- Starts at the event's own Misc DKP, else the linkshell's Misc post rate (HNM
+                   Settings); blank also pays that rate. Carried by Save / Post / Update like every
+                   other value.
 
                    HIDDEN on a card that prices its captures. There the money rides on each
                    capture row -- every misc post already arrives priced at the camp's regular
@@ -474,8 +475,8 @@
                        [ngModel]="dkpDraft(event).misc"
                        (ngModelChange)="setMiscDkp(event, $event)"
                        [ngModelOptions]="{ standalone: true }"
-                       [placeholder]="formatDkp(dkpDraft(event).amount)"
-                       title="DKP for members credited only by Misc posts. Blank pays them the same as a window attendee." />
+                       [placeholder]="formatDkp(miscPostRate())"
+                       title="DKP for members credited only by Misc posts. Blank pays the Misc post rate from HNM Settings." />
               </label>
             }
           </div>

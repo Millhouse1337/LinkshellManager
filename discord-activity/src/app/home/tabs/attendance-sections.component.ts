@@ -577,11 +577,15 @@ export class AttendanceSectionsComponent {
     this.dkpDrafts[event.id] ??= {
       amount: event.dkpAmount ?? null,
       entryType: event.entryType ?? '',
-      // Null is MEANINGFUL here, unlike amount: it means "misc pays what a window pays", which is
-      // the default. Blanking the input is how an officer goes back to that.
+      // The server fills a blank one in with the linkshell's Misc post rate, so this starts at the
+      // rate the event pays. Blanking the input goes back to that rate.
       misc: event.miscDkpAmount ?? null
     };
     return this.dkpDrafts[event.id];
+  }
+
+  protected miscPostRate(): number | null {
+    return this.data()?.miscPostRate ?? null;
   }
 
   protected setMiscDkp(event: ActivityWindowEvent, value: number | null): void {

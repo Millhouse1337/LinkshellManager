@@ -202,9 +202,9 @@ public static class WindowEventDkp
             : Default;
 
     // The Misc rate to apply for a save that doesn't carry one. Same precedence shape as Resolve,
-    // but the floor is the event's own resolved default rather than the constant: "misc pays the
-    // same as a window" is the documented default, so an event that never sets a misc rate must
-    // price misc-only members identically to everyone else.
+    // but the floor is passed in rather than the constant: the save paths pass the linkshell's Misc
+    // post rate (HNM Settings), else the event's own resolved default, so an event that never sets
+    // a misc rate pays misc-only members what the settings say a misc post pays.
     public static double ResolveMisc(double? supplied, double? stored, double resolvedDefault)
         => supplied is { } s && s >= 0 ? s
             : stored is { } t && t >= 0 ? t

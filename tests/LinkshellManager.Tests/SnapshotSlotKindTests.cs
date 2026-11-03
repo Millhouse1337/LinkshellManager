@@ -224,6 +224,35 @@ public class SnapshotSlotKindTests
         Assert.Equal(1.5, Assert.Single(combined).EffectiveDkpAmount);
     }
 
+    // The card never shows that null, though: an event with no Misc DKP of its own takes the
+    // linkshell's Misc post rate (HNM Settings), in the Misc DKP box and in the roster both.
+    [Fact]
+    public void ABlankMiscDkp_TakesTheLinkshellsMiscPostRate()
+    {
+        var camp = GriddedCamp();
+        camp.DkpAmount = 1.5;
+        camp.Snapshots.Add(Capture(Anchor, AttendanceSnapshotSlotKinds.Misc, "Millhouse"));
+
+        var row = ActivityDataController.MapActivityWindowEvent(camp, miscPostRate: 0.5);
+
+        Assert.Equal(0.5, row.MiscDkpAmount);
+        Assert.Equal(0.5, Assert.Single(row.CombinedMembers).EffectiveDkpAmount);
+    }
+
+    [Fact]
+    public void AnEventsOwnMiscDkp_BeatsTheMiscPostRate()
+    {
+        var camp = GriddedCamp();
+        camp.DkpAmount = 1.5;
+        camp.MiscDkpAmount = 2;
+        camp.Snapshots.Add(Capture(Anchor, AttendanceSnapshotSlotKinds.Misc, "Millhouse"));
+
+        var row = ActivityDataController.MapActivityWindowEvent(camp, miscPostRate: 0.5);
+
+        Assert.Equal(2, row.MiscDkpAmount);
+        Assert.Equal(2, Assert.Single(row.CombinedMembers).EffectiveDkpAmount);
+    }
+
     // An officer's explicit per-character amount beats both rates.
     [Fact]
     public void AnExplicitOverride_BeatsTheMiscRate()
