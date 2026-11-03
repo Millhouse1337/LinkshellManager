@@ -61,6 +61,9 @@ export class AttendanceSectionsComponent {
   // Snapshot id -> the event picked in its Event dropdown. Kept here rather than read off the
   // <select>, so picking one re-checks the Attach button.
   protected readonly attachTargets: Record<number, string> = {};
+  // Snapshot id -> the DKP box's value, and the value last seeded or saved (see attachDkp).
+  protected readonly attachDkps: Record<number, number | null> = {};
+  private readonly attachDkpSaved: Record<number, number | null> = {};
   // Snapshot id -> why its last Attach / Make New Event was refused ("That camp has ended...").
   // Shown on the row itself: the page's error banner sits at the top, out of sight
   // from the Unlinked Snapshots list.
@@ -262,6 +265,42 @@ export class AttendanceSectionsComponent {
     this.attachNames[snapshotId] = value;
   }
 
+  // The DKP box: what this post pays each person on it. Starts at the post's own price, else the
+  // linkshell's Misc post rate. `attachDkpSaved` is the value last seeded or saved, so only a real
+  // change is sent -- an untouched box leaves the post on the rate rather than pinning it.
+  protected attachDkp(snapshot: ActivityWindowSnapshot): number | null {
+    if (!(snapshot.id in this.attachDkpSaved)) {
+      const seed = snapshot.dkpOverride ?? this.data()?.miscPostRate ?? null;
+      this.attachDkpSaved[snapshot.id] = seed;
+      this.attachDkps[snapshot.id] = seed;
+    }
+    return this.attachDkps[snapshot.id] ?? null;
+  }
+
+  protected setAttachDkp(snapshotId: number, value: number | null): void {
+    this.attachDkps[snapshotId] = value;
+    this.setSnapshotError(snapshotId, null);
+  }
+
+  // Blur / Enter on the DKP box. A refusal lands on the row like Attach's.
+  protected async commitAttachDkp(snapshot: ActivityWindowSnapshot): Promise<void> {
+    await this.fileSnapshotRow(snapshot, () => this.saveAttachDkp(snapshot));
+  }
+
+  // Saves the box as the post's own price when it changed. Blank clears it, putting the post back
+  // on the Misc post rate. Throws on failure so a filing action stops before it files.
+  private async saveAttachDkp(snapshot: ActivityWindowSnapshot): Promise<void> {
+    const value = this.attachDkp(snapshot);
+    if (value === this.attachDkpSaved[snapshot.id]) return;
+    if (value !== null && (!Number.isFinite(value) || value < 0)) {
+      throw new Error('DKP must be 0 or more.');
+    }
+    if (!(await this.activity.setMiscPostDkp(snapshot.id, value))) {
+      throw new Error(this.activity.actionError() ?? "Setting this post's DKP failed.");
+    }
+    this.attachDkpSaved[snapshot.id] = value;
+  }
+
   // The Event dropdown's pick ("camp:<id>" / "we:<id>", '' = none yet).
   protected attachTarget(snapshotId: number): string {
     return this.attachTargets[snapshotId] ?? '';
@@ -342,6 +381,8 @@ export class AttendanceSectionsComponent {
       // The server keeps a capture's existing name, so a retyped one is saved first or the chip
       // and the new event would disagree.
       await this.saveAttachName(snapshot);
+      // Its price becomes the new event's Misc DKP (server-side), so it is saved before filing.
+      await this.saveAttachDkp(snapshot);
       // The post lands on the new event as a misc post, like every filed capture.
       await this.windows.attachSnapshot(snapshot.id, id, { name, createNew: true });
     });
@@ -414,6 +455,7 @@ export class AttendanceSectionsComponent {
     const linkshellId = this.primaryLinkshellId();
     if (!linkshellId || !selection) return;
     await this.saveAttachName(snapshot);
+    await this.saveAttachDkp(snapshot);
 
     if (selection.startsWith('we:')) {
       const windowEventId = Number(selection.slice(3));

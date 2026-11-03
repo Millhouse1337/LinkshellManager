@@ -1319,6 +1319,9 @@ export interface ActivityWindowEventsResponse {
   // now, so the list can genuinely be hiding some and the panel has to be able to say so.
   unlinkedTotalCount: number;
   unlinkedDisplayCap: number;
+  // The linkshell's Misc post rate: what an unlinked post pays with no price of its own, and what
+  // the Unlinked Snapshots row's DKP box starts at.
+  miscPostRate?: number | null;
 }
 
 export interface ActivityWindowEventMemberDkpInput {
@@ -1429,6 +1432,8 @@ export interface ActivityWindowSnapshot {
   // The account that posted it (its character name, else user name). Sent for unlinked captures,
   // where Triage shows who sent a member's capture; absent elsewhere.
   postedByName?: string | null;
+  // The post's own price, null when it pays the Misc post rate. Sent for unlinked captures.
+  dkpOverride?: number | null;
   // Window or Misc. Distinct from a null windowNumber, which means the camp runs no grid at all —
   // an ungridded camp still files ordinary Window captures.
   slotKind: string;

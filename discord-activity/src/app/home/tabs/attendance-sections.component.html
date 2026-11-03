@@ -600,7 +600,7 @@
                running is the common case, and typing its name by hand only risks a
                typo that splits the payroll across two events. The free-text box
                below stays for anything with no live camp or open event to join. -->
-          <!-- One row: Event [pick] Message [name] [Attach] | [Make New Event] | Alliance [n]
+          <!-- One row: Event [pick] Message [name] DKP [n] [Attach] | [Make New Event] | Alliance [n]
                [Ignore]. Each label is grouped with its control so the even spacing across the row
                never parts the two. There is no post type: a filed capture is always a misc post. -->
           <!-- Names the CAPTURE: the chip in the header reads this same value. It saves itself on
@@ -616,6 +616,19 @@
               (blur)="saveAttachName(snapshot)"
               (keydown.enter)="messageBox.blur()"
               placeholder="Snapshot name" />
+            </span>
+            <!-- What the post pays each person on it. Starts at the linkshell's Misc post rate;
+                 saved the same way as Message. Pays on a live camp, and becomes the Misc DKP of a
+                 new event made from this post. -->
+            <span class="we-unlinked-field">
+            <label class="we-unlinked-label" [attr.for]="'snapshot-dkp-' + snapshot.id">DKP</label>
+            <input #dkpBox type="number" min="0" step="any" class="input we-unlinked-dkp"
+              [id]="'snapshot-dkp-' + snapshot.id"
+              [ngModel]="attachDkp(snapshot)"
+              (ngModelChange)="setAttachDkp(snapshot.id, $event)"
+              (blur)="commitAttachDkp(snapshot)"
+              (keydown.enter)="dkpBox.blur()"
+              title="What this post pays each person on it. Starts at the linkshell's Misc post rate. Used on a live camp and as the Misc DKP of a new event made from this post; an existing attendance event pays its own Misc DKP." />
             </span>
           </ng-template>
           @if (hasAttachTargets(model)) {
