@@ -113,6 +113,26 @@ public class SnapshotFilingTests
         Assert.Null(saved.WindowNumber);
     }
 
+    // The Unlinked Snapshots row's DKP box: the price set there becomes the new event's Misc DKP,
+    // and an untouched box (no price) means the linkshell's Misc post rate -- what the box showed.
+    [Theory]
+    [InlineData(2.0, 2.0)]
+    [InlineData(null, 0.75)]
+    public async Task MakeNewEvent_PaysThePostsPrice_OrTheMiscPostRate(double? postPrice, double expected)
+    {
+        using var db = NewDb();
+        db.Linkshells.Add(new Linkshell { Id = 1, LinkshellName = "LS", HnmStandardMiscBonus = 0.75 });
+        var capture = Capture("Late Kirin");
+        capture.DkpAmount = postPrice;
+        var snapshot = await SeedAsync(db, capture);
+
+        var result = await NewFiling(db).FileAsync(snapshot,
+            new SnapshotFilingService.Request(null, null, null, CreateNew: true), CancellationToken.None);
+
+        Assert.Null(result.Error);
+        Assert.Equal(expected, (await db.WindowEvents.AsNoTracking().SingleAsync()).MiscDkpAmount);
+    }
+
     [Fact]
     public async Task MakeNewEvent_WithNoName_IsRefused()
     {

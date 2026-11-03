@@ -107,6 +107,18 @@ public sealed class SnapshotFilingService
                 cancellationToken,
                 forceNew: request.CreateNew);
             snapshot.Name ??= name;
+
+            // A new event made from this post pays it as the event's Misc DKP: the post's own price
+            // if an officer set one on the Unlinked Snapshots row, else the linkshell's Misc post
+            // rate -- the number that row's DKP box showed.
+            if (request.CreateNew && windowEvent is not null && windowEvent.MiscDkpAmount is null)
+            {
+                windowEvent.MiscDkpAmount = snapshot.DkpAmount
+                    ?? await _dbContext.Linkshells
+                        .Where(l => l.Id == snapshot.LinkshellId)
+                        .Select(l => (double?)l.HnmStandardMiscBonus)
+                        .FirstOrDefaultAsync(cancellationToken);
+            }
         }
 
         if (windowEvent is null) return Result.NotFound("Window Event not found.");

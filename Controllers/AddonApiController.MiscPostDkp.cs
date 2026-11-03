@@ -10,7 +10,8 @@ namespace LinkshellManagerDiscordApp.Controllers;
 //
 // AttendanceSnapshot.DkpAmount is what an officer says this post pays each person on it,
 // replacing the linkshell's Misc post rate. Same rules as a window price: moderators only, live
-// Standard HNM camps only, snapped to the linkshell's DKP grid on write, and null clears it.
+// Standard HNM camps only (or a post not filed yet, which carries the price to wherever it is
+// filed), snapped to the linkshell's DKP grid on write, and null clears it.
 //
 // Two routes over one body, like WindowDkp: the addon posts with a pairing token, the web and the
 // Activity with a cookie or bearer.
@@ -69,34 +70,43 @@ public sealed partial class AddonApiController
     private async Task<IActionResult> SetMiscPostDkpAsync(
         AttendanceSnapshot snapshot, double? amount, CancellationToken cancellationToken)
     {
-        if (!AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind))
-        {
-            return BadRequest(new { error = "Only a misc post is priced this way. A window is priced on its own tab." });
-        }
-
-        // A misc post is priced against the live camp it was filed on. Once that camp ends, End
-        // Camp has carried the amount onto the review card, and the correction belongs there.
+        // An UNLINKED post can carry its own price before it is filed -- the Unlinked Snapshots
+        // row's DKP box. It is filed as Misc wherever it lands (SnapshotFilingService), so the
+        // slot test below does not apply to it yet. The price then pays on a live camp
+        // (HnmCampPricing.MiscValueFor) or becomes a new event's Misc DKP.
+        var unlinked = WindowEventLinkService.IsUnlinked(snapshot);
         var camp = snapshot.LinkedEvent;
-        if (camp is null)
+        if (!unlinked)
         {
-            return BadRequest(new { error = "File this post against a camp first. It has no price until it belongs to one." });
-        }
-        if (camp.EndTime is not null)
-        {
-            return BadRequest(new
+            if (!AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind))
             {
-                error = "This camp has ended. Change the amount on its review card under "
-                      + "Events Pending DKP Post instead.",
-            });
-        }
-        if (!HnmCampPricing.HonoursWindowAmount(camp))
-        {
-            return BadRequest(new
+                return BadRequest(new { error = "Only a misc post is priced this way. A window is priced on its own tab." });
+            }
+
+            // A filed misc post is priced against the live camp it was filed on. Once that camp
+            // ends, End Camp has carried the amount onto the review card, and the correction
+            // belongs there.
+            if (camp is null)
             {
-                error = DiscordEventMessageBuilder.IsWd(camp)
-                    ? "This camp credits attendance from Check In to Check Out, so a misc post has no price of its own."
-                    : "Only HNM camps price misc posts."
-            });
+                return BadRequest(new { error = "This post is on an attendance event. Its Misc DKP is set on that event's card." });
+            }
+            if (camp.EndTime is not null)
+            {
+                return BadRequest(new
+                {
+                    error = "This camp has ended. Change the amount on its review card under "
+                          + "Events Pending DKP Post instead.",
+                });
+            }
+            if (!HnmCampPricing.HonoursWindowAmount(camp))
+            {
+                return BadRequest(new
+                {
+                    error = DiscordEventMessageBuilder.IsWd(camp)
+                        ? "This camp credits attendance from Check In to Check Out, so a misc post has no price of its own."
+                        : "Only HNM camps price misc posts."
+                });
+            }
         }
 
         var linkshell = await _dbContext.Linkshells
@@ -131,8 +141,11 @@ public sealed partial class AddonApiController
             snapshotId = snapshot.Id,
             // The post's own price, or null when it is back on the linkshell rate.
             dkpOverride = snapshot.DkpAmount,
-            // What it pays each person now, whichever of the two that came from.
-            dkpAmount = HnmCampPricing.MiscValueFor(camp, linkshell, snapshot.DkpAmount),
+            // What it pays each person now, whichever of the two that came from. An unlinked post
+            // has no camp yet, so its fallback is the linkshell's Misc post rate itself.
+            dkpAmount = unlinked
+                ? snapshot.DkpAmount ?? linkshell?.HnmStandardMiscBonus ?? 0d
+                : HnmCampPricing.MiscValueFor(camp, linkshell, snapshot.DkpAmount),
         });
     }
 }

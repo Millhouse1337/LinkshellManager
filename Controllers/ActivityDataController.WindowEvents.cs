@@ -25,7 +25,10 @@ public sealed partial class ActivityDataController
         // How many unlinked captures exist versus how many are listed. Every /lsm now post lands
         // there now, so the list can genuinely be hiding some, and the panel says so.
         int UnlinkedTotalCount,
-        int UnlinkedDisplayCap);
+        int UnlinkedDisplayCap,
+        // The linkshell's Misc post rate: what an unlinked post pays when it has no price of its
+        // own, and what the Unlinked Snapshots row's DKP box starts at.
+        double? MiscPostRate = null);
 
     public sealed record ActivityWindowEventDto(
         int Id,
@@ -121,7 +124,10 @@ public sealed partial class ActivityDataController
         string? SlotLabel,
         // The account that posted it (character name, else user name). Filled for unlinked
         // captures, where Triage shows who sent a member's capture; null elsewhere.
-        string? PostedByName = null);
+        string? PostedByName = null,
+        // The post's own price (AttendanceSnapshot.DkpAmount), null when it pays the Misc post rate.
+        // Filled for unlinked captures, where the Unlinked Snapshots row edits it.
+        double? DkpOverride = null);
 
     public sealed record ActivityWindowSnapshotEntryDto(
         int Id,
@@ -294,6 +300,12 @@ public sealed partial class ActivityDataController
         // not. One query for the whole response — the mappers take the set, never the DbContext.
         var roster = await LinkshellRosterNames.LoadAsync(_dbContext, linkshellId, cancellationToken);
 
+        var miscPostRate = await _dbContext.Linkshells
+            .AsNoTracking()
+            .Where(l => l.Id == linkshellId)
+            .Select(l => (double?)l.HnmStandardMiscBonus)
+            .FirstOrDefaultAsync(cancellationToken);
+
         return Ok(new ActivityWindowEventsResponse(
             openEvents.Select(e => MapActivityWindowEvent(e, roster)).ToList(),
             closedEvents.Select(e => MapActivityWindowEvent(e, roster)).ToList(),
@@ -302,7 +314,8 @@ public sealed partial class ActivityDataController
             unlinkedSnapshots
                 .Select(s => MapActivityWindowSnapshot(s, null, roster) with
                 {
-                    PostedByName = s.PostedByAppUserId is { } posterId && posterNames.TryGetValue(posterId, out var name) ? name : null
+                    PostedByName = s.PostedByAppUserId is { } posterId && posterNames.TryGetValue(posterId, out var name) ? name : null,
+                    DkpOverride = s.DkpAmount,
                 })
                 .ToList(),
             canManage,
@@ -313,7 +326,8 @@ public sealed partial class ActivityDataController
             ActivityClosedAttendancePageSize,
             closedTotalCount,
             unlinkedTotalCount,
-            unlinkedDisplayCap));
+            unlinkedDisplayCap,
+            miscPostRate));
     }
 
     // Sets DKP + Entry Type (and any per-character overrides) on an UNposted event
