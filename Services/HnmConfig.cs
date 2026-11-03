@@ -368,7 +368,7 @@ public static class HnmConfig
     // TypeInitializationException a long way from the edit — the same trap SkyGodOrder documents.
     public static readonly IReadOnlyList<string> SkyFarmNmOrder = new[]
     {
-        "Faust",         "Brigandish Blade", // → Suzaku
+        "Brigandish Blade", "Faust",         // → Suzaku
         "Zipacna",       "Olla Grande",      // → Genbu
         "Steam Cleaner", "Mother Globe",     // → Seiryu
         "Despot",        "Ullikummi",        // → Byakko

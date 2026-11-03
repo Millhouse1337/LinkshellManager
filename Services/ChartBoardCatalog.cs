@@ -333,7 +333,7 @@ public static class ChartBoardCatalog
     // leads to, is the trailing run below them all.
     //
     // The runs ARE the columns here, which is why SkyBoard.Bosses below is ordered path by path
-    // (Faust, Brigandish Blade, Suzaku, then Zipacna, …) rather than tier by tier: a run is still a
+    // (Brigandish Blade, Faust, Suzaku, then Zipacna, …) rather than tier by tier: a run is still a
     // contiguous block of cards, exactly as on every other board — only its rendering differs.
     private static string SkyPathRun(string god) => $"{god} Path";
     private const string SkyFinalRun = "Final stage";

@@ -151,6 +151,31 @@ public class ChartPopItemMigrationTests
     }
 
     /// <summary>
+    /// ReclassifySkyPopItems flips exactly the rows whose item is on a card's POP list - the other
+    /// half of the split. It escapes apostrophes (Ro'Maeve Water), so only LIKE wildcards are checked.
+    /// </summary>
+    [Fact]
+    public void ReclassifyPops_FlipsExactlyTheSkyPopItems()
+    {
+        Assert.Equal(
+            Sky.Bosses
+                .SelectMany(boss => (boss.PopItems ?? Array.Empty<ChartPopItemOption>())
+                    .Select(option => $"{boss.Name} / {option.Name}"))
+                .OrderBy(pair => pair, StringComparer.Ordinal),
+            ReclassifySkyPopItems.NowPops
+                .Select(pop => $"{pop.Boss} / {pop.Item}")
+                .OrderBy(pair => pair, StringComparer.Ordinal));
+
+        Assert.All(
+            ReclassifySkyPopItems.NowPops.SelectMany(pop => new[] { pop.Boss, pop.Item }),
+            value =>
+            {
+                Assert.DoesNotContain('%', value);
+                Assert.DoesNotContain('_', value);
+            });
+    }
+
+    /// <summary>
     /// Sea's mapping is complete with NO exception: every single item on the old Sea board was filed
     /// under the boss it is spent on.
     /// So the moves and the board's items are the same set, in both directions — an item on the board

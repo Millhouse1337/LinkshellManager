@@ -30,7 +30,7 @@ public class ChartBoardCatalogTests
         Assert.Equal(
             new[]
             {
-                "Faust", "Brigandish Blade", "Suzaku",
+                "Brigandish Blade", "Faust", "Suzaku",
                 "Zipacna", "Olla Grande", "Genbu",
                 "Steam Cleaner", "Mother Globe", "Seiryu",
                 "Despot", "Ullikummi", "Byakko",
