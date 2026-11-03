@@ -587,6 +587,10 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
+        // A board still parked from its last camp (Repost on, not yet re-posted) comes back as a
+        // fresh camp first, or it would start while still marked ended and vanish from the app.
+        await HnmRecurringBoardService.ReviveParkedBoardForStartAsync(_dbContext, eventEntity, cancellationToken);
+
         var alreadyStarted = eventEntity.CommencementStartTime is not null;
         if (!alreadyStarted)
         {

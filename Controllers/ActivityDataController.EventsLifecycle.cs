@@ -359,6 +359,9 @@ public sealed partial class ActivityDataController
         var isHnmEvent = string.Equals((eventEntity.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
         if (isHnmEvent)
         {
+            // Same as the addon's start: a board still parked from its last camp comes back as a
+            // fresh camp first, or it starts while still marked ended and vanishes from the list.
+            await HnmRecurringBoardService.ReviveParkedBoardForStartAsync(_dbContext, eventEntity, cancellationToken);
             eventEntity.WindowAnchorAt ??= eventEntity.StartTime;
         }
 

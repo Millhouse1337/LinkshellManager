@@ -266,6 +266,57 @@ public static class HnmRecurringBoardService
         board.UpdatedAt = DateTime.UtcNow;
     }
 
+    // A board parked "defeated / awaiting re-post" that an officer STARTS by hand -- from the addon
+    // or the Activity -- before the poller has brought it back for the next pop.
+    //
+    // Ending a camp with Repost on keeps its Event row, stamped HnmDefeatedAt and WdFinalizedAt, and
+    // the poller revives it LeadHours before the pop. Starting it earlier only set the start time,
+    // so the camp was live AND still marked ended: the Activity keeps ended camps out of the live
+    // list and started ones out of the queue, and the camp disappeared from both.
+    //
+    // So the start revives it first, exactly as the poller would for the monster's newest ToD (next
+    // pop, day N+1 or day 1 after an HQ, the base monster after an HQ), and stamps the board so the
+    // poller treats that ToD as handled. Stages only; the caller saves. False when not parked.
+    public static async Task<bool> ReviveParkedBoardForStartAsync(
+        ApplicationDbContext db, Event ev, CancellationToken cancellationToken)
+    {
+        if (ev.HnmDefeatedAt is null && ev.WdFinalizedAt is null)
+        {
+            return false;
+        }
+
+        var monster = ev.AssignedMonsterName?.Trim() ?? string.Empty;
+        var board = await FindAsync(db, ev.LinkshellId, monster, cancellationToken);
+        var spawn = board?.MonsterName.Trim() ?? monster;
+        var names = HnmConfig.MonsterMatchNamesLower(spawn);
+        var tod = names.Count == 0 ? null : await db.Tods
+            .Where(t => t.LinkshellId == ev.LinkshellId
+                && t.MonsterName != null
+                && names.Contains(t.MonsterName.ToLower())
+                && t.RepopTime != null)
+            .OrderByDescending(t => t.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tod is null)
+        {
+            // No predicted pop to move to: clear the ended state and keep what the board shows.
+            await HnmEventSeeder.ReviveForNewPopAsync(
+                db, ev, ev.StartTime ?? DateTime.UtcNow, ev.DayNumber, ev.AssignedMonsterName, null, cancellationToken);
+            return true;
+        }
+
+        var nextDay = HnmConfig.NextDayNumber(tod.DayNumber, tod.Hq);
+        var nextMonster = tod.Hq ? HnmConfig.BaseMonsterName(spawn) ?? spawn : spawn;
+        await HnmEventSeeder.ReviveForNewPopAsync(
+            db, ev, tod.RepopTime!.Value, nextDay, nextMonster, tod.Id, cancellationToken);
+        if (board is not null)
+        {
+            board.LastSourceTodId = tod.Id;
+            board.UpdatedAt = DateTime.UtcNow;
+        }
+        return true;
+    }
+
     // The standing board for this SPAWN. Matched on every spelling of the monster (both
     // halves of a merge pair and the combined label) so a board first created under
     // "Fafnir" on day 2 is the same row the day-4 "Fafnir/Nidhogg" event updates. Keying
