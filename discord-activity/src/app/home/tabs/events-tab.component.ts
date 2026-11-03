@@ -18,6 +18,7 @@ import {
   ActivityClaimShieldCapture,
   ActivityEvent,
   ActivityLinkedSnapshot,
+  ActivityLootEntry,
   ActivityPartySetupSlot,
   ActivityTodEntry,
   ActivityWindowEvent,
@@ -2097,6 +2098,84 @@ export class EventsTabComponent {
       };
     } catch {
       // Service already exposes the action error state.
+    }
+  }
+
+  // ----- Fixing loot on a live event -----
+  //
+  // One row is open for editing at a time, and the fields edit a copy, so Cancel leaves the row
+  // as it was. Loot on a live event is not charged until the event ends, so changing or removing
+  // it moves no DKP; a row that was charged earlier is refunded (and re-charged on an edit) by
+  // LootEditService on the server.
+  protected readonly editingLootId = signal<number | null>(null);
+  protected lootEditDraft: ActivityLootInput = { itemName: '', itemWinner: '', winningDkpSpent: 0 };
+  // Two-step delete: window.confirm is suppressed in the Discord Activity iframe.
+  protected readonly confirmingDeleteLootId = signal<number | null>(null);
+
+  protected startLootEdit(loot: ActivityLootEntry): void {
+    this.lootEditDraft = {
+      itemName: loot.itemName ?? '',
+      itemWinner: loot.itemWinner ?? '',
+      winningDkpSpent: loot.winningDkpSpent ?? 0
+    };
+    this.confirmingDeleteLootId.set(null);
+    this.editingLootId.set(loot.id);
+  }
+
+  protected cancelLootEdit(): void {
+    this.editingLootId.set(null);
+  }
+
+  // The event's members, plus the current winner if they have since left the event, so opening
+  // Edit never quietly blanks the winner.
+  protected lootEditWinnerOptions(event: ActivityEvent): string[] {
+    const names = this.lootEligibleParticipants(event)
+      .map(participant => participant.characterName)
+      .filter((name): name is string => !!name);
+    const current = (this.lootEditDraft.itemWinner ?? '').trim();
+    if (current && !names.some(name => name.toLowerCase() === current.toLowerCase())) {
+      names.unshift(current);
+    }
+    return names;
+  }
+
+  protected async saveLootEdit(event: ActivityEvent, lootId: number): Promise<void> {
+    const itemName = this.lootEditDraft.itemName.trim();
+    const itemWinner = (this.lootEditDraft.itemWinner ?? '').trim();
+    if (!itemName || !itemWinner) {
+      this.activity.actionError.set('Item name and winner are required.');
+      this.activity.actionMessage.set(null);
+      return;
+    }
+
+    const structure = this.lootStructureFor(event.linkshellId);
+    const dkp = structure === 'LootCouncil' ? 0 : Number(this.lootEditDraft.winningDkpSpent ?? 0);
+    if (!Number.isInteger(dkp) || dkp < 0 || (structure === 'Hybrid' && dkp > 100)) {
+      this.activity.actionError.set(structure === 'Hybrid'
+        ? 'Deduction % must be a whole number between 0 and 100.'
+        : 'DKP must be a whole number, 0 or more.');
+      this.activity.actionMessage.set(null);
+      return;
+    }
+
+    // The server wants a reason on every loot edit, for the audit trail.
+    const ok = await this.activity.editEventLoot(lootId, {
+      itemName,
+      itemWinner,
+      winningDkpSpent: dkp,
+      reason: 'Corrected on the live event card.'
+    });
+    if (ok) {
+      this.editingLootId.set(null);
+    }
+  }
+
+  protected async deleteLoot(loot: ActivityLootEntry): Promise<void> {
+    const ok = await this.activity.deleteLoot('Event', loot.id, 'Removed from the live event card.');
+    this.confirmingDeleteLootId.set(null);
+    // The shared delete message promises a refund; only a row that was already charged gets one.
+    if (ok && loot.actualDeductedDkp == null) {
+      this.activity.actionMessage.set('Loot removed.');
     }
   }
 

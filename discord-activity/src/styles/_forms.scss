@@ -629,6 +629,12 @@
   grid-template-columns: minmax(0, 2fr) minmax(0, 1.25fr) minmax(0, 1fr) auto;
 }
 
+// A live event's loot row being edited in place: the form fills the row.
+.loot-form--edit {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Flex (not grid) so the row holds 3 OR 4 selects (the optional character
    picker) plus the button on a single line; selects share the space, the
    button keeps its intrinsic width. */

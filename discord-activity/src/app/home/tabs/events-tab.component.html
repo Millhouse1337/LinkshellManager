@@ -956,13 +956,37 @@
                       @if (event.loot.length > 0) {
                         <ul class="hnm-loot__list">
                           @for (loot of event.loot; track loot.id) {
+                            @if (editingLootId() === loot.id) {
+                              <li>
+                                <form class="hnm-loot__form hnm-loot__form--edit" (ngSubmit)="saveLootEdit(event, loot.id)">
+                                  <input [(ngModel)]="lootEditDraft.itemName" [name]="'campLootEditItem' + loot.id" placeholder="Item name" aria-label="Item name" required />
+                                  <div class="hnm-loot__row" [class.hnm-loot__row--no-dkp]="lootStructureFor(event.linkshellId) === 'LootCouncil'">
+                                    <select [(ngModel)]="lootEditDraft.itemWinner" [name]="'campLootEditWinner' + loot.id" aria-label="Winner">
+                                      <option value="">Member</option>
+                                      @for (name of lootEditWinnerOptions(event); track name) {
+                                        <option [value]="name">{{ name }}</option>
+                                      }
+                                    </select>
+                                    @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
+                                      <input [(ngModel)]="lootEditDraft.winningDkpSpent" [name]="'campLootEditDkp' + loot.id"
+                                        type="number" min="0"
+                                        [attr.max]="lootInputMax(event.linkshellId)"
+                                        [attr.aria-label]="lootInputPlaceholder(event.linkshellId)"
+                                        [placeholder]="lootStructureFor(event.linkshellId) === 'Hybrid' ? '%' : 'DKP'" />
+                                    }
+                                    <button type="submit" class="btn primary sm" [disabled]="activity.busyLootEdit()">Save</button>
+                                  </div>
+                                  <button type="button" class="btn sm" (click)="cancelLootEdit()">Cancel</button>
+                                </form>
+                              </li>
+                            } @else {
                             <li>
                               <div class="hnm-loot__item">
                                 <strong>{{ loot.itemName || 'Loot item' }}</strong>
                                 <span class="hnm-muted">{{ loot.itemWinner || 'Unassigned' }}</span>
                               </div>
-                              @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
-                                <div class="hnm-loot__cost">
+                              <div class="hnm-loot__cost">
+                                @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
                                   <span class="hnm-mono">{{ formatLootCost(loot.winningDkpSpent, event.linkshellId) }}</span>
                                   <!-- "DKP deducted": a row charged before loot moved to End Camp, which
                                        ending will not charge again. -->
@@ -973,9 +997,22 @@
                                     <span class="hnm-badge" data-tone="warning"
                                       title="Not charged yet. The winner's DKP comes off when the camp ends; until then it is held so they can't spend it twice.">At end</span>
                                   }
-                                </div>
-                              }
+                                }
+                                @if (manage) {
+                                  <div class="hnm-loot__actions">
+                                    @if (confirmingDeleteLootId() === loot.id) {
+                                      <button type="button" class="btn sm danger-outline" [disabled]="activity.busyLootEdit()"
+                                        (click)="deleteLoot(loot)">Confirm delete</button>
+                                      <button type="button" class="btn sm" (click)="confirmingDeleteLootId.set(null)">Keep</button>
+                                    } @else {
+                                      <button type="button" class="btn sm" (click)="startLootEdit(loot)">Edit</button>
+                                      <button type="button" class="btn sm danger-outline" (click)="confirmingDeleteLootId.set(loot.id)">Delete</button>
+                                    }
+                                  </div>
+                                }
+                              </div>
                             </li>
+                            }
                           }
                         </ul>
                       } @else {
@@ -2063,6 +2100,30 @@
                 @if (event.loot.length > 0) {
                   <ul class="compact-list compact-list--dense">
                     @for (loot of event.loot; track loot.id) {
+                      @if (editingLootId() === loot.id) {
+                        <li>
+                          <form class="loot-form loot-form--edit" (ngSubmit)="saveLootEdit(event, loot.id)">
+                            <input [(ngModel)]="lootEditDraft.itemName" [name]="'lootEditItem' + loot.id" placeholder="Item name" aria-label="Item name" required />
+                            <select [(ngModel)]="lootEditDraft.itemWinner" [name]="'lootEditWinner' + loot.id" aria-label="Winner">
+                              <option value="">Select event member</option>
+                              @for (name of lootEditWinnerOptions(event); track name) {
+                                <option [value]="name">{{ name }}</option>
+                              }
+                            </select>
+                            @if (lootStructureFor(event.linkshellId) !== 'LootCouncil') {
+                              <input [(ngModel)]="lootEditDraft.winningDkpSpent" [name]="'lootEditDkp' + loot.id"
+                                type="number" min="0"
+                                [attr.max]="lootInputMax(event.linkshellId)"
+                                [attr.aria-label]="lootInputPlaceholder(event.linkshellId)"
+                                [placeholder]="lootInputPlaceholder(event.linkshellId)" />
+                            }
+                            <div class="button-cluster">
+                              <button type="submit" class="btn primary sm" [disabled]="activity.busyLootEdit()">Save</button>
+                              <button type="button" class="btn sm" (click)="cancelLootEdit()">Cancel</button>
+                            </div>
+                          </form>
+                        </li>
+                      } @else {
                       <li>
                         <div>
                           <strong>{{ loot.itemName || 'Loot item' }}</strong>
@@ -2088,7 +2149,20 @@
                             }
                           </div>
                         }
+                        @if (canManageLinkshell(event.linkshellId)) {
+                          <div class="button-cluster">
+                            @if (confirmingDeleteLootId() === loot.id) {
+                              <button type="button" class="btn sm danger-outline" [disabled]="activity.busyLootEdit()"
+                                (click)="deleteLoot(loot)">Confirm delete</button>
+                              <button type="button" class="btn sm" (click)="confirmingDeleteLootId.set(null)">Keep</button>
+                            } @else {
+                              <button type="button" class="btn sm" (click)="startLootEdit(loot)">Edit</button>
+                              <button type="button" class="btn sm danger-outline" (click)="confirmingDeleteLootId.set(loot.id)">Delete</button>
+                            }
+                          </div>
+                        }
                       </li>
+                      }
                     }
                   </ul>
                 } @else {

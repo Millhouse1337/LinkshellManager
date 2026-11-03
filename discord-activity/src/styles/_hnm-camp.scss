@@ -674,6 +674,22 @@
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+// A loot row being edited in place: the form fills the row, Cancel sits under Save.
+.hnm-loot__form--edit {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+
+  > .btn {
+    align-self: flex-end;
+  }
+}
+
+.hnm-loot__actions {
+  display: flex;
+  gap: 6px;
+}
+
 .hnm-loot__list {
   margin: 0 -16px -16px;
   padding: 0;
