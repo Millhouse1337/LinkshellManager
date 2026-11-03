@@ -364,7 +364,11 @@
                   </section>
                 }
 
-                <!-- ----- Attendance: the strip, then one detail panel beside payout + loot ----- -->
+                <!-- ----- Attendance: the strip over one detail panel, beside payout + loot ----- -->
+                <!-- The strip sits in the left column with the detail panel, so payout + loot start
+                     at the top of the right column instead of below a full-width strip. -->
+                <div class="hnm-camp__grid">
+                <div class="hnm-camp__main">
                 <div class="hnm-camp__attendance">
                   <div class="hnm-camp__attendance-head">
                     <div class="hnm-camp__attendance-title">
@@ -419,7 +423,6 @@
                   }
                 </div>
 
-                <div class="hnm-camp__grid">
                   <section class="hnm-detail" [class.hnm-detail--empty]="!selected">
                     @if (selected; as step) {
                       @switch (step.kind) {
@@ -861,6 +864,7 @@
                       <p class="hnm-detail__note">Pick a step above to see who was on it and what it pays.</p>
                     }
                   </section>
+                </div>
 
                   <aside class="hnm-camp__side">
                     @if (event.hnmPayout; as payout) {

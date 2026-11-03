@@ -141,10 +141,6 @@
 
 // ----- Attendance strip -----
 
-.hnm-camp__attendance {
-  margin-top: 16px;
-}
-
 .hnm-camp__attendance-head {
   display: flex;
   align-items: center;
@@ -167,18 +163,20 @@
   }
 }
 
-// One row of steps. They share the width when there's room and scroll sideways when there isn't,
-// so a 25-window wyrm camp never wraps into a wall of boxes.
+// The steps wrap into rows across the left column, and past about two rows they scroll up and down
+// inside the box, so a 25-window wyrm camp never pushes the detail panel off the screen. The
+// padding keeps the picked step's focus ring from being clipped by the scroll box.
 .hnm-steps {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: 8px;
+  max-height: 200px;
   margin: 0;
-  padding: 2px 2px 6px;
+  padding: 3px 6px 3px 3px;
   list-style: none;
-  overflow-x: auto;
+  overflow-y: auto;
 
   > li {
-    flex: 1 0 148px;
     min-width: 0;
   }
 }
@@ -295,7 +293,15 @@
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 16px;
   align-items: start;
-  margin-top: 12px;
+  margin-top: 16px;
+}
+
+// Left column: the attendance strip, then the detail panel under it.
+.hnm-camp__main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
 }
 
 .hnm-detail {
