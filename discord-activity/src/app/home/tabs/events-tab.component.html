@@ -197,48 +197,80 @@
 
               @if (!collapsed) {
                 @if (manage && newPostEventId() === event.id) {
-                  <section class="hnm-panel">
-                    <!-- Misc posts only: window posts come from the lsm addon. -->
-                    <div class="hnm-panel__head">
+                  <!-- Misc posts only: window posts come from the lsm addon. -->
+                  @let postRate = newPostRate(event);
+                  @let postPicked = newPostSelected().size;
+                  <section class="hnm-panel hnm-post">
+                    <div class="hnm-post__head">
                       <h3>New misc post</h3>
-                    </div>
-                    <div class="new-post">
-                      <label class="new-post__row">
-                        <span class="roster-muted">Name</span>
-                        <input type="text" placeholder="Misc post" maxlength="128"
+                      <p class="hnm-muted">One-time award, paid once per member when the camp ends</p>
+                      <label class="hnm-post__name">
+                        <span class="hnm-eyebrow">Name</span>
+                        <input type="text" placeholder="e.g. after 75%" maxlength="128"
                           [ngModel]="newPostName()" (ngModelChange)="newPostName.set($event)" [name]="'campPostName' + event.id" />
-                        <span class="roster-muted">Pays the Misc rate once per person; change it on the post after.</span>
                       </label>
-                      <div class="new-post__row">
-                        <input type="text" placeholder="Search members..." autocomplete="off"
-                          [ngModel]="newPostSearch()" (ngModelChange)="newPostSearch.set($event)" [name]="'campPostSearch' + event.id" />
-                        <span class="roster-muted">{{ newPostSelected().size }} selected</span>
-                      </div>
-                      @if (addMemberLoading(event.id)) {
-                        <p class="notice">Loading linkshell members…</p>
-                      } @else {
-                        <ul class="new-post__members">
-                          @for (candidate of newPostCandidates(event.id); track candidate.appUserId) {
-                            <li>
-                              <label>
-                                <input type="checkbox" [checked]="isNewPostSelected(candidate.appUserId)"
-                                  (change)="toggleNewPostMember(candidate.appUserId)" />
-                                {{ addMemberCandidateLabel(candidate) }}
-                              </label>
-                            </li>
-                          } @empty {
-                            <li class="roster-muted">No members match.</li>
-                          }
-                        </ul>
-                      }
-                      <div class="new-post__row">
-                        <button type="button" class="btn primary sm"
-                          [disabled]="newPostSelected().size === 0 || newPostSaving()"
+                    </div>
+
+                    <div class="hnm-formula hnm-post__formula">
+                      <span class="hnm-formula__chip"><b class="hnm-mono">{{ postRate | number:'1.0-2' }}</b> Misc rate</span>
+                      <span class="hnm-formula__op">=</span>
+                      <span class="hnm-formula__per"><b class="hnm-mono">{{ postRate | number:'1.0-2' }}</b> per member</span>
+                      <span class="hnm-formula__total hnm-mono">× {{ postPicked }} = <b>{{ postRate * postPicked | number:'1.0-2' }} DKP</b></span>
+                    </div>
+
+                    <div class="hnm-post__members-head">
+                      <span class="hnm-post__count">
+                        <span class="hnm-eyebrow">Members</span>
+                        <span class="hnm-mono hnm-muted">{{ postPicked }} of {{ addMemberCandidatesByEvent()[event.id]?.length ?? 0 }} selected</span>
+                      </span>
+                      <span class="hnm-post__tools">
+                        <span class="hnm-post__search">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                          <input type="search" placeholder="Search members" autocomplete="off" aria-label="Search members"
+                            [ngModel]="newPostSearch()" (ngModelChange)="newPostSearch.set($event)" [name]="'campPostSearch' + event.id" />
+                        </span>
+                        <button type="button" class="btn sm" (click)="selectAllNewPostMembers(event.id)">Select all</button>
+                        <button type="button" class="btn sm" [disabled]="postPicked === 0" (click)="clearNewPostMembers()">Clear</button>
+                      </span>
+                    </div>
+                    @if (addMemberLoading(event.id)) {
+                      <p class="notice">Loading linkshell members…</p>
+                    } @else {
+                      <ul class="hnm-post__members">
+                        @for (candidate of newPostCandidates(event.id); track candidate.appUserId) {
+                          <li>
+                            <label class="hnm-post__member" [class.is-on]="isNewPostSelected(candidate.appUserId)">
+                              <input type="checkbox" [checked]="isNewPostSelected(candidate.appUserId)"
+                                (change)="toggleNewPostMember(candidate.appUserId)" />
+                              <span class="hnm-post__member-text">
+                                <strong>{{ candidate.characterName }}</strong>
+                                @if (candidate.rank) {
+                                  <span class="hnm-muted">{{ candidate.rank }}</span>
+                                }
+                              </span>
+                            </label>
+                          </li>
+                        } @empty {
+                          <li class="hnm-muted">No members match.</li>
+                        }
+                      </ul>
+                    }
+
+                    <div class="hnm-post__foot">
+                      <p class="hnm-muted">Rate and per-member values can be changed on the post after it's created.</p>
+                      <span class="hnm-post__actions">
+                        <button type="button" class="btn" (click)="closeNewPost()">Cancel</button>
+                        <button type="button" class="btn primary"
+                          [disabled]="postPicked === 0 || newPostSaving()"
                           (click)="submitNewPost(event)">
-                          {{ newPostSaving() ? 'Posting...' : 'Create post' }}
+                          @if (newPostSaving()) {
+                            Posting...
+                          } @else {
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                            Create misc post
+                          }
                         </button>
-                        <button type="button" class="btn ghost sm" (click)="closeNewPost()">Cancel</button>
-                      </div>
+                      </span>
                     </div>
                   </section>
                 }

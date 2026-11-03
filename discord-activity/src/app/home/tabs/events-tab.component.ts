@@ -698,6 +698,22 @@ export class EventsTabComponent {
     this.newPostSelected.set(next);
   }
 
+  // Adds everyone the search currently shows, so "Select all" after a search picks just those.
+  protected selectAllNewPostMembers(eventId: number): void {
+    const next = new Set(this.newPostSelected());
+    for (const candidate of this.newPostCandidates(eventId)) next.add(candidate.appUserId);
+    this.newPostSelected.set(next);
+  }
+
+  protected clearNewPostMembers(): void {
+    this.newPostSelected.set(new Set());
+  }
+
+  // What the post pays each member: the linkshell's Misc post rate (HNM Settings).
+  protected newPostRate(event: ActivityEvent): number {
+    return this.linkshellSettingsFor(event.linkshellId)?.hnmStandardMiscBonus ?? 0;
+  }
+
   protected async submitNewPost(event: ActivityEvent): Promise<void> {
     const ids = [...this.newPostSelected()];
     if (ids.length === 0 || this.newPostSaving()) return;

@@ -135,6 +135,166 @@
   }
 }
 
+// ----- New misc post (Add New Post) -----
+//
+// Four bands split by full-width rules: name, the payout formula, the member picker, then the
+// buttons. The panel's own padding moves onto each band so the rules can run edge to edge.
+
+.hnm-post {
+  padding: 0;
+}
+
+.hnm-post__head {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+
+  h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  p {
+    margin: 0;
+  }
+}
+
+.hnm-post__name {
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  margin-top: 12px;
+
+  input {
+    width: 100%;
+  }
+}
+
+.hnm-post__members-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 18px 10px;
+}
+
+.hnm-post__count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.hnm-post__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hnm-post__search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+
+  svg {
+    position: absolute;
+    left: 10px;
+    width: 14px;
+    height: 14px;
+    color: var(--fg-3);
+    pointer-events: none;
+  }
+
+  input {
+    width: 240px;
+    max-width: 100%;
+    padding-left: 32px;
+  }
+}
+
+// A card per member. Scrolls in place past a few rows so a big linkshell doesn't push the
+// Create button off the screen.
+.hnm-post__members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  max-height: 260px;
+  margin: 0;
+  padding: 2px 18px 16px;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.hnm-post__member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+
+  &:hover:not(.is-on) {
+    border-color: var(--border-hot);
+  }
+
+  &.is-on {
+    border-color: var(--accent);
+    background: var(--accent-weak);
+  }
+
+  input {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent);
+  }
+}
+
+.hnm-post__member-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+
+  strong {
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fg);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.hnm-post__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+
+  p {
+    margin: 0;
+  }
+}
+
+.hnm-post__actions {
+  display: flex;
+  gap: 8px;
+
+  .btn svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
 .hnm-camp .live-party-setup-row {
   margin: 12px 0 0;
 }
