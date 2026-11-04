@@ -656,6 +656,39 @@ export class AttendanceSectionsComponent {
     (this.captureDkpDrafts[event.id] ??= {})[entry.id] = value;
   }
 
+  // The DKP a post pays, for its COLLAPSED row: one amount when everyone on it gets the same, a
+  // "low–high" range when not. Reads the very drafts the boxes inside are bound to, so it moves as
+  // an officer types. An unlinked post (no event yet) shows its own price. On an event, a post that
+  // is pending or ignored pays nobody, and an unregistered name is paid nothing, so those add no
+  // amount; null when nothing is left to show.
+  protected postDkpLabel(snapshot: ActivityWindowSnapshot, event: ActivityWindowEvent | null): string | null {
+    const values: number[] = [];
+    if (!event) {
+      const own = this.attachDkp(snapshot);
+      if (own !== null && Number.isFinite(Number(own))) values.push(Number(own));
+    } else {
+      if (snapshot.snapshotStatus !== 'Active' || snapshot.isPending) return null;
+      for (const entry of snapshot.entries ?? []) {
+        let value: number | null = null;
+        if (event.perCaptureDkp) {
+          value = this.captureDkp(event, entry);
+        } else {
+          const name = entry.characterName.trim().toLowerCase();
+          const member = event.combinedMembers.find(m => m.characterName.trim().toLowerCase() === name);
+          if (!member || member.isRegistered === false) continue;
+          value = this.memberDkp(event, member).value;
+        }
+        if (value !== null && Number.isFinite(Number(value))) values.push(Number(value));
+      }
+    }
+    if (values.length === 0) return null;
+    const low = Math.min(...values);
+    const high = Math.max(...values);
+    return low === high
+      ? `${this.formatDkp(low)} DKP`
+      : `${this.formatDkp(low)}–${this.formatDkp(high)} DKP`;
+  }
+
   // The Combined DKP column shows the live draft so officers see edits
   // (including default-driven cascades) reflected immediately.
   //

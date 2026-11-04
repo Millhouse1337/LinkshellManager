@@ -278,6 +278,8 @@
 .we-snapshot[open] > .we-snapshot__head .we-snapshot__caret { transform: rotate(90deg); }
 .we-snapshot__title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; color: var(--fg); }
 .we-snapshot__meta { color: var(--muted); font-weight: 400; }
+/* A post's DKP on its collapsed line, in the Combined DKP column's gold. */
+.we-snapshot__meta .we-snapshot__dkp { color: var(--we-gold); font-weight: 700; }
 /* Which spawn window the capture was taken in. Leads the row — on a 25-window wyrm it's the
    fastest way to tell four snapshots of the same camp apart, ahead of the timestamp.
    Borrows .tag's border; tabular-nums keeps "Window 3 of 25" from jittering as it counts up.

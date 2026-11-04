@@ -536,6 +536,10 @@
         <!-- Who captured it and where are in the opened row, so the closed line stays short. -->
         <span class="we-snapshot__meta">
           · {{ snapshot.entryCount }} {{ snapshot.entryCount === 1 ? 'member' : 'members' }}
+          <!-- What the post pays, so it reads without opening the row. Live off the boxes inside. -->
+          @if (postDkpLabel(snapshot, event); as postDkp) {
+            · <strong class="we-snapshot__dkp">{{ postDkp }}</strong>
+          }
         </span>
         @if (snapshot.snapshotStatus !== 'Active') {
           <span class="tag warning">{{ snapshot.snapshotStatus }}</span>
