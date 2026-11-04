@@ -2551,6 +2551,10 @@ export interface ActivityChartBoss {
   keyItemTotalMembers: number;
   /** Exactly who still needs it, in roster order - what the card's drawer lists. */
   keyItemMissing: string[];
+  /** Whether this card gets an "add pop item" button. The server's answer; the add endpoint checks it too. */
+  takesPopItems: boolean;
+  /** Whether this card gets an "add drop item" button. */
+  takesDropItems: boolean;
 }
 
 export interface ActivityChartLedgerCell {

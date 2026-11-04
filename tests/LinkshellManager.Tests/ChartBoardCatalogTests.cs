@@ -140,6 +140,10 @@ public class ChartBoardCatalogTests
             {
                 Assert.Equal(pop, Assert.Single(card.PopItems!).Name);
             }
+
+            // The card's add buttons follow its lists: a pop button only where there is a pop item.
+            Assert.Equal(pop is not null, sky.TakesItemKind(card, ChartItemKinds.Pop));
+            Assert.True(sky.TakesItemKind(card, ChartItemKinds.Drop));
             Assert.Equal(god, card.LeadsTo);
 
             // A feeder sits in its god's column, above the god — which is what makes the arrow badge
@@ -300,21 +304,29 @@ public class ChartBoardCatalogTests
 
         foreach (var (card, drop, pops) in expected)
         {
-            Assert.Equal(drop, Assert.Single(sea.Find(card)!.PopItems!).Name);
+            Assert.Equal(drop, Assert.Single(sea.Find(card)!.DropItems!).Name);
             Assert.Equal(pops, sea.Find(card)!.LeadsTo);
         }
 
         // And that is the WHOLE board: the only cards holding nothing are the two at the foot.
         Assert.Equal(
             expected.Select(row => row.Card).OrderBy(name => name, StringComparer.Ordinal),
-            sea.Bosses.Where(boss => boss.PopItems is { Count: > 0 })
+            sea.Bosses.Where(boss => boss.DropItems is { Count: > 0 })
                 .Select(boss => boss.Name)
                 .OrderBy(name => name, StringComparer.Ordinal));
+
+        // Every Sea card is drop-only, so nothing lists a pop item and no card takes one.
+        Assert.False(sea.HasPopItemOptions);
+        Assert.All(sea.Bosses, boss =>
+        {
+            Assert.False(sea.TakesItemKind(boss, ChartItemKinds.Pop));
+            Assert.True(sea.TakesItemKind(boss, ChartItemKinds.Drop));
+        });
 
         // No Source anywhere on Sea any more, for the reason Sky names none: an item's drop source IS
         // the card it sits on, so naming it again would repeat the boss select the picker sits beside.
         Assert.All(
-            sea.Bosses.SelectMany(boss => boss.PopItems ?? Array.Empty<ChartPopItemOption>()),
+            sea.Bosses.SelectMany(boss => boss.DropItems ?? Array.Empty<ChartPopItemOption>()),
             option => Assert.Null(option.Source));
     }
 
@@ -323,7 +335,7 @@ public class ChartBoardCatalogTests
     /// the terminus of the chain, Absolute Virtue because it is a finale that documents rewards rather
     /// than tracking pops — so both fall back to a free-text box while the rest of the board gets a
     /// picker. This is why the choice is made per boss, and why
-    /// ChartBoard.HasPopItemOptions asks Any rather than All.
+    /// ChartBoard.HasDropItemOptions asks Any rather than All.
     /// </summary>
     [Fact]
     public void SeaBoard_MixesTrackedCardsAndTheTwoAtTheFoot()
@@ -332,11 +344,11 @@ public class ChartBoardCatalogTests
 
         Assert.Equal(
             new[] { "Jailer of Love", "Absolute Virtue" },
-            sea.Bosses.Where(boss => boss.PopItems is null or { Count: 0 })
+            sea.Bosses.Where(boss => boss.DropItems is null or { Count: 0 })
                 .Select(boss => boss.Name)
                 .ToArray());
 
-        Assert.True(sea.HasPopItemOptions);
+        Assert.True(sea.HasDropItemOptions);
 
         // Love is popped WITH the three second-stage virtues, but holds none of them: they sit on the
         // Jailers that drop them, and its subtitle is what says so. Same shape as Kirin on Sky.
@@ -344,11 +356,11 @@ public class ChartBoardCatalogTests
 
         // How many the DOWNSTREAM pop takes rides in the label, next to the name it is a count of —
         // the target stock for a card that is farmed rather than killed once.
-        Assert.Equal("Ghrah M Chip ×12", sea.PopItemsFor("Ghrah").Single().Label);
-        Assert.Equal("High-Quality Aern Organ ×1–3", sea.PopItemsFor("Aern").Single().Label);
+        Assert.Equal("Ghrah M Chip ×12", sea.DropItemsFor("Ghrah").Single().Label);
+        Assert.Equal("High-Quality Aern Organ ×1–3", sea.DropItemsFor("Aern").Single().Label);
 
         // The rest is a bare name: a count of one says nothing a picker with one option does not.
-        Assert.Equal("Second Virtue", sea.PopItemsFor("Jailer of Fortitude").Single().Label);
+        Assert.Equal("Second Virtue", sea.DropItemsFor("Jailer of Fortitude").Single().Label);
     }
 
     /// <summary>
@@ -418,9 +430,12 @@ public class ChartBoardCatalogTests
         Assert.Equal(new[] { "Seal of Seiryu" }, Names(sky, "Seiryu"));
         Assert.Equal(new[] { "Seal of Byakko" }, Names(sky, "Byakko"));
 
+        // Every god records drops only - Kirin included, which lists none and so takes free text.
         foreach (var god in HnmConfig.SkyGodOrder)
         {
             Assert.Empty(sky.PopItemsFor(god));
+            Assert.False(sky.TakesItemKind(sky.Find(god)!, ChartItemKinds.Pop));
+            Assert.True(sky.TakesItemKind(sky.Find(god)!, ChartItemKinds.Drop));
         }
 
         // Kirin is the terminus: popped WITH the four seals, but nothing is tracked as dropping FROM
@@ -465,7 +480,7 @@ public class ChartBoardCatalogTests
         Assert.Equal("Gem of the North", sky.DropItemsFor("Zipacna").Single().Label);
 
         var sea = ChartBoardCatalog.Find(ChartBoardCatalog.Sea)!;
-        Assert.Equal("Fourth Virtue", sea.PopItemsFor("Jailer of Justice").Single().Label);
+        Assert.Equal("Fourth Virtue", sea.DropItemsFor("Jailer of Justice").Single().Label);
     }
 
     /// <summary>
@@ -523,10 +538,12 @@ public class ChartBoardCatalogTests
             ChartBoardCatalog.NormalizePopItemName(ChartBoardCatalog.Dynamis, "Xarcabard", " Montiont Silverpiece "));
         Assert.Null(ChartBoardCatalog.NormalizePopItemName(ChartBoardCatalog.Sky, "Genbu", "   "));
 
-        // Sea DOES canonicalise now, on the card that drops the item rather than the one it pops.
+        // Sea DOES canonicalise, on the card that drops the item - against its DROP list, since every
+        // Sea card is drop-only.
         Assert.Equal(
             "High-Quality Xzomit Organ",
-            ChartBoardCatalog.NormalizePopItemName(ChartBoardCatalog.Sea, "Xzomit", " high-quality xzomit organ "));
+            ChartBoardCatalog.NormalizeItemName(
+                ChartBoardCatalog.Sea, "Xzomit", " high-quality xzomit organ ", ChartItemKinds.Drop));
     }
 
     // Every board card renders an <img>. A wrong file name is a broken image on a page nobody
@@ -908,7 +925,7 @@ public class ChartBoardCatalogTests
             ChartBoardFeatures.PopItems | ChartBoardFeatures.DropItems,
             ChartBoardCatalog.Find(ChartBoardCatalog.Sky)!.Features);
         Assert.Equal(
-            ChartBoardFeatures.PopItems | ChartBoardFeatures.DropItems,
+            ChartBoardFeatures.DropItems,
             ChartBoardCatalog.Find(ChartBoardCatalog.Sea)!.Features);
         Assert.Equal(
             ChartBoardFeatures.Wishlist | ChartBoardFeatures.KeyItems,

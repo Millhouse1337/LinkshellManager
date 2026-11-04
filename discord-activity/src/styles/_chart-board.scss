@@ -441,6 +441,14 @@
 .panel-tab .chart-item-table tbody tr:last-child td { border-bottom: 0; }
 /* A card's Drop Item table sits straight under its Pop Item one. */
 .panel-tab .chart-item-table + .chart-item-table { border-top: 1px solid var(--border); }
+/* The card's own add button, at the right of the section heading. Pulled into the padding so the
+   heading row is no taller with it than without it. */
+.panel-tab .chart-item-table .chart-item-table__add {
+  float: right;
+  margin: -4px -4px -4px 8px;
+  text-transform: none;
+  letter-spacing: normal;
+}
 .panel-tab .chart-item-table tbody tr:hover { background: var(--surface-2); }
 .panel-tab .chart-item-table .chart-item__name { font-weight: 500; color: var(--fg); }
 .panel-tab .chart-item-table .chart-item__qty {
@@ -459,7 +467,17 @@
  * vertically-scrolling iframe, flip the rows to stacked label/value pairs — the same treatment
  * _responsive.scss already applies to participant and compact lists at this width. */
 @media (max-width: 720px) {
-  .panel-tab .chart-item-table thead { display: none; }
+  /* The heading row stays, as one line: it names the section and carries the add button. Only
+     the Qty label goes - every stacked row below already says Qty. */
+  .panel-tab .chart-item-table thead tr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-tab .chart-item-table thead th { border-bottom: 0; }
+  .panel-tab .chart-item-table .chart-item-table__qty-label { display: none; }
   .panel-tab .chart-item-table tbody tr {
     display: block;
     padding: 8px 0;

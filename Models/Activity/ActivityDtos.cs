@@ -1866,7 +1866,12 @@ public sealed record ActivityChartBossDto(
     int KeyItemHaveCount,
     int KeyItemTotalMembers,
     /// <summary>Exactly who still needs it, in roster order — what the card's drawer lists.</summary>
-    IReadOnlyList<string> KeyItemMissing);
+    IReadOnlyList<string> KeyItemMissing,
+    /// <summary>Whether this card shows an "add pop item" button. The server's own answer, from
+    /// ChartBoard.TakesItemKind, which is also what the add endpoint checks.</summary>
+    bool TakesPopItems,
+    /// <summary>Twin of TakesPopItems for the "add drop item" button.</summary>
+    bool TakesDropItems);
 
 /// <summary>
 /// <c>Name</c> is what gets stored; <c>Source</c> is the mob that drops it; <c>Label</c> is the two

@@ -171,13 +171,22 @@ public sealed record ChartBoss(
     /// what NormalizeDraft canonicalises a pop row's name against, and a name in both lists would
     /// make that canonicalisation depend on which form was used - a coin flip at edit time, which
     /// ChartBoardCatalogTests.NoBoardListsAnItemAsBothAPopAndADrop refuses. Two, the migrations that
-    /// moved rows are pinned against these lists by set equality (Sea's PopItems, Sky's DropItems),
-    /// so an addition would be a failing test rather than a silent reclassification of somebody's rows.
+    /// moved rows are pinned against these lists by set equality (Sea's and Sky's DropItems), so an
+    /// addition would be a failing test rather than a silent reclassification of somebody's rows.
     ///
     /// LAST, after EndsRow, for the reason spelled out at Group and LeadsTo: a new optional member
     /// anywhere earlier compiles clean and silently captures the value meant for the one after it.
     /// </summary>
-    IReadOnlyList<ChartPopItemOption>? DropItems = null);
+    IReadOnlyList<ChartPopItemOption>? DropItems = null,
+    /// <summary>
+    /// Which add buttons THIS card shows, narrowing the board's own Features: Faust records only
+    /// drops, so it gets no "Add pop item" button even though Sky takes pop items. Null means every
+    /// item form the board offers. Only the PopItems and DropItems flags mean anything here.
+    ///
+    /// Declared rather than read off PopItems/DropItems: Kirin records drops but lists none, so its
+    /// drop box is free text, and HENM takes pop items with no list at all.
+    /// </summary>
+    ChartBoardFeatures? ItemForms = null);
 
 /// <summary>One board (Sky, Sea, …) and the bosses it tracks, in display order.</summary>
 public sealed record ChartBoard(
@@ -296,6 +305,19 @@ public sealed record ChartBoard(
         string.Equals(kind, ChartItemKinds.Drop, StringComparison.OrdinalIgnoreCase)
             ? DropItemsFor(boss)
             : PopItemsFor(boss);
+
+    /// <summary>
+    /// Whether an item of this kind may be ADDED to this card: the board must offer the form, and
+    /// the card must not have narrowed it away (see <see cref="ChartBoss.ItemForms"/>). Edits never
+    /// ask, for the reason AllowsPopItems gives.
+    /// </summary>
+    public bool TakesItemKind(ChartBoss boss, string? kind)
+    {
+        var form = ChartBoardCatalog.NormalizeItemKind(kind) == ChartItemKinds.Drop
+            ? ChartBoardFeatures.DropItems
+            : ChartBoardFeatures.PopItems;
+        return Features.HasFlag(form) && (boss.ItemForms is null || boss.ItemForms.Value.HasFlag(form));
+    }
 
     /// <summary>
     /// The key item earned on a card, or null. A board-level key item never matches: it belongs to
@@ -443,7 +465,10 @@ public static class ChartBoardCatalog
                             Group: run,
                             PopItems: card.Pop is null ? null : new[] { new ChartPopItemOption(card.Pop) },
                             LeadsTo: card.Feeds,
-                            DropItems: new[] { new ChartPopItemOption(card.Drop) });
+                            DropItems: new[] { new ChartPopItemOption(card.Drop) },
+                            ItemForms: card.Pop is null
+                                ? ChartBoardFeatures.DropItems
+                                : ChartBoardFeatures.PopItems | ChartBoardFeatures.DropItems);
                     });
 
                 var godCard = SkyGodCards[god];
@@ -453,7 +478,10 @@ public static class ChartBoardCatalog
                     $"{god}.jpg",
                     Subtitle: godCard.Subtitle,
                     Group: run,
-                    DropItems: godCard.Drops));
+                    DropItems: godCard.Drops,
+                    // Every god records drops only - Kirin included, which lists none and so takes
+                    // whatever is typed.
+                    ItemForms: ChartBoardFeatures.DropItems));
             })
             .ToList())
     {
@@ -474,7 +502,7 @@ public static class ChartBoardCatalog
     // takes no trade at all, one more trash family, and the Jailer at the foot. Jailer of Love —
     // which every column leads to — and Absolute Virtue are the trailing run below them all.
     //
-    // A card's items are what falls OFF it, the same rule Sky turns on: a virtue lives on the NM
+    // A card's items are what falls OFF it, so they are all DROP items: a virtue lives on the NM
     // that DROPS it, not on the one it pops. That rule is what lets the six trash families hold the
     // organs and chips, and it is why the ARROW BADGE — not the item list — is what says where a
     // drop is going. What POPS a card is said in its SUBTITLE, exactly as Kirin says it on Sky.
@@ -529,7 +557,7 @@ public static class ChartBoardCatalog
                 ChartBossKinds.MiniNm,
                 "Farmed trash mob",
                 Group: SeaJusticePath,
-                PopItems: new[] { new ChartPopItemOption("Ghrah M Chip", Needed: "12") },
+                DropItems: new[] { new ChartPopItemOption("Ghrah M Chip", Needed: "12") },
                 LeadsTo: "Jailer of Fortitude"),
 
             new ChartBoss(
@@ -540,7 +568,7 @@ public static class ChartBoardCatalog
                 "JailerOfForitude.jpg",
                 Subtitle: "Popped with 12 Ghrah M Chips",
                 Group: SeaJusticePath,
-                PopItems: new[] { new ChartPopItemOption("Second Virtue") },
+                DropItems: new[] { new ChartPopItemOption("Second Virtue") },
                 LeadsTo: "Jailer of Justice"),
 
             // One mob in three jobs, but three emblems: the shipped art draws each job separately, so
@@ -551,7 +579,7 @@ public static class ChartBoardCatalog
                 "IxDRK.jpg",
                 Subtitle: "Animosity spawn",
                 Group: SeaJusticePath,
-                PopItems: new[] { new ChartPopItemOption("Deed of Moderation") },
+                DropItems: new[] { new ChartPopItemOption("Deed of Moderation") },
                 LeadsTo: "Jailer of Justice"),
 
             new ChartBoss(
@@ -561,7 +589,7 @@ public static class ChartBoardCatalog
                 ChartBossKinds.MiniNm,
                 "Farmed trash mob",
                 Group: SeaJusticePath,
-                PopItems: new[] { new ChartPopItemOption("High-Quality Xzomit Organ") },
+                DropItems: new[] { new ChartPopItemOption("High-Quality Xzomit Organ") },
                 LeadsTo: "Jailer of Justice"),
 
             new ChartBoss(
@@ -570,7 +598,7 @@ public static class ChartBoardCatalog
                 "JailerofJustice.jpg",
                 Subtitle: "Popped with Second Virtue + Deed of Moderation + HQ Xzomit Organ",
                 Group: SeaJusticePath,
-                PopItems: new[] { new ChartPopItemOption("Fourth Virtue") }),
+                DropItems: new[] { new ChartPopItemOption("Fourth Virtue") }),
 
             // ---- Hope Path ----
 
@@ -581,7 +609,7 @@ public static class ChartBoardCatalog
                 ChartBossKinds.MiniNm,
                 "Farmed trash mob",
                 Group: SeaHopePath,
-                PopItems: new[] { new ChartPopItemOption("High-Quality Aern Organ", Needed: "1–3") },
+                DropItems: new[] { new ChartPopItemOption("High-Quality Aern Organ", Needed: "1–3") },
                 LeadsTo: "Ix'aern (MNK)"),
 
             new ChartBoss(
@@ -590,7 +618,7 @@ public static class ChartBoardCatalog
                 "IxMNK.jpg",
                 Subtitle: "3 organs guarantees a deed or vice",
                 Group: SeaHopePath,
-                PopItems: new[] { new ChartPopItemOption("Deed of Placidity") },
+                DropItems: new[] { new ChartPopItemOption("Deed of Placidity") },
                 LeadsTo: "Jailer of Hope"),
 
             new ChartBoss(
@@ -599,7 +627,7 @@ public static class ChartBoardCatalog
                 "JailerOfTemperance.jpg",
                 Subtitle: "Lottery spawn",
                 Group: SeaHopePath,
-                PopItems: new[] { new ChartPopItemOption("First Virtue") },
+                DropItems: new[] { new ChartPopItemOption("First Virtue") },
                 LeadsTo: "Jailer of Hope"),
 
             new ChartBoss(
@@ -609,7 +637,7 @@ public static class ChartBoardCatalog
                 ChartBossKinds.MiniNm,
                 "Farmed trash mob",
                 Group: SeaHopePath,
-                PopItems: new[] { new ChartPopItemOption("High-Quality Phuabo Organ") },
+                DropItems: new[] { new ChartPopItemOption("High-Quality Phuabo Organ") },
                 LeadsTo: "Jailer of Hope"),
 
             new ChartBoss(
@@ -618,7 +646,7 @@ public static class ChartBoardCatalog
                 "JailerOfHope.jpg",
                 Subtitle: "Popped with First Virtue + Deed of Placidity + HQ Phuabo Organ",
                 Group: SeaHopePath,
-                PopItems: new[] { new ChartPopItemOption("Fifth Virtue") }),
+                DropItems: new[] { new ChartPopItemOption("Fifth Virtue") }),
 
             // ---- Prudence Path ----
 
@@ -629,7 +657,7 @@ public static class ChartBoardCatalog
                 ChartBossKinds.MiniNm,
                 "Farmed trash mob",
                 Group: SeaPrudencePath,
-                PopItems: new[] { new ChartPopItemOption("High-Quality Euvhi Organ", Needed: "1") },
+                DropItems: new[] { new ChartPopItemOption("High-Quality Euvhi Organ", Needed: "1") },
                 LeadsTo: "Jailer of Faith"),
 
             new ChartBoss(
@@ -638,7 +666,7 @@ public static class ChartBoardCatalog
                 "JailerOfFaith.jpg",
                 Subtitle: "Popped with one HQ Euvhi Organ",
                 Group: SeaPrudencePath,
-                PopItems: new[] { new ChartPopItemOption("Third Virtue") },
+                DropItems: new[] { new ChartPopItemOption("Third Virtue") },
                 LeadsTo: "Jailer of Prudence"),
 
             new ChartBoss(
@@ -647,7 +675,7 @@ public static class ChartBoardCatalog
                 "IxDRG.jpg",
                 Subtitle: "Lottery from Aw'aern placeholders",
                 Group: SeaPrudencePath,
-                PopItems: new[] { new ChartPopItemOption("Deed of Sensibility") },
+                DropItems: new[] { new ChartPopItemOption("Deed of Sensibility") },
                 LeadsTo: "Jailer of Prudence"),
 
             new ChartBoss(
@@ -657,7 +685,7 @@ public static class ChartBoardCatalog
                 ChartBossKinds.MiniNm,
                 "Farmed trash mob",
                 Group: SeaPrudencePath,
-                PopItems: new[] { new ChartPopItemOption("High-Quality Hpemde Organ") },
+                DropItems: new[] { new ChartPopItemOption("High-Quality Hpemde Organ") },
                 LeadsTo: "Jailer of Prudence"),
 
             new ChartBoss(
@@ -666,7 +694,7 @@ public static class ChartBoardCatalog
                 "JailerofPrudence.jpg",
                 Subtitle: "Popped with Third Virtue + Deed of Sensibility + HQ Hpemde Organ",
                 Group: SeaPrudencePath,
-                PopItems: new[] { new ChartPopItemOption("Sixth Virtue") }),
+                DropItems: new[] { new ChartPopItemOption("Sixth Virtue") }),
 
             // ---- Final stage: what all three columns lead to ----
             //
@@ -704,7 +732,11 @@ public static class ChartBoardCatalog
         })
     {
         // The three path runs are drawn as columns; the Final stage run falls below them.
-        Features = ChartBoardFeatures.PopItems | ChartBoardFeatures.DropItems,
+        //
+        // DROPS ONLY, on every card: everything listed here falls off the card it sits on, so the
+        // pop form has nothing to record. Set on the board rather than per card - no Sea card is an
+        // exception. DropOnlyChartCards turned the rows saved as pop items into drops.
+        Features = ChartBoardFeatures.DropItems,
         PathColumns = new[] { SeaJusticePath, SeaHopePath, SeaPrudencePath },
     };
 

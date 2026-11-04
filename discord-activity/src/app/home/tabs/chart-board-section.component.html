@@ -17,6 +17,9 @@
       drops another (Brigandish Blade) says which is which. A catalog item nobody holds yet still
       gets its line, at 0 and muted.
 
+      The add button rides in the heading row, beside Qty, only on a kind this card takes. In the
+      Qty cell rather than a third column, so the body rows keep two cells and full-width borders.
+
       Who holds which copy, who is credited for it, and every button that edits a row live in the
       Holdings table below, which has the whole page width to say them in. This is the at-a-glance
       view; that is the detail view, and the only one that writes.
@@ -26,7 +29,16 @@
         <thead>
           <tr>
             <th>{{ section.heading }}</th>
-            <th>Qty</th>
+            <th>
+              <span class="chart-item-table__qty-label">Qty</span>
+              @if (canManage() && section.takes) {
+                <button type="button" class="btn sm ghost chart-item-table__add"
+                        (click)="toggleFormFor(boss.boss, section.kind)"
+                        [attr.aria-label]="'Add ' + section.heading.toLowerCase() + ' to ' + boss.boss">
+                  {{ isAddingTo(boss.boss, section.kind) ? 'Close' : '+ Add' }}
+                </button>
+              }
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -52,27 +64,23 @@
     <div class="section-title">{{ chart()?.boardLabel || boardKey() }} Tracker</div>
   </div>
 
-  <div class="section-head-right">
+  <!-- The view switch on top, the same control the Events and Auction pages use. No add buttons
+       up here: each card carries its own, one per kind it takes. -->
+  <div class="section-head-right section-head-right--stacked">
+    @if (hasViewTabs()) {
+      <div class="view-tabs" role="tablist" aria-label="Chart view">
+        <button type="button" class="view-tab" role="tab"
+          [class.active]="view() === 'items'"
+          [attr.aria-selected]="view() === 'items'"
+          (click)="view.set('items')">Pop/Drop Items</button>
+        <button type="button" class="view-tab" role="tab"
+          [class.active]="view() === 'holdings'"
+          [attr.aria-selected]="view() === 'holdings'"
+          (click)="view.set('holdings')">{{ chart()?.boardLabel || boardKey() }} Holdings</button>
+      </div>
+    }
     @if (chart()?.lastUpdatedUtc) {
       <span class="chart-updated">Updated {{ chart()!.lastUpdatedUtc | date:'short' }}</span>
-    }
-    <!--
-      Two buttons where the board takes both kinds, each opening the SAME form pre-set. The website
-      stacks two always-open cards instead; inside a Discord iframe that would push the boards off
-      the bottom of the panel, so this surface toggles one.
-
-      Gated on features, not on whether a list happens to be populated: HENM declares no pop items
-      and still takes them, while Dynamis declares none and no longer offers the form at all.
-    -->
-    @if (canManage() && features().popItems) {
-      <button type="button" class="btn sm primary" (click)="toggleForm('Pop')">
-        {{ showForm() && editingItemId() === null && formKind() === 'Pop' ? 'Close' : 'Add pop item' }}
-      </button>
-    }
-    @if (canManage() && features().dropItems) {
-      <button type="button" class="btn sm primary" (click)="toggleForm('Drop')">
-        {{ showForm() && editingItemId() === null && formKind() === 'Drop' ? 'Close' : 'Add drop item' }}
-      </button>
     }
   </div>
 </div>
@@ -84,7 +92,7 @@
 @if (showForm() && canManage()) {
   <!-- chart-form-card lifts the card's `overflow: hidden`, which would otherwise clip the credit
        dropdown where it hangs past the bottom of the card. -->
-  <div class="card chart-form-card">
+  <div class="card chart-form-card" #formCard>
     <div class="card-head">
       <div class="card-title">
         {{ editingItemId() === null ? 'Add a ' + itemLabel().toLowerCase() : 'Edit ' + itemLabel().toLowerCase() }}
@@ -96,7 +104,7 @@
           <label for="chart-boss">Boss</label>
           <select id="chart-boss" name="boss"
                   [ngModel]="formBoss()" (ngModelChange)="onBossChange($event)">
-            @for (boss of bosses(); track boss.boss) {
+            @for (boss of formBossChoices(); track boss.boss) {
               <option [value]="boss.boss">{{ boss.boss }}</option>
             }
           </select>
@@ -414,6 +422,9 @@
   line up sideways. A container per column would let each size its own cards and the tiers would
   drift apart.
 -->
+<!-- The Pop/Drop Items tab. Hidden rather than removed, like the Events views. The add/edit form
+     sits above both tabs, so Edit in the holdings table opens it without switching tab. -->
+<div [hidden]="!showsView('items')">
 @if (pathGroups().length) {
   <div class="chart-paths" [style.--chart-path-rows]="pathRowCount()">
     @for (group of pathGroups(); track group.label) {
@@ -449,17 +460,21 @@
     }
   }
 </div>
+</div>
 
 @if (chart(); as loaded) {
   <!-- Built from the same bosses the cards above render, not from a second projection: one set of
        rows read two ways, so the two halves of the page cannot disagree. It owns the row buttons —
-       Edit comes back here because the form it opens lives at the top of this board. -->
-  <app-chart-holdings-section
-    [bosses]="loaded.bosses"
-    [boardLabel]="loaded.boardLabel"
-    [canManage]="canManage()"
-    [tracksDrops]="features().dropItems"
-    (edit)="beginEdit($event)" />
+       Edit comes back here because the form it opens lives at the top of this board.
+       On Sky and Sea this is the Holdings tab. -->
+  <div [hidden]="!showsView('holdings')">
+    <app-chart-holdings-section
+      [bosses]="loaded.bosses"
+      [boardLabel]="loaded.boardLabel"
+      [canManage]="canManage()"
+      [tracksDrops]="features().dropItems"
+      (edit)="beginEdit($event)" />
+  </div>
 
   <!-- Below the holdings table, matching the website. Both ride in THIS payload rather than
        fetching separately, so a card badge and the list under it are always the same rows. -->

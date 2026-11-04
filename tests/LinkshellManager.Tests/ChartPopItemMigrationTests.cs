@@ -151,6 +151,29 @@ public class ChartPopItemMigrationTests
     }
 
     /// <summary>
+    /// DropOnlyChartCards turns Pop rows into drops on exactly the Sky cards that take no pop item.
+    /// One missing leaves its pop rows under a heading with no add button; one extra turns Curtana,
+    /// Ro'Maeve Water or Diorite into a drop.
+    /// </summary>
+    [Fact]
+    public void DropOnly_NamesExactlyTheSkyCardsThatTakeNoPopItem()
+    {
+        Assert.Equal(
+            Sky.Bosses
+                .Where(boss => !Sky.TakesItemKind(boss, ChartItemKinds.Pop))
+                .Select(boss => boss.Name)
+                .OrderBy(name => name, StringComparer.Ordinal),
+            DropOnlyChartCards.SkyDropOnlyCards.OrderBy(name => name, StringComparer.Ordinal));
+
+        Assert.All(DropOnlyChartCards.SkyDropOnlyCards, name =>
+        {
+            Assert.DoesNotContain('\'', name);
+            Assert.DoesNotContain('%', name);
+            Assert.DoesNotContain('_', name);
+        });
+    }
+
+    /// <summary>
     /// ReclassifySkyPopItems flips exactly the rows whose item is on a card's POP list - the other
     /// half of the split. It escapes apostrophes (Ro'Maeve Water), so only LIKE wildcards are checked.
     /// </summary>
@@ -187,7 +210,7 @@ public class ChartPopItemMigrationTests
     {
         Assert.Equal(
             Sea.Bosses
-                .SelectMany(boss => boss.PopItems ?? Array.Empty<ChartPopItemOption>())
+                .SelectMany(boss => boss.DropItems ?? Array.Empty<ChartPopItemOption>())
                 .Select(option => option.Name)
                 .OrderBy(name => name, StringComparer.Ordinal),
             RefileSeaPopItemsOntoTheirDroppers.Moves
@@ -235,7 +258,7 @@ public class ChartPopItemMigrationTests
             .GroupBy(move => move.NewBoss, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var card in Sea.Bosses.Where(boss => boss.PopItems is { Count: > 0 }))
+        foreach (var card in Sea.Bosses.Where(boss => boss.DropItems is { Count: > 0 }))
         {
             Assert.True(byTarget.TryGetValue(card.Name, out var moves), $"Nothing is refiled onto {card.Name}.");
             Assert.Equal(1, moves);

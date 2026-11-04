@@ -2,11 +2,15 @@ import { CommonModule } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   HostListener,
+  Injector,
   Input,
+  afterNextRender,
   computed,
   inject,
-  signal
+  signal,
+  viewChild
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
@@ -42,6 +46,8 @@ interface ChartItemSection {
   kind: ChartItemKind;
   heading: string;
   items: ChartConsolidatedItem[];
+  /** Whether this card takes adds of this kind - i.e. whether the section carries an add button. */
+  takes: boolean;
 }
 
 /**
@@ -140,7 +146,9 @@ export class ChartBoardSectionComponent {
    * Split by KIND, pop items first: what is traded to a boss and what falls off it are different
    * questions, and Brigandish Blade answers both. Each section starts with the catalog's own items
    * for that kind, at 0 until a row says otherwise, then anything else officers have typed in.
-   * A kind with nothing listed and nothing held is left out, so Faust shows no empty Pop heading.
+   * A section is shown when the card TAKES that kind - even empty, because it carries the add
+   * button - or when old rows of that kind are still on it. So Faust shows no Pop heading, and
+   * Kirin shows an empty Drop one.
    *
    * Keyed by boss and memoised, so the template can ask per card without re-folding on every pass.
    * Catalog order comes first; after that, first-seen spelling and position win.
@@ -174,9 +182,14 @@ export class ChartBoardSectionComponent {
             }
           }
 
-          return { kind, heading: kind === 'Drop' ? 'Drop Item' : 'Pop Item', items: order };
+          return {
+            kind,
+            heading: kind === 'Drop' ? 'Drop Item' : 'Pop Item',
+            items: order,
+            takes: kind === 'Drop' ? boss.takesDropItems : boss.takesPopItems
+          };
         })
-        .filter(section => section.items.length > 0);
+        .filter(section => section.takes || section.items.length > 0);
     }
 
     return byBoss;
@@ -257,12 +270,31 @@ export class ChartBoardSectionComponent {
     popItems: true, dropItems: false, wishlist: false, keyItems: false
   });
 
+  // ---- Pop/Drop Items | Holdings tabs ----
+
+  /**
+   * Which half of the board is showing: the cards, or the holdings table. The template HIDES the
+   * other half rather than unmounting it, so an expanded farmer list survives a switch. Kept when
+   * the board changes, so Sky Holdings → Sea lands on Sea Holdings.
+   */
+  protected readonly view = signal<'items' | 'holdings'>('items');
+
+  /** Only Sky and Sea split into tabs - the two boards that record drops. The rest keep one page. */
+  protected readonly hasViewTabs = computed(() => this.features().dropItems);
+
+  protected showsView(view: 'items' | 'holdings'): boolean {
+    return !this.hasViewTabs() || this.view() === view;
+  }
+
+  private readonly injector = inject(Injector);
+  private readonly formCard = viewChild<ElementRef<HTMLElement>>('formCard');
+
   protected readonly showForm = signal(false);
   protected readonly editingItemId = signal<number | null>(null);
   /**
-   * Which kind the open form is adding. Sky and Sea offer two buttons that each open THIS form
-   * pre-set, rather than two always-open cards the way the website does it: two stacked forms inside
-   * a Discord iframe would push the boards off the bottom of the panel.
+   * Which kind the open form is adding. Each card's own add button opens THIS form pre-set to that
+   * card and kind, rather than a form per card: the form has six fields, and squeezed into a card
+   * one of four across it would wrap every label.
    *
    * On an edit it is the row's own kind, and the server ignores it there anyway - a row moves
    * between bosses, never between kinds.
@@ -281,6 +313,17 @@ export class ChartBoardSectionComponent {
   private defaultBoss(): string {
     return this.bosses()[0]?.boss ?? '';
   }
+
+  /**
+   * The Boss dropdown: only cards that take the kind being added, so switching boss cannot land a
+   * pop item on Faust. The row's own boss always stays, so editing an old row never re-points it.
+   */
+  protected readonly formBossChoices = computed<ActivityChartBoss[]>(() => {
+    const kind = this.formKind();
+    const current = this.formBoss();
+    return this.bosses().filter(boss =>
+      boss.boss === current || (kind === 'Drop' ? boss.takesDropItems : boss.takesPopItems));
+  });
 
   /**
    * The pop items the selected boss takes, straight off the payload — the server's catalog is the
@@ -463,19 +506,37 @@ export class ChartBoardSectionComponent {
     }
   }
 
-  // No boss argument any more: the per-card "Add one" buttons that used to preselect one are gone,
-  // and the form opens on the board's first card like any other fresh add.
+  /** Whether the open form is a fresh add for exactly this card and kind - its button then reads Close. */
+  protected isAddingTo(boss: string, kind: ChartItemKind): boolean {
+    return this.showForm() && this.editingItemId() === null
+      && this.formKind() === kind && this.formBoss() === boss;
+  }
+
   /**
-   * Opens the form for one kind, or closes it if that kind's button is pressed again.
+   * A card's add button: opens the form on that card and kind, or closes it if the same button is
+   * pressed again. Any other card's button re-opens it for that card instead.
    *
-   * Switching from the pop button to the drop button while the form is open RE-OPENS rather than
-   * closing: pressing "Add drop item" should always leave a drop form on screen.
+   * The form sits at the top of the board, which can be well above the card clicked, so it is
+   * scrolled into view once it has rendered.
    */
-  protected toggleForm(kind: ChartItemKind = 'Pop'): void {
-    const opening = !this.showForm() || this.editingItemId() !== null || this.formKind() !== kind;
+  protected toggleFormFor(boss: string, kind: ChartItemKind): void {
+    const closing = this.isAddingTo(boss, kind);
     this.resetForm();
+    if (closing) {
+      this.showForm.set(false);
+      return;
+    }
     this.formKind.set(kind);
-    this.showForm.set(opening);
+    this.formBoss.set(boss);
+    this.showForm.set(true);
+    this.revealForm();
+  }
+
+  /** afterNextRender for the reason the event queue panel gives: a zero-delay timer can beat the render. */
+  private revealForm(): void {
+    afterNextRender(() => {
+      this.formCard()?.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, { injector: this.injector });
   }
 
   protected beginEdit(item: ActivityChartPopItem): void {
@@ -493,6 +554,8 @@ export class ChartBoardSectionComponent {
     this.formCredits.set(new Set(item.credits.map(credit => credit.characterName.trim().toLowerCase())));
     this.formCreditsOpen.set(false);
     this.showForm.set(true);
+    // Edit is pressed in the holdings table, below every card - the form is far off screen.
+    this.revealForm();
   }
 
   protected resetForm(): void {

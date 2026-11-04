@@ -78,11 +78,13 @@ public sealed partial class ActivityDataController
         // would make every one of them permanently uneditable. Checked against the ROUTE's board for
         // the reason above - the body has no say in which board it lands on, so it has none in
         // whether that board allows the kind either. And it is checked server-side because "the
-        // client does not render the form" is not a gate.
+        // client does not render the form" is not a gate. Per CARD, not just per board: Faust takes
+        // drops only, and its card has no pop button to say so.
         var catalog = ChartBoardCatalog.Find(board)!;
-        if (!(draft.Kind == ChartItemKinds.Drop ? catalog.AllowsDropItems : catalog.AllowsPopItems))
+        if (!catalog.TakesItemKind(catalog.Find(draft.Boss)!, draft.Kind))
         {
-            return BadRequest(new { error = $"The {catalog.Label} board does not take items of that kind." });
+            var kindName = draft.Kind == ChartItemKinds.Drop ? "drop" : "pop";
+            return BadRequest(new { error = $"{draft.Boss} does not take {kindName} items." });
         }
 
         var holder = await ResolveChartHolderAsync(linkshellId, draft, cancellationToken);
@@ -306,7 +308,9 @@ public sealed partial class ActivityDataController
                     keyItemsByBoss.TryGetValue(boss.Name, out var keyItem) ? keyItem.Name : null,
                     keyItem?.HaveCount ?? 0,
                     keyItem?.TotalMembers ?? 0,
-                    keyItem?.MissingCharacterNames ?? Array.Empty<string>());
+                    keyItem?.MissingCharacterNames ?? Array.Empty<string>(),
+                    board.TakesItemKind(boss, ChartItemKinds.Pop),
+                    board.TakesItemKind(boss, ChartItemKinds.Drop));
             })
             .ToList();
 
