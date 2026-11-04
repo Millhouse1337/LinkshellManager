@@ -16,14 +16,6 @@
 /* The page header (.we-header/.we-title/.we-subtitle/.we-header-actions) went away with the
    standalone tab — these sections now sit under the Event System tab's own headings. */
 
-/* Crystal */
-.we-crystal {
-  width: 12px; height: 12px; transform: rotate(45deg); border-radius: 2px; flex: 0 0 auto;
-  background: linear-gradient(135deg, var(--accent-hover), var(--accent));
-  border: 1px solid rgba(180, 200, 255, 0.7);
-  box-shadow: 0 0 10px rgba(79, 124, 255, 0.6), inset 0 0 4px rgba(255, 255, 255, 0.4);
-}
-
 /* Cards */
 .we-tab .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
@@ -46,58 +38,29 @@
 
 .we-empty { padding: 18px; color: var(--muted); font-size: 13px; }
 
-/* Event card */
+/* Event card. The shell matches the live camp card (.event-card--live in styles/_event-cards.scss)
+   and the header uses that card's global .event-card__* classes, so only the <details> plumbing
+   lives here. No padding on the card itself: the body sections carry their own. */
 .we-card {
-  border: 1px solid rgba(79, 124, 255, 0.45); border-radius: 16px; overflow: hidden;
-  background: var(--surface);
-  box-shadow: 0 0 0 1px rgba(79, 124, 255, 0.1), 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 34px -12px rgba(79, 124, 255, 0.5);
+  border: 1px solid var(--accent); border-radius: var(--r-md); overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
   margin-bottom: 14px;
 }
-.we-card--closed { border-color: var(--border); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4); }
-/* The head IS the card's <summary>, so the whole bar toggles it. Grid rather than flex so the
-   chevron sits DEAD CENTRE of the bar — under flex it would drift with the width of the title
-   and the counts either side of it. */
-.we-card__head {
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
-  padding: 16px 18px; border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--surface-2), var(--surface));
-  cursor: pointer; list-style: none; user-select: none;
-}
+.we-card--closed { border-color: var(--border); }
+/* The head IS the card's <summary>, so the whole top of the card toggles it. Same padding as the
+   camp card, with its tighter bottom. */
+.we-card__head { display: block; padding: 14px 14px 10px; cursor: pointer; list-style: none; user-select: none; }
 .we-card__head::-webkit-details-marker { display: none; }
-.we-card:not([open]) > .we-card__head { border-bottom: none; }
-.we-card__head:hover .we-card__caret { color: var(--fg); border-color: var(--accent); }
-.we-card__caret {
-  justify-self: center;
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; border-radius: 50%;
-  color: var(--muted); background: var(--bg-elev); border: 1px solid var(--border);
-  transition: transform 0.18s ease, color 0.15s ease, border-color 0.15s ease;
-}
-.we-card__caret svg { width: 18px; height: 18px; }
+.we-card[open] > .we-card__head { border-bottom: 1px solid var(--border); }
+.we-card__tags { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* A span, so it needs its own width for the global --center margin to centre it. */
+.we-card__caret { width: fit-content; }
+.we-card__head:hover .we-card__caret { color: var(--fg); }
 .we-card[open] > .we-card__head .we-card__caret { transform: rotate(180deg); }
-.we-card__title-group { justify-self: start; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.we-card__title { font-size: 17px; font-weight: 800; color: var(--fg); margin: 0; }
 /* An event made from a snapshot (Make New Event From This Post), not from ending a camp. */
 .we-from-snapshot { display: inline-flex; align-items: center; gap: 4px; background: var(--violet-weak); color: var(--violet); border-color: transparent; }
 .we-from-snapshot svg { width: 12px; height: 12px; }
-.we-card__meta, .we-count {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: 999px; font-size: 12px;
-  background: var(--bg-elev); border: 1px solid var(--border);
-}
-.we-card__meta { color: var(--muted); }
-.we-count { color: var(--muted); font-weight: 600; padding: 5px 11px; }
-.we-card__meta svg, .we-count svg { width: 14px; height: 14px; }
-.we-card__meta svg { color: var(--muted); }
-.we-count--members svg { color: var(--accent); }
-.we-count--snapshots svg { color: #38bdf8; }
-.we-card__counts { justify-self: end; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-
-/* Narrow: no room for a centre column — title + chevron on one row, counts wrap below. */
-@media (max-width: 760px) {
-  .we-card__head { grid-template-columns: 1fr auto; }
-  .we-card__counts { grid-column: 1 / -1; justify-self: start; }
-}
 
 /* Controls */
 .we-card__controls {
@@ -397,6 +360,9 @@
    margin for the loose case, so zero it out and let the flex gap space them. */
 .we-closed-list,
 .we-open-list { padding: 14px 18px; display: flex; flex-direction: column; gap: 14px; }
+/* The open list sits straight in Current Field Activity, so it runs edge to edge with the camp
+   cards and keeps their 12px stack gap. (The gap above it, after a camp card, is in _event-cards.) */
+.we-open-list { padding: 0; gap: 12px; }
 .we-closed-list .we-card,
 .we-open-list .we-card { margin-bottom: 0; }
 

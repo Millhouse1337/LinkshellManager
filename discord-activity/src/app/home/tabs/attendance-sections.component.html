@@ -193,73 +193,78 @@
        full roster table, so the page opens as a scannable list of headers. No `open` binding at
        all: Angular would re-assert it on change detection and fight the user's own toggling. -->
   <details class="we-card" [class.we-card--closed]="closed">
+    <!-- Laid out like the live camp card it sits under, with the same global .event-card__* classes:
+         the title block on the left, a status readout in the middle where the camp shows its
+         window, the counts on the right, and the chevron centred underneath. -->
     <summary class="we-card__head" title="Click to expand or collapse this event">
-      <div class="we-card__title-group">
-        <span class="we-crystal" aria-hidden="true"></span>
-        <h3 class="we-card__title">{{ event.name || 'Attendance Event' }}</h3>
-        <span class="we-card__meta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-            <circle cx="12" cy="12" r="9"/>
-            <path d="M12 7v5l3 2"/>
-          </svg>
-          {{ formatDate(event.firstCapturedAtUtc) }}
-        </span>
-        @if (event.isCamp || event.sourceEventId) {
-          <span class="tag accent" title="Created by ending an HNM camp — each member's DKP is already filled in from the camp's scoring. Review it, then Post to pay.">Camp</span>
-        } @else {
-          <!-- The only other way an attendance event is made: Make New Event From This Post, on an
-               unlinked /lsm now snapshot (app or addon). -->
-          <span class="tag we-from-snapshot" title="Made from a /lsm now snapshot with Make New Event From This Post, not by ending a camp.">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M4 8h3l2-3h6l2 3h3v11H4z"/>
-              <circle cx="12" cy="13" r="3.5"/>
-            </svg>
-            From snapshot
+      <div class="event-card__hero">
+        <div>
+          <div class="event-card__title-row">
+            <strong>{{ event.name || 'Attendance Event' }}</strong>
+            <span class="we-card__tags">
+              @if (event.isCamp || event.sourceEventId) {
+                <span class="tag accent" title="Created by ending an HNM camp — each member's DKP is already filled in from the camp's scoring. Review it, then Post to pay.">Camp</span>
+              } @else {
+                <!-- The only other way an attendance event is made: Make New Event From This Post, on an
+                     unlinked /lsm now snapshot (app or addon). -->
+                <span class="tag we-from-snapshot" title="Made from a /lsm now snapshot with Make New Event From This Post, not by ending a camp.">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 8h3l2-3h6l2 3h3v11H4z"/>
+                    <circle cx="12" cy="13" r="3.5"/>
+                  </svg>
+                  From snapshot
+                </span>
+              }
+              @if (event.allianceNumbers.length > 1) {
+                <!-- More than one is the healthy shape for a big camp: every alliance fielded its own
+                     poster. One alliance on a 36-person turnout means half the raid isn't counted. -->
+                <span class="tag we-alliance-chip">{{ event.allianceNumbers.length }} alliances</span>
+              }
+              @if (event.pendingSnapshotCount > 0) {
+                <span class="tag warning">{{ event.pendingSnapshotCount }} pending</span>
+              }
+              @if (closed) {
+                <span class="tag">Closed</span>
+              }
+            </span>
+          </div>
+          <p>Attendance | {{ eventZone(event) || 'Zone unknown' }}</p>
+          <p class="event-card__when">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            Captured {{ formatDate(event.firstCapturedAtUtc) }}
+          </p>
+          @if (event.createdByCharacterName) {
+            <p class="event-card__actor"><span class="event-card__actor-label">Event Creator:</span> {{ event.createdByCharacterName }}</p>
+          }
+        </div>
+        <div class="event-card__global-timer">
+          <span class="event-card__global-timer-label">DKP Sheet</span>
+          <span class="num event-card__global-timer-value">{{ sheetStatus(event) }}</span>
+        </div>
+        <div class="event-card__meta">
+          <span class="event-card__metric">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-1a4 4 0 0 0-3-3.85"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            {{ event.combinedMemberCount }} {{ event.combinedMemberCount === 1 ? 'member' : 'members' }}
           </span>
-        }
-        @if (event.allianceNumbers.length > 1) {
-          <!-- More than one is the healthy shape for a big camp: every alliance fielded its own
-               poster. One alliance on a 36-person turnout means half the raid isn't counted. -->
-          <span class="tag we-alliance-chip">{{ event.allianceNumbers.length }} alliances</span>
-        }
-        @if (event.pendingSnapshotCount > 0) {
-          <span class="tag warning">{{ event.pendingSnapshotCount }} pending</span>
-        }
-        @if (closed) {
-          <span class="tag">Closed</span>
-        }
+          <!-- Said on the collapsed header, because that is where an officer decides whether a card
+               needs opening at all. The roster inside marks which ones. -->
+          @if ((event.unregisteredMemberCount ?? 0) > 0) {
+            <span class="event-card__metric we-count--unregistered"
+                  title="These characters are not on the linkshell roster, so posting this camp pays them nothing.">
+              {{ event.unregisteredMemberCount }} not registered
+            </span>
+          }
+          <span class="event-card__metric">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg>
+            {{ event.snapshotCount }} {{ event.snapshotCount === 1 ? 'snapshot' : 'snapshots' }}
+          </span>
+        </div>
       </div>
-      <!-- Expand/collapse affordance, centred between the title and the counts. The whole
-           summary bar is clickable; this is the visual cue for it. -->
-      <span class="we-card__caret" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m6 9 6 6 6-6"/>
-        </svg>
+      <!-- The camp card's centred chevron. A span, not a button: the whole summary already toggles
+           the card. `collapsed` stops the global rule flipping it; the [open] rule flips it here. -->
+      <span class="card-collapse-toggle card-collapse-toggle--center collapsed we-card__caret" aria-hidden="true">
+        <svg class="card-collapse-toggle__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </span>
-      <div class="we-card__counts">
-        <span class="we-count we-count--members">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-            <circle cx="12" cy="8" r="4"/>
-            <path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>
-          </svg>
-          {{ event.combinedMemberCount }} {{ event.combinedMemberCount === 1 ? 'member' : 'members' }}
-        </span>
-        <!-- Said on the collapsed header, because that is where an officer decides whether a card
-             needs opening at all. The roster inside marks which ones. -->
-        @if ((event.unregisteredMemberCount ?? 0) > 0) {
-          <span class="we-count we-count--unregistered"
-                title="These characters are not on the linkshell roster, so posting this camp pays them nothing.">
-            {{ event.unregisteredMemberCount }} not registered
-          </span>
-        }
-        <span class="we-count we-count--snapshots">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
-            <rect x="3" y="5" width="18" height="14" rx="2"/>
-            <path d="M3 9h18"/>
-          </svg>
-          {{ event.snapshotCount }} {{ event.snapshotCount === 1 ? 'snapshot' : 'snapshots' }}
-        </span>
-      </div>
     </summary>
 
     @if (model.canManage) {

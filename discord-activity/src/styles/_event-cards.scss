@@ -34,6 +34,12 @@
   margin-top: 12px;
 }
 
+// The open attendance events follow the live camp cards on Current Field Activity. The gap goes on
+// the list inside the component, not its host, because the host renders even with no events.
+.event-card + app-attendance-sections .we-open-list {
+  margin-top: 12px;
+}
+
 // Collapsible event/queue cards. The chevron lives at the far right of
 // the card header; rotating it via .collapsed gives the visual cue that
 // the card is hidden.

@@ -215,6 +215,19 @@ export class AttendanceSectionsComponent {
     }).format(new Date(value));
   }
 
+  // The card header's "Attendance | <zone>" line: the first capture that names a zone.
+  protected eventZone(event: ActivityWindowEvent): string | null {
+    const zone = event.snapshots.find(s => !!s.primaryZone)?.primaryZone;
+    return zone ? zone.split('_').join(' ') : null;
+  }
+
+  // The big readout in the middle of the card header, where a live camp shows its window.
+  protected sheetStatus(event: ActivityWindowEvent): string {
+    if (this.isPosted(event)) return 'posted';
+    if (event.pendingSnapshotCount > 0) return `${event.pendingSnapshotCount} pending`;
+    return 'not posted';
+  }
+
   protected jobs(row: ActivityWindowSnapshotEntry | ActivityWindowCombinedMember): string {
     const isReal = (job?: string | null): boolean =>
       !!job && job.toUpperCase() !== 'NONE';
