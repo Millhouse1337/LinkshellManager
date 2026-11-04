@@ -226,13 +226,19 @@ export class AttendanceSectionsComponent {
     return event.isCamp || event.sourceEventId ? 'Camp generated Event' : 'LSM Now generated Event';
   }
 
-  // The big centre readout, worded like the live camp card's: how many windows have a capture.
-  // A window two alliances both posted counts once; an ignored capture doesn't count, a pending
-  // one does (it was captured, it just isn't confirmed yet). Ungridded captures have no window
-  // number, so each of those counts on its own.
-  protected windowsCapturedLabel(event: ActivityWindowEvent): string {
-    const counted = this.windowSnapshots(event).filter(s => s.snapshotStatus === 'Active' || s.isPending);
-    const n = new Set(counted.map(s => s.windowNumber ?? `capture-${s.id}`)).size;
+  // The big centre readout. An LSM Now event counts its posts, Misc included -- most of what lands
+  // on one is Misc, so a window count read 0. A camp-made event says how many windows have a
+  // capture, worded like the live camp card's, with a window two alliances both posted counted
+  // once. Either way an ignored capture doesn't count and a pending one does (it was captured, it
+  // just isn't confirmed yet). Ungridded captures have no window number, so each counts on its own.
+  protected readoutLabel(event: ActivityWindowEvent): string {
+    const counts = (s: ActivityWindowSnapshot) => s.snapshotStatus === 'Active' || s.isPending;
+    if (!(event.isCamp || event.sourceEventId)) {
+      const posts = event.snapshots.filter(counts).length;
+      return `${posts} ${posts === 1 ? 'Post' : 'Posts'}`;
+    }
+    const windows = this.windowSnapshots(event).filter(counts);
+    const n = new Set(windows.map(s => s.windowNumber ?? `capture-${s.id}`)).size;
     return `${n} ${n === 1 ? 'Window' : 'Windows'} Captured`;
   }
 
