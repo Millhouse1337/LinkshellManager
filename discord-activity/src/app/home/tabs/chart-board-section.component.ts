@@ -9,6 +9,7 @@ import {
   afterNextRender,
   computed,
   inject,
+  input,
   signal,
   viewChild
 } from '@angular/core';
@@ -25,6 +26,9 @@ import type {
 import { ChartHoldingsSectionComponent } from './chart-holdings-section.component';
 import { ChartKeyItemSectionComponent } from './chart-key-item-section.component';
 import { ChartWishlistSectionComponent } from './chart-wishlist-section.component';
+
+/** The Pop/Drop Items | Holdings tabs on Sky and Sea. */
+export type ChartView = 'items' | 'holdings';
 
 /** One heading and the cards under it. Local, like ChartsSectionOption in charts-tab.component.ts. */
 interface ChartBossGroup {
@@ -273,17 +277,16 @@ export class ChartBoardSectionComponent {
   // ---- Pop/Drop Items | Holdings tabs ----
 
   /**
-   * Which half of the board is showing: the cards, or the holdings table. The template HIDES the
-   * other half rather than unmounting it, so an expanded farmer list survives a switch. Kept when
-   * the board changes, so Sky Holdings → Sea lands on Sea Holdings.
+   * Which half of the board is showing: the cards, or the holdings table. The switch itself lives
+   * in the Charts page header (ChartsTabComponent); null means this board has no tabs, so both
+   * halves show. The template HIDES the other half rather than unmounting it, so an expanded
+   * farmer list survives a switch.
    */
-  protected readonly view = signal<'items' | 'holdings'>('items');
+  readonly view = input<ChartView | null>(null);
 
-  /** Only Sky and Sea split into tabs - the two boards that record drops. The rest keep one page. */
-  protected readonly hasViewTabs = computed(() => this.features().dropItems);
-
-  protected showsView(view: 'items' | 'holdings'): boolean {
-    return !this.hasViewTabs() || this.view() === view;
+  protected showsView(view: ChartView): boolean {
+    const selected = this.view();
+    return selected === null || selected === view;
   }
 
   private readonly injector = inject(Injector);

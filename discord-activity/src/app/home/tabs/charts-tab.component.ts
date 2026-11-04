@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, model } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, model, signal } from '@angular/core';
 
+import { ChartBoardService } from '../../discord/chart-board.service';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
-import { ChartBoardSectionComponent } from './chart-board-section.component';
+import { ChartBoardSectionComponent, type ChartView } from './chart-board-section.component';
 
 /** One entry in the Charts sub-nav. Unbuilt boards render disabled rather than hidden. */
 interface ChartsSectionOption {
@@ -50,10 +51,27 @@ export function chartsSectionFromSlug(slug: string | null | undefined): string {
 })
 export class ChartsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
+  private readonly charts = inject(ChartBoardService);
 
   protected readonly sections = CHARTS_SECTIONS;
 
   readonly section = model<string>(CHARTS_SECTIONS[0].key, { alias: 'view' });
+
+  /**
+   * The Pop/Drop Items | Holdings switch. Held HERE rather than in the board section so it can sit
+   * in this page's header, at the top right. Kept across a board change, so Sky Holdings -> Sea
+   * lands on Sea Holdings.
+   */
+  protected readonly chartView = signal<ChartView>('items');
+
+  /** Only Sky and Sea split into tabs - the two boards that record drops. The rest keep one page. */
+  protected readonly hasViewTabs = computed(
+    () => this.charts.board(this.section())?.features.dropItems === true
+  );
+
+  protected readonly boardLabel = computed(
+    () => this.charts.board(this.section())?.boardLabel || this.section()
+  );
 
   protected readonly linkshellId = computed<number | null>(() =>
     this.activity.overview()?.appUser?.primaryLinkshellId

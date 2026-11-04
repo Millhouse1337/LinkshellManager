@@ -3,6 +3,22 @@
     <div class="section-label">Content</div>
     <div class="section-title">Charts</div>
   </div>
+  <!-- The board's Pop/Drop Items | Holdings switch, up here at the top of the page like the Events
+       and Auction switches. Only on boards that split into tabs (Sky, Sea). -->
+  @if (hasViewTabs()) {
+    <div class="section-head-right">
+      <div class="view-tabs" role="tablist" aria-label="Chart view">
+        <button type="button" class="view-tab" role="tab"
+          [class.active]="chartView() === 'items'"
+          [attr.aria-selected]="chartView() === 'items'"
+          (click)="chartView.set('items')">Pop/Drop Items</button>
+        <button type="button" class="view-tab" role="tab"
+          [class.active]="chartView() === 'holdings'"
+          [attr.aria-selected]="chartView() === 'holdings'"
+          (click)="chartView.set('holdings')">{{ boardLabel() }} Holdings</button>
+      </div>
+    </div>
+  }
 </div>
 
 <div class="chart-subnav" role="tablist" aria-label="Chart boards">
@@ -24,7 +40,8 @@
 </div>
 
 @if (linkshellId() !== null) {
-  <app-chart-board-section [linkshellId]="linkshellId()" [board]="section()" />
+  <app-chart-board-section [linkshellId]="linkshellId()" [board]="section()"
+                           [view]="hasViewTabs() ? chartView() : null" />
 } @else {
   <div class="empty-state">Join a linkshell to track pop items.</div>
 }

@@ -64,21 +64,9 @@
     <div class="section-title">{{ chart()?.boardLabel || boardKey() }} Tracker</div>
   </div>
 
-  <!-- The view switch on top, the same control the Events and Auction pages use. No add buttons
-       up here: each card carries its own, one per kind it takes. -->
-  <div class="section-head-right section-head-right--stacked">
-    @if (hasViewTabs()) {
-      <div class="view-tabs" role="tablist" aria-label="Chart view">
-        <button type="button" class="view-tab" role="tab"
-          [class.active]="view() === 'items'"
-          [attr.aria-selected]="view() === 'items'"
-          (click)="view.set('items')">Pop/Drop Items</button>
-        <button type="button" class="view-tab" role="tab"
-          [class.active]="view() === 'holdings'"
-          [attr.aria-selected]="view() === 'holdings'"
-          (click)="view.set('holdings')">{{ chart()?.boardLabel || boardKey() }} Holdings</button>
-      </div>
-    }
+  <!-- No add buttons up here: each card carries its own, one per kind it takes. The Pop/Drop Items
+       | Holdings switch is in the Charts page header above. -->
+  <div class="section-head-right">
     @if (chart()?.lastUpdatedUtc) {
       <span class="chart-updated">Updated {{ chart()!.lastUpdatedUtc | date:'short' }}</span>
     }
