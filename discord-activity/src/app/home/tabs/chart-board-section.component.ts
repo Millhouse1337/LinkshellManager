@@ -17,6 +17,7 @@ import { FormsModule } from '@angular/forms';
 
 import { ChartBoardService } from '../../discord/chart-board.service';
 import type {
+  ActivityChartBoard,
   ActivityChartBoss,
   ActivityChartCreditInput,
   ActivityChartPopItem,
@@ -27,8 +28,45 @@ import { ChartHoldingsSectionComponent } from './chart-holdings-section.componen
 import { ChartKeyItemSectionComponent } from './chart-key-item-section.component';
 import { ChartWishlistSectionComponent } from './chart-wishlist-section.component';
 
-/** The Pop/Drop Items | Holdings tabs on Sky and Sea. */
-export type ChartView = 'items' | 'holdings';
+/** The parts of a board page a tab can show. */
+export type ChartSection = 'cards' | 'holdings' | 'requests' | 'progress';
+
+/** One tab in the Charts page header, and the parts of the board it shows. */
+export interface ChartViewTab {
+  key: string;
+  label: string;
+  sections: readonly ChartSection[];
+}
+
+/**
+ * The tabs a board splits into, or none for a board that keeps one long page (Limbus, HENM).
+ * One function, read by the Charts page to draw the switch and to tell this component what to show,
+ * so the two cannot disagree about which part sits under which tab.
+ *
+ * Keys are shared where the meaning is, so Sky Holdings -> Sea lands on Sea Holdings.
+ */
+export function chartViewTabs(board: ActivityChartBoard | null): ChartViewTab[] {
+  if (!board) {
+    return [];
+  }
+  // Sky and Sea - the two boards that record drops.
+  if (board.features.dropItems) {
+    return [
+      { key: 'items', label: 'Pop/Drop Items', sections: ['cards'] },
+      { key: 'holdings', label: `${board.boardLabel} Holdings`, sections: ['holdings'] }
+    ];
+  }
+  // Dynamis - the one board with key items. The zone cards each show their key item, so they are
+  // the Key Item tab; the old pop item holdings stay under them, where they were.
+  if (board.features.keyItems) {
+    return [
+      { key: 'keyItem', label: 'Key Item', sections: ['cards', 'holdings'] },
+      { key: 'requests', label: 'Item Request', sections: ['requests'] },
+      { key: 'progress', label: 'Member Progress', sections: ['progress'] }
+    ];
+  }
+  return [];
+}
 
 /** One heading and the cards under it. Local, like ChartsSectionOption in charts-tab.component.ts. */
 interface ChartBossGroup {
@@ -274,19 +312,19 @@ export class ChartBoardSectionComponent {
     popItems: true, dropItems: false, wishlist: false, keyItems: false
   });
 
-  // ---- Pop/Drop Items | Holdings tabs ----
+  // ---- tabs ----
 
   /**
-   * Which half of the board is showing: the cards, or the holdings table. The switch itself lives
-   * in the Charts page header (ChartsTabComponent); null means this board has no tabs, so both
-   * halves show. The template HIDES the other half rather than unmounting it, so an expanded
-   * farmer list survives a switch.
+   * The parts of the board the selected tab shows. The switch itself lives in the Charts page
+   * header (ChartsTabComponent, via chartViewTabs); null means this board has no tabs, so every
+   * part shows. The template HIDES the other parts rather than unmounting them, so an expanded
+   * farmer list or a half-typed request survives a switch.
    */
-  readonly view = input<ChartView | null>(null);
+  readonly visibleSections = input<readonly ChartSection[] | null>(null);
 
-  protected showsView(view: ChartView): boolean {
-    const selected = this.view();
-    return selected === null || selected === view;
+  protected shows(section: ChartSection): boolean {
+    const visible = this.visibleSections();
+    return visible === null || visible.includes(section);
   }
 
   private readonly injector = inject(Injector);

@@ -410,9 +410,10 @@
   line up sideways. A container per column would let each size its own cards and the tiers would
   drift apart.
 -->
-<!-- The Pop/Drop Items tab. Hidden rather than removed, like the Events views. The add/edit form
-     sits above both tabs, so Edit in the holdings table opens it without switching tab. -->
-<div [hidden]="!showsView('items')">
+<!-- The cards: Sky and Sea's Pop/Drop Items tab, Dynamis's Key Item tab. Hidden rather than
+     removed, like the Events views. The add/edit form sits above every tab, so Edit in the holdings
+     table opens it without switching tab. -->
+<div [hidden]="!shows('cards')">
 @if (pathGroups().length) {
   <div class="chart-paths" [style.--chart-path-rows]="pathRowCount()">
     @for (group of pathGroups(); track group.label) {
@@ -455,7 +456,7 @@
        rows read two ways, so the two halves of the page cannot disagree. It owns the row buttons —
        Edit comes back here because the form it opens lives at the top of this board.
        On Sky and Sea this is the Holdings tab. -->
-  <div [hidden]="!showsView('holdings')">
+  <div [hidden]="!shows('holdings')">
     <app-chart-holdings-section
       [bosses]="loaded.bosses"
       [boardLabel]="loaded.boardLabel"
@@ -466,15 +467,21 @@
 
   <!-- Below the holdings table, matching the website. Both ride in THIS payload rather than
        fetching separately, so a card badge and the list under it are always the same rows. -->
+  <!-- Dynamis's Item Request tab. -->
   @if (features().wishlist) {
-    <app-chart-wishlist-section
-      [board]="loaded"
-      [canManage]="canManage()" />
+    <div [hidden]="!shows('requests')">
+      <app-chart-wishlist-section
+        [board]="loaded"
+        [canManage]="canManage()" />
+    </div>
   }
 
+  <!-- Dynamis's Member Progress tab. -->
   @if (features().keyItems) {
-    <app-chart-key-item-section
-      [board]="loaded"
-      [canManage]="canManage()" />
+    <div [hidden]="!shows('progress')">
+      <app-chart-key-item-section
+        [board]="loaded"
+        [canManage]="canManage()" />
+    </div>
   }
 }

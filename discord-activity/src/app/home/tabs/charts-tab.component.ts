@@ -3,7 +3,11 @@ import { ChangeDetectionStrategy, Component, computed, inject, model, signal } f
 
 import { ChartBoardService } from '../../discord/chart-board.service';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
-import { ChartBoardSectionComponent, type ChartView } from './chart-board-section.component';
+import {
+  ChartBoardSectionComponent,
+  chartViewTabs,
+  type ChartViewTab
+} from './chart-board-section.component';
 
 /** One entry in the Charts sub-nav. Unbuilt boards render disabled rather than hidden. */
 interface ChartsSectionOption {
@@ -57,21 +61,20 @@ export class ChartsTabComponent {
 
   readonly section = model<string>(CHARTS_SECTIONS[0].key, { alias: 'view' });
 
+  /** The board's tabs (see chartViewTabs); empty for a board that keeps one page. */
+  protected readonly viewTabs = computed(() => chartViewTabs(this.charts.board(this.section())));
+
   /**
-   * The Pop/Drop Items | Holdings switch. Held HERE rather than in the board section so it can sit
-   * in this page's header, at the top right. Kept across a board change, so Sky Holdings -> Sea
-   * lands on Sea Holdings.
+   * The selected tab's key. Held HERE rather than in the board section so the switch can sit in
+   * this page's header, at the top right. Kept across a board change, so Sky Holdings -> Sea lands
+   * on Sea Holdings; a key the new board does not have falls back to its first tab.
    */
-  protected readonly chartView = signal<ChartView>('items');
+  protected readonly chartView = signal('items');
 
-  /** Only Sky and Sea split into tabs - the two boards that record drops. The rest keep one page. */
-  protected readonly hasViewTabs = computed(
-    () => this.charts.board(this.section())?.features.dropItems === true
-  );
-
-  protected readonly boardLabel = computed(
-    () => this.charts.board(this.section())?.boardLabel || this.section()
-  );
+  protected readonly activeTab = computed<ChartViewTab | null>(() => {
+    const tabs = this.viewTabs();
+    return tabs.find(tab => tab.key === this.chartView()) ?? tabs[0] ?? null;
+  });
 
   protected readonly linkshellId = computed<number | null>(() =>
     this.activity.overview()?.appUser?.primaryLinkshellId
