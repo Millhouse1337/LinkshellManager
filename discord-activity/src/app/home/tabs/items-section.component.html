@@ -80,7 +80,7 @@
           <div class="entry-item__main">
             <strong>{{ item.itemName }}</strong>
             @if (item.itemType) { <span class="tag default">{{ item.itemType }}</span> }
-            <span class="tag default num">{{ item.quantity }}</span>
+            <span class="tag default num">Qty {{ item.quantity }}</span>
             @if (item.isSold) {
               <span class="tag accent">Sold {{ (item.soldPrice ?? 0).toLocaleString() }} gil</span>
             }
@@ -157,21 +157,22 @@
   @if (view() === 'stockpile' && chartHoldings().length > 0) {
     <div class="card-head" style="border-top: 1px solid var(--border)">
       <div class="card-title">From Charts</div>
-      <span class="tag default num">{{ chartHoldings().length }}</span>
+      <span class="tag default num">{{ chartHoldingGroups().length }}</span>
     </div>
+    <!-- One line per item: Charts' per-copy rows are added up here, holders listed together. -->
     <ul class="entry-list" style="border-top: 0">
-      @for (row of chartHoldings(); track row.id) {
+      @for (group of chartHoldingGroups(); track group.key) {
         <li class="entry-item">
           <div class="entry-item__main">
-            <strong>{{ row.itemName }}</strong>
-            <span class="tag default">{{ row.boardLabel }} &middot; {{ row.boss }}</span>
-            <span class="tag default">{{ row.kind === 'Drop' ? 'Drop' : 'Pop' }}</span>
-            <span class="tag default num">{{ row.quantity }}</span>
+            <strong>{{ group.itemName }}</strong>
+            <span class="tag default">{{ group.boardLabel }} &middot; {{ group.boss }}</span>
+            <span class="tag default">{{ group.kind === 'Drop' ? 'Drop Item' : 'Pop Item' }}</span>
+            <span class="tag default num">Qty {{ group.quantity }}</span>
           </div>
-          @if (row.notes) { <div class="entry-item__sub">{{ row.notes }}</div> }
+          @if (group.notes.length > 0) { <div class="entry-item__sub">{{ group.notes.join(' · ') }}</div> }
           <div class="entry-item__meta">
-            <span>Held by {{ row.heldByCharacterName || 'nobody yet' }}</span>
-            @if (activity.formatDateTime(row.updatedAt); as when) { <span>&middot; Updated {{ when }}</span> }
+            <span>Held by {{ holderList(group) }}</span>
+            @if (activity.formatDateTime(group.updatedAt); as when) { <span>&middot; Updated {{ when }}</span> }
             <span>&middot; Edit on Charts</span>
           </div>
         </li>

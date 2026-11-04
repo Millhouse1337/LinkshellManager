@@ -15,6 +15,19 @@ import type { ActivityChartHolding, ActivityItem, ActivityItemInput } from '../.
  * Items and gil belong side by side because one turns into the other: marking an item sold records the
  * gil against the treasury in the same transaction.
  */
+/** One line of the From Charts list: every copy of one item on one card, with who holds them. */
+interface ChartHoldingGroup {
+  key: string;
+  itemName: string;
+  boardLabel: string;
+  boss: string;
+  kind: string;
+  quantity: number;
+  holders: { name: string; quantity: number }[];
+  notes: string[];
+  updatedAt: string;
+}
+
 @Component({
   selector: 'app-items-section',
   imports: [CommonModule, FormsModule],
@@ -69,6 +82,62 @@ export class ItemsSectionComponent {
   });
 
   /**
+   * The chart holdings folded to one line per item: copies of the same item on the same card (and
+   * of the same kind) add up, and their holders are listed together. Charts keeps one row per copy
+   * in one person's hands because its question is "who is sitting on it"; Treasury's is "what do we
+   * have", where ten Summerstone lines read as ten different things.
+   *
+   * The server sends rows sorted board -> card -> item -> holder, so first-seen order keeps that.
+   */
+  protected readonly chartHoldingGroups = computed<ChartHoldingGroup[]>(() => {
+    const groups = new Map<string, ChartHoldingGroup>();
+    for (const row of this.chartHoldings()) {
+      const key = [row.board, row.boss, row.kind, row.itemName.trim().toLowerCase()].join('|');
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          key,
+          itemName: row.itemName,
+          boardLabel: row.boardLabel,
+          boss: row.boss,
+          kind: row.kind,
+          quantity: 0,
+          holders: [],
+          notes: [],
+          updatedAt: row.updatedAt
+        };
+        groups.set(key, group);
+      }
+      group.quantity += row.quantity ?? 0;
+
+      // One entry per person, with their copies counted, so a holder with two rows reads once.
+      const name = row.heldByCharacterName?.trim() || 'Unassigned';
+      const holder = group.holders.find(entry => entry.name.toLowerCase() === name.toLowerCase());
+      if (holder) {
+        holder.quantity += row.quantity ?? 0;
+      } else {
+        group.holders.push({ name, quantity: row.quantity ?? 0 });
+      }
+
+      const note = row.notes?.trim();
+      if (note && !group.notes.includes(note)) {
+        group.notes.push(note);
+      }
+      if ((row.updatedAt ?? '') > (group.updatedAt ?? '')) {
+        group.updatedAt = row.updatedAt;
+      }
+    }
+    return [...groups.values()];
+  });
+
+  /** "kiessssy, Ladicius (2)": each holder once, with a count only when they hold more than one. */
+  protected holderList(group: ChartHoldingGroup): string {
+    return group.holders
+      .map(holder => holder.quantity > 1 ? `${holder.name} (${holder.quantity})` : holder.name)
+      .join(', ');
+  }
+
+  /**
    * Names to suggest for "who sold it", read off the same overview payload the items come from.
    *
    * A datalist rather than a select: the seller is usually on the roster but not always — gil lands
@@ -98,7 +167,7 @@ export class ItemsSectionComponent {
   );
 
   /** Everything the Stockpile lists, chart holdings included, so the counts match the list. */
-  protected readonly stockpileCount = computed(() => this.stockpile().length + this.chartHoldings().length);
+  protected readonly stockpileCount = computed(() => this.stockpile().length + this.chartHoldingGroups().length);
 
   protected readonly totalQuantity = computed(() =>
     this.stockpile().reduce((sum, item) => sum + (item.quantity ?? 0), 0)
