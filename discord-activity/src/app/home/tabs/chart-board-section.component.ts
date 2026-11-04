@@ -39,7 +39,7 @@ export interface ChartViewTab {
 }
 
 /**
- * The tabs a board splits into, or none for a board that keeps one long page (HENM).
+ * The tabs a board splits into, or none for a board that keeps one long page.
  * One function, read by the Charts page to draw the switch and to tell this component what to show,
  * so the two cannot disagree about which part sits under which tab.
  *
@@ -69,6 +69,12 @@ export function chartViewTabs(board: ActivityChartBoard | null): ChartViewTab[] 
         { key: 'items', label: 'Drop Items', sections: ['cards'] },
         { key: 'holdings', label: 'Holdings', sections: ['holdings'] },
         { key: 'requests', label: 'Item Requests', sections: ['requests'] }
+      ];
+    // The tier ladder - each tier's pop item strip above its NMs - with the holdings table under it.
+    case 'HENM':
+      return [
+        { key: 'items', label: 'Pop Item Holdings', sections: ['cards', 'holdings'] },
+        { key: 'requests', label: 'Item Request', sections: ['requests'] }
       ];
     default:
       return [];
@@ -246,6 +252,14 @@ export class ChartBoardSectionComponent {
 
   protected sectionsFor(boss: string): ChartItemSection[] {
     return this.consolidatedItems()[boss] ?? [];
+  }
+
+  /**
+   * Whether a card shows an item table at all: it takes adds of some kind, or old rows still sit on
+   * it. A HENM NM (its tier's strip holds the pop items) and a Dynamis zone show none.
+   */
+  protected tracksItems(boss: ActivityChartBoss): boolean {
+    return boss.takesPopItems || boss.takesDropItems || boss.items.length > 0;
   }
 
   /** Distinct items with at least one row. A catalog line still at 0 lists nothing anyone holds. */

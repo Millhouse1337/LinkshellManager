@@ -2459,7 +2459,8 @@ export interface ActivityClaimCandidate {
 export type ChartThemeKey = string;
 
 /** Chooses the card layout. The data behind every kind is identical. */
-export type ChartBossKind = 'Standard' | 'MiniNm' | 'Final';
+/** 'Tier' is not a monster: a HENM tier's shared pop items, drawn as a strip under the tier heading. */
+export type ChartBossKind = 'Standard' | 'MiniNm' | 'Final' | 'Tier';
 
 /**
  * Whether a tracked row is something traded TO a boss or something that fell OFF one. The rows are

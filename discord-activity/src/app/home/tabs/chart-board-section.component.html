@@ -248,7 +248,20 @@
 </ng-template>
 
 <ng-template #bossCard let-boss>
-  @if (boss.kind !== 'Final') {
+  @if (boss.kind === 'Tier') {
+        <!-- A tier's SHARED pop items (HENM): one set opens every NM in the tier, so they sit in a
+             wide strip under the tier heading rather than on any one card. Same item table, same
+             "+ Add" button - its rows are filed under the tier's name. -->
+        <article class="card chart-card chart-tier-items" [ngClass]="'is-' + boss.themeKey">
+          <div class="card-head">
+            <div class="chart-card__name">{{ boss.boss }} pop items</div>
+            <span class="tag chart-count">{{ boss.totalQuantity }} held</span>
+          </div>
+          <div class="card-body chart-card__body">
+            <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
+          </div>
+        </article>
+  } @else if (boss.kind !== 'Final') {
         <article class="card chart-card" [ngClass]="'is-' + boss.themeKey">
           <div class="card-head">
             <div class="chart-card__heading">
@@ -282,9 +295,9 @@
             <!-- A Mini NM is farmed rather than popped, so stock is the headline, not item count. -->
             @if (boss.kind === 'MiniNm') {
               <span class="tag chart-count">{{ boss.totalQuantity }} held</span>
-            } @else if (!features().popItems && !features().dropItems) {
-              <!-- A board that tracks no items has nothing to count here. Dynamis and Limbus
-                   headline outstanding requests instead, which is what those cards are about now. -->
+            } @else if (!tracksItems(boss)) {
+              <!-- A card that records no items has nothing to count here. Dynamis and HENM's NMs
+                   headline outstanding requests instead, which is what those cards are about. -->
               <span class="tag chart-count">{{ boss.pendingRequestCount }} requested</span>
             } @else {
               <!-- Distinct items, matching the lines on the card — totalItems counts ROWS, and the
@@ -295,24 +308,28 @@
 
           <!-- Requests tied to THIS card. Board-level ones ("anywhere") count toward none, which is
                exactly what leaving the zone blank said. Skipped where the header already shows it. -->
-          @if (boss.pendingRequestCount && (features().popItems || features().dropItems)) {
+          @if (boss.pendingRequestCount && tracksItems(boss)) {
             <div class="chart-card__requests">
               <span class="tag accent">{{ boss.pendingRequestCount }} requested</span>
             </div>
           }
 
-          <div class="card-body chart-card__body">
-            <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
-          </div>
+          <!-- The item table and its totals only on a card that records items. A HENM NM's pop
+               items are its tier's strip, and a Dynamis zone records none at all. -->
+          @if (tracksItems(boss)) {
+            <div class="card-body chart-card__body">
+              <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
+            </div>
 
-          <!-- Every non-finale card, Mini NM included. A Mini NM used to skip this, which left it
-               shorter than the cards beside it and its grid row with a hole in it. Its header already
-               headlines stock, so "Total Qty" repeats that one number — a card the same shape as its
-               neighbours is worth the repetition. -->
-          <div class="chart-card__footer">
-            <span>Total Items: <strong>{{ trackedItemCount(boss.boss) }}</strong></span>
-            <span>Total Qty: <strong>{{ boss.totalQuantity }}</strong></span>
-          </div>
+            <!-- Every non-finale card that records items, Mini NM included. A Mini NM used to skip
+                 this, which left it shorter than the cards beside it and its grid row with a hole in
+                 it. Its header already headlines stock, so "Total Qty" repeats that one number — a
+                 card the same shape as its neighbours is worth the repetition. -->
+            <div class="chart-card__footer">
+              <span>Total Items: <strong>{{ trackedItemCount(boss.boss) }}</strong></span>
+              <span>Total Qty: <strong>{{ boss.totalQuantity }}</strong></span>
+            </div>
+          }
 
           <ng-container [ngTemplateOutlet]="cardKeyItem" [ngTemplateOutletContext]="{ $implicit: boss }" />
         </article>
@@ -350,22 +367,24 @@
                 }
               </div>
             </div>
-            @if (!features().popItems && !features().dropItems) {
+            @if (!tracksItems(boss)) {
               <span class="tag chart-count">{{ boss.pendingRequestCount }} requested</span>
             } @else {
               <span class="tag chart-count">{{ boss.totalItems }} {{ boss.totalItems === 1 ? 'Item' : 'Items' }}</span>
             }
           </div>
 
-          @if (boss.pendingRequestCount && (features().popItems || features().dropItems)) {
+          @if (boss.pendingRequestCount && tracksItems(boss)) {
             <div class="chart-card__requests">
               <span class="tag accent">{{ boss.pendingRequestCount }} requested</span>
             </div>
           }
 
-          <div class="card-body chart-card__body">
-            <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
-          </div>
+          @if (tracksItems(boss)) {
+            <div class="card-body chart-card__body">
+              <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
+            </div>
+          }
 
           @if (boss.rewards.length || boss.referenceNote) {
             <div class="chart-card__footer chart-rewards__bar">

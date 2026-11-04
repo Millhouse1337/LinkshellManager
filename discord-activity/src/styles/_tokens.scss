@@ -211,6 +211,12 @@
 
   --chart-henm-council:   var(--danger);  --chart-henm-council-weak:   var(--danger-weak);
 
+  // Each tier's pop item strip, in its tier's hue.
+  --chart-henm-tier-1:    var(--success); --chart-henm-tier-1-weak:    var(--success-weak);
+  --chart-henm-tier-2:    var(--gold);    --chart-henm-tier-2-weak:    var(--gold-weak);
+  --chart-henm-tier-3:    var(--orange);  --chart-henm-tier-3-weak:    var(--orange-weak);
+  --chart-henm-tier-4:    var(--danger);  --chart-henm-tier-4-weak:    var(--danger-weak);
+
   // Item-type / activity-feed dots (alias the family above).
   --dot-crafting: var(--cyan);
   --dot-loot:     var(--purple);

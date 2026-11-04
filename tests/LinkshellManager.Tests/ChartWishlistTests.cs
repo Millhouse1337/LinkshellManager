@@ -77,6 +77,17 @@ public class ChartWishlistTests
         Assert.Null(ChartWishlistService.NormalizeDraft(
             ChartBoardCatalog.Dynamis, "Byakko", "Ridill", 1, null));
 
+    // A HENM tier strip is where the tier's pop items are kept, not something loot drops from, so a
+    // request cannot name one. The NMs in the tier still can.
+    [Fact]
+    public void NormalizeDraft_RefusesATierStrip_ButTakesItsNms()
+    {
+        Assert.Null(ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Henm, "Tier 1", "Ridill", 1, null));
+        Assert.Equal(
+            "Ruinous Rocs",
+            ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Henm, "ruinous rocs", "Ridill", 1, null)!.Boss);
+    }
+
     [Fact]
     public void NormalizeDraft_RefusesABoardThatOffersNoWishlist()
     {

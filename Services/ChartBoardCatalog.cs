@@ -11,6 +11,16 @@ public static class ChartBossKinds
 
     /// <summary>The board's final encounter. Carries its reference notes in a reward drawer.</summary>
     public const string Final = "Final";
+
+    /// <summary>
+    /// Not a monster: the pop items a whole GROUP shares, drawn as a wide strip under the group's
+    /// heading instead of as a card. HENM's tiers - one set of pop items serves every NM in the tier.
+    ///
+    /// An entry in Bosses rather than a separate list, so its rows are ordinary rows filed under its
+    /// name ("Tier 1"): the add form, the holdings table and farming credit all work unchanged. It
+    /// never takes item requests - ChartWishlistService refuses it, and the request form hides it.
+    /// </summary>
+    public const string Tier = "Tier";
 }
 
 /// <summary>
@@ -918,6 +928,22 @@ public static class ChartBoardCatalog
     private const string HenmTier3 = "Tier 3";
     private const string HenmTier4 = "Tier 4";
 
+    // A tier's SHARED pop items: one set opens every NM in the tier, so they belong to the tier, not
+    // to any one card. First in its run, so the strip sits right under the tier heading. Rows are
+    // filed under its name ("Tier 1"), which is a stored key like any boss name.
+    //
+    // HENM.png is never drawn - a strip has no emblem - but every entry names a real file, which
+    // ChartBoardCatalogTests.EveryBossEmblem_ExistsOnDisk checks. Each tier's colour matches its
+    // NMs' (see _tokens.scss).
+    private static ChartBoss HenmTierItems(string name, string themeKey, string group) =>
+        new(name, themeKey, "HENM.png", ChartBossKinds.Tier, Group: group);
+
+    // An NM card. It records no items of its own - its tier's strip holds them - so it shows no
+    // item table and no add button.
+    private static ChartBoss HenmNm(
+        string name, string themeKey, string emblemFile, string group, string? subtitle = null) =>
+        new(name, themeKey, emblemFile, Subtitle: subtitle, Group: group, ItemForms: ChartBoardFeatures.None);
+
     private static readonly ChartBoard HenmBoard = new(
         Henm,
         "HENM",
@@ -930,32 +956,34 @@ public static class ChartBoardCatalog
         {
             // Tier 1 carries the zone it is camped in; the ladder above it is the same NMs wherever
             // they are found, so only this tier says where.
-            new ChartBoss("Ruinous Rocs", "henm-rocs", "Ruinous_Rocks.jpg",
-                Subtitle: "Rolanberry Fields", Group: HenmTier1),
-            new ChartBoss("Despotic Decapod", "henm-decapod", "Despotic_Decapod.jpg",
-                Subtitle: "Jugner Forest", Group: HenmTier1),
-            new ChartBoss("Sacred Scorpions", "henm-scorpions", "Sacred_Scorpions.jpg",
-                Subtitle: "Sauromugue Champaign", Group: HenmTier1),
+            HenmTierItems("Tier 1", "henm-tier-1", HenmTier1),
+            HenmNm("Ruinous Rocs", "henm-rocs", "Ruinous_Rocks.jpg", HenmTier1, "Rolanberry Fields"),
+            HenmNm("Despotic Decapod", "henm-decapod", "Despotic_Decapod.jpg", HenmTier1, "Jugner Forest"),
+            HenmNm("Sacred Scorpions", "henm-scorpions", "Sacred_Scorpions.jpg", HenmTier1, "Sauromugue Champaign"),
 
-            new ChartBoss("Mammet-9999", "henm-mammet", "Mammet_9999.jpg", Group: HenmTier2),
-            new ChartBoss("Tonberry Sovereign", "henm-tonberry", "Tonberry_Sovereign.jpg", Group: HenmTier2),
-            new ChartBoss("Ultimega", "henm-ultimega", "Ultimega.jpg", Group: HenmTier2),
+            HenmTierItems("Tier 2", "henm-tier-2", HenmTier2),
+            HenmNm("Mammet-9999", "henm-mammet", "Mammet_9999.jpg", HenmTier2),
+            HenmNm("Tonberry Sovereign", "henm-tonberry", "Tonberry_Sovereign.jpg", HenmTier2),
+            HenmNm("Ultimega", "henm-ultimega", "Ultimega.jpg", HenmTier2),
 
-            new ChartBoss("Primordial Behemoth", "henm-behemoth", "Primordial_Behemoth.jpg", Group: HenmTier3),
-            new ChartBoss("Minogame", "henm-minogame", "Minogame.jpg", Group: HenmTier3),
-            new ChartBoss("IO", "henm-io", "IO.jpg", Group: HenmTier3),
+            HenmTierItems("Tier 3", "henm-tier-3", HenmTier3),
+            HenmNm("Primordial Behemoth", "henm-behemoth", "Primordial_Behemoth.jpg", HenmTier3),
+            HenmNm("Minogame", "henm-minogame", "Minogame.jpg", HenmTier3),
+            HenmNm("IO", "henm-io", "IO.jpg", HenmTier3),
 
             // Standard rather than Final: a Final card with no Rewards list renders a reward strip
-            // reading "Rewards 0" and loses its totals footer. Same call Kirin makes.
-            new ChartBoss("Council of the Zilart", "henm-council", "Council_of_the_Zilart.jpg",
-                Subtitle: "The ladder ends here", Group: HenmTier4),
+            // reading "Rewards 0". Same call Kirin makes.
+            HenmTierItems("Tier 4", "henm-tier-4", HenmTier4),
+            HenmNm("Council of the Zilart", "henm-council", "Council_of_the_Zilart.jpg", HenmTier4,
+                "The ladder ends here"),
         })
     {
         CentersRows = true,
 
         // The only board that keeps its pop form AND takes requests. The ladder really is popped
         // with tracked items, and it is also the board people queue up wanting things off, so
-        // neither affordance replaces the other.
+        // neither affordance replaces the other. The pop form only reaches the four tier strips:
+        // every NM card narrows it away with ItemForms.
         Features = ChartBoardFeatures.PopItems | ChartBoardFeatures.Wishlist,
     };
 

@@ -151,6 +151,33 @@ public class ChartPopItemMigrationTests
     }
 
     /// <summary>
+    /// HenmPopItemsByTier moves every HENM NM's rows onto its OWN tier's strip - a swapped pair would
+    /// put Tier 1's shards on Tier 2 - and covers every NM, since none takes items any more.
+    /// </summary>
+    [Fact]
+    public void HenmByTier_MovesEachNmOntoItsOwnTier()
+    {
+        var henm = ChartBoardCatalog.Find(ChartBoardCatalog.Henm)!;
+
+        foreach (var (nm, tier) in HenmPopItemsByTier.Moves)
+        {
+            var card = henm.Find(nm);
+            var strip = henm.Find(tier);
+            Assert.True(card is not null, $"'{nm}' is not a HENM card.");
+            Assert.True(strip is { Kind: ChartBossKinds.Tier }, $"'{tier}' is not a HENM tier strip.");
+            Assert.Equal(card!.Group, strip!.Group);
+            Assert.DoesNotContain('%', nm);
+            Assert.DoesNotContain('_', nm);
+        }
+
+        Assert.Equal(
+            henm.Bosses.Where(boss => boss.Kind != ChartBossKinds.Tier)
+                .Select(boss => boss.Name)
+                .OrderBy(name => name, StringComparer.Ordinal),
+            HenmPopItemsByTier.Moves.Select(move => move.Nm).OrderBy(name => name, StringComparer.Ordinal));
+    }
+
+    /// <summary>
     /// DropOnlyChartCards turns Pop rows into drops on exactly the Sky cards that take no pop item.
     /// One missing leaves its pop rows under a heading with no add button; one extra turns Curtana,
     /// Ro'Maeve Water or Diorite into a drop.

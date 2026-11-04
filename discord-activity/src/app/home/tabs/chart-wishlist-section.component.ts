@@ -45,7 +45,10 @@ export class ChartWishlistSectionComponent {
 
   protected readonly requests = computed(() => this.boardSignal()?.wishlist.requests ?? []);
   protected readonly pendingCount = computed(() => this.boardSignal()?.wishlist.pendingCount ?? 0);
-  protected readonly bosses = computed(() => this.boardSignal()?.bosses ?? []);
+  // Not a HENM tier strip: that holds the tier's pop items, it drops nothing, and the server refuses
+  // a request naming one.
+  protected readonly bosses = computed(() =>
+    (this.boardSignal()?.bosses ?? []).filter(boss => boss.kind !== 'Tier'));
   protected readonly canManageBoard = computed(() => this.canManageSignal());
 
   /** Only the pending queue is ordered. A fulfilled request is settled and has no place in one. */

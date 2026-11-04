@@ -100,13 +100,15 @@ public sealed class ChartWishlistService
         string? canonicalBoss = null;
         if (!string.IsNullOrWhiteSpace(boss))
         {
-            canonicalBoss = ChartBoardCatalog.NormalizeBoss(catalog.Key, boss);
-            if (canonicalBoss is null)
+            var card = catalog.Find(boss);
+            if (card is null || card.Kind == ChartBossKinds.Tier)
             {
-                // Named a card and got it wrong. Refused rather than quietly downgraded to
-                // "anywhere": silently widening what somebody asked for is worse than saying no.
+                // Named a card and got it wrong - or named a tier's pop item strip, which is not
+                // somewhere loot comes from. Refused rather than quietly downgraded to "anywhere":
+                // silently widening what somebody asked for is worse than saying no.
                 return null;
             }
+            canonicalBoss = card.Name;
         }
 
         return new ChartWishlistDraft(

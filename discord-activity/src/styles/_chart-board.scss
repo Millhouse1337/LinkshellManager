@@ -109,6 +109,10 @@
 .panel-tab .is-henm-minogame  { --boss: var(--chart-henm-minogame);  --boss-weak: var(--chart-henm-minogame-weak); }
 .panel-tab .is-henm-io        { --boss: var(--chart-henm-io);        --boss-weak: var(--chart-henm-io-weak); }
 .panel-tab .is-henm-council   { --boss: var(--chart-henm-council);   --boss-weak: var(--chart-henm-council-weak); }
+.panel-tab .is-henm-tier-1    { --boss: var(--chart-henm-tier-1);    --boss-weak: var(--chart-henm-tier-1-weak); }
+.panel-tab .is-henm-tier-2    { --boss: var(--chart-henm-tier-2);    --boss-weak: var(--chart-henm-tier-2-weak); }
+.panel-tab .is-henm-tier-3    { --boss: var(--chart-henm-tier-3);    --boss-weak: var(--chart-henm-tier-3-weak); }
+.panel-tab .is-henm-tier-4    { --boss: var(--chart-henm-tier-4);    --boss-weak: var(--chart-henm-tier-4-weak); }
 
 /* ===== Boss cards ===== */
 /* auto-fit rather than a fixed column count: five or six across on a desktop web page, two or three
@@ -242,6 +246,9 @@
   margin-bottom: 14px;
 }
 .panel-tab .chart-rows > .chart-card { flex: 0 1 280px; }
+/* A HENM tier's pop item strip: a row of its own under the tier heading, as wide as the tier's three
+   NM cards beneath it (3 x 280px + 2 gaps), so it reads as belonging to all of them. */
+.panel-tab .chart-rows > .chart-tier-items { flex: 1 0 100%; max-width: 860px; }
 .panel-tab .chart-rows > .chart-group-heading { flex: 1 0 100%; margin-top: 6px; }
 .panel-tab .chart-rows > .chart-group-heading:first-child { margin-top: 0; }
 /* Zero-height full-width item — the only way to force a line break mid-row in a wrap container. */

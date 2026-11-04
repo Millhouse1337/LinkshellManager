@@ -732,15 +732,27 @@ public class ChartBoardCatalogTests
         Assert.True(henm.CentersRows);
         Assert.All(henm.Bosses, boss => Assert.False(boss.EndsRow));
 
+        // Each tier opens with its shared pop item strip, then its NMs.
         Assert.Equal(
             new[]
             {
-                new[] { "Ruinous Rocs", "Despotic Decapod", "Sacred Scorpions" },
-                new[] { "Mammet-9999", "Tonberry Sovereign", "Ultimega" },
-                new[] { "Primordial Behemoth", "Minogame", "IO" },
-                new[] { "Council of the Zilart" },
+                new[] { "Tier 1", "Ruinous Rocs", "Despotic Decapod", "Sacred Scorpions" },
+                new[] { "Tier 2", "Mammet-9999", "Tonberry Sovereign", "Ultimega" },
+                new[] { "Tier 3", "Primordial Behemoth", "Minogame", "IO" },
+                new[] { "Tier 4", "Council of the Zilart" },
             },
             RowsOf(henm));
+
+        // Pop items belong to the TIER: only the four strips take them, and no NM card takes any item.
+        Assert.All(henm.Bosses, boss =>
+        {
+            var isTier = boss.Kind == ChartBossKinds.Tier;
+            Assert.Equal(isTier, henm.TakesItemKind(boss, ChartItemKinds.Pop));
+            Assert.False(henm.TakesItemKind(boss, ChartItemKinds.Drop));
+        });
+        Assert.Equal(
+            new[] { "Tier 1", "Tier 2", "Tier 3", "Tier 4" },
+            henm.Bosses.Where(boss => boss.Kind == ChartBossKinds.Tier).Select(boss => boss.Name).ToArray());
 
         // The entry cost rides in the tier's own caption, where the reference art puts it — a banner
         // over the row, not a claim that each of the three NMs takes fifty shards of its own.
