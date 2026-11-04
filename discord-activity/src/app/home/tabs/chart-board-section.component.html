@@ -251,16 +251,21 @@
   @if (boss.kind === 'Tier') {
         <!-- A tier's SHARED pop items (HENM): one set opens every NM in the tier, so they sit in a
              wide strip under the tier heading rather than on any one card. Same item table, same
-             "+ Add" button - its rows are filed under the tier's name. -->
-        <article class="card chart-card chart-tier-items" [ngClass]="'is-' + boss.themeKey">
-          <div class="card-head">
-            <div class="chart-card__name">{{ boss.boss }} pop items</div>
-            <span class="tag chart-count">{{ boss.totalQuantity }} held</span>
-          </div>
-          <div class="card-body chart-card__body">
-            <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
-          </div>
-        </article>
+             "+ Add" button - its rows are filed under the tier's name.
+
+             The wrapper takes the WHOLE row, so the tier's NMs always start on the next one; the
+             strip is centred inside it at the width of the three cards below. -->
+        <div class="chart-tier-row">
+          <article class="card chart-card chart-tier-items" [ngClass]="'is-' + boss.themeKey">
+            <div class="card-head">
+              <div class="chart-card__name">{{ boss.boss }} pop items</div>
+              <span class="tag chart-count">{{ boss.totalQuantity }} held</span>
+            </div>
+            <div class="card-body chart-card__body">
+              <ng-container [ngTemplateOutlet]="itemTable" [ngTemplateOutletContext]="{ $implicit: boss }" />
+            </div>
+          </article>
+        </div>
   } @else if (boss.kind !== 'Final') {
         <article class="card chart-card" [ngClass]="'is-' + boss.themeKey">
           <div class="card-head">

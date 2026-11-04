@@ -246,9 +246,15 @@
   margin-bottom: 14px;
 }
 .panel-tab .chart-rows > .chart-card { flex: 0 1 280px; }
-/* A HENM tier's pop item strip: a row of its own under the tier heading, as wide as the tier's three
-   NM cards beneath it (3 x 280px + 2 gaps), so it reads as belonging to all of them. */
-.panel-tab .chart-rows > .chart-tier-items { flex: 1 0 100%; max-width: 860px; }
+/* A HENM tier's pop item strip: a row of its own under the tier heading. The wrapper fills the row
+   so nothing can sit beside it; the strip inside is as wide as the tier's three NM cards beneath it
+   (3 x 280px + 2 gaps), so it reads as belonging to all of them. */
+.panel-tab .chart-rows > .chart-tier-row {
+  display: flex;
+  flex: 1 0 100%;
+  justify-content: center;
+}
+.panel-tab .chart-tier-row > .chart-tier-items { flex: 0 1 860px; }
 .panel-tab .chart-rows > .chart-group-heading { flex: 1 0 100%; margin-top: 6px; }
 .panel-tab .chart-rows > .chart-group-heading:first-child { margin-top: 0; }
 /* Zero-height full-width item — the only way to force a line break mid-row in a wrap container. */
