@@ -303,7 +303,7 @@
             } @else if (!tracksItems(boss)) {
               <!-- A card that records no items has nothing to count here. Dynamis and HENM's NMs
                    headline outstanding requests instead, which is what those cards are about. -->
-              <span class="tag chart-count">{{ boss.pendingRequestCount }} requested</span>
+              <span class="tag chart-count">{{ boss.pendingRequestCount }} {{ boss.pendingRequestCount === 1 ? 'Request' : 'Requests' }}</span>
             } @else {
               <!-- Distinct items, matching the lines on the card — totalItems counts ROWS, and the
                    card folds several rows of one item into one line. -->
@@ -315,7 +315,7 @@
                exactly what leaving the zone blank said. Skipped where the header already shows it. -->
           @if (boss.pendingRequestCount && tracksItems(boss)) {
             <div class="chart-card__requests">
-              <span class="tag accent">{{ boss.pendingRequestCount }} requested</span>
+              <span class="tag accent">{{ boss.pendingRequestCount }} {{ boss.pendingRequestCount === 1 ? 'Request' : 'Requests' }}</span>
             </div>
           }
 
@@ -373,7 +373,7 @@
               </div>
             </div>
             @if (!tracksItems(boss)) {
-              <span class="tag chart-count">{{ boss.pendingRequestCount }} requested</span>
+              <span class="tag chart-count">{{ boss.pendingRequestCount }} {{ boss.pendingRequestCount === 1 ? 'Request' : 'Requests' }}</span>
             } @else {
               <span class="tag chart-count">{{ boss.totalItems }} {{ boss.totalItems === 1 ? 'Item' : 'Items' }}</span>
             }
@@ -381,7 +381,7 @@
 
           @if (boss.pendingRequestCount && tracksItems(boss)) {
             <div class="chart-card__requests">
-              <span class="tag accent">{{ boss.pendingRequestCount }} requested</span>
+              <span class="tag accent">{{ boss.pendingRequestCount }} {{ boss.pendingRequestCount === 1 ? 'Request' : 'Requests' }}</span>
             </div>
           }
 
