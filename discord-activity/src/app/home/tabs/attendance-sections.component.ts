@@ -611,14 +611,6 @@ export class AttendanceSectionsComponent {
     return this.dkpDrafts[event.id];
   }
 
-  protected miscPostRate(): number | null {
-    return this.data()?.miscPostRate ?? null;
-  }
-
-  protected setMiscDkp(event: ActivityWindowEvent, value: number | null): void {
-    this.dkpDraft(event).misc = value;
-  }
-
   private currentDefault(event: ActivityWindowEvent): number {
     const draft = this.dkpDrafts[event.id];
     if (draft && draft.amount !== null) return draft.amount;

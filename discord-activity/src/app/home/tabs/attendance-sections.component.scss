@@ -426,13 +426,6 @@
 }
 .we-snapshots__group-count, .we-snapshots__group-help { font-size: 11px; color: var(--muted); }
 
-/* The Misc rate rides the card's existing DKP draft, so Save/Post/Update all carry it. */
-.we-misc-dkp {
-  display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
-  font-size: 11px; color: var(--fg-2);
-  .we-dkp-input { width: 84px; text-align: right; height: 30px; }
-}
-
 /* Why one member on the combined roster is priced differently from the one above them. */
 .we-credit-chip {
   font-size: 10px; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap;
