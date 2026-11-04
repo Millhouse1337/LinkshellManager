@@ -95,7 +95,9 @@
                           </svg>
                         </span>
                       }
-                      <span class="ps-slot-req-label">{{ slotRequirement(slot) }}</span>
+                      <!-- title: the label is cut short ("Any …") when the sign-up controls crowd
+                           the row, so hovering shows the whole requirement. -->
+                      <span class="ps-slot-req-label" [title]="slotRequirement(slot)">{{ slotRequirement(slot) }}</span>
                       @if (editEnabled()) {
                         <button type="button" class="ps-slot-edit-btn" (click)="editingSlotId() === slot.slotId ? editingSlotId.set(null) : openJobEdit(slot)"
                           title="Change this slot's job">✎</button>
