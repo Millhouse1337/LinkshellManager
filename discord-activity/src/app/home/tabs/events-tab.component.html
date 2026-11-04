@@ -1,11 +1,11 @@
     <div class="panel-tab fade">
       <div class="section-head">
         <div>
+          <!-- Current has no heading up here: its sections are the queue first, then the live
+               events, and each carries its own heading in that order (Queue / Upcoming Events from
+               the queue panel, Live / Live Events above the live cards). -->
           @switch (eventsView()) {
-            @case ('current') {
-              <div class="section-label">Live Operations</div>
-              <div class="section-title">Current Field Activity</div>
-            }
+            @case ('current') {}
             @case ('pending') {
               <div class="section-label">Officer To-Do</div>
               <div class="section-title">Pending</div>
@@ -62,6 +62,12 @@
 
       <!-- ===== Current: everything still in play ===== -->
       <div [hidden]="eventsView() !== 'current'">
+        <div class="section-head">
+          <div>
+            <div class="section-label">Live</div>
+            <div class="section-title">Live Events</div>
+          </div>
+        </div>
 
         @if (showNoLiveActivity()) {
           <div class="card">
