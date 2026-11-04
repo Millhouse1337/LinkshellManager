@@ -233,6 +233,11 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Selected party setup does not belong to this linkshell." });
         }
 
+        // What the form opened with, so a parked board coming back below can tell the fields the
+        // officer changed from the leftovers it was pre-filled with.
+        var startBefore = eventEntity.StartTime;
+        var dayBefore = eventEntity.DayNumber;
+
         eventEntity.LinkshellId = request.LinkshellId;
         eventEntity.EventName = request.EventName.Trim();
         eventEntity.EventType = request.EventType?.Trim();
@@ -315,6 +320,17 @@ public sealed partial class ActivityDataController
         {
             await HnmRecurringBoardService.RefreshRepostAtAsync(
                 _dbContext, eventEntity, recurrenceMonster, cancellationToken);
+
+            // Parked, and its re-post time has already come: Update brings the sign-up board
+            // back now rather than re-drawing the "defeated" note again.
+            if (await HnmRecurringBoardService.ReviveDueParkedBoardAfterEditAsync(
+                    _dbContext, eventEntity, DateTime.UtcNow,
+                    startTimeUtc != startBefore ? startTimeUtc : null,
+                    request.DayNumber != dayBefore ? request.DayNumber : null,
+                    cancellationToken))
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
         }
 
         return Ok(new { success = true });

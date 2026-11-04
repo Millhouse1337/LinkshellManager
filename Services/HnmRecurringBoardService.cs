@@ -317,6 +317,44 @@ public static class HnmRecurringBoardService
         return true;
     }
 
+    // An officer saved the edit form on a PARKED board whose advertised re-post time
+    // (HnmRepostAt) has already come. Saving used to re-draw the "defeated" note and nothing
+    // else, so a board the poller had failed to bring back stayed down however often it was
+    // edited. Now Update brings it back: revived exactly as the poller would (next pop, next
+    // day, base monster after an HQ), then the start time and day the officer CHANGED in this
+    // edit are put back on top, since they just chose those. The form opens with the parked
+    // board's leftovers -- the killed day, the old repop -- so an untouched field takes the
+    // poller's value, not the leftover.
+    //
+    // A board still waiting on a future re-post stays parked; the save already re-drew its note.
+    // editedStartUtc / editedDayNumber are null when that field wasn't changed. Stages only; the
+    // caller saves, and the DbContext save-hook then re-posts the sign-up board in Discord.
+    public static async Task<bool> ReviveDueParkedBoardAfterEditAsync(
+        ApplicationDbContext db, Event ev, DateTime nowUtc,
+        DateTime? editedStartUtc, int? editedDayNumber,
+        CancellationToken cancellationToken)
+    {
+        if (ev.HnmDefeatedAt is null || ev.HnmRepostAt is not { } repostAt || repostAt > nowUtc)
+        {
+            return false;
+        }
+
+        if (!await ReviveParkedBoardForStartAsync(db, ev, cancellationToken))
+        {
+            return false;
+        }
+
+        if (editedStartUtc is { } start)
+        {
+            ev.StartTime = start;
+        }
+        if (editedDayNumber is { } day)
+        {
+            ev.DayNumber = day;
+        }
+        return true;
+    }
+
     // The standing board for this SPAWN. Matched on every spelling of the monster (both
     // halves of a merge pair and the combined label) so a board first created under
     // "Fafnir" on day 2 is the same row the day-4 "Fafnir/Nidhogg" event updates. Keying
