@@ -328,6 +328,8 @@ builder.Services.AddHostedService<DiscordTodBoardBackgroundService>();
 builder.Services.AddSingleton<DiscordAuctionChannelQueue>();
 builder.Services.AddScoped<DiscordAuctionChannelPublisher>();
 builder.Services.AddHostedService<DiscordAuctionChannelBackgroundService>();
+// Redraws a card when its auction starts or ends on the clock (nothing is saved then).
+builder.Services.AddHostedService<AuctionCardTimerBackgroundService>();
 // Phase 2: bot-posts-to-channel event announcements + the inline-signup
 // interactions endpoint.
 builder.Services.AddScoped<DiscordBotClient>();
