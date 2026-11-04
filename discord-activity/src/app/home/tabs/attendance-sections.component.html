@@ -238,8 +238,8 @@
           }
         </div>
         <div class="event-card__global-timer">
-          <span class="event-card__global-timer-label">DKP Sheet</span>
-          <span class="num event-card__global-timer-value">{{ sheetStatus(event) }}</span>
+          <span class="event-card__global-timer-label">{{ originLabel(event) }}</span>
+          <span class="num event-card__global-timer-value">{{ windowsCapturedLabel(event) }}</span>
         </div>
         <div class="event-card__meta">
           <span class="event-card__metric">
@@ -549,14 +549,8 @@
           <span class="tag we-snapshot__role">{{ captureName }}</span>
         }
         <strong>{{ formatDate(snapshot.capturedAtUtc) }}</strong>
+        <!-- Who captured it and where are in the opened row, so the closed line stays short. -->
         <span class="we-snapshot__meta">
-          · captured by <strong>{{ snapshot.capturedByCharacterName || '-' }}</strong>
-          @if (snapshot.postedByName && snapshot.postedByName !== snapshot.capturedByCharacterName) {
-            · sent by <strong>{{ snapshot.postedByName }}</strong>
-          }
-          @if (snapshot.primaryZone) {
-            · {{ snapshot.primaryZone }}
-          }
           · {{ snapshot.entryCount }} {{ snapshot.entryCount === 1 ? 'member' : 'members' }}
         </span>
         @if (snapshot.snapshotStatus !== 'Active') {
@@ -577,6 +571,17 @@
         </span>
       }
     </summary>
+
+    <!-- Moved down from the closed line. Shown to everyone, managers or not. -->
+    <p class="we-snapshot__detail we-snapshot__meta">
+      Captured by <strong>{{ snapshot.capturedByCharacterName || '-' }}</strong>
+      @if (snapshot.postedByName && snapshot.postedByName !== snapshot.capturedByCharacterName) {
+        · Sent by <strong>{{ snapshot.postedByName }}</strong>
+      }
+      @if (snapshot.primaryZone) {
+        · <ng-container *ngTemplateOutlet="zoneCell; context: { zone: snapshot.primaryZone }" />
+      }
+    </p>
 
     @if (model.canManage) {
       <!-- The blocking decision, above the filing controls: an unconfirmed capture earns nothing

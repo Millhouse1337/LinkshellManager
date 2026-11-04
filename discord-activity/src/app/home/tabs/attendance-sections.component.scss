@@ -295,6 +295,7 @@
   white-space: nowrap;
 }
 .we-snapshot__actions { margin-left: auto; display: flex; gap: 6px; }
+.we-snapshot__detail { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0 14px 10px; font-size: 12.5px; }
 .we-snapshot-actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 2px 14px 12px; }
 /* The unlinked row spreads its controls evenly across the full width. */
 .we-snapshot-actions-row--fill { justify-content: space-between; }
