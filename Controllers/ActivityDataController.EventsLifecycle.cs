@@ -309,10 +309,14 @@ public sealed partial class ActivityDataController
             eventEntity.HnmKillBonusOverride = NormalizeBonusOverride(request.HnmKillBonusOverride);
             eventEntity.HnmPerWindowOverride = NormalizeBonusOverride(request.HnmPerWindowOverride);
 
-            // A LIVE camp whose start the officer moved: the window grid moves with it, or the
-            // board keeps counting windows from the time it went live on.
+            // A LIVE camp whose start no longer matches the time its grid counts from: the grid
+            // moves to the start, or the board keeps counting windows from the time it went live
+            // on. Compared against the ANCHOR, not the start the form opened with, so a camp whose
+            // start was moved before this fix heals on its next save. Nothing else moves the anchor
+            // once a camp is live, so a healthy camp never trips this.
             if (eventEntity.CommencementStartTime is not null
-                && startTimeUtc is { } newStartUtc && newStartUtc != startBefore)
+                && startTimeUtc is { } newStartUtc
+                && newStartUtc != (eventEntity.WindowAnchorAt ?? startBefore))
             {
                 HnmWindowAdvanceBackgroundService.ReanchorToStart(eventEntity, newStartUtc, DateTime.UtcNow);
             }
