@@ -9,6 +9,10 @@ import {
 import { formatElapsed, parseDate } from '../sidebar-panel.helpers';
 import { canManageLinkshellIn } from '../activity-home.helpers';
 
+// Active = started (live, then ended-but-not-closed). Pending = start time still ahead.
+// History = closed auctions, one row per item.
+export type AuctionsView = 'active' | 'pending' | 'history';
+
 @Component({
   selector: 'app-auctions-panel',
   imports: [CommonModule, FormsModule],
@@ -46,8 +50,9 @@ export class AuctionsPanelComponent {
   // a floating modal). On desktop the modal is fixed-position and this
   // call is a harmless no-op visually.
   @ViewChild('auctionFormAnchor') private auctionFormAnchor?: ElementRef<HTMLElement>;
-  // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/auctions/history).
-  readonly auctionsView = model<'active' | 'history'>('active', { alias: 'view' });
+  // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/auctions/pending,
+  // /auctions/history).
+  readonly auctionsView = model<AuctionsView>('active', { alias: 'view' });
 
   // Auction history is rendered as a flat table — one row per item across
   // all closed auctions, paginated. Page is a signal so OnPush picks up
@@ -356,6 +361,11 @@ export class AuctionsPanelComponent {
         await this.activity.createAuction(payload);
       }
 
+      // Show the tab the saved auction now sits on, so a future start doesn't look like it vanished.
+      // new Date, not parseDate: the form's value is LOCAL time, and parseDate reads a zoneless
+      // string as UTC.
+      const startMs = payload.startTimeLocal ? new Date(payload.startTimeLocal).getTime() : NaN;
+      this.setAuctionsView(startMs > Date.now() ? 'pending' : 'active');
       this.closeAuctionForm();
     } finally {
       this.isSubmittingAuction = false;
@@ -370,8 +380,23 @@ export class AuctionsPanelComponent {
     return this.activity.auctionHistory();
   }
 
-  protected pagedActiveAuctions() {
+  // The auction cards the open tab shows. Pending: start time still ahead. Active: everything that
+  // has started, live ones first and ended-but-not-closed ones after them (each group keeps the
+  // server's start-time order). Re-read every second through `now`, so an auction moves from
+  // Pending to Active on its own when its start time arrives.
+  protected viewAuctions() {
     const all = this.auctions();
+    if (this.auctionsView() === 'pending') {
+      return all.filter(auction => this.auctionState(auction) === 'scheduled');
+    }
+    const endedLast = (auction: (typeof all)[number]) => (this.auctionState(auction) === 'ended' ? 1 : 0);
+    return all
+      .filter(auction => this.auctionState(auction) !== 'scheduled')
+      .sort((a, b) => endedLast(a) - endedLast(b));
+  }
+
+  protected pagedActiveAuctions() {
+    const all = this.viewAuctions();
     const size = this.auctionsActivePageSize;
     const totalPages = Math.max(1, Math.ceil(all.length / size));
     if (this.auctionsActivePage() >= totalPages) {
@@ -382,7 +407,7 @@ export class AuctionsPanelComponent {
   }
 
   protected auctionsActivePageCount(): number {
-    return Math.max(1, Math.ceil(this.auctions().length / this.auctionsActivePageSize));
+    return Math.max(1, Math.ceil(this.viewAuctions().length / this.auctionsActivePageSize));
   }
 
   protected auctionsActiveNextPage(): void {
@@ -466,7 +491,8 @@ export class AuctionsPanelComponent {
     return scheduledStart || endTime || 'Timer unavailable';
   }
 
-  protected setAuctionsView(view: 'active' | 'history'): void {
+  protected setAuctionsView(view: AuctionsView): void {
+    if (view !== this.auctionsView()) this.auctionsActivePage.set(0);
     this.auctionsView.set(view);
   }
 
@@ -623,6 +649,8 @@ export class AuctionsPanelComponent {
     }
 
     await this.activity.startAuction(auctionId, this.selectedLinkshellId);
+    // Started early from Pending: follow it to Active, where it now lives.
+    this.setAuctionsView('active');
   }
 
   // Two-stage inline confirmation for ending an auction early.

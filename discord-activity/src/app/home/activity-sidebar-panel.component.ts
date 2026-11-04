@@ -7,7 +7,7 @@ import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from '.
 import { canManageLinkshellIn } from './activity-home.helpers';
 import type { ProfileView } from './activity-home.types';
 import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.helpers';
-import { AuctionsPanelComponent } from './sidebar-panels/auctions-panel.component';
+import { AuctionsPanelComponent, AuctionsView } from './sidebar-panels/auctions-panel.component';
 import { InvitesPanelComponent } from './sidebar-panels/invites-panel.component';
 import { JobRatingsPanelComponent } from './sidebar-panels/job-ratings-panel.component';
 import { RosterPanelComponent } from './sidebar-panels/roster-panel.component';
@@ -174,8 +174,8 @@ import { StarRatingComponent } from './sidebar-panels/star-rating.component';
 })
 export class ActivitySidebarPanelComponent {
   @Input() visibleSections?: readonly string[];
-  // Passed straight through to the auctions panel (Active / History), two-way.
-  readonly auctionsView = model<'active' | 'history'>('active');
+  // Passed straight through to the auctions panel (Active / Pending / History), two-way.
+  readonly auctionsView = model<AuctionsView>('active');
   // Which part of the profile shows; the strip that picks it sits by the Profile tab's heading.
   readonly profileView = input<ProfileView>('jobs');
   protected readonly activity = inject(DiscordActivityService);

@@ -33,6 +33,7 @@ import { TreasuryTabComponent } from './tabs/treasury-tab.component';
 import { PartySetupTabComponent } from './tabs/party-setup-tab.component';
 import { TodsTabComponent } from './tabs/tods-tab.component';
 import { LootHistoryPanelComponent } from './sidebar-panels/loot-history-panel.component';
+import type { AuctionsView } from './sidebar-panels/auctions-panel.component';
 
 @Component({
   selector: 'app-activity-home',
@@ -81,14 +82,18 @@ export class ActivityHomeComponent {
   });
   private readonly subView = computed(() => this.location()[1] ?? null);
 
-  // The sub-views other tabs keep in the location too: /events/pending, /events/past, /auctions/history,
+  // The sub-views other tabs keep in the location too: /events/pending, /events/past,
+  // /auctions/pending, /auctions/history,
   // /profile/crafts, /treasury/items, /charts/sea. Each tab two-way binds its own view, so a click there
   // updates the URL.
   protected readonly eventsView = computed(() => {
     const view = this.subView();
     return view === 'pending' || view === 'past' ? view : 'current';
   });
-  protected readonly auctionsView = computed(() => (this.subView() === 'history' ? 'history' : 'active'));
+  protected readonly auctionsView = computed<AuctionsView>(() => {
+    const view = this.subView();
+    return view === 'pending' || view === 'history' ? view : 'active';
+  });
   protected readonly profileViews = [
     { key: 'jobs' as const, label: 'Jobs' },
     { key: 'crafts' as const, label: 'Crafts' },
@@ -355,8 +360,8 @@ export class ActivityHomeComponent {
     this.setActiveTab('timed-events', view === 'current' ? undefined : view);
   }
 
-  protected setAuctionsView(view: 'active' | 'history'): void {
-    this.setActiveTab('auctions', view === 'history' ? view : undefined);
+  protected setAuctionsView(view: AuctionsView): void {
+    this.setActiveTab('auctions', view === 'active' ? undefined : view);
   }
 
   protected setTreasuryView(view: TreasuryView): void {

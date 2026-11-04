@@ -30,6 +30,15 @@
             type="button"
             class="view-tab"
             role="tab"
+            [class.active]="auctionsView() === 'pending'"
+            [attr.aria-selected]="auctionsView() === 'pending'"
+            (click)="setAuctionsView('pending')">
+            Pending
+          </button>
+          <button
+            type="button"
+            class="view-tab"
+            role="tab"
             [class.active]="auctionsView() === 'history'"
             [attr.aria-selected]="auctionsView() === 'history'"
             (click)="setAuctionsView('history')">
@@ -70,7 +79,8 @@
 
     @if (!selectedLinkshell()) {
       <p class="notice">Select or join a linkshell before working with auctions.</p>
-    } @else if (auctionsView() === 'active') {
+    } @else if (auctionsView() !== 'history') {
+      <!-- Active and Pending share these cards; viewAuctions() picks which auctions each shows. -->
       <!-- Only show the loading notice on the *first* load (no data yet).
            The auto-refresh poller flips auctionsBusy on every background
            tick (5s while an auction is Live); swapping the board out for
@@ -79,7 +89,7 @@
            rendered and let the refreshed values update in place. -->
       @if (activity.auctionsBusy() && auctions().length === 0) {
         <p class="notice">Loading auctions...</p>
-      } @else if (auctions().length > 0) {
+      } @else if (viewAuctions().length > 0) {
         <!-- One card per auction: its header (title, status, time window, auction-level actions),
              then its items as cards of their own. Each item card carries everything a table row
              did -- start, current, leader, the bid box, View Bids -- and opens its bid history
@@ -346,13 +356,17 @@
               (click)="auctionsActivePrevPage()">Prev</button>
             <span class="muted" style="font-size:12px">
               Page {{ auctionsActivePage() + 1 }} of {{ auctionsActivePageCount() }}
-              &middot; {{ auctions().length }} auction{{ auctions().length === 1 ? '' : 's' }}
+              &middot; {{ viewAuctions().length }} auction{{ viewAuctions().length === 1 ? '' : 's' }}
             </span>
             <button type="button" class="btn sm"
               [disabled]="auctionsActivePage() + 1 >= auctionsActivePageCount()"
               (click)="auctionsActiveNextPage()">Next</button>
           </div>
         }
+      } @else if (auctionsView() === 'pending') {
+        <p class="notice">No auctions are waiting to go live.</p>
+      } @else if (auctions().length > 0) {
+        <p class="notice">No auctions are live right now. Upcoming ones are under Pending.</p>
       } @else {
         <p class="notice">No auctions exist on this linkshell yet.</p>
       }
