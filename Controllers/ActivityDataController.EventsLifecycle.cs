@@ -308,6 +308,14 @@ public sealed partial class ActivityDataController
             eventEntity.HnmClaimBonusOverride = NormalizeBonusOverride(request.HnmClaimBonusOverride);
             eventEntity.HnmKillBonusOverride = NormalizeBonusOverride(request.HnmKillBonusOverride);
             eventEntity.HnmPerWindowOverride = NormalizeBonusOverride(request.HnmPerWindowOverride);
+
+            // A LIVE camp whose start the officer moved: the window grid moves with it, or the
+            // board keeps counting windows from the time it went live on.
+            if (eventEntity.CommencementStartTime is not null
+                && startTimeUtc is { } newStartUtc && newStartUtc != startBefore)
+            {
+                HnmWindowAdvanceBackgroundService.ReanchorToStart(eventEntity, newStartUtc, DateTime.UtcNow);
+            }
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

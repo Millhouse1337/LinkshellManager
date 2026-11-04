@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -217,4 +218,33 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
     // attendance snapshots, so a snapshot can never disagree with the board it was taken from.
     public static int ScheduledWindow(DateTime anchor, DateTime now, int minutes, int windowCount)
         => HnmConfig.WindowNumberAt(anchor, now, minutes, windowCount);
+
+    // An officer moved a LIVE camp's start time from the edit form. The grid counts from
+    // WindowAnchorAt, stamped once when the camp went live, and the loop above only ever moves the
+    // counter UP -- so the edit changed the "Started" line and nothing else, and a camp that went
+    // live on the wrong time kept reading "Window 7 of 7 / final window" after being moved to the
+    // real pop. This re-anchors the grid on the new start and puts the counter, and the next-window
+    // countdown, where that start says they are: up or down.
+    //
+    // HnmClearedWindow is stamped at the new printed window, so moving the start never wipes a
+    // roster by itself; a wyrm board's clear fires at the next real boundary, as it would have.
+    // A camp with no timed cadence (or a single window) has no grid to move and is left alone.
+    // Stages only; the caller saves.
+    public static void ReanchorToStart(Event ev, DateTime startUtc, DateTime nowUtc)
+    {
+        var count = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        var minutes = DiscordEventMessageBuilder.EffectiveWindowMinutes(ev);
+        if (!DiscordEventMessageBuilder.UsesWindows(ev) || count <= 1 || minutes <= 0)
+        {
+            return;
+        }
+
+        ev.WindowAnchorAt = startUtc;
+        ev.HnmWindowNumber = nowUtc < startUtc ? 1 : ScheduledWindow(startUtc, nowUtc, minutes, count);
+        // Same rule as the loop: window N+1 opens at anchor + N x minutes, none after the last.
+        ev.NextWindowAt = ev.HnmWindowNumber >= count
+            ? null
+            : startUtc.AddMinutes(ev.HnmWindowNumber * (double)minutes);
+        ev.HnmClearedWindow = DiscordEventMessageBuilder.FocusWindow(ev);
+    }
 }
