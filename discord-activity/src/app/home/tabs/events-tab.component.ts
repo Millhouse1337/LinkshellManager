@@ -366,16 +366,13 @@ export class EventsTabComponent {
   // no window schedule at all — so a run that had just started, with nothing posted yet,
   // announced itself as being on its last window.
   //
-  // Every state here says ROSTER, because that is the only thing this line has ever been about:
-  // whether the attendance snapshot for the window named directly above it has landed. It used to
-  // read a bare "posted", sitting in a large slot under "WINDOW 4 OF 7" on a card whose main
-  // button says "End Camp/Post ToD" -- so it was read as the ToD having been posted, which it
-  // never means. The ToD is filed at End Camp and this camp is still live.
+  // Never a bare "posted": sitting in a large slot under "WINDOW 4 OF 7" on a card whose main
+  // button says "End Camp/Post ToD", that was read as the ToD having been posted, which it never
+  // means. The ToD is filed at End Camp and this camp is still live.
   //
   // A camp on a real cadence only runs out of nextWindowAt on its final window. So a null
   // countdown BELOW the last window means there is no cadence to count, not that the camp
-  // is finishing — and for those the useful thing to say is whether the current window's
-  // snapshot has landed, since that's the only thing anyone is waiting on.
+  // is finishing — and for those it says how many windows have been captured so far.
   protected campWindowStatus(event: ActivityEvent): string {
     // Checked BEFORE the countdown on purpose. A closed two-post camp can still be sitting on
     // a cadence that has a next window scheduled, and "next window 4:12" on a camp that
@@ -391,9 +388,10 @@ export class EventsTabComponent {
     if (focus >= (event.windowCount ?? 1)) {
       return 'final window';
     }
-    return this.attendanceWindowsFor(event).some(w => w.sequenceNumber === focus)
-      ? 'roster posted'
-      : 'roster not posted';
+    // How many windows the camp has captured so far, rather than whether the current one has: the
+    // same wording as the attendance event cards under it. Kill rosters are not counted.
+    const n = this.postedWindowCount(event);
+    return `${n} ${n === 1 ? 'Window' : 'Windows'} Captured`;
   }
 
   // Two-click confirm for deleting a live HNM camp outright (no ToD). The Discord iframe blocks the

@@ -221,11 +221,19 @@ export class AttendanceSectionsComponent {
     return zone ? zone.split('_').join(' ') : null;
   }
 
-  // The big readout in the middle of the card header, where a live camp shows its window.
-  protected sheetStatus(event: ActivityWindowEvent): string {
-    if (this.isPosted(event)) return 'posted';
-    if (event.pendingSnapshotCount > 0) return `${event.pendingSnapshotCount} pending`;
-    return 'not posted';
+  // The small label over the card header's centre readout: where the event came from.
+  protected originLabel(event: ActivityWindowEvent): string {
+    return event.isCamp || event.sourceEventId ? 'Camp generated Event' : 'LSM Now generated Event';
+  }
+
+  // The big centre readout, worded like the live camp card's: how many windows have a capture.
+  // A window two alliances both posted counts once; an ignored capture doesn't count, a pending
+  // one does (it was captured, it just isn't confirmed yet). Ungridded captures have no window
+  // number, so each of those counts on its own.
+  protected windowsCapturedLabel(event: ActivityWindowEvent): string {
+    const counted = this.windowSnapshots(event).filter(s => s.snapshotStatus === 'Active' || s.isPending);
+    const n = new Set(counted.map(s => s.windowNumber ?? `capture-${s.id}`)).size;
+    return `${n} ${n === 1 ? 'Window' : 'Windows'} Captured`;
   }
 
   protected jobs(row: ActivityWindowSnapshotEntry | ActivityWindowCombinedMember): string {
