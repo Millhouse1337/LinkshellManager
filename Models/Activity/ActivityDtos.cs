@@ -1824,6 +1824,22 @@ public sealed record ActivityChartBoardFeaturesDto(
 public sealed record ActivityChartBoardSummaryDto(string Board, string Label);
 
 /// <summary>
+/// One held chart item, flattened across every board for Treasury → Items. Read-only there: the row
+/// is edited on its Charts board. <c>Kind</c> is ChartItemKinds.Pop or Drop.
+/// </summary>
+public sealed record ActivityChartHoldingDto(
+    int Id,
+    string Board,
+    string BoardLabel,
+    string Boss,
+    string Kind,
+    string ItemName,
+    int Quantity,
+    string? HeldByCharacterName,
+    string? Notes,
+    DateTime UpdatedAt);
+
+/// <summary>
 /// One boss's card. <c>ThemeKey</c> names a CSS class and never carries a colour value; <c>Kind</c>
 /// chooses the layout (Standard grid card, MiniNm, or the board's Final encounter panel).
 /// </summary>

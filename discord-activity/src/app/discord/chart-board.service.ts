@@ -6,6 +6,7 @@ import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityChartBoard,
   ActivityChartCreditInput,
+  ActivityChartHolding,
   ActivityChartKeyItemInput,
   ActivityChartPopItemInput,
   ActivityChartWishlistInput,
@@ -65,6 +66,27 @@ export class ChartBoardService {
       throw error;
     } finally {
       this.busyLoad.set(false);
+    }
+  }
+
+  /**
+   * Every held chart item across all boards, for Treasury → Items. Kept with the linkshell it was
+   * loaded for, so switching linkshells never shows the last one's stash for a moment.
+   */
+  readonly holdings = signal<{ linkshellId: number; rows: ActivityChartHolding[] } | null>(null);
+
+  /**
+   * Quiet on failure: this is a side list on the Treasury page, and a Charts hiccup must not put an
+   * error banner over the items the officer actually came to see. The list just stays empty.
+   */
+  async loadHoldings(linkshellId: number): Promise<void> {
+    try {
+      const rows = await this.http.fetchActivityJson<ActivityChartHolding[]>(
+        `/api/activity/linkshells/${linkshellId}/chart-holdings`
+      );
+      this.holdings.set({ linkshellId, rows });
+    } catch {
+      this.holdings.set({ linkshellId, rows: [] });
     }
   }
 

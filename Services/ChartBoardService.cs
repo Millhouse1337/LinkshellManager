@@ -1,3 +1,4 @@
+using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
@@ -121,6 +122,70 @@ public sealed class ChartBoardService
             .OrderBy(item => item.SortOrder)
             .ThenBy(item => item.Id)
             .ToListAsync(cancellationToken);
+
+    /// <summary>
+    /// Every chart item the linkshell is HOLDING (at least one copy), across all boards, for
+    /// Treasury → Items. In board order, then card order, the way the Charts pages lay them out,
+    /// then by item and holder. A row whose board or card the catalog no longer has sorts last.
+    /// </summary>
+    public async Task<List<ActivityChartHoldingDto>> LoadHoldingsAsync(
+        int linkshellId, CancellationToken cancellationToken)
+    {
+        var rows = await _db.ChartPopItems
+            .AsNoTracking()
+            .Where(item => item.LinkshellId == linkshellId && item.Quantity > 0)
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(row =>
+            {
+                var board = ChartBoardCatalog.Find(row.Board);
+                var boardOrder = board is null ? -1 : IndexOfBoard(board);
+                var bossOrder = -1;
+                if (board is not null)
+                {
+                    for (var i = 0; i < board.Bosses.Count; i++)
+                    {
+                        if (string.Equals(board.Bosses[i].Name, row.Boss, StringComparison.OrdinalIgnoreCase))
+                        {
+                            bossOrder = i;
+                            break;
+                        }
+                    }
+                }
+                return (Row: row, Board: board,
+                    BoardOrder: boardOrder < 0 ? int.MaxValue : boardOrder,
+                    BossOrder: bossOrder < 0 ? int.MaxValue : bossOrder);
+            })
+            .OrderBy(entry => entry.BoardOrder)
+            .ThenBy(entry => entry.BossOrder)
+            .ThenBy(entry => entry.Row.ItemName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.Row.HeldByCharacterName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Select(entry => new ActivityChartHoldingDto(
+                entry.Row.Id,
+                entry.Row.Board,
+                entry.Board?.Label ?? entry.Row.Board,
+                entry.Row.Boss,
+                entry.Row.Kind,
+                entry.Row.ItemName,
+                entry.Row.Quantity,
+                string.IsNullOrWhiteSpace(entry.Row.HeldByCharacterName) ? null : entry.Row.HeldByCharacterName.Trim(),
+                entry.Row.Notes,
+                entry.Row.UpdatedAt))
+            .ToList();
+
+        static int IndexOfBoard(ChartBoard board)
+        {
+            for (var i = 0; i < ChartBoardCatalog.Boards.Count; i++)
+            {
+                if (ReferenceEquals(ChartBoardCatalog.Boards[i], board))
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+    }
 
     public async Task<List<ChartRosterEntry>> LoadRosterAsync(int linkshellId, CancellationToken cancellationToken)
     {

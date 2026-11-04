@@ -28,7 +28,7 @@
         {{ soldItems().length }} sold &middot; {{ soldTotal().toLocaleString() }} gil
       </span>
     } @else {
-      <span class="tag default num">{{ stockpile().length }} items &middot; {{ totalQuantity() }} qty</span>
+      <span class="tag default num">{{ stockpileCount() }} items &middot; {{ totalQuantity() }} qty</span>
     }
   </div>
 
@@ -133,7 +133,9 @@
         </li>
       }
     </ul>
-  } @else {
+  } @else if (view() === 'sold' || chartHoldings().length === 0) {
+    <!-- Skipped when the only things in the stockpile are chart holdings: they are listed below,
+         so "no items tracked yet" would be wrong. -->
     <div class="empty-state empty-state--compact">
       @if (view() === 'sold') {
         <div class="empty-state-desc">
@@ -147,6 +149,34 @@
         <div class="empty-state-desc">No items tracked yet. Add items to manage loot drops and inventory.</div>
       }
     </div>
+  }
+
+  <!-- The Charts boards' held items, read straight off the boards. No buttons: each is edited,
+       credited and removed on its Charts board, and selling one here would leave the board still
+       showing it. Stockpile only -- a chart holding is never "sold". -->
+  @if (view() === 'stockpile' && chartHoldings().length > 0) {
+    <div class="card-head" style="border-top: 1px solid var(--border)">
+      <div class="card-title">From Charts</div>
+      <span class="tag default num">{{ chartHoldings().length }}</span>
+    </div>
+    <ul class="entry-list" style="border-top: 0">
+      @for (row of chartHoldings(); track row.id) {
+        <li class="entry-item">
+          <div class="entry-item__main">
+            <strong>{{ row.itemName }}</strong>
+            <span class="tag default">{{ row.boardLabel }} &middot; {{ row.boss }}</span>
+            <span class="tag default">{{ row.kind === 'Drop' ? 'Drop' : 'Pop' }}</span>
+            <span class="tag default num">{{ row.quantity }}</span>
+          </div>
+          @if (row.notes) { <div class="entry-item__sub">{{ row.notes }}</div> }
+          <div class="entry-item__meta">
+            <span>Held by {{ row.heldByCharacterName || 'nobody yet' }}</span>
+            @if (activity.formatDateTime(row.updatedAt); as when) { <span>&middot; Updated {{ when }}</span> }
+            <span>&middot; Edit on Charts</span>
+          </div>
+        </li>
+      }
+    </ul>
   }
 
   <!-- One datalist for the whole list rather than one per row: only ever one sell form is open, and

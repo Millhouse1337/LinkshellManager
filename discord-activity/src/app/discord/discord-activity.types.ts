@@ -2598,6 +2598,23 @@ export interface ActivityChartRosterMember {
   altCharacterNames: string[];
 }
 
+/**
+ * One held chart item, across every board, as Treasury → Items lists it. Read-only there: the row
+ * is edited on its Charts board. kind is 'Pop' or 'Drop'.
+ */
+export interface ActivityChartHolding {
+  id: number;
+  board: string;
+  boardLabel: string;
+  boss: string;
+  kind: string;
+  itemName: string;
+  quantity: number;
+  heldByCharacterName?: string | null;
+  notes?: string | null;
+  updatedAt: string;
+}
+
 export interface ActivityChartBoard {
   linkshellId: number;
   board: string;

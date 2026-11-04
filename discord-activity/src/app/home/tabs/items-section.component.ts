@@ -2,8 +2,9 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { ChartBoardService } from '../../discord/chart-board.service';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
-import type { ActivityItem, ActivityItemInput } from '../../discord/discord-activity.types';
+import type { ActivityChartHolding, ActivityItem, ActivityItemInput } from '../../discord/discord-activity.types';
 
 /**
  * Treasury → Items: the linkshell's stash.
@@ -23,8 +24,15 @@ import type { ActivityItem, ActivityItemInput } from '../../discord/discord-acti
 export class ItemsSectionComponent {
   protected readonly activity = inject(DiscordActivityService);
 
+  private readonly charts = inject(ChartBoardService);
+
   @Input({ required: true }) set linkshellId(value: number | null) {
     this.selectedLinkshellId.set(value);
+    // The Treasury tab is rebuilt each time it opens, so this runs on every visit and the list is
+    // fresh after an edit on Charts.
+    if (value) {
+      void this.charts.loadHoldings(value);
+    }
   }
 
   /** Whether this member can add, edit, sell or remove items (CanManageInventory). */
@@ -49,6 +57,16 @@ export class ItemsSectionComponent {
   protected readonly view = signal<'stockpile' | 'sold'>('stockpile');
 
   protected readonly stockpile = computed(() => this.items().filter(item => !item.isSold));
+
+  /**
+   * The Charts boards' held items (Sky, Sea, Limbus, HENM...), listed under the stockpile so the
+   * stash reads as one list. Read-only here: each row is edited, credited and removed on its board,
+   * so it has no Sell / Edit / Delete — selling one here would leave the board still showing it.
+   */
+  protected readonly chartHoldings = computed<ActivityChartHolding[]>(() => {
+    const loaded = this.charts.holdings();
+    return loaded && loaded.linkshellId === this.selectedLinkshellId() ? loaded.rows : [];
+  });
 
   /**
    * Names to suggest for "who sold it", read off the same overview payload the items come from.
@@ -79,8 +97,12 @@ export class ItemsSectionComponent {
     this.view() === 'sold' ? this.soldItems() : this.stockpile()
   );
 
+  /** Everything the Stockpile lists, chart holdings included, so the counts match the list. */
+  protected readonly stockpileCount = computed(() => this.stockpile().length + this.chartHoldings().length);
+
   protected readonly totalQuantity = computed(() =>
     this.stockpile().reduce((sum, item) => sum + (item.quantity ?? 0), 0)
+    + this.chartHoldings().reduce((sum, row) => sum + (row.quantity ?? 0), 0)
   );
 
   /** What the archive has brought in, so the Sold tab answers its own obvious question. */
