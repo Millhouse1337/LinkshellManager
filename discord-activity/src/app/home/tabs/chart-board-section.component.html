@@ -46,6 +46,7 @@
             <tr>
               <td [attr.data-label]="section.heading">
                 <span class="chart-item__name" [class.chart-item__muted]="!item.tracked">{{ item.name }}</span>
+                @if (item.note) { <span class="chart-item__muted"> · {{ item.note }}</span> }
               </td>
               <td data-label="Qty">
                 <span class="chart-item__qty" [class.chart-item__muted]="!item.tracked">{{ item.quantity }}</span>

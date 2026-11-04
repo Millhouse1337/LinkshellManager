@@ -94,6 +94,9 @@ interface ChartConsolidatedItem {
   /** False for a catalog item nobody has a row for yet. It is still listed, at 0, so the card says
    *  what the boss takes and drops before anyone holds one. */
   tracked: boolean;
+  /** The catalog option's source, shown beside the name — a HENM tier item's price. Null on a
+   *  line no catalog option names. */
+  note: string | null;
 }
 
 /** A card's lines of one kind, under that kind's own heading. */
@@ -219,7 +222,9 @@ export class ChartBoardSectionComponent {
 
           const options = (kind === 'Drop' ? boss.dropItemOptions : boss.popItemOptions) ?? [];
           for (const option of options) {
-            const line = { name: option.name, quantity: 0, tracked: false };
+            const line: ChartConsolidatedItem = {
+              name: option.name, quantity: 0, tracked: false, note: option.source?.trim() || null
+            };
             seen.set(option.name.trim().toLowerCase(), line);
             order.push(line);
           }
@@ -231,7 +236,9 @@ export class ChartBoardSectionComponent {
               found.quantity += item.quantity;
               found.tracked = true;
             } else {
-              const line = { name: item.itemName, quantity: item.quantity, tracked: true };
+              const line: ChartConsolidatedItem = {
+                name: item.itemName, quantity: item.quantity, tracked: true, note: null
+              };
               seen.set(key, line);
               order.push(line);
             }

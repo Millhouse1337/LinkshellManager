@@ -859,10 +859,18 @@ public static class ChartBoardCatalog
             //
             // EndsRow is only needed INSIDE a run: the Temenos heading is full-width and already
             // breaks the row after CS, and Central B1 is the last card on the board.
-            new ChartBoss("NW", "apollyon-nw", "Apollyon.png", Group: LimbusApollyon),
-            new ChartBoss("SW", "apollyon-sw", "Apollyon.png", Group: LimbusApollyon),
-            new ChartBoss("NE", "apollyon-ne", "Apollyon.png", Group: LimbusApollyon),
-            new ChartBoss("SE", "apollyon-se", "Apollyon.png", Group: LimbusApollyon, EndsRow: true),
+            //
+            // Each area that rewards a chip lists it as the card's drop, so the card shows it at 0
+            // until somebody holds one (the four outer chips open Central). Central and CS reward
+            // none and stay free text.
+            new ChartBoss("NW", "apollyon-nw", "Apollyon.png", Group: LimbusApollyon,
+                DropItems: new[] { new ChartPopItemOption("Magenta Chip") }),
+            new ChartBoss("SW", "apollyon-sw", "Apollyon.png", Group: LimbusApollyon,
+                DropItems: new[] { new ChartPopItemOption("Charcoal Chip") }),
+            new ChartBoss("NE", "apollyon-ne", "Apollyon.png", Group: LimbusApollyon,
+                DropItems: new[] { new ChartPopItemOption("Smoky Chip") }),
+            new ChartBoss("SE", "apollyon-se", "Apollyon.png", Group: LimbusApollyon, EndsRow: true,
+                DropItems: new[] { new ChartPopItemOption("Smalt Chip") }),
 
             new ChartBoss(
                 "Central",
@@ -885,13 +893,21 @@ public static class ChartBoardCatalog
                 "Optional · Metal Chip area.",
                 Group: LimbusApollyon),
 
-            new ChartBoss("Western Tower", "temenos-west", "Temenos.png", Group: LimbusTemenos),
-            new ChartBoss("Eastern Tower", "temenos-east", "Temenos.png", Group: LimbusTemenos),
-            new ChartBoss("Northern Tower", "temenos-north", "Temenos.png", Group: LimbusTemenos, EndsRow: true),
+            // The towers' chips open the central floors (Emerald 1F, Scarlet 2F, Ivory 3F), and the
+            // floors' three open 4F. Central 4F and B1 reward none and stay free text.
+            new ChartBoss("Western Tower", "temenos-west", "Temenos.png", Group: LimbusTemenos,
+                DropItems: new[] { new ChartPopItemOption("Emerald Chip") }),
+            new ChartBoss("Eastern Tower", "temenos-east", "Temenos.png", Group: LimbusTemenos,
+                DropItems: new[] { new ChartPopItemOption("Scarlet Chip") }),
+            new ChartBoss("Northern Tower", "temenos-north", "Temenos.png", Group: LimbusTemenos, EndsRow: true,
+                DropItems: new[] { new ChartPopItemOption("Ivory Chip") }),
 
-            new ChartBoss("Central 1F", "temenos-1f", "Temenos.png", Group: LimbusTemenos),
-            new ChartBoss("Central 2F", "temenos-2f", "Temenos.png", Group: LimbusTemenos),
-            new ChartBoss("Central 3F", "temenos-3f", "Temenos.png", Group: LimbusTemenos, EndsRow: true),
+            new ChartBoss("Central 1F", "temenos-1f", "Temenos.png", Group: LimbusTemenos,
+                DropItems: new[] { new ChartPopItemOption("Orchid Chip") }),
+            new ChartBoss("Central 2F", "temenos-2f", "Temenos.png", Group: LimbusTemenos,
+                DropItems: new[] { new ChartPopItemOption("Cerulean Chip") }),
+            new ChartBoss("Central 3F", "temenos-3f", "Temenos.png", Group: LimbusTemenos, EndsRow: true,
+                DropItems: new[] { new ChartPopItemOption("Silver Chip") }),
 
             new ChartBoss(
                 "Central 4F",
@@ -913,7 +929,8 @@ public static class ChartBoardCatalog
     {
         CentersRows = true,
 
-        // Requests, plus DROP items on every card. No drop lists, so the drop box is free text. Still
+        // Requests, plus DROP items on every card. The ten areas that reward a chip list it (a picker
+        // and a 0 line on the card); Central, CS, Central 4F and B1 list none and keep free text. Still
         // no pop form: nothing on this board is popped with a tracked trade. No key items here -
         // Limbus passes are consumed rather than kept, so there is no permanent per-member state.
         Features = ChartBoardFeatures.Wishlist | ChartBoardFeatures.DropItems,
@@ -935,8 +952,14 @@ public static class ChartBoardCatalog
     // HENM.png is never drawn - a strip has no emblem - but every entry names a real file, which
     // ChartBoardCatalogTests.EveryBossEmblem_ExistsOnDisk checks. Each tier's colour matches its
     // NMs' (see _tokens.scss).
-    private static ChartBoss HenmTierItems(string name, string themeKey, string group) =>
-        new(name, themeKey, "HENM.png", ChartBossKinds.Tier, Group: group);
+    //
+    // popItem is the tier's pop item, listed on the strip at 0 until held and offered in its add
+    // picker. Its Source is what it costs, shown beside the name. Null for a tier not released yet,
+    // whose strip keeps a free-text box.
+    private static ChartBoss HenmTierItems(
+        string name, string themeKey, string group, ChartPopItemOption? popItem = null) =>
+        new(name, themeKey, "HENM.png", ChartBossKinds.Tier, Group: group,
+            PopItems: popItem is null ? null : new[] { popItem });
 
     // An NM card. It records no items of its own - its tier's strip holds them - so it shows no
     // item table and no add button.
@@ -956,12 +979,15 @@ public static class ChartBoardCatalog
         {
             // Tier 1 carries the zone it is camped in; the ladder above it is the same NMs wherever
             // they are found, so only this tier says where.
-            HenmTierItems("Tier 1", "henm-tier-1", HenmTier1),
+            // Only Tiers 1 and 2 are released; 3 and 4 get their pop items when they are.
+            HenmTierItems("Tier 1", "henm-tier-1", HenmTier1,
+                new ChartPopItemOption("Faded Stone", Source: "50,000 gil")),
             HenmNm("Ruinous Rocs", "henm-rocs", "Ruinous_Rocks.jpg", HenmTier1, "Rolanberry Fields"),
             HenmNm("Despotic Decapod", "henm-decapod", "Despotic_Decapod.jpg", HenmTier1, "Jugner Forest"),
             HenmNm("Sacred Scorpions", "henm-scorpions", "Sacred_Scorpions.jpg", HenmTier1, "Sauromugue Champaign"),
 
-            HenmTierItems("Tier 2", "henm-tier-2", HenmTier2),
+            HenmTierItems("Tier 2", "henm-tier-2", HenmTier2,
+                new ChartPopItemOption("Faded Gem", Source: "100,000 gil")),
             HenmNm("Mammet-9999", "henm-mammet", "Mammet_9999.jpg", HenmTier2),
             HenmNm("Tonberry Sovereign", "henm-tonberry", "Tonberry_Sovereign.jpg", HenmTier2),
             HenmNm("Ultimega", "henm-ultimega", "Ultimega.jpg", HenmTier2),
