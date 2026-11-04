@@ -51,6 +51,15 @@
         </div>
       </div>
 
+      <!-- ===== Queue / Create event: Current only ===== -->
+      <!-- First on Current, above the live cards. Its own wrapper rather than inside Current's, because
+           Current's Edit Live Event and the header's Create Event open this panel's <dialog>, and Angular
+           needs the panel kept (hidden on the other views), not destroyed. It used to sit at the top of
+           Pending too, repeating Current. -->
+      <div [hidden]="eventsView() !== 'current'">
+        <app-activity-queue-panel />
+      </div>
+
       <!-- ===== Current: everything still in play ===== -->
       <div [hidden]="eventsView() !== 'current'">
 
@@ -61,7 +70,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
               </div>
               <div class="empty-state-title">No live events running</div>
-              <div class="empty-state-desc">Start a queued event or create a new one below to begin.</div>
+              <div class="empty-state-desc">Start a queued event or create a new one above to begin.</div>
             </div>
           </div>
         }
@@ -2363,15 +2372,6 @@
              there; its "Awaiting confirmation" part). An unverified or unfiled capture is unpaid
              attendance waiting on an officer, so it sits with the live work. -->
         <app-attendance-sections section="unlinked" />
-      </div>
-
-      <!-- ===== Queue / Create event: Current only ===== -->
-      <!-- Under Current's live cards. Its own wrapper rather than inside Current's, because Current's
-           Edit Live Event and the header's Create Event open this panel's <dialog>, and Angular needs
-           the panel kept (hidden on the other views), not destroyed. It used to sit at the top of
-           Pending too, repeating Current. -->
-      <div [hidden]="eventsView() !== 'current'">
-        <app-activity-queue-panel />
       </div>
 
       <!-- ===== Pending: ended events still to be paid out ===== -->

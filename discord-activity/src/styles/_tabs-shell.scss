@@ -758,13 +758,15 @@ body {
 }
 
 /* The queue (Upcoming Events + create-event form) flows inside the same
-   1640px-capped, centered .panel-tab as the Live Operations section above it
-   so their left/right edges line up. */
+   1640px-capped, centered .panel-tab as the Live Operations cards below it
+   so their left/right edges line up. The bottom gap keeps the first live
+   card from reading as part of the queue. */
 .panel-tab app-activity-queue-panel {
   display: block;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+  margin-bottom: 24px;
 }
 
 /* Ensure embedded sidebar/queue panels use the cleaner card chrome */
