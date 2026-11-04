@@ -500,9 +500,9 @@ public class ChartBoardCatalogTests
         }
 
         Assert.True(ChartBoardCatalog.Find(ChartBoardCatalog.Sky)!.HasPopItemOptions);
-        // Dynamis and Limbus declare no pop items AND no longer offer the add form at all - members
-        // submit requests on those boards instead. The two facts are separate, which is exactly why
-        // AllowsPopItems is declared rather than inferred from this property.
+        // Dynamis and Limbus declare no pop items AND no longer offer the pop form - members submit
+        // requests on those boards instead (and Limbus takes drops). The two facts are separate,
+        // which is exactly why AllowsPopItems is declared rather than inferred from this property.
         Assert.False(ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!.HasPopItemOptions);
         Assert.False(ChartBoardCatalog.Find(ChartBoardCatalog.Limbus)!.HasPopItemOptions);
         Assert.False(ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!.AllowsPopItems);
@@ -931,8 +931,15 @@ public class ChartBoardCatalogTests
             ChartBoardFeatures.Wishlist | ChartBoardFeatures.KeyItems,
             ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!.Features);
         Assert.Equal(
-            ChartBoardFeatures.Wishlist,
+            ChartBoardFeatures.Wishlist | ChartBoardFeatures.DropItems,
             ChartBoardCatalog.Find(ChartBoardCatalog.Limbus)!.Features);
+        // Every Limbus card takes drops - free text, since none lists any.
+        var limbus = ChartBoardCatalog.Find(ChartBoardCatalog.Limbus)!;
+        Assert.All(limbus.Bosses, area =>
+        {
+            Assert.True(limbus.TakesItemKind(area, ChartItemKinds.Drop));
+            Assert.False(limbus.TakesItemKind(area, ChartItemKinds.Pop));
+        });
         Assert.Equal(
             ChartBoardFeatures.PopItems | ChartBoardFeatures.Wishlist,
             ChartBoardCatalog.Find(ChartBoardCatalog.Henm)!.Features);

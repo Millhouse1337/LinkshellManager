@@ -903,10 +903,10 @@ public static class ChartBoardCatalog
     {
         CentersRows = true,
 
-        // Same call Dynamis makes, and for the same reason: fourteen areas that all took free text.
-        // No key items here - Limbus passes are consumed rather than kept, so there is no permanent
-        // per-member state to track.
-        Features = ChartBoardFeatures.Wishlist,
+        // Requests, plus DROP items on every card. No drop lists, so the drop box is free text. Still
+        // no pop form: nothing on this board is popped with a tracked trade. No key items here -
+        // Limbus passes are consumed rather than kept, so there is no permanent per-member state.
+        Features = ChartBoardFeatures.Wishlist | ChartBoardFeatures.DropItems,
     };
 
     // HENM : Zilart is a TIER ladder — three NMs per tier, each tier unlocking the next, ending at

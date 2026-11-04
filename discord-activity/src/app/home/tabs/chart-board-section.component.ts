@@ -39,33 +39,40 @@ export interface ChartViewTab {
 }
 
 /**
- * The tabs a board splits into, or none for a board that keeps one long page (Limbus, HENM).
+ * The tabs a board splits into, or none for a board that keeps one long page (HENM).
  * One function, read by the Charts page to draw the switch and to tell this component what to show,
  * so the two cannot disagree about which part sits under which tab.
+ *
+ * Chosen by board rather than inferred from features: each board's tabs are named for that board,
+ * and two boards with the same features (Sea and Limbus both take drops) still want different ones.
  *
  * Keys are shared where the meaning is, so Sky Holdings -> Sea lands on Sea Holdings.
  */
 export function chartViewTabs(board: ActivityChartBoard | null): ChartViewTab[] {
-  if (!board) {
-    return [];
+  switch (board?.board) {
+    case 'Sky':
+    case 'Sea':
+      return [
+        { key: 'items', label: 'Pop/Drop Items', sections: ['cards'] },
+        { key: 'holdings', label: `${board.boardLabel} Holdings`, sections: ['holdings'] }
+      ];
+    // The zone cards each show their key item, so they are the Key Item tab; the old pop item
+    // holdings stay under them, where they were.
+    case 'Dynamis':
+      return [
+        { key: 'keyItem', label: 'Key Item', sections: ['cards', 'holdings'] },
+        { key: 'requests', label: 'Item Request', sections: ['requests'] },
+        { key: 'progress', label: 'Member Progress', sections: ['progress'] }
+      ];
+    case 'Limbus':
+      return [
+        { key: 'items', label: 'Drop Items', sections: ['cards'] },
+        { key: 'holdings', label: 'Holdings', sections: ['holdings'] },
+        { key: 'requests', label: 'Item Requests', sections: ['requests'] }
+      ];
+    default:
+      return [];
   }
-  // Sky and Sea - the two boards that record drops.
-  if (board.features.dropItems) {
-    return [
-      { key: 'items', label: 'Pop/Drop Items', sections: ['cards'] },
-      { key: 'holdings', label: `${board.boardLabel} Holdings`, sections: ['holdings'] }
-    ];
-  }
-  // Dynamis - the one board with key items. The zone cards each show their key item, so they are
-  // the Key Item tab; the old pop item holdings stay under them, where they were.
-  if (board.features.keyItems) {
-    return [
-      { key: 'keyItem', label: 'Key Item', sections: ['cards', 'holdings'] },
-      { key: 'requests', label: 'Item Request', sections: ['requests'] },
-      { key: 'progress', label: 'Member Progress', sections: ['progress'] }
-    ];
-  }
-  return [];
 }
 
 /** One heading and the cards under it. Local, like ChartsSectionOption in charts-tab.component.ts. */
