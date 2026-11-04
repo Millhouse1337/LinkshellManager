@@ -3,23 +3,38 @@
         <div>
           <div class="section-label">ToD Tracker</div>
         </div>
-        <!-- The linkshell is already named in the top bar's switcher, so it isn't repeated here. -->
+        <!-- The linkshell is already named in the top bar's switcher, so it isn't repeated here.
+             The view switch on top, like the Event System's; reviewers only, since Pending is theirs. -->
         <div class="section-head-right section-head-right--stacked">
-          @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
-            <button type="button" class="btn primary sm" (click)="todForm.openCreate(selectedDashboardLinkshellId())">+ Log ToD</button>
+          @if (canReviewSubmissions()) {
+            <div class="view-tabs" role="tablist" aria-label="ToD view">
+              <button type="button" class="view-tab" role="tab"
+                [class.active]="!showingPending()"
+                [attr.aria-selected]="!showingPending()"
+                (click)="todsView.set('main')">Main</button>
+              <button type="button" class="view-tab" role="tab"
+                [class.active]="showingPending()"
+                [attr.aria-selected]="showingPending()"
+                [title]="pendingCount() > 0 ? pendingCount() + ' ToD submission(s) waiting for approval' : ''"
+                (click)="todsView.set('pending')">Pending{{ pendingCount() > 0 ? ' (' + pendingCount() + ')' : '' }}</button>
+            </div>
           }
-          <div class="section-head-counts">
-            <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
-          </div>
+          @if (!showingPending()) {
+            @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
+              <button type="button" class="btn primary sm" (click)="todForm.openCreate(selectedDashboardLinkshellId())">+ Log ToD</button>
+            }
+            <div class="section-head-counts">
+              <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
+            </div>
+          }
         </div>
       </div>
 
-      <!-- ToD Submissions Needing Approval: only for those who may approve them (the API checks
-           again), at the top so a waiting ToD isn't missed. -->
-      @if (canReviewSubmissions()) {
+      <!-- Pending: ToD Submissions Needing Approval, for those who may approve them (the API checks
+           again). Main: the tracker below. -->
+      @if (showingPending()) {
         <app-pending-submissions-section />
-      }
-
+      } @else {
       <!-- Tracked Windows -->
       <div class="card">
         <div class="card-head">
@@ -142,6 +157,7 @@
           </div>
         }
       </div>
+      }
 
       <!-- Log ToD form (modal) — extracted into a shared component so the Events tab's
            "Post ToD" button on an HNM board can open the same form. Mounted at the tab

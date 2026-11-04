@@ -357,7 +357,7 @@
   <!-- ===== TODS TAB ===== -->
   @if (activeTab() === 'tods') {
     <div role="tabpanel" [id]="panelId('tods')" [attr.aria-labelledby]="tabId('tods')">
-      <app-tods-tab [deleteTodFn]="deleteTodFn" />
+      <app-tods-tab [deleteTodFn]="deleteTodFn" [view]="todsView()" (viewChange)="setTodsView($event)" />
     </div>
   }
 

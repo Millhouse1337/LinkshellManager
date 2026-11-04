@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, effect, inject, model, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityLinkshellSettings,
@@ -7,6 +7,7 @@ import {
 } from '../../discord/discord-activity.service';
 import type { ActivityMonsterSetup, ActivityPartySetupListRow } from '../../discord/discord-activity.types';
 import { PartySetupService } from '../../discord/party-setup.service';
+import { PendingSubmissionsService } from '../../discord/pending-submissions.service';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
 import { PendingSubmissionsSectionComponent } from './pending-submissions-section.component';
 import { TodFormComponent } from './tod-form.component';
@@ -15,6 +16,9 @@ import { TOD_NOT_ENTERED, canReviewSubmissionsIn, mergedMonsterName, monsterSetu
 import { hasHqVariant } from '../activity-home.types';
 
 type TodFilter = 'All' | 'Ready' | 'Pending';
+
+// Main = the tracker (approved ToDs). Pending = members' ToD submissions waiting for approval.
+export type TodsView = 'main' | 'pending';
 
 @Component({
   selector: 'app-tods-tab',
@@ -25,8 +29,28 @@ type TodFilter = 'All' | 'Ready' | 'Pending';
 export class TodsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetup = inject(PartySetupService);
+  private readonly pendingSubmissions = inject(PendingSubmissionsService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly now = signal(Date.now());
+
+  // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/tods/pending).
+  readonly todsView = model<TodsView>('main', { alias: 'view' });
+
+  // Pending is for reviewers only: anyone else sees no tabs and always gets Main, even when they
+  // follow a /tods/pending link.
+  protected showingPending(): boolean {
+    return this.todsView() === 'pending' && this.canReviewSubmissions();
+  }
+
+  // ToDs waiting for approval, for the "Pending (N)" tab label.
+  protected pendingCount(): number {
+    return this.pendingSubmissions.queueFor(this.selectedDashboardLinkshellId())?.tods.length ?? 0;
+  }
+
+  // The linkshell whose approval queue to load, or 0 when the viewer may not review it. A computed
+  // so the load below runs when this changes, not on every overview refresh.
+  private readonly reviewLinkshellId = computed(() =>
+    this.canReviewSubmissions() ? this.selectedDashboardLinkshellId() : 0);
 
   // The single-instance ToD delete confirmation modal lives in the parent so
   // it remains mounted regardless of which tab is active.
@@ -76,6 +100,13 @@ export class TodsTabComponent {
     effect(() => {
       const id = this.selectedDashboardLinkshellId();
       if (id) queueMicrotask(() => void this.partySetup.loadList(id));
+    });
+
+    // Loads the approval queue while Main is open too, so the Pending tab's count is right before
+    // anyone clicks it. (The Pending section reloads it when it opens.)
+    effect(() => {
+      const id = this.reviewLinkshellId();
+      if (id) queueMicrotask(() => void this.pendingSubmissions.load(id));
     });
   }
 
