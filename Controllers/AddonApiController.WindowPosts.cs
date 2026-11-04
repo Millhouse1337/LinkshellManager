@@ -1,7 +1,9 @@
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -83,7 +85,7 @@ public sealed partial class AddonApiController
                               + "windows. To credit someone who was missed, add them to the Close window.");
             }
 
-            attendanceWindow = new EventAttendanceWindow
+            attendanceWindow = await SaveNewWindowOrAdoptExistingAsync(_dbContext, new EventAttendanceWindow
             {
                 EventId = eventEntity.Id,
                 SequenceNumber = windowSequence,
@@ -99,15 +101,15 @@ public sealed partial class AddonApiController
                 SpawnWindow = DiscordEventMessageBuilder.SpawnWindowNow(eventEntity),
                 PostedBySource = postedBySource,
                 IsKillWindow = isKillWindow
-            };
-            _dbContext.EventAttendanceWindows.Add(attendanceWindow);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            }, cancellationToken);
         }
-        else if (isKillWindow && !attendanceWindow.IsKillWindow)
+
+        if (isKillWindow && !attendanceWindow.IsKillWindow)
         {
             // Post Kill landing in a row that already exists — a second kill post correcting
-            // the first, or a retry. Promote it rather than silently filing the kill roster as
-            // an ordinary window, which would pay it the window rate and pay nobody the kill.
+            // the first, a retry, or a race lost to another officer's ordinary post. Promote it
+            // rather than silently filing the kill roster as an ordinary window, which would pay
+            // it the window rate and pay nobody the kill.
             //
             // Never demotes: an ordinary post into a kill row must not strip the flag, or the
             // per-window "add a member" backfill would turn the kill roster back into a window.
@@ -117,6 +119,39 @@ public sealed partial class AddonApiController
         }
 
         return (attendanceWindow, null);
+    }
+
+    // Saves a brand-new window row, or hands back the one another post created first.
+    //
+    // Two officers pressing Post on the same not-yet-posted window at the same moment both find no
+    // row and both try to create it. The unique (EventId, SequenceNumber) index lets one through and
+    // rejects the other, which used to surface as a bare 500 on a post that had done nothing wrong.
+    // The loser now drops its own row and joins the winner's, exactly as if it had arrived a second
+    // later -- its members are added to that window and anyone already in it is skipped as usual.
+    //
+    // Any other save failure, or a rejection with no winning row to be found, is rethrown untouched.
+    internal static async Task<EventAttendanceWindow> SaveNewWindowOrAdoptExistingAsync(
+        ApplicationDbContext dbContext, EventAttendanceWindow newWindow, CancellationToken cancellationToken)
+    {
+        dbContext.EventAttendanceWindows.Add(newWindow);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return newWindow;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Stop tracking ours, or the next SaveChanges on this request would try the insert again.
+            // Anything else the failed save carried (the addon's auto-commence) stays pending and
+            // goes out with that next save.
+            dbContext.Entry(newWindow).State = EntityState.Detached;
+
+            var winner = await dbContext.EventAttendanceWindows.FirstOrDefaultAsync(
+                w => w.EventId == newWindow.EventId && w.SequenceNumber == newWindow.SequenceNumber,
+                cancellationToken);
+            if (winner is null) throw;
+            return winner;
+        }
     }
 
     // windowSequence: which of the camp's windows; a new one is created, an existing one is added to.
