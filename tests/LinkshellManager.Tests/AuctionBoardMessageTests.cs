@@ -40,9 +40,6 @@ public class AuctionBoardMessageTests
     private static string Description(object payload)
         => Render(payload).GetProperty("embeds")[0].GetProperty("description").GetString() ?? string.Empty;
 
-    // The item table without its ANSI color codes -- what a phone shows.
-    private static string Plain(string text) => System.Text.RegularExpressions.Regex.Replace(text, "\u001b\\[[0-9;]*m", "");
-
     [Fact]
     public void LiveCard_ShowsStatusCountAndEachItemsBid()
     {
@@ -55,14 +52,9 @@ public class AuctionBoardMessageTests
 
         Assert.StartsWith("🟢 **Live** · ends <t:", text);
         Assert.Contains("Host **Millh** · 3 items", text);
-        Assert.Contains("```ansi", text);
-        // Columns line up: the DKP right-aligned, the leader (or "no bids") after it.
-        Assert.Contains("1  Ridill       120 DKP  Alpha", Plain(text));
-        Assert.Contains("2  Kraken Club   50 DKP  no bids", Plain(text));
-        Assert.Contains("3  Haubergeon         —  no bids", Plain(text));
-        // The leader in bold green; an item nobody has bid on in gray.
-        Assert.Contains("\u001b[1;32mAlpha\u001b[0m", text);
-        Assert.Contains("\u001b[30mno bids\u001b[0m", text);
+        Assert.Contains("`1` **Ridill** · 120 DKP, Alpha", text);
+        Assert.Contains("`2` **Kraken Club** · opens 50 DKP", text);
+        Assert.Contains("`3` **Haubergeon** · no bids yet", text);
     }
 
     // The items sit UNDER the details, which is why both live in the description: Discord draws
@@ -74,8 +66,8 @@ public class AuctionBoardMessageTests
             LiveAuction(new AuctionItem { Id = 1, ItemName = "Ridill" }), null, Now));
         var text = payload.GetProperty("embeds")[0].GetProperty("description").GetString()!;
 
-        Assert.True(text.IndexOf("Starts <t:", StringComparison.Ordinal) < text.IndexOf("```ansi", StringComparison.Ordinal));
-        Assert.True(text.IndexOf("Host **Millh**", StringComparison.Ordinal) < text.IndexOf("```ansi", StringComparison.Ordinal));
+        Assert.True(text.IndexOf("Starts <t:", StringComparison.Ordinal) < text.IndexOf("`1`", StringComparison.Ordinal));
+        Assert.True(text.IndexOf("Host **Millh**", StringComparison.Ordinal) < text.IndexOf("`1`", StringComparison.Ordinal));
         Assert.False(payload.GetProperty("embeds")[0].TryGetProperty("fields", out _));
     }
 
@@ -95,14 +87,14 @@ public class AuctionBoardMessageTests
     }
 
     [Fact]
-    public void ItemTypeAndNotes_SitNextToTheName_CutToTheColumn()
+    public void ItemTypeAndNotes_SitOnTheItemsLine()
     {
         var auction = LiveAuction(
             new AuctionItem { Id = 1, ItemName = "Ridill", ItemType = "Weapon", Notes = "From Ouryu" });
 
-        var text = Plain(Description(AuctionBoardMessageBuilder.BuildLivePayload(auction, null, Now)));
+        var text = Description(AuctionBoardMessageBuilder.BuildLivePayload(auction, null, Now));
 
-        Assert.Contains("1  Ridill  Weapon · From…  —  no bids", text);
+        Assert.Contains("`1` **Ridill** · no bids yet · _Weapon · From Ouryu_", text);
     }
 
     [Fact]
@@ -117,10 +109,8 @@ public class AuctionBoardMessageTests
 
         Assert.True(text.Length <= 4096, $"description is {text.Length} chars");
         Assert.Matches(@"_…and \d+ more — see the app\._", text);
-        Assert.Contains(" 1  Item 1 ", Plain(text));
-        Assert.DoesNotContain("Item 60", text);
-        // The table is closed before the note, or the note would render inside the code block.
-        Assert.True(text.LastIndexOf("```", StringComparison.Ordinal) < text.IndexOf("_…and", StringComparison.Ordinal));
+        Assert.Contains("`1` **Item 1** ·", text);
+        Assert.DoesNotContain("`60` **Item 60**", text);
     }
 
     // One picker instead of a button per item, then My bids and Open in app.

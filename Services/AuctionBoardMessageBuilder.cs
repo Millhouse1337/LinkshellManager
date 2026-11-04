@@ -58,7 +58,7 @@ public static class AuctionBoardMessageBuilder
     }
 
     // The details first -- status, when it starts and ends, who is running it -- and the items
-    // UNDER them as a table (AppendItemTable). Everything sits in the description so the order is
+    // UNDER them, one numbered line each. Everything sits in the description so the order is
     // fixed: Discord always draws fields after the description, which put the item list above
     // the Starts / Ends / Created by it belongs under.
     private static object BuildLiveEmbed(Auction auction, string? appLink, DateTime nowUtc)
@@ -88,7 +88,8 @@ public static class AuctionBoardMessageBuilder
         {
             notes.Add($"_Items after the first {MaxPickerItems} aren't in the picker — bid on them in the app._");
         }
-        AppendItemTable(sb, items, notes);
+        sb.Append('\n');
+        AppendItems(sb, items, notes, (item, index) => LiveLine(item, index + 1));
 
         return new
         {
@@ -166,88 +167,12 @@ public static class AuctionBoardMessageBuilder
         }
     }
 
-    // ANSI styles Discord draws inside an ```ansi code block. Desktop shows the colors; phones
-    // show the same table in plain text. Plain markdown has no colors and no right alignment,
-    // which is why the item list is a fixed-width table at all.
-    private const string Reset = "\u001b[0m";
-    private const string BoldWhite = "\u001b[1;37m";
-    private const string Gray = "\u001b[30m";
-    private const string Yellow = "\u001b[33m";
-    private const string BoldGreen = "\u001b[1;32m";
-
-    // Column caps, so a row stays inside the embed's width instead of wrapping and breaking the
-    // columns: about 55 characters with every column full.
-    private const int NameWidthMax = 14;
-    private const int NotesWidthMax = 14;
-    private const int BidderWidthMax = 12;
-
-    // The live card's item list:
-    //   1  Kirin's Pole  abc            10 DKP  Millhouse
-    //   2  test item     Endgame Loot…  25 DKP  no bids
-    // Number (matches the item picker), name in bold white, its type / notes, then the DKP
-    // lined up on the right and the leader in bold green. No bids yet: the opening DKP and
-    // "no bids", in gray. Stops at the description budget like AppendItems.
-    private static void AppendItemTable(StringBuilder sb, IReadOnlyList<AuctionItem> items, List<string> notes)
+    // "`1` **Kirin's Pole** · 10 DKP, Millhouse · _abc_" -- number, name, where the bidding
+    // stands, then the type / notes on the same line. The number matches the item picker's.
+    private static string LiveLine(AuctionItem item, int number)
     {
-        if (items.Count == 0)
-        {
-            sb.Append("\n\n_No items._");
-            return;
-        }
-
-        var rows = items.Select((item, index) =>
-        {
-            var hasBid = item.CurrentHighestBid is > 0;
-            var dkp = hasBid ? $"{item.CurrentHighestBid} DKP"
-                : item.StartingBidDkp is > 0 ? $"{item.StartingBidDkp} DKP"
-                : "—";
-            var bidder = !hasBid ? "no bids"
-                : string.IsNullOrWhiteSpace(item.CurrentHighestBidder) ? "?"
-                : Cell(item.CurrentHighestBidder!, BidderWidthMax);
-            return (
-                Number: (index + 1).ToString(),
-                Name: Cell(ItemName(item), NameWidthMax),
-                Notes: Cell(RawDetail(item) ?? string.Empty, NotesWidthMax),
-                Dkp: dkp,
-                Bidder: bidder,
-                HasBid: hasBid);
-        }).ToList();
-        var numberWidth = rows.Max(r => r.Number.Length);
-        var nameWidth = rows.Max(r => r.Name.Length);
-        var notesWidth = rows.Max(r => r.Notes.Length);
-        var dkpWidth = rows.Max(r => r.Dkp.Length);
-
-        sb.Append("\n```ansi");
-        // Room for the notes, the "…and N more" line and the closing fence.
-        var reserved = notes.Sum(n => n.Length + 1) + 52;
-        for (var i = 0; i < rows.Count; i++)
-        {
-            var row = rows[i];
-            var notesCell = notesWidth == 0 ? string.Empty : "  " + row.Notes.PadRight(notesWidth);
-            var bidStyle = row.HasBid ? Yellow : Gray;
-            var bidderStyle = row.HasBid ? BoldGreen : Gray;
-            var line = $"\n{row.Number.PadLeft(numberWidth)}  {BoldWhite}{row.Name.PadRight(nameWidth)}{Reset}"
-                + $"{notesCell}  {bidStyle}{row.Dkp.PadLeft(dkpWidth)}{Reset}  {bidderStyle}{row.Bidder}{Reset}";
-            if (sb.Length + line.Length + reserved > DescriptionBudget)
-            {
-                notes.Insert(0, $"_…and {rows.Count - i} more — see the app._");
-                break;
-            }
-            sb.Append(line);
-        }
-        sb.Append("\n```");
-
-        foreach (var note in notes)
-        {
-            sb.Append('\n').Append(note);
-        }
-    }
-
-    // One table cell: single line, no backticks (they would close the code block), cut to `max`.
-    private static string Cell(string value, int max)
-    {
-        var text = value.Trim().ReplaceLineEndings(" ").Replace('`', '\'');
-        return text.Length <= max ? text : text[..(max - 1)].TrimEnd() + "…";
+        var line = $"`{number}` **{Escape(ItemName(item))}** · {Escape(BidState(item))}";
+        return DetailText(item) is { } detail ? $"{line} · _{detail}_" : line;
     }
 
     // Where an item's bidding stands, in plain text (the picker's option description uses it
@@ -275,21 +200,17 @@ public static class AuctionBoardMessageBuilder
     private static string? DetailLine(AuctionItem item)
         => DetailText(item) is { } detail ? $"↳ _{detail}_" : null;
 
-    // "Weapon · Dropped by Ouryu" (escaped for markdown), or null when the item has neither.
+    // "Weapon · Dropped by Ouryu" (escaped), or null when the item has neither.
     private static string? DetailText(AuctionItem item)
-        => RawDetail(item) is { } detail ? Escape(detail) : null;
-
-    // The same, unescaped -- for the code-block table, where markdown is not parsed.
-    private static string? RawDetail(AuctionItem item)
     {
         var bits = new List<string>();
         if (!string.IsNullOrWhiteSpace(item.ItemType))
         {
-            bits.Add(item.ItemType!.Trim());
+            bits.Add(Escape(item.ItemType!.Trim()));
         }
         if (!string.IsNullOrWhiteSpace(item.Notes))
         {
-            bits.Add(Truncate(item.Notes!.Trim().ReplaceLineEndings(" "), NotesMax));
+            bits.Add(Escape(Truncate(item.Notes!.Trim().ReplaceLineEndings(" "), NotesMax)));
         }
         return bits.Count == 0 ? null : string.Join(" · ", bits);
     }
