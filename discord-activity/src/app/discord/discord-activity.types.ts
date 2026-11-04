@@ -1897,8 +1897,9 @@ export interface ActivityCreateEventInput {
   autoStart?: boolean;
   // When true, attendees earn active-member credit (reconciled at close). Default true.
   countsTowardActive?: boolean;
-  // HNM signup board only: the monster the board is for. The monster's standing re-post setting
-  // is not sent from here — create and edit leave it alone; only End Camp / Post ToD sets it.
+  // HNM signup board only: the monster the board is for. The monster's standing re-post switch
+  // is not sent from here — only End Camp / Post ToD turns it on or off. Its lead is: see
+  // repostLeadHours.
   monsterName?: string | null;
   // HNM signup board only: optional "Day N" label shown on the board.
   dayNumber?: number | null;
@@ -1910,6 +1911,9 @@ export interface ActivityCreateEventInput {
   hnmClaimBonusOverride?: number | null;
   hnmKillBonusOverride?: number | null;
   hnmPerWindowOverride?: number | null;
+  // HNM edit only: hours before the pop the sign-up board re-posts. The server applies it only
+  // when the monster already re-posts, and never on create. Null leaves the lead alone.
+  repostLeadHours?: number | null;
 }
 
 export interface ActivityAddEventMemberInput {

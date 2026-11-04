@@ -309,6 +309,11 @@ public sealed partial class ActivityDataController
             eventEntity.HnmKillBonusOverride = NormalizeBonusOverride(request.HnmKillBonusOverride);
             eventEntity.HnmPerWindowOverride = NormalizeBonusOverride(request.HnmPerWindowOverride);
 
+            // When the sign-up board re-posts, if this monster re-posts at all. Saved with the
+            // event below; RefreshRepostAtAsync after it moves the advertised time to match.
+            await HnmRecurringBoardService.ApplyEditedLeadAsync(
+                _dbContext, eventEntity, request.RepostLeadHours, cancellationToken);
+
             // A LIVE camp whose start no longer matches the time its grid counts from: the grid
             // moves to the start, or the board keeps counting windows from the time it went live
             // on. Compared against the ANCHOR, not the start the form opened with, so a camp whose

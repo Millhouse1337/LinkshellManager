@@ -68,6 +68,32 @@ public static class HnmRecurringBoardService
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    // The edit form's re-post lead: how many hours before the pop the sign-up board comes back.
+    // Only for a monster that ALREADY re-posts -- edit never switches re-post on (End Camp / Post
+    // ToD own that), so with no enabled board this does nothing. The lead lives on the monster's
+    // standing board and is shared by every board for the spawn, exactly as End Camp sets it; the
+    // poller reads it every tick, so the new lead moves the real re-post time straight away. Call
+    // RefreshRepostAtAsync after saving so the card advertises the new time. Stages only.
+    public static async Task<bool> ApplyEditedLeadAsync(
+        ApplicationDbContext db, Event ev, double? leadHours, CancellationToken cancellationToken)
+    {
+        var monster = ev.AssignedMonsterName?.Trim();
+        if (leadHours is not { } lead || lead <= 0 || string.IsNullOrWhiteSpace(monster))
+        {
+            return false;
+        }
+
+        var board = await FindAsync(db, ev.LinkshellId, monster, cancellationToken);
+        if (board is not { Enabled: true } || board.LeadHours == lead)
+        {
+            return false;
+        }
+
+        board.LeadHours = lead;
+        board.UpdatedAt = DateTime.UtcNow;
+        return true;
+    }
+
     // Re-derive a defeated board's DISPLAYED re-post time (Event.HnmRepostAt) from the
     // monster's current standing lead. Call it after an event edit, which may have moved the
     // board or switched its monster: HnmRecurringBoardBackgroundService always recomputes its own

@@ -1447,9 +1447,9 @@ public sealed record ActivityCreateEventRequest(
     // Default true.
     bool CountsTowardActive = true,
     // HNM signup board only: the canonical monster the board is for. Ignored for non-HNM events.
-    // The monster's standing "repost before the next predicted pop" setting is not part of this
-    // request: creating or editing an event leaves it alone, and only End Camp / Post ToD
-    // (ActivityPostBoardTodRequest.Repost) switches it on or off.
+    // The monster's standing "repost before the next predicted pop" switch is not part of this
+    // request: only End Camp / Post ToD (ActivityPostBoardTodRequest.Repost) turns it on or off.
+    // Its LEAD can be adjusted on edit -- see RepostLeadHours at the end.
     string? MonsterName = null,
     // HNM signup board only: optional "Day N" label shown on the board.
     int? DayNumber = null,
@@ -1461,7 +1461,12 @@ public sealed record ActivityCreateEventRequest(
     double? HnmCloseBonusOverride = null,
     double? HnmClaimBonusOverride = null,
     double? HnmKillBonusOverride = null,
-    double? HnmPerWindowOverride = null);
+    double? HnmPerWindowOverride = null,
+    // HNM edit only: how many hours before the pop the sign-up board re-posts. Applied only when
+    // the monster already re-posts (HnmRecurringBoard enabled), never switching it on; shared by
+    // every board for the spawn, as End Camp sets it. Null or <= 0 leaves the lead alone. Ignored
+    // on create.
+    double? RepostLeadHours = null);
 
 public sealed record ActivityCreateLinkshellRequest(string Name, string? Details);
 

@@ -23,6 +23,7 @@ import {
   EVENT_SUB_JOB_OPTIONS
 } from './event-job-options';
 import { hasHqVariant, isHnmTierMonster } from './activity-home.types';
+import { datetimeLocalToUtcIso } from '../discord/discord-activity.helpers';
 import { PartySetupService } from '../discord/party-setup.service';
 import { TodService } from '../discord/tod.service';
 import { canManageLinkshellIn } from './activity-home.helpers';
@@ -123,8 +124,16 @@ export class ActivityQueuePanelComponent {
     hnmCloseBonusOverride: null,
     hnmClaimBonusOverride: null,
     hnmKillBonusOverride: null,
-    hnmPerWindowOverride: null
+    hnmPerWindowOverride: null,
+    // Edit only, and only when the monster already re-posts. Seeded from the event's
+    // repeatLeadHours in openEditEventForm.
+    repostLeadHours: null
   };
+
+  // Whether the event being edited belongs to a monster that re-posts its board on its own (an
+  // enabled standing board). Decides whether "Board re-posts" is an hours box or an "Off" note:
+  // the edit form adjusts the lead but never switches re-post on.
+  protected editingRepostOn = false;
 
   // Free-text monster name when "Other" is picked in the HNM monster dropdown.
   protected customMonsterName = '';
@@ -756,16 +765,15 @@ export class ActivityQueuePanelComponent {
     if (Number.isNaN(start) || Number.isNaN(repost)) {
       return null;
     }
-    let sec = Math.max(0, Math.round((start - repost) / 1000));
-    const h = Math.floor(sec / 3600);
-    sec %= 3600;
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
+    // Whole minutes. The re-post is timed off the ToD, so a Start edited a few seconds off it read
+    // "12h 16s" for a 12-hour lead; seconds never mean anything here.
+    const totalMinutes = Math.max(0, Math.round((start - repost) / 60_000));
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
     const parts: string[] = [];
     if (h) { parts.push(`${h}h`); }
     if (m) { parts.push(`${m}m`); }
-    if (s) { parts.push(`${s}s`); }
-    return parts.length ? parts.join(' ') : '0s';
+    return parts.length ? parts.join(' ') : '0m';
   }
 
   protected openPostTodForm(event: {
@@ -927,7 +935,12 @@ export class ActivityQueuePanelComponent {
         // A day the form didn't ask for is not a day the board should print: switching the
         // monster from a merge pair to anything else must not post the number that was typed
         // while the box was still on offer. The model keeps it, so switching back restores it.
-        dayNumber: this.dayNumberVisible() ? this.createModel.dayNumber : null
+        dayNumber: this.dayNumberVisible() ? this.createModel.dayNumber : null,
+        // Only what the "Board re-posts" box showed. Anything else -- a live camp, a monster that
+        // does not re-post, the create form -- sends nothing and the lead stays as it is.
+        repostLeadHours: this.showRepostLeadField() && this.editingRepostOn
+          ? this.createModel.repostLeadHours ?? null
+          : null
       };
       if (this.editingEventId) {
         await this.activity.updateEvent(this.editingEventId, payload);
@@ -941,6 +954,24 @@ export class ActivityQueuePanelComponent {
     } finally {
       this.isSubmittingCreate = false;
     }
+  }
+
+  // "Board re-posts" is offered when editing a QUEUED HNM board. Not on create (a new board has no
+  // re-post cycle yet) and not on a live camp (its next re-post is set when it ends).
+  protected showRepostLeadField(): boolean {
+    return this.isHnmSelected() && this.editingEventId !== null && !this.isEditingLiveEvent;
+  }
+
+  // When the board would re-post with the lead in the box: the first window minus the lead.
+  // Null until both are filled in, so the hint only shows a real time.
+  protected repostPreview(): string | null {
+    const lead = Number(this.createModel.repostLeadHours);
+    const startIso = datetimeLocalToUtcIso(this.createModel.startTimeLocal);
+    if (!startIso || !Number.isFinite(lead) || lead <= 0) {
+      return null;
+    }
+    const start = Date.parse(startIso);
+    return Number.isNaN(start) ? null : new Date(start - lead * 3_600_000).toISOString();
   }
 
   public openEditEventForm(event: {
@@ -966,10 +997,14 @@ export class ActivityQueuePanelComponent {
     hnmClaimBonusOverride?: number | null;
     hnmKillBonusOverride?: number | null;
     hnmPerWindowOverride?: number | null;
+    repeatOnTod?: boolean;
+    repeatLeadHours?: number | null;
   }): void {
     this.activity.clearActionState();
     this.isCreateOpen = true;
     this.editingEventId = event.id;
+    this.editingRepostOn = event.repeatOnTod ?? false;
+    this.createModel.repostLeadHours = event.repeatLeadHours ?? null;
     this.isEditingLiveEvent = !!event.commencementStartTime;
     this.createModel.linkshellId = event.linkshellId;
     this.createModel.eventName = event.name ?? '';
@@ -1078,6 +1113,8 @@ export class ActivityQueuePanelComponent {
     this.createModel.countsTowardActive = true;
     this.createModel.monsterName = null;
     this.createModel.dayNumber = null;
+    this.createModel.repostLeadHours = null;
+    this.editingRepostOn = false;
     this.customMonsterName = '';
     this.isEditingLiveEvent = false;
     this.editingOriginalPartySetupId = null;

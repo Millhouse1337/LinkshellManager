@@ -138,6 +138,56 @@ public class HnmParkedBoardEditTests
         Assert.NotNull(ev.HnmDefeatedAt);
     }
 
+    // ---- the edit form's re-post lead ----
+
+    [Fact]
+    public async Task EditingTheLead_MovesTheBoardsRepostTime()
+    {
+        var waiting = DueParkedBoard();
+        waiting.HnmRepostAt = NextRepop.AddHours(-2);
+        using var db = await SeededAsync(waiting);
+        var ev = await db.Events.SingleAsync();
+
+        var changed = await HnmRecurringBoardService.ApplyEditedLeadAsync(db, ev, 6, CancellationToken.None);
+        await db.SaveChangesAsync();
+        await HnmRecurringBoardService.RefreshRepostAtAsync(db, ev, ev.AssignedMonsterName, CancellationToken.None);
+
+        Assert.True(changed);
+        Assert.Equal(6, (await db.HnmRecurringBoards.SingleAsync()).LeadHours);
+        Assert.Equal(NextRepop.AddHours(-6), ev.HnmRepostAt);
+    }
+
+    [Fact]
+    public async Task EditingTheLead_NeverSwitchesRepostOn()
+    {
+        using var db = await SeededAsync(DueParkedBoard());
+        var board = await db.HnmRecurringBoards.SingleAsync();
+        board.Enabled = false;
+        await db.SaveChangesAsync();
+        var ev = await db.Events.SingleAsync();
+
+        var changed = await HnmRecurringBoardService.ApplyEditedLeadAsync(db, ev, 6, CancellationToken.None);
+
+        Assert.False(changed);
+        Assert.False(board.Enabled);
+        Assert.Equal(2, board.LeadHours);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    public async Task ABlankOrNonPositiveLead_LeavesTheLeadAlone(double? lead)
+    {
+        using var db = await SeededAsync(DueParkedBoard());
+        var ev = await db.Events.SingleAsync();
+
+        var changed = await HnmRecurringBoardService.ApplyEditedLeadAsync(db, ev, lead, CancellationToken.None);
+
+        Assert.False(changed);
+        Assert.Equal(2, (await db.HnmRecurringBoards.SingleAsync()).LeadHours);
+    }
+
     [Fact]
     public async Task ABoardThatIsUp_IsLeftAlone()
     {

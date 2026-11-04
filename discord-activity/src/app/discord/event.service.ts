@@ -164,7 +164,8 @@ export class EventService {
         hnmCloseBonusOverride: input.hnmCloseBonusOverride ?? null,
         hnmClaimBonusOverride: input.hnmClaimBonusOverride ?? null,
         hnmKillBonusOverride: input.hnmKillBonusOverride ?? null,
-        hnmPerWindowOverride: input.hnmPerWindowOverride ?? null
+        hnmPerWindowOverride: input.hnmPerWindowOverride ?? null,
+        repostLeadHours: input.repostLeadHours ?? null
       });
 
       await this.auth.refreshOverview();
