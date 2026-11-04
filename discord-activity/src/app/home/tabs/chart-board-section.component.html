@@ -220,39 +220,30 @@
      path columns needed the same card in a second place, and a copy would have been two card
      layouts to keep in step. -->
 <!--
-  The key item this card grants, and exactly who is still short of it.
+  The key item this card grants: how many have it, and the viewer's own "I Have It" button.
 
-  A count plus a drawer, because "3 of 14" answers how far along the linkshell is while the list
-  answers who to chase - and only the second one is actionable. Its own template rather than pasted
-  into both card branches below: it is a footer strip AND a drawer, which is more than the three
-  duplicated lines the heading blocks already carry.
+  The button ticks the VIEWER's own cell in the Member Progress grid - the same write, the same
+  self-serve rule the server checks. Pressed again it clears it. A viewer with no membership has no
+  row to tick, so they see the count only. Who is still short of it is the Member Progress tab.
 
-  The stored fact is "has it"; missing is its inverse against the live roster, so somebody who joins
-  tomorrow shows up here with no backfill.
+  Its own template rather than pasted into both card branches below.
 -->
 <ng-template #cardKeyItem let-boss>
   @if (boss.keyItemName) {
-    <div class="chart-card__footer chart-rewards__bar">
-      <button type="button" class="chart-rewards__toggle" (click)="toggleKeyItem(boss.boss)"
-              [attr.aria-expanded]="keyItemOpenBoss() === boss.boss">
-        <span class="chart-rewards__chevron" [class.is-open]="keyItemOpenBoss() === boss.boss">›</span> Key item
-      </button>
+    <div class="chart-card__footer chart-keyitem__bar">
       <strong>{{ boss.keyItemHaveCount }} of {{ boss.keyItemTotalMembers }} have it</strong>
-    </div>
-    @if (keyItemOpenBoss() === boss.boss) {
-      <aside class="chart-rewards">
-        @if (boss.keyItemMissing.length === 0) {
-          <div class="chart-rewards__note">Everybody on the roster has {{ boss.keyItemName }}.</div>
+      @if (viewerMembershipId() !== null) {
+        @if (viewerHasKeyItem(boss.keyItemName)) {
+          <button type="button" class="btn sm ghost" [disabled]="charts.busySave()"
+                  [title]="'You have ' + boss.keyItemName + '. Press to undo.'"
+                  (click)="setOwnKeyItem(boss.keyItemName, false)">✓ I Have It</button>
         } @else {
-          <div class="chart-rewards__note">Still needed by {{ boss.keyItemMissing.length }}:</div>
-          <ul>
-            @for (name of boss.keyItemMissing; track name) {
-              <li><span>◈</span> {{ name }}</li>
-            }
-          </ul>
+          <button type="button" class="btn sm primary" [disabled]="charts.busySave()"
+                  [title]="'Mark ' + boss.keyItemName + ' as yours'"
+                  (click)="setOwnKeyItem(boss.keyItemName, true)">I Have It</button>
         }
-      </aside>
-    }
+      }
+    </div>
   }
 </ng-template>
 

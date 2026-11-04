@@ -671,19 +671,39 @@ export class ChartBoardSectionComponent {
     this.rewardsOpenBoss.update(open => (open === boss ? null : boss));
   }
 
-  /**
-   * The "who still needs this key item" drawer. A separate signal from rewardsOpenBoss so a finale
-   * card that has both can open one without closing the other.
-   */
-  protected readonly keyItemOpenBoss = signal<string | null>(null);
+  // ---- a card's "I Have It" button ----
 
-  protected toggleKeyItem(boss: string): void {
-    this.keyItemOpenBoss.update(open => (open === boss ? null : boss));
+  /** The viewer's own membership, or null for somebody with none - they get no button. */
+  protected readonly viewerMembershipId = computed(() => this.chart()?.viewerMembershipId ?? null);
+
+  /** Whether the viewer's own row in the key item grid has this one ticked. */
+  protected viewerHasKeyItem(keyItemName: string): boolean {
+    const grid = this.chart()?.keyItems;
+    const viewer = this.viewerMembershipId();
+    const column = grid?.columns.findIndex(item => item.name === keyItemName) ?? -1;
+    const row = grid?.rows.find(member => member.membershipId === viewer);
+    return column >= 0 && row?.has[column] === true;
+  }
+
+  /**
+   * Ticks or clears the viewer's OWN cell - the same write the Member Progress grid makes, and the
+   * server applies the same self-serve rule to it.
+   */
+  protected async setOwnKeyItem(keyItemName: string, has: boolean): Promise<void> {
+    const linkshellId = this.selectedLinkshellId();
+    const membershipId = this.viewerMembershipId();
+    if (linkshellId === null || membershipId === null) {
+      return;
+    }
+    try {
+      await this.charts.setKeyItem(linkshellId, this.boardKey(), { keyItemName, membershipId, has });
+    } catch {
+      // Surfaced by the service through the shared action banner.
+    }
   }
 
   private closeAll(): void {
     this.cancelForm();
     this.rewardsOpenBoss.set(null);
-    this.keyItemOpenBoss.set(null);
   }
 }

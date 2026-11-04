@@ -2549,7 +2549,8 @@ export interface ActivityChartBoss {
   keyItemName?: string | null;
   keyItemHaveCount: number;
   keyItemTotalMembers: number;
-  /** Exactly who still needs it, in roster order - what the card's drawer lists. */
+  /** Exactly who still needs it, in roster order. No longer drawn on the card - the card has an
+   *  "I Have It" button instead, and the Member Progress tab shows who is missing. */
   keyItemMissing: string[];
   /** Whether this card gets an "add pop item" button. The server's answer; the add endpoint checks it too. */
   takesPopItems: boolean;

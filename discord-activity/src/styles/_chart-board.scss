@@ -352,6 +352,13 @@
   border-top: 1px solid var(--border);
 }
 .panel-tab .chart-card__footer strong { color: var(--fg); font-weight: 600; }
+/* The key item strip carries the "I Have It" button, so it trims its padding to stay about as tall
+   as the totals strip above it. */
+.panel-tab .chart-keyitem__bar {
+  align-items: center;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
 
 .panel-tab .chart-card__empty {
   padding: 16px 14px;
