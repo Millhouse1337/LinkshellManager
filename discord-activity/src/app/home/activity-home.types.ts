@@ -35,11 +35,13 @@ export const TAB_NAMES = [
 
 export type TabName = typeof TAB_NAMES[number];
 
-// The Profile tab's views, picked by the strip by its heading: /profile, /profile/crafts,
-// /profile/ratings.
-// Onboarding (/profile/onboarding, the Next Steps checklist) is opened by the button beside the
-// "Your profile" title rather than from the strip.
-export type ProfileView = 'jobs' | 'crafts' | 'ratings' | 'onboarding';
+// The Profile tab's views, picked by the strip by its heading: /profile (Profile: characters and
+// time zone), /profile/jobs, /profile/crafts, /profile/ratings.
+export type ProfileView = 'profile' | 'jobs' | 'crafts' | 'ratings';
+
+// The Dashboard's views: / (Overview, the linkshell dashboard) and /dashboard/onboarding (the Next
+// Steps checklist, which used to be a page of the Profile tab).
+export type DashboardView = 'overview' | 'onboarding';
 
 // The Treasury tab's views, picked by the strip in its header: /treasury (the balance sheet),
 // /treasury/items, /treasury/transactions.

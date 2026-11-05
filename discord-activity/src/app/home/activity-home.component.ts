@@ -14,7 +14,7 @@ import {
   DiscordActivityService
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
-import { TAB_NAMES, type ManagementView, type ProfileView, type SettingsSection, type TabName, type TreasuryView } from './activity-home.types';
+import { TAB_NAMES, type DashboardView, type ManagementView, type ProfileView, type SettingsSection, type TabName, type TreasuryView } from './activity-home.types';
 import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
 
@@ -97,17 +97,24 @@ export class ActivityHomeComponent {
   });
   protected readonly todsView = computed<TodsView>(() => (this.subView() === 'pending' ? 'pending' : 'main'));
   protected readonly profileViews = [
+    { key: 'profile' as const, label: 'Profile' },
     { key: 'jobs' as const, label: 'Jobs' },
     { key: 'crafts' as const, label: 'Crafts' },
     { key: 'ratings' as const, label: 'Player Ratings' },
   ];
   protected readonly profileView = computed<ProfileView>(() => {
-    // No linkshell yet: Jobs, Crafts and Player Ratings all need one, so the tab is Onboarding,
-    // which is where a new member's character name and time zone go. (Only once the overview has
-    // loaded, so a slow load doesn't flash Onboarding at someone who has linkshells.)
-    if (this.activity.overview()?.linkshells?.length === 0) return 'onboarding';
+    // No linkshell yet: Jobs, Crafts and Player Ratings all need one, so the tab is Profile, which
+    // is where a new member's character name and time zone go.
+    if (this.activity.overview()?.linkshells?.length === 0) return 'profile';
     const view = this.subView();
-    return view === 'crafts' || view === 'ratings' || view === 'onboarding' ? view : 'jobs';
+    return view === 'jobs' || view === 'crafts' || view === 'ratings' ? view : 'profile';
+  });
+  protected readonly dashboardView = computed<DashboardView>(() => {
+    // No linkshell yet: the Overview has nothing to show, so the tab is Onboarding, the checklist a
+    // new member needs most. (Only once the overview has loaded, so a slow load doesn't flash
+    // Onboarding at someone who has linkshells.)
+    if (this.activity.overview()?.linkshells?.length === 0) return 'onboarding';
+    return this.activeTab() === 'dashboard' && this.subView() === 'onboarding' ? 'onboarding' : 'overview';
   });
   protected readonly treasuryView = computed<TreasuryView>(() => {
     const view = this.activeTab() === 'treasury' ? this.subView() : null;
@@ -335,7 +342,10 @@ export class ActivityHomeComponent {
   // as it always was: a changing iframe URL interacts badly with the Activity SDK's URL mapping
   // (see charts-tab), and there is no address bar or Back button there anyway.
   protected setActiveTab(tab: TabName, subView?: string | readonly string[]): void {
-    const parts = [slugForTab(tab), ...(typeof subView === 'string' ? [subView] : subView ?? [])]
+    const sub = typeof subView === 'string' ? [subView] : subView ?? [];
+    // The dashboard's slug is empty (it is the bare URL), so a sub-view of it spells the tab out:
+    // /dashboard/onboarding (tabFromSlug reads 'dashboard' back).
+    const parts = [slugForTab(tab) || (sub.length > 0 ? tab : ''), ...sub]
       .filter((part): part is string => !!part);
     if (tab !== this.activeTab()) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -391,7 +401,11 @@ export class ActivityHomeComponent {
   }
 
   protected setProfileView(view: ProfileView): void {
-    this.setActiveTab('profile', view === 'jobs' ? undefined : view);
+    this.setActiveTab('profile', view === 'profile' ? undefined : view);
+  }
+
+  protected setDashboardView(view: DashboardView): void {
+    this.setActiveTab('dashboard', view === 'overview' ? undefined : view);
   }
 
   // Every Data Admin step is a new page (list → row → edit), so it starts at the top.

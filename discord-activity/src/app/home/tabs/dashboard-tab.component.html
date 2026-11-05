@@ -9,7 +9,13 @@
             <div class="section-label">Dashboard</div>
             <div class="section-title">Linkshell overview</div>
           </div>
-          <span class="tag default num">{{ dashboardLinkshell.memberCount }} members</span>
+          <!-- Count on top, then the Overview | Onboarding strip, like the Event System's. -->
+          <div class="section-head-right section-head-right--stacked">
+            <span class="tag default num">{{ dashboardLinkshell.memberCount }} members</span>
+            @if (viewTabs) {
+              <ng-container [ngTemplateOutlet]="viewTabs" />
+            }
+          </div>
         </div>
 
         <div class="stat-strip">

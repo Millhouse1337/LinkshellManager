@@ -22,5 +22,8 @@ export function slugForTab(tab: TabName): string {
 // The tab a URL's first segment names, or null for an unknown name.
 export function tabFromSlug(slug: string | null | undefined): TabName | null {
   const value = (slug ?? '').trim().toLowerCase();
+  // The dashboard is the bare URL, but its sub-views need a first segment to sit under:
+  // /dashboard/onboarding.
+  if (value === 'dashboard') return 'dashboard';
   return ROUTABLE_TABS.find(tab => slugForTab(tab) === value) ?? null;
 }

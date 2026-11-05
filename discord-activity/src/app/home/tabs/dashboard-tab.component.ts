@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, Input, TemplateRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivityHttpClient } from '../../discord/activity-http.client';
 import { formatActionError } from '../../discord/discord-activity.helpers';
@@ -55,6 +55,9 @@ export class DashboardTabComponent {
   // single instance is shared between the Dashboard and ToDs tabs.
   @Input({ required: true }) deleteTodFn!: (todId: number, monsterName: string) => void;
   @Input({ required: true }) setActiveTabFn!: (tab: TabName) => void;
+  // The parent's Overview | Onboarding strip, drawn in this view's heading (the parent owns the
+  // view, since Onboarding isn't this component).
+  @Input() viewTabs: TemplateRef<unknown> | null = null;
 
   // Roster search is shared with the linkshell tab via the parent component
   // so the value persists when the user hops between tabs.

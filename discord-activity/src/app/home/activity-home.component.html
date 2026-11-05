@@ -282,11 +282,43 @@
   <!-- ===== DASHBOARD TAB ===== -->
   @if (activeTab() === 'dashboard') {
     <div role="tabpanel" [id]="panelId('dashboard')" [attr.aria-labelledby]="tabId('dashboard')">
-      <app-dashboard-tab
-        [deleteTodFn]="deleteTodFn"
-        [setActiveTabFn]="setActiveTabFn"
-        [rosterSearchValue]="dashboardRosterSearch"
-        [rosterSearchChange]="setDashboardRosterSearch" />
+      <!-- Onboarding (/dashboard/onboarding) is the Next Steps checklist, which used to be a page of
+           the Profile tab. With no linkshell it is the only view (the Overview would be empty), so
+           its strip only shows once there is an Overview to switch back to. -->
+      @if (dashboardView() === 'onboarding') {
+        <div class="panel-tab fade">
+          <div class="section-head">
+            <div>
+              <div class="section-label">Dashboard</div>
+              <div class="section-title">Onboarding</div>
+            </div>
+            @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
+              <ng-container [ngTemplateOutlet]="dashboardViewTabs" />
+            }
+          </div>
+          <app-activity-sidebar-panel [visibleSections]="['next-steps']" />
+        </div>
+      } @else {
+        <app-dashboard-tab
+          [viewTabs]="dashboardViewTabs"
+          [deleteTodFn]="deleteTodFn"
+          [setActiveTabFn]="setActiveTabFn"
+          [rosterSearchValue]="dashboardRosterSearch"
+          [rosterSearchChange]="setDashboardRosterSearch" />
+      }
+      <!-- One copy of the Overview | Onboarding strip, drawn in whichever view's heading is showing. -->
+      <ng-template #dashboardViewTabs>
+        <div class="view-tabs" role="tablist" aria-label="Dashboard view">
+          <button type="button" class="view-tab" role="tab"
+            [class.active]="dashboardView() === 'overview'"
+            [attr.aria-selected]="dashboardView() === 'overview'"
+            (click)="setDashboardView('overview')">Overview</button>
+          <button type="button" class="view-tab" role="tab"
+            [class.active]="dashboardView() === 'onboarding'"
+            [attr.aria-selected]="dashboardView() === 'onboarding'"
+            (click)="setDashboardView('onboarding')">Onboarding</button>
+        </div>
+      </ng-template>
     </div>
   }
 
@@ -296,18 +328,12 @@
       <div class="section-head">
         <div>
           <div class="section-label">Account</div>
-          <!-- Onboarding is a page of its own (/profile/onboarding), not one of the strip's views:
-               it is the checklist for getting set up, not part of the profile. Always offered,
-               since a new member with no linkshell is the one who needs it most. -->
-          <div class="section-title-row">
-            <div class="section-title">Your profile</div>
-            <button type="button" class="btn primary sm"
-              [attr.aria-pressed]="profileView() === 'onboarding'"
-              (click)="setProfileView('onboarding')">Onboarding</button>
-          </div>
+          <!-- (The Onboarding button that sat beside this title moved to the Dashboard's
+               Onboarding view.) -->
+          <div class="section-title">Your profile</div>
         </div>
-        <!-- Crafts and Player Ratings only exist inside a linkshell, so with none there is
-             nothing to switch between. -->
+        <!-- Jobs, Crafts and Player Ratings only exist inside a linkshell, so with none there is
+             nothing to switch between: Profile is the only view. -->
         @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
           <div class="view-tabs" role="tablist" aria-label="Profile view">
             @for (view of profileViews; track view.key) {
@@ -320,9 +346,7 @@
         }
       </div>
 
-      <app-activity-sidebar-panel
-        [visibleSections]="profileView() === 'onboarding' ? ['next-steps'] : ['profile']"
-        [profileView]="profileView()" />
+      <app-activity-sidebar-panel [visibleSections]="['profile']" [profileView]="profileView()" />
     </div>
   }
 

@@ -177,7 +177,7 @@ export class ActivitySidebarPanelComponent {
   // Passed straight through to the auctions panel (Active / Pending / History), two-way.
   readonly auctionsView = model<AuctionsView>('active');
   // Which part of the profile shows; the strip that picks it sits by the Profile tab's heading.
-  readonly profileView = input<ProfileView>('jobs');
+  readonly profileView = input<ProfileView>('profile');
   protected readonly activity = inject(DiscordActivityService);
 
   protected showSection(name: string): boolean {
