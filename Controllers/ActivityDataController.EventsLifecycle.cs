@@ -290,10 +290,9 @@ public sealed partial class ActivityDataController
                     eventEntity.WindowCountOverride = HnmConfig.EffectiveWindowCount(monsterName);
                     await HnmEventSeeder.StampSpawnGridAsync(_dbContext, eventEntity, monsterName, cancellationToken);
                 }
-                if (string.IsNullOrWhiteSpace(eventEntity.EventLocation))
-                {
-                    eventEntity.EventLocation = HnmConfig.ZoneFor(monsterName);
-                }
+                // No zone fill-in here, unlike create: the edit form opens with the saved location,
+                // so a blank one is an officer who erased it. Refilling it made Location impossible
+                // to clear -- erase the location, Update, and the default zone came straight back.
             }
             eventEntity.DayNumber = request.DayNumber;
             eventEntity.EndTime = null;
