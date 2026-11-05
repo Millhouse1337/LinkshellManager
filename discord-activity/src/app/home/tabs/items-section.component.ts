@@ -69,6 +69,10 @@ export class ItemsSectionComponent {
   // not be padded out with things already gone.
   protected readonly view = signal<'stockpile' | 'sold'>('stockpile');
 
+  // Which list the card shows, picked by its Treasury | Charts strip: the items entered here, or the
+  // Charts boards' held items. They used to be one list, the chart holdings under the stockpile.
+  protected readonly source = signal<'treasury' | 'charts'>('treasury');
+
   protected readonly stockpile = computed(() => this.items().filter(item => !item.isSold));
 
   /**
@@ -166,12 +170,15 @@ export class ItemsSectionComponent {
     this.view() === 'sold' ? this.soldItems() : this.stockpile()
   );
 
-  /** Everything the Stockpile lists, chart holdings included, so the counts match the list. */
-  protected readonly stockpileCount = computed(() => this.stockpile().length + this.chartHoldingGroups().length);
+  /** Each sub-tab counts only its own list, so the counts match what is showing. */
+  protected readonly stockpileCount = computed(() => this.stockpile().length);
 
   protected readonly totalQuantity = computed(() =>
     this.stockpile().reduce((sum, item) => sum + (item.quantity ?? 0), 0)
-    + this.chartHoldings().reduce((sum, row) => sum + (row.quantity ?? 0), 0)
+  );
+
+  protected readonly chartQuantity = computed(() =>
+    this.chartHoldings().reduce((sum, row) => sum + (row.quantity ?? 0), 0)
   );
 
   /** What the archive has brought in, so the Sold tab answers its own obvious question. */
@@ -206,7 +213,9 @@ export class ItemsSectionComponent {
       this.resetForm();
       return;
     }
-    // A new item is never sold, so it would land in the other tab and look like nothing happened.
+    // A new item is never sold (or a chart holding), so it would land in another tab and look like
+    // nothing happened.
+    this.source.set('treasury');
     this.view.set('stockpile');
   }
 

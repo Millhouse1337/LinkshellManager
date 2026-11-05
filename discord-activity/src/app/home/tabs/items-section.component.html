@@ -15,21 +15,34 @@
 </div>
 
 <div class="card">
-  <!-- Stockpile is what is still here; Sold is the archive. Nothing is deleted by selling — it moves. -->
+  <!-- Treasury (the items entered here) or Charts (the boards' held items). Each opens on its own
+       darker heading row, which carries that list's count. -->
   <div class="card-head">
     <div class="card-head-right">
+      <button type="button" class="btn sm {{ source() === 'treasury' ? 'primary' : 'ghost' }}"
+              (click)="source.set('treasury')">Treasury</button>
+      <button type="button" class="btn sm {{ source() === 'charts' ? 'primary' : 'ghost' }}"
+              (click)="source.set('charts')">Charts</button>
+    </div>
+  </div>
+
+  @if (source() === 'treasury') {
+  <!-- Stockpile is what is still here; Sold is the archive. Nothing is deleted by selling — it moves. -->
+  <div class="card-head" style="border-top: 1px solid var(--border)">
+    <div class="card-title">From Treasury</div>
+    <div class="card-head-right">
+      @if (view() === 'sold') {
+        <span class="tag default num">
+          {{ soldItems().length }} sold &middot; {{ soldTotal().toLocaleString() }} gil
+        </span>
+      } @else {
+        <span class="tag default num">{{ stockpileCount() }} items &middot; {{ totalQuantity() }} qty</span>
+      }
       <button type="button" class="btn sm {{ view() === 'stockpile' ? 'primary' : 'ghost' }}"
               (click)="setView('stockpile')">Stockpile</button>
       <button type="button" class="btn sm {{ view() === 'sold' ? 'primary' : 'ghost' }}"
               (click)="setView('sold')">Sold</button>
     </div>
-    @if (view() === 'sold') {
-      <span class="tag default num">
-        {{ soldItems().length }} sold &middot; {{ soldTotal().toLocaleString() }} gil
-      </span>
-    } @else {
-      <span class="tag default num">{{ stockpileCount() }} items &middot; {{ totalQuantity() }} qty</span>
-    }
   </div>
 
   @if (showForm() && canManage) {
@@ -133,9 +146,7 @@
         </li>
       }
     </ul>
-  } @else if (view() === 'sold' || chartHoldings().length === 0) {
-    <!-- Skipped when the only things in the stockpile are chart holdings: they are listed below,
-         so "no items tracked yet" would be wrong. -->
+  } @else {
     <div class="empty-state empty-state--compact">
       @if (view() === 'sold') {
         <div class="empty-state-desc">
@@ -151,14 +162,19 @@
     </div>
   }
 
+  } @else {
   <!-- The Charts boards' held items, read straight off the boards. No buttons: each is edited,
        credited and removed on its Charts board, and selling one here would leave the board still
-       showing it. Stockpile only -- a chart holding is never "sold". -->
-  @if (view() === 'stockpile' && chartHoldings().length > 0) {
+       showing it. No Stockpile / Sold either -- a chart holding is never "sold". -->
     <div class="card-head" style="border-top: 1px solid var(--border)">
       <div class="card-title">From Charts</div>
-      <span class="tag default num">{{ chartHoldingGroups().length }}</span>
+      <span class="tag default num">{{ chartHoldingGroups().length }} items &middot; {{ chartQuantity() }} qty</span>
     </div>
+    @if (chartHoldings().length === 0) {
+      <div class="empty-state empty-state--compact">
+        <div class="empty-state-desc">Nothing is held on the Charts boards. Items show here once a board records who holds them.</div>
+      </div>
+    }
     <!-- One line per item: Charts' per-copy rows are added up here, holders listed together. -->
     <ul class="entry-list" style="border-top: 0">
       @for (group of chartHoldingGroups(); track group.key) {
