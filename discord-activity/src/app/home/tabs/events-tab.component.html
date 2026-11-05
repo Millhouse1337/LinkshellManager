@@ -98,7 +98,9 @@
             <!-- The top of the card is the classic live card, collapsed or not. Opened, the
                  attendance below it uses the new layout: a step strip, one detail panel, and a
                  payout + loot column. -->
-            <article class="event-card event-card--live hnm-camp" [class.event-card--collapsed]="collapsed">
+            <!-- id + jump-target: the dashboard's Live & Upcoming Events rows scroll here. -->
+            <article class="event-card event-card--live hnm-camp jump-target" [id]="'event-' + event.id"
+                     [class.event-card--collapsed]="collapsed">
               <div class="event-card__hero">
                 <div>
                   <div class="event-card__title-row">
@@ -1120,7 +1122,7 @@
               } <!-- /camp body -->
             </article>
           } @else {
-            <article class="event-card event-card--live"
+            <article class="event-card event-card--live jump-target" [id]="'event-' + event.id"
                      [class.event-card--collapsed]="isLiveEventCollapsed(event.id)">
               <div class="event-card__hero">
                 <div>

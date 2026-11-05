@@ -290,6 +290,17 @@ body {
   border-radius: 999px;
 }
 .tabs::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* A card another page can jump to (the dashboard's Live & Upcoming Events rows → the Event
+   System's cards): it stops below the pinned identity bar and 50px tab strip instead of under
+   them, and flashes an outline so the eye finds it. */
+.jump-target { scroll-margin-top: calc(var(--identity-h) + 50px + 12px); }
+.jump-target--flash { animation: jump-target-flash 1.6s ease-out; }
+@keyframes jump-target-flash {
+  0%, 40% { box-shadow: 0 0 0 2px var(--accent); }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
+
 .tab {
   padding: 6px 10px;
   font-family: var(--font-sans);

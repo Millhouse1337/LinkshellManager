@@ -341,6 +341,46 @@ export class DashboardTabComponent {
       .slice(0, 4);
   }
 
+  // Started events, the same cut as the Event System's Live section (EventsTabComponent.liveEvents):
+  // an HNM camp that has ended and waits to re-post is left out, though it is still commenced.
+  protected dashboardLiveEvents() {
+    return this.selectedDashboardEvents()
+      .filter(event => Boolean(event.commencementStartTime))
+      .filter(event => !((event.type ?? '').trim().toUpperCase() === 'HNM'
+        && (Boolean(event.hnmAwaitingRepost) || Boolean(event.wdFinalizedAt))));
+  }
+
+  // Opens the Event System on this event's card. The tab draws a moment after the switch, so wait
+  // for the card (id event-<id>, on the live and queued cards) to appear, then scroll it in and
+  // flash it. Gives up quietly after ~3s, leaving you at the top of the tab.
+  protected openEvent(eventId: number): void {
+    this.setActiveTabFn('timed-events');
+    const deadline = Date.now() + 3000;
+    const tryScroll = (): void => {
+      const card = document.getElementById(`event-${eventId}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        card.classList.add('jump-target--flash');
+        setTimeout(() => card.classList.remove('jump-target--flash'), 1600);
+      } else if (Date.now() < deadline) {
+        setTimeout(tryScroll, 50);
+      }
+    };
+    setTimeout(tryScroll, 50);
+  }
+
+  // "started 2h 5m ago" under a live row's start time (eventRelativeLabel only counts forward).
+  protected eventStartedLabel(value?: string | null): string {
+    const started = parseDate(value);
+    if (!started) return '';
+    const minutes = Math.max(0, Math.floor((this.now() - started) / 60000));
+    if (minutes < 60) return `started ${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `started ${hours}h ${minutes % 60}m ago`;
+    const days = Math.floor(hours / 24);
+    return `started ${days} day${days === 1 ? '' : 's'} ago`;
+  }
+
   // Maps an event type/category (Sky, Sea, Dynamis, Limbus, HENM, ...) to a themed
   // FFXI thumbnail served from the Activity's public folder. Types without a
   // dedicated image (NM, BCNM, KSNM, blanks) return null so the caller falls back

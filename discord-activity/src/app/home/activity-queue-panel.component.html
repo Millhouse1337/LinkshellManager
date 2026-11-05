@@ -456,7 +456,8 @@
     }
     <div class="queue-list">
       @for (event of queuedEvents(); track event.id) {
-        <article class="queue-card">
+        <!-- id + jump-target: the dashboard's Live & Upcoming Events rows scroll here. -->
+        <article class="queue-card jump-target" [id]="'event-' + event.id">
           <!-- Horizontal summary row: icon · name/type · Starts · Creator ·
                Party Setup · participants · actions. -->
           <div class="event-card__summary">

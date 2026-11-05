@@ -371,16 +371,50 @@
             }
           </div>
 
-          <!-- Upcoming Events -->
+          <!-- Live & Upcoming Events: the live ones first (all of them), then the next few queued.
+               A row opens the Event System scrolled to that event's card. -->
           <div class="card">
             <div class="card-head">
-              <div class="card-title">Upcoming Events</div>
+              <div class="card-title">Live &amp; Upcoming Events</div>
               <button type="button" class="card-link" (click)="setActiveTab('timed-events')">View all</button>
             </div>
-            @if (dashboardUpcomingEvents().length > 0) {
+            @if (dashboardLiveEvents().length > 0 || dashboardUpcomingEvents().length > 0) {
               <div class="upcoming-list">
+                @for (event of dashboardLiveEvents(); track event.id) {
+                  <div class="upcoming-row upcoming-row--link" role="button" tabindex="0"
+                       [title]="'Open ' + (event.name || 'this event') + ' in the Event System'"
+                       (click)="openEvent(event.id)" (keydown.enter)="openEvent(event.id)"
+                       (keydown.space)="$event.preventDefault(); openEvent(event.id)">
+                    @if (eventThumbImage(event); as thumbSrc) {
+                      <img class="upcoming-thumb upcoming-thumb--image" [src]="thumbSrc" [alt]="event.type || 'Event'" />
+                    } @else {
+                      <div class="upcoming-thumb"></div>
+                    }
+                    <div class="upcoming-body">
+                      <div class="upcoming-title-row">
+                        <span class="upcoming-title">{{ event.name || 'Event' }}</span>
+                        <span class="tag success">Live</span>
+                        @if (event.type) {
+                          <span class="tag default">{{ event.type }}</span>
+                        }
+                      </div>
+                      <div class="upcoming-sub">
+                        {{ event.participantCount }} signed
+                        @if (event.partySetupName) { · {{ event.partySetupName }} }
+                        @if (event.location) { · {{ event.location }} }
+                      </div>
+                    </div>
+                    <div class="upcoming-time">
+                      <div class="upcoming-time-main num">{{ eventClockLabel(event.commencementStartTime) }}</div>
+                      <div class="upcoming-time-sub">{{ eventStartedLabel(event.commencementStartTime) }}</div>
+                    </div>
+                  </div>
+                }
                 @for (event of dashboardUpcomingEvents(); track event.id) {
-                  <div class="upcoming-row">
+                  <div class="upcoming-row upcoming-row--link" role="button" tabindex="0"
+                       [title]="'Open ' + (event.name || 'this event') + ' in the Event System'"
+                       (click)="openEvent(event.id)" (keydown.enter)="openEvent(event.id)"
+                       (keydown.space)="$event.preventDefault(); openEvent(event.id)">
                     @if (eventThumbImage(event); as thumbSrc) {
                       <img class="upcoming-thumb upcoming-thumb--image" [src]="thumbSrc" [alt]="event.type || 'Event'" />
                     } @else {
@@ -408,7 +442,7 @@
               </div>
             } @else {
               <div class="empty-state empty-state--compact">
-                <div class="empty-state-desc">No upcoming events scheduled.</div>
+                <div class="empty-state-desc">No live or upcoming events.</div>
               </div>
             }
           </div>
