@@ -1,5 +1,7 @@
 using System.Text;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
@@ -32,10 +34,13 @@ public sealed class HnmBoardNoticeService
     // summaryEmbed is that camp's "🏁 Event ended" summary (DiscordEventEndedPublisher), drawn
     // ABOVE the defeated part so ending a camp leaves one message instead of two. The publisher
     // skips its own post for a camp whose board carries it.
+    //
+    // details is what the note says about the next pop beyond its time (ResolveDetailsAsync).
     public async Task<bool> PostDefeatedNoticeAsync(
         Event ev, CancellationToken cancellationToken,
         int? eventHistoryId = null,
-        object? summaryEmbed = null)
+        object? summaryEmbed = null,
+        DefeatedNoticeDetails? details = null)
     {
         if (string.IsNullOrWhiteSpace(ev.DiscordChannelId) || string.IsNullOrWhiteSpace(ev.DiscordMessageId))
         {
@@ -46,31 +51,11 @@ public sealed class HnmBoardNoticeService
             ? ev.AssignedMonsterName!
             : (!string.IsNullOrWhiteSpace(ev.EventName) ? ev.EventName! : "The monster");
 
-        // Discord <t:unix:D/T/R> renders each viewer's local time + a live "in N hours".
-        // D + T ("August 26, 2026" + "6:07:35 PM") rather than the single F style: F is the only
-        // style that carries the weekday but it stops at minutes, and a repop time is ToD math —
-        // the seconds matter more here than the weekday does.
-        var description = new StringBuilder();
-        if (ev.StartTime.HasValue)
-        {
-            var repop = ToUnix(ev.StartTime.Value);
-            description.Append($"Will repop <t:{repop}:D> <t:{repop}:T> (<t:{repop}:R>).");
-        }
-        else
-        {
-            description.Append("Next pop time is being calculated.");
-        }
-        if (ev.HnmRepostAt.HasValue)
-        {
-            var repost = ToUnix(ev.HnmRepostAt.Value);
-            description.Append($"\n\nThe sign-up board will automatically re-post in this channel <t:{repost}:R>.");
-        }
-
         var title = $"💀 {monster} defeated";
         object defeated = new
         {
             title,
-            description = description.ToString(),
+            description = BuildDefeatedDescription(ev, details),
             color = 0x6B7280
         };
         var payload = new
@@ -132,6 +117,65 @@ public sealed class HnmBoardNoticeService
         return ok;
     }
 
+    // The note's body. Discord <t:unix:D/T/R> renders each viewer's local time + a live "in N hours".
+    // D + T ("August 26, 2026" + "6:07:35 PM") rather than the single F style: F is the only
+    // style that carries the weekday but it stops at minutes, and a repop time is ToD math —
+    // the seconds matter more here than the weekday does.
+    internal static string BuildDefeatedDescription(Event ev, DefeatedNoticeDetails? details)
+    {
+        var description = new StringBuilder();
+        if (ev.StartTime.HasValue)
+        {
+            var repop = ToUnix(ev.StartTime.Value);
+            description.Append($"Will repop <t:{repop}:D> <t:{repop}:T> (<t:{repop}:R>).");
+        }
+        else
+        {
+            description.Append("Next pop time is being calculated.");
+        }
+        if (details?.NextDay is { } nextDay)
+        {
+            description.Append($"\nNext pop: **Day {nextDay}**.");
+        }
+        if (details?.RepopFormula is { } formula)
+        {
+            description.Append($"\nRepop = {formula}.");
+        }
+        if (ev.HnmRepostAt.HasValue)
+        {
+            var repost = ToUnix(ev.HnmRepostAt.Value);
+            description.Append($"\n\nThe sign-up board will automatically re-post in this channel <t:{repost}:R>.");
+        }
+        return description.ToString();
+    }
+
+    // What the note can say about the next pop, read off the ToD the board is parked on.
+    //
+    // Nothing at all when that ToD is not this kill's. A camp ended with no ToD still points at the
+    // ToD it was created from, whose repop is the pop that just happened. The day worked out from it
+    // would be the day this camp was already on, so it is left off rather than printed wrong.
+    public static async Task<DefeatedNoticeDetails> ResolveDetailsAsync(
+        ApplicationDbContext db, Event ev, CancellationToken cancellationToken)
+    {
+        var tod = ev.SourceTodId is { } todId
+            ? await db.Tods.AsNoTracking().FirstOrDefaultAsync(t => t.Id == todId, cancellationToken)
+            : null;
+        if (tod?.RepopTime is not { } repop
+            || (ev.HnmDefeatedAt is { } defeatedAt && repop <= defeatedAt))
+        {
+            return new DefeatedNoticeDetails(null, null);
+        }
+
+        // The same answer the board gets when it comes back (HnmEventSeeder.ReviveForNewPopAsync's
+        // callers). Only the three NQ/HQ families count days, and NextDay is 1 after any HQ.
+        var nextDay = HnmConfig.HasHqVariant(ev.AssignedMonsterName)
+            ? HnmDayCycle.NextDay(tod, ev.DayNumber)
+            : null;
+        return new DefeatedNoticeDetails(nextDay, TodRepopNote.Formula(tod.Cooldown, tod.AdditionalSeconds));
+    }
+
     private static long ToUnix(DateTime utc) =>
         new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds();
 }
+
+public sealed record DefeatedNoticeDetails(int? NextDay, string? RepopFormula);

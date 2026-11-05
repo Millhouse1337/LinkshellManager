@@ -58,7 +58,10 @@ public sealed class HnmCampPopService
         // /uploads/tods/... path). null/blank => leave the ToD's existing image alone.
         string? ImagePath = null);
 
-    public sealed record Result(bool Success, string? Error, DateTime? RepopTimeUtc, DateTime? RepostAtUtc);
+    // Cooldown + AdditionalSeconds: what RepopTimeUtc was worked out from, so a confirmation can say.
+    public sealed record Result(
+        bool Success, string? Error, DateTime? RepopTimeUtc, DateTime? RepostAtUtc,
+        string? Cooldown = null, int AdditionalSeconds = 0);
 
     public async Task<Result> PopAsync(Request request, CancellationToken cancellationToken)
     {
@@ -302,7 +305,7 @@ public sealed class HnmCampPopService
             "HNM camp popped: event {EventId} ({Monster}) window {Window}, repop {Repop:o}, mode {Mode}.",
             ev.Id, monster, popWindow, repopUtc, DiscordEventMessageBuilder.IsWd(ev) ? "Manual Check In" : "Standard");
 
-        return new Result(true, null, repopUtc, ev.HnmRepostAt);
+        return new Result(true, null, repopUtc, ev.HnmRepostAt, cooldown, additionalSeconds);
     }
 
 }

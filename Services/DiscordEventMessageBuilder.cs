@@ -778,7 +778,9 @@ public static class DiscordEventMessageBuilder
             fields.Add(new
             {
                 name = ev.CommencementStartTime is not null ? "Started" : "Starts",
-                value = TimestampMarkup(sw),
+                // Seconds on a windowed camp: its start is ToD math, down to the monster's Additional
+                // Seconds, and the heading above already prints them. This field cut them off.
+                value = UsesWindows(ev) ? TimestampMarkupWithSeconds(sw) : TimestampMarkup(sw),
                 inline = true
             });
         }
@@ -1909,6 +1911,13 @@ public static class DiscordEventMessageBuilder
     {
         var unix = ((DateTimeOffset)DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds();
         return $"<t:{unix}:f> (<t:{unix}:R>)";
+    }
+
+    // :D + :T, because Discord has no single date + time style that carries seconds.
+    private static string TimestampMarkupWithSeconds(DateTime utc)
+    {
+        var unix = ((DateTimeOffset)DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        return $"<t:{unix}:D> <t:{unix}:T> (<t:{unix}:R>)";
     }
 
     private static string Escape(string value) => value

@@ -84,6 +84,28 @@ public class HnmCampPopServiceTests
         Killed: false,
         PopWindow: null);
 
+    // End Camp reports what the repop was worked out from, so the Discord confirmation can say.
+    [Fact]
+    public async Task PopAsync_ReportsTheCooldownAndAdditionalSeconds()
+    {
+        using var db = await SeededAsync(LiveCamp());
+        db.LinkshellMonsterTimings.Add(new LinkshellMonsterTiming
+        {
+            LinkshellId = LinkshellId,
+            MonsterName = "Adamantoise/Aspidochelone",
+            NormalizedMonsterName = MonsterTimingDefaults.Normalize("Adamantoise/Aspidochelone"),
+            CooldownMinutes = 22 * 60,
+            AdditionalSeconds = 16,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await NewService(db).PopAsync(PopRequest(Now), CancellationToken.None);
+
+        Assert.Equal(Now.AddHours(22).AddSeconds(16), result.RepopTimeUtc);
+        Assert.Equal("22 Hour", result.Cooldown);
+        Assert.Equal(16, result.AdditionalSeconds);
+    }
+
     [Fact]
     public async Task PopAsync_NoTod_LeavesTimeAndRepopUnrecorded()
     {

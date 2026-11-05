@@ -79,7 +79,8 @@ public sealed class DiscordEventChannelPublisher
                 var summary = archiveId is { } id
                     ? await DiscordEventEndedPublisher.BuildSummaryEmbedAsync(_db, id, cancellationToken)
                     : null;
-                await _hnmBoardNotice.PostDefeatedNoticeAsync(ev, cancellationToken, archiveId, summary);
+                var noticeDetails = await HnmBoardNoticeService.ResolveDetailsAsync(_db, ev, cancellationToken);
+                await _hnmBoardNotice.PostDefeatedNoticeAsync(ev, cancellationToken, archiveId, summary, noticeDetails);
 
                 // SAVE. The notice can repoint DiscordMessageId (a note it had to re-post) and
                 // clears DiscordExtraMessageIds after deleting those messages, but it only stages

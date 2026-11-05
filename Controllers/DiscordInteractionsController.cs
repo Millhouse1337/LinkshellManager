@@ -1688,8 +1688,14 @@ public sealed class DiscordInteractionsController : ControllerBase
                 ? (killed ? "claimed + killed" : "claimed, no kill")
                 : "no claim";
             var windowNote = popWindow is { } pwin ? $" · popped on window {pwin} of {effectiveWindows}" : string.Empty;
+            // Only when the monster has Additional Seconds: the officer typed one time and the board
+            // will show another, so say which and why. Silent otherwise, with nothing to explain.
+            var repopNote = result.RepopTimeUtc is { } repopUtc
+                && TodRepopNote.Formula(result.Cooldown, result.AdditionalSeconds) is { } repopFormula
+                    ? $"\n🕒 The reposted event starts <t:{ToUnixSeconds(repopUtc)}:D> <t:{ToUnixSeconds(repopUtc)}:T>: {repopFormula}."
+                    : string.Empty;
             return Ephemeral(
-                $"🏁 Camp ended — {outcomeNote}{(hq == true ? ", HQ" : string.Empty)}.{windowNote}{repostNote} " + tail);
+                $"🏁 Camp ended — {outcomeNote}{(hq == true ? ", HQ" : string.Empty)}.{windowNote}{repostNote} " + tail + repopNote);
         }
 
         // Outside Party Signup ONBOARDING modal — no linked account required. Register
@@ -2172,7 +2178,14 @@ public sealed class DiscordInteractionsController : ControllerBase
             : await HnmRecurringBoardService.FindAsync(_db, ev.LinkshellId, monsterName, cancellationToken);
         var currentLead = standingBoard is { Enabled: true, LeadHours: > 0 } ? standingBoard.LeadHours : (double?)null;
 
-        return WdPopModal(ev, currentLead);
+        // How this monster's next repop is worked out, for the note on the Time of Death box. The
+        // same setup HnmCampPopService reads when the modal comes back.
+        var timing = await HttpContext.RequestServices.GetRequiredService<MonsterTimingResolver>()
+            .ResolveAsync(ev.LinkshellId, monsterName, cancellationToken);
+        var repopFormula = TodRepopNote.Formula(
+            TodDurationFormat.Format(timing.CooldownMinutes), timing.AdditionalSeconds);
+
+        return WdPopModal(ev, currentLead, repopFormula);
     }
 
     // The End Camp / Enter ToD modal, and Discord's cap of 5 components is the whole design
@@ -2191,7 +2204,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     //
     // Day # stays absent: the event form owns it, and unlike everything above it isn't something
     // the officer OBSERVED at the camp — it's a value they'd be copying back in.
-    private IActionResult WdPopModal(Event ev, double? currentLeadHours) =>
+    private IActionResult WdPopModal(Event ev, double? currentLeadHours, string? repopFormula) =>
         Ok(new
         {
             type = ResponseModal,
@@ -2199,7 +2212,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             {
                 custom_id = $"{WdPopModalPrefix}{ev.Id}",
                 title = "End Camp / Enter ToD",
-                components = BuildWdPopModalFields(ev, currentLeadHours),
+                components = BuildWdPopModalFields(ev, currentLeadHours, repopFormula),
             }
         });
 
@@ -2210,20 +2223,25 @@ public sealed class DiscordInteractionsController : ControllerBase
     // `currentLeadHours` is this monster's standing Repeat-on-ToD lead when that board exists AND is
     // enabled, else null. Passed in rather than looked up here so this stays a pure function of the
     // camp; the caller owns the query.
-    public static object[] BuildWdPopModalFields(Event ev, double? currentLeadHours)
+    //
+    // `repopFormula` is TodRepopNote.Formula for this monster, null when it has no Additional Seconds.
+    public static object[] BuildWdPopModalFields(Event ev, double? currentLeadHours, string? repopFormula = null)
     {
         // `value` PREFILLS the box with real, editable text; `placeholder` is the grey hint that
         // shows only while it's empty. A field carrying a prefill sends no placeholder at all —
         // the two would never be visible at the same moment anyway, and a prefilled box's hint is
         // the value itself.
+        //
+        // `description` is a line of text under the label, and is what moves the box into a Label
+        // (type 18), the only component that can carry one. It still counts as one row, so the
+        // 5-row cap is untouched. A text input inside a Label must not have a `label` of its own.
         static object TextRow(string fieldId, string label, string placeholder, bool required,
-            int maxLength, string? value = null)
+            int maxLength, string? value = null, string? description = null)
         {
             var input = new Dictionary<string, object?>
             {
                 ["type"] = 4, // text input
                 ["custom_id"] = fieldId,
-                ["label"] = label,
                 ["style"] = 1, // short
                 ["min_length"] = required ? 1 : 0,
                 ["max_length"] = maxLength,
@@ -2237,6 +2255,17 @@ public sealed class DiscordInteractionsController : ControllerBase
             {
                 input["placeholder"] = placeholder;
             }
+            if (description is { Length: > 0 })
+            {
+                return new Dictionary<string, object?>
+                {
+                    ["type"] = 18, // label
+                    ["label"] = label,
+                    ["description"] = description,
+                    ["component"] = input,
+                };
+            }
+            input["label"] = label;
             return new { type = 1, components = new object[] { input } };
         }
 
@@ -2296,8 +2325,12 @@ public sealed class DiscordInteractionsController : ControllerBase
             // "now" and blank parse too, and are deliberately NOT in the placeholder: blank is
             // spelled out in the label already, and a placeholder listing every accepted spelling
             // reads as a syntax reference rather than as an example of what to type.
+            //
+            // The note sits on the box it is about: the time typed here is not the time the reposted
+            // board will show when the monster has Additional Seconds.
             TextRow(WdPopTodFieldId, "Time of Death (blank = not entered)",
-                "9:05:15 PM, or 21:05:15", false, 16),
+                "9:05:15 PM, or 21:05:15", false, 16,
+                description: repopFormula is null ? null : $"Reposted event starts at {repopFormula}."),
         };
         if (HnmConfig.HasHqVariant(ev.AssignedMonsterName))
         {
