@@ -123,11 +123,11 @@ public class HnmMonsterMergeTests
         Assert.Null(HnmConfig.NextDayNumber(current, wasHq: false));
 
     [Theory]
-    [InlineData("Adamantoise/Aspidochelone", "Qufim Island")]
+    [InlineData("Adamantoise/Aspidochelone", "Valley of Sorrows")]
     [InlineData("Behemoth/King Behemoth", "Behemoth's Dominion")]
     [InlineData("Fafnir/Nidhogg", "Dragon's Aery")]
-    [InlineData("Adamantoise", "Qufim Island")]      // single still resolves
-    [InlineData("Aspidochelone", "Qufim Island")]    // stronger half still resolves
+    [InlineData("Adamantoise", "Valley of Sorrows")]      // single still resolves
+    [InlineData("Aspidochelone", "Valley of Sorrows")]    // stronger half still resolves
     public void ZoneFor_ResolvesCombinedAndSingle(string monster, string expectedZone)
     {
         Assert.Equal(expectedZone, HnmConfig.ZoneFor(monster));
