@@ -23,7 +23,7 @@ public static class LegacyUrlRedirects
         ("/Linkshell/Create", "configurations", false),
         ("/Linkshell/Edit", "configurations", true),
         ("/Linkshell/Delete", "configurations", true),
-        ("/Linkshell/Permissions", "permissions", true),
+        ("/Linkshell/Permissions", "configurations/permissions", true),
         ("/Linkshell/GameAddon", "addon", false),
         ("/Linkshell/DownloadDkpTemplate", "/api/activity/dkp-import/template", false),
         ("/Linkshell", "management", true),

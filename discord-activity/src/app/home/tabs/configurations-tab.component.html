@@ -18,8 +18,20 @@
             }
           }
         </div>
-        <div class="section-head-right">
-          @if (view() === 'configurations') {
+        <!-- The view switch on top (Overview + Permissions / Pair Code), like the Event System's,
+             with the tab's main button under it. -->
+        <div class="section-head-right section-head-right--stacked">
+          @if (view() === 'configurations' || !addonGloballyDisabled()) {
+            <div class="view-tabs" role="tablist" [attr.aria-label]="viewTitle() + ' view'">
+              @for (tab of sectionTabs(); track tab.key) {
+                <button type="button" class="view-tab" role="tab"
+                  [class.active]="section() === tab.key"
+                  [attr.aria-selected]="section() === tab.key"
+                  (click)="section.set(tab.key)">{{ tab.label }}</button>
+              }
+            </div>
+          }
+          @if (view() === 'configurations' && section() === 'overview') {
             <button type="button" class="btn primary sm" (click)="toggleCreateLinkshellForm()">+ New Linkshell</button>
           }
         </div>
@@ -53,8 +65,8 @@
         </div>
       }
 
-      <!-- ===== Configurations view (settings cards) ===== -->
-      @if (view() === 'configurations') {
+      <!-- ===== Configurations → Overview (settings cards) ===== -->
+      @if (view() === 'configurations' && section() === 'overview') {
 
       @if (canCustomizeSelectedLinkshell()) {
         <div class="card">
@@ -946,8 +958,8 @@
            question about the DKP economy, not about Discord wiring. See
            tabs/dkp-grouping-tab.component.*) -->
       }
-      <!-- ===== Permissions view (its own tab) ===== -->
-      @if (view() === 'permissions') {
+      <!-- ===== Configurations → Permissions (was its own tab) ===== -->
+      @if (view() === 'configurations' && section() === 'permissions') {
       <div class="card">
         <div class="card-head">
           <div class="card-title">Permissions</div>
@@ -1047,8 +1059,8 @@
         }
       </div>
       }
-      <!-- ===== Game Addon view (its own tab) ===== -->
-      @if (view() === 'addon' && !addonGloballyDisabled()) {
+      <!-- ===== Game Addon → Overview ===== -->
+      @if (view() === 'addon' && section() === 'overview' && !addonGloballyDisabled()) {
       <!-- Stylized "about the addon" section (adapted from the LSM landing page,
            remapped onto the app's design tokens). The showcase-* classes are shared
            (styles/_showcase.scss) with the DKP tab's Import DKP page. -->
@@ -1171,7 +1183,10 @@
           </section>
         </div>
       </div>
+      }
 
+      <!-- ===== Game Addon → Pair Code ===== -->
+      @if (view() === 'addon' && section() === 'pair-code' && !addonGloballyDisabled()) {
       <div class="card" (mouseenter)="loadAddonTokensForCurrent()">
         <div class="card-head">
           <div>

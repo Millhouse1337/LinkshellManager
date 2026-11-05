@@ -98,7 +98,7 @@ members stay out of the roster and earn nothing until an officer presses Confirm
 **Unlinked Snapshots** on Event System → Current (a member's in its *Awaiting confirmation* part), where an
 officer can confirm them, name them, link them to an event, or create an event from them.
 
-**Manage attendance with the addon** is its own permission (Permissions tab), on for Leader and
+**Manage attendance with the addon** is its own permission (Configurations → Permissions), on for Leader and
 Officer by default. A member with it can run camps, post window rosters and set DKP from the addon,
 and their `/lsm now` captures count straight away, without needing any officer permission in the app.
 Without it, `/lsm now` is the only way to send attendance; nothing else is queued for approval.

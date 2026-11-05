@@ -238,13 +238,7 @@
               [attr.tabindex]="activeTab() === 'configurations' ? 0 : -1"
               [class.active]="activeTab() === 'configurations'"
               (click)="setActiveTab('configurations')">Configurations</button>
-      <button type="button" class="tab" role="tab"
-              [id]="tabId('permissions')"
-              [attr.aria-controls]="panelId('permissions')"
-              [attr.aria-selected]="activeTab() === 'permissions'"
-              [attr.tabindex]="activeTab() === 'permissions' ? 0 : -1"
-              [class.active]="activeTab() === 'permissions'"
-              (click)="setActiveTab('permissions')">Permissions</button>
+      <!-- (Permissions used to be a tab here; it is Configurations' second view now.) -->
       <!-- After the divider: tabs that aren't about one linkshell. Game Addon covers every
            linkshell at once and shows on both hosts; Admin and Data Admin are website-only
            (canOpenTab hides them inside Discord). -->
@@ -436,12 +430,13 @@
   }
 
   <!-- ===== CONFIGURATIONS TAB ===== -->
-  <!-- Configurations, Permissions and Game Addon are three tabs backed by ONE
-       component instance (it swaps sections by [view]), so switching between them
-       keeps state and doesn't reload. -->
-  @if (activeTab() === 'configurations' || activeTab() === 'permissions' || activeTab() === 'addon') {
+  <!-- Configurations and Game Addon are two tabs backed by ONE component instance
+       (it swaps sections by [view], and each tab's Overview / second view by
+       [section]), so switching between them keeps state and doesn't reload. -->
+  @if (activeTab() === 'configurations' || activeTab() === 'addon') {
     <div role="tabpanel" [id]="panelId(activeTab())" [attr.aria-labelledby]="tabId(activeTab())">
-      <app-configurations-tab [view]="activeTab()" />
+      <app-configurations-tab [view]="activeTab()"
+        [section]="settingsSection()" (sectionChange)="setSettingsSection($event)" />
     </div>
   }
 

@@ -14,7 +14,7 @@ import {
   DiscordActivityService
 } from '../discord/discord-activity.service';
 import { ActivitySidebarPanelComponent } from './activity-sidebar-panel.component';
-import { TAB_NAMES, type ManagementView, type ProfileView, type TabName, type TreasuryView } from './activity-home.types';
+import { TAB_NAMES, type ManagementView, type ProfileView, type SettingsSection, type TabName, type TreasuryView } from './activity-home.types';
 import { ADMIN_BADGE, primaryLinkshellSettings, rankIcon } from './activity-home.helpers';
 import { slugForTab, tabFromSlug } from './tab-routes';
 
@@ -115,6 +115,13 @@ export class ActivityHomeComponent {
   });
   protected readonly managementView = computed<ManagementView>(() =>
     (this.activeTab() === 'linkshell' && this.subView() === 'invites' ? 'invites' : 'roster'));
+  // Configurations: Overview or /configurations/permissions. Game Addon: Overview or /addon/pair-code.
+  protected readonly settingsSection = computed<SettingsSection>(() => {
+    const view = this.subView();
+    if (this.activeTab() === 'configurations' && view === 'permissions') return view;
+    if (this.activeTab() === 'addon' && view === 'pair-code') return view;
+    return 'overview';
+  });
   protected readonly chartsView = computed(() => chartsSectionFromSlug(this.subView()));
   // Data Admin keeps a whole path below its tab: /data-admin/rule/5/edit.
   protected readonly dataAdminPath = computed(() => (this.activeTab() === 'data-admin' ? this.location().slice(1) : []));
@@ -376,6 +383,11 @@ export class ActivityHomeComponent {
 
   protected setManagementView(view: ManagementView): void {
     this.setActiveTab('linkshell', view === 'roster' ? undefined : view);
+  }
+
+  // Stays on whichever of Configurations / Game Addon is open; Overview is the bare tab URL.
+  protected setSettingsSection(section: SettingsSection): void {
+    this.setActiveTab(this.activeTab(), section === 'overview' ? undefined : section);
   }
 
   protected setProfileView(view: ProfileView): void {

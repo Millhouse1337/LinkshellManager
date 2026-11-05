@@ -30,7 +30,7 @@ for the default Officer role, which doesn't carry these flags:
 - manual DKP adjustments (`CanAuditDkp`)
 - Customize linkshell, including DKP import (`CanCustomizeLinkshell`)
 
-A leader grants them on the Permissions tab if their officers should keep them.
+A leader grants them on Configurations → Permissions if their officers should keep them.
 
 The game addon has its own gate for acting on the linkshell's behalf: **Manage attendance with the
 addon** (`CanManageAttendanceWithAddon`), checked by `AddonApiController.TokenIssuerCanModerateAsync`.

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, model, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAddonToken,
@@ -10,7 +10,7 @@ import {
   ActivityLootStructure,
   DiscordActivityService
 } from '../../discord/discord-activity.service';
-import { type TabName } from '../activity-home.types';
+import { type SettingsSection, type TabName } from '../activity-home.types';
 import type {
   ActivityMonsterTiming,
   ActivityMonsterTimingInput,
@@ -75,14 +75,18 @@ export class ConfigurationsTabComponent {
     'Use this to indicate whether the monster has a Claim Shield in game. '
     + 'This feature also controls support for claim shield tagging in the addon.';
 
-  // Which section this instance renders. The parent mounts ONE component for the
-  // Configurations / Permissions / Game Addon tabs and swaps this input, so state is
-  // shared and switching between the three tabs doesn't reload anything.
+  // Which tab this instance renders. The parent mounts ONE component for the
+  // Configurations / Game Addon tabs and swaps this input, so state is shared and
+  // switching between the two tabs doesn't reload anything.
   readonly view = input<TabName>('configurations');
-  protected readonly viewTitle = computed(() =>
-    this.view() === 'permissions' ? 'Permissions'
-      : this.view() === 'addon' ? 'Game Addon'
-        : 'Configurations');
+  protected readonly viewTitle = computed(() => (this.view() === 'addon' ? 'Game Addon' : 'Configurations'));
+  // The view inside that tab, picked by the strip in the header: Overview, plus Permissions
+  // (Configurations) or Pair Code (Game Addon). Two-way bound so the parent keeps it in the URL.
+  readonly section = model<SettingsSection>('overview');
+  protected readonly sectionTabs = computed(() =>
+    this.view() === 'addon'
+      ? [{ key: 'overview' as const, label: 'Overview' }, { key: 'pair-code' as const, label: 'Pair Code' }]
+      : [{ key: 'overview' as const, label: 'Overview' }, { key: 'permissions' as const, label: 'Permissions' }]);
 
   public constructor() {
     // Match the parent's behavior on tab activation: prefetch roles and seed

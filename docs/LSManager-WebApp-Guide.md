@@ -25,7 +25,7 @@ The website is the same app as the Discord Activity, with the same tabs along th
 Charts, Auctions, Event System, ToDs, Party Setup, DKP, Loot, Management, Treasury, Profile, Messages,
 Configurations, Permissions and Game Addon. The [Discord Activity Guide](LSManager-DiscordActivity-Guide.md#the-tabs)
 describes each one. Which tabs appear depends on your linkshell's **feature toggles**, and the buttons
-inside them on your role's **permissions** (Permissions tab).
+inside them on your role's **permissions** (Configurations → Permissions).
 
 A few things are nicer in a browser:
 

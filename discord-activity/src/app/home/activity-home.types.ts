@@ -22,8 +22,9 @@ export const TAB_NAMES = [
   'loot',
   'endgame',
   'messages',
+  // Permissions used to be its own 'permissions' tab; it is now the Configurations tab's second
+  // view (/configurations/permissions). See SettingsSection.
   'configurations',
-  'permissions',
   'addon',
   // Website only (never inside Discord), gated by ActivityHomeComponent.canOpenTab: the super-admin
   // switches and the super-admin database browser. (Members' submissions are reviewed in the Event
@@ -46,6 +47,11 @@ export type TreasuryView = 'balance' | 'items' | 'transactions';
 
 // The Management tab's views: /management (the roster) and /management/invites.
 export type ManagementView = 'roster' | 'invites';
+
+// The views of the two tabs ConfigurationsTabComponent draws, picked by the strip in its header.
+// Configurations: /configurations (Overview, the settings cards) and /configurations/permissions.
+// Game Addon: /addon (Overview, about the addon) and /addon/pair-code (pairing codes + tokens).
+export type SettingsSection = 'overview' | 'permissions' | 'pair-code';
 
 // HNM base -> stronger merge pairs (mirrors HnmConfig.MonsterMergePairs). On the
 // create-event monster dropdown the two are offered as ONE entry: the base name below

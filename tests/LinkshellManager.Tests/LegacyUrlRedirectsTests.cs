@@ -40,7 +40,7 @@ public class LegacyUrlRedirectsTests
     [InlineData("/Linkshell/Create", "", "/discord-activity/configurations")]
     [InlineData("/Linkshell/Edit/5", "", "/discord-activity/configurations?ls=5")]
     [InlineData("/Linkshell/Customize", "?id=5", "/discord-activity/configurations?ls=5")]
-    [InlineData("/Linkshell/Permissions", "", "/discord-activity/permissions")]
+    [InlineData("/Linkshell/Permissions", "", "/discord-activity/configurations/permissions")]
     [InlineData("/Linkshell/GameAddon", "", "/discord-activity/addon")]
     [InlineData("/Linkshell/DownloadDkpTemplate", "", "/api/activity/dkp-import/template")]
     [InlineData("/Account/Profile", "", "/discord-activity/profile")]
