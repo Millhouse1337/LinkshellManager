@@ -38,7 +38,10 @@ public static class HnmRecurringBoardService
             board = new HnmRecurringBoard
             {
                 LinkshellId = ev.LinkshellId,
-                MonsterName = monster,
+                // One row per SPAWN: either half of a merge pair is stored under the combined
+                // "Base/Stronger" label, so a camp named "Adamantoise" never starts a second row
+                // beside "Adamantoise/Aspidochelone" (see MergeHnmRecurringBoardsPerSpawn).
+                MonsterName = HnmConfig.ClaimGroupName(monster),
                 CreatedByAppUserId = ev.CreatorUserId,
                 CreatedAt = nowUtc,
             };
