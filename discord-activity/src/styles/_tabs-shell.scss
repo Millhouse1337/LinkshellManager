@@ -400,8 +400,8 @@ body {
   gap: 6px;
   align-items: center;
 }
-/* The right side in two lines, both against the right edge: the view switch or main button on
-   top, the counts that go with it underneath. */
+/* The right side stacked against the right edge: counts on top, then the view switch, then the
+   main button (Event System, ToDs). */
 .section-head-right--stacked {
   flex-direction: column;
   align-items: flex-end;

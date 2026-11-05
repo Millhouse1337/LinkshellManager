@@ -4,8 +4,13 @@
           <div class="section-label">ToD Tracker</div>
         </div>
         <!-- The linkshell is already named in the top bar's switcher, so it isn't repeated here.
-             The view switch on top, like the Event System's; reviewers only, since Pending is theirs. -->
+             Count on top, then the view switch (reviewers only, since Pending is theirs), then Log ToD,
+             like the Event System's. Pending makes the count invisible rather than removing it, so
+             the switch under it doesn't jump when clicked. -->
         <div class="section-head-right section-head-right--stacked">
+          <div class="section-head-counts" [style.visibility]="showingPending() ? 'hidden' : null">
+            <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
+          </div>
           @if (canReviewSubmissions()) {
             <div class="view-tabs" role="tablist" aria-label="ToD view">
               <button type="button" class="view-tab" role="tab"
@@ -19,13 +24,8 @@
                 (click)="todsView.set('pending')">Pending{{ pendingCount() > 0 ? ' (' + pendingCount() + ')' : '' }}</button>
             </div>
           }
-          @if (!showingPending()) {
-            @if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
-              <button type="button" class="btn primary sm" (click)="todForm.openCreate(selectedDashboardLinkshellId())">+ Log ToD</button>
-            }
-            <div class="section-head-counts">
-              <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
-            </div>
+          @if (!showingPending() && (activity.overview()?.linkshells?.length ?? 0) > 0) {
+            <button type="button" class="btn primary sm" (click)="todForm.openCreate(selectedDashboardLinkshellId())">+ Log ToD</button>
           }
         </div>
       </div>

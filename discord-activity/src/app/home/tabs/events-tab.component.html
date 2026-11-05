@@ -16,9 +16,18 @@
             }
           }
         </div>
-        <!-- The view switch on top, so it stays put when the counts under it hide.
+        <!-- Counts on top, then the view switch, then Create Event.
              Pending (URL /events/pending) holds the ended events still waiting for their DKP post. -->
         <div class="section-head-right section-head-right--stacked">
+          <!-- The counts are about Current, so Pending/Past make them invisible rather than removing
+               them: the row keeps its space and the switch under it doesn't jump when clicked. -->
+          <div class="section-head-counts" [style.visibility]="eventsView() === 'current' ? null : 'hidden'">
+            <span class="tag default">{{ liveEvents().length }} live</span>
+            <span class="tag default">{{ queuedEvents().length }} queued</span>
+            @if (liveAttendanceEvents().length > 0) {
+              <span class="tag accent">{{ liveAttendanceEvents().length }} attendance</span>
+            }
+          </div>
           <div class="view-tabs" role="tablist" aria-label="Event view">
             <button type="button" class="view-tab" role="tab"
               [class.active]="eventsView() === 'current'"
@@ -36,17 +45,8 @@
           </div>
           <!-- Current only: the queue (and the create form its panel owns) is only shown there, and
                a <dialog> under a hidden ancestor can't open. -->
-          @if (eventsView() === 'current') {
-            <div class="section-head-counts">
-              <span class="tag default">{{ liveEvents().length }} live</span>
-              <span class="tag default">{{ queuedEvents().length }} queued</span>
-              @if (liveAttendanceEvents().length > 0) {
-                <span class="tag accent">{{ liveAttendanceEvents().length }} attendance</span>
-              }
-              @if (canCreateEvent()) {
-                <button type="button" class="btn primary sm" (click)="openCreateEventForm()">Create Event</button>
-              }
-            </div>
+          @if (eventsView() === 'current' && canCreateEvent()) {
+            <button type="button" class="btn primary sm" (click)="openCreateEventForm()">Create Event</button>
           }
         </div>
       </div>
