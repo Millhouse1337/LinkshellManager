@@ -195,6 +195,18 @@ export class WindowEventService {
       { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null, captureDkp }, "DKP details saved.");
   }
 
+  // A live LSM Now event: keeps the card's DKP (as Save does) and moves it to Events Pending DKP
+  // Post, where it is reviewed and posted to the sheet.
+  async sendToReview(
+    windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
+    memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null,
+    captureDkp?: ActivityWindowEventCaptureDkpInput[]
+  ): Promise<void> {
+    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/send-to-review`,
+      { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null, captureDkp },
+      'Sent to review. It is now under Events Pending DKP Post.');
+  }
+
   async postToSheet(
     windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
     memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null,

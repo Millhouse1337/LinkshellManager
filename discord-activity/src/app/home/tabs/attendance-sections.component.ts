@@ -757,6 +757,20 @@ export class AttendanceSectionsComponent {
     await this.windows.saveDkp(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 
+  // A live event made from /lsm now isn't posted from Live Events: Send to Review moves it to
+  // Events Pending DKP Post, and it is posted from there. Camp-made cards only ever reach that
+  // list by End Camp.
+  protected sendsToReview(event: ActivityWindowEvent): boolean {
+    return this.section() === 'live' && !(event.isCamp || event.sourceEventId);
+  }
+
+  protected async sendToReview(event: ActivityWindowEvent): Promise<void> {
+    const id = this.primaryLinkshellId();
+    const draft = this.dkpDraft(event);
+    if (!id || !this.dkpDraftValid(event)) return;
+    await this.windows.sendToReview(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
+  }
+
   // No native confirm — the explicit "Post to sheet" / "Update sheet" button
   // click IS the confirmation. Discord's iframe blocks window.confirm()
   // which silently returned false and dropped the action.

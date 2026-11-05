@@ -419,6 +419,19 @@
               </svg>
               Update on DKP sheet
             </button>
+          } @else if (sendsToReview(event)) {
+            <!-- No pending-snapshot block here: nothing is paid yet, and the captures can still be
+                 confirmed or rejected in review. Post is where that is enforced. -->
+            <button type="button" class="btn sm ghost" (click)="saveDkp(event)" [disabled]="dkpActionsDisabled(event)">Save</button>
+            <button type="button" class="btn sm primary" (click)="sendToReview(event)"
+              [disabled]="dkpActionsDisabled(event)"
+              title="Saves the DKP above and moves this event to Events Pending DKP Post, where it is posted to the DKP sheet.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path d="M5 12h14"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+              Send to Review
+            </button>
           } @else {
             @if (event.pendingSnapshotCount > 0) {
               <!-- Publishing is one-way and a pending capture is NOT in the roster above, so

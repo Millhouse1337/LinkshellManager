@@ -345,26 +345,69 @@ public sealed partial class ActivityDataController
         }
         if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
 
+        await ApplyDkpDraftAsync(windowEvent.Value, request, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // Send to Review: a LIVE attendance event made from /lsm now leaves Live Events for Events
+    // Pending DKP Post, where an officer reviews it and posts it to the sheet. Keeps the DKP typed
+    // on the card (exactly what Save keeps) and closes it, in one save, so the card can't arrive in
+    // review without the amounts it was sent with.
+    [HttpPost("window-events/{windowEventId:int}/send-to-review")]
+    public async Task<IActionResult> SendWindowEventToReviewAsync(
+        int windowEventId,
+        [FromBody] ActivityWindowEventDkpRequest request,
+        CancellationToken cancellationToken)
+    {
+        var windowEvent = await LoadManageableWindowEventAsync(
+            windowEventId, cancellationToken, includeMemberDkpOverrides: true);
+        if (windowEvent.Result is not null) return windowEvent.Result;
+
+        if (windowEvent.Value!.PostedToSheetAt.HasValue)
+        {
+            return BadRequest(new { error = "This event is already posted." });
+        }
+        // Live means what the Live Events list means (AttendanceQueryFilters.ApplyLiveFilter): an
+        // ended camp or a closed event is already in review.
+        if (windowEvent.Value.Status != WindowEventStatuses.Open || windowEvent.Value.CampEndedAtUtc != null)
+        {
+            return BadRequest(new { error = "This event is already in review." });
+        }
+        if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
+
+        await ApplyDkpDraftAsync(windowEvent.Value, request, cancellationToken);
+        windowEvent.Value.Status = WindowEventStatuses.Closed;
+        windowEvent.Value.ClosedAtUtc = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
+    }
+
+    // What Save keeps from the card: DKP + Entry Type, per-character and per-capture amounts, and
+    // the Misc rate. Stages only; the caller saves.
+    private async Task ApplyDkpDraftAsync(
+        WindowEvent windowEvent, ActivityWindowEventDkpRequest request, CancellationToken cancellationToken)
+    {
         // Both fields are gone from the UI; keep whatever the event already carries when the
         // client omits them — see WindowEventDkp.Resolve / WindowEventEntryTypes.Resolve.
-        var resolvedDkp = WindowEventDkp.Resolve(request.DkpAmount, windowEvent.Value.DkpAmount);
-        windowEvent.Value.DkpAmount = resolvedDkp;
-        windowEvent.Value.EntryType = WindowEventEntryTypes.Resolve(
-            request.EntryType, windowEvent.Value.EntryType, windowEvent.Value.Name);
-        ApplyActivityMemberDkpOverrides(windowEvent.Value, resolvedDkp, request.MemberDkp);
-        ApplyActivityCaptureDkp(windowEvent.Value, request.CaptureDkp);
+        var resolvedDkp = WindowEventDkp.Resolve(request.DkpAmount, windowEvent.DkpAmount);
+        windowEvent.DkpAmount = resolvedDkp;
+        windowEvent.EntryType = WindowEventEntryTypes.Resolve(
+            request.EntryType, windowEvent.EntryType, windowEvent.Name);
+        ApplyActivityMemberDkpOverrides(windowEvent, resolvedDkp, request.MemberDkp);
+        ApplyActivityCaptureDkp(windowEvent, request.CaptureDkp);
         // Resolved BEFORE the assignment, or the stored-value fallback would read the value we are
         // about to overwrite and a save carrying no misc field would silently reset it.
         var resolvedMisc = WindowEventDkp.ResolveMisc(
-            request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount,
-            await MiscPostRateAsync(windowEvent.Value.LinkshellId, cancellationToken) ?? resolvedDkp);
-        windowEvent.Value.MiscDkpAmount = request.MiscDkpAmount;
+            request.MiscDkpAmount, windowEvent.MiscDkpAmount,
+            await MiscPostRateAsync(windowEvent.LinkshellId, cancellationToken) ?? resolvedDkp);
+        windowEvent.MiscDkpAmount = request.MiscDkpAmount;
         // Skipped on a card that prices its captures: the Misc rate materializes itself as
         // per-member override rows, and those are not what such a card is paid from.
-        if (!windowEvent.Value.PerCaptureDkp)
+        if (!windowEvent.PerCaptureDkp)
         {
             WindowEventMiscDkp.ApplyMiscOverrides(
-                windowEvent.Value, resolvedDkp, resolvedMisc,
+                windowEvent, resolvedDkp, resolvedMisc,
                 WindowEventMiscDkp.SubmittedNames(
                     request.MemberDkp?.Select(m => new ViewModels.WindowEventMemberDkpInput
                     {
@@ -372,8 +415,6 @@ public sealed partial class ActivityDataController
                         DkpAmount = m.DkpAmount,
                     })));
         }
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
     }
 
     // Publishes a window event: sets DKP + Entry Type (and any per-character
