@@ -43,10 +43,11 @@ public static class UpcomingRepopLookup
                 && tod.MonsterName != null
                 && tod.RepopTime != null
                 && tod.RepopTime > nowUtc)
-            // Newest row first, so a monster that was logged twice answers with its LATEST
-            // ToD — the same row the recurring-board poller acts on (see
+            // Latest pop first (row id as tie-break), so a monster that was logged twice answers
+            // with its LATEST ToD — the same row the recurring-board poller acts on (see
             // HnmRecurringBoardService.SyncParkedBoardsForTodAsync).
-            .OrderByDescending(tod => tod.Id)
+            .OrderByDescending(tod => tod.RepopTime)
+            .ThenByDescending(tod => tod.Id)
             .Select(tod => new { tod.Id, tod.MonsterName, tod.RepopTime, tod.DayNumber })
             .ToListAsync(cancellationToken);
 

@@ -192,7 +192,8 @@ public static class HnmRecurringBoardService
                 && tod.MonsterName != null
                 && names.Contains(tod.MonsterName.ToLower())
                 && tod.RepopTime != null)
-            .OrderByDescending(tod => tod.Id)
+            .OrderByDescending(tod => tod.RepopTime)
+            .ThenByDescending(tod => tod.Id)
             .Select(tod => new { tod.Id, tod.RepopTime })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -320,7 +321,8 @@ public static class HnmRecurringBoardService
                 && t.MonsterName != null
                 && names.Contains(t.MonsterName.ToLower())
                 && t.RepopTime != null)
-            .OrderByDescending(t => t.Id)
+            .OrderByDescending(t => t.RepopTime)
+            .ThenByDescending(t => t.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (tod is null)
@@ -400,7 +402,7 @@ public static class HnmRecurringBoardService
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    // The most recent ToD (by row id) for this monster that has a predicted pop time — the same
+    // The most recent ToD (latest predicted pop, row id as tie-break) for this monster — the same
     // ToD the poller targets, so a camp that adopts it (HnmCampReviewHandoffService) and the
     // poller agree on which pop is next.
     public static Task<int?> LatestTodIdAsync(
@@ -421,7 +423,8 @@ public static class HnmRecurringBoardService
                 && tod.MonsterName != null
                 && names.Contains(tod.MonsterName.ToLower())
                 && tod.RepopTime != null)
-            .OrderByDescending(tod => tod.Id)
+            .OrderByDescending(tod => tod.RepopTime)
+            .ThenByDescending(tod => tod.Id)
             .Select(tod => (int?)tod.Id)
             .FirstOrDefaultAsync(cancellationToken);
     }

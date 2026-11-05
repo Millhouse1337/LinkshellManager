@@ -111,13 +111,16 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         // spawn (the combined label AND either half), not just the segments.
         var names = HnmConfig.MonsterMatchNamesLower(monster);
 
-        // Latest ToD for this monster that has a predicted pop time.
+        // Latest ToD for this monster that has a predicted pop time. "Latest" is the latest POP, not
+        // the highest row id: an edited ToD keeps its old id, so going by id let an older kill logged
+        // after it hide the real next pop, and the board never came back (OnlyFrens Turtle, 2026-11-05).
         var tod = names.Count == 0 ? null : await db.Tods
             .Where(t => t.LinkshellId == board.LinkshellId
                 && t.MonsterName != null
                 && names.Contains(t.MonsterName.ToLower())
                 && t.RepopTime != null)
-            .OrderByDescending(t => t.Id)
+            .OrderByDescending(t => t.RepopTime)
+            .ThenByDescending(t => t.Id)
             .FirstOrDefaultAsync(cancellationToken);
         if (tod is null || tod.Id == board.LastSourceTodId)
         {
