@@ -345,7 +345,13 @@ public sealed partial class ActivityDataController
         tod.PopWindow = NormalizePopWindow(request.PopWindow);
         tod.Claim = request.Claim;
         tod.Hq = normalizedHq;
-        tod.AdditionalSeconds = Math.Max(0, request.AdditionalSeconds);
+        // 0 means "use the monster's", as it does on create and End Camp. No form asks for this number,
+        // so a 0 here is a ToD saved before its monster had one, or one approved from the queue, and
+        // editing its time must not quietly drop the seconds off the repop.
+        var timing = await _monsterTimings.ResolveAsync(tod.LinkshellId, monsterName, cancellationToken);
+        tod.AdditionalSeconds = request.AdditionalSeconds > 0
+            ? request.AdditionalSeconds
+            : Math.Max(0, timing.AdditionalSeconds);
         tod.Time = todTimeUtc;
         tod.Cooldown = cooldown;
         tod.RepopTime = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(tod.AdditionalSeconds);

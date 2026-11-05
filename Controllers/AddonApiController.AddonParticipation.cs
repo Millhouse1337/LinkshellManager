@@ -1364,7 +1364,14 @@ public sealed partial class AddonApiController
             _monsterTimings, token.LinkshellId, monsterName, cancellationToken);
         var interval = await ActivityDataController.GetDefaultTodIntervalAsync(
             _monsterTimings, token.LinkshellId, monsterName, cancellationToken);
-        var repopTimeUtc = defeatedAtUtc.AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown));
+        // The monster's Additional Seconds too, the same as the Activity's Log ToD and both End Camp
+        // paths. Leaving them off made a ToD posted in game start its reposted board early, by
+        // exactly that many seconds, and every window on it with them.
+        var timing = await _monsterTimings.ResolveAsync(token.LinkshellId, monsterName, cancellationToken);
+        var additionalSeconds = Math.Max(0, timing.AdditionalSeconds);
+        var repopTimeUtc = defeatedAtUtc
+            .AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown))
+            .AddSeconds(additionalSeconds);
 
         // Claim arrives verbatim on the request — tri-state:
         //   true  -> "Post (Claimed)" pressed in the ToD Capturing panel
@@ -1424,6 +1431,7 @@ public sealed partial class AddonApiController
             DayNumber = dayNumber,
             Claim = claimed,
             PopWindow = popWindow,
+            AdditionalSeconds = additionalSeconds,
             Time = defeatedAtUtc,
             Cooldown = cooldown,
             RepopTime = repopTimeUtc,
@@ -1455,7 +1463,9 @@ public sealed partial class AddonApiController
             repopTimeUtc = tod.RepopTime,
             cooldown = tod.Cooldown,
             interval = tod.Interval,
-            claim = tod.Claim
+            claim = tod.Claim,
+            // So the addon can say why the repop it prints carries these seconds.
+            additionalSeconds = tod.AdditionalSeconds
         });
     }
 

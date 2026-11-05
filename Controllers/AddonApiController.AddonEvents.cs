@@ -146,6 +146,7 @@ public sealed partial class AddonApiController
         }
 
         var shapes = raw.ToDictionary(evt => evt.Id, AddonEventWindowShape.For);
+        var monsterTimings = await _monsterTimings.GetMapAsync(linkshellId, cancellationToken);
 
         // createdFromAddon is sourced from the explicit CreationSource column. Legacy
         // rows (CreationSource null) fall back to a Details-prefix check so events
@@ -187,6 +188,9 @@ public sealed partial class AddonApiController
             // button the server would refuse — see events_sync.break_room_applies.
             supportsBreakRoom = EventBreakPolicy.SupportsBreakRoom(evt),
             assignedMonsterName = evt.AssignedMonsterName,
+            // The monster's Additional Seconds, for the note beside the addon's ToD and End Event
+            // controls: a reposted board starts at ToD + cooldown + these.
+            additionalSeconds = monsterTimings.For(evt.AssignedMonsterName).AdditionalSeconds,
             // DISPLAY ONLY — the window number to SHOW, whatever the board prints. Always
             // FocusWindow, never the raw HnmWindowNumber column: closing that gap is exactly the
             // "board says 18, addon says 17" mismatch this exists to prevent.
