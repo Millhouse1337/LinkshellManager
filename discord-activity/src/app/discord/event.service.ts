@@ -709,10 +709,11 @@ export class EventService {
   }
 
   // Add New Post (always a Misc post): files a new Misc post on the camp with the picked members.
-  async addCampMiscPost(eventId: number, name: string | null, appUserIds: string[]): Promise<boolean> {
+  // dkpAmount is the post's own price per member; null leaves it on the linkshell's Misc post rate.
+  async addCampMiscPost(eventId: number, name: string | null, appUserIds: string[], dkpAmount: number | null): Promise<boolean> {
     this.auth.setActionError(null);
     try {
-      await this.http.sendActivityRequest('POST', `/api/addon/management/events/${eventId}/misc-posts`, { name, appUserIds });
+      await this.http.sendActivityRequest('POST', `/api/addon/management/events/${eventId}/misc-posts`, { name, appUserIds, dkpAmount });
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Adding the misc post failed.'));

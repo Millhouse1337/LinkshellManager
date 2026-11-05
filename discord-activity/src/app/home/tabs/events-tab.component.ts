@@ -655,6 +655,10 @@ export class EventsTabComponent {
   protected readonly newPostSearch = signal('');
   protected readonly newPostSelected = signal<ReadonlySet<string>>(new Set());
   protected readonly newPostSaving = signal(false);
+  // The DKP box in the form's formula row: what this post pays each member. undefined = untouched
+  // (the box shows the linkshell's Misc post rate); null = emptied (the box stays empty so typing
+  // isn't fought, and the rate applies); a number = typed.
+  protected readonly newPostDkp = signal<number | null | undefined>(undefined);
 
   protected offersNewPost(event: ActivityEvent): boolean {
     return this.isHnmEvent(event) && !this.isWdCamp(event) && !!event.commencementStartTime;
@@ -669,6 +673,7 @@ export class EventsTabComponent {
     this.newPostName.set('');
     this.newPostSearch.set('');
     this.newPostSelected.set(new Set());
+    this.newPostDkp.set(undefined);
     if (!this.addMemberCandidatesByEvent()[event.id]) {
       await this.loadAddMemberCandidates(event.id);
     }
@@ -707,17 +712,43 @@ export class EventsTabComponent {
     this.newPostSelected.set(new Set());
   }
 
-  // What the post pays each member: the linkshell's Misc post rate (HNM Settings).
+  // The linkshell's Misc post rate (HNM Settings): what a post pays each member unless the form's
+  // DKP box says otherwise.
   protected newPostRate(event: ActivityEvent): number {
     return this.linkshellSettingsFor(event.linkshellId)?.hnmStandardMiscBonus ?? 0;
+  }
+
+  // What the post being made pays each member: the typed amount, else the rate.
+  protected newPostPerMember(event: ActivityEvent): number {
+    return this.newPostDkp() ?? this.newPostRate(event);
+  }
+
+  // What the box shows: the rate until it is touched, then exactly what was typed (empty included).
+  protected newPostDkpBox(event: ActivityEvent): number | null {
+    const typed = this.newPostDkp();
+    return typed === undefined ? this.newPostRate(event) : typed;
+  }
+
+  // ngModel on a number input hands over a number, or null when the box is emptied.
+  protected setNewPostDkp(value: number | null): void {
+    this.newPostDkp.set(typeof value === 'number' && Number.isFinite(value) ? value : null);
+  }
+
+  // Whether the post has a price of its own (a typed amount other than the rate).
+  protected newPostHasOwnDkp(event: ActivityEvent): boolean {
+    const typed = this.newPostDkp();
+    return typed != null && typed !== this.newPostRate(event);
   }
 
   protected async submitNewPost(event: ActivityEvent): Promise<void> {
     const ids = [...this.newPostSelected()];
     if (ids.length === 0 || this.newPostSaving()) return;
+    // Sent only when it differs from the rate, so an untouched post keeps following the rate (and
+    // any later change to it) instead of freezing today's value onto the post.
+    const dkpAmount = this.newPostHasOwnDkp(event) ? this.newPostDkp() ?? null : null;
     this.newPostSaving.set(true);
     try {
-      const ok = await this.activity.addCampMiscPost(event.id, this.newPostName().trim() || null, ids);
+      const ok = await this.activity.addCampMiscPost(event.id, this.newPostName().trim() || null, ids, dkpAmount);
       if (ok) {
         this.closeNewPost();
         await this.activity.refreshOverview();

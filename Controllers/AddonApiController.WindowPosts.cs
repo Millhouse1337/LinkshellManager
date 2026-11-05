@@ -157,7 +157,9 @@ public sealed partial class AddonApiController
     // windowSequence: which of the camp's windows; a new one is created, an existing one is added to.
     public sealed record AddonAddWindowPostRequest(int WindowSequence, IReadOnlyList<string>? AppUserIds);
     // name: optional; "Misc post" when blank.
-    public sealed record AddonAddMiscPostRequest(string? Name, IReadOnlyList<string>? AppUserIds);
+    // DkpAmount: what this post pays each member, replacing the linkshell's Misc post rate. Null
+    // (or left out) = no price of its own, the rate applies.
+    public sealed record AddonAddMiscPostRequest(string? Name, IReadOnlyList<string>? AppUserIds, double? DkpAmount = null);
 
     // A live, per-window-priced camp, the officer posting to it, and the members they picked.
     private sealed record NewPostContext(
@@ -323,7 +325,8 @@ public sealed partial class AddonApiController
     //
     // Files a new Misc post on the camp with the picked members: the same shape a `/lsm now` capture
     // takes once an officer files it as Misc (LinkedEventId + the Misc slot), already verified
-    // because an officer made it. It pays the Misc rate once per person, priced on the camp card.
+    // because an officer made it. It pays the Misc rate once per person, or the DkpAmount the
+    // officer typed into the form (same rules as editing it afterwards, ResolveMiscPostDkp).
     [HttpPost("management/events/{eventId:int}/misc-posts")]
     public async Task<IActionResult> AddMiscPostManagementAsync(
         int eventId,
@@ -333,6 +336,17 @@ public sealed partial class AddonApiController
         var (context, error) = await LoadNewPostContextAsync(eventId, request.AppUserIds, cancellationToken);
         if (error is not null) return error;
         var (camp, actor, actorName, members) = context!;
+
+        double? dkpAmount = null;
+        if (request.DkpAmount is not null)
+        {
+            var linkshell = await _dbContext.Linkshells
+                .AsNoTracking()
+                .FirstOrDefaultAsync(l => l.Id == camp.LinkshellId, cancellationToken);
+            var (resolved, amountError) = ResolveMiscPostDkp(request.DkpAmount, linkshell);
+            if (amountError is not null) return BadRequest(new { error = amountError });
+            dkpAmount = resolved;
+        }
 
         var nowUtc = DateTime.UtcNow;
         var snapshot = new AttendanceSnapshot
@@ -348,6 +362,7 @@ public sealed partial class AddonApiController
             VerifiedByAppUserId = actor.Id,
             LinkedEventId = camp.Id,
             EntryCount = members.Count,
+            DkpAmount = dkpAmount,
         };
         WindowEventLinkService.ApplyCampSlot(
             snapshot,

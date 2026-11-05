@@ -216,6 +216,7 @@
                 @if (manage && newPostEventId() === event.id) {
                   <!-- Misc posts only: window posts come from the lsm addon. -->
                   @let postRate = newPostRate(event);
+                  @let postPer = newPostPerMember(event);
                   @let postPicked = newPostSelected().size;
                   <section class="hnm-panel hnm-post">
                     <div class="hnm-post__head">
@@ -229,10 +230,19 @@
                     </div>
 
                     <div class="hnm-formula hnm-post__formula">
-                      <span class="hnm-formula__chip"><b class="hnm-mono">{{ postRate | number:'1.0-2' }}</b> Misc rate</span>
+                      <!-- The DKP each member gets, editable: starts on the linkshell's Misc post rate;
+                           a different number gives this post its own price. Empty = the rate. -->
+                      <span class="hnm-formula__chip">
+                        <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                          aria-label="DKP per member for this post"
+                          [title]="'Leave empty for the Misc post rate (' + (postRate | number:'1.0-2') + ')'"
+                          [ngModel]="newPostDkpBox(event)" (ngModelChange)="setNewPostDkp($event)"
+                          [name]="'campPostDkp' + event.id" />
+                        {{ newPostHasOwnDkp(event) ? 'Set for this post' : 'Misc rate' }}
+                      </span>
                       <span class="hnm-formula__op">=</span>
-                      <span class="hnm-formula__per"><b class="hnm-mono">{{ postRate | number:'1.0-2' }}</b> per member</span>
-                      <span class="hnm-formula__total hnm-mono">× {{ postPicked }} = <b>{{ postRate * postPicked | number:'1.0-2' }} DKP</b></span>
+                      <span class="hnm-formula__per"><b class="hnm-mono">{{ postPer | number:'1.0-2' }}</b> per member</span>
+                      <span class="hnm-formula__total hnm-mono">× {{ postPicked }} = <b>{{ postPer * postPicked | number:'1.0-2' }} DKP</b></span>
                     </div>
 
                     <div class="hnm-post__members-head">

@@ -113,24 +113,10 @@ public sealed partial class AddonApiController
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == snapshot.LinkshellId, cancellationToken);
 
-        double? resolved = null;
-        if (amount is { } value)
+        var (resolved, amountError) = ResolveMiscPostDkp(amount, linkshell);
+        if (amountError is not null)
         {
-            if (double.IsNaN(value) || double.IsInfinity(value))
-            {
-                return BadRequest(new { error = "dkpAmount must be a number." });
-            }
-            if (value < 0)
-            {
-                return BadRequest(new { error = "dkpAmount must be non-negative." });
-            }
-            if (value > MaxWindowDkp)
-            {
-                return BadRequest(new { error = $"dkpAmount must be {MaxWindowDkp:0} or less." });
-            }
-            // Snapped on write for the same reason a window price is: showing an off-grid number
-            // would promise a payout nothing is going to make.
-            resolved = DkpRounding.Round(value, DkpRounding.StepFor(linkshell?.DkpRoundingIncrement));
+            return BadRequest(new { error = amountError });
         }
 
         snapshot.DkpAmount = resolved;
@@ -147,5 +133,20 @@ public sealed partial class AddonApiController
                 ? snapshot.DkpAmount ?? linkshell?.HnmStandardMiscBonus ?? 0d
                 : HnmCampPricing.MiscValueFor(camp, linkshell, snapshot.DkpAmount),
         });
+    }
+
+    // A misc post's price, checked and snapped: null stays null (the linkshell's Misc post rate
+    // applies); a number must be finite and 0..MaxWindowDkp, and lands on the linkshell's DKP grid.
+    // Shared by the price edit above and AddMiscPostManagementAsync, which prices a post as it is
+    // created.
+    private static (double? Amount, string? Error) ResolveMiscPostDkp(double? amount, Linkshell? linkshell)
+    {
+        if (amount is not { } value) return (null, null);
+        if (double.IsNaN(value) || double.IsInfinity(value)) return (null, "dkpAmount must be a number.");
+        if (value < 0) return (null, "dkpAmount must be non-negative.");
+        if (value > MaxWindowDkp) return (null, $"dkpAmount must be {MaxWindowDkp:0} or less.");
+        // Snapped on write for the same reason a window price is: showing an off-grid number
+        // would promise a payout nothing is going to make.
+        return (DkpRounding.Round(value, DkpRounding.StepFor(linkshell?.DkpRoundingIncrement)), null);
     }
 }
