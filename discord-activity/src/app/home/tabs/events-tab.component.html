@@ -770,16 +770,68 @@
                                 <span>{{ attendanceWindowDkpNote(event, win) }}</span>
                               </div>
                             } @else {
+                              <!-- Each part is editable here too, through the same drafts and saves as the
+                                   table's Regular / Open / Close cells below, so the two always agree. -->
                               <div class="hnm-formula">
                                 @if (isKill) {
-                                  <span class="hnm-formula__chip"><b>{{ windowPerAttendee(event, win) | number:'1.0-2' }}</b> Kill bonus</span>
+                                  @if (manage) {
+                                    <label class="hnm-formula__chip hnm-formula__chip--edit">
+                                      <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
+                                             aria-label="Kill bonus"
+                                             [disabled]="windowDkpSaving()"
+                                             [value]="windowDkpDraft(event, win)"
+                                             [title]="windowDkpHint(win)"
+                                             (input)="setWindowDkpDraft(win, $event)"
+                                             (change)="commitWindowDkp(event, win)" />
+                                      Kill bonus
+                                    </label>
+                                  } @else {
+                                    <span class="hnm-formula__chip"><b>{{ windowPerAttendee(event, win) | number:'1.0-2' }}</b> Kill bonus</span>
+                                  }
                                 } @else {
-                                  <span class="hnm-formula__chip"><b>{{ windowBaseValue(event, win) | number:'1.0-2' }}</b> {{ win.dkpAmount != null ? 'Set for this window' : 'Regular' }}</span>
-                                  @if (openWindowValue(event, win) > 0) {
+                                  @if (manage) {
+                                    <label class="hnm-formula__chip hnm-formula__chip--edit">
+                                      <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
+                                             aria-label="DKP for this window"
+                                             [disabled]="windowDkpSaving()"
+                                             [value]="windowDkpDraft(event, win)"
+                                             [title]="windowDkpHint(win)"
+                                             (input)="setWindowDkpDraft(win, $event)"
+                                             (change)="commitWindowDkp(event, win)" />
+                                      {{ win.dkpAmount != null ? 'Set for this window' : 'Regular' }}
+                                    </label>
+                                  } @else {
+                                    <span class="hnm-formula__chip"><b>{{ windowBaseValue(event, win) | number:'1.0-2' }}</b> {{ win.dkpAmount != null ? 'Set for this window' : 'Regular' }}</span>
+                                  }
+                                  @if (isOpenWindow(win) && manage) {
+                                    <span class="hnm-formula__op">+</span>
+                                    <label class="hnm-formula__chip hnm-formula__chip--edit">
+                                      <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
+                                             aria-label="Open bonus"
+                                             [disabled]="windowDkpSaving()"
+                                             [value]="openBonusDraft(event)"
+                                             title="This camp's open bonus, added to window 1's DKP. Clear the box to go back to the linkshell default."
+                                             (input)="setOpenBonusDraft(event, $event)"
+                                             (change)="commitOpenBonus(event)" />
+                                      Open bonus
+                                    </label>
+                                  } @else if (openWindowValue(event, win) > 0) {
                                     <span class="hnm-formula__op">+</span>
                                     <span class="hnm-formula__chip"><b>{{ openWindowValue(event, win) | number:'1.0-2' }}</b> Open bonus</span>
                                   }
-                                  @if (closeWindowValue(event, win) > 0) {
+                                  @if (isCloseWindow(event, win) && manage) {
+                                    <span class="hnm-formula__op">+</span>
+                                    <label class="hnm-formula__chip hnm-formula__chip--edit">
+                                      <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
+                                             aria-label="Closing bonus"
+                                             [disabled]="windowDkpSaving()"
+                                             [value]="closeBonusDraft(event)"
+                                             title="This camp's close bonus. Applies to everyone on the closing window; clear the box to go back to the linkshell default."
+                                             (input)="setCloseBonusDraft(event, $event)"
+                                             (change)="commitCloseBonus(event)" />
+                                      Closing bonus
+                                    </label>
+                                  } @else if (closeWindowValue(event, win) > 0) {
                                     <span class="hnm-formula__op">+</span>
                                     <span class="hnm-formula__chip"><b>{{ closeWindowValue(event, win) | number:'1.0-2' }}</b> Closing bonus</span>
                                   }
