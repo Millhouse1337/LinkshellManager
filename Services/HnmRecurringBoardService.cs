@@ -331,8 +331,8 @@ public static class HnmRecurringBoardService
             return true;
         }
 
-        var nextDay = HnmConfig.NextDayNumber(tod.DayNumber, tod.Hq);
-        var nextMonster = tod.Hq ? HnmConfig.BaseMonsterName(spawn) ?? spawn : spawn;
+        var nextDay = HnmDayCycle.NextDay(tod, ev.DayNumber);
+        var nextMonster = HnmDayCycle.WasHq(tod) ? HnmConfig.BaseMonsterName(spawn) ?? spawn : spawn;
         await HnmEventSeeder.ReviveForNewPopAsync(
             db, ev, tod.RepopTime!.Value, nextDay, nextMonster, tod.Id, cancellationToken);
         if (board is not null)

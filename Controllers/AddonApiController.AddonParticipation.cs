@@ -1389,6 +1389,9 @@ public sealed partial class AddonApiController
         var dayNumber = request.DayNumber.HasValue && request.DayNumber.Value > 0
             ? request.DayNumber
             : null;
+        // A live camp for this spawn decides the day -- see HnmDayCycle.DayForAddonTodAsync.
+        dayNumber = await HnmDayCycle.DayForAddonTodAsync(
+            _dbContext, token.LinkshellId, monsterName, dayNumber, cancellationToken);
 
         // Only a positive window is a reading; 0 / negative is the addon saying it has none, and
         // must stay null so "Popped on window" renders as "not recorded" rather than as window 0.

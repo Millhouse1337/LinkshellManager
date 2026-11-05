@@ -149,8 +149,8 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         // renders as the base half; a board keyed on the bare stronger name needs the swap
         // spelled out, since "Nidhogg" killed means the next spawn is Fafnir. The TEMPLATE's
         // MonsterName is left alone — it's the stable key for this spawn's standing board.
-        var nextDay = HnmConfig.NextDayNumber(tod.DayNumber, tod.Hq);
-        var nextMonster = tod.Hq ? HnmConfig.BaseMonsterName(monster)! : monster;
+        var nextDay = HnmDayCycle.NextDay(tod, boardDay: null);
+        var nextMonster = HnmDayCycle.WasHq(tod) ? HnmConfig.BaseMonsterName(monster)! : monster;
 
         // Idempotency / addon coexistence: reuse an existing not-yet-ended event that was created
         // from this exact ToD, or ANY board for this monster within ±10 min of the pop.
@@ -279,8 +279,10 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
                 && startUtc >= windowStart && startUtc <= windowEnd;
             if (existing.HnmDefeatedAt != null || !alreadyOnThisPop)
             {
+                // The board's own day stands in for a ToD that doesn't say one (HnmDayCycle.NextDay).
                 await HnmEventSeeder.ReviveForNewPopAsync(
-                    db, existing, repopUtc, nextDay, nextMonster, tod.Id, cancellationToken);
+                    db, existing, repopUtc, HnmDayCycle.NextDay(tod, existing.DayNumber), nextMonster,
+                    tod.Id, cancellationToken);
                 _logger.LogInformation(
                     "HNM board reactivated: event '{EventName}' ({EventId}, linkshell {LinkshellId}, monster '{Monster}') from tod {TodId}, repop {Repop:o}.",
                     existing.EventName, existing.Id, board.LinkshellId, monster, tod.Id, repopUtc);
