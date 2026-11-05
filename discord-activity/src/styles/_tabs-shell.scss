@@ -65,7 +65,15 @@ body {
   color: var(--fg-2);
   border-bottom: 1px solid var(--border);
   background: var(--bg);
+  // Pinned to the top while the page scrolls. The fixed height lets the tab strip
+  // below pin itself exactly underneath (`.tabs { top: var(--identity-h) }`); 44px
+  // fits the tallest item (the 28px linkshell dropdown) plus padding and border.
+  position: sticky;
+  top: 0;
+  z-index: 11;
+  height: var(--identity-h);
 }
+:root { --identity-h: 44px; }
 .identity-left {
   display: flex;
   align-items: center;
@@ -247,7 +255,7 @@ body {
 /* ===== Tab bar ===== */
 .tabs {
   position: sticky;
-  top: 0;
+  top: var(--identity-h); // right under the pinned identity bar
   z-index: 10;
   display: flex;
   align-items: center;
