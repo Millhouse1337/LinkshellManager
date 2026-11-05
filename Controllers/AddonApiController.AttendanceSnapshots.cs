@@ -383,6 +383,10 @@ public sealed partial class AddonApiController
         var snapshots = rows.Select(s =>
         {
             var isMisc = AttendanceSnapshotSlotKinds.IsMisc(s.SlotKind);
+            // The live camp it is filed on, or null. A review-card capture (WindowEventId set) still
+            // points LinkedEventId at the board, which the next pop reuses -- reporting it would put
+            // the last camp's posts in the next camp's Misc Posts panel.
+            var liveCamp = s.WindowEventId == null ? s.LinkedEvent : null;
             // Same rule as both web mappers: a Misc capture has no window, and nothing may derive
             // one for it.
             var window = isMisc ? null : s.WindowNumber;
@@ -408,8 +412,8 @@ public sealed partial class AddonApiController
                 windowEventId = s.WindowEventId,
                 windowEventName = s.WindowEvent?.Name,
                 // Filed against a LIVE camp, before End Camp moves it onto the camp's review card.
-                linkedEventId = s.LinkedEventId,
-                linkedEventName = s.LinkedEvent?.EventName,
+                linkedEventId = liveCamp?.Id,
+                linkedEventName = liveCamp?.EventName,
                 // The addon groups on this: an unfiled capture is the officer's to-do, and the
                 // poster is usually the person who needs reminding it is still sitting there.
                 isUnlinked = WindowEventLinkService.IsUnlinked(s),
@@ -417,7 +421,7 @@ public sealed partial class AddonApiController
                 // Per person on the post, not a total. Null once the camp has ended and the
                 // capture has moved off the live event -- the review card owns the amount from
                 // then on, and guessing one here could disagree with what an officer has edited.
-                dkpAmount = isMisc ? HnmCampPricing.MiscValueFor(s.LinkedEvent, linkshell, s.DkpAmount) : null,
+                dkpAmount = isMisc ? HnmCampPricing.MiscValueFor(liveCamp, linkshell, s.DkpAmount) : null,
                 // The officer's price for this one post, or null when it pays the linkshell's Misc
                 // post rate. Lets the addon's edit box tell "inherited" apart from "set".
                 dkpOverride = isMisc ? s.DkpAmount : null,

@@ -308,7 +308,12 @@ public sealed partial class ActivityDataController
             ? (await _dbContext.AttendanceSnapshots
                     .AsNoTracking()
                     .Include(snapshot => snapshot.Entries)
+                    // WindowEventId == null: only captures filed on the LIVE camp. End Camp's review
+                    // card snapshots keep LinkedEventId pointing at the board, and the board is
+                    // recycled for the next pop, so without this the last camp's Open / Close / Tag
+                    // showed up (and paid) on the next camp, where Unlink refused them.
                     .Where(snapshot => snapshot.LinkedEventId != null
+                                       && snapshot.WindowEventId == null
                                        && linkedEventIds.Contains(snapshot.LinkedEventId.Value)
                                        && snapshot.SnapshotStatus != AttendanceSnapshotStatuses.Ignored)
                     .OrderBy(snapshot => snapshot.CapturedAtUtc)
