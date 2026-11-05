@@ -80,6 +80,22 @@ export function additionalSecondsLabel(seconds: number): string {
   return seconds === 1 ? '1 additional second' : `${seconds} additional seconds`;
 }
 
+// A form's "YYYY-MM-DDTHH:mm:ss" value is the viewer's wall clock, and the server is what converts
+// it. So these two read it as if it were UTC: plain clock arithmetic and formatting, which a
+// daylight-saving change in the browser's own zone cannot bend.
+export function shiftLocalDateTime(value: string, seconds: number): string {
+  const clock = Date.parse(`${value}Z`);
+  return Number.isNaN(clock) ? value : new Date(clock + seconds * 1000).toISOString().slice(0, 19);
+}
+
+// The clock time alone, for reading beside the box: "1:00:16 PM".
+export function formatLocalClockTime(value: string): string {
+  const clock = Date.parse(`${value}Z`);
+  return Number.isNaN(clock)
+    ? value
+    : new Intl.DateTimeFormat(undefined, { timeZone: 'UTC', timeStyle: 'medium' }).format(clock);
+}
+
 export function parseDate(value?: string | null): number | null {
   if (!value) {
     return null;

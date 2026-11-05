@@ -24,9 +24,7 @@ public static class UpcomingRepopLookup
         string MonsterName,
         IReadOnlyList<string> MatchNames,
         DateTime RepopTimeUtc,
-        int? DayNumber,
-        // The seconds already inside RepopTimeUtc, as the ToD recorded them.
-        int AdditionalSeconds = 0);
+        int? DayNumber);
 
     public static async Task<List<Entry>> ForLinkshellAsync(
         ApplicationDbContext db,
@@ -50,7 +48,7 @@ public static class UpcomingRepopLookup
             // HnmRecurringBoardService.SyncParkedBoardsForTodAsync).
             .OrderByDescending(tod => tod.RepopTime)
             .ThenByDescending(tod => tod.Id)
-            .Select(tod => new { tod.Id, tod.MonsterName, tod.RepopTime, tod.DayNumber, tod.AdditionalSeconds })
+            .Select(tod => new { tod.Id, tod.MonsterName, tod.RepopTime, tod.DayNumber })
             .ToListAsync(cancellationToken);
 
         var entries = new List<Entry>();
@@ -81,8 +79,7 @@ public static class UpcomingRepopLookup
                 row.MonsterName!.Trim(),
                 matchNames,
                 DateTime.SpecifyKind(row.RepopTime!.Value, DateTimeKind.Utc),
-                row.DayNumber,
-                row.AdditionalSeconds));
+                row.DayNumber));
         }
 
         return entries.OrderBy(entry => entry.RepopTimeUtc).ToList();

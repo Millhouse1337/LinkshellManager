@@ -226,14 +226,24 @@
   gap: 8px;
 }
 
-/* Says how Starts relates to the monster's Additional Seconds, so it stands out from a plain hint. */
-.cem__hint--seconds {
-  padding: 8px 10px;
-  border: 1px solid var(--cem-sel-line);
-  border-radius: 8px;
-  background: var(--cem-sel-bg);
+/* The Starts box with the monster's Additional Seconds added up to its right. Wraps under the box
+   on a narrow screen, or beside the wider Hour : Min : Sec boxes on a tablet. */
+.cem__start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.cem__start app-datetime-input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.cem__start-total {
   color: var(--cem-sel-fg);
-  font-weight: 600;
+  font: 600 13px var(--cem-mono);
+  white-space: nowrap;
 }
 
 /* ===== Controls ===== */

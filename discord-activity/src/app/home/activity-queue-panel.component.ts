@@ -28,10 +28,9 @@ import { datetimeLocalToUtcIso } from '../discord/discord-activity.helpers';
 import { PartySetupService } from '../discord/party-setup.service';
 import { TodService } from '../discord/tod.service';
 import {
-  additionalSecondsLabel,
   canManageLinkshellIn,
-  parseLocalDateTime,
-  toDateTimeLocalValue
+  formatLocalClockTime,
+  shiftLocalDateTime
 } from './activity-home.helpers';
 import type { ActivityPartySetupListRow, ActivityUpcomingRepop } from '../discord/discord-activity.types';
 import { MarkdownTextareaComponent } from './tabs/markdown-textarea.component';
@@ -403,7 +402,7 @@ export class ActivityQueuePanelComponent {
   protected isStartAtUpcomingRepop(): boolean {
     const repop = this.selectedUpcomingRepop();
     return !!repop
-      && (this.createModel.startTimeLocal ?? '') === this.activity.toViewerLocalInputValue(repop.repopTime, true);
+      && this.startWithAdditionalSeconds() === this.activity.toViewerLocalInputValue(repop.repopTime, true);
   }
 
   // Write the predicted pop into Start, but only into an EMPTY box or over this component's own
@@ -438,22 +437,19 @@ export class ActivityQueuePanelComponent {
       return;
     }
 
-    this.createModel.startTimeLocal = value;
-    this.autoFilledStartTimeLocal = value;
+    // A repop already includes the seconds, and the box holds the time without them.
+    const withoutSeconds = shiftLocalDateTime(value, -this.selectedMonsterAdditionalSeconds());
+    this.createModel.startTimeLocal = withoutSeconds;
+    this.autoFilledStartTimeLocal = withoutSeconds;
     this.recomputeDuration();
   }
 
   // ===== Additional Seconds =====
   //
-  // A repop is ToD + cooldown + the monster's Additional Seconds, and a reposted event starts then.
-  // Starts on this form is different: it is the final time, saved exactly as shown and never added
-  // to, because an edit that re-added them would push the camp later on every save. So the form says
-  // which of the two the box holds, and offers the seconds as a button for a time typed by hand.
-
-  // The two start values the "Add N sec" button must not offer to add to: what the form opened with
-  // (already final, and usually a repop that includes them) and what the button itself just wrote.
-  private openedStartTimeLocal: string | null = null;
-  private startWithSecondsAdded: string | null = null;
+  // The Starts box holds the time WITHOUT the monster's Additional Seconds. The sum is printed beside
+  // it ("1:00:00 PM + 16 sec = 1:00:16 PM") and the total is what gets saved. Opening a saved event
+  // takes the seconds back off for the box, so saving it unchanged lands on the same total and
+  // repeated edits can never push the camp later.
 
   // The picked monster's Additional Seconds, matched on either half of a combined setup so a camp
   // that still stores "Fafnir" finds the "Fafnir/Nidhogg" row.
@@ -469,38 +465,20 @@ export class ActivityQueuePanelComponent {
     return Math.max(0, Math.floor(Number(setup?.additionalSeconds) || 0));
   }
 
-  protected startSecondsNote(): string | null {
-    const repopSeconds = this.selectedUpcomingRepop()?.additionalSeconds ?? 0;
-    if (this.isStartAtUpcomingRepop() && repopSeconds > 0) {
-      return `Starts is the predicted pop: ToD + cooldown + ${additionalSecondsLabel(repopSeconds)}.`;
-    }
+  // What the event actually starts at: the box plus the seconds.
+  private startWithAdditionalSeconds(): string {
+    const start = this.createModel.startTimeLocal ?? '';
+    return start ? shiftLocalDateTime(start, this.selectedMonsterAdditionalSeconds()) : '';
+  }
+
+  // "1:00:00 PM + 16 sec = 1:00:16 PM". Null with no time in the box, or no seconds to add.
+  protected startTotalText(): string | null {
+    const start = this.createModel.startTimeLocal ?? '';
     const seconds = this.selectedMonsterAdditionalSeconds();
-    if (seconds <= 0) {
+    if (!start || seconds <= 0) {
       return null;
     }
-    return `This monster has ${additionalSecondsLabel(seconds)} in Monster Setups. A reposted event adds them `
-      + 'to its ToD automatically, but the time in Starts is saved exactly as shown.';
-  }
-
-  protected canAddSecondsToStart(): boolean {
-    const start = this.createModel.startTimeLocal ?? '';
-    return !!start
-      && this.selectedMonsterAdditionalSeconds() > 0
-      && !this.isStartAtUpcomingRepop()
-      && start !== this.openedStartTimeLocal
-      && start !== this.startWithSecondsAdded;
-  }
-
-  protected addSecondsToStart(): void {
-    const start = parseLocalDateTime(this.createModel.startTimeLocal);
-    if (!start) {
-      return;
-    }
-    const value = toDateTimeLocalValue(
-      new Date(start.getTime() + this.selectedMonsterAdditionalSeconds() * 1000));
-    this.createModel.startTimeLocal = value;
-    this.startWithSecondsAdded = value;
-    this.onStartTimeChange();
+    return `${formatLocalClockTime(start)} + ${seconds} sec = ${formatLocalClockTime(this.startWithAdditionalSeconds())}`;
   }
 
   // ===== HNM camp DKP =====
@@ -897,8 +875,6 @@ export class ActivityQueuePanelComponent {
       void this.partySetups.loadList(this.createModel.linkshellId);
     }
     this.autoFilledStartTimeLocal = null;
-    this.openedStartTimeLocal = null;
-    this.startWithSecondsAdded = null;
     this.loadUpcomingRepops();
     // Called from outside (the Event System header) through a viewChild, so OnPush wouldn't
     // otherwise re-check this panel and the dialog would never render. Same as openEditEventForm.
@@ -999,6 +975,8 @@ export class ActivityQueuePanelComponent {
     try {
       const payload: ActivityCreateEventInput = {
         ...this.createModel,
+        // The total the form printed beside the box, not the box itself.
+        startTimeLocal: this.startWithAdditionalSeconds(),
         partySetupId: nextPartySetupId,
         monsterName,
         // A day the form didn't ask for is not a day the board should print: switching the
@@ -1035,7 +1013,7 @@ export class ActivityQueuePanelComponent {
   // Null until both are filled in, so the hint only shows a real time.
   protected repostPreview(): string | null {
     const lead = Number(this.createModel.repostLeadHours);
-    const startIso = datetimeLocalToUtcIso(this.createModel.startTimeLocal);
+    const startIso = datetimeLocalToUtcIso(this.startWithAdditionalSeconds());
     if (!startIso || !Number.isFinite(lead) || lead <= 0) {
       return null;
     }
@@ -1096,10 +1074,11 @@ export class ActivityQueuePanelComponent {
     this.createModel.eventLocation = event.location ?? '';
     // Seconds included: both inputs are step="1", and an HNM pop time is second-precise —
     // re-filling at :00 would quietly move the camp's start every time it was edited.
-    this.createModel.startTimeLocal = this.activity.toViewerLocalInputValue(event.startTime ?? null, true);
-    this.openedStartTimeLocal = this.createModel.startTimeLocal;
-    this.startWithSecondsAdded = null;
+    const savedStartLocal = this.activity.toViewerLocalInputValue(event.startTime ?? null, true);
     this.createModel.endTimeLocal = this.activity.toViewerLocalInputValue(event.endTime ?? null, true);
+    // The box holds the time without the seconds, which are read off the monster, so this waits
+    // until the monster is set below.
+    this.createModel.startTimeLocal = savedStartLocal;
     // Addon-created (HNM) events come back with no end time; the "N/A" toggle
     // reflects that, and the duration is derived from Start + End below.
     this.endTimeNotSpecified = !this.createModel.endTimeLocal;
@@ -1113,6 +1092,9 @@ export class ActivityQueuePanelComponent {
     this.createModel.monsterName = event.assignedMonsterName ?? null;
     this.customMonsterName = '';
     this.createModel.dayNumber = event.dayNumber ?? null;
+    this.createModel.startTimeLocal = savedStartLocal
+      ? shiftLocalDateTime(savedStartLocal, -this.selectedMonsterAdditionalSeconds())
+      : '';
     // Lazy-load the linkshell's PartySetup list so the dropdown populates.
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);

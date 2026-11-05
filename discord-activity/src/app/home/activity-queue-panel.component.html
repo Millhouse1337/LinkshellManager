@@ -149,8 +149,13 @@
           <div class="cem__grid">
             <label class="cem__field">
               <span class="cem__label">Starts</span>
-              <app-datetime-input inputClass="cem__input cem__input--mono" [(ngModel)]="createModel.startTimeLocal"
-                name="startTimeLocal" (ngModelChange)="onStartTimeChange()" />
+              <span class="cem__start">
+                <app-datetime-input inputClass="cem__input cem__input--mono" [(ngModel)]="createModel.startTimeLocal"
+                  name="startTimeLocal" (ngModelChange)="onStartTimeChange()" />
+                @if (startTotalText(); as total) {
+                  <span class="cem__start-total">{{ total }}</span>
+                }
+              </span>
             </label>
 
             @if (showRepostLeadField()) {
@@ -196,18 +201,6 @@
               @if (!isStartAtUpcomingRepop()) {
                 <button type="button" class="cem__chip cem__chip--sm" (click)="useUpcomingRepopStartTime()">
                   Use this time
-                </button>
-              }
-            </small>
-          }
-
-          <!-- Additional Seconds: whether Starts already includes them, or is saved as typed. -->
-          @if (startSecondsNote(); as note) {
-            <small class="cem__hint cem__hint--inline cem__hint--seconds">
-              <span>{{ note }}</span>
-              @if (canAddSecondsToStart()) {
-                <button type="button" class="cem__chip cem__chip--sm" (click)="addSecondsToStart()">
-                  Add {{ selectedMonsterAdditionalSeconds() }} sec
                 </button>
               }
             </small>

@@ -1075,8 +1075,6 @@ export interface ActivityUpcomingRepop {
   // Predicted repop, UTC ISO.
   repopTime: string;
   dayNumber?: number | null;
-  // The seconds already inside repopTime, as the ToD recorded them.
-  additionalSeconds?: number;
 }
 
 export interface ActivityEvent {
