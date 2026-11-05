@@ -226,6 +226,16 @@
   gap: 8px;
 }
 
+/* Says how Starts relates to the monster's Additional Seconds, so it stands out from a plain hint. */
+.cem__hint--seconds {
+  padding: 8px 10px;
+  border: 1px solid var(--cem-sel-line);
+  border-radius: 8px;
+  background: var(--cem-sel-bg);
+  color: var(--cem-sel-fg);
+  font-weight: 600;
+}
+
 /* ===== Controls ===== */
 .cem__input,
 .cem__select {

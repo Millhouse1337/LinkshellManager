@@ -201,6 +201,18 @@
             </small>
           }
 
+          <!-- Additional Seconds: whether Starts already includes them, or is saved as typed. -->
+          @if (startSecondsNote(); as note) {
+            <small class="cem__hint cem__hint--inline cem__hint--seconds">
+              <span>{{ note }}</span>
+              @if (canAddSecondsToStart()) {
+                <button type="button" class="cem__chip cem__chip--sm" (click)="addSecondsToStart()">
+                  Add {{ selectedMonsterAdditionalSeconds() }} sec
+                </button>
+              }
+            </small>
+          }
+
           @if (showRepostLeadField() && editingRepostOn && repostPreview(); as repostAt) {
             <small class="cem__hint">
               The sign-up board re-posts in the Discord channel {{ activity.formatDateTimeWithSeconds(repostAt) }}.

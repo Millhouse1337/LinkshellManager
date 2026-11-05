@@ -75,6 +75,11 @@ export function toDateTimeLocalValue(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+// "16 additional seconds": how every form words a monster's Additional Seconds (Monster Setups).
+export function additionalSecondsLabel(seconds: number): string {
+  return seconds === 1 ? '1 additional second' : `${seconds} additional seconds`;
+}
+
 export function parseDate(value?: string | null): number | null {
   if (!value) {
     return null;

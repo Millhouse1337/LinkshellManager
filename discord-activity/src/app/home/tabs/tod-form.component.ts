@@ -8,6 +8,7 @@ import {
 } from '../../discord/discord-activity.service';
 import {
   DEFAULT_POP_WINDOWS,
+  additionalSecondsLabel,
   formatElapsed,
   parseLocalDateTime,
   parseTodDurationMinutes,
@@ -425,6 +426,9 @@ export class TodFormComponent {
         this.applyIntervalMinutes(configured.cadenceMinutes);
         this.todDraft.additionalSeconds = Math.max(0, Math.floor(Number(configured.additionalSeconds) || 0));
       }
+    } else {
+      // A monster typed by hand has no setup, so it must not keep the seconds of the one picked before.
+      this.todDraft.additionalSeconds = 0;
     }
     // Day and NQ/HQ hide for anything but the three merge pairs; a hidden control must not post
     // the value it held for the previous monster.
@@ -658,6 +662,18 @@ export class TodFormComponent {
     return this.activity.formatDateTimeWithSeconds(this.todRepopLocalValue) ?? this.todRepopLocalValue;
   }
 
+  // The note beside "Next repop opens": the time typed above is not the time a reposted event shows
+  // when the monster has Additional Seconds, so say so here. Null with none, as there is nothing to explain.
+  protected repopFormulaNote(): string | null {
+    const seconds = Math.max(0, Math.floor(Number(this.todDraft.additionalSeconds) || 0));
+    if (seconds <= 0) {
+      return null;
+    }
+    const cooldown = this.todCooldownLabel();
+    const parts = ['time of death', ...(cooldown ? [cooldown] : []), additionalSecondsLabel(seconds)];
+    return `Any reposted event starts at this time: ${parts.join(' + ')}.`;
+  }
+
   // Board-mode submit: posts the ToD to the HNM board endpoint, which also moves the event
   // StartTime to the repop, wipes signups, marks the board defeated, and updates Discord.
   private async submitBoardTod(): Promise<void> {
@@ -799,11 +815,18 @@ export class TodFormComponent {
     this.todDraft.dayNumber = tod.dayNumber ?? null;
     this.todPopWindow = tod.popWindow ?? null;
     this.todDraft.hq = !!tod.hq;
-    this.todDraft.additionalSeconds = tod.additionalSeconds ?? 0;
     this.todDraft.claim = !!tod.claim;
     this.todDayNumberNotSpecified = tod.dayNumber == null;
 
     const monsterName: string = tod.monsterName ?? '';
+    // A ToD saved with none takes the monster's: the server does the same with a 0 when this is
+    // saved, so reading it the other way would preview one repop and store another.
+    const recordedSeconds = Math.max(0, Math.floor(Number(tod.additionalSeconds) || 0));
+    const option = this.todMonsterOptionFor(monsterName);
+    this.todDraft.additionalSeconds = recordedSeconds > 0 || !option
+      ? recordedSeconds
+      : Math.max(0, Math.floor(Number(this.monsterSetupFor(option)?.additionalSeconds) || 0));
+
     if (this.isKnownTodMonster(monsterName)) {
       this.todDraft.monsterName = monsterName;
       this.todCustomMonsterName = '';

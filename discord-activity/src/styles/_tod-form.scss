@@ -285,8 +285,9 @@
 /* ===== Next repop ===== */
 .tod-repop {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 12px 16px;
   padding: 14px 16px;
   border: 1px solid var(--accent-glow);
   border-radius: var(--r-lg);
@@ -317,6 +318,18 @@
 .tod-repop .tod-repop__countdown {
   color: var(--accent-hover);
   font-variant-numeric: tabular-nums;
+}
+
+/* Why the time above carries seconds nobody typed. Its own full-width row inside the box. */
+.tod-repop__note {
+  flex-basis: 100%;
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--accent-glow);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 /* ===== Claimed / Killed / Re-post switches ===== */

@@ -37,7 +37,8 @@ public sealed partial class ActivityDataController
                 monsterName = entry.MonsterName,
                 matchNames = entry.MatchNames,
                 repopTime = entry.RepopTimeUtc,
-                dayNumber = entry.DayNumber
+                dayNumber = entry.DayNumber,
+                additionalSeconds = entry.AdditionalSeconds
             }).ToList()
         });
     }

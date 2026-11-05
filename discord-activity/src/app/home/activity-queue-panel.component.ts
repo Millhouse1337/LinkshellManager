@@ -27,7 +27,12 @@ import { hasHqVariant, isHnmTierMonster } from './activity-home.types';
 import { datetimeLocalToUtcIso } from '../discord/discord-activity.helpers';
 import { PartySetupService } from '../discord/party-setup.service';
 import { TodService } from '../discord/tod.service';
-import { canManageLinkshellIn } from './activity-home.helpers';
+import {
+  additionalSecondsLabel,
+  canManageLinkshellIn,
+  parseLocalDateTime,
+  toDateTimeLocalValue
+} from './activity-home.helpers';
 import type { ActivityPartySetupListRow, ActivityUpcomingRepop } from '../discord/discord-activity.types';
 import { MarkdownTextareaComponent } from './tabs/markdown-textarea.component';
 import { PartySetupEditorComponent } from './tabs/party-setup-editor.component';
@@ -438,6 +443,66 @@ export class ActivityQueuePanelComponent {
     this.recomputeDuration();
   }
 
+  // ===== Additional Seconds =====
+  //
+  // A repop is ToD + cooldown + the monster's Additional Seconds, and a reposted event starts then.
+  // Starts on this form is different: it is the final time, saved exactly as shown and never added
+  // to, because an edit that re-added them would push the camp later on every save. So the form says
+  // which of the two the box holds, and offers the seconds as a button for a time typed by hand.
+
+  // The two start values the "Add N sec" button must not offer to add to: what the form opened with
+  // (already final, and usually a repop that includes them) and what the button itself just wrote.
+  private openedStartTimeLocal: string | null = null;
+  private startWithSecondsAdded: string | null = null;
+
+  // The picked monster's Additional Seconds, matched on either half of a combined setup so a camp
+  // that still stores "Fafnir" finds the "Fafnir/Nidhogg" row.
+  protected selectedMonsterAdditionalSeconds(): number {
+    const picked = (this.createModel.monsterName ?? '').trim().toLowerCase();
+    if (!this.isHnmSelected() || this.isOtherMonsterSelected() || !picked) {
+      return 0;
+    }
+    const setup = (this.selectedLinkshellSettings()?.monsterSetups ?? []).find(candidate => {
+      const name = candidate.monsterName.trim().toLowerCase();
+      return name === picked || name.split('/').some(half => half.trim() === picked);
+    });
+    return Math.max(0, Math.floor(Number(setup?.additionalSeconds) || 0));
+  }
+
+  protected startSecondsNote(): string | null {
+    const repopSeconds = this.selectedUpcomingRepop()?.additionalSeconds ?? 0;
+    if (this.isStartAtUpcomingRepop() && repopSeconds > 0) {
+      return `Starts is the predicted pop: ToD + cooldown + ${additionalSecondsLabel(repopSeconds)}.`;
+    }
+    const seconds = this.selectedMonsterAdditionalSeconds();
+    if (seconds <= 0) {
+      return null;
+    }
+    return `This monster has ${additionalSecondsLabel(seconds)} in Monster Setups. A reposted event adds them `
+      + 'to its ToD automatically, but the time in Starts is saved exactly as shown.';
+  }
+
+  protected canAddSecondsToStart(): boolean {
+    const start = this.createModel.startTimeLocal ?? '';
+    return !!start
+      && this.selectedMonsterAdditionalSeconds() > 0
+      && !this.isStartAtUpcomingRepop()
+      && start !== this.openedStartTimeLocal
+      && start !== this.startWithSecondsAdded;
+  }
+
+  protected addSecondsToStart(): void {
+    const start = parseLocalDateTime(this.createModel.startTimeLocal);
+    if (!start) {
+      return;
+    }
+    const value = toDateTimeLocalValue(
+      new Date(start.getTime() + this.selectedMonsterAdditionalSeconds() * 1000));
+    this.createModel.startTimeLocal = value;
+    this.startWithSecondsAdded = value;
+    this.onStartTimeChange();
+  }
+
   // ===== HNM camp DKP =====
   //
   // What a camp pays is configured once per linkshell, in whichever shape its attendance
@@ -832,6 +897,8 @@ export class ActivityQueuePanelComponent {
       void this.partySetups.loadList(this.createModel.linkshellId);
     }
     this.autoFilledStartTimeLocal = null;
+    this.openedStartTimeLocal = null;
+    this.startWithSecondsAdded = null;
     this.loadUpcomingRepops();
     // Called from outside (the Event System header) through a viewChild, so OnPush wouldn't
     // otherwise re-check this panel and the dialog would never render. Same as openEditEventForm.
@@ -1030,6 +1097,8 @@ export class ActivityQueuePanelComponent {
     // Seconds included: both inputs are step="1", and an HNM pop time is second-precise —
     // re-filling at :00 would quietly move the camp's start every time it was edited.
     this.createModel.startTimeLocal = this.activity.toViewerLocalInputValue(event.startTime ?? null, true);
+    this.openedStartTimeLocal = this.createModel.startTimeLocal;
+    this.startWithSecondsAdded = null;
     this.createModel.endTimeLocal = this.activity.toViewerLocalInputValue(event.endTime ?? null, true);
     // Addon-created (HNM) events come back with no end time; the "N/A" toggle
     // reflects that, and the duration is derived from Start + End below.

@@ -116,6 +116,9 @@
           <span class="tod-label">In</span>
           <strong class="tod-repop__countdown">{{ repopCountdown() }}</strong>
         </div>
+        @if (repopFormulaNote(); as note) {
+          <p class="tod-repop__note">{{ note }}</p>
+        }
       </div>
 
       <!-- Re-post the sign-up board before the next pop. Offered on EVERY board form — End Camp,
