@@ -78,9 +78,8 @@
            records "Not entered" (no time, no repop) for a camp where nobody saw the mob die. -->
       <label class="tod-field">
         <span class="tod-label">Time of death @if (boardEndCamp) {<em>· blank = not entered</em>}</span>
-        <input class="tod-input tod-input--mono" [ngModel]="todTimeLocalValue"
-          (ngModelChange)="onTodTimeLocalChange($event)" name="todTimeLocal"
-          type="datetime-local" step="1" [required]="!boardEndCamp"
+        <app-datetime-input inputClass="tod-input tod-input--mono" [ngModel]="todTimeLocalValue"
+          (ngModelChange)="onTodTimeLocalChange($event)" name="todTimeLocal" [required]="!boardEndCamp"
           [attr.title]="boardEndCamp ? 'Leave blank if nobody saw it die — the tracker shows Not entered and the board won\'t auto-re-post.' : null" />
       </label>
 

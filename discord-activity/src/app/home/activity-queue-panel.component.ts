@@ -12,6 +12,7 @@ import {
   viewChild
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DateTimeInputComponent } from './datetime-input.component';
 import {
   ActivityCreateEventInput,
   ActivityQuickJoinInput,
@@ -58,6 +59,7 @@ interface HnmBonusField {
   selector: 'app-activity-queue-panel',
   imports: [
     CommonModule,
+    DateTimeInputComponent,
     FormsModule,
     MarkdownTextareaComponent,
     PartySetupPanelComponent,

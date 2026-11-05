@@ -149,8 +149,8 @@
           <div class="cem__grid">
             <label class="cem__field">
               <span class="cem__label">Starts</span>
-              <input class="cem__input cem__input--mono" [(ngModel)]="createModel.startTimeLocal" name="startTimeLocal"
-                type="datetime-local" step="1" (ngModelChange)="onStartTimeChange()" />
+              <app-datetime-input inputClass="cem__input cem__input--mono" [(ngModel)]="createModel.startTimeLocal"
+                name="startTimeLocal" (ngModelChange)="onStartTimeChange()" />
             </label>
 
             @if (showRepostLeadField()) {
@@ -172,8 +172,8 @@
               <label class="cem__field">
                 <span class="cem__label">Ends</span>
                 @if (!endTimeNotSpecified) {
-                  <input class="cem__input cem__input--mono" [(ngModel)]="createModel.endTimeLocal" name="endTimeLocal"
-                    type="datetime-local" step="1" (ngModelChange)="onEndTimeChange()" />
+                  <app-datetime-input inputClass="cem__input cem__input--mono" [(ngModel)]="createModel.endTimeLocal"
+                    name="endTimeLocal" (ngModelChange)="onEndTimeChange()" />
                 } @else {
                   <input class="cem__input cem__input--mono" value="Open-ended" disabled />
                 }

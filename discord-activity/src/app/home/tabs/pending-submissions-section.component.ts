@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DateTimeInputComponent } from '../datetime-input.component';
 
 import { datetimeLocalToUtcIso } from '../../discord/discord-activity.helpers';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
@@ -29,7 +30,7 @@ interface TodDraft {
 // (CanManageTods). The top bar's Refresh reloads it (AutoRefreshService).
 @Component({
   selector: 'app-pending-submissions-section',
-  imports: [FormsModule],
+  imports: [DateTimeInputComponent, FormsModule],
   templateUrl: './pending-submissions-section.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })

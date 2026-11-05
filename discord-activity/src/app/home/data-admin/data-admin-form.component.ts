@@ -1,15 +1,18 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 
 import { formatActionError, formatError } from '../../discord/discord-activity.helpers';
 import { AuthService } from '../../discord/auth.service';
 import { DataAdminService } from '../../discord/data-admin.service';
 import type { DataAdminField, DataAdminForm } from '../../discord/data-admin.types';
+import { DateTimeInputComponent } from '../datetime-input.component';
 
 // Create (id null) or edit one row: one input per editable column, its kind chosen by the server
 // (text, textarea, number, checkbox, datetime-local, or a select for a foreign key or a const
 // column). A refused save comes back as the same form with each field's error.
 @Component({
   selector: 'app-data-admin-form',
+  imports: [DateTimeInputComponent, FormsModule],
   templateUrl: './data-admin-form.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })

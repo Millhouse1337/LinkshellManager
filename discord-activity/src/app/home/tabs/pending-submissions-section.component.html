@@ -41,11 +41,11 @@
               </label>
               <label style="display:flex;flex-direction:column;gap:4px">
                 <span class="muted">Time of death</span>
-                <input type="datetime-local" step="1" [(ngModel)]="draft.timeLocal" />
+                <app-datetime-input [(ngModel)]="draft.timeLocal" />
               </label>
               <label style="display:flex;flex-direction:column;gap:4px">
                 <span class="muted">Repop time</span>
-                <input type="datetime-local" step="1" [(ngModel)]="draft.repopTimeLocal" />
+                <app-datetime-input [(ngModel)]="draft.repopTimeLocal" />
               </label>
               <label style="display:flex;flex-direction:column;gap:4px">
                 <span class="muted">Cooldown</span>

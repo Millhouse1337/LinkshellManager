@@ -65,8 +65,7 @@
                        (input)="values[field.name] = $any($event.target).value" />
               }
               @case ('datetime-local') {
-                <input type="datetime-local" step="1" [value]="values[field.name]"
-                       (input)="values[field.name] = $any($event.target).value" />
+                <app-datetime-input [ngModel]="values[field.name]" (ngModelChange)="values[field.name] = $event" />
                 <span class="muted" style="font-size:11px">UTC</span>
               }
               @default {

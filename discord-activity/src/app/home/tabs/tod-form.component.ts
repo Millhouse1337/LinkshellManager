@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DateTimeInputComponent } from '../datetime-input.component';
 import {
   ActivityCreateTodInput,
   DiscordActivityService
@@ -27,7 +28,7 @@ import type { ActivityMonsterSetup } from '../../discord/discord-activity.types'
 // extra wiring needed for the recurring-board reposter to pick the new ToD up.
 @Component({
   selector: 'app-tod-form',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, DateTimeInputComponent, FormsModule],
   templateUrl: './tod-form.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
