@@ -438,6 +438,12 @@
                         {{ postedWindowCount(event) }} of {{ postCount(event) }} windows posted{{ killWindow ? ' · kill posted' : '' }}
                       </span>
                     </div>
+                    <!-- A ToD for this camp's monster was logged since the camp started (usually the
+                         addon's ToD post), so the officer can see it landed. -->
+                    @if (event.hnmCampTodPostedAt) {
+                      <span class="hnm-badge" data-tone="success"
+                        [title]="'ToD logged ' + (event.hnmCampTodPostedAt | date:'shortTime')">New ToD Updated</span>
+                    }
                     <!-- (Adding a post or a member is the Add New Post / Add a Member button at the
                          top of the card.) -->
                   </div>

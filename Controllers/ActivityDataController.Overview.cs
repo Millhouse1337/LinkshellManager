@@ -748,6 +748,46 @@ public sealed partial class ActivityDataController
         bool HnmTodRecorded(Event e) =>
             e.SourceTodId is not { } todId || !todlessSourceTodIds.Contains(todId);
 
+        // The live card's "New ToD Updated" label: the latest ToD logged for a live HNM camp's
+        // monster since that camp started. Matched by MonsterMatchNames, the way the recurring
+        // board matches a ToD, so a Fafnir camp lights up on a Nidhogg ToD too.
+        var liveHnmCamps = activeEvents
+            .Where(e => e.CommencementStartTime != null && e.EndTime == null
+                        && DiscordEventMessageBuilder.IsHnm(e))
+            .ToList();
+        var campTods = new List<(int LinkshellId, string MonsterName, DateTime TimeStamp)>();
+        if (liveHnmCamps.Count > 0)
+        {
+            var campLinkshellIds = liveHnmCamps.Select(e => e.LinkshellId).Distinct().ToList();
+            var earliestStart = liveHnmCamps.Min(e => e.CommencementStartTime!.Value);
+            campTods = (await _dbContext.Tods
+                    .AsNoTracking()
+                    .Where(t => campLinkshellIds.Contains(t.LinkshellId)
+                                && t.TimeStamp != null && t.TimeStamp >= earliestStart
+                                && t.MonsterName != null)
+                    .Select(t => new { t.LinkshellId, t.MonsterName, t.TimeStamp })
+                    .ToListAsync(cancellationToken))
+                .Select(t => (t.LinkshellId, t.MonsterName!, t.TimeStamp!.Value))
+                .ToList();
+        }
+        DateTime? CampTodPostedAt(Event e)
+        {
+            if (e.CommencementStartTime is not { } started || e.EndTime != null
+                || !DiscordEventMessageBuilder.IsHnm(e))
+            {
+                return null;
+            }
+            var names = HnmConfig.MonsterMatchNames(e.AssignedMonsterName ?? e.EventName);
+            if (names.Count == 0) return null;
+            var latest = campTods
+                .Where(t => t.LinkshellId == e.LinkshellId && t.TimeStamp >= started
+                            && names.Contains(t.MonsterName.Trim()))
+                .Select(t => (DateTime?)t.TimeStamp)
+                .DefaultIfEmpty(null)
+                .Max();
+            return latest is { } stamp ? DateTime.SpecifyKind(stamp, DateTimeKind.Utc) : null;
+        }
+
         // Which linkshells have a dashboard banner (+ its version for cache-busting),
         // fetched WITHOUT the image bytes so the polled overview stays lean.
         var bannerVersions = (await _dbContext.LinkshellBanners
@@ -1065,7 +1105,8 @@ public sealed partial class ActivityDataController
                 evt.HnmPerWindowOverride,
                 DiscordEventMessageBuilder.PostsOpenAndClose(evt),
                 DiscordEventMessageBuilder.WindowMethodFor(evt),
-                CampPayoutOf(evt))).ToList(),
+                CampPayoutOf(evt),
+                CampTodPostedAt(evt))).ToList(),
             pendingInvites.Select(invite => new ActivityInviteDto(
                 invite.Id,
                 invite.AppUserId,

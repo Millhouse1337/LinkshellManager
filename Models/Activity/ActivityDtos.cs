@@ -830,7 +830,10 @@ public sealed record ActivityEventDto(
     string? WindowMethod = null,
     // What End Camp would pay out if the camp ended now, for the live card's payout panel. Null on
     // anything but a Standard HNM camp. See ActivityCampPayoutDto.
-    ActivityCampPayoutDto? HnmPayout = null);
+    ActivityCampPayoutDto? HnmPayout = null,
+    // When a ToD for this camp's monster was last logged (addon or app) since the camp started,
+    // for the live card's "New ToD Updated" label. Null on anything but a live HNM camp.
+    DateTime? HnmCampTodPostedAt = null);
 
 // A live Standard HNM camp's payout, summed over every account the camp prices: the same per-account
 // totals the attendee rows show as EventTotalDkp, plus the taggers and capture-only members who have

@@ -1177,6 +1177,9 @@ export interface ActivityEvent {
   wdPopWindow?: number | null;
   // What End Camp would pay out if the camp ended now. Null on anything but a Standard HNM camp.
   hnmPayout?: ActivityCampPayout | null;
+  // When a ToD for this live camp's monster was last logged since the camp started (addon or
+  // app). Drives the card's "New ToD Updated" label. Null when none, or not a live HNM camp.
+  hnmCampTodPostedAt?: string | null;
 }
 
 // A live Standard HNM camp's payout, summed over every account the camp pays (including taggers and
