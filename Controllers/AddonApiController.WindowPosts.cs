@@ -102,6 +102,23 @@ public sealed partial class AddonApiController
                 PostedBySource = postedBySource,
                 IsKillWindow = isKillWindow
             }, cancellationToken);
+
+            // On a named Open/Close camp, posting the Close IS the officer saying "this closes the
+            // camp", so tick it. The payout already treats the latest post as the close here
+            // (ResolveCloseWindow); the tick makes the app's Closing window box agree with it.
+            if (postsOpenAndClose && !isKillWindow && windowSequence == 2
+                && !attendanceWindow.IsClosingWindow)
+            {
+                var siblings = await _dbContext.EventAttendanceWindows
+                    .Where(w => w.EventId == eventEntity.Id)
+                    .ToListAsync(cancellationToken);
+                foreach (var sibling in siblings)
+                {
+                    // One close per camp, the same rule SetClosingWindowAsync enforces.
+                    sibling.IsClosingWindow = sibling.Id == attendanceWindow.Id;
+                }
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
         }
 
         if (isKillWindow && !attendanceWindow.IsKillWindow)
