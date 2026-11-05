@@ -1,166 +1,208 @@
 # LinkshellManager — In-Game Addon Guide (`lsm`)
 
-> A Lua addon for **Ashita v3**. Captures your alliance's attendance from party memory, watches chat for ToDs, and (when paired) syncs everything to LSManager in real time.
+> A Lua addon for **Ashita v3**. It runs your linkshell's **HNM camps** from inside the game: it posts
+> your alliance's attendance, catches the ToD, the Claim Shield lottery and the loot from chat, and
+> syncs everything to LSManager in real time.
 
 This guide covers the **in-game addon**. Its companions have their own guides:
 - **[Web App Guide](LSManager-WebApp-Guide.md)** — the full management surface in a browser.
 - **[Discord Activity Guide](LSManager-DiscordActivity-Guide.md)** — the member-facing experience in Discord.
 
-You generate **pairing codes** from either the web app or the Discord Activity; everything the addon captures shows up in both within seconds.
+The addon is for **HNM and NM camps only**. Timed events (Sky, Sea, Dynamis…) are run in the app.
+Events are always **made in Discord or the web app** — the addon picks them up from there.
+
+![The LSM addon launcher](images/lsm-addon-guide.png)
 
 ---
 
-## Installation
-1. Copy the `lsm` folder into your Ashita installation:  `Ashita/addons/lsm/`.
-2. In game, load it:
+## Install and pair — one time
+
+1. Copy the `lsm` folder into `Ashita/addons/lsm/`, then load it in game:
    ```
-   /addon load att
+   /addon load lsm
    ```
-3. (Optional) auto-load on launch — add to your boot script:
+2. In the app, open the **Game Addon** tab → **Pair Code** → **+ Get Code**. Codes expire in a few minutes.
+3. In game, redeem it:
    ```
-   /addon load att
+   /lsm link <code>
    ```
+   **One code pairs every linkshell you belong to.** There is no slot to pick: the addon lists
+   whichever paired linkshells are on your two equipped pearls.
+4. Check it worked with `/lsm status`. The launcher's header now shows **[Web Sync Activated]**.
 
-## Pair the addon to your linkshell — one time
-Pairing is one command. The addon ships pointed at `https://linkshellmanager.com`, so there is no server to set up first.
+> **Self-hosting?** Run `/lsm server https://your-lsmanager-host` before pairing. Everyone else can
+> skip this — the addon ships pointed at `https://linkshellmanager.com`.
 
-> **Self-hosting?** Run `/lsm server https://your-lsmanager-host` before pairing. The addon probes the URL right away: `Server OK (HTTP 401)` means it's reachable and ready to pair, `Probe FAILED: ...` means the URL is wrong or the site is down. Your value is saved and survives updates.
+---
 
-**Step 1 — generate a pairing code on the website or Discord Activity**
-- **Web:** Configurations → Customize Linkshell → Addon pairing → *Generate pairing code*.
-- **Discord:** Configurations tab → Game Addon (lsm) → *+ Get Code*.
-- Codes expire in a few minutes. Copy the 8-character code shown.
+## The launcher — `/attend`
 
-**Step 2 — link the addon to a pearl slot**
-```
-/lsm link <code>           (defaults to LS1)
-/lsm link <code> 1         (LS pearl slot 1 — main linkshell)
-/lsm link <code> 2         (LS pearl slot 2 — second linkshell)
-```
-On success: `Linked to <Linkshell Name> on LS1 [optional label]`. The addon now syncs to that linkshell whenever you use the LS1 (or LS2) pearl in game.
+The **left side** picks the camp: who is in the zone, the queued and active events, and posts
+waiting to be filed. The **right side** runs the camp you picked.
 
-You can pair **two different linkshells** — one to LS1, one to LS2 — and the addon picks the right one based on which pearl you're wearing.
+![The launcher at a glance](images/lsm-launcher-map.png)
 
-## Check your status / unlink
-```
-/lsm status                List server URL and current pairings
-/lsm list                   Same as status
-/lsm unlink                 Unlink everything
-/lsm unlink 1               Unlink LS1 only
-/lsm unlink 2               Unlink LS2 only
-/lsm unlink all             Same as bare /lsm unlink
-```
+- An event sits in **Queued Events** until 5 minutes before its start, then moves to **Active Events**.
+- The **Lobby** is for looking only. It never pays anyone — only a **Post** does.
+- **Refresh** re-pulls events, the roster and every list. Use it after someone changes an event in the app.
 
-## Day-to-day commands
+### Compact mode
 
-**Open the launcher (the main UI window)**
-```
-/attend
-```
-This opens the launcher with: action bar, attendance roster, queued events from the web, break room, create-event, loot pool, and ToD capture panel. The local roster is seeded with you immediately. If paired, the latest queued events from the web also load automatically.
+Tick **Compact** for a small fold-up window with the same tools — handy mid-fight.
 
-**Take attendance for a known event**
-```
-/lsm <event-alias>            e.g.  /lsm kirin    /lsm fafnir    /lsm "King Behemoth"
-/lsm <alias> ls               Restrict to LS pearl 1
-/lsm <alias> ls2              Restrict to LS pearl 2
-/lsm <alias> h                Write to HNM log
-/lsm <alias> e                Write to Event log
-```
-The addon reads your alliance out of party memory, builds attendance, then opens the attendance window. If paired, the result also posts to the web event.
+![Compact mode](images/lsm-compact-mode.png)
 
-**Take attendance where you are**
-```
-/lsm                          Your current alliance
-/lsm here                     Resolve event by current zone and run it
-```
+---
+
+## Running an HNM camp
+
+![Running an HNM camp, start to finish](images/lsm-camp-flow.png)
+
+Each monster's **Window Method** (Configurations → Monster Setups in the app) decides how the camp posts:
+
+| Window Method | What you post |
+|---|---|
+| **Open/Close Only** | **Open** at the start, **Close** at the end, then the **Kill** roster. |
+| **Every Window** | One post per window: **Window 1** (pays the open bonus), Window 2, 3… Tick **Closing bonus** on the window it closed on. |
+
+### Posting attendance
+
+Your **alliance is worked out for you** — the addon reads the alliance leader, shown as
+**Posting as: <leader>'s alliance**. Each post gets its own tab, and you can still fix a post
+after it is made.
+
+![Attendance after the Open](images/lsm-attendance-open.png)
+
+After the kill, post the **Close**, then the **Kill** roster. **End Event** stays greyed out until
+the yellow line under the buttons is cleared.
+
+![Attendance after the Close and Kill](images/lsm-attendance-close.png)
+
+> **End Event does not pay anyone yet.** It hands the camp to the app, where an officer reviews it
+> and posts the DKP.
+
+### Loot, ToD and Claim Shield
+
+These three panels **fill in by themselves** from chat while a camp is queued or live. Your job
+is to press **Post** on each one. **Clear** only clears your own screen — nothing on the web changes.
+
+![Loot Pool, ToD Capturing and Claim Shield](images/lsm-captures.png)
+
+- **ToD** — press **Post (Claimed)** or **Post (Unclaimed)**. Pressed the wrong one? Press the other.
+- **Claim Shield** — **Post** sends the tags, which pay the claim bonus.
+- **Loot** — **Post Loot** on each drop, pick the winner and the DKP spent, then **Save**.
+
+The monsters the addon listens for are the ones in **Monster Setups**. Add a new NM there with
+**+ Add monster**; the addon picks it up on the next **Refresh**.
+
+### Misc Posts
+
+A roster post **outside any window** — for example a mid-camp headcount. Name it, then press
+**Create Misc Post**. If the camp is still queued, this starts it first.
+
+![Misc Posts](images/lsm-misc-posts.png)
+
+---
+
+## Repop Timer — `/repop`
+
+A small window that counts down to every tracked monster's next repop. It is display only.
+
+![Repop Timer](images/lsm-repop-timer.png)
+
+Tick **Settings → Display → Repop Timer** if you also want it to open with `/attend`.
+
+---
+
+## `/lsm now` and Unlinked Posts
+
+`/lsm now [name]` snaps your alliance right now (add `p` for just your party), for example
+`/lsm now "Fafnir D2"`. It writes a local CSV and sends the post to LSManager **unfiled**, so an
+officer can file it onto an event later.
+
+**Anyone paired can use `/lsm now`.** What happens next depends on the **Manage attendance with the
+addon** permission (Configurations → Permissions; on for Leader and Officer by default):
+
+| You have the permission | You don't |
+|---|---|
+| Your post counts straight away. You can also run camps, post windows and set DKP. | Your post arrives **Pending**. Its people earn nothing until an officer presses **Confirm**. |
+
+Officers file posts from the **Unlinked Posts** panel in the addon…
+
+![Unlinked Posts in the addon](images/lsm-unlinked-posts.png)
+
+…or from **Event System → Current → Unlinked Snapshots** in the app. A member's post waits under
+**Awaiting confirmation**:
+
+![A member's post awaiting confirmation](images/lsm-web-awaiting-confirmation.png)
+
+An officer's post (or a confirmed one) skips that step and waits under **Unlinked**:
+
+![An officer's post, ready to file](images/lsm-web-unlinked.png)
+
+Either way the post is filed as a **Misc** post: **Attach** puts it on an existing event, and
+**Make New Event** turns it into its own attendance event.
+
+---
 
 ## One poster per alliance
 
-A capture is **one alliance** — up to 18 people, read from party memory. The FFXI client gives an
-addon no way to see players outside your own alliance, so:
+A post is **one alliance** — up to 18 people, read from party memory. The game gives an addon no
+way to see players outside your own alliance, so:
 
-> **Every alliance at an event needs at least one member with the addon paired.**
+> **Every alliance at a camp needs at least one member with the addon paired.**
 > An alliance with no poster is not counted.
 
-Tell the addon which alliance you are in so the web can keep the rosters apart:
-```
-/lsm alliance 1               You are posting for Alliance 1
-/lsm alliance 2               ...Alliance 2, and so on (1-6)
-/lsm status                   Shows your current alliance along with pairings
-```
-It is also a dropdown in the launcher's attendance panel. Officers can correct it afterwards on
-the web if someone picks wrong.
+Nobody has to set an alliance number — the addon reads the alliance leader for you. If the app
+gets the number wrong, an officer can change it on the post (the **Alliance** box).
 
-**Anyone can post with `/lsm now`.** If your role doesn't have the **Manage attendance with the
-addon** permission, your capture arrives **Pending**: it shows up on the event straight away, but its
-members stay out of the roster and earn nothing until an officer presses Confirm. Captures that don't match an open camp land in
-**Unlinked Snapshots** on Event System → Current (a member's in its *Awaiting confirmation* part), where an
-officer can confirm them, name them, link them to an event, or create an event from them.
+---
 
-**Manage attendance with the addon** is its own permission (Configurations → Permissions), on for Leader and
-Officer by default. A member with it can run camps, post window rosters and set DKP from the addon,
-and their `/lsm now` captures count straight away, without needing any officer permission in the app.
-Without it, `/lsm now` is the only way to send attendance; nothing else is queued for approval.
+## Commands
 
-The zone-wide scan (`/lsm all` and the old `/sea`-based Zone scope) has been removed. It relied on
-the FFXI search window and a render-range entity sweep, neither of which could see a zone reliably
-— and neither could tell one alliance from another.
+| Command | What it does |
+|---|---|
+| `/attend` · `/attend close` | Open or close the launcher. |
+| `/repop` · `/repop close` | Open or close the Repop Timer. |
+| `/lsm link <code>` | Pair the addon (one code covers every linkshell you're in). |
+| `/lsm unlink [name\|all]` | Drop one pairing, or all of them. |
+| `/lsm status` | Show the server, your pairings and which pearl slot each shell is in. |
+| `/lsm now [name] [p\|a]` | Snap your alliance (`a`, the default) or party (`p`) to a CSV and the web. |
+| `/lsm roster` | Check the linkshell roster against your alliance — who your next post will and won't pay. |
+| `/lsm jobs` | List the jobs the addon has learned this session. |
+| `/lsm slots` · `/lsm slots swap` | Check what each pearl slot reads, or swap them if they're backwards. |
+| `/lsm server <url>` | Point at a self-hosted LSManager. |
+| `/lsm help` | Print the command list in chat. |
 
-**Show composition vs. roster**
-```
-/comp <event-alias>           Show needed composition for the event
-/comp list                    List every event with a composition defined
-```
+**Troubleshooting toggles:** `/lsm todcapture` (log every defeat line), `/lsm claimshield debug`,
+`/lsm repop debug`, `/lsm seaprobe` (Lobby **Scan** problems).
 
-**Help window**
-```
-/lsm help
-```
+Gone for good: `/lsm alliance` (automatic now), `/lsm checkin` / `/lsm checkout` (Manual Check In
+camps use the **Check In** / **Check Out** buttons on the Discord camp board), and creating events
+in game.
 
-## ToD capture (automatic)
+---
 
-Once paired, the addon listens to chat for "X was defeated by ..." lines from known HNM/NM. When it sees one:
+## Settings
 
-1. Captures the monster name and timestamp.
-2. Posts a ToD to the linked linkshell (LS1 or LS2 depending on which pearl you're wearing).
-3. The ToD shows up immediately on the **Dashboard ToD Tracker** and the **ToDs** view in both the web app and the Discord Activity — with countdown to repop window.
+Open **Settings** from the launcher's top-left corner.
 
-**Diagnose missed captures:**
-```
-/lsm tod debug                Toggle verbose capture logging
-/lsm tod debug on             Force on
-/lsm tod debug off            Force off
-/lsm tod clear                Clear local capture cache
-```
+| Section | What it sets |
+|---|---|
+| **Display** | Open the Repop Timer with `/attend`; draw the addon cursor. |
+| **Display panels** | Which panels show in the Main and Compact views (Lobby, Loot Pool, ToD Capturing, Claim Shield, Misc Posts). |
+| **UI Scale** | Scale and font size. |
+| **Window Opacity** | Main, Compact, Settings and Repop Timer. These apply live and are not saved. |
 
-## Live event flow (when paired)
-
-1. **Officer creates an event** — on web, Discord, or in-game (the launcher's *Create Event* panel).
-2. **Members sign up** — from any of the three surfaces.
-3. **Event starts** — once it's in commencement, attendance windows open.
-4. **In-game**, anyone whose role has **Manage attendance with the addon** can run `/lsm <alias>` or `/lsm here` during each window (everyone else sends `/lsm now`, which waits for an officer). The addon reads your alliance, builds the roster, and posts attendance to the web. One poster per alliance — set yours with `/lsm alliance <n>`.
-5. **Breaks** — members can flag themselves as on-break from the launcher; officers can verify or moderate.
-6. **Loot** — winners and DKP spent are recorded against the event and against the ToD if the kill was tied to one.
-7. **Event ends** — it moves to **Event History** with the full attendance ledger and loot list.
-
-## Debug & developer commands
-```
-/lsm debug          Toggle the addon debug window
-/lsm debugmode      Toggle verbose console logging
-/lsm memscan        Find the entity-list pointer (if memory broke after a patch)
-/lsm memdump <addr> [count]
-/lsm api            Dump entity manager metatable
-/findoffset         Deep-scan for entity list
-/apidump            Dump memory API methods
-```
+Press **Save** to keep your changes. DKP amounts are not set here — they live in the app's
+**HNM Settings** and each camp's **Change DKP**.
 
 ---
 
 ## Quick reference
-- **Pair:** `/addon load att` → generate a code on web/Discord → `/lsm link <code> [1|2]`. (`/lsm server <url>` first only if you self-host.)
-- **Open the launcher:** `/attend`.
-- **Set your alliance:** `/lsm alliance <1-6>` — one poster per alliance, every time.
-- **Take attendance:** `/lsm <event>` or `/lsm here`.
-- **Check pairings:** `/lsm status`.
+- **Pair:** `/addon load lsm` → Game Addon → Pair Code → **+ Get Code** → `/lsm link <code>`.
+- **Run a camp:** `/attend` → pick the camp → **Start & Post: Open** → **Post: Close** → **Post Kill** → post the ToD, Claim Shield and loot → **End Event**.
+- **Quick headcount:** `/lsm now [name]`, then file it from **Unlinked Posts**.
+- **Repop countdowns:** `/repop`.
+- **Every alliance needs its own poster.**
 - **Companion guides:** [Web App](LSManager-WebApp-Guide.md) · [Discord Activity](LSManager-DiscordActivity-Guide.md)
