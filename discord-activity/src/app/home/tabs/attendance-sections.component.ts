@@ -743,7 +743,12 @@ export class AttendanceSectionsComponent {
     // No entryType check: with the picker gone there is no way for an officer to fill a blank
     // one, so requiring it here would permanently disable Post/Save on any event whose tag is
     // missing — exactly the rows that most need posting. The server resolves it instead.
-    return draft.amount !== null && draft.amount >= 0;
+    //
+    // Same for a blank amount: the Default DKP box is gone too (DKP is set per capture), so an
+    // event created with no amount (an /lsm now event) could never be saved or sent. The server
+    // keeps the stored amount or falls back to the default (WindowEventDkp.Resolve). Only a
+    // negative number is refused.
+    return draft.amount === null || draft.amount >= 0;
   }
 
   protected dkpActionsDisabled(event: ActivityWindowEvent): boolean {
@@ -754,7 +759,7 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.saveDkp(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
+    await this.windows.saveDkp(event.id, id, draft.amount, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 
   // A live event made from /lsm now isn't posted from Live Events: Send to Review moves it to
@@ -768,7 +773,7 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.sendToReview(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
+    await this.windows.sendToReview(event.id, id, draft.amount, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 
   // No native confirm — the explicit "Post to sheet" / "Update sheet" button
@@ -778,13 +783,13 @@ export class AttendanceSectionsComponent {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.postToSheet(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
+    await this.windows.postToSheet(event.id, id, draft.amount, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 
   protected async editPosted(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
     if (!id || !this.dkpDraftValid(event)) return;
-    await this.windows.editPosted(event.id, id, draft.amount!, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
+    await this.windows.editPosted(event.id, id, draft.amount, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 }

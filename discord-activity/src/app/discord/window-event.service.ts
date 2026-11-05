@@ -187,7 +187,7 @@ export class WindowEventService {
   // error on screen, no row in the ledger, nothing in the server log because the request never
   // reached a handler.
   async saveDkp(
-    windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
+    windowEventId: number, linkshellId: number, dkpAmount: number | null, entryType: string,
     memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null,
     captureDkp?: ActivityWindowEventCaptureDkpInput[]
   ): Promise<void> {
@@ -198,7 +198,7 @@ export class WindowEventService {
   // A live LSM Now event: keeps the card's DKP (as Save does) and moves it to Events Pending DKP
   // Post, where it is reviewed and posted to the sheet.
   async sendToReview(
-    windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
+    windowEventId: number, linkshellId: number, dkpAmount: number | null, entryType: string,
     memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null,
     captureDkp?: ActivityWindowEventCaptureDkpInput[]
   ): Promise<void> {
@@ -208,7 +208,7 @@ export class WindowEventService {
   }
 
   async postToSheet(
-    windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
+    windowEventId: number, linkshellId: number, dkpAmount: number | null, entryType: string,
     memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null,
     captureDkp?: ActivityWindowEventCaptureDkpInput[]
   ): Promise<void> {
@@ -217,7 +217,7 @@ export class WindowEventService {
   }
 
   async editPosted(
-    windowEventId: number, linkshellId: number, dkpAmount: number, entryType: string,
+    windowEventId: number, linkshellId: number, dkpAmount: number | null, entryType: string,
     memberDkp?: ActivityWindowEventMemberDkpInput[], miscDkpAmount?: number | null,
     captureDkp?: ActivityWindowEventCaptureDkpInput[]
   ): Promise<void> {
