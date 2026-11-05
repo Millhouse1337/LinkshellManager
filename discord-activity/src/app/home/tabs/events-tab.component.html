@@ -903,7 +903,7 @@
                                               } @else if (isCloseWindow(event, win)) {
                                                 {{ closeWindowValue(event, win) | number:'1.0-2' }}
                                               } @else {
-                                                <span class="roster-muted" title="Tick Closing bonus to pay the close bonus on this window.">0</span>
+                                                <span class="roster-muted" [title]="closeBonusZeroHint(event)">0</span>
                                               }
                                             </td>
                                             <td class="num hnm-roster__subtotal">{{ attendeeWindowSubtotal(event, win, attendee) | number:'1.0-2' }}</td>
@@ -1626,7 +1626,7 @@
                                         } @else if (isCloseWindow(event, activeWindow)) {
                                           {{ closeWindowValue(event, activeWindow) | number:'1.0-2' }}
                                         } @else {
-                                          <span class="roster-muted" title="Tick Closing bonus to pay the close bonus on this window.">0</span>
+                                          <span class="roster-muted" [title]="closeBonusZeroHint(event)">0</span>
                                         }
                                       </td>
                                       <!-- One-time amounts: the same on every window. A dash for a scan

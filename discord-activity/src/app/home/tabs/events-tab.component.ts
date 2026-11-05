@@ -1748,8 +1748,18 @@ export class EventsTabComponent {
   // A kill roster is filed after the close and pays through the kill bonus, so it can never BE the
   // close — the server refuses it too, and this hides the box rather than offering a click that
   // comes back as an error.
+  //
+  // Every Window camps only. On an Open/Close camp the Close post IS the close (it is ticked when
+  // it is posted), so there is nothing for an officer to choose.
   protected canMarkClosingWindow(event: ActivityEvent, window: ActivityAttendanceWindow): boolean {
-    return !this.isWdCamp(event) && !window.isKillWindow;
+    return !this.isWdCamp(event) && !this.postsOpenAndClose(event) && !window.isKillWindow;
+  }
+
+  // Hover text on a 0 in the Closing bonus column: where the close bonus comes from on this camp.
+  protected closeBonusZeroHint(event: ActivityEvent): string {
+    return this.postsOpenAndClose(event)
+      ? 'The close bonus is paid on the Close post.'
+      : 'Tick Closing bonus to pay the close bonus on this window.';
   }
 
   protected async toggleClosingWindow(window: ActivityAttendanceWindow): Promise<void> {
