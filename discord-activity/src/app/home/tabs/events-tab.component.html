@@ -695,6 +695,7 @@
                                   }
                                 </div>
                               </div>
+                              <div class="hnm-detail__actions">
                               <!-- Which window closes the camp out. On a numbered camp ticking it is the ONLY
                                    thing that pays the close bonus. Ticking one unticks the others server-side. -->
                               @if (manage && canMarkClosingWindow(event, win)) {
@@ -710,6 +711,26 @@
                                   }
                                 </label>
                               }
+                              <!-- Delete the whole window (its roster goes with it). Two clicks: the x asks
+                                   "Are you sure?" inline, because window.confirm() is blocked in Discord. -->
+                              @if (manage) {
+                                @if (pendingDeleteWindowId() === win.id) {
+                                  <span class="hnm-detail__confirm">
+                                    Are you sure?
+                                    <button type="button" class="btn danger-fill sm" (click)="confirmDeleteWindow(win.id)">Delete</button>
+                                    <button type="button" class="btn ghost sm" (click)="pendingDeleteWindowId.set(null)">Cancel</button>
+                                  </span>
+                                } @else {
+                                  <button type="button" class="hnm-icon-btn hnm-icon-btn--danger"
+                                    [attr.aria-label]="'Delete ' + (isKill ? 'the kill roster' : step.title)"
+                                    [title]="'Delete ' + (isKill ? 'the kill roster' : step.title) + ' and its roster'"
+                                    [disabled]="deletingWindowId() === win.id"
+                                    (click)="pendingDeleteWindowId.set(win.id)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                  </button>
+                                }
+                              }
+                              </div>
                             </div>
 
                             <!-- What one attendee earns here, built up from its parts, then the window's total. -->

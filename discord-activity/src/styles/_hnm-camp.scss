@@ -492,6 +492,21 @@
   min-width: 0;
 }
 
+/* The header's right side: the Closing bonus switch and the window's delete x (or its
+   "Are you sure?" confirm, which takes the x's place). */
+.hnm-detail__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hnm-detail__confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-1);
+}
+
 .hnm-detail__title {
   display: flex;
   align-items: center;

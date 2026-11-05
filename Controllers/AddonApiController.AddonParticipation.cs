@@ -796,10 +796,23 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
+        return await DeleteAttendanceWindowAsync(attendanceWindow, cancellationToken);
+    }
+
+    // The shared body of both "delete this window" endpoints: the addon's undo above, and the
+    // Activity's x on a live camp's window panel (DeleteWindowManagementAsync). The caller has
+    // loaded the window with its Event and Attendees and checked who is asking; this applies the
+    // two guards and removes the window with everything its post wrote.
+    private async Task<IActionResult> DeleteAttendanceWindowAsync(
+        EventAttendanceWindow attendanceWindow, CancellationToken cancellationToken)
+    {
+        var eventId = attendanceWindow.EventId;
+        var sequence = attendanceWindow.SequenceNumber;
+
         // An ENDED camp has already handed its windows to a review card (HnmCampReviewHandoffService)
         // and its DKP is computed from that copy. Deleting the live row would change nothing an
         // officer can see and everything they cannot, so the correction belongs on the review card.
-        if (attendanceWindow.Event.EndTime is not null)
+        if (attendanceWindow.Event?.EndTime is not null)
         {
             return BadRequest(new
             {
@@ -815,7 +828,8 @@ public sealed partial class AddonApiController
         //
         // Only on a 2-post camp, which is the only shape that guard applies to; a numbered camp
         // re-posts any window freely, so it may be undone in any order.
-        if (DiscordEventMessageBuilder.PostsOpenAndClose(attendanceWindow.Event)
+        if (attendanceWindow.Event is not null
+            && DiscordEventMessageBuilder.PostsOpenAndClose(attendanceWindow.Event)
             && !attendanceWindow.IsKillWindow
             && await _dbContext.EventAttendanceWindows.AnyAsync(
                 w => w.EventId == eventId && w.SequenceNumber > sequence && !w.IsKillWindow,

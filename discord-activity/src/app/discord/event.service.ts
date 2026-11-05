@@ -641,6 +641,20 @@ export class EventService {
     }
   }
 
+  // Deletes a whole posted window on a live camp (its attendee rows and their ledger entries go
+  // with it). The server refuses an ended camp and, on an Open/Close camp, the Open while the Close
+  // is filed, and returns why.
+  async deleteAttendanceWindow(windowId: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.sendActivityRequest('DELETE', `/api/addon/management/windows/${windowId}`);
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Deleting the window failed.'));
+      return false;
+    }
+  }
+
   // Prices ONE posted attendance window: what it pays each attendee, replacing the camp's default
   // (the open on window 1, the regular rate elsewhere). The close bonus still adds on top when the
   // window is the close. `null` clears the price and puts the window back on the default — a real

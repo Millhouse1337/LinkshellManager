@@ -949,6 +949,7 @@ export class DiscordActivityService {
   addLoot(eventId: number, input: ActivityLootInput): Promise<void> { return this.eventService.addLoot(eventId, input); }
   quickJoinLiveEvent(eventId: number, input: ActivityQuickJoinInput): Promise<void> { return this.eventService.quickJoinLiveEvent(eventId, input); }
   removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> { return this.eventService.removeAttendanceWindowAttendee(attendeeId); }
+  deleteAttendanceWindow(windowId: number): Promise<boolean> { return this.eventService.deleteAttendanceWindow(windowId); }
   setAttendanceWindowDkp(windowId: number, dkpAmount: number | null): Promise<boolean> { return this.eventService.setAttendanceWindowDkp(windowId, dkpAmount); }
   setCampKillBonus(eventId: number, killBonus: number | null): Promise<boolean> { return this.eventService.setCampKillBonus(eventId, killBonus); }
   setCampCloseBonus(eventId: number, closeBonus: number | null): Promise<boolean> { return this.eventService.setCampCloseBonus(eventId, closeBonus); }

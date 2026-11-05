@@ -38,6 +38,32 @@ public sealed partial class AddonApiController
         return Ok(new { removedId = attendee.Id });
     }
 
+    // Cookie-authenticated delete of a WHOLE posted window: the x on a live camp's window panel in
+    // the Activity. The same guards and cleanup as the addon's undo (DeleteAttendanceWindowAsync:
+    // live camps only, Close before Open on an Open/Close camp), at the same bar as removing one
+    // attendee from it.
+    [HttpDelete("management/windows/{windowId:int}")]
+    public async Task<IActionResult> DeleteWindowManagementAsync(
+        int windowId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveManagementUserAsync(cancellationToken);
+        if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
+
+        var attendanceWindow = await _dbContext.EventAttendanceWindows
+            .Include(w => w.Event)
+            .Include(w => w.Attendees)
+            .FirstOrDefaultAsync(w => w.Id == windowId, cancellationToken);
+        if (attendanceWindow?.Event is null) return NotFound(new { error = "Window not found." });
+
+        var membership = await _dbContext.AppUserLinkshells
+            .FirstOrDefaultAsync(
+                m => m.AppUserId == appUser.Id && m.LinkshellId == attendanceWindow.Event.LinkshellId,
+                cancellationToken);
+        if (!CanManageLinkshell(membership)) return Forbid();
+
+        return await DeleteAttendanceWindowAsync(attendanceWindow, cancellationToken);
+    }
+
     [HttpPost("management/pairing-code")]
     public async Task<IActionResult> CreatePairingCodeAsync(
         [FromBody] CreatePairingCodeRequest request,

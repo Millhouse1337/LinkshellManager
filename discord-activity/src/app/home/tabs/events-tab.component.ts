@@ -1552,6 +1552,24 @@ export class EventsTabComponent {
     }
   }
 
+  // The same two-click confirm for deleting a WHOLE window (the x in its detail panel's header):
+  // the first click asks "Are you sure?", Delete calls the API. Afterwards the panel falls back to
+  // the newest roster on its own (selectedCampStep), since the picked step no longer exists.
+  protected readonly pendingDeleteWindowId = signal<number | null>(null);
+  protected readonly deletingWindowId = signal<number | null>(null);
+
+  protected async confirmDeleteWindow(windowId: number): Promise<void> {
+    this.pendingDeleteWindowId.set(null);
+    this.deletingWindowId.set(windowId);
+    try {
+      if (await this.activity.deleteAttendanceWindow(windowId)) {
+        await this.activity.refreshOverview();
+      }
+    } finally {
+      this.deletingWindowId.set(null);
+    }
+  }
+
   // ----- Pricing one window by hand -----
   //
   // The DKP column's cells. Every row of a window shows the same box, because the price belongs to
