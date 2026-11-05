@@ -1928,6 +1928,35 @@ export class EventsTabComponent {
     }
   }
 
+  // Delete: removes a linked snapshot for good, so nobody on it is paid by it. Same inline
+  // "Are you sure?" confirm as Unlink. Only one of the two confirms is open at a time.
+  protected readonly pendingDeleteSnapshotId = signal<number | null>(null);
+  protected readonly deletingSnapshotId = signal<number | null>(null);
+
+  protected askUnlinkSnapshot(snapshotId: number): void {
+    this.pendingDeleteSnapshotId.set(null);
+    this.pendingUnlinkSnapshotId.set(snapshotId);
+  }
+
+  protected askDeleteSnapshot(snapshotId: number): void {
+    this.pendingUnlinkSnapshotId.set(null);
+    this.pendingDeleteSnapshotId.set(snapshotId);
+  }
+
+  protected async confirmDeleteSnapshot(snapshot: ActivityLinkedSnapshot): Promise<void> {
+    if (this.deletingSnapshotId() !== null) return;
+    this.deletingSnapshotId.set(snapshot.id);
+    try {
+      if (await this.activity.deleteCampSnapshot(snapshot.id)) {
+        this.pendingDeleteSnapshotId.set(null);
+        this.dropMiscDkpDraft(snapshot);
+        await this.activity.refreshOverview();
+      }
+    } finally {
+      this.deletingSnapshotId.set(null);
+    }
+  }
+
   private dropMiscDkpDraft(snapshot: ActivityLinkedSnapshot): void {
     this.miscDkpDrafts.update(map => {
       const next = { ...map };

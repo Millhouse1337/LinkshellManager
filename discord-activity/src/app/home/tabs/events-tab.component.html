@@ -587,8 +587,9 @@
                                   · posted by {{ snapshot.capturedByCharacterName || '—' }}
                                 </div>
                               </div>
-                              <!-- Unlink sends it back to Unlinked Snapshots, paying nobody here. Two clicks,
-                                   because it changes what the camp pays. -->
+                              <!-- Unlink sends it back to Unlinked Snapshots, paying nobody here. Delete
+                                   removes it for good. Both take two clicks, because both change what
+                                   the camp pays. -->
                               @if (manage) {
                                 <div class="hnm-detail__actions">
                                   @if (pendingUnlinkSnapshotId() === snapshot.id) {
@@ -600,11 +601,25 @@
                                     </button>
                                     <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
                                       (click)="pendingUnlinkSnapshotId.set(null)">Keep</button>
+                                  } @else if (pendingDeleteSnapshotId() === snapshot.id) {
+                                    <span class="hnm-muted">Are you sure? This deletes the snapshot for good.</span>
+                                    <button type="button" class="evt-btn evt-btn--small evt-btn--danger"
+                                      [disabled]="deletingSnapshotId() === snapshot.id"
+                                      (click)="confirmDeleteSnapshot(snapshot)">
+                                      {{ deletingSnapshotId() === snapshot.id ? 'Deleting...' : 'Delete' }}
+                                    </button>
+                                    <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
+                                      (click)="pendingDeleteSnapshotId.set(null)">Keep</button>
                                   } @else {
                                     <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
-                                      (click)="pendingUnlinkSnapshotId.set(snapshot.id)">
+                                      (click)="askUnlinkSnapshot(snapshot.id)">
                                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M8 2v3M2 8h3M16 22v-3M22 16h-3"/></svg>
                                       Unlink snapshot
+                                    </button>
+                                    <button type="button" class="evt-btn evt-btn--small evt-btn--secondary"
+                                      (click)="askDeleteSnapshot(snapshot.id)">
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                      Delete snapshot
                                     </button>
                                   }
                                 </div>
@@ -1760,8 +1775,17 @@
                                     {{ unlinkingSnapshotId() === snapshot.id ? 'Unlinking...' : 'Unlink' }}
                                   </button>
                                   <button type="button" class="btn ghost sm" (click)="pendingUnlinkSnapshotId.set(null)">Keep</button>
+                                } @else if (pendingDeleteSnapshotId() === snapshot.id) {
+                                  <span class="roster-muted">Are you sure? This deletes the snapshot for good.</span>
+                                  <button type="button" class="btn danger-fill sm"
+                                    [disabled]="deletingSnapshotId() === snapshot.id"
+                                    (click)="confirmDeleteSnapshot(snapshot)">
+                                    {{ deletingSnapshotId() === snapshot.id ? 'Deleting...' : 'Delete' }}
+                                  </button>
+                                  <button type="button" class="btn ghost sm" (click)="pendingDeleteSnapshotId.set(null)">Keep</button>
                                 } @else {
-                                  <button type="button" class="btn ghost sm" (click)="pendingUnlinkSnapshotId.set(snapshot.id)">Unlink</button>
+                                  <button type="button" class="btn ghost sm" (click)="askUnlinkSnapshot(snapshot.id)">Unlink</button>
+                                  <button type="button" class="btn ghost sm" (click)="askDeleteSnapshot(snapshot.id)">Delete</button>
                                 }
                               </span>
                             }

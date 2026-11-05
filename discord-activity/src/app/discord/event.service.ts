@@ -760,6 +760,19 @@ export class EventService {
     }
   }
 
+  // Deletes a snapshot linked to a live camp, entries and all (the same endpoint the Attendance
+  // tab's Delete uses). Returns false, with the error shown, when the server refuses.
+  async deleteCampSnapshot(snapshotId: number): Promise<boolean> {
+    this.auth.setActionError(null);
+    try {
+      await this.http.sendActivityRequest('POST', `/api/activity/window-events/snapshots/${snapshotId}/delete`);
+      return true;
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Deleting this snapshot failed.'));
+      return false;
+    }
+  }
+
   // Marks (or unmarks) ONE posted window as the camp's close. On a numbered camp that is the only
   // thing that pays the close bonus, which adds to whatever the window already pays.
   //

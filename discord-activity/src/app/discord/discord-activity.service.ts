@@ -957,6 +957,7 @@ export class DiscordActivityService {
   addCampMiscPost(eventId: number, name: string | null, appUserIds: string[], dkpAmount: number | null): Promise<boolean> { return this.eventService.addCampMiscPost(eventId, name, appUserIds, dkpAmount); }
   setMiscPostDkp(snapshotId: number, dkpAmount: number | null): Promise<boolean> { return this.eventService.setMiscPostDkp(snapshotId, dkpAmount); }
   unlinkCampSnapshot(snapshotId: number): Promise<boolean> { return this.eventService.unlinkCampSnapshot(snapshotId); }
+  deleteCampSnapshot(snapshotId: number): Promise<boolean> { return this.eventService.deleteCampSnapshot(snapshotId); }
   setAttendanceWindowClosing(windowId: number, isClosingWindow: boolean): Promise<boolean> { return this.eventService.setAttendanceWindowClosing(windowId, isClosingWindow); }
   loadEventHistory(linkshellId: number): Promise<ActivityEventHistoryResponse | null> { return this.eventService.loadEventHistory(linkshellId); }
   loadEventHistoryWindows(id: number): Promise<ActivityEventHistoryWindowsResponse | null> { return this.eventService.loadEventHistoryWindows(id); }
