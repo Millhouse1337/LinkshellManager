@@ -842,9 +842,13 @@ export class DashboardTabComponent {
       });
   }
 
+  // Finished events for Recent activity's "Events" rows: the overview's recentHistory (the selected
+  // linkshell's 8 latest, plenty for a 10-row feed). It used to read activity.historyList(), which
+  // only the sidebar panel loads (Profile, Management, ...), so the Events filter stayed empty
+  // until one of those tabs had been opened.
   protected selectedDashboardHistory() {
     const selectedId = this.selectedDashboardLinkshellId();
-    return this.activity.historyList().filter(history => history.linkshellId === selectedId);
+    return (this.activity.overview()?.recentHistory ?? []).filter(history => history.linkshellId === selectedId);
   }
 
   protected selectedDashboardTods() {
