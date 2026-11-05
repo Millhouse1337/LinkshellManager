@@ -81,6 +81,13 @@ the yellow line under the buttons is cleared.
 > **End Event does not pay anyone yet.** It hands the camp to the app, where an officer reviews it
 > and posts the DKP.
 
+### Your camp in the app
+
+Every post you make shows up on the camp's card in the app (**Event System → Current**) within
+seconds. Members can check what they will earn there, and officers can fix a post.
+
+![Your live camp in the app](images/lsm-web-live-camp.png)
+
 ### Loot, ToD and Claim Shield
 
 These three panels **fill in by themselves** from chat while a camp is queued or live. Your job
