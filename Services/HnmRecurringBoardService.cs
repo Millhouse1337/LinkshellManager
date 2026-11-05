@@ -74,6 +74,11 @@ public static class HnmRecurringBoardService
     // standing board and is shared by every board for the spawn, exactly as End Camp sets it; the
     // poller reads it every tick, so the new lead moves the real re-post time straight away. Call
     // RefreshRepostAtAsync after saving so the card advertises the new time. Stages only.
+    //
+    // EVERY enabled board for the spawn takes the lead, not just FindAsync's lowest id. Older
+    // linkshells can hold two rows for one spawn ("Adamantoise" and "Adamantoise/Aspidochelone"):
+    // the form reads the lead from one of them and this used to write only the other, so the
+    // saved lead never showed in the form, and the poller fired on whichever lead came first.
     public static async Task<bool> ApplyEditedLeadAsync(
         ApplicationDbContext db, Event ev, double? leadHours, CancellationToken cancellationToken)
     {
@@ -83,15 +88,25 @@ public static class HnmRecurringBoardService
             return false;
         }
 
-        var board = await FindAsync(db, ev.LinkshellId, monster, cancellationToken);
-        if (board is not { Enabled: true } || board.LeadHours == lead)
+        var names = HnmConfig.MonsterMatchNamesLower(monster);
+        if (names.Count == 0)
         {
             return false;
         }
+        var boards = await db.HnmRecurringBoards
+            .Where(board => board.LinkshellId == ev.LinkshellId
+                && board.Enabled
+                && names.Contains(board.MonsterName.ToLower()))
+            .ToListAsync(cancellationToken);
 
-        board.LeadHours = lead;
-        board.UpdatedAt = DateTime.UtcNow;
-        return true;
+        var changed = false;
+        foreach (var board in boards.Where(board => board.LeadHours != lead))
+        {
+            board.LeadHours = lead;
+            board.UpdatedAt = DateTime.UtcNow;
+            changed = true;
+        }
+        return changed;
     }
 
     // Re-derive a defeated board's DISPLAYED re-post time (Event.HnmRepostAt) from the

@@ -157,6 +157,26 @@ public class HnmParkedBoardEditTests
         Assert.Equal(NextRepop.AddHours(-6), ev.HnmRepostAt);
     }
 
+    // OnlyFrens, 2026-11-05: two enabled rows for one spawn. The form showed the combined row's
+    // 2h while the save went to the "Adamantoise" row, so the lead "never changed".
+    [Fact]
+    public async Task EditingTheLead_UpdatesEveryEnabledBoardForTheSpawn()
+    {
+        using var db = await SeededAsync(DueParkedBoard());
+        db.HnmRecurringBoards.Add(new HnmRecurringBoard
+        {
+            Id = 2, LinkshellId = LinkshellId, MonsterName = "Adamantoise", Enabled = true, LeadHours = 3,
+        });
+        await db.SaveChangesAsync();
+        var ev = await db.Events.SingleAsync();
+
+        var changed = await HnmRecurringBoardService.ApplyEditedLeadAsync(db, ev, 4, CancellationToken.None);
+        await db.SaveChangesAsync();
+
+        Assert.True(changed);
+        Assert.All(await db.HnmRecurringBoards.ToListAsync(), board => Assert.Equal(4, board.LeadHours));
+    }
+
     [Fact]
     public async Task EditingTheLead_NeverSwitchesRepostOn()
     {
