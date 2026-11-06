@@ -365,14 +365,8 @@
   font-size: 14px;
 }
 
-.tod-row-time--repop .tod-row-time-label,
-.tod-row-time--repop .tod-row-time-value {
+.tod-row-time--repop .tod-row-time-label {
   color: var(--success);
-}
-
-// "Not entered" isn't a time, and green would make it read like one.
-.tod-row[data-tone='unknown'] .tod-row-time--repop .tod-row-time-value {
-  color: var(--fg-2);
 }
 
 .tod-row > .tod-image-thumb {
