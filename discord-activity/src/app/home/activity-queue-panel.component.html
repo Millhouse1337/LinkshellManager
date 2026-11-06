@@ -472,7 +472,7 @@
 
             <div class="event-main">
               <h3>{{ event.name || 'Untitled event' }}</h3>
-              <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}@if (event.dayNumber != null) { <span>&nbsp;·&nbsp;Day {{ event.dayNumber }}</span> }</p>
+              <p>{{ event.type || 'Event' }} | {{ event.location || 'Location TBD' }}@if ((event.hnmNextDay ?? event.dayNumber) != null) { <span>&nbsp;·&nbsp;Day {{ event.hnmNextDay ?? event.dayNumber }}</span> }</p>
             </div>
 
             <div class="participant-box">

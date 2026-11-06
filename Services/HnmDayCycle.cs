@@ -22,6 +22,10 @@ public static class HnmDayCycle
     public static int? NextDay(Tod tod, int? boardDay) =>
         HnmConfig.NextDayNumber(tod.DayNumber ?? boardDay, WasHq(tod));
 
+    // The day a parked board comes back on: what an officer typed on it, else the next in the cycle.
+    public static int? NextDayForBoard(Event board, Tod tod) =>
+        board.HnmNextDayOverride ?? NextDay(tod, board.DayNumber);
+
     // The day an ADDON-posted ToD records. The live camp for the spawn wins, because that is where
     // the day lives -- an officer set it on the board, and the board is what moves it on. The
     // addon's ToD Capture panel sends the PREVIOUS ToD's day, carried forward, so every kill of a

@@ -236,7 +236,8 @@ public sealed partial class ActivityDataController
         // What the form opened with, so a parked board coming back below can tell the fields the
         // officer changed from the leftovers it was pre-filled with.
         var startBefore = eventEntity.StartTime;
-        var dayBefore = eventEntity.DayNumber;
+        var dayBefore = await HnmRecurringBoardService.DayShownInEditFormAsync(
+            _dbContext, eventEntity, cancellationToken);
 
         // The ToD the officer just agreed to move, looked up before the edit changes the event. Only
         // if it is still the one the popup named: a new ToD logged meanwhile moves nothing.
@@ -304,7 +305,7 @@ public sealed partial class ActivityDataController
                 // so a blank one is an officer who erased it. Refilling it made Location impossible
                 // to clear -- erase the location, Update, and the default zone came straight back.
             }
-            eventEntity.DayNumber = request.DayNumber;
+            HnmRecurringBoardService.ApplyEditedDay(eventEntity, dayBefore, request.DayNumber);
             eventEntity.EndTime = null;
             eventEntity.Duration = null;
             eventEntity.DkpPerHour = 0;

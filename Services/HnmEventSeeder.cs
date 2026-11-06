@@ -93,6 +93,7 @@ public static class HnmEventSeeder
         ev.HnmWindowNumber = 1; // new pop cycle → back to Window 1
         ev.HnmClearedWindow = null; // …and nothing in the new cycle is settled yet (null reads as "window 1 handled")
         ev.DayNumber = nextDay;
+        ev.HnmNextDayOverride = null; // it was for this pop, and nextDay already carries it
         ev.AssignedMonsterName = nextMonster;
         ev.CommencementStartTime = null;
         ev.WindowAnchorAt = null;

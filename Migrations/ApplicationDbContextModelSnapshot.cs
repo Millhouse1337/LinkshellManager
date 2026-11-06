@@ -1724,6 +1724,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<double?>("HnmKillBonusOverride")
                         .HasColumnType("double precision");
 
+                    b.Property<int?>("HnmNextDayOverride")
+                        .HasColumnType("integer");
+
                     b.Property<double?>("HnmOpenBonusOverride")
                         .HasColumnType("double precision");
 

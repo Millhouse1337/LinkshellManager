@@ -357,11 +357,12 @@ public static class HnmRecurringBoardService
         {
             // No predicted pop to move to: clear the ended state and keep what the board shows.
             await HnmEventSeeder.ReviveForNewPopAsync(
-                db, ev, ev.StartTime ?? DateTime.UtcNow, ev.DayNumber, ev.AssignedMonsterName, null, cancellationToken);
+                db, ev, ev.StartTime ?? DateTime.UtcNow, ev.HnmNextDayOverride ?? ev.DayNumber,
+                ev.AssignedMonsterName, null, cancellationToken);
             return true;
         }
 
-        var nextDay = HnmDayCycle.NextDay(tod, ev.DayNumber);
+        var nextDay = HnmDayCycle.NextDayForBoard(ev, tod);
         var nextMonster = HnmDayCycle.WasHq(tod) ? HnmConfig.BaseMonsterName(spawn) ?? spawn : spawn;
         await HnmEventSeeder.ReviveForNewPopAsync(
             db, ev, tod.RepopTime!.Value, nextDay, nextMonster, tod.Id, cancellationToken);
@@ -371,6 +372,32 @@ public static class HnmRecurringBoardService
             board.UpdatedAt = DateTime.UtcNow;
         }
         return true;
+    }
+
+    // The day the edit form's Day box opens on. On a parked board that is the NEXT pop's day, the
+    // one its Discord note says, not the day the camp ended on. Read before the edit is applied.
+    public static async Task<int?> DayShownInEditFormAsync(
+        ApplicationDbContext db, Event ev, CancellationToken cancellationToken)
+        => ev.HnmDefeatedAt is null
+            ? ev.DayNumber
+            : (await HnmBoardNoticeService.ResolveDetailsAsync(db, ev, cancellationToken)).NextDay ?? ev.DayNumber;
+
+    // The edit form's Day box, saved. A board that is up just takes the day. On a parked board a
+    // changed day is the officer saying what the next pop is, so its note and the board that comes
+    // back both have to say it. DayNumber stays the day the camp ended on: the box was opened on a
+    // different number, so writing it there would move the cycle on twice. A blank box goes back to
+    // the worked-out day. Stages only.
+    public static void ApplyEditedDay(Event ev, int? dayFormOpenedWith, int? typedDay)
+    {
+        if (ev.HnmDefeatedAt is null)
+        {
+            ev.DayNumber = typedDay;
+            return;
+        }
+        if (typedDay != dayFormOpenedWith)
+        {
+            ev.HnmNextDayOverride = typedDay is > 0 ? typedDay : null;
+        }
     }
 
     // An officer saved the edit form on a PARKED board whose advertised re-post time

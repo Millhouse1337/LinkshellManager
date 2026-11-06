@@ -833,7 +833,10 @@ public sealed record ActivityEventDto(
     ActivityCampPayoutDto? HnmPayout = null,
     // When a ToD for this camp's monster was last logged (addon or app) since the camp started,
     // for the live card's "New ToD Updated" label. Null on anything but a live HNM camp.
-    DateTime? HnmCampTodPostedAt = null);
+    DateTime? HnmCampTodPostedAt = null,
+    // A parked board's next pop's day: what its Discord note says, and what the edit form opens on.
+    // DayNumber on such a board is still the day the camp ended on. Null when not parked or no day.
+    int? HnmNextDay = null);
 
 // A live Standard HNM camp's payout, summed over every account the camp prices: the same per-account
 // totals the attendee rows show as EventTotalDkp, plus the taggers and capture-only members who have

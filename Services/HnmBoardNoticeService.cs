@@ -154,23 +154,32 @@ public sealed class HnmBoardNoticeService
     // Nothing at all when that ToD is not this kill's. A camp ended with no ToD still points at the
     // ToD it was created from, whose repop is the pop that just happened. The day worked out from it
     // would be the day this camp was already on, so it is left off rather than printed wrong.
+    //
+    // A day an officer typed on the parked board is always said: it is their word for the next pop,
+    // and it is the day the board comes back on (HnmDayCycle.NextDayForBoard).
     public static async Task<DefeatedNoticeDetails> ResolveDetailsAsync(
         ApplicationDbContext db, Event ev, CancellationToken cancellationToken)
     {
         var tod = ev.SourceTodId is { } todId
             ? await db.Tods.AsNoTracking().FirstOrDefaultAsync(t => t.Id == todId, cancellationToken)
             : null;
+        return ResolveDetails(ev, tod);
+    }
+
+    // The same, for a caller that already holds the row ev.SourceTodId points at.
+    public static DefeatedNoticeDetails ResolveDetails(Event ev, Tod? tod)
+    {
         if (tod?.RepopTime is not { } repop
             || (ev.HnmDefeatedAt is { } defeatedAt && repop <= defeatedAt))
         {
-            return new DefeatedNoticeDetails(null, null);
+            return new DefeatedNoticeDetails(ev.HnmNextDayOverride, null);
         }
 
         // The same answer the board gets when it comes back (HnmEventSeeder.ReviveForNewPopAsync's
         // callers). Only the three NQ/HQ families count days, and NextDay is 1 after any HQ.
         var nextDay = HnmConfig.HasHqVariant(ev.AssignedMonsterName)
-            ? HnmDayCycle.NextDay(tod, ev.DayNumber)
-            : null;
+            ? HnmDayCycle.NextDayForBoard(ev, tod)
+            : ev.HnmNextDayOverride;
         return new DefeatedNoticeDetails(nextDay, TodRepopNote.Formula(tod.Cooldown, tod.AdditionalSeconds));
     }
 

@@ -288,7 +288,7 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
             {
                 // The board's own day stands in for a ToD that doesn't say one (HnmDayCycle.NextDay).
                 await HnmEventSeeder.ReviveForNewPopAsync(
-                    db, existing, repopUtc, HnmDayCycle.NextDay(tod, existing.DayNumber), nextMonster,
+                    db, existing, repopUtc, HnmDayCycle.NextDayForBoard(existing, tod), nextMonster,
                     tod.Id, cancellationToken);
                 _logger.LogInformation(
                     "HNM board reactivated: event '{EventName}' ({EventId}, linkshell {LinkshellId}, monster '{Monster}') from tod {TodId}, repop {Repop:o}.",

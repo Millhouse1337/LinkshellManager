@@ -149,6 +149,11 @@ public class Event
     // the camp); null = not shown. Distinct from HnmWindowNumber (the spawn-window cycle).
     public int? DayNumber { get; set; }
 
+    // The day an officer typed for the NEXT pop while this board is parked. Null = work it out from
+    // the ToD (HnmDayCycle.NextDayForBoard). DayNumber stays the day the camp ended on, because the
+    // cycle counts on from it. Cleared when the board comes back.
+    public int? HnmNextDayOverride { get; set; }
+
     // Manual Check In attendance state. AttendanceMode is stamped "Wd" (HnmAttendanceModes.Wd) at
     // create time for HNM events in a Manual Check In linkshell; null = Standard (every existing/
     // Standard event stays on the current code paths). All Manual Check In behavior is gated on this.

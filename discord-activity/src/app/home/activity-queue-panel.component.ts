@@ -1091,6 +1091,7 @@ export class ActivityQueuePanelComponent {
     countsTowardActive?: boolean;
     assignedMonsterName?: string | null;
     dayNumber?: number | null;
+    hnmNextDay?: number | null;
     hnmOpenBonusOverride?: number | null;
     hnmCloseBonusOverride?: number | null;
     hnmClaimBonusOverride?: number | null;
@@ -1145,7 +1146,7 @@ export class ActivityQueuePanelComponent {
     this.editingOriginalMonster = event.assignedMonsterName ?? null;
     this.editingOriginalStartLocal = savedStartLocal;
     this.customMonsterName = '';
-    this.createModel.dayNumber = event.dayNumber ?? null;
+    this.createModel.dayNumber = event.hnmNextDay ?? event.dayNumber ?? null;
     this.createModel.startTimeLocal = savedStartLocal
       ? shiftLocalDateTime(savedStartLocal, -this.selectedMonsterAdditionalSeconds())
       : '';

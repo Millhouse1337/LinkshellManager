@@ -1107,6 +1107,9 @@ export interface ActivityEvent {
   assignedMonsterName?: string | null;
   // Optional "Day N" label shown on the board (round-trips into the edit form).
   dayNumber?: number | null;
+  // A parked board's next pop's day: what its Discord note says, and what the edit form opens on.
+  // dayNumber on such a board is still the day the camp ended on.
+  hnmNextDay?: number | null;
   // HNM "defeated / awaiting re-post" state: true once a ToD is logged from the board.
   // startTime = predicted repop; hnmRepostAt = when the board auto-re-posts (null if
   // Repeat-on-ToD off); sourceTodId = the logged ToD so "Edit ToD" can pre-fill it.

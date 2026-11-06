@@ -568,6 +568,25 @@ public sealed partial class ActivityDataController
                 mine);
         }
 
+        // The ToDs parked boards sit on, so each can say which day comes next: the same answer as
+        // its Discord note. One query, and only when a board is parked.
+        var parkedTodIds = activeEvents
+            .Where(evt => evt.HnmDefeatedAt != null && evt.SourceTodId != null)
+            .Select(evt => evt.SourceTodId!.Value)
+            .Distinct()
+            .ToList();
+        var parkedTods = parkedTodIds.Count > 0
+            ? await _dbContext.Tods
+                .AsNoTracking()
+                .Where(tod => parkedTodIds.Contains(tod.Id))
+                .ToDictionaryAsync(tod => tod.Id, cancellationToken)
+            : new Dictionary<int, Tod>();
+
+        int? ParkedNextDayOf(Event evt) => evt.HnmDefeatedAt is null
+            ? null
+            : HnmBoardNoticeService.ResolveDetails(
+                evt, evt.SourceTodId is { } sourceTodId ? parkedTods.GetValueOrDefault(sourceTodId) : null).NextDay;
+
         // Resolve creator/starter character names for each active event. Prefer
         // the user's linkshell-specific character name; fall back to their
         // top-level AppUser.CharacterName, then UserName.
@@ -1101,7 +1120,8 @@ public sealed partial class ActivityDataController
                 DiscordEventMessageBuilder.PostsOpenAndClose(evt),
                 DiscordEventMessageBuilder.WindowMethodFor(evt),
                 CampPayoutOf(evt),
-                CampTodPostedAt(evt))).ToList(),
+                CampTodPostedAt(evt),
+                ParkedNextDayOf(evt))).ToList(),
             pendingInvites.Select(invite => new ActivityInviteDto(
                 invite.Id,
                 invite.AppUserId,
