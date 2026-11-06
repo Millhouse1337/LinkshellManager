@@ -108,6 +108,18 @@ public sealed record RosterNameCandidate(
 
 public static class LinkshellRosterNames
 {
+    // The same set from memberships already in memory, for a caller that loaded them with their
+    // AppUser anyway. Same rule as LoadCandidatesAsync: no account, nothing to credit.
+    public static RosterNameSet FromMemberships(IEnumerable<AppUserLinkshell> memberships)
+        => RosterNameSet.From(memberships
+            .Where(link => link.AppUserId != null)
+            .Select(link => new RosterNameCandidate(
+                link.CharacterName,
+                link.AppUser?.CharacterName,
+                link.AppUser?.AltCharacterName1,
+                link.AppUser?.AltCharacterName2,
+                link.AppUserId)));
+
     // One query, four columns. Memberships with no AppUserId are skipped for the same reason the
     // DKP paths skip them: without an account there is nothing to credit, so such a row cannot make
     // anyone "registered" no matter what name it carries.

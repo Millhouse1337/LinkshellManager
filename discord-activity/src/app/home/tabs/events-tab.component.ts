@@ -825,7 +825,7 @@ export class EventsTabComponent {
     const snapshots: CampStep[] = this.linkedSnapshotTabs(event).map(snapshot => ({
       ...blank, snapshot, key: `s:${snapshot.id}`, kind: 'snapshot',
       title: this.linkedSnapshotTabLabel(snapshot), time: snapshot.capturedAtUtc,
-      sub: EventsTabComponent.countLabel(snapshot.entries.length, 'member')
+      sub: this.linkedSnapshotHeadcount(snapshot)
         + ((snapshot.dkpPerMember ?? 0) > 0 ? ` · +${EventsTabComponent.trimDkp(snapshot.dkpPerMember ?? 0)}` : ''),
       badge: snapshot.isMisc ? 'Misc' : snapshot.windowLabel?.trim() || 'Snapshot', tone: 'snapshot',
     }));
@@ -1476,6 +1476,30 @@ export class EventsTabComponent {
   // edited on the attendance event.
   protected linkedSnapshotsFor(event: { linkedSnapshots?: ActivityLinkedSnapshot[] }): ActivityLinkedSnapshot[] {
     return event.linkedSnapshots ?? [];
+  }
+
+  // End Camp only pays names on the linkshell roster, and a capture reads the whole alliance, so it
+  // can hold people who get nothing. They stay listed and marked; these keep the counts honest.
+  protected creditedEntryCount(snapshot: ActivityLinkedSnapshot): number {
+    return snapshot.entries.filter(entry => entry.isRegistered !== false).length;
+  }
+
+  protected unregisteredEntryCount(snapshot: ActivityLinkedSnapshot): number {
+    return snapshot.entries.length - this.creditedEntryCount(snapshot);
+  }
+
+  // A camp that doesn't price captures pays nobody from them, so "credited" would mean nothing there.
+  private linkedSnapshotHeadcount(snapshot: ActivityLinkedSnapshot): string {
+    const total = snapshot.entries.length;
+    const credited = this.creditedEntryCount(snapshot);
+    return credited === total || snapshot.dkpPerMember == null
+      ? EventsTabComponent.countLabel(total, 'member')
+      : `${credited} of ${total} credited`;
+  }
+
+  protected notRegisteredHint(characterName: string | null | undefined): string {
+    return `${characterName} is not on the linkshell roster, so ending this camp pays them nothing. `
+      + 'They need to sign up on an event board once, or join from the LSM app by accepting the linkshell invite.';
   }
 
   // Linked snapshots render as TABS, the same strip the Attendance Windows card uses above them.

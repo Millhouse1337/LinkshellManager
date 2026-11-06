@@ -907,7 +907,11 @@ public sealed record ActivityLinkedSnapshotEntryDto(
     string? Zone,
     // True for a name an officer typed in rather than one the addon scanned. The UI tints
     // these so an asserted attendee never reads as an observed one.
-    bool AddedManually);
+    bool AddedManually,
+    // On the linkshell roster, so End Camp can pay them. False means the capture read someone the
+    // linkshell doesn't know (a capture reads the whole alliance): listed, but paid nothing. Worked
+    // out on every read, so someone who registers mid-camp loses the mark straight away.
+    bool IsRegistered = true);
 
 // A claim-shield lottery captured during this camp: who from the linkshell
 // actually landed an action on the mob before the lottery resolved, and what

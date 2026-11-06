@@ -1251,6 +1251,8 @@ export interface ActivityLinkedSnapshotEntry {
   zone?: string | null;
   // A name an officer typed rather than one the addon scanned; tinted in the table.
   addedManually: boolean;
+  // False: not on the linkshell roster, so End Camp pays them nothing. They stay listed and marked.
+  isRegistered?: boolean;
 }
 
 // One claim-shield lottery captured by the addon during this camp.

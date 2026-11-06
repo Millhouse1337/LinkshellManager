@@ -140,6 +140,64 @@ public class UnregisteredCaptureMemberTests
         Assert.False(row.Entries.Single(e => e.CharacterName == "Randomguy").IsRegistered);
     }
 
+    // ---- a capture linked to a live camp ----
+
+    // The live camp's card, before End Camp. It has to agree with the review card it turns into.
+    [Fact]
+    public void ALinkedCaptureEntry_CarriesTheSameMark()
+    {
+        var roster = Roster("Edicius");
+
+        Assert.True(ActivityDataController.MapLinkedSnapshotEntry(
+            new AttendanceSnapshotEntry { CharacterName = "Edicius" }, roster).IsRegistered);
+        Assert.False(ActivityDataController.MapLinkedSnapshotEntry(
+            new AttendanceSnapshotEntry { CharacterName = "Randomguy" }, roster).IsRegistered);
+    }
+
+    [Fact]
+    public void ALinkedCaptureEntry_CarryingAKnownAccount_IsRegistered()
+    {
+        var roster = RosterNameSet.From(new[]
+        {
+            new RosterNameCandidate("Edicius", null, null, null, AppUserId: "user-1"),
+        });
+
+        var row = ActivityDataController.MapLinkedSnapshotEntry(
+            new AttendanceSnapshotEntry { CharacterName = "Someothercharacter", AppUserId = "user-1" }, roster);
+
+        Assert.True(row.IsRegistered);
+    }
+
+    // The overview builds its roster from memberships it already loaded, and must know the same
+    // four names the ledger pays. A membership with no account can't be paid, so it knows nobody.
+    [Fact]
+    public void ARosterFromLoadedMemberships_KnowsAllFourNames()
+    {
+        var roster = LinkshellRosterNames.FromMemberships(new[]
+        {
+            new AppUserLinkshell
+            {
+                AppUserId = "user-1",
+                CharacterName = "Edicius",
+                AppUser = new AppUser
+                {
+                    CharacterName = "Accountname",
+                    AltCharacterName1 = "Athmilk",
+                    AltCharacterName2 = "Secondalt",
+                },
+            },
+            new AppUserLinkshell { CharacterName = "Noaccount" },
+        });
+
+        Assert.True(roster.Contains("Edicius"));
+        Assert.True(roster.Contains("Accountname"));
+        Assert.True(roster.Contains("Athmilk"));
+        Assert.True(roster.Contains("Secondalt"));
+        Assert.True(roster.ContainsAppUserId("user-1"));
+        Assert.False(roster.Contains("Noaccount"));
+        Assert.False(roster.Contains("Randomguy"));
+    }
+
     // ---- the account a capture recorded ----
 
     // THE ONE THAT WOULD HAVE LIED. A camp handoff stamps AppUserId onto the entry, and

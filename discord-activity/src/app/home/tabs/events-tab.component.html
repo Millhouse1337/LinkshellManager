@@ -591,6 +591,9 @@
                                 <div class="hnm-detail__sub">
                                   Linked snapshot · {{ snapshot.capturedAtUtc | date:'shortTime' }}
                                   · posted by {{ snapshot.capturedByCharacterName || '—' }}
+                                  @if (unregisteredEntryCount(snapshot) > 0) {
+                                    · <span class="roster-unregistered-count" title="These characters are not on the linkshell roster, so ending this camp pays them nothing.">{{ unregisteredEntryCount(snapshot) }} not registered</span>
+                                  }
                                 </div>
                               </div>
                               <!-- Unlink sends it back to Unlinked Snapshots, paying nobody here. Delete
@@ -639,8 +642,8 @@
                                 <span class="hnm-formula__op">=</span>
                                 <span class="hnm-formula__per"><b>{{ snapshot.dkpPerMember | number:'1.0-2' }}</b> per member</span>
                                 <span class="hnm-formula__total">
-                                  × {{ snapshot.entries.length }} =
-                                  <b>{{ snapshot.dkpPerMember * snapshot.entries.length | number:'1.0-2' }} DKP</b>
+                                  × {{ creditedEntryCount(snapshot) }} =
+                                  <b>{{ snapshot.dkpPerMember * creditedEntryCount(snapshot) | number:'1.0-2' }} DKP</b>
                                 </span>
                               </div>
                             }
@@ -657,8 +660,14 @@
                                 <tbody>
                                   @for (entry of snapshot.entries; track entry.id) {
                                     <!-- Tinted: a name an officer typed must never read as one the addon scanned. -->
-                                    <tr [class.roster-row--manual]="entry.addedManually">
-                                      <td><strong>{{ entry.characterName }}</strong></td>
+                                    <tr [class.roster-row--manual]="entry.addedManually"
+                                        [class.roster-row--unregistered]="entry.isRegistered === false">
+                                      <td>
+                                        <strong>{{ entry.characterName }}</strong>
+                                        @if (entry.isRegistered === false) {
+                                          <span class="tag roster-unregistered-chip" [title]="notRegisteredHint(entry.characterName)">Not registered</span>
+                                        }
+                                      </td>
                                       <td>
                                         @if (entry.mainJob) {
                                           <span class="job-pill">{{ entry.mainJob }}{{ entry.mainJobLevel ? ' ' + entry.mainJobLevel : '' }}</span>
@@ -673,7 +682,7 @@
                                       <!-- A Misc post's price is editable in place: one price for the whole
                                            post, so every row edits the same number. -->
                                       <td class="num">
-                                        @if (snapshot.dkpPerMember == null) {
+                                        @if (snapshot.dkpPerMember == null || entry.isRegistered === false) {
                                           <span class="roster-muted">-</span>
                                         } @else if (snapshot.isMisc && manage) {
                                           <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
@@ -1807,6 +1816,9 @@
                               · {{ snapshot.entries.length }}
                               {{ snapshot.entries.length === 1 ? 'member' : 'members' }}
                             </span>
+                            @if (unregisteredEntryCount(snapshot) > 0) {
+                              <span class="roster-unregistered-count" title="These characters are not on the linkshell roster, so ending this camp pays them nothing.">{{ unregisteredEntryCount(snapshot) }} not registered</span>
+                            }
                             @if (snapshot.snapshotStatus !== 'Active') {
                               <span class="tag warning">{{ snapshot.snapshotStatus }}</span>
                             }
@@ -1862,8 +1874,14 @@
                                 @for (entry of snapshot.entries; track entry.id) {
                                   <!-- Tinted: a name an officer asserted must never read as one
                                        the addon actually scanned. -->
-                                  <tr [class.roster-row--manual]="entry.addedManually">
-                                    <td><strong>{{ entry.characterName }}</strong></td>
+                                  <tr [class.roster-row--manual]="entry.addedManually"
+                                      [class.roster-row--unregistered]="entry.isRegistered === false">
+                                    <td>
+                                      <strong>{{ entry.characterName }}</strong>
+                                      @if (entry.isRegistered === false) {
+                                        <span class="tag roster-unregistered-chip" [title]="notRegisteredHint(entry.characterName)">Not registered</span>
+                                      }
+                                    </td>
                                     <td>
                                       @if (entry.mainJob) {
                                         <span class="job-pill">{{ entry.mainJob }}{{ entry.mainJobLevel ? ' ' + entry.mainJobLevel : '' }}</span>
@@ -1884,7 +1902,7 @@
                                          every row edits the same number. Numbered captures are priced
                                          by the window they name and stay read-only. -->
                                     <td class="num">
-                                      @if (snapshot.dkpPerMember == null) {
+                                      @if (snapshot.dkpPerMember == null || entry.isRegistered === false) {
                                         <span class="roster-muted">-</span>
                                       } @else if (snapshot.isMisc && canManageLinkshell(event.linkshellId)) {
                                         <input type="number" step="0.25" min="0" class="input num roster-dkp-input"

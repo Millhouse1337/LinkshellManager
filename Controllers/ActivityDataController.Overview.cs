@@ -322,6 +322,9 @@ public sealed partial class ActivityDataController
                 .ToDictionary(group => group.Key, group => group.ToList())
             : new Dictionary<int, List<AttendanceSnapshot>>();
 
+        // Who the shell knows, so each linked capture can say who End Camp will actually pay.
+        var rosterNames = LinkshellRosterNames.FromMemberships(primaryLinkshellMembers);
+
         List<ActivityLinkedSnapshotDto> LinkedSnapshotsFor(Event evt)
         {
             if (!linkedSnapshotsByEvent.TryGetValue(evt.Id, out var snapshots))
@@ -354,15 +357,7 @@ public sealed partial class ActivityDataController
                     // scanned ones (the UI tints them too).
                     .OrderBy(entry => entry.AddedManually)
                     .ThenBy(entry => entry.CharacterName)
-                    .Select(entry => new ActivityLinkedSnapshotEntryDto(
-                        entry.Id,
-                        entry.CharacterName,
-                        entry.MainJob,
-                        entry.MainJobLevel,
-                        entry.SubJob,
-                        entry.SubJobLevel,
-                        entry.Zone,
-                        entry.AddedManually))
+                    .Select(entry => MapLinkedSnapshotEntry(entry, rosterNames))
                     .ToList(),
                 // WHAT THIS CAPTURE PAYS EACH PERSON ON IT. The card listed who was on a capture
                 // and said nothing about what it was worth, so the one question an officer has

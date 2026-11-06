@@ -189,6 +189,27 @@
   background: rgba(255, 196, 87, 0.06);
 }
 
+// Someone the linkshell doesn't know: a capture reads the whole alliance, so they are listed, but
+// End Camp pays them nothing. Same look as the review card's mark (attendance-sections).
+.roster-table tr.roster-row--unregistered td {
+  background: var(--danger-weak);
+}
+
+.roster-unregistered-chip {
+  margin-left: 8px;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--danger-weak);
+  border-color: transparent;
+  color: var(--danger);
+}
+
+.roster-unregistered-count {
+  color: var(--danger);
+}
+
 .job-pill {
   display: inline-block;
   padding: 2px 7px;
