@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityCreateTodInput,
+  ActivityLinkedTod,
   ActivityUpcomingRepop,
   ActivityUpdateTodInput
 } from './discord-activity.types';
@@ -66,6 +67,14 @@ export class TodService {
     } catch {
       return [];
     }
+  }
+
+  // Throws on failure rather than answering null: null means "no ToD moves", and saying that after
+  // a failed lookup would leave the event and the ToD page disagreeing with nobody told.
+  async loadLinkedTod(eventId: number): Promise<ActivityLinkedTod | null> {
+    const payload = await this.http.fetchActivityJson<{ tod?: ActivityLinkedTod | null }>(
+      `/api/activity/events/${eventId}/linked-tod`);
+    return payload?.tod ?? null;
   }
 
   async updateTod(input: ActivityUpdateTodInput): Promise<void> {

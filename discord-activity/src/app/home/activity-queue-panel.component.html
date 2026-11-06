@@ -434,11 +434,11 @@
            (click)="resolveConfirm(false)">
         <div style="max-width:420px;width:calc(100% - 32px);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.5)"
              (click)="$event.stopPropagation()">
-          <strong style="display:block;margin-bottom:8px">Change party setup?</strong>
-          <p class="muted" style="margin:0 0 16px;font-size:13px">{{ confirmMessage }}</p>
+          <strong style="display:block;margin-bottom:8px">{{ confirmTitle }}</strong>
+          <p class="muted" style="margin:0 0 16px;font-size:13px;white-space:pre-line">{{ confirmMessage }}</p>
           <div style="display:flex;justify-content:flex-end;gap:8px">
             <button type="button" class="action-button action-button--secondary" (click)="resolveConfirm(false)">Cancel</button>
-            <button type="button" class="action-button" (click)="resolveConfirm(true)">Move to no-slot &amp; save</button>
+            <button type="button" class="action-button" (click)="resolveConfirm(true)">{{ confirmAction }}</button>
           </div>
         </div>
       </div>

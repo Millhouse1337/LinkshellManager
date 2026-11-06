@@ -1917,6 +1917,16 @@ export interface ActivityCreateEventInput {
   // HNM edit only: hours before the pop the sign-up board re-posts. The server applies it only
   // when the monster already re-posts, and never on create. Null leaves the lead alone.
   repostLeadHours?: number | null;
+  // HNM edit only: the ToD to move to the new start, after the officer confirmed the popup.
+  moveTodId?: number | null;
+}
+
+// The ToD a changed Starts would move, for the edit form's popup. UTC ISO times.
+export interface ActivityLinkedTod {
+  todId: number;
+  monsterName: string;
+  time: string | null;
+  repopTime: string;
 }
 
 export interface ActivityAddEventMemberInput {

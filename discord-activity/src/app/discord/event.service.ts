@@ -165,11 +165,12 @@ export class EventService {
         hnmClaimBonusOverride: input.hnmClaimBonusOverride ?? null,
         hnmKillBonusOverride: input.hnmKillBonusOverride ?? null,
         hnmPerWindowOverride: input.hnmPerWindowOverride ?? null,
-        repostLeadHours: input.repostLeadHours ?? null
+        repostLeadHours: input.repostLeadHours ?? null,
+        moveTodId: input.moveTodId ?? null
       });
 
       await this.auth.refreshOverview();
-      this.auth.setActionMessage('Event updated.');
+      this.auth.setActionMessage(input.moveTodId ? 'Event and ToD updated.' : 'Event updated.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Updating the event failed.'));
       throw error;

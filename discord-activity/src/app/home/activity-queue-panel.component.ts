@@ -32,7 +32,7 @@ import {
   formatLocalClockTime,
   shiftLocalDateTime
 } from './activity-home.helpers';
-import type { ActivityPartySetupListRow, ActivityUpcomingRepop } from '../discord/discord-activity.types';
+import type { ActivityLinkedTod, ActivityPartySetupListRow, ActivityUpcomingRepop } from '../discord/discord-activity.types';
 import { MarkdownTextareaComponent } from './tabs/markdown-textarea.component';
 import { PartySetupEditorComponent } from './tabs/party-setup-editor.component';
 import { PartySetupPanelComponent } from './tabs/party-setup-panel.component';
@@ -102,10 +102,15 @@ export class ActivityQueuePanelComponent {
   // a setup change on save so we can warn that it clears the existing slot
   // signups (they're keyed to the old setup's slots). null = had no setup.
   private editingOriginalPartySetupId: number | null = null;
+  // What the edit form opened with, so a save can tell whether Starts really moved (see confirmTodMove).
+  private editingOriginalStartLocal = '';
+  private editingOriginalMonster: string | null = null;
 
   // Promise-based confirm dialog (window.confirm is suppressed in the Discord
   // Activity iframe). requestConfirm() resolves true/false when the user picks.
   protected readonly confirmModalOpen = signal(false);
+  protected confirmTitle = '';
+  protected confirmAction = '';
   protected confirmMessage = '';
   private confirmResolver: ((ok: boolean) => void) | null = null;
   protected readonly createModel: ActivityCreateEventInput = {
@@ -969,11 +974,17 @@ export class ActivityQueuePanelComponent {
       }
     }
 
+    const todMove = await this.confirmTodMove(monsterName);
+    if (!todMove.proceed) {
+      return;
+    }
+
     this.isSubmittingCreate = true;
 
     try {
       const payload: ActivityCreateEventInput = {
         ...this.createModel,
+        moveTodId: todMove.todId,
         // The total the form printed beside the box, not the box itself.
         startTimeLocal: this.startWithAdditionalSeconds(),
         partySetupId: nextPartySetupId,
@@ -1000,6 +1011,48 @@ export class ActivityQueuePanelComponent {
     } finally {
       this.isSubmittingCreate = false;
     }
+  }
+
+  // Starts on an HNM event IS a ToD's repop, so changing it moves that ToD on the ToD page too, and
+  // everyone in the linkshell sees the new time. The officer is told exactly what changes before
+  // anything is saved, and the ToD only moves if they agree. Cancel goes back to the form.
+  private async confirmTodMove(monsterName: string | null): Promise<{ proceed: boolean; todId: number | null }> {
+    const nothingToMove = { proceed: true, todId: null };
+    const toSeconds = (ms: number) => Math.floor(ms / 1000);
+
+    const newRepop = Date.parse(datetimeLocalToUtcIso(this.startWithAdditionalSeconds()) ?? '');
+    const oldStart = Date.parse(datetimeLocalToUtcIso(this.editingOriginalStartLocal) ?? '');
+    if (!this.editingEventId
+        || !this.isHnmSelected()
+        || monsterName !== this.editingOriginalMonster
+        || Number.isNaN(newRepop)
+        || toSeconds(newRepop) === toSeconds(oldStart)) {
+      return nothingToMove;
+    }
+
+    let tod: ActivityLinkedTod | null;
+    try {
+      tod = await this.tods.loadLinkedTod(this.editingEventId);
+    } catch {
+      this.activity.actionError.set('Could not look up the ToD for this event, so nothing was saved. Please try again.');
+      return { proceed: false, todId: null };
+    }
+
+    const oldRepop = tod ? Date.parse(tod.repopTime) : NaN;
+    if (!tod || toSeconds(oldRepop) === toSeconds(newRepop)) {
+      return nothingToMove;
+    }
+
+    const format = (ms: number) => this.activity.formatDateTimeWithSeconds(new Date(ms).toISOString());
+    const lines = [`Saving also changes the ${tod.monsterName} ToD on the ToD page, for everyone in the linkshell.`, ''];
+    if (tod.time) {
+      const oldDeath = Date.parse(tod.time);
+      lines.push(`Time of Death: ${format(oldDeath)} → ${format(oldDeath + newRepop - oldRepop)}`);
+    }
+    lines.push(`Repop: ${format(oldRepop)} → ${format(newRepop)}`);
+
+    const ok = await this.requestConfirm(lines.join('\n'), 'Change the ToD too?', 'Change ToD & save');
+    return ok ? { proceed: true, todId: tod.todId } : { proceed: false, todId: null };
   }
 
   // "Board re-posts" is offered when editing a QUEUED HNM board. Not on create (a new board has no
@@ -1089,6 +1142,8 @@ export class ActivityQueuePanelComponent {
     this.createModel.countsTowardActive = event.countsTowardActive ?? true;
     // HNM board fields so editing preserves the monster and day.
     this.createModel.monsterName = event.assignedMonsterName ?? null;
+    this.editingOriginalMonster = event.assignedMonsterName ?? null;
+    this.editingOriginalStartLocal = savedStartLocal;
     this.customMonsterName = '';
     this.createModel.dayNumber = event.dayNumber ?? null;
     this.createModel.startTimeLocal = savedStartLocal
@@ -1170,6 +1225,8 @@ export class ActivityQueuePanelComponent {
     this.customMonsterName = '';
     this.isEditingLiveEvent = false;
     this.editingOriginalPartySetupId = null;
+    this.editingOriginalStartLocal = '';
+    this.editingOriginalMonster = null;
     this.editingCurrentSetupName = null;
     this.autoFilledStartTimeLocal = null;
     this.resetHnmDkpOverride();
@@ -1177,8 +1234,14 @@ export class ActivityQueuePanelComponent {
 
   // Opens the confirm dialog and resolves once the user chooses. Any pending
   // confirm is rejected (false) first so a stale promise can't dangle.
-  private requestConfirm(message: string): Promise<boolean> {
+  private requestConfirm(
+    message: string,
+    title = 'Change party setup?',
+    action = 'Move to no-slot & save'
+  ): Promise<boolean> {
     this.confirmResolver?.(false);
+    this.confirmTitle = title;
+    this.confirmAction = action;
     this.confirmMessage = message;
     this.confirmModalOpen.set(true);
     this.cdr.markForCheck();
