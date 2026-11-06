@@ -139,13 +139,23 @@ public static class HnmRecurringBoardService
                 .Select(b => (double?)b.LeadHours)
                 .FirstOrDefaultAsync(cancellationToken);
 
-        // The pop being waited on is the source ToD's prediction (StartTime mirrors it, and
-        // stands in for the rows that predate SourceTodId).
-        var repopUtc = ev.SourceTodId is { } todId
-            ? await db.Tods
-                .Where(tod => tod.Id == todId)
+        // Counted from the LATER of the board's start (the edit form's Starts box, the time its
+        // re-post hint counts from) and the monster's newest ToD (what the poller counts from), so
+        // Update can never open the board ahead of either. This used to read the ToD the board was
+        // parked on. That ToD goes stale when a newer one is logged, and its long-gone pop read as
+        // "the re-post time has come", so Update opened a board hours before its time.
+        var newestRepop = names.Count == 0
+            ? null
+            : await db.Tods
+                .Where(tod => tod.LinkshellId == ev.LinkshellId
+                    && tod.MonsterName != null
+                    && names.Contains(tod.MonsterName.ToLower())
+                    && tod.RepopTime != null)
+                .OrderByDescending(tod => tod.RepopTime)
                 .Select(tod => tod.RepopTime)
-                .FirstOrDefaultAsync(cancellationToken) ?? ev.StartTime
+                .FirstOrDefaultAsync(cancellationToken);
+        var repopUtc = newestRepop is { } todRepop && (ev.StartTime is not { } start || todRepop > start)
+            ? todRepop
             : ev.StartTime;
 
         var refreshed = repopUtc is { } anchor && leadHours.HasValue

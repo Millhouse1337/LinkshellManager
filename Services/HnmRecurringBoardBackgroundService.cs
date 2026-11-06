@@ -122,6 +122,10 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
             .OrderByDescending(t => t.RepopTime)
             .ThenByDescending(t => t.Id)
             .FirstOrDefaultAsync(cancellationToken);
+        if (await WaitOrReviveBoardMovedLaterAsync(db, board, names, tod?.RepopTime, nowUtc, cancellationToken))
+        {
+            return;
+        }
         if (tod is null || tod.Id == board.LastSourceTodId)
         {
             return; // no ToD yet, or this pop cycle was already handled
@@ -295,5 +299,39 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         board.LastSourceTodId = tod.Id;
         board.UpdatedAt = nowUtc;
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    // A parked board an officer moved LATER than the newest ToD, with the edit form's Starts box. Its
+    // advertised re-post time counts from that start (RefreshRepostAtAsync), so that is when it comes
+    // back. Going by the ToD would open it early and throw the start away, and a ToD already handled
+    // (or none at all) would never open it. True when such a board exists, which leaves the rest of
+    // this tick alone.
+    private async Task<bool> WaitOrReviveBoardMovedLaterAsync(
+        ApplicationDbContext db, HnmRecurringBoard board, List<string> names,
+        DateTime? newestRepopUtc, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        var parked = await db.Events
+            .Where(e => e.LinkshellId == board.LinkshellId
+                && e.HnmDefeatedAt != null
+                && e.HnmRepostAt != null
+                && e.StartTime > nowUtc
+                && e.AssignedMonsterName != null
+                && names.Contains(e.AssignedMonsterName.ToLower()))
+            .ToListAsync(cancellationToken);
+        var moved = parked.FirstOrDefault(e => newestRepopUtc is not { } repop || e.StartTime > repop);
+        if (moved is null)
+        {
+            return false;
+        }
+
+        if (await HnmRecurringBoardService.ReviveDueParkedBoardAfterEditAsync(
+                db, moved, nowUtc, moved.StartTime, editedDayNumber: null, cancellationToken))
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation(
+                "HNM board reactivated at the time an officer set: event '{EventName}' ({EventId}, linkshell {LinkshellId}), start {Start:o}.",
+                moved.EventName, moved.Id, board.LinkshellId, moved.StartTime);
+        }
+        return true;
     }
 }

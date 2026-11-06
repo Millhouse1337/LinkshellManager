@@ -5,6 +5,7 @@ using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -222,5 +223,165 @@ public class HnmParkedBoardEditTests
 
         Assert.False(revived);
         Assert.Equal(3, ev.DayNumber);
+    }
+
+    // ---- Update never opens a board before the re-post time the officer set ----
+
+    private static readonly DateTime FarPop = Now.AddHours(10);
+    private const double FourHourLead = 4;
+
+    // What the Update button runs once the form is saved.
+    private static async Task<bool> UpdateAsync(ApplicationDbContext db, Event ev, DateTime nowUtc)
+    {
+        await HnmRecurringBoardService.RefreshRepostAtAsync(db, ev, ev.AssignedMonsterName, CancellationToken.None);
+        return await HnmRecurringBoardService.ReviveDueParkedBoardAfterEditAsync(
+            db, ev, nowUtc, editedStartUtc: null, editedDayNumber: null, CancellationToken.None);
+    }
+
+    // The board still points at ToD 7, whose pop is long gone, and the real next pop is on ToD 8.
+    private static async Task<ApplicationDbContext> SeededWithNewerTodAsync(Event board)
+    {
+        var db = await SeededAsync(board);
+        (await db.Tods.SingleAsync()).RepopTime = Now.AddDays(-2);
+        db.Tods.Add(new Tod { Id = 8, LinkshellId = LinkshellId, MonsterName = Monster, DayNumber = 4, RepopTime = FarPop });
+        (await db.HnmRecurringBoards.SingleAsync()).LeadHours = FourHourLead;
+        await db.SaveChangesAsync();
+        return db;
+    }
+
+    [Fact]
+    public async Task Update_ANewerTodSetsTheRepostTime_NotTheOldTodTheBoardPointsAt()
+    {
+        var parked = DueParkedBoard();
+        parked.StartTime = FarPop; // the ToD tracker already moved the board here
+        using var db = await SeededWithNewerTodAsync(parked);
+        var ev = await db.Events.SingleAsync();
+
+        var revived = await UpdateAsync(db, ev, Now);
+
+        Assert.False(revived);
+        Assert.NotNull(ev.HnmDefeatedAt);
+        Assert.Equal(FarPop.AddHours(-FourHourLead), ev.HnmRepostAt);
+    }
+
+    [Fact]
+    public async Task Update_AStartLeftOnAnOldPop_DoesNotOpenABoardWhoseNewestTodIsAhead()
+    {
+        var parked = DueParkedBoard();
+        parked.StartTime = Now.AddDays(-2);
+        using var db = await SeededWithNewerTodAsync(parked);
+        var ev = await db.Events.SingleAsync();
+
+        var revived = await UpdateAsync(db, ev, Now);
+
+        Assert.False(revived);
+        Assert.NotNull(ev.HnmDefeatedAt);
+        Assert.Equal(FarPop.AddHours(-FourHourLead), ev.HnmRepostAt);
+    }
+
+    // The form's own hint: Starts minus the lead.
+    [Fact]
+    public async Task Update_AStartTypedLaterThanTheTod_CountsFromTheTypedStart()
+    {
+        var parked = DueParkedBoard();
+        parked.StartTime = FarPop;
+        using var db = await SeededAsync(parked);
+        (await db.Tods.SingleAsync()).RepopTime = Now.AddDays(-2);
+        (await db.HnmRecurringBoards.SingleAsync()).LeadHours = FourHourLead;
+        await db.SaveChangesAsync();
+        var ev = await db.Events.SingleAsync();
+
+        var revived = await UpdateAsync(db, ev, Now);
+
+        Assert.False(revived);
+        Assert.NotNull(ev.HnmDefeatedAt);
+        Assert.Equal(FarPop.AddHours(-FourHourLead), ev.HnmRepostAt);
+    }
+
+    [Fact]
+    public async Task Update_OnceTheRepostTimeHasCome_StillOpensTheBoard()
+    {
+        using var db = await SeededAsync(DueParkedBoard());
+        var ev = await db.Events.SingleAsync();
+
+        var revived = await UpdateAsync(db, ev, Now);
+
+        Assert.True(revived);
+        Assert.Null(ev.HnmDefeatedAt);
+        Assert.Equal(NextRepop, ev.StartTime);
+    }
+
+    // ---- the poller keeps to that same time ----
+
+    private static HnmRecurringBoardBackgroundService Poller() =>
+        new(null!, NullLogger<HnmRecurringBoardBackgroundService>.Instance);
+
+    // Moved by hand to FarPop while ToD 7 says NextRepop, and that ToD's own re-post time has passed.
+    private static Event BoardMovedLaterByAnOfficer()
+    {
+        var moved = DueParkedBoard();
+        moved.StartTime = FarPop;
+        moved.HnmRepostAt = FarPop.AddHours(-FourHourLead);
+        return moved;
+    }
+
+    [Fact]
+    public async Task Poller_WaitsForTheTimeAnOfficerMovedTheBoardTo()
+    {
+        using var db = await SeededAsync(BoardMovedLaterByAnOfficer());
+        var board = await db.HnmRecurringBoards.SingleAsync();
+
+        await Poller().ProcessBoardAsync(db, board, Now, CancellationToken.None);
+
+        var ev = await db.Events.SingleAsync();
+        Assert.NotNull(ev.HnmDefeatedAt);
+        Assert.Equal(FarPop, ev.StartTime);
+        Assert.Null(board.LastSourceTodId);
+    }
+
+    [Fact]
+    public async Task Poller_OpensAMovedBoardAtItsTime_AndKeepsTheStartTheOfficerSet()
+    {
+        using var db = await SeededAsync(BoardMovedLaterByAnOfficer());
+        var board = await db.HnmRecurringBoards.SingleAsync();
+
+        await Poller().ProcessBoardAsync(db, board, FarPop.AddHours(-FourHourLead), CancellationToken.None);
+
+        var ev = await db.Events.SingleAsync();
+        Assert.Null(ev.HnmDefeatedAt);
+        Assert.Null(ev.HnmRepostAt);
+        Assert.Equal(FarPop, ev.StartTime);
+        Assert.Equal(4, ev.DayNumber);
+        Assert.Equal(7, board.LastSourceTodId);
+    }
+
+    // The poller is done with this ToD, so only the officer's time can bring the board back.
+    [Fact]
+    public async Task Poller_OpensAMovedBoard_EvenWhenItsTodWasAlreadyHandled()
+    {
+        using var db = await SeededAsync(BoardMovedLaterByAnOfficer());
+        var board = await db.HnmRecurringBoards.SingleAsync();
+        board.LastSourceTodId = 7;
+        await db.SaveChangesAsync();
+
+        await Poller().ProcessBoardAsync(db, board, FarPop.AddHours(-FourHourLead), CancellationToken.None);
+
+        var ev = await db.Events.SingleAsync();
+        Assert.Null(ev.HnmDefeatedAt);
+        Assert.Equal(FarPop, ev.StartTime);
+    }
+
+    [Fact]
+    public async Task Poller_AnOrdinaryParkedBoard_StillComesBackOnItsTod()
+    {
+        using var db = await SeededAsync(DueParkedBoard());
+        var board = await db.HnmRecurringBoards.SingleAsync();
+
+        await Poller().ProcessBoardAsync(db, board, Now, CancellationToken.None);
+
+        var ev = await db.Events.SingleAsync();
+        Assert.Null(ev.HnmDefeatedAt);
+        Assert.Equal(NextRepop, ev.StartTime);
+        Assert.Equal(7, board.LastSourceTodId);
     }
 }
