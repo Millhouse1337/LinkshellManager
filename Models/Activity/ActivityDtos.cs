@@ -1469,7 +1469,11 @@ public sealed record ActivityCreateEventRequest(
     // the monster already re-posts (HnmRecurringBoard enabled), never switching it on; shared by
     // every board for the spawn, as End Camp sets it. Null or <= 0 leaves the lead alone. Ignored
     // on create.
-    double? RepostLeadHours = null);
+    double? RepostLeadHours = null,
+    // HNM edit only: the ToD to move to the new start, once the officer has confirmed the popup that
+    // names it (GET events/{id}/linked-tod). Null leaves every ToD alone, so a ToD never changes
+    // without the popup. Ignored on create.
+    int? MoveTodId = null);
 
 public sealed record ActivityCreateLinkshellRequest(string Name, string? Details);
 

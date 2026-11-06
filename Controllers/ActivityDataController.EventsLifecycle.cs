@@ -238,6 +238,16 @@ public sealed partial class ActivityDataController
         var startBefore = eventEntity.StartTime;
         var dayBefore = eventEntity.DayNumber;
 
+        // The ToD the officer just agreed to move, looked up before the edit changes the event. Only
+        // if it is still the one the popup named: a new ToD logged meanwhile moves nothing.
+        var todToMove = request.MoveTodId is null
+            ? null
+            : await HnmRecurringBoardService.FindLinkedTodAsync(_dbContext, eventEntity, cancellationToken);
+        if (todToMove?.Id != request.MoveTodId)
+        {
+            todToMove = null;
+        }
+
         eventEntity.LinkshellId = request.LinkshellId;
         eventEntity.EventName = request.EventName.Trim();
         eventEntity.EventType = request.EventType?.Trim();
@@ -324,6 +334,12 @@ public sealed partial class ActivityDataController
             {
                 HnmWindowAdvanceBackgroundService.ReanchorToStart(eventEntity, newStartUtc, DateTime.UtcNow);
             }
+
+            // Saved with the event, so the event and the ToD page can't end up disagreeing.
+            if (todToMove is not null && startTimeUtc is { } movedStartUtc)
+            {
+                HnmRecurringBoardService.MoveTodToRepop(todToMove, movedStartUtc, DateTime.UtcNow);
+            }
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -334,6 +350,14 @@ public sealed partial class ActivityDataController
         var recurrenceMonster = eventEntity.AssignedMonsterName?.Trim();
         if (isHnm && !string.IsNullOrWhiteSpace(recurrenceMonster))
         {
+            // A moved ToD is handled like an edit on the ToD page, including re-opening a re-post
+            // cycle the poller had already finished with.
+            if (todToMove is not null)
+            {
+                await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
+                    _dbContext, todToMove.LinkshellId, todToMove.MonsterName, cancellationToken);
+            }
+
             await HnmRecurringBoardService.RefreshRepostAtAsync(
                 _dbContext, eventEntity, recurrenceMonster, cancellationToken);
 
@@ -350,6 +374,47 @@ public sealed partial class ActivityDataController
         }
 
         return Ok(new { success = true });
+    }
+
+    // The ToD a changed Starts would move, so the edit form can name it before anything is saved.
+    [HttpGet("events/{eventId:int}/linked-tod")]
+    public async Task<IActionResult> GetLinkedTodAsync(int eventId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new { error = "Sign in to read this event's ToD." });
+        }
+
+        var eventEntity = await _dbContext.Events
+            .AsNoTracking()
+            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+        if (eventEntity is null)
+        {
+            return NotFound(new { error = "The selected event was not found." });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var tod = await HnmRecurringBoardService.FindLinkedTodAsync(_dbContext, eventEntity, cancellationToken);
+        if (tod is null)
+        {
+            return Ok(new { tod = (object?)null });
+        }
+        return Ok(new
+        {
+            tod = new
+            {
+                todId = tod.Id,
+                monsterName = tod.MonsterName,
+                time = tod.Time is { } time ? DateTime.SpecifyKind(time, DateTimeKind.Utc) : (DateTime?)null,
+                repopTime = DateTime.SpecifyKind(tod.RepopTime!.Value, DateTimeKind.Utc),
+            }
+        });
     }
 
     [HttpPost("events/{eventId:int}/start")]

@@ -411,6 +411,73 @@ public static class HnmRecurringBoardService
         return true;
     }
 
+    // The ToD an HNM event's Starts box is showing, which is the row a changed Starts moves.
+    //
+    //   * Parked: the monster's newest ToD, the pop the board is waiting on. SourceTodId is not
+    //     enough here, because it goes stale when a newer ToD is logged.
+    //   * Up or live: the ToD it was posted for. A newer one can be the kill of this very camp.
+    //   * Made by hand: no link is stored, so only a ToD whose repop IS the start counts. A camp
+    //     someone scheduled at their own time is not a statement about any ToD.
+    //
+    // Null when the event has no such ToD. Read before the edit is applied to the event.
+    public static async Task<Tod?> FindLinkedTodAsync(
+        ApplicationDbContext db, Event ev, CancellationToken cancellationToken)
+    {
+        var names = HnmConfig.MonsterMatchNamesLower(ev.AssignedMonsterName);
+        if (names.Count == 0)
+        {
+            return null;
+        }
+        var tods = db.Tods.Where(tod => tod.LinkshellId == ev.LinkshellId
+            && tod.MonsterName != null
+            && names.Contains(tod.MonsterName.ToLower())
+            && tod.RepopTime != null);
+
+        if (ev.HnmDefeatedAt is not null)
+        {
+            return await tods
+                .OrderByDescending(tod => tod.RepopTime)
+                .ThenByDescending(tod => tod.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (ev.SourceTodId is { } sourceTodId)
+        {
+            var source = await tods.FirstOrDefaultAsync(tod => tod.Id == sourceTodId, cancellationToken);
+            if (source is not null)
+            {
+                return source;
+            }
+        }
+
+        if (ev.StartTime is not { } start)
+        {
+            return null;
+        }
+        // A second either way: the form works in whole seconds and a stored repop may not.
+        var from = start.AddSeconds(-1);
+        var to = start.AddSeconds(1);
+        return await tods
+            .Where(tod => tod.RepopTime >= from && tod.RepopTime <= to)
+            .OrderByDescending(tod => tod.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    // Moves a ToD so its repop lands on the given time. The Time of Death moves by the same amount,
+    // so repop = ToD + cooldown + seconds still adds up on the ToD page and on its next edit.
+    // Stages only; the caller saves.
+    public static void MoveTodToRepop(Tod tod, DateTime newRepopUtc, DateTime nowUtc)
+    {
+        if (tod.RepopTime is not { } oldRepopUtc || oldRepopUtc == newRepopUtc)
+        {
+            return;
+        }
+        var shift = newRepopUtc - oldRepopUtc;
+        tod.RepopTime = newRepopUtc;
+        tod.Time = tod.Time?.Add(shift);
+        tod.TimeStamp = nowUtc;
+    }
+
     // The standing board for this SPAWN. Matched on every spelling of the monster (both
     // halves of a merge pair and the combined label) so a board first created under
     // "Fafnir" on day 2 is the same row the day-4 "Fafnir/Nidhogg" event updates. Keying
