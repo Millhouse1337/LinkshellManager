@@ -662,10 +662,39 @@ export class TodFormComponent {
     return this.activity.formatDateTimeWithSeconds(this.todRepopLocalValue) ?? this.todRepopLocalValue;
   }
 
+  private draftAdditionalSeconds(): number {
+    return Math.max(0, Math.floor(Number(this.todDraft.additionalSeconds) || 0));
+  }
+
+  // "Next repop opens" as a sum, when the monster has Additional Seconds:
+  // "Nov 5, 2026, 1:32:53 + 16 = 1:33:09 PM". Null with none, or with no repop yet.
+  //
+  // The first time drops its AM/PM when the total has the same one. It keeps it when the seconds
+  // cross noon or midnight (11:59:50 AM + 16 = 12:00:06 PM), where leaving it off would misread.
+  protected todRepopSum(): { base: string; seconds: number; total: string } | null {
+    const seconds = this.draftAdditionalSeconds();
+    const repop = parseLocalDateTime(this.todRepopLocalValue);
+    if (seconds <= 0 || !repop) {
+      return null;
+    }
+    const base = this.activity.formatDateTimeWithSeconds(
+      new Date(repop.getTime() - seconds * 1000).toISOString());
+    const total = this.activity.formatTimeWithSeconds(repop.toISOString());
+    if (!base || !total) {
+      return null;
+    }
+    const dayPeriod = /\s*[AP]M$/i.exec(total)?.[0];
+    return {
+      base: dayPeriod && base.endsWith(dayPeriod) ? base.slice(0, -dayPeriod.length) : base,
+      seconds,
+      total,
+    };
+  }
+
   // The note beside "Next repop opens": the time typed above is not the time a reposted event shows
   // when the monster has Additional Seconds, so say so here. Null with none, as there is nothing to explain.
   protected repopFormulaNote(): string | null {
-    const seconds = Math.max(0, Math.floor(Number(this.todDraft.additionalSeconds) || 0));
+    const seconds = this.draftAdditionalSeconds();
     if (seconds <= 0) {
       return null;
     }

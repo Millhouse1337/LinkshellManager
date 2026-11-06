@@ -727,6 +727,23 @@ export class DiscordActivityService {
     }).format(date);
   }
 
+  // The clock time alone, with seconds, in the viewer's zone: "1:33:09 PM".
+  formatTimeWithSeconds(value?: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: this.viewerTimeZone(),
+      timeStyle: 'medium'
+    }).format(date);
+  }
+
   // Formats an instant for a `<input type="datetime-local">` in the viewer's zone.
   //
   // includeSeconds must be true wherever the input carries `step="1"` (the event form): without

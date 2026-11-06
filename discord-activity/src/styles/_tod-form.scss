@@ -320,6 +320,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The time the repop actually opens at: the same yellow as the event form's Starts total. */
+.tod-repop .tod-repop__total {
+  color: #ffdf4d;
+}
+
 /* Why the time above carries seconds nobody typed. Its own full-width row inside the box. */
 .tod-repop__note {
   flex-basis: 100%;

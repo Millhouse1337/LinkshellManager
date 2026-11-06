@@ -110,7 +110,11 @@
       <div class="tod-repop">
         <div class="tod-repop__when">
           <span class="tod-label tod-label--accent">Next repop opens</span>
-          <strong>{{ todRepopSummary() }}</strong>
+          @if (todRepopSum(); as sum) {
+            <strong>{{ sum.base }} + {{ sum.seconds }} = <span class="tod-repop__total">{{ sum.total }}</span></strong>
+          } @else {
+            <strong>{{ todRepopSummary() }}</strong>
+          }
         </div>
         <div class="tod-repop__in">
           <span class="tod-label">In</span>
