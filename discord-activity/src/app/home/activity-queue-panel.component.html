@@ -152,8 +152,8 @@
               <span class="cem__start">
                 <app-datetime-input inputClass="cem__input cem__input--mono" [(ngModel)]="createModel.startTimeLocal"
                   name="startTimeLocal" (ngModelChange)="onStartTimeChange()" />
-                @if (startTotalText(); as total) {
-                  <span class="cem__start-total">{{ total }}</span>
+                @if (startTotalTime(); as total) {
+                  <span class="cem__start-total">+ {{ selectedMonsterAdditionalSeconds() }} sec = <strong>{{ total }}</strong></span>
                 }
               </span>
             </label>

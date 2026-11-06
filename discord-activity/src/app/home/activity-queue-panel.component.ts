@@ -446,8 +446,8 @@ export class ActivityQueuePanelComponent {
 
   // ===== Additional Seconds =====
   //
-  // The Starts box holds the time WITHOUT the monster's Additional Seconds. The sum is printed beside
-  // it ("1:00:00 PM + 16 sec = 1:00:16 PM") and the total is what gets saved. Opening a saved event
+  // The Starts box holds the time WITHOUT the monster's Additional Seconds. The rest of the sum is
+  // printed beside it ("+ 16 sec = 1:00:16 PM") and the total is what gets saved. Opening a saved event
   // takes the seconds back off for the box, so saving it unchanged lands on the same total and
   // repeated edits can never push the camp later.
 
@@ -471,14 +471,13 @@ export class ActivityQueuePanelComponent {
     return start ? shiftLocalDateTime(start, this.selectedMonsterAdditionalSeconds()) : '';
   }
 
-  // "1:00:00 PM + 16 sec = 1:00:16 PM". Null with no time in the box, or no seconds to add.
-  protected startTotalText(): string | null {
+  // The total's clock time for beside the box. Null with no time in the box, or no seconds to add.
+  protected startTotalTime(): string | null {
     const start = this.createModel.startTimeLocal ?? '';
-    const seconds = this.selectedMonsterAdditionalSeconds();
-    if (!start || seconds <= 0) {
+    if (!start || this.selectedMonsterAdditionalSeconds() <= 0) {
       return null;
     }
-    return `${formatLocalClockTime(start)} + ${seconds} sec = ${formatLocalClockTime(this.startWithAdditionalSeconds())}`;
+    return formatLocalClockTime(this.startWithAdditionalSeconds());
   }
 
   // ===== HNM camp DKP =====

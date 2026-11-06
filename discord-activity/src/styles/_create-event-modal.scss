@@ -246,6 +246,12 @@
   white-space: nowrap;
 }
 
+/* The time the event actually starts at: yellow, so it stands out from the time in the box. */
+.cem__start-total strong {
+  color: #ffdf4d;
+  font-weight: 700;
+}
+
 /* ===== Controls ===== */
 .cem__input,
 .cem__select {
