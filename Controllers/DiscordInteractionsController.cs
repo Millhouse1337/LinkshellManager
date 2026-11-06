@@ -1612,8 +1612,7 @@ public sealed class DiscordInteractionsController : ControllerBase
                     && double.IsFinite(lead) && lead > 0)
                 {
                     repost = true;
-                    // Same ceiling HnmRecurringBoardService clamps to, applied here so the
-                    // confirmation below reports the lead that was actually stored.
+                    // Same ceiling HnmRecurringBoardService clamps to.
                     repostLead = Math.Min(lead, 168);
                 }
                 else
@@ -1657,45 +1656,16 @@ public sealed class DiscordInteractionsController : ControllerBase
                 return Ephemeral(result.Error ?? "Couldn't end the camp.");
             }
 
-            // No ToD = no predicted repop, so nothing re-posts and there's no "next pop" to
-            // count back from. Say so plainly rather than promising a re-post that won't come.
-            // "Event System" (not the old "Attendance System"): the snapshot review rows now render
-            // in that page's Current Field Activity section, beside the camps that produced them.
-            var tail = todUtc is null
-                ? (isWd
-                    ? "No Time of Death recorded. The roster is waiting in **Event System** — review it there and hit **Post** to pay DKP."
-                    : "No Time of Death recorded — the tracker shows **Not entered** and the board won't auto-re-post. Post the next one by hand.")
-                : (isWd
-                    ? "Board closed. The roster is waiting in **Event System** — review it there and hit **Post** to pay DKP."
-                    : "Board closed — it'll re-post before the next predicted pop. The roster is waiting in **Event System**; review it there and hit **Post** to pay DKP.");
-            // Read back the three things the officer just chose, so a mis-pick is caught here rather
-            // than discovered in the attendance review. The re-post note is deliberately silent when
-            // there's no ToD — there's no predicted pop to count back from, so nothing would fire.
-            // A lead LONGER than the monster's repop puts the re-post moment in the past, and the
-            // poller's gate is `now < postAt → wait`, so the board goes up on its very next tick.
-            // That's the sane reading of "re-post 100h before a 21h repop" and it already works —
-            // this only stops the confirmation from promising a countdown that isn't coming.
-            var repostNote = repost switch
+            // Nothing to say when it worked: the board has already turned into the "defeated" note.
+            // The exception is a camp ended with no ToD on a monster that re-posts, because nothing
+            // on the board says the re-post isn't coming.
+            if (todUtc is null && !isWd)
             {
-                true when todUtc is not null =>
-                    result.RepostAtUtc is { } repostAt && repostAt <= DateTime.UtcNow
-                        ? " · re-posting right away (that lead is longer than the repop)"
-                        : $" · re-posting {repostLead?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}h before the next pop",
-                false => " · auto-re-post off",
-                _ => string.Empty,
-            };
-            var outcomeNote = claimed
-                ? (killed ? "claimed + killed" : "claimed, no kill")
-                : "no claim";
-            var windowNote = popWindow is { } pwin ? $" · popped on window {pwin} of {effectiveWindows}" : string.Empty;
-            // Only when the monster has Additional Seconds: the officer typed one time and the board
-            // will show another, so say which and why. Silent otherwise, with nothing to explain.
-            var repopNote = result.RepopTimeUtc is { } repopUtc
-                && TodRepopNote.Formula(result.Cooldown, result.AdditionalSeconds) is { } repopFormula
-                    ? $"\n🕒 The reposted event starts <t:{ToUnixSeconds(repopUtc)}:D> <t:{ToUnixSeconds(repopUtc)}:T>: {repopFormula}."
-                    : string.Empty;
-            return Ephemeral(
-                $"🏁 Camp ended — {outcomeNote}{(hq == true ? ", HQ" : string.Empty)}.{windowNote}{repostNote} " + tail + repopNote);
+                return Ephemeral(
+                    "Camp ended, but no Time of Death was recorded — the tracker shows **Not entered** "
+                    + "and the board won't auto-re-post. Post the next one by hand.");
+            }
+            return Ok(new { type = ResponseDeferredUpdate });
         }
 
         // Outside Party Signup ONBOARDING modal — no linked account required. Register
