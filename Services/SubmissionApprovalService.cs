@@ -32,6 +32,17 @@ public sealed class SubmissionApprovalService
 
     public async Task<int> QueueTodAsync(int linkshellId, string submittedByAppUserId, TodSubmissionInput input, CancellationToken cancellationToken)
     {
+        // Another member already queued this kill: one thing to approve, holding what both knew.
+        if (input.Time is { } defeatedAtUtc
+            && await TodSameKill.FindPendingAsync(_db, linkshellId, input.MonsterName, defeatedAtUtc, cancellationToken) is { } sameKill)
+        {
+            sameKill.Claim ??= input.Claim;
+            sameKill.PopWindow = TodSameKill.EarliestWindow(
+                sameKill.PopWindow, input.PopWindow is { } window && window > 0 ? window : null);
+            await _db.SaveChangesAsync(cancellationToken);
+            return sameKill.Id;
+        }
+
         var submission = new PendingTodSubmission
         {
             LinkshellId = linkshellId,
@@ -64,6 +75,17 @@ public sealed class SubmissionApprovalService
 
         var occurredAt = DateTime.UtcNow;
         var todTimeUtc = pending.Time;
+
+        // The kill got its ToD while this waited, from an officer's post. Approving adds what this
+        // one knew to that ToD, not a second row. The sign-up reset below already ran for it.
+        if (todTimeUtc is { } defeatedAtUtc
+            && await TodSameKill.FindAsync(_db, pending.LinkshellId, pending.MonsterName, defeatedAtUtc, cancellationToken) is { } sameKill)
+        {
+            TodSameKill.Merge(sameKill, pending.Claim, pending.PopWindow);
+            _db.PendingTodSubmissions.Remove(pending);
+            await _db.SaveChangesAsync(cancellationToken);
+            return ApprovalResult.Approved;
+        }
 
         var tod = new Tod
         {

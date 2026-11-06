@@ -1405,6 +1405,21 @@ public sealed partial class AddonApiController
         // Resolved BEFORE the approval branch below, which needs it too.
         var popWindow = request.PopWindow is { } pw && pw > 0 ? pw : (int?)null;
 
+        // Another character already posted this kill: this post is the same ToD, not a second one.
+        // Nothing below runs for it. In particular the sign-up reset, which would wipe anyone who
+        // signed up for the next pop since the first post. Only someone who can manage ToDs adds to
+        // the saved row; anyone else's post has nothing left to queue for approval.
+        var sameKill = await TodSameKill.FindAsync(
+            _dbContext, token.LinkshellId, monsterName, defeatedAtUtc, cancellationToken);
+        if (sameKill is not null)
+        {
+            if (canManage && TodSameKill.Merge(sameKill, claimed, popWindow))
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            return Ok(TodPostResponse(sameKill, alreadyPosted: true));
+        }
+
         if (!canManage)
         {
             var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
@@ -1455,19 +1470,23 @@ public sealed partial class AddonApiController
         // A board comes back only through Repeat-on-ToD, at the lead the create form set
         // (HnmRecurringBoardBackgroundService).
 
-        return Ok(new
-        {
-            todId = tod.Id,
-            monsterName = tod.MonsterName,
-            defeatedAtUtc = tod.Time,
-            repopTimeUtc = tod.RepopTime,
-            cooldown = tod.Cooldown,
-            interval = tod.Interval,
-            claim = tod.Claim,
-            // So the addon can say why the repop it prints carries these seconds.
-            additionalSeconds = tod.AdditionalSeconds
-        });
+        return Ok(TodPostResponse(tod, alreadyPosted: false));
     }
+
+    private static object TodPostResponse(Tod tod, bool alreadyPosted) => new
+    {
+        todId = tod.Id,
+        monsterName = tod.MonsterName,
+        defeatedAtUtc = tod.Time,
+        repopTimeUtc = tod.RepopTime,
+        cooldown = tod.Cooldown,
+        interval = tod.Interval,
+        claim = tod.Claim,
+        // So the addon can say why the repop it prints carries these seconds.
+        additionalSeconds = tod.AdditionalSeconds,
+        // So the addon can say another character got there first, and show the saved claim.
+        alreadyPosted
+    };
 
     // Updates the claim status on an existing addon-posted ToD. The addon
     // UI calls this after the loot-pool flow auto-creates a ToD with claim
