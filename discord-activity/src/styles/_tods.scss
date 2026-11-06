@@ -204,6 +204,14 @@
   --tod-fill: color-mix(in srgb, var(--success) 45%, transparent);
 }
 
+// Every window has passed. After the 'up' rules above, which it overrides.
+.tod-row[data-window-passed] {
+  --tod-accent: var(--danger);
+  --tod-halo: var(--danger-weak);
+  --tod-fill: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+
 .tod-row-head {
   display: flex;
   align-items: flex-start;

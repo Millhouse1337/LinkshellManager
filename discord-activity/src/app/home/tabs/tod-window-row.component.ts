@@ -20,7 +20,8 @@ import { hasHqVariant } from '../activity-home.types';
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'tod-row',
-    '[attr.data-tone]': 'view().tone'
+    '[attr.data-tone]': 'view().tone',
+    '[attr.data-window-passed]': 'view().windowPassed ? "" : null'
   }
 })
 export class TodWindowRowComponent {
@@ -90,6 +91,9 @@ export class TodWindowRowComponent {
 
     return {
       tone,
+      // Every window has gone by, which turns the row red. Not a monster with no window grid: it
+      // shares the 'up' tone once its repop passes, but it has no window to miss.
+      windowPassed: tone === 'up' && closeMs !== null,
       statusLabel,
       big,
       details,
