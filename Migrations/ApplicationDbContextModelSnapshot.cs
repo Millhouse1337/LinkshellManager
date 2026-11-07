@@ -1354,7 +1354,8 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("EventHistoryId");
 
-                    b.HasIndex("EventId");
+                    b.HasIndex("EventId")
+                        .IsUnique();
 
                     b.HasIndex("LinkshellId", "CapturedAtUtc");
 
@@ -1390,7 +1391,11 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CaptureId");
+                    b.HasIndex("CaptureId", "AppUserId")
+                        .IsUnique();
+
+                    b.HasIndex("CaptureId", "CharacterName")
+                        .IsUnique();
 
                     b.ToTable("ClaimShieldCaptureMembers", (string)null);
                 });

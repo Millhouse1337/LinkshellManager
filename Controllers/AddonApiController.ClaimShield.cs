@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Authorization;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -78,11 +79,27 @@ public sealed partial class AddonApiController
     // against the live linkshell roster (same membershipByName index that
     // PostAttendanceAsync builds), so a stale addon roster cache can't poison
     // the stored record.
+    //
+    // ONE capture per camp. Every officer's addon reads the same lottery off chat, so a camp with
+    // three officers at it used to collect three copies of one lottery. The first post makes the
+    // capture; each later one JOINS it, adding only the people it doesn't have yet -- someone who
+    // was in one officer's chat log and not another's is still counted. These posts land within
+    // milliseconds of each other, so the joining goes through UniqueRaceRetry.
+    //
+    // A capture with no camp is stored as it arrives: with no camp to group by there is no
+    // "same lottery" to join.
     [HttpPost("claim-shield-captures")]
     [AddonApiAuth]
-    public async Task<IActionResult> PostClaimShieldCaptureAsync(
+    public Task<IActionResult> PostClaimShieldCaptureAsync(
         [FromBody] AddonClaimShieldRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        UniqueRaceRetry.RunAsync(
+            _dbContext,
+            () => PostClaimShieldCaptureCoreAsync(request, cancellationToken),
+            "ClaimShieldCaptures", "ClaimShieldCaptureMembers");
+
+    private async Task<IActionResult> PostClaimShieldCaptureCoreAsync(
+        AddonClaimShieldRequest request, CancellationToken cancellationToken)
     {
         if (request is null)
         {
@@ -149,20 +166,61 @@ public sealed partial class AddonApiController
             }
         }
 
-        var capture = new ClaimShieldCapture
+        var eventId = await ResolveClaimShieldEventAsync(
+            request.EventId, token.LinkshellId, monster, capturedAt, cancellationToken);
+
+        // Posts joining the same capture TAKE TURNS. Without this, two officers joining at once each
+        // count the members they can see, and the later save's MemberCount overwrites the earlier
+        // one's (found against a real Postgres: six people on the capture, a count of four). The
+        // row lock is held until this post commits; the next joiner then reads the capture fresh.
+        // In-memory tests have neither transactions nor row locks, and run one post at a time.
+        var relational = _dbContext.Database.IsRelational();
+        await using var transaction = relational
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        // The camp's capture, when another officer's post already made it.
+        ClaimShieldCapture? capture = null;
+        if (eventId is int campId)
         {
-            LinkshellId = token.LinkshellId,
-            EventId = await ResolveClaimShieldEventAsync(
-                request.EventId, token.LinkshellId, monster, capturedAt, cancellationToken),
-            MonsterName = TruncateString(monster, 128) ?? monster,
-            Won = request.Won,
-            TotalPlayers = totalPlayers,
-            CapturedAtUtc = capturedAt,
-            CapturedByCharacterName = TruncateString(
-                await ResolveTokenIssuerNameAsync(token, cancellationToken), 256),
-            CapturedMessage = TruncateString(request.CapturedMessage, 512),
-            CreatedAtUtc = nowUtc,
-        };
+            if (relational)
+            {
+                await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"""SELECT 1 FROM "ClaimShieldCaptures" WHERE "EventId" = {campId} FOR UPDATE""",
+                    cancellationToken);
+            }
+            capture = await _dbContext.ClaimShieldCaptures
+                .Include(existing => existing.Members)
+                .FirstOrDefaultAsync(existing => existing.EventId == campId, cancellationToken);
+        }
+        var joined = capture is not null;
+
+        if (capture is null)
+        {
+            capture = new ClaimShieldCapture
+            {
+                LinkshellId = token.LinkshellId,
+                EventId = eventId,
+                MonsterName = TruncateString(monster, 128) ?? monster,
+                Won = request.Won,
+                TotalPlayers = totalPlayers,
+                CapturedAtUtc = capturedAt,
+                CapturedByCharacterName = TruncateString(
+                    await ResolveTokenIssuerNameAsync(token, cancellationToken), 256),
+                CapturedMessage = TruncateString(request.CapturedMessage, 512),
+                CreatedAtUtc = nowUtc,
+            };
+            _dbContext.ClaimShieldCaptures.Add(capture);
+        }
+        else
+        {
+            // Every post read the same result line, so these normally agree already. When they
+            // don't, a client missed part of it: a win any of them saw was a win, and the bigger
+            // lottery count is the fuller read. The first post's time and "captured by" stand.
+            capture.Won |= request.Won;
+            capture.TotalPlayers = Math.Max(capture.TotalPlayers, totalPlayers);
+            capture.CapturedMessage ??= TruncateString(request.CapturedMessage, 512);
+        }
 
         // One list to iterate whichever shape arrived. MemberActions is the
         // current addon; Members is the older names-only form.
@@ -172,8 +230,17 @@ public sealed partial class AddonApiController
                 .Select(name => new AddonClaimShieldMember(name, null))
                 .ToList();
 
-        var seenRawNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seenMembershipIds = new HashSet<int>();
+        // Seeded with whoever is already on the capture, so joining it adds only the people it was
+        // missing. A person is the same by name OR by account: two alt names of one player collapse
+        // to a single row, within this post and across posts.
+        var seenRawNames = capture.Members
+            .Select(member => member.CharacterName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var seenAppUserIds = capture.Members
+            .Where(member => member.AppUserId != null)
+            .Select(member => member.AppUserId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var added = 0;
         foreach (var entry in incoming)
         {
             if (string.IsNullOrWhiteSpace(entry?.Name)) continue;
@@ -181,12 +248,12 @@ public sealed partial class AddonApiController
             if (!seenRawNames.Add(name)) continue;
 
             membershipByName.TryGetValue(name, out var membership);
-            if (membership is not null && !seenMembershipIds.Add(membership.Id))
+            if (membership?.AppUserId is { } appUserId && !seenAppUserIds.Add(appUserId))
             {
-                // Two alt names of one player collapse to a single row.
                 continue;
             }
 
+            added++;
             capture.Members.Add(new ClaimShieldCaptureMember
             {
                 CharacterName = TruncateString(name, 256) ?? name,
@@ -201,8 +268,8 @@ public sealed partial class AddonApiController
         capture.MemberCount = capture.Members.Count;
         capture.MatchedCount = capture.Members.Count(m => m.Matched);
 
-        _dbContext.ClaimShieldCaptures.Add(capture);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
         return Ok(new
         {
@@ -210,8 +277,13 @@ public sealed partial class AddonApiController
             monster = capture.MonsterName,
             won = capture.Won,
             totalPlayers = capture.TotalPlayers,
+            // The whole capture's counts, joined or not -- what the addon prints as "N matched".
             memberCount = capture.MemberCount,
             matchedCount = capture.MatchedCount,
+            // True when another officer's post had already made this camp's capture, and how many
+            // of this post's people it was missing.
+            joined,
+            added,
             // Echoed so the addon can say which camp it landed on -- or show
             // that it landed on none, which is the case worth noticing.
             eventId = capture.EventId,

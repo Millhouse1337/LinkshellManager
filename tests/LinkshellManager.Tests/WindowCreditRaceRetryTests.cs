@@ -28,7 +28,7 @@ public class WindowCreditRaceRetryTests
         await using var db = NewDb();
         var attempts = 0;
 
-        var result = await AddonApiController.RetryOnceIfWindowCreditRaceAsync(db, () =>
+        var result = await AddonApiController.RetryIfWindowCreditRaceAsync(db, () =>
         {
             attempts++;
             if (attempts == 1)
@@ -51,7 +51,7 @@ public class WindowCreditRaceRetryTests
         await using var db = NewDb();
         var attempts = 0;
 
-        var result = await AddonApiController.RetryOnceIfWindowCreditRaceAsync(db, () =>
+        var result = await AddonApiController.RetryIfWindowCreditRaceAsync(db, () =>
         {
             attempts++;
             return Task.FromResult("done");
@@ -62,18 +62,18 @@ public class WindowCreditRaceRetryTests
     }
 
     [Fact]
-    public async Task LosingTwice_IsRethrown()
+    public async Task LosingEveryRetry_IsRethrown()
     {
         await using var db = NewDb();
         var attempts = 0;
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
-            AddonApiController.RetryOnceIfWindowCreditRaceAsync<string>(db, () =>
+            AddonApiController.RetryIfWindowCreditRaceAsync<string>(db, () =>
             {
                 attempts++;
                 throw Rejection(PostgresErrorCodes.UniqueViolation, "AppUserEventWindows");
             }));
-        Assert.Equal(2, attempts);
+        Assert.Equal(1 + UniqueRaceRetry.MaxRetries, attempts);
     }
 
     [Theory]
@@ -85,7 +85,7 @@ public class WindowCreditRaceRetryTests
         var attempts = 0;
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
-            AddonApiController.RetryOnceIfWindowCreditRaceAsync<string>(db, () =>
+            AddonApiController.RetryIfWindowCreditRaceAsync<string>(db, () =>
             {
                 attempts++;
                 throw Rejection(sqlState, table);

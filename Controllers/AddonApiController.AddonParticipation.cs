@@ -254,7 +254,7 @@ public sealed partial class AddonApiController
         [FromBody] AddonAttendanceRequest request,
         CancellationToken cancellationToken) =>
         // Two officers posting the same window at once: the loser re-runs and adds only who is left.
-        RetryOnceIfWindowCreditRaceAsync(
+        RetryIfWindowCreditRaceAsync(
             _dbContext, () => PostAttendanceCoreAsync(eventId, request, cancellationToken));
 
     private async Task<IActionResult> PostAttendanceCoreAsync(

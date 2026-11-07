@@ -1932,7 +1932,7 @@ namespace LinkshellManagerDiscordApp.Data
                     .OnDelete(DeleteBehavior.SetNull);
                 // UNIQUE: one credit per person per window. The posts check this before inserting,
                 // but two posts landing at the same moment both pass that check, so the database
-                // has to be the one that says no (see RetryOnceIfWindowCreditRaceAsync). Null
+                // has to be the one that says no (see UniqueRaceRetry). Null
                 // AppUserIds never collide in Postgres, so legacy rows without one are unaffected.
                 entity.HasIndex(item => new { item.EventAttendanceWindowId, item.AppUserId }).IsUnique();
                 entity.HasOne(item => item.EventAttendanceWindow)
@@ -2064,8 +2064,11 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.EventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.LinkshellId, item.CapturedAtUtc });
-                // The Activity loads captures per event; without this that's a scan.
-                entity.HasIndex(item => item.EventId);
+                // UNIQUE: one capture per live camp. Every officer's addon reads the same lottery off
+                // chat, and each post joins the camp's capture rather than adding another. The
+                // database enforces it because those posts land at the same moment (UniqueRaceRetry).
+                // Captures with no camp have a null EventId, and nulls never collide in Postgres.
+                entity.HasIndex(item => item.EventId).IsUnique();
                 entity.HasIndex(item => item.EventHistoryId);
             });
 
@@ -2075,7 +2078,12 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
                 entity.Property(item => item.AppUserId).HasMaxLength(450);
                 entity.Property(item => item.ActionMessage).HasMaxLength(512);
-                entity.HasIndex(item => item.CaptureId);
+                // UNIQUE: one row per person per capture, by account and by name. Two posts joining
+                // the same capture at once both read "Dan isn't on it yet"; these make the later one
+                // retry instead of adding Dan twice. An unmatched name has a null AppUserId, which
+                // never collides, so it is held to one row by the name index alone.
+                entity.HasIndex(item => new { item.CaptureId, item.AppUserId }).IsUnique();
+                entity.HasIndex(item => new { item.CaptureId, item.CharacterName }).IsUnique();
             });
 
             builder.Entity<LinkshellDiscordWebhook>(entity =>
