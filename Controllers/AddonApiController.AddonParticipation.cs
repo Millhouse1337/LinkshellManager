@@ -249,10 +249,16 @@ public sealed partial class AddonApiController
 
     [HttpPost("events/{eventId:int}/attendance")]
     [AddonApiAuth]
-    public async Task<IActionResult> PostAttendanceAsync(
+    public Task<IActionResult> PostAttendanceAsync(
         int eventId,
         [FromBody] AddonAttendanceRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        // Two officers posting the same window at once: the loser re-runs and adds only who is left.
+        RetryOnceIfWindowCreditRaceAsync(
+            _dbContext, () => PostAttendanceCoreAsync(eventId, request, cancellationToken));
+
+    private async Task<IActionResult> PostAttendanceCoreAsync(
+        int eventId, AddonAttendanceRequest request, CancellationToken cancellationToken)
     {
         if (request.Entries is null || request.Entries.Count == 0)
         {

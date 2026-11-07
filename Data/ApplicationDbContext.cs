@@ -1930,7 +1930,11 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany(aue => aue.AttendedWindows)
                     .HasForeignKey(item => item.AppUserEventId)
                     .OnDelete(DeleteBehavior.SetNull);
-                entity.HasIndex(item => new { item.EventAttendanceWindowId, item.AppUserId });
+                // UNIQUE: one credit per person per window. The posts check this before inserting,
+                // but two posts landing at the same moment both pass that check, so the database
+                // has to be the one that says no (see RetryOnceIfWindowCreditRaceAsync). Null
+                // AppUserIds never collide in Postgres, so legacy rows without one are unaffected.
+                entity.HasIndex(item => new { item.EventAttendanceWindowId, item.AppUserId }).IsUnique();
                 entity.HasOne(item => item.EventAttendanceWindow)
                     .WithMany(window => window.Attendees)
                     .HasForeignKey(item => item.EventAttendanceWindowId)

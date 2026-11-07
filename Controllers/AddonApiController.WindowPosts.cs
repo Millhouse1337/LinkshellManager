@@ -171,6 +171,39 @@ public sealed partial class AddonApiController
         }
     }
 
+    // Runs a window post, and runs it once more from scratch if it lost a race on a person.
+    //
+    // Two officers posting the same window at the same moment, both naming Bob, both read "Bob is
+    // not in this window yet" before either has saved. The unique indexes on AppUserEventWindows
+    // reject the second insert, which used to fail that officer's WHOLE post -- including the
+    // people only they had seen. Re-running it reads the window again, skips everyone the other
+    // post already credited, and adds only who is left, exactly as if it had arrived a second later.
+    //
+    // The tracker is cleared first so nothing from the failed save is sent again. Everything the
+    // post saved before that point (the window row, its price, the close tick) is safe to repeat.
+    // Only once: a second loss means something other than a near-simultaneous post is going on.
+    internal static async Task<T> RetryOnceIfWindowCreditRaceAsync<T>(
+        ApplicationDbContext dbContext, Func<Task<T>> post)
+    {
+        try
+        {
+            return await post();
+        }
+        catch (DbUpdateException ex) when (IsWindowCreditRace(ex))
+        {
+            dbContext.ChangeTracker.Clear();
+            return await post();
+        }
+    }
+
+    // A unique-index rejection on a per-window credit row: the person is already in that window.
+    internal static bool IsWindowCreditRace(DbUpdateException ex) =>
+        ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            TableName: "AppUserEventWindows",
+        };
+
     // windowSequence: which of the camp's windows; a new one is created, an existing one is added to.
     public sealed record AddonAddWindowPostRequest(int WindowSequence, IReadOnlyList<string>? AppUserIds);
     // name: optional; "Misc post" when blank.
@@ -245,10 +278,15 @@ public sealed partial class AddonApiController
     // ledger entry. Someone already credited in that window is skipped, so posting into an existing
     // window is how an officer adds a missed member.
     [HttpPost("management/events/{eventId:int}/window-posts")]
-    public async Task<IActionResult> AddWindowPostManagementAsync(
+    public Task<IActionResult> AddWindowPostManagementAsync(
         int eventId,
         [FromBody] AddonAddWindowPostRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        RetryOnceIfWindowCreditRaceAsync(
+            _dbContext, () => AddWindowPostManagementCoreAsync(eventId, request, cancellationToken));
+
+    private async Task<IActionResult> AddWindowPostManagementCoreAsync(
+        int eventId, AddonAddWindowPostRequest request, CancellationToken cancellationToken)
     {
         var (context, error) = await LoadNewPostContextAsync(eventId, request.AppUserIds, cancellationToken);
         if (error is not null) return error;

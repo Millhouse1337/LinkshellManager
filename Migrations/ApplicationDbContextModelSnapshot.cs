@@ -566,7 +566,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("AppUserEventId", "EventAttendanceWindowId")
                         .IsUnique();
 
-                    b.HasIndex("EventAttendanceWindowId", "AppUserId");
+                    b.HasIndex("EventAttendanceWindowId", "AppUserId")
+                        .IsUnique();
 
                     b.ToTable("AppUserEventWindows", (string)null);
                 });
