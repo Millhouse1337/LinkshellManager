@@ -162,8 +162,8 @@ public static class TreasuryLabels
     // What the mule box on each settle panel is called. Paying out takes gil OFF a character; the
     // panel opposite puts it on one. Short, because both sit inline in a row of controls rather than
     // over a labelled field — the record form has room for the full question, this does not.
-    public const string PayingOutOf = "Paying out of";
-    public const string ReceivedOnto = "Received onto";
+    public const string PaidBy = "Paid by";
+    public const string ReceivedBy = "Received by";
     public const string CollectAction = "Record payment received";
     public const string CollectHint = "Tick who has paid us. Each one is settled in full.";
     public const string CollectConfirm =

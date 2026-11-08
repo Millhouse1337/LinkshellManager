@@ -432,6 +432,8 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;
+  /* Room above the panel's total line, so the mule box doesn't sit on it. */
+  margin-bottom: 12px;
 }
 
 .panel-tab .fin-settle__hint {

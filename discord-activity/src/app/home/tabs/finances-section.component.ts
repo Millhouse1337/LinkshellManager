@@ -794,7 +794,7 @@ export class FinancesSectionComponent {
 
   /** What the box is called on each side — gil leaving a mule, or arriving on one. */
   protected settleHolderLabel(side: SettleSide): string {
-    return side === 'weOwe' ? 'Paying out of' : 'Received onto';
+    return side === 'weOwe' ? 'Paid by' : 'Received by';
   }
 
   private setPicks(side: SettleSide, picks: ReadonlySet<string>): void {
