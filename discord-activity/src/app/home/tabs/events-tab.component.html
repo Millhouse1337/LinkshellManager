@@ -479,7 +479,7 @@
                                 <span class="hnm-badge" [attr.data-tone]="step.tone">{{ step.badge }}</span>
                               }
                             </span>
-                            <span class="hnm-step__time">{{ step.time ? (step.time | date:'shortTime') : (step.kind === 'upcoming' ? '' : '—') }}</span>
+                            <span class="hnm-step__time">{{ step.time ? (step.time | date:'shortTime') : (step.kind === 'upcoming' ? '' : '—') }}@if (step.source) { · {{ step.source }}}</span>
                             <span class="hnm-step__sub">{{ step.sub }}</span>
                           </button>
                         </li>
@@ -591,6 +591,9 @@
                                 <div class="hnm-detail__sub">
                                   Linked snapshot · {{ snapshot.capturedAtUtc | date:'shortTime' }}
                                   · posted by {{ snapshot.capturedByCharacterName || '—' }}
+                                  @if (step.source) {
+                                    · from {{ step.source }}
+                                  }
                                   @if (unregisteredEntryCount(snapshot) > 0) {
                                     · <span class="roster-unregistered-count" title="These characters are not on the linkshell roster, so ending this camp pays them nothing.">{{ unregisteredEntryCount(snapshot) }} not registered</span>
                                   }
@@ -1813,6 +1816,9 @@
                             <strong>{{ snapshot.capturedAtUtc | date:'short' }}</strong>
                             <span class="roster-muted">
                               · posted by {{ snapshot.capturedByCharacterName || '-' }}
+                              @if (postSourceLabel(snapshot.postSource); as source) {
+                                · from {{ source }}
+                              }
                               · {{ snapshot.entries.length }}
                               {{ snapshot.entries.length === 1 ? 'member' : 'members' }}
                             </span>

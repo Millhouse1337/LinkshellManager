@@ -14,6 +14,7 @@ import type {
   ActivityWindowSnapshot,
   ActivityWindowSnapshotEntry
 } from '../../discord/discord-activity.types';
+import { postSourceLabel } from '../../discord/discord-activity.types';
 
 // Baseline DKP per member when neither a saved override nor an event default
 // exists yet.
@@ -226,20 +227,14 @@ export class AttendanceSectionsComponent {
     return event.isCamp || event.sourceEventId ? 'Camp generated Event' : 'LSM Now generated Event';
   }
 
-  // The big centre readout. An LSM Now event counts its posts, Misc included -- most of what lands
-  // on one is Misc, so a window count read 0. A camp-made event says how many windows have a
-  // capture, worded like the live camp card's, with a window two alliances both posted counted
-  // once. Either way an ignored capture doesn't count and a pending one does (it was captured, it
-  // just isn't confirmed yet). Ungridded captures have no window number, so each counts on its own.
+  // The big centre readout: how many posts the event has -- every Open, Close, Kill, Claim Shield
+  // and Misc post counts once. An ignored capture doesn't count; a pending one does (it was
+  // captured, it just isn't confirmed yet).
   protected readoutLabel(event: ActivityWindowEvent): string {
-    const counts = (s: ActivityWindowSnapshot) => s.snapshotStatus === 'Active' || s.isPending;
-    if (!(event.isCamp || event.sourceEventId)) {
-      const posts = event.snapshots.filter(counts).length;
-      return `${posts} ${posts === 1 ? 'Post' : 'Posts'}`;
-    }
-    const windows = this.windowSnapshots(event).filter(counts);
-    const n = new Set(windows.map(s => s.windowNumber ?? `capture-${s.id}`)).size;
-    return `${n} ${n === 1 ? 'Window' : 'Windows'} Captured`;
+    const posts = event.snapshots
+      .filter(s => s.snapshotStatus === 'Active' || s.isPending)
+      .length;
+    return `${posts} ${posts === 1 ? 'Post' : 'Posts'}`;
   }
 
   protected jobs(row: ActivityWindowSnapshotEntry | ActivityWindowCombinedMember): string {
@@ -361,6 +356,7 @@ export class AttendanceSectionsComponent {
 
   protected readonly slotWindow = SLOT_WINDOW;
   protected readonly slotMisc = SLOT_MISC;
+  protected readonly postSourceLabel = postSourceLabel;
 
   // The two groups a card renders its captures in. Split server-side and mirrored here.
   protected windowSnapshots(event: ActivityWindowEvent): ActivityWindowSnapshot[] {

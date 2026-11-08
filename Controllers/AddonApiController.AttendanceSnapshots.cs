@@ -215,6 +215,10 @@ public sealed partial class AddonApiController
             // rather than just "verified" keeps the trail readable when several officers post.
             VerifiedAtUtc = canModerate ? nowUtc : null,
             VerifiedByAppUserId = canModerate ? token.IssuedToAppUserId : null,
+            // Only the addon's Create Misc Post button names a camp; `/lsm now` never does.
+            PostSource = filedCamp is not null
+                ? AttendanceSnapshotPostSources.AddonUi
+                : AttendanceSnapshotPostSources.LsmNow,
         };
 
         // Park it on the camp, in the slot the officer named. End Camp carries it from there onto

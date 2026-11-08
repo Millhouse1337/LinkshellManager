@@ -395,6 +395,7 @@ public sealed partial class AddonApiController
             LinkedEventId = camp.Id,
             EntryCount = members.Count,
             DkpAmount = dkpAmount,
+            PostSource = AttendanceSnapshotPostSources.App,
         };
         WindowEventLinkService.ApplyCampSlot(
             snapshot,

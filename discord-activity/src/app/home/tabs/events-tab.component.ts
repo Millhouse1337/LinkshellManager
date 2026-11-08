@@ -22,6 +22,7 @@ import {
   ActivityPartySetupSlot,
   ActivityTodEntry,
   ActivityWindowEvent,
+  postSourceLabel,
 } from '../../discord/discord-activity.types';
 import { ActivityQueuePanelComponent } from '../activity-queue-panel.component';
 import { EventHistoryPanelComponent } from '../sidebar-panels/event-history-panel.component';
@@ -64,6 +65,8 @@ interface CampStep {
   kind: 'window' | 'missed' | 'kill' | 'claim' | 'snapshot' | 'upcoming';
   title: string;
   time: string | null;
+  // Where a post came from ("/lsm now", "Addon UI", "App"), shown after the time. Snapshots only.
+  source: string | null;
   sub: string;
   badge: string | null;
   tone: 'neutral' | 'accent' | 'success' | 'danger' | 'warning' | 'kill' | 'snapshot';
@@ -787,7 +790,7 @@ export class EventsTabComponent {
   // no roster stays in as a gap to fill), then the Claim Shield lotteries and linked snapshots by
   // time, then the kill roster, then whatever windows are still to come.
   protected campSteps(event: ActivityEvent): CampStep[] {
-    const blank = { window: null, capture: null, snapshot: null };
+    const blank = { window: null, capture: null, snapshot: null, source: null };
     const windows: CampStep[] = [];
     const kills: CampStep[] = [];
 
@@ -825,6 +828,7 @@ export class EventsTabComponent {
     const snapshots: CampStep[] = this.linkedSnapshotTabs(event).map(snapshot => ({
       ...blank, snapshot, key: `s:${snapshot.id}`, kind: 'snapshot',
       title: this.linkedSnapshotTabLabel(snapshot), time: snapshot.capturedAtUtc,
+      source: postSourceLabel(snapshot.postSource),
       sub: this.linkedSnapshotHeadcount(snapshot)
         + ((snapshot.dkpPerMember ?? 0) > 0 ? ` · +${EventsTabComponent.trimDkp(snapshot.dkpPerMember ?? 0)}` : ''),
       badge: snapshot.isMisc ? 'Misc' : snapshot.windowLabel?.trim() || 'Snapshot', tone: 'snapshot',
@@ -859,7 +863,7 @@ export class EventsTabComponent {
       : named ? remaining.map(name).join(' & ') : `Windows ${first}–${last}`;
     return {
       key: 'upcoming', kind: 'upcoming', title, time: null, sub: killed ? 'Not needed' : 'Upcoming',
-      badge: null, tone: 'neutral', window: null, capture: null, snapshot: null,
+      badge: null, tone: 'neutral', window: null, capture: null, snapshot: null, source: null,
     };
   }
 
@@ -1477,6 +1481,8 @@ export class EventsTabComponent {
   protected linkedSnapshotsFor(event: { linkedSnapshots?: ActivityLinkedSnapshot[] }): ActivityLinkedSnapshot[] {
     return event.linkedSnapshots ?? [];
   }
+
+  protected readonly postSourceLabel = postSourceLabel;
 
   // End Camp only pays names on the linkshell roster, and a capture reads the whole alliance, so it
   // can hold people who get nothing. They stay listed and marked; these keep the counts honest.

@@ -88,6 +88,11 @@ public class AttendanceSnapshot
     // EventAttendanceWindow.DkpAmount follows for a window. End Camp carries it onto each entry.
     public double? DkpAmount { get; set; }
 
+    // Where the post was made: `/lsm now`, the addon's Create Misc Post button, or the app's Add New
+    // Post form (AttendanceSnapshotPostSources). Null on older posts and on End Camp's own rosters.
+    [MaxLength(16)]
+    public string? PostSource { get; set; }
+
     // Which alliance this capture came from. The FFXI client can only see your OWN alliance
     // (party memory slots 0-17), so two alliances at one camp are completely invisible to each
     // other.

@@ -695,6 +695,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<string>("PostSource")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<string>("PostedByAppUserId")
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");

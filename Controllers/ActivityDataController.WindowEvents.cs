@@ -128,7 +128,9 @@ public sealed partial class ActivityDataController
         string? PostedByName = null,
         // The post's own price (AttendanceSnapshot.DkpAmount), null when it pays the Misc post rate.
         // Filled for unlinked captures, where the Unlinked Snapshots row edits it.
-        double? DkpOverride = null);
+        double? DkpOverride = null,
+        // Where it was posted from (AttendanceSnapshotPostSources), null when not recorded.
+        string? PostSource = null);
 
     public sealed record ActivityWindowSnapshotEntryDto(
         int Id,
@@ -1141,7 +1143,8 @@ public sealed partial class ActivityDataController
                 ? "Misc"
                 : resolvedWindow is { } slotWindow
                     ? (hasGrid && gridWindows is { } slotTotal ? $"Window {slotWindow} of {slotTotal}" : $"Window {slotWindow}")
-                    : null);
+                    : null,
+            PostSource: snapshot.PostSource);
     }
 
     internal static List<ActivityWindowCombinedMemberDto> BuildActivityCombinedMembers(

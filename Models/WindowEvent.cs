@@ -377,3 +377,17 @@ public static class AttendanceSnapshotSlotKinds
     // than at a misc rate an officer never chose.
     public static string Resolve(string? value) => IsMisc(value) ? Misc : Window;
 }
+
+// Where a post was made (AttendanceSnapshot.PostSource). Null on posts made before it was recorded,
+// and on the rosters End Camp builds itself — the app shows nothing for those.
+public static class AttendanceSnapshotPostSources
+{
+    // The `/lsm now` chat command. Lands unlinked; an officer files it later.
+    public const string LsmNow = "LsmNow";
+
+    // The addon's Create Misc Post button, which names its camp at post time.
+    public const string AddonUi = "AddonUi";
+
+    // The app's Add New Post form on a live camp.
+    public const string App = "App";
+}

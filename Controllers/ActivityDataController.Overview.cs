@@ -375,7 +375,8 @@ public sealed partial class ActivityDataController
                 HnmCampPricing.LinkedCaptureValueFor(
                     evt, primaryLinkshell, snapshot.SlotKind, snapshot.WindowNumber, snapshot.DkpAmount),
                 IsMisc: AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind),
-                DkpOverride: snapshot.DkpAmount))
+                DkpOverride: snapshot.DkpAmount,
+                PostSource: snapshot.PostSource))
                 .ToList();
         }
 

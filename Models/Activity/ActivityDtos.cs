@@ -898,7 +898,9 @@ public sealed record ActivityLinkedSnapshotDto(
     // DkpAmount, PATCH management/attendance-snapshots/{id}/dkp).
     bool IsMisc = false,
     // That hand-set price, or null when the post is on the linkshell's Misc post rate.
-    double? DkpOverride = null);
+    double? DkpOverride = null,
+    // Where it was posted from (AttendanceSnapshotPostSources), null when not recorded.
+    string? PostSource = null);
 
 public sealed record ActivityLinkedSnapshotEntryDto(
     int Id,

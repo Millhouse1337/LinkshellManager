@@ -1242,6 +1242,18 @@ export interface ActivityLinkedSnapshot {
   // (null = on the linkshell's Misc post rate).
   isMisc?: boolean;
   dkpOverride?: number | null;
+  // Where it was posted from: 'LsmNow' | 'AddonUi' | 'App'. Null on older posts.
+  postSource?: string | null;
+}
+
+// "/lsm now", "Addon UI" or "App" for a post's postSource; null when it wasn't recorded.
+export function postSourceLabel(source: string | null | undefined): string | null {
+  switch (source) {
+    case 'LsmNow': return '/lsm now';
+    case 'AddonUi': return 'Addon UI';
+    case 'App': return 'App';
+    default: return null;
+  }
 }
 
 export interface ActivityLinkedSnapshotEntry {
@@ -1448,6 +1460,8 @@ export interface ActivityWindowSnapshot {
   isMisc: boolean;
   // What the chip reads: "Misc", or the windowLabel.
   slotLabel?: string | null;
+  // Where it was posted from: 'LsmNow' | 'AddonUi' | 'App'. Null on older posts.
+  postSource?: string | null;
   entries: ActivityWindowSnapshotEntry[];
 }
 
