@@ -704,6 +704,9 @@ export class DashboardTabComponent {
         .slice(0, 10);
   }
 
+  // News & Updates and Recent activity share one card; this is which one it shows.
+  protected readonly feedTab = signal<'news' | 'activity'>('news');
+
   protected activityFilter: 'all' | 'kills' | 'claims' | 'events' | 'loot' = 'all';
 
   protected dashboardRecentActivity(): {

@@ -337,12 +337,65 @@
       <!-- News & Updates (left) + Upcoming Events (right) -->
       @if (selectedDashboardLinkshell()) {
         <div class="dash-row dash-row--stretch">
-          <!-- News & Updates -->
-          <div class="card">
+          <!-- News & Updates and Recent activity: one card, a tab to switch between them. -->
+          <div class="card activity-card">
             <div class="card-head">
-              <div class="card-title">News &amp; Updates</div>
+              <div class="view-tabs" role="tablist" aria-label="News or recent activity">
+                <button type="button" class="view-tab" role="tab"
+                  [class.active]="feedTab() === 'news'" [attr.aria-selected]="feedTab() === 'news'"
+                  (click)="feedTab.set('news')">News &amp; Updates</button>
+                <button type="button" class="view-tab" role="tab"
+                  [class.active]="feedTab() === 'activity'" [attr.aria-selected]="feedTab() === 'activity'"
+                  (click)="feedTab.set('activity')">Recent activity</button>
+              </div>
+              @if (feedTab() === 'activity') {
+                <button type="button" class="card-link" (click)="setActiveTab('timed-events')">Full log</button>
+              }
             </div>
-            @if (dashboardNewsUpdates().length > 0) {
+            @if (feedTab() === 'activity') {
+              <div class="activity-filter-bar">
+                <div class="seg-toggle">
+                  <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'all'" (click)="activityFilter = 'all'">All</button>
+                  <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'kills'" (click)="activityFilter = 'kills'">Kills</button>
+                  <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'claims'" (click)="activityFilter = 'claims'">Claims</button>
+                  <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'events'" (click)="activityFilter = 'events'">Events</button>
+                  <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'loot'" (click)="activityFilter = 'loot'">Loot</button>
+                </div>
+              </div>
+              @if (dashboardRecentActivity().length > 0) {
+                <div class="activity-feed">
+                  @for (item of dashboardRecentActivity(); track item.when + '|' + item.kind + '|' + item.name) {
+                    <div class="activity-row">
+                      <div class="activity-when">{{ item.relative }}</div>
+                      <div class="activity-dot-cell">
+                        <span class="activity-dot activity-dot--{{ item.kind }}"></span>
+                      </div>
+                      <div class="activity-body">
+                        <div class="activity-body-primary">
+                          <strong>{{ item.name }}</strong>
+                          <span> {{ item.action }}</span>
+                        </div>
+                        @if (item.detail) {
+                          <div class="activity-body-detail">{{ item.detail }}</div>
+                        }
+                      </div>
+                      <div class="activity-right">
+                        @if (item.dkp != null) {
+                          <span class="activity-dkp" [class.activity-dkp--neg]="item.dkp < 0" [class.activity-dkp--pos]="item.dkp > 0">
+                            {{ item.dkp > 0 ? '+' : '' }}{{ item.dkp }} DKP
+                          </span>
+                        }
+                        <span class="activity-badge activity-badge--{{ item.kind }}">{{ item.categoryLabel }}</span>
+                      </div>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div class="empty-state empty-state--compact">
+                  <div class="empty-state-desc">No activity yet.</div>
+                </div>
+              }
+            } @else if (dashboardNewsUpdates().length > 0) {
               <div class="news-list">
                 @for (item of dashboardNewsUpdates(); track item.when + '|' + item.title) {
                   <div class="news-row">
@@ -679,55 +732,6 @@
         }
       }
 
-      <!-- Recent activity -->
-      @if (selectedDashboardLinkshell()) {
-        <div class="card activity-card">
-          <div class="card-head">
-            <div class="card-title">Recent activity</div>
-            <button type="button" class="card-link" (click)="setActiveTab('timed-events')">Full log</button>
-          </div>
-          <div class="activity-filter-bar">
-            <div class="seg-toggle">
-              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'all'" (click)="activityFilter = 'all'">All</button>
-              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'kills'" (click)="activityFilter = 'kills'">Kills</button>
-              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'claims'" (click)="activityFilter = 'claims'">Claims</button>
-              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'events'" (click)="activityFilter = 'events'">Events</button>
-              <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'loot'" (click)="activityFilter = 'loot'">Loot</button>
-            </div>
-          </div>
-          @if (dashboardRecentActivity().length > 0) {
-            <div class="activity-feed">
-              @for (item of dashboardRecentActivity(); track item.when + '|' + item.kind + '|' + item.name) {
-                <div class="activity-row">
-                  <div class="activity-when">{{ item.relative }}</div>
-                  <div class="activity-dot-cell">
-                    <span class="activity-dot activity-dot--{{ item.kind }}"></span>
-                  </div>
-                  <div class="activity-body">
-                    <div class="activity-body-primary">
-                      <strong>{{ item.name }}</strong>
-                      <span> {{ item.action }}</span>
-                    </div>
-                    @if (item.detail) {
-                      <div class="activity-body-detail">{{ item.detail }}</div>
-                    }
-                  </div>
-                  <div class="activity-right">
-                    @if (item.dkp != null) {
-                      <span class="activity-dkp" [class.activity-dkp--neg]="item.dkp < 0" [class.activity-dkp--pos]="item.dkp > 0">
-                        {{ item.dkp > 0 ? '+' : '' }}{{ item.dkp }} DKP
-                      </span>
-                    }
-                    <span class="activity-badge activity-badge--{{ item.kind }}">{{ item.categoryLabel }}</span>
-                  </div>
-                </div>
-              }
-            </div>
-          } @else {
-            <div class="empty-state empty-state--compact">
-              <div class="empty-state-desc">No activity yet.</div>
-            </div>
-          }
-        </div>
-      }
+      <!-- (Recent activity used to be its own card here. It is a tab on the News & Updates card
+           now.) -->
     </div>
