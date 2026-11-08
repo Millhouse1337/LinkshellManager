@@ -286,6 +286,11 @@
   font-weight: 500;
 }
 
+// "Repops in" reads green; the row's dot and tint stay yellow.
+.tod-row[data-tone='pending'] .tod-row-status-label {
+  color: var(--success);
+}
+
 .tod-row[data-tone='unknown'] .tod-row-big {
   color: var(--fg-2);
 }
