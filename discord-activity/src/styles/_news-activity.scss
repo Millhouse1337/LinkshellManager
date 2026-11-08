@@ -53,17 +53,16 @@
   position: relative;
   padding: 4px 14px 4px 36px;
 }
-// The News & Activity card: up to 3 news rows pinned on top, then the activity feed.
-// The feed's filters (All/Kills/Claims/Events/Loot) have different row counts, so it
-// keeps a constant height with internal scroll — switching filters never changes the
-// page height (no scroll jump). The empty state holds the same height. 300px (was
-// 420px before the news moved onto this card) keeps the card about as tall as it was.
+// The News & Activity card: news and activity in one timeline. Its filters
+// (All/News/Kills/Claims/Events/Loot) have different row counts, so the feed keeps a
+// constant height with internal scroll — switching filters never changes the page
+// height (no scroll jump). The empty state holds the same height.
 .panel-tab .activity-card .activity-feed {
-  height: 300px;
+  height: 420px;
   overflow-y: auto;
 }
 .panel-tab .activity-card .empty-state {
-  min-height: 300px;
+  min-height: 420px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -113,8 +112,13 @@
 .panel-tab .activity-dot--claim { background: var(--feed-claim); box-shadow: 0 0 6px rgba(79, 124, 255, 0.4); }
 .panel-tab .activity-dot--no-claim { background: var(--warning); box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
 .panel-tab .activity-dot--event { background: var(--success); box-shadow: 0 0 6px rgba(67, 209, 122, 0.4); }
-.panel-tab .activity-dot--announcement { background: var(--success); box-shadow: 0 0 6px rgba(67, 209, 122, 0.4); }
-.panel-tab .activity-dot--rule { background: var(--success); box-shadow: 0 0 6px rgba(67, 209, 122, 0.4); }
+// News rows (announcement, rule, auction, DKP, member) share one colour, pink, so they
+// stand apart from the activity colours (loot purple, claim blue, no claim amber, event green).
+.panel-tab .activity-dot--announcement,
+.panel-tab .activity-dot--rule,
+.panel-tab .activity-dot--auction,
+.panel-tab .activity-dot--dkp,
+.panel-tab .activity-dot--member { background: var(--pink); box-shadow: 0 0 6px rgba(236, 72, 153, 0.4); }
 .panel-tab .activity-body {
   min-width: 0;
 }
@@ -160,8 +164,11 @@
 .panel-tab .activity-badge--claim { background: var(--accent-weak); color: var(--feed-claim); }
 .panel-tab .activity-badge--no-claim { background: var(--warning-weak); color: var(--warning); }
 .panel-tab .activity-badge--event { background: var(--success-weak); color: var(--success); }
-.panel-tab .activity-badge--announcement { background: var(--success-weak); color: var(--success); }
-.panel-tab .activity-badge--rule { background: var(--success-weak); color: var(--success); }
+.panel-tab .activity-badge--announcement,
+.panel-tab .activity-badge--rule,
+.panel-tab .activity-badge--auction,
+.panel-tab .activity-badge--dkp,
+.panel-tab .activity-badge--member { background: var(--pink-weak); color: var(--pink); }
 
 /* ===== Inline forms & entry lists (Rules / Announcements) ===== */
 .panel-tab .inline-form {

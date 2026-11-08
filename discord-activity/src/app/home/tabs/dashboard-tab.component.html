@@ -337,39 +337,17 @@
       <!-- News & Updates (left) + Upcoming Events (right) -->
       @if (selectedDashboardLinkshell()) {
         <div class="dash-row dash-row--stretch">
-          <!-- News & Updates and Recent activity in one card: the newest news is pinned on top
-               (so a busy night of kills and loot can't push it out), the activity feed below. -->
+          <!-- News & Updates and Recent activity in one card: one timeline, newest first. "All"
+               shows both; the News chip shows only announcements, rules, auctions, DKP and members. -->
           <div class="card activity-card">
             <div class="card-head">
               <div class="card-title">News &amp; Activity</div>
               <button type="button" class="card-link" (click)="setActiveTab('timed-events')">Full log</button>
             </div>
-            @if (dashboardNewsUpdates().length > 0) {
-              <div class="news-list news-list--pinned">
-                @for (item of dashboardNewsUpdates(); track item.when + '|' + item.title) {
-                  <div class="news-row">
-                    @if (item.iconPath) {
-                      <img class="news-thumb news-thumb--image" [src]="item.iconPath" [alt]="item.subtitle" />
-                    } @else {
-                      <div class="news-thumb"></div>
-                    }
-                    <div class="news-main">
-                      <div class="news-title">{{ item.title }}</div>
-                      <div class="news-sub">{{ item.subtitle }}</div>
-                    </div>
-                    <div class="news-meta">
-                      @if (item.dkp != null) {
-                        <div><span class="num">{{ item.dkp }}</span> dkp</div>
-                      }
-                      <div class="news-time">{{ item.relative }}</div>
-                    </div>
-                  </div>
-                }
-              </div>
-            }
             <div class="activity-filter-bar">
               <div class="seg-toggle">
                 <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'all'" (click)="activityFilter = 'all'">All</button>
+                <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'news'" (click)="activityFilter = 'news'">News</button>
                 <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'kills'" (click)="activityFilter = 'kills'">Kills</button>
                 <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'claims'" (click)="activityFilter = 'claims'">Claims</button>
                 <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'events'" (click)="activityFilter = 'events'">Events</button>
@@ -719,6 +697,6 @@
         }
       }
 
-      <!-- (Recent activity used to be its own card here. It shares the News & Activity card
-           now, below the pinned news.) -->
+      <!-- (Recent activity used to be its own card here. It is part of the News & Activity
+           card's timeline now.) -->
     </div>

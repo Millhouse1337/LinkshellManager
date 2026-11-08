@@ -29,6 +29,21 @@ import { JobsRosterStore } from '../jobs-roster.store';
 import { RULE_CATEGORY_OPTIONS, categoryBadge, parseRuleDetails } from '../rule-content.helpers';
 import { TodWindowRowComponent } from './tod-window-row.component';
 
+// One row of the dashboard's News & Activity feed: news (announcement..member) and activity
+// (loot..event) mixed in one timeline, newest first.
+type FeedKind = 'loot' | 'no-claim' | 'claim' | 'event' | 'announcement' | 'rule' | 'auction' | 'dkp' | 'member';
+interface FeedItem {
+  kind: FeedKind;
+  name: string;
+  action: string;
+  detail: string;
+  dkp: number | null;
+  categoryLabel: string;
+  relative: string;
+  when: number;
+}
+const NEWS_KINDS: ReadonlySet<FeedKind> = new Set<FeedKind>(['announcement', 'rule', 'auction', 'dkp', 'member']);
+
 @Component({
   selector: 'app-dashboard-tab',
   imports: [CommonModule, FormsModule, TodWindowRowComponent],
@@ -599,127 +614,52 @@ export class DashboardTabComponent {
     return `${monster.monsterName} · W${bar.window}: ${bar.count} of ${this.popsLabel(monster.totalPops)}`;
   }
 
-  // ----- News & recent activity -----
+  // ----- News & Activity feed -----
 
-  protected dashboardNewsUpdates(): {
-    title: string;
-    subtitle: string;
-    dkp: number | null;
-    iconPath: string | null;
-    relative: string;
-    colorClass: string;
-    when: number;
-  }[] {
-    const selectedId = this.selectedDashboardLinkshellId();
-    const items: ReturnType<typeof this.dashboardNewsUpdates> = [];
-
-    // The "newsy" feed: announcements, rules, auctions, DKP adjustments, and new
-    // members. Operational stuff (kills/claims/loot/events) lives in Recent
-    // Activity instead. All sourced from the active linkshell in the overview.
+  // The news rows: announcements, rules, auctions, DKP adjustments and new members. Only the
+  // active (primary) linkshell's overview carries them, so another linkshell shows activity only.
+  private dashboardNewsItems(): FeedItem[] {
     const primary = this.activity.overview()?.primaryLinkshell;
-    if (!primary || primary.id !== selectedId) {
+    if (!primary || primary.id !== this.selectedDashboardLinkshellId()) {
       return [];
     }
 
+    const items: FeedItem[] = [];
+    const add = (kind: FeedKind, categoryLabel: string, whenText: string | null | undefined,
+                 name: string, action: string, detail = '', dkp: number | null = null) => {
+      const when = parseDate(whenText) ?? 0;
+      items.push({ kind, name, action, detail, dkp, categoryLabel, relative: this.longPastRelative(when), when });
+    };
+
     for (const announcement of primary.announcements ?? []) {
-      const when = parseDate(announcement.createdAt) ?? 0;
-      items.push({
-        title: announcement.title,
-        subtitle: announcement.createdByCharacterName
-          ? `Announcement · ${announcement.createdByCharacterName}`
-          : 'Announcement',
-        dkp: null,
-        // Relative path (no leading slash) so it resolves against the app's
-        // /discord-activity/ base href; the file ships from discord-activity/public/.
-        iconPath: 'ffxi_assets/Other/Announcements.png',
-        relative: this.shortPastRelative(when),
-        colorClass: 'c',
-        when
-      });
+      const by = announcement.createdByCharacterName ? `by ${announcement.createdByCharacterName}` : '';
+      add('announcement', 'Announcement', announcement.createdAt, announcement.title, '', by);
     }
-
     for (const rule of primary.rules ?? []) {
-      const when = parseDate(rule.createdAt) ?? 0;
-      items.push({
-        title: rule.title,
-        subtitle: 'Rule updated',
-        dkp: null,
-        // Relative path (no leading slash) so it resolves against the app's
-        // /discord-activity/ base href; the file ships from discord-activity/public/.
-        iconPath: 'ffxi_assets/Other/New_Rule.jpg',
-        relative: this.shortPastRelative(when),
-        colorClass: 'd',
-        when
-      });
+      add('rule', 'Rule', rule.createdAt, rule.title, 'updated');
     }
-
     for (const auction of primary.recentAuctions ?? []) {
-      const when = parseDate(auction.when) ?? 0;
-      items.push({
-        title: `${auction.title} ${auction.closed ? 'closed' : 'opened'}`,
-        subtitle: 'Auction',
-        dkp: null,
-        iconPath: 'ffxi_assets/Other/Auction.jpg',
-        relative: this.shortPastRelative(when),
-        colorClass: 'e',
-        when
-      });
+      add('auction', 'Auction', auction.when, auction.title, auction.closed ? 'closed' : 'opened');
     }
-
     for (const audit of primary.recentDkpAudits ?? []) {
-      const when = parseDate(audit.occurredAt) ?? 0;
-      const sign = audit.amount >= 0 ? '+' : '';
-      items.push({
-        title: `${audit.characterName} DKP ${sign}${audit.amount}`,
-        subtitle: audit.isCorrection ? 'DKP correction' : 'DKP adjustment',
-        dkp: null,
-        // Relative (no leading slash) so it resolves against the app's
-        // /discord-activity/ base href — the only static path that is both
-        // served by the web app AND covered by the Discord proxy's URL
-        // mappings. The file ships from discord-activity/public/.
-        iconPath: 'ffxi_assets/Other/DKP.jpg',
-        relative: this.shortPastRelative(when),
-        colorClass: 'f',
-        when
-      });
+      // The amount shows on the right as +N / -N DKP, same as loot.
+      add('dkp', 'DKP', audit.occurredAt, audit.characterName,
+        audit.isCorrection ? 'DKP corrected' : 'DKP adjusted', '', audit.amount);
     }
-
     for (const member of primary.members ?? []) {
-      if (!member.dateJoined) continue;
-      const when = parseDate(member.dateJoined) ?? 0;
-      items.push({
-        title: `${member.characterName} joined`,
-        subtitle: 'New member',
-        dkp: null,
-        iconPath: 'ffxi_assets/Other/NewMember.jpg',
-        relative: this.shortPastRelative(when),
-        colorClass: 'a',
-        when
-      });
+      if (member.dateJoined) {
+        add('member', 'Member', member.dateJoined, member.characterName, 'joined');
+      }
     }
-
-    // Only the newest 3: they're pinned above the activity feed on the same card, so a longer
-    // list would crowd the feed out.
-    return items
-      .filter(item => item.when > 0)
-      .sort((left, right) => right.when - left.when)
-      .slice(0, 3);
+    return items;
   }
 
-  protected activityFilter: 'all' | 'kills' | 'claims' | 'events' | 'loot' = 'all';
+  protected activityFilter: 'all' | 'news' | 'kills' | 'claims' | 'events' | 'loot' = 'all';
 
-  protected dashboardRecentActivity(): {
-    kind: 'loot' | 'no-claim' | 'claim' | 'event' | 'announcement' | 'rule';
-    name: string;
-    action: string;
-    detail: string;
-    dkp: number | null;
-    categoryLabel: string;
-    relative: string;
-    when: number;
-  }[] {
+  // News and activity in one timeline, newest first (the "All" filter shows both).
+  protected dashboardRecentActivity(): FeedItem[] {
     const selectedId = this.selectedDashboardLinkshellId();
-    const items: ReturnType<typeof this.dashboardRecentActivity> = [];
+    const items: FeedItem[] = this.dashboardNewsItems();
 
     const tods = (this.activity.overview()?.recentTods ?? []).filter(tod => tod.linkshellId === selectedId);
     for (const tod of tods) {
@@ -789,12 +729,10 @@ export class DashboardTabComponent {
       });
     }
 
-    // Announcements + rules now live in the News & Updates feed, not here —
-    // Recent Activity is the operational feed (kills/claims/loot/events).
-
     const filter = this.activityFilter;
     const filtered = items.filter(item => {
       if (filter === 'all') return true;
+      if (filter === 'news') return NEWS_KINDS.has(item.kind);
       if (filter === 'kills') return item.kind === 'loot' || item.kind === 'no-claim' || item.kind === 'claim';
       if (filter === 'claims') return item.kind === 'claim';
       if (filter === 'events') return item.kind === 'event';
@@ -802,26 +740,11 @@ export class DashboardTabComponent {
       return true;
     });
 
+    // 20, not 10: news and activity share the list now. The feed scrolls inside the card.
     return filtered
       .filter(item => item.when > 0)
       .sort((left, right) => right.when - left.when)
-      .slice(0, 10);
-  }
-
-  private shortPastRelative(whenMs: number): string {
-    if (!whenMs) return '';
-    const deltaSeconds = Math.max(0, Math.floor((this.now() - whenMs) / 1000));
-    const minutes = Math.floor(deltaSeconds / 60);
-    if (minutes < 60) return minutes <= 1 ? 'just now' : `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days === 1) return 'yesterday';
-    if (days < 7) {
-      const date = new Date(whenMs);
-      return date.toLocaleDateString([], { weekday: 'short' });
-    }
-    return `${days}d ago`;
+      .slice(0, 20);
   }
 
   private longPastRelative(whenMs: number): string {

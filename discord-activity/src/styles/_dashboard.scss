@@ -96,12 +96,6 @@
   border-top: 1px solid var(--border);
 }
 .panel-tab .news-row:first-child { border-top: 0; }
-// News pinned above the activity feed (News & Activity card): sized to its rows — the
-// stretch rule above would otherwise grow it — with a line between it and the feed.
-.panel-tab .dash-row--stretch > .card > .news-list--pinned {
-  flex: 0 0 auto;
-  border-bottom: 1px solid var(--border);
-}
 .panel-tab .news-thumb {
   width: 32px;
   height: 32px;
