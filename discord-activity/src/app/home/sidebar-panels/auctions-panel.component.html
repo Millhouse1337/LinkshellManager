@@ -364,9 +364,9 @@
           </div>
         }
       } @else if (auctionsView() === 'pending') {
-        <p class="notice">No auctions are waiting to go live.</p>
+        <p class="notice">No auctions are waiting to be closed or to go live.</p>
       } @else if (auctions().length > 0) {
-        <p class="notice">No auctions are live right now. Upcoming ones are under Pending.</p>
+        <p class="notice">No auctions are live right now. Ended and upcoming ones are under Pending.</p>
       } @else {
         <p class="notice">No auctions exist on this linkshell yet.</p>
       }

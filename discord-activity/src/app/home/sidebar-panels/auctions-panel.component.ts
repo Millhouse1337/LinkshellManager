@@ -380,19 +380,26 @@ export class AuctionsPanelComponent {
     return this.activity.auctionHistory();
   }
 
-  // The auction cards the open tab shows. Pending: start time still ahead. Active: everything that
-  // has started, live ones first and ended-but-not-closed ones after them (each group keeps the
-  // server's start-time order). Re-read every second through `now`, so an auction moves from
-  // Pending to Active on its own when its start time arrives.
+  // The auction cards the open tab shows. Active: live (and ending) auctions only. Pending: ended
+  // auctions still waiting for an officer to close them, first because they need acting on, then
+  // the ones whose start time is still ahead (each group keeps the server's start-time order).
+  // Re-read every second through `now`, so an auction moves Pending -> Active when it starts and
+  // Active -> Pending when it ends.
   protected viewAuctions() {
     const all = this.auctions();
     if (this.auctionsView() === 'pending') {
-      return all.filter(auction => this.auctionState(auction) === 'scheduled');
+      const scheduledLast = (auction: (typeof all)[number]) => (this.auctionState(auction) === 'scheduled' ? 1 : 0);
+      return all
+        .filter(auction => {
+          const state = this.auctionState(auction);
+          return state === 'scheduled' || state === 'ended';
+        })
+        .sort((a, b) => scheduledLast(a) - scheduledLast(b));
     }
-    const endedLast = (auction: (typeof all)[number]) => (this.auctionState(auction) === 'ended' ? 1 : 0);
-    return all
-      .filter(auction => this.auctionState(auction) !== 'scheduled')
-      .sort((a, b) => endedLast(a) - endedLast(b));
+    return all.filter(auction => {
+      const state = this.auctionState(auction);
+      return state === 'live' || state === 'ending';
+    });
   }
 
   protected pagedActiveAuctions() {
