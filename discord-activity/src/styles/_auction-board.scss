@@ -590,14 +590,18 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-.auctions-panel .section-head-right {
+/* Row 1: the AUCTION label with Lock beside it. The label's own bottom margin would push it above
+   the button's centre line, so the row carries the spacing instead. */
+.auctions-panel .auctions-head-label { margin-bottom: 4px; }
+.auctions-panel .auctions-head-label .section-label { margin: 0; }
+/* Row 3: Create on its own against the right edge, under the view switch. The title row keeps its
+   12px gap to the board when Create is hidden, and closes up to Create when it shows. */
+.auctions-panel .section-head:has(+ .auctions-head-create) { margin-bottom: 6px; }
+.auctions-panel .auctions-head-create {
   display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-bottom: 12px;
 }
-/* Stacked (Create under Active / History): the rule above would centre them, so pin both right. */
-.auctions-panel .section-head-right--stacked { align-items: flex-end; }
 .auctions-panel .section-label {
   font-size: 10px;
   font-weight: 600;

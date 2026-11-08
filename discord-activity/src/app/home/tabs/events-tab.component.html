@@ -1,26 +1,23 @@
     <div class="panel-tab fade">
-      <div class="section-head">
-        <div>
-          <!-- Current has no heading up here: its sections are the queue first, then the live
-               events, and each carries its own heading in that order (Queue / Upcoming Events from
-               the queue panel, Live / Live Events above the live cards). -->
+      <!-- Three rows to save space: the label with the counts on its right, the title with the view
+           switch on its right, then Create Event on its own. On Current the heading is the queue's
+           (the first thing under it); Live / Live Events sits above the live cards further down.
+           Pending (URL /events/pending) holds the ended events still waiting for their DKP post. -->
+      <div class="section-head-rows">
+        <div class="section-head-row">
           @switch (eventsView()) {
-            @case ('current') {}
+            @case ('current') {
+              <div class="section-label">{{ canCreateEvent() ? 'Queue' : 'Signups' }}</div>
+            }
             @case ('pending') {
               <div class="section-label">Officer To-Do</div>
-              <div class="section-title">Pending</div>
             }
             @default {
               <div class="section-label">History</div>
-              <div class="section-title">Past Events</div>
             }
           }
-        </div>
-        <!-- Counts on top, then the view switch, then Create Event.
-             Pending (URL /events/pending) holds the ended events still waiting for their DKP post. -->
-        <div class="section-head-right section-head-right--stacked">
           <!-- The counts are about Current, so Pending/Past make them invisible rather than removing
-               them: the row keeps its space and the switch under it doesn't jump when clicked. -->
+               them: the row keeps its height and the switch under it doesn't jump when clicked. -->
           <div class="section-head-counts" [style.visibility]="eventsView() === 'current' ? null : 'hidden'">
             <span class="tag default">{{ liveEvents().length }} live</span>
             <span class="tag default">{{ queuedEvents().length }} queued</span>
@@ -28,6 +25,19 @@
               <span class="tag accent">{{ liveAttendanceEvents().length }} attendance</span>
             }
           </div>
+        </div>
+        <div class="section-head-row">
+          @switch (eventsView()) {
+            @case ('current') {
+              <h2 class="section-title">{{ canCreateEvent() ? 'Upcoming Events' : 'Upcoming runs' }}</h2>
+            }
+            @case ('pending') {
+              <h2 class="section-title">Pending</h2>
+            }
+            @default {
+              <h2 class="section-title">Past Events</h2>
+            }
+          }
           <div class="view-tabs" role="tablist" aria-label="Event view">
             <button type="button" class="view-tab" role="tab"
               [class.active]="eventsView() === 'current'"
@@ -43,12 +53,14 @@
               [attr.aria-selected]="eventsView() === 'past'"
               (click)="eventsView.set('past')">Past</button>
           </div>
-          <!-- Current only: the queue (and the create form its panel owns) is only shown there, and
-               a <dialog> under a hidden ancestor can't open. -->
-          @if (eventsView() === 'current' && canCreateEvent()) {
-            <button type="button" class="btn primary sm" (click)="openCreateEventForm()">Create Event</button>
-          }
         </div>
+        <!-- Current only: the queue (and the create form its panel owns) is only shown there, and
+             a <dialog> under a hidden ancestor can't open. -->
+        @if (eventsView() === 'current' && canCreateEvent()) {
+          <div class="section-head-row section-head-row--end">
+            <button type="button" class="btn primary sm" (click)="openCreateEventForm()">Create Event</button>
+          </div>
+        }
       </div>
 
       <!-- ===== Queue / Create event: Current only ===== -->

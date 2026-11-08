@@ -1,55 +1,53 @@
 <article class="panel auctions-panel" aria-labelledby="auctions-heading">
+    <!-- Three rows: the label with Lock beside it, the title with the view switch on the right, then
+         Create on its own. Lock stays up by the label, away from Create: one is a pause for the whole
+         board, the other adds to it, and side by side they were easy to mix up. -->
+    <div class="section-title-row auctions-head-label">
+      <p class="section-label">Auction</p>
+      @if (canLockAuctions()) {
+        <button type="button" class="btn sm" [class.danger-outline]="!auctionsLocked()"
+          (click)="toggleAuctionsLock()">
+          {{ auctionsLocked() ? 'Unlock bidding' : 'Lock bidding' }}
+        </button>
+      }
+    </div>
     <div class="section-head">
-      <div>
-        <p class="section-label">Auction</p>
-        <!-- Lock sits by the title, away from Create: one is a pause for the whole board, the
-             other adds to it, and side by side they were easy to mix up. -->
-        <div class="section-title-row">
-          <h2 id="auctions-heading" class="section-title">Auction board</h2>
-          @if (canLockAuctions()) {
-            <button type="button" class="btn sm" [class.danger-outline]="!auctionsLocked()"
-              (click)="toggleAuctionsLock()">
-              {{ auctionsLocked() ? 'Unlock bidding' : 'Lock bidding' }}
-            </button>
-          }
-        </div>
-      </div>
-      <!-- The view switch on top and Create under it, both against the right edge. -->
-      <div class="section-head-right section-head-right--stacked">
-        <div class="view-tabs" role="tablist" aria-label="Auction view">
-          <button
-            type="button"
-            class="view-tab"
-            role="tab"
-            [class.active]="auctionsView() === 'active'"
-            [attr.aria-selected]="auctionsView() === 'active'"
-            (click)="setAuctionsView('active')">
-            Active
-          </button>
-          <button
-            type="button"
-            class="view-tab"
-            role="tab"
-            [class.active]="auctionsView() === 'pending'"
-            [attr.aria-selected]="auctionsView() === 'pending'"
-            (click)="setAuctionsView('pending')">
-            Pending
-          </button>
-          <button
-            type="button"
-            class="view-tab"
-            role="tab"
-            [class.active]="auctionsView() === 'history'"
-            [attr.aria-selected]="auctionsView() === 'history'"
-            (click)="setAuctionsView('history')">
-            History
-          </button>
-        </div>
-        @if (selectedLinkshell() && canManageLinkshell(selectedLinkshellId)) {
-          <button type="button" class="btn primary sm" (click)="openCreateAuctionForm()">Create</button>
-        }
+      <h2 id="auctions-heading" class="section-title">Auction Board</h2>
+      <div class="view-tabs" role="tablist" aria-label="Auction view">
+        <button
+          type="button"
+          class="view-tab"
+          role="tab"
+          [class.active]="auctionsView() === 'active'"
+          [attr.aria-selected]="auctionsView() === 'active'"
+          (click)="setAuctionsView('active')">
+          Active
+        </button>
+        <button
+          type="button"
+          class="view-tab"
+          role="tab"
+          [class.active]="auctionsView() === 'pending'"
+          [attr.aria-selected]="auctionsView() === 'pending'"
+          (click)="setAuctionsView('pending')">
+          Pending
+        </button>
+        <button
+          type="button"
+          class="view-tab"
+          role="tab"
+          [class.active]="auctionsView() === 'history'"
+          [attr.aria-selected]="auctionsView() === 'history'"
+          (click)="setAuctionsView('history')">
+          History
+        </button>
       </div>
     </div>
+    @if (selectedLinkshell() && canManageLinkshell(selectedLinkshellId)) {
+      <div class="auctions-head-create">
+        <button type="button" class="btn primary sm" (click)="openCreateAuctionForm()">Create</button>
+      </div>
+    }
 
     @if (auctionsLocked()) {
       <div class="auction-locked-banner" style="display:flex;align-items:center;gap:8px;margin:8px 0;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(248,113,113,.12);color:var(--fg)">

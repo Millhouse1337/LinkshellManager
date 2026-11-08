@@ -1,17 +1,17 @@
     <div class="panel-tab fade">
-      <div class="section-head">
-        <div>
+      <!-- The linkshell is already named in the top bar's switcher, so it isn't repeated here.
+           Rows, like the Event System's: the label with the count on its right, then the view switch
+           (reviewers only, since Pending is theirs), then Log ToD. Pending makes the count invisible
+           rather than removing it, so the switch under it doesn't jump when clicked. -->
+      <div class="section-head-rows">
+        <div class="section-head-row">
           <div class="section-label">ToD Tracker</div>
-        </div>
-        <!-- The linkshell is already named in the top bar's switcher, so it isn't repeated here.
-             Count on top, then the view switch (reviewers only, since Pending is theirs), then Log ToD,
-             like the Event System's. Pending makes the count invisible rather than removing it, so
-             the switch under it doesn't jump when clicked. -->
-        <div class="section-head-right section-head-right--stacked">
           <div class="section-head-counts" [style.visibility]="showingPending() ? 'hidden' : null">
             <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
           </div>
-          @if (canReviewSubmissions()) {
+        </div>
+        @if (canReviewSubmissions()) {
+          <div class="section-head-row section-head-row--end">
             <div class="view-tabs" role="tablist" aria-label="ToD view">
               <button type="button" class="view-tab" role="tab"
                 [class.active]="!showingPending()"
@@ -23,11 +23,13 @@
                 [title]="pendingCount() > 0 ? pendingCount() + ' ToD submission(s) waiting for approval' : ''"
                 (click)="todsView.set('pending')">Pending{{ pendingCount() > 0 ? ' (' + pendingCount() + ')' : '' }}</button>
             </div>
-          }
-          @if (!showingPending() && (activity.overview()?.linkshells?.length ?? 0) > 0) {
+          </div>
+        }
+        @if (!showingPending() && (activity.overview()?.linkshells?.length ?? 0) > 0) {
+          <div class="section-head-row section-head-row--end">
             <button type="button" class="btn primary sm" (click)="todForm.openCreate(selectedDashboardLinkshellId())">+ Log ToD</button>
-          }
-        </div>
+          </div>
+        }
       </div>
 
       <!-- Pending: ToD Submissions Needing Approval, for those who may approve them (the API checks

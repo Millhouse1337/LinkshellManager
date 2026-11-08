@@ -1,12 +1,6 @@
-<article class="panel panel--wide" aria-labelledby="queue-heading">
-  <div class="panel__header">
-    <div>
-      <!-- section-label (blue), matching the Live and Triage labels below it on this tab. -->
-      <div class="section-label">{{ isMemberMode() ? 'Signups' : 'Queue' }}</div>
-      <h2 id="queue-heading">{{ isMemberMode() ? 'Upcoming runs' : 'Upcoming Events' }}</h2>
-    </div>
-    <!-- Create Event moved up to the Event System header, under its view switch. -->
-  </div>
+<!-- No heading of its own: Queue / Upcoming Events is the Event System header's, on the rows with the
+     counts and the view switch, along with Create Event. -->
+<article class="panel panel--wide" [attr.aria-label]="isMemberMode() ? 'Upcoming runs' : 'Upcoming Events'">
 
   @if (isCreateOpen) {
     <dialog #editDialog class="event-edit-modal-dialog event-edit-modal-dialog--flush"
