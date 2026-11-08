@@ -1,18 +1,20 @@
 <!-- Treasury > Balance Sheet / Transactions. Outside the summary() guard so the Treasury tab's view
      strip (projected in as [treasuryViews]) is there while the payload loads. -->
-<div class="section-head fin-head">
-  <div>
-    <div class="section-label">Treasury</div>
+<!-- Rows: the label, the title with the view strip on its right, then the button on its own row
+     against the right edge. -->
+<div class="section-head-rows">
+  <div class="section-label">Treasury</div>
+  <div class="section-head-row">
     <div class="section-title">{{ view() === 'transactions' ? 'Transactions' : 'Balance Sheet' }}</div>
-  </div>
-  <div class="fin-head-actions">
     <ng-content select="[treasuryViews]" />
-    @if (summary() && canManage()) {
+  </div>
+  @if (summary() && canManage()) {
+    <div class="section-head-row section-head-row--end">
       <button type="button" class="btn primary sm" (click)="toggleForm()">
         {{ showForm() ? 'Cancel' : 'Record Transaction' }}
       </button>
-    }
-  </div>
+    </div>
+  }
 </div>
 
 @if (view() === 'balance' && summary(); as totals) {
