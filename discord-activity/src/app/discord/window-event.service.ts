@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityAddSnapshotEntryInput,
+  ActivityEventAddMemberCandidate,
   ActivityWindowEventCaptureDkpInput,
   ActivityWindowEventMemberDkpInput,
   ActivityWindowEventsResponse
@@ -250,6 +251,28 @@ export class WindowEventService {
       `/api/activity/window-events/snapshots/${snapshotId}/entries/${entryId}/delete`,
       undefined,
       'Removed person from the snapshot.');
+  }
+
+  // The linkshell roster, for a card's New Post member picker. [] on failure (the error is shown).
+  async loadMemberCandidates(windowEventId: number): Promise<ActivityEventAddMemberCandidate[]> {
+    this.auth.setActionError(null);
+    try {
+      return await this.http.fetchActivityJson<ActivityEventAddMemberCandidate[]>(
+        `/api/activity/window-events/${windowEventId}/member-candidates`);
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Loading linkshell members failed.'));
+      return [];
+    }
+  }
+
+  // New Post on a card not yet posted to the DKP sheet: one Misc post with the picked members.
+  // dkpAmount null = the linkshell's Misc post rate.
+  async addMiscPost(
+    windowEventId: number, linkshellId: number,
+    name: string | null, appUserIds: string[], dkpAmount: number | null
+  ): Promise<void> {
+    await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/misc-posts`,
+      { name, appUserIds, dkpAmount }, 'Misc post added.');
   }
 
   private async run(linkshellId: number, path: string, body: unknown, message: string): Promise<void> {

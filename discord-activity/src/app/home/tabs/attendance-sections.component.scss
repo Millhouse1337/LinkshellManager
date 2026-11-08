@@ -107,6 +107,8 @@
   margin: 14px 18px; background: var(--bg-elev); border: 1px solid var(--border);
   border-radius: 12px; padding: 12px 14px;
 }
+/* Add New Post's form, lined up with the roster box under it. */
+.we-new-post { margin: 14px 18px 0; }
 .we-roster__subtitle {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   font-size: 13px; font-weight: 700; color: var(--fg); padding: 2px 2px 10px;

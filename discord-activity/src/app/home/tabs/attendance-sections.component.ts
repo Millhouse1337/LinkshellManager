@@ -7,6 +7,7 @@ import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { WindowEventService } from '../../discord/window-event.service';
 import type {
   ActivityEvent,
+  ActivityEventAddMemberCandidate,
   ActivityWindowCombinedMember,
   ActivityWindowEvent,
   ActivityWindowEventCaptureDkpInput,
@@ -376,6 +377,112 @@ export class AttendanceSectionsComponent {
   protected async close(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     if (id) await this.windows.close(event.id, id);
+  }
+
+  // ----- Add New Post (pending cards) -----
+  //
+  // The exception path for members a camp's posts missed: one named Misc post with the members an
+  // officer picks, on a card in Events Pending DKP Post. Same form as a live camp's Add New Post.
+  // One panel open at a time.
+  protected readonly newPostEventId = signal<number | null>(null);
+  protected readonly newPostName = signal('');
+  protected readonly newPostSearch = signal('');
+  protected readonly newPostSelected = signal<ReadonlySet<string>>(new Set());
+  protected readonly newPostSaving = signal(false);
+  protected readonly newPostCandidates = signal<ActivityEventAddMemberCandidate[]>([]);
+  protected readonly newPostLoading = signal(false);
+  // The DKP box: undefined = untouched (shows the Misc post rate); null = emptied (the rate
+  // applies); a number = typed.
+  protected readonly newPostDkp = signal<number | null | undefined>(undefined);
+
+  protected offersNewPost(event: ActivityWindowEvent): boolean {
+    return this.section() === 'archive' && !this.isPosted(event);
+  }
+
+  protected async toggleNewPost(event: ActivityWindowEvent): Promise<void> {
+    if (this.newPostEventId() === event.id) {
+      this.newPostEventId.set(null);
+      return;
+    }
+    this.newPostEventId.set(event.id);
+    this.newPostName.set('');
+    this.newPostSearch.set('');
+    this.newPostSelected.set(new Set());
+    this.newPostDkp.set(undefined);
+    this.newPostCandidates.set([]);
+    this.newPostLoading.set(true);
+    try {
+      this.newPostCandidates.set(await this.windows.loadMemberCandidates(event.id));
+    } finally {
+      this.newPostLoading.set(false);
+    }
+  }
+
+  protected filteredNewPostCandidates(): ActivityEventAddMemberCandidate[] {
+    const query = this.newPostSearch().trim().toLowerCase();
+    const all = this.newPostCandidates();
+    return query ? all.filter(c => c.characterName.toLowerCase().includes(query)) : all;
+  }
+
+  protected isNewPostSelected(appUserId: string): boolean {
+    return this.newPostSelected().has(appUserId);
+  }
+
+  protected toggleNewPostMember(appUserId: string): void {
+    const next = new Set(this.newPostSelected());
+    if (next.has(appUserId)) next.delete(appUserId); else next.add(appUserId);
+    this.newPostSelected.set(next);
+  }
+
+  // Adds everyone the search currently shows.
+  protected selectAllNewPostMembers(): void {
+    const next = new Set(this.newPostSelected());
+    for (const candidate of this.filteredNewPostCandidates()) next.add(candidate.appUserId);
+    this.newPostSelected.set(next);
+  }
+
+  protected clearNewPostMembers(): void {
+    this.newPostSelected.set(new Set());
+  }
+
+  // The linkshell's Misc post rate: what the post pays each member unless the box says otherwise.
+  protected newPostRate(): number {
+    return this.data()?.miscPostRate ?? 0;
+  }
+
+  protected newPostPerMember(): number {
+    return this.newPostDkp() ?? this.newPostRate();
+  }
+
+  protected newPostDkpBox(): number | null {
+    const typed = this.newPostDkp();
+    return typed === undefined ? this.newPostRate() : typed;
+  }
+
+  protected setNewPostDkp(value: number | null): void {
+    this.newPostDkp.set(typeof value === 'number' && Number.isFinite(value) ? value : null);
+  }
+
+  protected newPostHasOwnDkp(): boolean {
+    const typed = this.newPostDkp();
+    return typed != null && typed !== this.newPostRate();
+  }
+
+  protected async submitNewPost(event: ActivityWindowEvent): Promise<void> {
+    const ids = [...this.newPostSelected()];
+    const linkshellId = this.primaryLinkshellId();
+    if (ids.length === 0 || this.newPostSaving() || !linkshellId) return;
+    // Sent only when it differs from the rate, like the live camp form.
+    const dkpAmount = this.newPostHasOwnDkp() ? this.newPostDkp() ?? null : null;
+    this.newPostSaving.set(true);
+    try {
+      await this.windows.addMiscPost(event.id, linkshellId, this.newPostName().trim() || null, ids, dkpAmount);
+      this.newPostEventId.set(null);
+    } catch {
+      // The service already put the reason in the error banner; keep the form open to retry.
+    } finally {
+      this.newPostSaving.set(false);
+    }
   }
 
   protected async reopen(event: ActivityWindowEvent): Promise<void> {

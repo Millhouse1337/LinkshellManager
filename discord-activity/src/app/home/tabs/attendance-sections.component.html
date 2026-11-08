@@ -273,6 +273,14 @@
              (DKP is set per snapshot), and an inline text box beside the destructive Close /
              Delete buttons invited mis-clicks. -->
         <div class="we-card__actions">
+          @if (offersNewPost(event)) {
+            <!-- The exception path: a Misc post for members the camp's posts missed. -->
+            <button type="button" class="btn sm" [class.primary]="newPostEventId() === event.id"
+              (click)="toggleNewPost(event)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              Add New Post
+            </button>
+          }
           <button type="button" class="btn sm" (click)="openEditEvent(event)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
               <path d="M12 20h9"/>
@@ -315,6 +323,99 @@
           }
         </div>
       </div>
+
+      @if (newPostEventId() === event.id) {
+        <!-- Same form as a live camp's Add New Post (events-tab), on the global .hnm-post styles. -->
+        @let postRate = newPostRate();
+        @let postPer = newPostPerMember();
+        @let postPicked = newPostSelected().size;
+        <section class="hnm-panel hnm-post we-new-post">
+          <div class="hnm-post__head">
+            <h3>New misc post</h3>
+            <p class="hnm-muted">For members the camp's posts missed. Paid once per member when this event is posted.</p>
+            <label class="hnm-post__name">
+              <span class="hnm-eyebrow">Name</span>
+              <input type="text" placeholder="e.g. missed the close" maxlength="128"
+                [ngModel]="newPostName()" (ngModelChange)="newPostName.set($event)" [name]="'wePostName' + event.id" />
+            </label>
+          </div>
+
+          @if (event.perCaptureDkp) {
+            <div class="hnm-formula hnm-post__formula">
+              <!-- Starts on the linkshell's Misc post rate; a different number gives this post its
+                   own price. Empty = the rate. -->
+              <span class="hnm-formula__chip">
+                <input type="number" step="0.25" min="0" class="input we-dkp-input"
+                  aria-label="DKP per member for this post"
+                  [title]="'Leave empty for the Misc post rate (' + (postRate | number:'1.0-2') + ')'"
+                  [ngModel]="newPostDkpBox()" (ngModelChange)="setNewPostDkp($event)"
+                  [name]="'wePostDkp' + event.id" />
+                {{ newPostHasOwnDkp() ? 'Set for this post' : 'Misc rate' }}
+              </span>
+              <span class="hnm-formula__op">=</span>
+              <span class="hnm-formula__per"><b class="hnm-mono">{{ postPer | number:'1.0-2' }}</b> per member</span>
+              <span class="hnm-formula__total hnm-mono">× {{ postPicked }} = <b>{{ postPer * postPicked | number:'1.0-2' }} DKP</b></span>
+            </div>
+          } @else {
+            <p class="hnm-muted">Pays what this event's Misc DKP pays.</p>
+          }
+
+          <div class="hnm-post__members-head">
+            <span class="hnm-post__count">
+              <span class="hnm-eyebrow">Members</span>
+              <span class="hnm-mono hnm-muted">{{ postPicked }} of {{ newPostCandidates().length }} selected</span>
+            </span>
+            <span class="hnm-post__tools">
+              <span class="hnm-post__search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <input type="search" placeholder="Search members" autocomplete="off" aria-label="Search members"
+                  [ngModel]="newPostSearch()" (ngModelChange)="newPostSearch.set($event)" [name]="'wePostSearch' + event.id" />
+              </span>
+              <button type="button" class="btn sm" (click)="selectAllNewPostMembers()">Select all</button>
+              <button type="button" class="btn sm" [disabled]="postPicked === 0" (click)="clearNewPostMembers()">Clear</button>
+            </span>
+          </div>
+          @if (newPostLoading()) {
+            <p class="notice">Loading linkshell members…</p>
+          } @else {
+            <ul class="hnm-post__members">
+              @for (candidate of filteredNewPostCandidates(); track candidate.appUserId) {
+                <li>
+                  <label class="hnm-post__member" [class.is-on]="isNewPostSelected(candidate.appUserId)">
+                    <input type="checkbox" [checked]="isNewPostSelected(candidate.appUserId)"
+                      (change)="toggleNewPostMember(candidate.appUserId)" />
+                    <span class="hnm-post__member-text">
+                      <strong>{{ candidate.characterName }}</strong>
+                      @if (candidate.rank) {
+                        <span class="hnm-muted">{{ candidate.rank }}</span>
+                      }
+                    </span>
+                  </label>
+                </li>
+              } @empty {
+                <li class="hnm-muted">No members match.</li>
+              }
+            </ul>
+          }
+
+          <div class="hnm-post__foot">
+            <p class="hnm-muted">Per-member values can still be changed on the post before posting.</p>
+            <span class="hnm-post__actions">
+              <button type="button" class="btn" (click)="newPostEventId.set(null)">Cancel</button>
+              <button type="button" class="btn primary"
+                [disabled]="postPicked === 0 || newPostSaving()"
+                (click)="submitNewPost(event)">
+                @if (newPostSaving()) {
+                  Posting...
+                } @else {
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                  Create misc post
+                }
+              </button>
+            </span>
+          </div>
+        </section>
+      }
     }
 
     <section class="we-roster">
