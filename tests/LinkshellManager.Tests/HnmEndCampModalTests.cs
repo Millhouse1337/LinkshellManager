@@ -93,8 +93,27 @@ public class HnmEndCampModalTests
         Assert.Equal(
             new[] { "killed", "claimed", "missed" },
             Options(outcome).EnumerateArray().Select(o => o.GetProperty("value").GetString()));
-        // The happy path is pre-selected so an officer can submit without touching the field.
-        Assert.True(Options(outcome)[0].GetProperty("default").GetBoolean());
+    }
+
+    // The dropdowns open on "Select…" with nothing pre-picked, and are REQUIRED — a blank outcome
+    // would parse as claimed+killed and pay bonuses, so Discord must block Submit until one is picked.
+    [Fact]
+    public void Dropdowns_StartOnSelect_AndMustBeAnswered()
+    {
+        var selects = Fields(Camp("Behemoth/King Behemoth")).EnumerateArray()
+            .Where(f => FieldId(f) is "wdpop_hq" or "wdpop_outcome")
+            .Select(f => f.GetProperty("component"))
+            .ToList();
+
+        Assert.Equal(2, selects.Count);
+        foreach (var select in selects)
+        {
+            Assert.Equal("Select…", select.GetProperty("placeholder").GetString());
+            Assert.True(select.GetProperty("required").GetBoolean());
+            Assert.Equal(1, select.GetProperty("min_values").GetInt32());
+            Assert.All(select.GetProperty("options").EnumerateArray(),
+                o => Assert.False(o.TryGetProperty("default", out _)));
+        }
     }
 
     // (Every PopWindow_* test lived here: the picker opened empty and required, kept the board's

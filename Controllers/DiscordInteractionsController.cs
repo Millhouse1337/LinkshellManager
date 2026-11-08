@@ -2242,8 +2242,9 @@ public sealed class DiscordInteractionsController : ControllerBase
 
         // A modal dropdown is a string select (type 3) wrapped in a Label (type 18) — a bare select
         // in an action row is rejected. Label's own `label` caps around 45 chars, so the longer hint
-        // goes in `description`. The first option is pre-selected as the happy path so the officer
-        // can submit without touching the field; the submit-side parse defaults to the same value.
+        // goes in `description`. Nothing is pre-selected: the box opens on a "Select…" placeholder and
+        // is REQUIRED, so Discord won't submit until the officer actually picks. It has to be required,
+        // because a blank outcome parses as "claimed and killed" (ParseCampOutcome) and pays bonuses.
         static object SelectRow(string fieldId, string label, string description,
             params (string Value, string Label)[] options)
         {
@@ -2251,15 +2252,15 @@ public sealed class DiscordInteractionsController : ControllerBase
             {
                 ["type"] = 3, // string select
                 ["custom_id"] = fieldId,
-                ["required"] = false,
-                ["min_values"] = 0,
+                ["placeholder"] = "Select…",
+                ["required"] = true,
+                ["min_values"] = 1,
                 ["max_values"] = 1,
                 ["options"] = options
-                    .Select((option, index) => new Dictionary<string, object?>
+                    .Select(option => new Dictionary<string, object?>
                     {
                         ["label"] = option.Label,
                         ["value"] = option.Value,
-                        ["default"] = index == 0,
                     })
                     .ToArray(),
             };
@@ -2292,7 +2293,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             //
             // Blank Date = today, which is the ordinary path and stays a one-box form in practice.
             TextRow(WdPopTodDateFieldId, "Date (blank = today)",
-                "9/5  ·  9/5/2026  ·  yesterday", false, 12),
+                "Ex: 9/5  ·  9/5/2026  ·  yesterday", false, 12),
             // "now" and blank parse too, and are deliberately NOT in the placeholder: blank is
             // spelled out in the label already, and a placeholder listing every accepted spelling
             // reads as a syntax reference rather than as an example of what to type.
@@ -2300,7 +2301,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             // The note sits on the box it is about: the time typed here is not the time the reposted
             // board will show when the monster has Additional Seconds.
             TextRow(WdPopTodFieldId, "Time of Death (blank = not entered)",
-                "9:05:15 PM, or 21:05:15", false, 16,
+                "Ex: 9:05:15 PM, or 21:05:15", false, 16,
                 description: repopFormula is null ? null : $"Reposted event starts at {repopFormula}."),
         };
         if (HnmConfig.HasHqVariant(ev.AssignedMonsterName))
