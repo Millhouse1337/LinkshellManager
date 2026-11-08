@@ -812,7 +812,7 @@ export class EventsTabComponent {
       }
       const closing = !this.isWdCamp(event) && this.isCloseWindow(event, window);
       windows.push({ ...blank, window, key, kind: 'window', title: tab.label, time: window.postedAt, sub,
-        badge: closing ? 'Closing' : 'Posted', tone: closing ? 'accent' : 'neutral' });
+        badge: 'Posted', tone: closing ? 'accent' : 'neutral' });
     }
 
     const tag = this.claimBonusAmount(event);
