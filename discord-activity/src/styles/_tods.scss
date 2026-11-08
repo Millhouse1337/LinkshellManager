@@ -187,6 +187,8 @@
   --tod-accent: var(--warning);
   --tod-halo: var(--warning-weak);
   --tod-fill: color-mix(in srgb, var(--warning) 40%, transparent);
+  // Yellow, at the same strength as the green (open) and red (passed) rows.
+  background: color-mix(in srgb, var(--warning) 6%, transparent);
 }
 
 .tod-row[data-tone='open'],
