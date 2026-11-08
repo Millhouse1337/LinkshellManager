@@ -205,10 +205,12 @@
 .panel-tab .ac-roster--with-actions .ac-roster-actions .btn {
   white-space: nowrap;
 }
+/* background-color, not the `background` shorthand: the shorthand also wipes the chevron, which every
+   select gets as a background image (_tokens.scss). The right padding is the chevron's room. */
 .panel-tab .ac-roster--with-actions .ac-roster-rank select {
   width: 100%;
-  padding: 4px 6px;
-  background: var(--surface-2);
+  padding: 4px 32px 4px 6px;
+  background-color: var(--surface-2);
   color: var(--fg);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
