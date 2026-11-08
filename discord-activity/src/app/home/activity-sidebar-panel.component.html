@@ -1,11 +1,11 @@
 <ng-container>
   @if (showSection('profile')) {
   <!-- No card header or intro blurb: the Profile tab already heads the page with
-       "Account / Your profile", and the Next Steps checklist (the Dashboard's Onboarding
+       "Profile / <the view's name>", and the Next Steps checklist (the Dashboard's Onboarding
        view) carries the setup-needed prompt, so both only repeated themselves here.
-       The Profile | Jobs | Crafts | Player Ratings strip by that heading picks the view.
-       Jobs and Crafts share one form and its Save; ratings save as you click, so Player
-       Ratings sits outside the form. All but Profile need a linkshell. -->
+       The Profile | Jobs | Crafts | Ratings strip by that heading picks the view.
+       Jobs and Crafts share one form and its Save; ratings save as you click, so Ratings
+       sits outside the form. All but Profile need a linkshell. -->
   @let view = hasLinkshell() ? profileView() : 'profile';
 
   <!-- Which character the Jobs and Crafts grids and "What your linkshell thinks" show:
@@ -34,13 +34,8 @@
     @if (view === 'profile') {
       <!-- Who you are and when you are (Onboarding's step 1). Used to sit at the bottom of the
            Onboarding page. It saves through the same submitProfile() as Jobs and Crafts, which
-           sends the whole profile, so saving either view keeps the other's edits. -->
-      <div class="panel__header">
-        <div>
-          <p class="eyebrow eyebrow--small">Profile</p>
-          <h2 id="characters-heading">Characters &amp; time zone</h2>
-        </div>
-      </div>
+           sends the whole profile, so saving either view keeps the other's edits. Its heading is
+           the page's own ("Profile / Name & Time Zone"). -->
       <form class="create-form create-form--compact" (ngSubmit)="submitProfile()">
         <div class="create-form__grid">
           <label>

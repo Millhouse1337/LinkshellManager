@@ -45,7 +45,7 @@ The top strip shows the active linkshell name and member count, a clock, a refre
 - **Profile** — three views, switched at the top right:
   - **Jobs** — character name, alts, time zone, and each character's job levels, merits, gear/skill stars and relics.
   - **Crafts** — each character's craft levels.
-  - **Player Ratings** — *What your linkshell thinks* (teammates' average gear/skill per job and their comments, for whichever of your characters you pick) beside **Rate teammates**.
+  - **Ratings** — *What your linkshell thinks* (teammates' average gear/skill per job and their comments, for whichever of your characters you pick) beside **Rate teammates**.
 
 - **Messages** — internal inbox.
 

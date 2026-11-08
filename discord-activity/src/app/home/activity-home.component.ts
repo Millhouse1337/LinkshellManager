@@ -96,12 +96,15 @@ export class ActivityHomeComponent {
     return view === 'pending' || view === 'history' ? view : 'active';
   });
   protected readonly todsView = computed<TodsView>(() => (this.subView() === 'pending' ? 'pending' : 'main'));
+  // `title` is the page heading while that view is showing (beside the strip).
   protected readonly profileViews = [
-    { key: 'profile' as const, label: 'Profile' },
-    { key: 'jobs' as const, label: 'Jobs' },
-    { key: 'crafts' as const, label: 'Crafts' },
-    { key: 'ratings' as const, label: 'Player Ratings' },
+    { key: 'profile' as const, label: 'Profile', title: 'Name & Time Zone' },
+    { key: 'jobs' as const, label: 'Jobs', title: 'Jobs' },
+    { key: 'crafts' as const, label: 'Crafts', title: 'Crafts' },
+    { key: 'ratings' as const, label: 'Ratings', title: 'Ratings' },
   ];
+  protected readonly profileTitle = computed(() =>
+    this.profileViews.find(view => view.key === this.profileView())?.title ?? 'Name & Time Zone');
   protected readonly profileView = computed<ProfileView>(() => {
     // No linkshell yet: Jobs, Crafts and Player Ratings all need one, so the tab is Profile, which
     // is where a new member's character name and time zone go.
