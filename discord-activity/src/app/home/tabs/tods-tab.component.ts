@@ -15,7 +15,7 @@ import { TodWindowRowComponent } from './tod-window-row.component';
 import { TOD_NOT_ENTERED, canReviewSubmissionsIn, mergedMonsterName, monsterSetupForTod, todSortKey, todWindowState } from '../activity-home.helpers';
 import { hasHqVariant } from '../activity-home.types';
 
-type TodFilter = 'All' | 'Ready' | 'Pending';
+type TodFilter = 'All' | 'Ready' | 'Pending' | 'Done';
 
 // Main = the tracker (approved ToDs). Pending = members' ToD submissions waiting for approval.
 export type TodsView = 'main' | 'pending';
@@ -177,9 +177,12 @@ export class TodsTabComponent {
 
   protected readonly expandedTodGroups = signal<Set<string>>(new Set());
 
-  // The All / Ready / Pending pills on Tracked Windows. Ready = the repop has passed (window open
-  // or up); Pending = still counting down. A "Not entered" ToD is neither, so only All shows it.
-  protected readonly todFilters: readonly TodFilter[] = ['All', 'Ready', 'Pending'];
+  // The All / Ready / Pending / Done pills on Tracked Windows.
+  //   Ready   = the repop has passed and it can still pop (window open, or up with no window grid)
+  //   Pending = still counting down to the repop
+  //   Done    = every spawn window has passed (the red rows; TodWindowRowComponent's windowPassed)
+  // A "Not entered" ToD is none of them, so only All shows it.
+  protected readonly todFilters: readonly TodFilter[] = ['All', 'Ready', 'Pending', 'Done'];
   protected readonly todFilter = signal<TodFilter>('All');
 
   protected filteredTodGroups() {
@@ -187,8 +190,13 @@ export class TodsTabComponent {
     const now = this.now();
     return this.groupedDashboardTods().filter(group => {
       if (filter === 'All') return true;
-      const tone = todWindowState(group.latest, group.setup, now).tone;
-      return filter === 'Ready' ? tone === 'open' || tone === 'up' : tone === 'pending';
+      const { tone, closeMs } = todWindowState(group.latest, group.setup, now);
+      const done = tone === 'up' && closeMs !== null;
+      switch (filter) {
+        case 'Ready': return (tone === 'open' || tone === 'up') && !done;
+        case 'Pending': return tone === 'pending';
+        case 'Done': return done;
+      }
     });
   }
 
