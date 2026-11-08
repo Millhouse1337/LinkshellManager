@@ -698,14 +698,13 @@ export class DashboardTabComponent {
       });
     }
 
+    // Only the newest 3: they're pinned above the activity feed on the same card, so a longer
+    // list would crowd the feed out.
     return items
       .filter(item => item.when > 0)
       .sort((left, right) => right.when - left.when)
-        .slice(0, 10);
+      .slice(0, 3);
   }
-
-  // News & Updates and Recent activity share one card; this is which one it shows.
-  protected readonly feedTab = signal<'news' | 'activity'>('news');
 
   protected activityFilter: 'all' | 'kills' | 'claims' | 'events' | 'loot' = 'all';
 
