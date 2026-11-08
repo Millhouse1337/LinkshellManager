@@ -1,14 +1,15 @@
 <article class="panel loot-history-panel" aria-labelledby="loot-history-heading">
-  <div class="section-head">
+  <!-- The heading, then Add Loot on its own row against the right edge. -->
+  <div class="section-head-rows">
     <div>
       <p class="section-label">Loot</p>
-      <h2 id="loot-history-heading" class="section-title">Loot history</h2>
+      <h2 id="loot-history-heading" class="section-title">Loot History</h2>
     </div>
-    <div class="section-head-right">
-      @if (canAddLoot()) {
+    @if (canAddLoot()) {
+      <div class="section-head-row section-head-row--end">
         <button type="button" class="btn primary sm" (click)="openAdd()">+ Add Loot</button>
-      }
-    </div>
+      </div>
+    }
   </div>
 
   <div class="loot-history-panel__filters">

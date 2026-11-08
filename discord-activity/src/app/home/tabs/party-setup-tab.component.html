@@ -1,16 +1,17 @@
 <div class="panel-tab fade">
-  <div class="section-head">
+  <!-- The heading, then New Setup on its own row against the right edge.
+       No Refresh of its own: the top bar's Refresh reloads this tab's list (AutoRefreshService)
+       and the open setup (the panel listens for every refresh). -->
+  <div class="section-head-rows">
     <div>
       <div class="section-label">ToD Tracker</div>
       <div class="section-title">Party Setup</div>
     </div>
-    <!-- No Refresh of its own: the top bar's Refresh reloads this tab's list (AutoRefreshService)
-         and the open setup (the panel listens for every refresh). -->
-    <div class="section-head-right">
-      @if (canManage()) {
+    @if (canManage()) {
+      <div class="section-head-row section-head-row--end">
         <button type="button" class="btn primary sm" (click)="openCreate()">+ New Setup</button>
-      }
-    </div>
+      </div>
+    }
   </div>
 
   @if (list(); as model) {

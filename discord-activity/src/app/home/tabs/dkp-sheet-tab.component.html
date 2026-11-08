@@ -1,23 +1,26 @@
 <div class="panel-tab fade">
-  <div class="section-head">
-    <div>
-      <div class="section-label">DKP</div>
+  <!-- Rows: the label, the title with the DKP view switch on its right (the DKP tab passes its
+       strip in, ng-content), then Export to Excel on its own row against the right edge.
+       No Refresh of its own: the top bar's Refresh reloads the sheet while it's showing
+       (ActivityHomeComponent.refreshTarget). -->
+  <div class="section-head-rows">
+    <div class="section-label">DKP</div>
+    <div class="section-head-row">
       <div class="section-title">DKP Sheet</div>
+      <ng-content />
     </div>
-    <div class="section-head-right">
-      <!-- The website downloads it directly. Discord's iframe has nowhere to save a file, so there
-           it opens a one-time download link in the member's own browser (DownloadLinkService). -->
-      @if (primaryLinkshellId()) {
+    <!-- The website downloads it directly. Discord's iframe has nowhere to save a file, so there
+         it opens a one-time download link in the member's own browser (DownloadLinkService). -->
+    @if (primaryLinkshellId()) {
+      <div class="section-head-row section-head-row--end">
         @if (activity.isWebsite) {
           <a class="btn sm" [href]="'/api/activity/dkp-sheet/export.xlsx?linkshellId=' + primaryLinkshellId()" download>Export to Excel</a>
         } @else {
           <button type="button" class="btn sm" [disabled]="downloads.busy()"
             (click)="downloads.openInBrowser('dkp-sheet', primaryLinkshellId())">Export to Excel</button>
         }
-      }
-      <!-- No Refresh of its own: the top bar's Refresh reloads the sheet while it's showing
-           (ActivityHomeComponent.refreshTarget). -->
-    </div>
+      </div>
+    }
   </div>
 
   @if (data(); as model) {

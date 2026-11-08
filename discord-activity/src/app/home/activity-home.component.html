@@ -401,16 +401,27 @@
        to scroll past and grouping was in Configurations entirely; the strip swaps them in place. -->
   @if (activeTab() === 'dkp') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('dkp')" [attr.aria-labelledby]="tabId('dkp')">
-      <div class="dkp-view-tabs" role="tablist" aria-label="DKP views">
-        @for (view of dkpViews(); track view.key) {
-          <button type="button" class="dkp-view-tab" role="tab"
-            [class.active]="dkpView() === view.key"
-            [attr.aria-selected]="dkpView() === view.key"
-            (click)="setDkpView(view.key)">{{ view.label }}</button>
-        }
-      </div>
+      <!-- The strip, drawn once. The Sheet puts it on its title row, beside "DKP Sheet"; the other
+           views carry headings of their own, so it stays above them. -->
+      <ng-template #dkpViewTabs let-inline="inline">
+        <div class="dkp-view-tabs" [class.dkp-view-tabs--inline]="inline" role="tablist" aria-label="DKP views">
+          @for (view of dkpViews(); track view.key) {
+            <button type="button" class="dkp-view-tab" role="tab"
+              [class.active]="dkpView() === view.key"
+              [attr.aria-selected]="dkpView() === view.key"
+              (click)="setDkpView(view.key)">{{ view.label }}</button>
+          }
+        </div>
+      </ng-template>
+      @if (dkpView() !== 'sheet') {
+        <ng-container [ngTemplateOutlet]="dkpViewTabs" [ngTemplateOutletContext]="{ inline: false }" />
+      }
       @switch (dkpView()) {
-        @case ('sheet') { <app-dkp-sheet-tab /> }
+        @case ('sheet') {
+          <app-dkp-sheet-tab>
+            <ng-container [ngTemplateOutlet]="dkpViewTabs" [ngTemplateOutletContext]="{ inline: true }" />
+          </app-dkp-sheet-tab>
+        }
         @case ('grouping') { <app-dkp-grouping-tab /> }
         @case ('import') { <app-dkp-import-card [linkshellId]="dkpImportLinkshellId()" /> }
         @default { <app-activity-sidebar-panel [visibleSections]="['dkp']" /> }

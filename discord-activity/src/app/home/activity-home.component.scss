@@ -122,6 +122,8 @@
      "DKP History" title/description block that starts the panel below it. */
   margin-left: auto;
 }
+/* On the DKP Sheet's title row (beside "DKP Sheet"): the row does the spacing. */
+.dkp-view-tabs--inline { margin: 0; }
 
 .dkp-view-tab {
   border: none;
