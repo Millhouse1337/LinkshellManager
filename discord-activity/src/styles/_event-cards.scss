@@ -25,7 +25,8 @@
 
 .event-card--live {
   background: var(--surface-2);
-  border-color: var(--accent);
+  // Green: live, the same green as the card's "Live" tag.
+  border-color: var(--success);
 }
 
 // Stack spacing for sibling event cards (Live Operations list).

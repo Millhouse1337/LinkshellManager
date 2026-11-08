@@ -48,6 +48,8 @@
   margin-bottom: 14px;
 }
 .we-card--closed { border-color: var(--border); }
+/* In Live Events, green like the live camp cards beside it. */
+.we-open-list .we-card { border-color: var(--success); }
 /* The head IS the card's <summary>, so the whole top of the card toggles it. Same padding as the
    camp card, with its tighter bottom. */
 .we-card__head { display: block; padding: 14px 14px 10px; cursor: pointer; list-style: none; user-select: none; }
