@@ -2015,8 +2015,8 @@ public sealed record ActivityChartWishlistDto(
 public sealed record ActivityChartWishlistRequestDto(
     int Id,
     string Board,
-    /// <summary>The card it is tied to, or null for "anywhere on this board".</summary>
-    string? Boss,
+    /// <summary>The cards (zones) it names, in board order. Empty = "anywhere on this board".</summary>
+    IReadOnlyList<string> Bosses,
     string ItemName,
     int Quantity,
     string? Notes,
@@ -2034,11 +2034,14 @@ public sealed record ActivityChartWishlistRequestDto(
 
 /// <summary>A member submitting a request. Board comes from the route, never from the body.</summary>
 public sealed record ActivityChartWishlistRequestInput(
-    /// <summary>Blank or null means "anywhere on this board", which is what the form opens on.</summary>
+    /// <summary>The ONE zone an older client sends. Read only when Bosses is absent.</summary>
     string? Boss,
     string? ItemName,
     int Quantity,
-    string? Notes);
+    string? Notes,
+    /// <summary>The zones picked. Empty or null means "anywhere on this board", which is what the
+    /// form opens on.</summary>
+    IReadOnlyList<string?>? Bosses = null);
 
 public sealed record ActivityChartWishlistStatusRequest(string? Status);
 

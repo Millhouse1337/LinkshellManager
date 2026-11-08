@@ -852,6 +852,57 @@
   flex-wrap: wrap;
 }
 
+/* ===== Item request zone picker =====
+   Tickable chips, several at once, on a full-width row of their own above the other fields. Grouped
+   under the board's headings, because Limbus names its areas by direction ("NW" in Apollyon AND in
+   no other zone, but you cannot tell that from the chip). A picked chip takes its zone's own hue. */
+.panel-tab .chart-form__field--zones { flex: 1 0 100%; align-items: center; }
+.panel-tab .chart-zone-picker__title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-3);
+}
+.panel-tab .chart-zone-picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+}
+.panel-tab .chart-zone-picker__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.panel-tab .chart-zone-picker__heading { font-size: 11px; color: var(--fg-3); }
+.panel-tab .chart-zone-picker__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.panel-tab .chart-zone-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.panel-tab .chart-zone-chip:hover { border-color: var(--boss, var(--accent)); color: var(--fg); }
+.panel-tab .chart-zone-chip.is-on {
+  border-color: var(--boss, var(--accent));
+  background: var(--boss-weak, var(--accent-weak));
+  color: var(--boss, var(--accent));
+  font-weight: 600;
+}
+
+/* A request naming several zones lists each, in its own hue. */
+.panel-tab .chart-wishlist__zones { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; }
+
 /* ===== Farming credit multiselect (inside the add / edit form) =====
    The panel is absolutely positioned so opening it does not push the form's other fields around,
    and the wrapper is what the document-click handler matches to decide "inside". */

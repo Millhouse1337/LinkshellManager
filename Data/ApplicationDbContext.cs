@@ -1018,6 +1018,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<ChartPopItemCredit> ChartPopItemCredits => Set<ChartPopItemCredit>();
         public DbSet<ChartBossProgress> ChartBossProgresses => Set<ChartBossProgress>();
         public DbSet<ChartWishlistRequest> ChartWishlistRequests => Set<ChartWishlistRequest>();
+        public DbSet<ChartWishlistRequestZone> ChartWishlistRequestZones => Set<ChartWishlistRequestZone>();
         public DbSet<ChartMemberKeyItem> ChartMemberKeyItems => Set<ChartMemberKeyItem>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
@@ -1798,7 +1799,6 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 entity.ToTable("ChartWishlistRequests");
                 entity.Property(item => item.Board).HasMaxLength(16).IsRequired();
-                entity.Property(item => item.Boss).HasMaxLength(64);
                 entity.Property(item => item.ItemName).HasMaxLength(128).IsRequired();
                 entity.Property(item => item.Notes).HasMaxLength(512);
                 entity.Property(item => item.Status).HasMaxLength(16).IsRequired()
@@ -1823,6 +1823,20 @@ namespace LinkshellManagerDiscordApp.Data
                     table.HasCheckConstraint(
                         "CK_ChartWishlistRequests_Status", "\"Status\" IN ('Pending','Fulfilled')");
                 });
+            });
+
+            // The zones a request names (none = anywhere). Deleted with the request: withdrawing one
+            // deletes its row, and its zones mean nothing without it.
+            builder.Entity<ChartWishlistRequestZone>(entity =>
+            {
+                entity.ToTable("ChartWishlistRequestZones");
+                entity.Property(zone => zone.Boss).HasMaxLength(64).IsRequired();
+                entity.HasOne(zone => zone.Request)
+                    .WithMany(request => request.Zones)
+                    .HasForeignKey(zone => zone.RequestId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // A zone once per request.
+                entity.HasIndex(zone => new { zone.RequestId, zone.Boss }).IsUnique();
             });
 
             // --- Charts: which members hold which key item. ---

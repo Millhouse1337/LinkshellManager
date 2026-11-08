@@ -1236,10 +1236,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-                    b.Property<string>("Boss")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
                     b.Property<DateTime?>("FulfilledAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1304,6 +1300,30 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                             t.HasCheckConstraint("CK_ChartWishlistRequests_Status", "\"Status\" IN ('Pending','Fulfilled')");
                         });
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ChartWishlistRequestZone", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Boss")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("RequestId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId", "Boss")
+                        .IsUnique();
+
+                    b.ToTable("ChartWishlistRequestZones", (string)null);
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ClaimShieldCapture", b =>
@@ -4390,6 +4410,17 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("Linkshell");
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ChartWishlistRequestZone", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.ChartWishlistRequest", "Request")
+                        .WithMany("Zones")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ClaimShieldCapture", b =>
                 {
                     b.HasOne("LinkshellManagerDiscordApp.Models.EventHistory", "EventHistory")
@@ -5087,6 +5118,11 @@ namespace LinkshellManagerDiscordApp.Migrations
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ChartPopItem", b =>
                 {
                     b.Navigation("Credits");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ChartWishlistRequest", b =>
+                {
+                    b.Navigation("Zones");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ClaimShieldCapture", b =>

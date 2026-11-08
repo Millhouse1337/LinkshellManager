@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ChartBoardService } from '../../discord/chart-board.service';
 import type {
   ActivityChartBoard,
+  ActivityChartBoss,
   ActivityChartWishlistRequest
 } from '../../discord/discord-activity.types';
 
@@ -49,6 +50,19 @@ export class ChartWishlistSectionComponent {
   // a request naming one.
   protected readonly bosses = computed(() =>
     (this.boardSignal()?.bosses ?? []).filter(boss => boss.kind !== 'Tier'));
+  // The zone chips, under the board's own headings (Original / Dreamworld Dynamis, Apollyon /
+  // Temenos). Needed on Limbus most: its areas are named by direction, so "NW" alone doesn't say
+  // which zone it is. One unnamed group on a board with no headings.
+  protected readonly bossGroups = computed(() => {
+    const groups: { label: string | null; bosses: ActivityChartBoss[] }[] = [];
+    for (const boss of this.bosses()) {
+      const label = boss.group ?? null;
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.bosses.push(boss);
+      else groups.push({ label, bosses: [boss] });
+    }
+    return groups;
+  });
   protected readonly canManageBoard = computed(() => this.canManageSignal());
 
   /** Only the pending queue is ordered. A fulfilled request is settled and has no place in one. */
@@ -57,12 +71,12 @@ export class ChartWishlistSectionComponent {
 
   // ---- the submit form ----
   //
-  // Opens on "anywhere" because both readings are real: somebody wants a specific drop out of one
-  // zone, somebody else just wants the item wherever it turns up. An empty string is what the server
-  // turns into a null boss.
+  // Opens on "anywhere" (no zone ticked) because both readings are real: somebody wants a drop out
+  // of particular zones, somebody else just wants the item wherever it turns up. Several zones can
+  // be ticked, for an item that drops in more than one.
 
   protected readonly formOpen = signal(false);
-  protected readonly formBoss = signal('');
+  protected readonly formBosses = signal<ReadonlySet<string>>(new Set());
   protected readonly formItemName = signal('');
   protected formQuantity = 1;
   protected formNotes = '';
@@ -74,10 +88,25 @@ export class ChartWishlistSectionComponent {
   }
 
   private resetForm(): void {
-    this.formBoss.set('');
+    this.formBosses.set(new Set());
     this.formItemName.set('');
     this.formQuantity = 1;
     this.formNotes = '';
+  }
+
+  protected isZonePicked(boss: string): boolean {
+    return this.formBosses().has(boss);
+  }
+
+  protected toggleZone(boss: string): void {
+    const next = new Set(this.formBosses());
+    if (next.has(boss)) next.delete(boss); else next.add(boss);
+    this.formBosses.set(next);
+  }
+
+  /** "Anywhere" is no zone at all, so picking it clears the rest. */
+  protected pickAnywhere(): void {
+    this.formBosses.set(new Set());
   }
 
   protected themeKeyFor(boss: string | null | undefined): string {
@@ -97,7 +126,8 @@ export class ChartWishlistSectionComponent {
 
     try {
       await this.charts.addWishlistRequest(board.linkshellId, board.board, {
-        boss: this.formBoss() || null,
+        // In board order; the server keeps that order either way.
+        bosses: this.bosses().map(boss => boss.boss).filter(name => this.formBosses().has(name)),
         itemName: this.formItemName().trim(),
         quantity: Number.isFinite(this.formQuantity) ? Math.max(1, this.formQuantity) : 1,
         notes: this.formNotes.trim() || null

@@ -27,12 +27,16 @@ public class ChartWishlistTests
         string item = "Ridill",
         string status = ChartWishlistStatuses.Pending,
         string? appUserId = "user-1",
-        string board = ChartBoardCatalog.Dynamis) => new()
+        string board = ChartBoardCatalog.Dynamis,
+        string[]? moreZones = null) => new()
     {
         Id = id,
         LinkshellId = 1,
         Board = board,
-        Boss = boss,
+        Zones = (boss is null ? Array.Empty<string>() : new[] { boss })
+            .Concat(moreZones ?? Array.Empty<string>())
+            .Select(zone => new ChartWishlistRequestZone { Boss = zone })
+            .ToList(),
         ItemName = item,
         Quantity = 1,
         Status = status,
@@ -46,11 +50,11 @@ public class ChartWishlistTests
     [Fact]
     public void NormalizeDraft_CanonicalisesTheBoardAndTheBoss()
     {
-        var draft = ChartWishlistService.NormalizeDraft("dynamis", " xarcabard ", "  Ridill ", 2, "  for DRK ");
+        var draft = ChartWishlistService.NormalizeDraft("dynamis", new[] { " xarcabard " }, "  Ridill ", 2, "  for DRK ");
 
         Assert.NotNull(draft);
         Assert.Equal("Dynamis", draft!.Board);
-        Assert.Equal("Xarcabard", draft.Boss);
+        Assert.Equal(new[] { "Xarcabard" }, draft.Bosses);
         Assert.Equal("Ridill", draft.ItemName);
         Assert.Equal(2, draft.Quantity);
         Assert.Equal("for DRK", draft.Notes);
@@ -64,35 +68,65 @@ public class ChartWishlistTests
     [InlineData("   ")]
     public void NormalizeDraft_TurnsABlankBossIntoAnywhere(string? boss)
     {
-        var draft = ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Dynamis, boss, "Ridill", 1, null);
+        var draft = ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Dynamis, new[] { boss }, "Ridill", 1, null);
 
         Assert.NotNull(draft);
-        Assert.Null(draft!.Boss);
+        Assert.Empty(draft!.Bosses);
     }
+
+    [Fact]
+    public void NormalizeDraft_TreatsNoZonesAsAnywhere() =>
+        Assert.Empty(ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Dynamis, null, "Ridill", 1, null)!.Bosses);
+
+    // An item that drops in more than one zone: every zone is kept, once each, in the BOARD's order
+    // and spelling rather than the order they were ticked in.
+    [Fact]
+    public void NormalizeDraft_KeepsSeveralZonesInBoardOrder()
+    {
+        var draft = ChartWishlistService.NormalizeDraft(
+            ChartBoardCatalog.Dynamis, new[] { "qufim", "Xarcabard", "QUFIM", " " }, "Ridill", 1, null);
+
+        Assert.Equal(new[] { "Xarcabard", "Qufim" }, draft!.Bosses);
+    }
+
+    // Limbus names its areas by direction, so a request there can span both zones' cards.
+    [Fact]
+    public void NormalizeDraft_TakesSeveralLimbusAreas() =>
+        Assert.Equal(
+            new[] { "NW", "Western Tower" },
+            ChartWishlistService.NormalizeDraft(
+                ChartBoardCatalog.Limbus, new[] { "western tower", "nw" }, "Omega's Eye", 1, null)!.Bosses);
 
     // Naming a card and getting it wrong is REFUSED rather than quietly widened to "anywhere":
     // silently broadening what somebody asked for is worse than saying no.
     [Fact]
     public void NormalizeDraft_RefusesABossFromAnotherBoard() =>
         Assert.Null(ChartWishlistService.NormalizeDraft(
-            ChartBoardCatalog.Dynamis, "Byakko", "Ridill", 1, null));
+            ChartBoardCatalog.Dynamis, new[] { "Byakko" }, "Ridill", 1, null));
+
+    // One bad zone refuses the WHOLE request rather than dropping just that zone: the request would
+    // otherwise name fewer places than the member picked.
+    [Fact]
+    public void NormalizeDraft_RefusesTheWholeRequestOnOneBadZone() =>
+        Assert.Null(ChartWishlistService.NormalizeDraft(
+            ChartBoardCatalog.Dynamis, new[] { "Xarcabard", "Byakko" }, "Ridill", 1, null));
 
     // A HENM tier strip is where the tier's pop items are kept, not something loot drops from, so a
     // request cannot name one. The NMs in the tier still can.
     [Fact]
     public void NormalizeDraft_RefusesATierStrip_ButTakesItsNms()
     {
-        Assert.Null(ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Henm, "Tier 1", "Ridill", 1, null));
+        Assert.Null(ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Henm, new[] { "Tier 1" }, "Ridill", 1, null));
         Assert.Equal(
-            "Ruinous Rocs",
-            ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Henm, "ruinous rocs", "Ridill", 1, null)!.Boss);
+            new[] { "Ruinous Rocs" },
+            ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Henm, new[] { "ruinous rocs" }, "Ridill", 1, null)!.Bosses);
     }
 
     [Fact]
     public void NormalizeDraft_RefusesABoardThatOffersNoWishlist()
     {
         Assert.False(ChartBoardCatalog.Find(ChartBoardCatalog.Sky)!.AllowsWishlist);
-        Assert.Null(ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Sky, null, "Kirin's Osode", 1, null));
+        Assert.Null(ChartWishlistService.NormalizeDraft(ChartBoardCatalog.Sky, (string?[]?)null, "Kirin's Osode", 1, null));
     }
 
     [Theory]
@@ -218,6 +252,22 @@ public class ChartWishlistTests
 
         Assert.Empty(built.PendingCountsByBoss);
         Assert.Single(built.Requests);
+    }
+
+    // A request naming two zones badges BOTH cards, once each, and is still one request on the
+    // board. Its zones come back in board order, whatever order they were stored in.
+    [Fact]
+    public void BuildWishlist_BadgesEveryZoneARequestNames()
+    {
+        var board = ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!;
+        var rows = new[] { Request(1, "qufim", moreZones: new[] { "Xarcabard" }), Request(2, "Xarcabard") };
+
+        var built = ChartWishlistService.BuildWishlist(board, rows, "user-1", canManage: false);
+
+        Assert.Equal(2, built.PendingCountsByBoss["Xarcabard"]);
+        Assert.Equal(1, built.PendingCountsByBoss["Qufim"]);
+        Assert.Equal(2, built.PendingCount);
+        Assert.Equal(new[] { "Xarcabard", "Qufim" }, built.Requests[0].Bosses);
     }
 
     // Decided per viewer HERE so no template re-derives it.

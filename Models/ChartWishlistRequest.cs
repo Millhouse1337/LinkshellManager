@@ -32,15 +32,14 @@ public class ChartWishlistRequest
     public string Board { get; set; } = string.Empty;
 
     /// <summary>
-    /// The card this request is tied to, or NULL for "anywhere on this board".
+    /// The cards (zones) this request is tied to. EMPTY means "anywhere on this board".
     ///
-    /// Optional because both readings are real: somebody wants a specific drop out of Xarcabard, and
-    /// somebody else just wants a Ridill from wherever it turns up. A null Boss contributes to NO
-    /// card badge and appears only in the board's request list, which is the honest rendering of
-    /// "I did not say where".
+    /// A list because an item can drop in more than one zone, so the request belongs on each of their
+    /// cards. Empty is a real answer too: somebody just wants a Ridill from wherever it turns up. An
+    /// empty request contributes to NO card badge and appears only in the board's request list,
+    /// which is the honest rendering of "I did not say where".
     /// </summary>
-    [MaxLength(64)]
-    public string? Boss { get; set; }
+    public ICollection<ChartWishlistRequestZone> Zones { get; set; } = new List<ChartWishlistRequestZone>();
 
     [MaxLength(128)]
     public string ItemName { get; set; } = string.Empty;

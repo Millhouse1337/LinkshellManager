@@ -20,9 +20,9 @@ public static class ChartWishlistStatuses
     public static readonly IReadOnlyList<string> All = new[] { Pending, Fulfilled };
 }
 
-/// <summary>What a member typed, before it is trusted.</summary>
+/// <summary>What a member typed, cleaned up. Bosses is empty for "anywhere on this board".</summary>
 public sealed record ChartWishlistDraft(
-    string Board, string? Boss, string ItemName, int Quantity, string? Notes);
+    string Board, IReadOnlyList<string> Bosses, string ItemName, int Quantity, string? Notes);
 
 /// <summary>One request as the app renders it.</summary>
 /// <param name="CanWithdraw">Decided HERE, per viewer, so no view re-derives it. A template that
@@ -31,7 +31,8 @@ public sealed record ChartWishlistDraft(
 public sealed record ChartWishlistRow(
     int Id,
     string Board,
-    string? Boss,
+    // The cards it names, in board order. Empty = anywhere.
+    IReadOnlyList<string> Bosses,
     string ItemName,
     int Quantity,
     string? Notes,
@@ -72,10 +73,11 @@ public sealed class ChartWishlistService
 
     /// <summary>
     /// Cleans up what a member typed. Null when the board is unknown, the board offers no wishlist,
-    /// the item has no name, or a non-blank boss is not a card on that board.
+    /// the item has no name, or any non-blank boss is not a card on that board.
     ///
-    /// A BLANK boss becomes null rather than being refused: "anywhere on this board" is the option
-    /// the form opens on and a real answer, not a missing one.
+    /// Blank bosses are dropped, and none at all means "anywhere on this board": the option the
+    /// form opens on and a real answer, not a missing one. The rest come back in the board's own
+    /// order, each once, spelled as the catalog spells it.
     ///
     /// Unlike ChartBoardService.NormalizeDraft, this one DOES check the board's feature flag. The
     /// asymmetry is deliberate and is the whole point of that method's comment: pop items exist on
@@ -83,7 +85,7 @@ public sealed class ChartWishlistService
     /// request on a board with no wishlist has never existed and never will.
     /// </summary>
     public static ChartWishlistDraft? NormalizeDraft(
-        string? board, string? boss, string? itemName, int quantity, string? notes)
+        string? board, IEnumerable<string?>? bosses, string? itemName, int quantity, string? notes)
     {
         var catalog = ChartBoardCatalog.Find(board);
         if (catalog is null || !catalog.AllowsWishlist)
@@ -97,23 +99,28 @@ public sealed class ChartWishlistService
             return null;
         }
 
-        string? canonicalBoss = null;
-        if (!string.IsNullOrWhiteSpace(boss))
+        var picked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var boss in bosses ?? Array.Empty<string?>())
         {
+            if (string.IsNullOrWhiteSpace(boss))
+            {
+                continue;
+            }
             var card = catalog.Find(boss);
             if (card is null || card.Kind == ChartBossKinds.Tier)
             {
                 // Named a card and got it wrong - or named a tier's pop item strip, which is not
-                // somewhere loot comes from. Refused rather than quietly downgraded to "anywhere":
-                // silently widening what somebody asked for is worse than saying no.
+                // somewhere loot comes from. The WHOLE request is refused rather than that zone
+                // quietly dropped (or the request widened to "anywhere"): changing what somebody
+                // asked for is worse than saying no.
                 return null;
             }
-            canonicalBoss = card.Name;
+            picked.Add(card.Name);
         }
 
         return new ChartWishlistDraft(
             catalog.Key,
-            canonicalBoss,
+            catalog.Bosses.Select(card => card.Name).Where(picked.Contains).ToList(),
             Truncate(name, 128)!,
             // Clamped to at least one. A request for zero of something is not a request, and the
             // check constraint refuses it anyway.
@@ -159,7 +166,7 @@ public sealed class ChartWishlistService
             .Select(row => new ChartWishlistRow(
                 row.Id,
                 row.Board,
-                row.Boss,
+                ZonesInBoardOrder(board, row),
                 row.ItemName,
                 row.Quantity,
                 row.Notes,
@@ -177,25 +184,45 @@ public sealed class ChartWishlistService
         foreach (var row in rows)
         {
             // Pending only: a fulfilled request is settled, and a card still advertising it would
-            // read as outstanding work. A request tied to no boss badges no card - it belongs to the
+            // read as outstanding work. A request tied to no zone badges no card - it belongs to the
             // board, which is exactly what leaving the zone blank said.
-            if (row.Boss is null || !IsPending(row))
+            if (!IsPending(row))
             {
                 continue;
             }
 
-            // Resolved through the catalog, so a badge lands on the card whatever case the row is
-            // spelled in and a row naming a card this board no longer has badges nothing.
-            var card = board.Find(row.Boss);
-            if (card is null)
+            // Every card it names counts it ONCE. Resolved through the catalog, so a badge lands on
+            // the card whatever case the row is spelled in, and a zone this board no longer has
+            // badges nothing.
+            var cards = row.Zones
+                .Select(zone => board.Find(zone.Boss))
+                .Where(card => card is not null)
+                .Select(card => card!.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var card in cards)
             {
-                continue;
+                counts[card] = counts.TryGetValue(card, out var running) ? running + 1 : 1;
             }
-
-            counts[card.Name] = counts.TryGetValue(card.Name, out var running) ? running + 1 : 1;
         }
 
         return new ChartWishlistBoard(requests, counts, rows.Count(IsPending));
+    }
+
+    /// <summary>
+    /// A request's zones in the order the board lists its cards, each spelled as the catalog spells
+    /// it. A zone the board no longer has is kept, after the rest, as stored: the list still shows
+    /// what was asked for even though no card badges it.
+    /// </summary>
+    private static IReadOnlyList<string> ZonesInBoardOrder(ChartBoard board, ChartWishlistRequest row)
+    {
+        var order = board.Bosses
+            .Select((card, index) => (card.Name, index))
+            .ToDictionary(pair => pair.Name, pair => pair.index, StringComparer.OrdinalIgnoreCase);
+        return row.Zones
+            .Select(zone => board.Find(zone.Boss)?.Name ?? zone.Boss)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => order.TryGetValue(name, out var index) ? index : int.MaxValue)
+            .ToList();
     }
 
     // ---- database ---------------------------------------------------------------
@@ -208,6 +235,7 @@ public sealed class ChartWishlistService
         int linkshellId, string board, CancellationToken cancellationToken) =>
         await _db.ChartWishlistRequests
             .AsNoTracking()
+            .Include(row => row.Zones)
             .Where(row => row.LinkshellId == linkshellId && row.Board == board)
             .OrderBy(row => row.Status == ChartWishlistStatuses.Pending ? 0 : 1)
             .ThenBy(row => row.Priority)

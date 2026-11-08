@@ -2710,8 +2710,8 @@ export interface ActivityChartWishlist {
 export interface ActivityChartWishlistRequest {
   id: number;
   board: string;
-  /** The card it is tied to, or null for "anywhere on this board". */
-  boss?: string | null;
+  /** The cards (zones) it names, in board order. Empty = "anywhere on this board". */
+  bosses: string[];
   itemName: string;
   quantity: number;
   notes?: string | null;
@@ -2757,8 +2757,8 @@ export interface ActivityChartKeyItemRow {
 }
 
 export interface ActivityChartWishlistInput {
-  /** Blank or null means "anywhere on this board", which is what the form opens on. */
-  boss?: string | null;
+  /** The zones picked. Empty means "anywhere on this board", which is what the form opens on. */
+  bosses: string[];
   itemName: string;
   quantity: number;
   notes?: string | null;

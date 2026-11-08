@@ -22,17 +22,35 @@
     </div>
     <div class="card-body">
       <form class="chart-form" (ngSubmit)="submitForm()">
-        <div class="chart-form__field">
-          <label for="wish-boss">Zone</label>
-          <!-- Opens on "anywhere" because both readings are real: somebody wants a specific drop out
-               of one zone, somebody else just wants the item wherever it turns up. -->
-          <select id="wish-boss" name="boss"
-                  [ngModel]="formBoss()" (ngModelChange)="formBoss.set($event)">
-            <option value="">Anywhere on this board</option>
-            @for (boss of bosses(); track boss.boss) {
-              <option [value]="boss.boss">{{ boss.boss }}</option>
+        <div class="chart-form__field chart-form__field--zones">
+          <span class="chart-zone-picker__title" id="wish-zones-label">Zones</span>
+          <!-- Opens on "Anywhere" (nothing ticked). Tick every zone the item drops in: an item can
+               come from more than one, and the request then counts on each of their cards. -->
+          <div class="chart-zone-picker" role="group" aria-labelledby="wish-zones-label">
+            <div class="chart-zone-picker__group">
+              <div class="chart-zone-picker__chips">
+                <button type="button" class="chart-zone-chip"
+                        [class.is-on]="formBosses().size === 0"
+                        [attr.aria-pressed]="formBosses().size === 0"
+                        (click)="pickAnywhere()">Anywhere on this board</button>
+              </div>
+            </div>
+            @for (group of bossGroups(); track group.label) {
+              <div class="chart-zone-picker__group">
+                @if (group.label) {
+                  <span class="chart-zone-picker__heading">{{ group.label }}</span>
+                }
+                <div class="chart-zone-picker__chips">
+                  @for (boss of group.bosses; track boss.boss) {
+                    <button type="button" class="chart-zone-chip" [ngClass]="'is-' + boss.themeKey"
+                            [class.is-on]="isZonePicked(boss.boss)"
+                            [attr.aria-pressed]="isZonePicked(boss.boss)"
+                            (click)="toggleZone(boss.boss)">{{ boss.boss }}</button>
+                  }
+                </div>
+              </div>
             }
-          </select>
+          </div>
         </div>
 
         <div class="chart-form__field">
@@ -102,8 +120,12 @@
               <td><strong class="chart-holdings__holder">{{ request.requestedByCharacterName }}</strong></td>
 
               <td>
-                @if (request.boss) {
-                  <span class="chart-holdings__boss" [ngClass]="themeKeyFor(request.boss)">{{ request.boss }}</span>
+                @if (request.bosses.length) {
+                  <span class="chart-wishlist__zones">
+                    @for (boss of request.bosses; track boss) {
+                      <span class="chart-holdings__boss" [ngClass]="themeKeyFor(boss)">{{ boss }}</span>
+                    }
+                  </span>
                 } @else {
                   <!-- Badges no card above, which is exactly what leaving the zone blank said. -->
                   <span class="chart-item__muted">Anywhere</span>

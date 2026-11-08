@@ -38,11 +38,12 @@ public sealed partial class ActivityDataController
 
         // The ROUTE's board, never a body field: a request cannot file itself under a board the URL
         // did not name. Same rule AddChartPopItemAsync follows.
+        // Bosses from a current client; the single Boss from a tab opened before zones became a list.
         var draft = ChartWishlistService.NormalizeDraft(
-            board, request.Boss, request.ItemName, request.Quantity, request.Notes);
+            board, request.Bosses ?? new[] { request.Boss }, request.ItemName, request.Quantity, request.Notes);
         if (draft is null)
         {
-            return BadRequest(new { error = "Give the item a name, and pick a zone on this board or leave it as anywhere." });
+            return BadRequest(new { error = "Give the item a name, and pick zones on this board or leave it as anywhere." });
         }
 
         var now = DateTime.UtcNow;
@@ -50,7 +51,7 @@ public sealed partial class ActivityDataController
         {
             LinkshellId = linkshellId,
             Board = draft.Board,
-            Boss = draft.Boss,
+            Zones = draft.Bosses.Select(boss => new ChartWishlistRequestZone { Boss = boss }).ToList(),
             ItemName = draft.ItemName,
             Quantity = draft.Quantity,
             Notes = draft.Notes,

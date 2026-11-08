@@ -354,7 +354,7 @@ public sealed partial class ActivityDataController
                     .Select(request => new ActivityChartWishlistRequestDto(
                         request.Id,
                         request.Board,
-                        request.Boss,
+                        request.Bosses,
                         request.ItemName,
                         request.Quantity,
                         request.Notes,
