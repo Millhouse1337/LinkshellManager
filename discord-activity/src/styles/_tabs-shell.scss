@@ -436,7 +436,8 @@ body {
 /* The row's gap does the spacing, and the label's own bottom margin would lift it off the counts'
    centre line. */
 .section-head-row .section-label,
-.section-head-row .section-title { margin: 0; }
+.section-head-row .section-title,
+.section-head-row .section-sub { margin: 0; }
 .section-head-counts {
   display: flex;
   flex-wrap: wrap;

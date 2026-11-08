@@ -87,6 +87,9 @@ export class ConfigurationsTabComponent {
     this.view() === 'addon'
       ? [{ key: 'overview' as const, label: 'Overview' }, { key: 'pair-code' as const, label: 'Pair Code' }]
       : [{ key: 'overview' as const, label: 'Overview' }, { key: 'permissions' as const, label: 'Permissions' }]);
+  // The header's white title: the picked section's name (Overview, Permissions, Pair Code).
+  protected readonly sectionTitle = computed(() =>
+    this.sectionTabs().find(tab => tab.key === this.section())?.label ?? 'Overview');
 
   public constructor() {
     // Match the parent's behavior on tab activation: prefetch roles and seed

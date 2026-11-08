@@ -1,26 +1,12 @@
     <div class="panel-tab fade">
-      <div class="section-head">
-        <div>
-          <div class="section-label">Settings</div>
-          <div class="section-title">{{ viewTitle() }}</div>
-          <!-- The addon pairs the whole account, so naming one linkshell here
-               would be misleading. Every other settings view genuinely is
-               per-linkshell and keeps the "Currently configuring" line. -->
-          @if (view() === 'addon') {
-            <div class="section-sub" style="font-size:16px;font-weight:700;color:var(--fg-1)">
-              Addon pairing applies to all your linkshells
-            </div>
-          } @else {
-            @if (activeLinkshellName(); as activeName) {
-              <div class="section-sub">
-                Currently configuring <span class="tag accent">{{ activeName }}</span>
-              </div>
-            }
-          }
-        </div>
-        <!-- The view switch on top (Overview + Permissions / Pair Code), like the Event System's,
-             with the tab's main button under it. -->
-        <div class="section-head-right section-head-right--stacked">
+      <!-- Rows: the tab's name (Configurations / Game Addon), then the picked section's name with
+           the view switch on its right, then which linkshell is being configured with the tab's
+           main button on its right. -->
+      @let showNewLinkshell = view() === 'configurations' && section() === 'overview';
+      <div class="section-head-rows">
+        <div class="section-label">{{ viewTitle() }}</div>
+        <div class="section-head-row">
+          <div class="section-title">{{ sectionTitle() }}</div>
           @if (view() === 'configurations' || !addonGloballyDisabled()) {
             <div class="view-tabs" role="tablist" [attr.aria-label]="viewTitle() + ' view'">
               @for (tab of sectionTabs(); track tab.key) {
@@ -31,10 +17,31 @@
               }
             </div>
           }
-          @if (view() === 'configurations' && section() === 'overview') {
-            <button type="button" class="btn primary sm" (click)="toggleCreateLinkshellForm()">+ New Linkshell</button>
-          }
         </div>
+        @if (view() === 'addon' || activeLinkshellName() || showNewLinkshell) {
+          <div class="section-head-row">
+            <!-- Always there, even empty, so the button stays against the right edge.
+                 The addon pairs the whole account, so naming one linkshell here would be
+                 misleading. Every other settings view genuinely is per-linkshell and keeps the
+                 "Currently configuring" line. -->
+            <div>
+              @if (view() === 'addon') {
+                <div class="section-sub" style="font-size:16px;font-weight:700;color:var(--fg-1)">
+                  Addon pairing applies to all your linkshells
+                </div>
+              } @else {
+                @if (activeLinkshellName(); as activeName) {
+                  <div class="section-sub">
+                    Currently configuring <span class="tag accent">{{ activeName }}</span>
+                  </div>
+                }
+              }
+            </div>
+            @if (showNewLinkshell) {
+              <button type="button" class="btn primary sm" (click)="toggleCreateLinkshellForm()">+ New Linkshell</button>
+            }
+          </div>
+        }
       </div>
 
       <!-- Create-a-linkshell popup, opened from the header button above. -->
