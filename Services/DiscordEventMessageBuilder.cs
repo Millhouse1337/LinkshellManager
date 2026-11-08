@@ -351,9 +351,11 @@ public static class DiscordEventMessageBuilder
         {
             content = BuildStartHeading(ev),
             embeds = new[] { BuildEmbed(ev, signups, snapshotOnly) },
-            // An empty array is what clears the components off a board that already posted
-            // them — omitting the field on an edit would leave the old ones in place.
-            components = snapshotOnly ? Array.Empty<object>() : BuildComponents(ev.Id),
+            // A snapshot camp's board keeps only "Open LSManager App". Always sending the field
+            // matters: omitting it on an edit would leave the old buttons in place.
+            components = snapshotOnly
+                ? WithOpenAppButton(Array.Empty<object[]>())
+                : BuildComponents(ev.Id),
             attachments = Array.Empty<object>(),
             allowed_mentions = new { parse = Array.Empty<string>() },
         };
@@ -875,30 +877,26 @@ public static class DiscordEventMessageBuilder
     // click on an older copy of a board still works.
     private static object[] BuildComponents(int eventId)
     {
-        return new object[]
+        return WithOpenAppButton(new[]
         {
-            new
+            new object[]
             {
-                type = 1, // action row
-                components = new object[]
+                new
                 {
-                    new
-                    {
-                        type = 2, // button
-                        style = 1, // primary
-                        label = "Sign up",
-                        custom_id = $"{PartyJoinEventPrefix}{eventId}",
-                    },
-                    new
-                    {
-                        type = 2, // button
-                        style = 2, // secondary
-                        label = "Withdraw",
-                        custom_id = $"{WithdrawPrefix}{eventId}",
-                    },
+                    type = 2, // button
+                    style = 1, // primary
+                    label = "Sign up",
+                    custom_id = $"{PartyJoinEventPrefix}{eventId}",
+                },
+                new
+                {
+                    type = 2, // button
+                    style = 2, // secondary
+                    label = "Withdraw",
+                    custom_id = $"{WithdrawPrefix}{eventId}",
                 },
             },
-        };
+        });
     }
 
     // Event detail fields for the board embed. The start time is NOT here — it's
@@ -1595,14 +1593,8 @@ public static class DiscordEventMessageBuilder
             firstRow = firstRow.Take(5).ToList();
         }
 
-        var rows = new List<object>
-        {
-            new
-            {
-                type = 1, // action row
-                components = firstRow.ToArray(),
-            },
-        };
+        // Each entry is one row's buttons; WithOpenAppButton wraps them into action rows at the end.
+        var rows = new List<object[]> { firstRow.ToArray() };
 
         var hasAnyone = hasSignups || hasAttendees;
 
@@ -1652,11 +1644,7 @@ public static class DiscordEventMessageBuilder
                 label = "🎖️ My Readiness",
                 custom_id = $"{ReadinessButtonPrefix}{eventId}",
             });
-            rows.Add(new
-            {
-                type = 1, // action row
-                components = memberRow.ToArray(),
-            });
+            rows.Add(memberRow.ToArray());
         }
 
         // ── Row 3 — officer roster controls ──────────────────────────────────────────────────
@@ -1705,11 +1693,7 @@ public static class DiscordEventMessageBuilder
                 custom_id = $"{WithdrawMemberButtonPrefix}{eventId}",
             });
         }
-        rows.Add(new
-        {
-            type = 1, // action row
-            components = officerButtons.ToArray(),
-        });
+        rows.Add(officerButtons.ToArray());
 
         // ── Row 4 — Manual Check In (Manual Check In) per-window attendance ────────────────────────────────
         // Check In records the clicker's arrival window at the board's current window (re-clicking a
@@ -1717,23 +1701,19 @@ public static class DiscordEventMessageBuilder
         // the camp is finalized (attendance locked).
         if (IsWd(ev) && ev.WdFinalizedAt is null)
         {
-            rows.Add(new
+            rows.Add(new object[]
             {
-                type = 1,
-                components = new object[]
+                new
                 {
-                    new
-                    {
-                        type = 2, style = 3, // success (green)
-                        label = "✅ Check In (this window)",
-                        custom_id = $"{XinPrefix}{eventId}",
-                    },
-                    new
-                    {
-                        type = 2, style = 2, // secondary — leaving mid-camp, keeps credit through this window
-                        label = "🚪 Check Out",
-                        custom_id = $"{CheckOutPrefix}{eventId}",
-                    },
+                    type = 2, style = 3, // success (green)
+                    label = "✅ Check In (this window)",
+                    custom_id = $"{XinPrefix}{eventId}",
+                },
+                new
+                {
+                    type = 2, style = 2, // secondary — leaving mid-camp, keeps credit through this window
+                    label = "🚪 Check Out",
+                    custom_id = $"{CheckOutPrefix}{eventId}",
                 },
             });
         }
@@ -1784,15 +1764,40 @@ public static class DiscordEventMessageBuilder
                 label = "🏁 End Camp / Enter ToD (officers)",
                 custom_id = $"{WdPopPrefix}{eventId}",
             });
-            rows.Add(new
-            {
-                type = 1,
-                components = windowRow.ToArray(),
-            });
+            rows.Add(windowRow.ToArray());
         }
 
+        return WithOpenAppButton(rows);
+    }
 
-        return rows.ToArray();
+    // The green "Open LSManager App" button. It reuses the /lsm launch card's "Join" id, so the
+    // click handler (DiscordInteractionsController) already opens the Activity for whoever clicks.
+    public const string LaunchAppButtonId = "evt:launch";
+
+    // Wraps each row of buttons into a Discord action row, with "Open LSManager App" always the
+    // LAST button: appended to the last row when it has room, otherwise on a new row of its own.
+    // Discord caps a message at 5 rows of 5 buttons, so it is skipped only if both are full.
+    private static object[] WithOpenAppButton(IEnumerable<object[]> buttonRows)
+    {
+        var rows = buttonRows.Select(row => row.ToList()).ToList();
+        var openApp = new
+        {
+            type = 2, // button
+            style = 3, // success (green)
+            label = "Open LSManager App",
+            custom_id = LaunchAppButtonId,
+        };
+        if (rows.Count > 0 && rows[^1].Count < 5)
+        {
+            rows[^1].Add(openApp);
+        }
+        else if (rows.Count < 5)
+        {
+            rows.Add(new List<object> { openApp });
+        }
+        return rows
+            .Select(row => (object)new { type = 1, components = row.ToArray() }) // action row
+            .ToArray();
     }
 
     // A role-colored dot for a slot: the signed-up role when filled, else the

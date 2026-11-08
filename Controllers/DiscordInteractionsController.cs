@@ -93,9 +93,10 @@ public sealed class DiscordInteractionsController : ControllerBase
     private const string WdPopKillFieldId = "wdpop_kill";
 
     // The "/lsm" slash command (posts a launch card) and its "Join" button (launches the
-    // Activity for the clicker via the LAUNCH_ACTIVITY callback).
+    // Activity for the clicker via the LAUNCH_ACTIVITY callback). Every event board's green
+    // "Open LSManager App" button sends this same id.
     private const string LaunchCommandName = "lsm";
-    private const string LaunchButtonId = "evt:launch";
+    private const string LaunchButtonId = DiscordEventMessageBuilder.LaunchAppButtonId;
 
     private readonly DiscordInteractionVerifier _verifier;
     private readonly ApplicationDbContext _db;
