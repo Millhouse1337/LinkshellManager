@@ -152,6 +152,24 @@
               </span>
             </label>
 
+            <!-- The picked monster's newest ToD from the ToD page, so the officer can see when it
+                 last died while setting Starts. Hidden until the list has loaded. -->
+            @if (hasPickedMonster() && latestTods() !== null) {
+              <div class="cem__field">
+                <span class="cem__label">Last ToD</span>
+                <div class="cem__last-tod">
+                  @if (selectedLatestTod(); as last) {
+                    <span>{{ last.time ? activity.formatDateTimeWithSeconds(last.time) : 'Not entered' }}</span>
+                    @if (last.hq) {
+                      <span class="cem__last-tod-tag">HQ</span>
+                    }
+                  } @else {
+                    <span class="cem__last-tod--none">No ToD tracked yet</span>
+                  }
+                </div>
+              </div>
+            }
+
             @if (showRepostLeadField()) {
               <!-- When the sign-up board comes back before the pop. Only for a monster that already
                    re-posts: switching re-post on or off stays with Edit ToD / Post new ToD. The lead

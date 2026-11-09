@@ -32,7 +32,7 @@ import {
   formatLocalClockTime,
   shiftLocalDateTime
 } from './activity-home.helpers';
-import type { ActivityLinkedTod, ActivityPartySetupListRow, ActivityUpcomingRepop } from '../discord/discord-activity.types';
+import type { ActivityLatestTod, ActivityLinkedTod, ActivityPartySetupListRow, ActivityUpcomingRepop } from '../discord/discord-activity.types';
 import { MarkdownTextareaComponent } from './tabs/markdown-textarea.component';
 import { PartySetupEditorComponent } from './tabs/party-setup-editor.component';
 import { PartySetupPanelComponent } from './tabs/party-setup-panel.component';
@@ -253,6 +253,8 @@ export class ActivityQueuePanelComponent {
       this.createModel.monsterName = null;
       this.customMonsterName = '';
     }
+    // The seeded monster names the event; leaving HNM clears a name that only came from it.
+    this.syncEventNameToMonster();
   }
 
   // HNM and NM ride in together after Sea. Both make the same kind of camp — they differ only
@@ -321,11 +323,32 @@ export class ActivityQueuePanelComponent {
   // the old "you picked one but it says Select a monster" bug.
   protected onMonsterSelect(value: string): void {
     this.createModel.monsterName = value ? value : null;
+    this.syncEventNameToMonster();
     this.applyRepopStartPrefill();
   }
 
   protected onCustomMonsterNameChange(): void {
+    this.syncEventNameToMonster();
     this.applyRepopStartPrefill();
+  }
+
+  // The Event name the form last filled in from the monster picker. While the name box still
+  // holds exactly this, the officer hasn't typed a name of their own, so picking another monster
+  // may replace it. Once they type something else, it is theirs and is left alone.
+  private autoFilledEventName = '';
+
+  // Names the event after the picked monster (or the typed "Other" name), unless the officer
+  // has already given it a name of their own.
+  private syncEventNameToMonster(): void {
+    const current = (this.createModel.eventName ?? '').trim();
+    if (current && current !== this.autoFilledEventName) {
+      return;
+    }
+    const monster = this.isHnmSelected()
+      ? (this.isOtherMonsterSelected() ? this.customMonsterName : (this.createModel.monsterName ?? '')).trim()
+      : '';
+    this.createModel.eventName = monster;
+    this.autoFilledEventName = monster;
   }
 
   protected isOtherMonsterSelected(): boolean {
@@ -362,8 +385,13 @@ export class ActivityQueuePanelComponent {
   // the officer (or belongs to the event being edited) and is never overwritten.
   private autoFilledStartTimeLocal: string | null = null;
 
+  // Each monster's newest ToD, for the "Last ToD" readout beside Starts. Loaded with upcomingRepops;
+  // null while loading, so the readout doesn't flash "No ToD tracked yet" before the answer lands.
+  protected readonly latestTods = signal<ActivityLatestTod[] | null>(null);
+
   private loadUpcomingRepops(): void {
     this.upcomingRepops.set([]);
+    this.latestTods.set(null);
     const linkshellId = this.createModel.linkshellId;
     if (!linkshellId) {
       return;
@@ -374,12 +402,16 @@ export class ActivityQueuePanelComponent {
       this.applyRepopStartPrefill();
       this.cdr.markForCheck();
     });
+    void this.tods.loadLatestTods(linkshellId).then(entries => {
+      this.latestTods.set(entries);
+      this.cdr.markForCheck();
+    });
   }
 
-  // The outstanding pop the picked monster is waiting on, or null. Matched against the server's
-  // matchNames (every spelling of the spawn) so a "Fafnir" ToD answers a "Fafnir/Nidhogg" camp,
-  // and on each half of a combined pick so it works the other way round too.
-  protected selectedUpcomingRepop(): ActivityUpcomingRepop | null {
+  // The picked monster's spellings to match a server entry's matchNames against: the pick itself
+  // plus each half of a combined pick, so a "Fafnir" ToD answers a "Fafnir/Nidhogg" camp and the
+  // other way round. Null when no HNM monster is picked.
+  private pickedMonsterSpellings(): Set<string> | null {
     if (!this.isHnmSelected()) {
       return null;
     }
@@ -398,9 +430,29 @@ export class ActivityQueuePanelComponent {
         spellings.add(trimmed);
       }
     }
+    return spellings;
+  }
 
-    return this.upcomingRepops().find(entry =>
-      entry.matchNames.some(name => spellings.has(name.trim().toLowerCase()))) ?? null;
+  protected hasPickedMonster(): boolean {
+    return this.pickedMonsterSpellings() !== null;
+  }
+
+  // The outstanding pop the picked monster is waiting on, or null.
+  protected selectedUpcomingRepop(): ActivityUpcomingRepop | null {
+    const spellings = this.pickedMonsterSpellings();
+    return spellings
+      ? this.upcomingRepops().find(entry =>
+          entry.matchNames.some(name => spellings.has(name.trim().toLowerCase()))) ?? null
+      : null;
+  }
+
+  // The picked monster's newest ToD, or null when it has none (or no monster is picked).
+  protected selectedLatestTod(): ActivityLatestTod | null {
+    const spellings = this.pickedMonsterSpellings();
+    return spellings
+      ? (this.latestTods() ?? []).find(entry =>
+          entry.matchNames.some(name => spellings.has(name.trim().toLowerCase()))) ?? null
+      : null;
   }
 
   // Whether Start already sits on the picked monster's predicted pop.
@@ -1144,6 +1196,12 @@ export class ActivityQueuePanelComponent {
     // HNM board fields so editing preserves the monster and day.
     this.createModel.monsterName = event.assignedMonsterName ?? null;
     this.editingOriginalMonster = event.assignedMonsterName ?? null;
+    // A camp still named after its monster keeps following the picker when the monster is
+    // changed; one with a custom name keeps that name.
+    this.autoFilledEventName = (event.name ?? '').trim().toLowerCase()
+        === (event.assignedMonsterName ?? '').trim().toLowerCase()
+      ? (event.name ?? '').trim()
+      : '';
     this.editingOriginalStartLocal = savedStartLocal;
     this.customMonsterName = '';
     this.createModel.dayNumber = event.hnmNextDay ?? event.dayNumber ?? null;
@@ -1224,6 +1282,7 @@ export class ActivityQueuePanelComponent {
     this.createModel.repostLeadHours = null;
     this.editingRepostOn = false;
     this.customMonsterName = '';
+    this.autoFilledEventName = '';
     this.isEditingLiveEvent = false;
     this.editingOriginalPartySetupId = null;
     this.editingOriginalStartLocal = '';

@@ -252,6 +252,34 @@
   font-weight: 700;
 }
 
+/* The picked monster's newest ToD beside Starts: read-only, so a flat strip the height of the
+   Starts box rather than something that looks typeable. */
+.cem__last-tod {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px dashed var(--cem-field-line);
+  border-radius: 10px;
+  color: var(--cem-fg);
+  font: 500 14px var(--cem-mono);
+}
+
+.cem__last-tod--none {
+  color: var(--cem-fg-3);
+  font-family: inherit;
+}
+
+.cem__last-tod-tag {
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: rgba(255, 223, 77, 0.15);
+  color: #ffdf4d;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
 /* ===== Controls ===== */
 .cem__input,
 .cem__select {

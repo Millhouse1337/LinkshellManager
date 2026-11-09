@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityCreateTodInput,
+  ActivityLatestTod,
   ActivityLinkedTod,
   ActivityUpcomingRepop,
   ActivityUpdateTodInput
@@ -63,6 +64,22 @@ export class TodService {
     try {
       const payload = await this.http.fetchActivityJson<{ entries?: ActivityUpcomingRepop[] }>(
         `/api/activity/linkshells/${linkshellId}/upcoming-repops`);
+      return payload?.entries ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  // Each monster's newest ToD, for the event form's "Last ToD" readout. Failures answer an empty
+  // list for the same reason as loadUpcomingRepops: it's a convenience, not something to block on.
+  async loadLatestTods(linkshellId: number): Promise<ActivityLatestTod[]> {
+    if (!linkshellId) {
+      return [];
+    }
+
+    try {
+      const payload = await this.http.fetchActivityJson<{ entries?: ActivityLatestTod[] }>(
+        `/api/activity/linkshells/${linkshellId}/latest-tods`);
       return payload?.entries ?? [];
     } catch {
       return [];

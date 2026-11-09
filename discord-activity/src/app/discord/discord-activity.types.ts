@@ -1077,6 +1077,18 @@ export interface ActivityUpcomingRepop {
   dayNumber?: number | null;
 }
 
+// A monster's newest ToD, past repop or not, for the event form's "Last ToD" readout.
+export interface ActivityLatestTod {
+  todId: number;
+  monsterName: string;
+  // Same as ActivityUpcomingRepop.matchNames: match a picked monster against these.
+  matchNames: string[];
+  // UTC ISO; null for a "Not entered" ToD.
+  time: string | null;
+  hq: boolean;
+  dayNumber?: number | null;
+}
+
 export interface ActivityEvent {
   id: number;
   linkshellId: number;
