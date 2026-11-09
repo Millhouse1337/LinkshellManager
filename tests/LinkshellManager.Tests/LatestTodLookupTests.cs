@@ -66,6 +66,29 @@ public class LatestTodLookupTests
         Assert.Contains("Fafnir/Nidhogg", entry.MatchNames);
     }
 
+    // The Day box on the event form is filled from NextDay: an NQ kill moves the cycle on a day,
+    // an HQ starts it over at 1 -- including an HQ posted by name ("Nidhogg") with no HQ toggle.
+    [Theory]
+    [InlineData("Fafnir", 1, false, 2)]
+    [InlineData("Fafnir/Nidhogg", 5, false, 6)]
+    [InlineData("Fafnir/Nidhogg", 5, true, 1)]
+    [InlineData("Nidhogg", 6, false, 1)]
+    [InlineData("Fafnir", null, false, null)]
+    public async Task Next_day_follows_the_day_cycle(string monster, int? day, bool hq, int? expectedNextDay)
+    {
+        using var db = NewInMemoryContext();
+        var tod = NewTod(1, monster, hoursAgo: 3);
+        tod.DayNumber = day;
+        tod.Hq = hq;
+        db.Tods.Add(tod);
+        await db.SaveChangesAsync();
+
+        var entry = Assert.Single(await LookupAsync(db));
+
+        Assert.Equal(day, entry.DayNumber);
+        Assert.Equal(expectedNextDay, entry.NextDay);
+    }
+
     [Fact]
     public async Task A_not_entered_tod_still_counts_as_the_latest()
     {

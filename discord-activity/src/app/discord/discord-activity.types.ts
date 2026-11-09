@@ -1087,6 +1087,8 @@ export interface ActivityLatestTod {
   time: string | null;
   hq: boolean;
   dayNumber?: number | null;
+  // The day the next camp is on: this ToD's day + 1, or 1 after an HQ. Null with no day recorded.
+  nextDay?: number | null;
 }
 
 export interface ActivityEvent {

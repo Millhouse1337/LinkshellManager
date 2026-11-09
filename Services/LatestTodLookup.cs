@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -14,13 +15,16 @@ namespace LinkshellManagerDiscordApp.Services;
 public static class LatestTodLookup
 {
     // TimeUtc is null for a "Not entered" ToD (the camp ended without anyone seeing it die).
+    // Hq and NextDay follow HnmDayCycle, the same rule the parked boards use: an HQ kill starts
+    // the cycle over at Day 1, an NQ kill moves it on a day, and no recorded day gives no next day.
     public sealed record Entry(
         int TodId,
         string MonsterName,
         IReadOnlyList<string> MatchNames,
         DateTime? TimeUtc,
         bool Hq,
-        int? DayNumber);
+        int? DayNumber,
+        int? NextDay);
 
     public static async Task<List<Entry>> ForLinkshellAsync(
         ApplicationDbContext db,
@@ -57,13 +61,15 @@ public static class LatestTodLookup
                 answered.Add(name);
             }
 
+            var tod = new Tod { MonsterName = row.MonsterName, Hq = row.Hq, DayNumber = row.DayNumber };
             entries.Add(new Entry(
                 row.Id,
                 row.MonsterName!.Trim(),
                 matchNames,
                 row.Time.HasValue ? DateTime.SpecifyKind(row.Time.Value, DateTimeKind.Utc) : null,
-                row.Hq,
-                row.DayNumber));
+                HnmDayCycle.WasHq(tod),
+                row.DayNumber,
+                HnmDayCycle.NextDay(tod, boardDay: null)));
         }
 
         return entries;

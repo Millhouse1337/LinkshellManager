@@ -33,7 +33,8 @@ public sealed partial class ActivityDataController
                 matchNames = entry.MatchNames,
                 time = entry.TimeUtc,
                 hq = entry.Hq,
-                dayNumber = entry.DayNumber
+                dayNumber = entry.DayNumber,
+                nextDay = entry.NextDay
             }).ToList()
         });
     }

@@ -293,6 +293,18 @@
   font-weight: 700;
 }
 
+/* The ToD's Day + HQ tags, pushed to the right end of the strip. */
+.cem__last-tod-tags {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.cem__last-tod-tag--day {
+  background: rgba(143, 166, 192, 0.15);
+  color: #cfe0f2;
+}
+
 /* ===== Controls ===== */
 .cem__input,
 .cem__select {

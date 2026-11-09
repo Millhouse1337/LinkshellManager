@@ -254,7 +254,9 @@ export class ActivityQueuePanelComponent {
       this.customMonsterName = '';
     }
     // The seeded monster names the event; leaving HNM clears a name that only came from it.
+    // Same for the day it was given off the monster's last ToD.
     this.syncEventNameToMonster();
+    this.applyNextDayPrefill();
   }
 
   // HNM and NM ride in together after Sea. Both make the same kind of camp — they differ only
@@ -324,11 +326,13 @@ export class ActivityQueuePanelComponent {
   protected onMonsterSelect(value: string): void {
     this.createModel.monsterName = value ? value : null;
     this.syncEventNameToMonster();
+    this.applyNextDayPrefill();
     this.applyRepopStartPrefill();
   }
 
   protected onCustomMonsterNameChange(): void {
     this.syncEventNameToMonster();
+    this.applyNextDayPrefill();
     this.applyRepopStartPrefill();
   }
 
@@ -404,8 +408,30 @@ export class ActivityQueuePanelComponent {
     });
     void this.tods.loadLatestTods(linkshellId).then(entries => {
       this.latestTods.set(entries);
+      // Only a NEW event: an edited one opens on its own day, and a blank there is left blank
+      // unless the officer changes the monster.
+      if (this.editingEventId === null) {
+        this.applyNextDayPrefill();
+      }
       this.cdr.markForCheck();
     });
+  }
+
+  // The Day value this component last wrote, so it can be replaced when the monster changes.
+  // Anything else in the box was typed by the officer (or belongs to the edited event) and stays.
+  private autoFilledDayNumber: number | null = null;
+
+  // Day number = the day after the picked monster's last ToD, or 1 when that ToD was the HQ
+  // (the server works it out: LatestTodLookup.NextDay). Only for the monsters with a day cycle;
+  // switching to one without clears a day this component filled in.
+  private applyNextDayPrefill(): void {
+    const current = this.createModel.dayNumber ?? null;
+    if (current !== null && current !== this.autoFilledDayNumber) {
+      return;
+    }
+    const next = this.dayNumberVisible() ? (this.selectedLatestTod()?.nextDay ?? null) : null;
+    this.createModel.dayNumber = next;
+    this.autoFilledDayNumber = next;
   }
 
   // The picked monster's spellings to match a server entry's matchNames against: the pick itself
@@ -1205,6 +1231,7 @@ export class ActivityQueuePanelComponent {
     this.editingOriginalStartLocal = savedStartLocal;
     this.customMonsterName = '';
     this.createModel.dayNumber = event.hnmNextDay ?? event.dayNumber ?? null;
+    this.autoFilledDayNumber = null;
     this.createModel.startTimeLocal = savedStartLocal
       ? shiftLocalDateTime(savedStartLocal, -this.selectedMonsterAdditionalSeconds())
       : '';
@@ -1283,6 +1310,7 @@ export class ActivityQueuePanelComponent {
     this.editingRepostOn = false;
     this.customMonsterName = '';
     this.autoFilledEventName = '';
+    this.autoFilledDayNumber = null;
     this.isEditingLiveEvent = false;
     this.editingOriginalPartySetupId = null;
     this.editingOriginalStartLocal = '';

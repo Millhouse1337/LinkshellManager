@@ -161,9 +161,14 @@
                 <div class="cem__last-tod">
                   @if (selectedLatestTod(); as last) {
                     <span>{{ last.time ? activity.formatDateTimeWithSeconds(last.time) : 'Not entered' }}</span>
-                    @if (last.hq) {
-                      <span class="cem__last-tod-tag">HQ</span>
-                    }
+                    <span class="cem__last-tod-tags">
+                      @if (last.dayNumber) {
+                        <span class="cem__last-tod-tag cem__last-tod-tag--day">Day {{ last.dayNumber }}</span>
+                      }
+                      @if (last.hq) {
+                        <span class="cem__last-tod-tag">HQ</span>
+                      }
+                    </span>
                   } @else {
                     <span class="cem__last-tod--none">No ToD tracked yet</span>
                   }
