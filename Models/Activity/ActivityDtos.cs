@@ -1299,11 +1299,23 @@ public sealed record ActivityDiscordRosterCandidateDto(
     string AvatarUrl,
     bool HasLsmAccount);
 
+// InDiscordServer: set by the invite browse when the linkshell is locked to a Discord
+// server (false = they must join it before they can open the linkshell); null otherwise.
 public sealed record ActivityUserSearchResultDto(
     string Id,
     string DisplayName,
     string? UserName,
-    string? PrimaryLinkshellName);
+    string? PrimaryLinkshellName,
+    bool? InDiscordServer);
+
+// Invite card, "In a Linkshell": the linkshells to pick from, then one's roster.
+public sealed record ActivityInviteSourceLinkshellDto(int Id, string Name);
+
+public sealed record ActivityInviteRosterRowDto(
+    string? AppUserId,
+    string DisplayName,
+    string State,
+    bool? InDiscordServer);
 
 public sealed record ActivityLinkshellSearchResultDto(
     int Id,

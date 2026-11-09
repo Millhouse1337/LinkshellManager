@@ -5,13 +5,36 @@ using Microsoft.EntityFrameworkCore;
 namespace LinkshellManagerDiscordApp.Services;
 
 // A single LSM user who is eligible to be invited to a linkshell. The Activity
-// maps it to ActivityUserSearchResultDto. Field order/names mirror
-// ActivityUserSearchResultDto so the Activity's JSON contract is unchanged.
+// maps it to ActivityUserSearchResultDto. InDiscordServer: whether they are in the
+// linkshell's locked Discord server — null when it isn't locked or the bot can't read it.
 public sealed record InviteCandidate(
     string Id,
     string DisplayName,
     string? UserName,
-    string? PrimaryLinkshellName);
+    string? PrimaryLinkshellName,
+    bool? InDiscordServer);
+
+// A linkshell whose roster the invite card can show ("In a Linkshell").
+public sealed record InviteSourceLinkshell(int Id, string Name);
+
+// One row of another linkshell's roster, as the invite card shows it: a name and what
+// can be done about that person for the linkshell doing the inviting (InviteRosterStates).
+// No rank, DKP or dates — only the name crosses between linkshells.
+public sealed record InviteRosterRow(
+    string? AppUserId,
+    string DisplayName,
+    string State,
+    bool? InDiscordServer);
+
+public static class InviteRosterStates
+{
+    public const string Invitable = "invite";
+    public const string Member = "member";       // already in the inviting linkshell
+    public const string Invited = "invited";     // a pending invite from it
+    public const string Requested = "requested"; // a pending join request to it
+    public const string Self = "you";
+    public const string NoAccount = "noAccount"; // a placeholder row, no LSM account to invite
+}
 
 public sealed record InviteCandidatePage(
     IReadOnlyList<InviteCandidate> Items,
@@ -53,19 +76,19 @@ public sealed class InviteCandidateService
         _discordIdentityService = discordIdentityService;
     }
 
-    // Paginated, searchable, filterable browse of every LSM user eligible to be
-    // invited to the given linkshell (anyone who has used the app), minus the
+    // Paginated, searchable browse of every LSM user eligible to be invited to the
+    // given linkshell ("Entire LSM Server": anyone who has used the app), minus the
     // caller, current members, and anyone with a pending invite/join request.
     //   query  - case-insensitive substring of character name OR username.
-    //   filter - "unaffiliated" (no linkshell), "affiliated" (has one), else all.
-    //   discordGuildId - when the linkshell is locked to a server, restrict to
-    //                    that server's members (null/unavailable = no restriction).
+    //   discordGuildId - when the linkshell is locked to a server, each result says
+    //                    whether they're in it. They are still listed: an outsider
+    //                    can be invited, but must join the server before the lock
+    //                    lets them open the linkshell.
     public async Task<InviteCandidatePage> BrowseAsync(
         int linkshellId,
         string callerAppUserId,
         string? discordGuildId,
         string? query,
-        string? filter,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
@@ -100,38 +123,120 @@ public sealed class InviteCandidateService
                 EF.Functions.ILike(user.UserName!, $"%{normalizedQuery}%"));
         }
 
-        var normalizedFilter = (filter ?? "all").Trim().ToLowerInvariant();
-        if (normalizedFilter == "unaffiliated")
-        {
-            eligible = eligible.Where(user => !_dbContext.AppUserLinkshells.Any(link => link.AppUserId == user.Id));
-        }
-        else if (normalizedFilter == "affiliated")
-        {
-            eligible = eligible.Where(user => _dbContext.AppUserLinkshells.Any(link => link.AppUserId == user.Id));
-        }
-
-        // When the linkshell is locked to a Discord server, only surface people
-        // who are actually in that server (null = unlocked or bot unavailable).
-        var guildEligibleIds = await TryGetGuildEligibleAppUserIdsAsync(discordGuildId, cancellationToken);
-        if (guildEligibleIds is not null)
-        {
-            eligible = eligible.Where(user => guildEligibleIds.Contains(user.Id));
-        }
-
         var total = await eligible.CountAsync(cancellationToken);
 
-        var items = await eligible
+        var rows = await eligible
             .OrderBy(user => user.CharacterName ?? user.UserName)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(user => new InviteCandidate(
+            .Select(user => new
+            {
                 user.Id,
-                user.CharacterName ?? user.UserName ?? "Unknown member",
+                DisplayName = user.CharacterName ?? user.UserName ?? "Unknown member",
                 user.UserName,
-                user.PrimaryLinkshellName))
+                user.PrimaryLinkshellName
+            })
             .ToListAsync(cancellationToken);
 
+        // Null = unlocked or the bot can't read the server: no flag either way.
+        var guildEligibleIds = await TryGetGuildEligibleAppUserIdsAsync(discordGuildId, cancellationToken);
+        var items = rows
+            .Select(row => new InviteCandidate(
+                row.Id,
+                row.DisplayName,
+                row.UserName,
+                row.PrimaryLinkshellName,
+                guildEligibleIds?.Contains(row.Id)))
+            .ToList();
+
         return new InviteCandidatePage(items, total, page, pageSize);
+    }
+
+    // Every active linkshell but the one doing the inviting, for the "In a Linkshell"
+    // picker. Caller handles auth + the manage-invites permission.
+    public async Task<IReadOnlyList<InviteSourceLinkshell>> ListInviteSourcesAsync(
+        int linkshellId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbContext.Linkshells
+            .Where(linkshell =>
+                linkshell.Id != linkshellId &&
+                linkshell.Status == "Active" &&
+                linkshell.LinkshellName != null)
+            .OrderBy(linkshell => linkshell.LinkshellName)
+            .Select(linkshell => new InviteSourceLinkshell(linkshell.Id, linkshell.LinkshellName!))
+            .ToListAsync(cancellationToken);
+    }
+
+    // The roster of another linkshell (source), each row marked with what the inviting
+    // linkshell (target) can do about that person. The whole roster is returned, members
+    // and pending ones included, so it reads like the real roster. Null when the source
+    // isn't an active linkshell. Caller handles auth + the manage-invites permission.
+    public async Task<IReadOnlyList<InviteRosterRow>?> GetLinkshellRosterAsync(
+        int targetLinkshellId,
+        int sourceLinkshellId,
+        string callerAppUserId,
+        string? discordGuildId,
+        CancellationToken cancellationToken)
+    {
+        var sourceExists = await _dbContext.Linkshells
+            .AnyAsync(linkshell =>
+                linkshell.Id == sourceLinkshellId &&
+                linkshell.Id != targetLinkshellId &&
+                linkshell.Status == "Active",
+                cancellationToken);
+        if (!sourceExists)
+        {
+            return null;
+        }
+
+        var roster = await _dbContext.AppUserLinkshells
+            .Where(link => link.LinkshellId == sourceLinkshellId)
+            .Select(link => new
+            {
+                link.AppUserId,
+                Name = link.CharacterName ?? link.AppUser!.CharacterName ?? link.AppUser.UserName,
+                IsPlaceholder = link.AppUser != null && link.AppUser.IsPlaceholder
+            })
+            .ToListAsync(cancellationToken);
+
+        var targetMemberIds = (await _dbContext.AppUserLinkshells
+                .Where(link => link.LinkshellId == targetLinkshellId && link.AppUserId != null)
+                .Select(link => link.AppUserId!)
+                .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var pendingByUser = (await _dbContext.Invites
+                .Where(invite =>
+                    invite.LinkshellId == targetLinkshellId &&
+                    invite.AppUserId != null &&
+                    PendingInviteStatuses.Contains(invite.Status))
+                .Select(invite => new { AppUserId = invite.AppUserId!, invite.Status })
+                .ToListAsync(cancellationToken))
+            .GroupBy(invite => invite.AppUserId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Status, StringComparer.Ordinal);
+
+        var guildEligibleIds = await TryGetGuildEligibleAppUserIdsAsync(discordGuildId, cancellationToken);
+
+        return roster
+            .Select(row =>
+            {
+                var hasAccount = row.AppUserId is not null && !row.IsPlaceholder;
+                var state = !hasAccount ? InviteRosterStates.NoAccount
+                    : row.AppUserId == callerAppUserId ? InviteRosterStates.Self
+                    : targetMemberIds.Contains(row.AppUserId!) ? InviteRosterStates.Member
+                    : pendingByUser.TryGetValue(row.AppUserId!, out var status)
+                        ? (status == "PendingJoinRequest" ? InviteRosterStates.Requested : InviteRosterStates.Invited)
+                    : InviteRosterStates.Invitable;
+
+                return new InviteRosterRow(
+                    hasAccount ? row.AppUserId : null,
+                    string.IsNullOrWhiteSpace(row.Name) ? "Unknown member" : row.Name,
+                    state,
+                    hasAccount ? guildEligibleIds?.Contains(row.AppUserId!) : null);
+            })
+            .OrderBy(row => row.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     // Resolves which AppUser ids may appear in a guild-locked linkshell's invite

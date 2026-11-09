@@ -85,14 +85,15 @@ public sealed partial class ActivityDataController
                 user.Id,
                 user.CharacterName ?? user.UserName ?? "Unknown member",
                 user.UserName,
-                user.PrimaryLinkshellName))
+                user.PrimaryLinkshellName,
+                null))
             .ToListAsync(cancellationToken);
 
         return Ok(results);
     }
 
-    // Paginated, searchable, filterable browse of every LSM user eligible to be
-    // invited to this linkshell (i.e. anyone who has used the app at least once),
+    // Paginated, searchable browse of every LSM user eligible to be invited to this
+    // linkshell (the invite card's "Entire LSM Server": anyone who has used the app),
     // minus current members, pending invites/join-requests, and the caller.
     // Lets leaders pick from a list instead of having to type a name. No Discord
     // bot required — these are users already in our database.
@@ -100,7 +101,6 @@ public sealed partial class ActivityDataController
     public async Task<IActionResult> BrowsePlayersAsync(
         [FromQuery] int linkshellId,
         [FromQuery] string? query,
-        [FromQuery] string? filter,
         [FromQuery] int page,
         [FromQuery] int pageSize,
         CancellationToken cancellationToken)
@@ -130,22 +130,82 @@ public sealed partial class ActivityDataController
             appUser.Id,
             membership?.Linkshell?.DiscordGuildId,
             query,
-            filter,
             page,
             pageSize,
             cancellationToken);
 
-        // Map to the Activity's DTO so the JSON contract the Angular client reads
-        // (id / displayName / userName / primaryLinkshellName) is unchanged.
         var items = result.Items
             .Select(candidate => new ActivityUserSearchResultDto(
                 candidate.Id,
                 candidate.DisplayName,
                 candidate.UserName,
-                candidate.PrimaryLinkshellName))
+                candidate.PrimaryLinkshellName,
+                candidate.InDiscordServer))
             .ToList();
 
         return Ok(new { items, total = result.Total, page = result.Page, pageSize = result.PageSize });
+    }
+
+    // The invite card's "In a Linkshell" picker: every other active linkshell in the app.
+    [HttpGet("linkshells/{linkshellId:int}/invite-sources")]
+    public async Task<IActionResult> GetInviteSourcesAsync(int linkshellId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to list linkshells."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var sources = await _inviteCandidates.ListInviteSourcesAsync(linkshellId, cancellationToken);
+        return Ok(sources.Select(source => new ActivityInviteSourceLinkshellDto(source.Id, source.Name)).ToList());
+    }
+
+    // One picked linkshell's roster, names only, each marked with what this linkshell
+    // can do about that person (invite / already a member / pending / no account).
+    [HttpGet("linkshells/{linkshellId:int}/invite-sources/{sourceLinkshellId:int}/roster")]
+    public async Task<IActionResult> GetInviteSourceRosterAsync(
+        int linkshellId,
+        int sourceLinkshellId,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to load a roster."
+            });
+        }
+
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var rows = await _inviteCandidates.GetLinkshellRosterAsync(
+            linkshellId,
+            sourceLinkshellId,
+            appUser.Id,
+            membership?.Linkshell?.DiscordGuildId,
+            cancellationToken);
+        if (rows is null)
+        {
+            return NotFound(new { error = "That linkshell was not found." });
+        }
+
+        return Ok(rows
+            .Select(row => new ActivityInviteRosterRowDto(row.AppUserId, row.DisplayName, row.State, row.InDiscordServer))
+            .ToList());
     }
 
     [HttpPost("invites/participants")]
