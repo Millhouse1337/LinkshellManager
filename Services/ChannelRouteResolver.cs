@@ -75,13 +75,14 @@ public sealed class ChannelRouteResolver
         // posted every HNM camp with no route of its own into a channel that had HNM unticked.)
         if (string.Equals(matchType, "HNM", StringComparison.OrdinalIgnoreCase))
         {
-            var monster = (monsterName ?? string.Empty).Trim();
-            // A combined "Base/Stronger" name (e.g. "Adamantoise/Aspidochelone") matches a
-            // route filtering EITHER half; single names split to one segment.
-            var monsterSegments = HnmConfig.MonsterSegments(monster);
+            // Every spelling of the same spawn on BOTH sides. The route editor stores the merged
+            // catalog label ("Fafnir/Nidhogg"), older routes hold a single half ("Fafnir"), and a
+            // camp can carry either. Comparing the camp's halves against the filter's tokens as-is
+            // never matched a combined token, so the three merge-pair boards posted nowhere.
+            var monsterNames = HnmConfig.MonsterMatchNames(monsterName);
             var hnmRoutes = rows.Where(route => FilterContains(route.EventTypeFilter, "HNM")).ToList();
-            var hnmMatch = monsterSegments.Length > 0
-                ? hnmRoutes.FirstOrDefault(route => monsterSegments.Any(seg => FilterContains(route.HnmMonsterFilter, seg)))
+            var hnmMatch = monsterNames.Count > 0
+                ? hnmRoutes.FirstOrDefault(route => FilterMatchesMonster(route.HnmMonsterFilter, monsterNames))
                 : null;
             hnmMatch ??= hnmRoutes.FirstOrDefault(route => string.IsNullOrWhiteSpace(route.HnmMonsterFilter));
             return string.IsNullOrEmpty(hnmMatch?.ChannelId) ? null : hnmMatch!.ChannelId;
@@ -89,6 +90,19 @@ public sealed class ChannelRouteResolver
 
         var match = rows.FirstOrDefault(route => FilterContains(route.EventTypeFilter, matchType));
         return string.IsNullOrEmpty(match?.ChannelId) ? null : match!.ChannelId;
+    }
+
+    // True when any monster in the pipe-delimited filter is the same spawn as the camp's monster.
+    private static bool FilterMatchesMonster(string? filter, IReadOnlyCollection<string> monsterNames)
+    {
+        if (string.IsNullOrWhiteSpace(filter))
+        {
+            return false;
+        }
+        return filter
+            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(token => HnmConfig.MonsterMatchNames(token)
+                .Any(name => monsterNames.Contains(name, StringComparer.OrdinalIgnoreCase)));
     }
 
     // True when the pipe-delimited filter explicitly contains the given event

@@ -52,6 +52,52 @@ public class ChannelRouteResolverTests
         Assert.Null(channel);
     }
 
+    // The route editor saves the merged catalog label, so a route can hold "Fafnir/Nidhogg" while
+    // a camp (or an older route) holds just one half. Every combination must still match.
+    [Theory]
+    [InlineData("Fafnir/Nidhogg", "Fafnir/Nidhogg")]
+    [InlineData("Fafnir/Nidhogg", "Fafnir")]
+    [InlineData("Fafnir/Nidhogg", "Nidhogg")]
+    [InlineData("Fafnir", "Fafnir/Nidhogg")]
+    [InlineData("Behemoth/King Behemoth", "Behemoth/King Behemoth")]
+    [InlineData("Adamantoise/Aspidochelone", "Adamantoise/Aspidochelone")]
+    public async Task Merge_pair_camp_finds_its_route_under_any_spelling(string routeFilter, string campMonster)
+    {
+        var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options);
+        db.LinkshellChannelRoutes.Add(new LinkshellChannelRoute
+        {
+            Id = 1, LinkshellId = 1, ChannelId = "wyrms", PostEvents = true,
+            EventTypeFilter = "HNM", HnmMonsterFilter = $"Tiamat|{routeFilter}",
+        });
+        db.SaveChanges();
+
+        var channel = await new ChannelRouteResolver(db)
+            .ResolveEventChannelIdAsync(1, "HNM", campMonster, CancellationToken.None);
+
+        Assert.Equal("wyrms", channel);
+    }
+
+    [Fact]
+    public async Task Merge_pair_route_does_not_catch_another_monster()
+    {
+        var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options);
+        db.LinkshellChannelRoutes.Add(new LinkshellChannelRoute
+        {
+            Id = 1, LinkshellId = 1, ChannelId = "wyrms", PostEvents = true,
+            EventTypeFilter = "HNM", HnmMonsterFilter = "Fafnir/Nidhogg",
+        });
+        db.SaveChanges();
+
+        var channel = await new ChannelRouteResolver(db)
+            .ResolveEventChannelIdAsync(1, "HNM", "Behemoth/King Behemoth", CancellationToken.None);
+
+        Assert.Null(channel);
+    }
+
     [Fact]
     public async Task Other_types_still_reach_the_other_route()
     {
