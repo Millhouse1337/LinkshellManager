@@ -253,7 +253,7 @@
                  The amounts come from the linkshell's HNM settings; "Change DKP" prices this
                  ONE camp without moving that setting. -->
             @if (!hnmDkpOverrideOpen) {
-              <div class="cem__bonus-row">
+              <div class="cem__bonus-row cem__bonus-row--even">
                 @for (field of hnmBonusFields(); track field.key) {
                   <div class="cem__bonus" [title]="field.hint">
                     <span class="cem__bonus-val">{{ hnmEffectiveBonus(field.key) }}</span>
@@ -261,7 +261,7 @@
                   </div>
                 }
               </div>
-              <button type="button" class="cem__btn cem__btn--dashed cem__btn--sm"
+              <button type="button" class="cem__btn cem__btn--dashed cem__btn--sm cem__btn--end"
                 (click)="openHnmDkpOverride()">Change DKP</button>
               <small class="cem__hint">Linkshell defaults. DKP is credited when an officer posts the camp for review.</small>
             } @else {

@@ -351,6 +351,13 @@
   border-radius: 10px;
 }
 
+/* The read-only DKP chips share the row's width equally (wrapping when it gets too narrow). */
+.cem__bonus-row--even .cem__bonus {
+  flex: 1 1 0;
+  min-width: 100px;
+  justify-content: center;
+}
+
 /* Reads value-first — "0.5 per window" — so the amount is the emphasis and the
    suffix trails it as plain words. */
 .cem__bonus-val {
@@ -669,6 +676,11 @@
   padding: 0 10px;
   border-radius: 8px;
   font-size: 12px;
+}
+
+/* Same, pinned to the right edge of its section. */
+.cem__btn--end {
+  align-self: flex-end;
 }
 
 .cem__btn--dashed:hover {
