@@ -337,22 +337,12 @@
       <!-- News & Updates (left) + Upcoming Events (right) -->
       @if (selectedDashboardLinkshell()) {
         <div class="dash-row dash-row--stretch">
-          <!-- News & Updates and Recent activity in one card: one timeline, newest first. "All"
-               shows both; the News chip shows only announcements, rules, auctions, DKP and members. -->
+          <!-- News & Updates and Recent activity in one card: one timeline, newest first, with
+               everything in it (no filter tabs). -->
           <div class="card activity-card">
             <div class="card-head">
               <div class="card-title">News &amp; Activity</div>
               <button type="button" class="card-link" (click)="setActiveTab('timed-events')">Full log</button>
-            </div>
-            <div class="activity-filter-bar">
-              <div class="seg-toggle">
-                <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'all'" (click)="activityFilter = 'all'">All</button>
-                <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'news'" (click)="activityFilter = 'news'">News</button>
-                <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'kills'" (click)="activityFilter = 'kills'">Kills</button>
-                <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'claims'" (click)="activityFilter = 'claims'">Claims</button>
-                <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'events'" (click)="activityFilter = 'events'">Events</button>
-                <button type="button" class="seg-toggle-btn" [class.active]="activityFilter === 'loot'" (click)="activityFilter = 'loot'">Loot</button>
-              </div>
             </div>
             @if (dashboardRecentActivity().length > 0) {
               <div class="activity-feed">

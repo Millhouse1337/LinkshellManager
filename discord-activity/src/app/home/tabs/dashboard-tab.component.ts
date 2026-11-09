@@ -42,7 +42,6 @@ interface FeedItem {
   relative: string;
   when: number;
 }
-const NEWS_KINDS: ReadonlySet<FeedKind> = new Set<FeedKind>(['announcement', 'rule', 'auction', 'dkp', 'member']);
 
 @Component({
   selector: 'app-dashboard-tab',
@@ -654,9 +653,7 @@ export class DashboardTabComponent {
     return items;
   }
 
-  protected activityFilter: 'all' | 'news' | 'kills' | 'claims' | 'events' | 'loot' = 'all';
-
-  // News and activity in one timeline, newest first (the "All" filter shows both).
+  // News and activity in one timeline, newest first.
   protected dashboardRecentActivity(): FeedItem[] {
     const selectedId = this.selectedDashboardLinkshellId();
     const items: FeedItem[] = this.dashboardNewsItems();
@@ -729,19 +726,8 @@ export class DashboardTabComponent {
       });
     }
 
-    const filter = this.activityFilter;
-    const filtered = items.filter(item => {
-      if (filter === 'all') return true;
-      if (filter === 'news') return NEWS_KINDS.has(item.kind);
-      if (filter === 'kills') return item.kind === 'loot' || item.kind === 'no-claim' || item.kind === 'claim';
-      if (filter === 'claims') return item.kind === 'claim';
-      if (filter === 'events') return item.kind === 'event';
-      if (filter === 'loot') return item.kind === 'loot';
-      return true;
-    });
-
-    // 20, not 10: news and activity share the list now. The feed scrolls inside the card.
-    return filtered
+    // 20, not 10: news and activity share the list. The feed scrolls inside the card.
+    return items
       .filter(item => item.when > 0)
       .sort((left, right) => right.when - left.when)
       .slice(0, 20);

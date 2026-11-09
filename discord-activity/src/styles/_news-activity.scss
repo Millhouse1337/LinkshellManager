@@ -23,40 +23,14 @@
   margin-top: 2px;
 }
 
-/* ===== Segmented All/Mine toggle ===== */
-.panel-tab .seg-toggle {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  overflow: hidden;
-}
-.panel-tab .seg-toggle-btn {
-  padding: 4px 10px;
-  font-size: 12px;
-  font-family: var(--font-sans);
-  border: 0;
-  background: transparent;
-  color: var(--fg-3);
-  cursor: pointer;
-}
-.panel-tab .seg-toggle-btn.active {
-  background: var(--surface);
-  color: var(--fg);
-}
-
 /* ===== Recent activity timeline ===== */
-.panel-tab .activity-filter-bar {
-  padding: 8px 14px 4px;
-}
 .panel-tab .activity-feed {
   position: relative;
   padding: 4px 14px 4px 36px;
 }
-// The News & Activity card: news and activity in one timeline. Its filters
-// (All/News/Kills/Claims/Events/Loot) have different row counts, so the feed keeps a
-// constant height with internal scroll — switching filters never changes the page
-// height (no scroll jump). The empty state holds the same height.
+// The News & Activity card: news and activity in one timeline. The feed keeps a constant
+// height with internal scroll, so it lines up with the card beside it however many rows
+// there are. The empty state holds the same height.
 .panel-tab .activity-card .activity-feed {
   height: 420px;
   overflow-y: auto;
