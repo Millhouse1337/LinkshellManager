@@ -1299,14 +1299,8 @@ public sealed record ActivityDiscordRosterCandidateDto(
     string AvatarUrl,
     bool HasLsmAccount);
 
-// The invite card's "From My Discord Server": the server the app was opened in (its name,
-// for the card's note; null when unknown) and who in it can be added.
-public sealed record ActivityDiscordRosterDto(
-    string? GuildName,
-    IReadOnlyList<ActivityDiscordRosterCandidateDto> Members);
-
-// InDiscordServer: set by the invite browse inside Discord — whether they are in the server
-// the app was opened in. Null on the website, or when the bot can't read that server.
+// InDiscordServer: set by the invite browse — whether they are in the linkshell's Discord
+// server (set in Configurations). Null when none is set, or when the bot can't read it.
 public sealed record ActivityUserSearchResultDto(
     string Id,
     string DisplayName,

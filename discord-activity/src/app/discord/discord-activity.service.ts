@@ -200,7 +200,6 @@ export class DiscordActivityService {
   readonly linkshellSearchBusy = this.inviteService.linkshellSearchBusy;
   readonly discordRosterCandidates = this.inviteService.discordRosterCandidates;
   readonly discordRosterBusy = this.inviteService.discordRosterBusy;
-  readonly discordRosterGuildName = this.inviteService.discordRosterGuildName;
   readonly busyDiscordUserId = this.inviteService.busyDiscordUserId;
   readonly dkpHistory = this.dkpService.dkpHistory;
   readonly dkpHistoryBusy = this.dkpService.dkpHistoryBusy;

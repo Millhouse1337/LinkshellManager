@@ -13,7 +13,7 @@ interface InviteResultRow {
   name: string;
   detail: string | null;
   avatarUrl: string | null;
-  /** Inside Discord, someone who isn't in the server the app was opened in. */
+  /** Someone who isn't in the linkshell's Discord server (set in Configurations). */
   outsideServer: boolean;
   invite: { appUserId: string } | { discordUserId: string };
 }
@@ -87,17 +87,22 @@ export class InvitesPanelComponent {
     });
   }
 
-  /** The dropdown's choices. From My Discord Server needs the app opened inside a Discord
-   *  server — on the website there is no server to list. */
+  /** The dropdown's choices. From My Discord Server needs a Discord server set for the
+   *  linkshell in Configurations. */
   protected sourceOptions(): { key: InviteSource; label: string }[] {
     return [
       { key: 'all', label: 'Entire LSM Server' },
-      ...(this.inDiscordServer() ? [{ key: 'discord' as const, label: 'From My Discord Server' }] : [])
+      ...(this.targetDiscordServer() ? [{ key: 'discord' as const, label: 'From My Discord Server' }] : [])
     ];
   }
 
-  private inDiscordServer(): boolean {
-    return !this.activity.isWebsite && !!this.activity.currentGuildId();
+  /** The Discord server set for the target linkshell in Configurations, or null. */
+  protected targetDiscordServer(): { id: string; name: string | null } | null {
+    const id = this.inviteTargetLinkshellId();
+    const settings = this.linkshellMemberships().find(membership => membership.id === id)?.settings;
+    return settings?.discordGuildId
+      ? { id: settings.discordGuildId, name: settings.discordGuildName ?? null }
+      : null;
   }
 
   /** The picked source, or Entire LSM Server when the pick isn't offered here. */

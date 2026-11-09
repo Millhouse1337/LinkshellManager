@@ -125,12 +125,11 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        // "Not in your Discord server" means the server the app was opened in.
-        var launchGuild = await GetVerifiedLaunchGuildAsync(appUser.Id, cancellationToken);
+        // "Not in your Discord server" means the linkshell's server, set in Configurations.
         var result = await _inviteCandidates.BrowseAsync(
             linkshellId,
             appUser.Id,
-            launchGuild.InGuild == true ? launchGuild.GuildId : null,
+            membership?.Linkshell?.DiscordGuildId,
             query,
             page,
             pageSize,
@@ -220,29 +219,9 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // The Discord server the app was opened in (X-Discord-Guild-Id), and whether the
-    // caller is really in it — the header comes from the client, so it is only trusted
-    // once the bot confirms the caller's Discord account is a member. InGuild is null
-    // when the bot can't read the server; GuildId is null on the website.
-    private async Task<(string? GuildId, bool? InGuild)> GetVerifiedLaunchGuildAsync(
-        string appUserId,
-        CancellationToken cancellationToken)
-    {
-        var guildId = GetRequestGuildId();
-        if (guildId is null)
-        {
-            return (null, null);
-        }
-
-        return (guildId, await _inviteCandidates.IsAppUserInGuildAsync(guildId, appUserId, cancellationToken));
-    }
-
-    private const string NotInLaunchGuildError = "You aren't a member of the Discord server this was opened in.";
-
-    // The invite card's "From My Discord Server": members of the Discord server the app
-    // was opened in who can be added to the linkshell — including people who have never
-    // used LSM (they get a Discord-keyed invite and auto-join on first sign-in). Also
-    // returns the server's name, for the card's note saying which server this is.
+    // The invite card's "From My Discord Server": members of the linkshell's Discord server
+    // (set in Configurations) who can be added to the linkshell — including people who have
+    // never used LSM (they get a Discord-keyed invite and auto-join on first sign-in).
     [HttpGet("linkshells/{linkshellId:int}/discord-roster")]
     public async Task<IActionResult> GetDiscordRosterCandidatesAsync(
         int linkshellId,
@@ -263,37 +242,21 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        var (guildId, inGuild) = await GetVerifiedLaunchGuildAsync(appUser.Id, cancellationToken);
-        if (guildId is null)
-        {
-            // The website: no server was opened in, so there's no one to list.
-            return Ok(new ActivityDiscordRosterDto(null, Array.Empty<ActivityDiscordRosterCandidateDto>()));
-        }
-        if (inGuild == false)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = NotInLaunchGuildError });
-        }
+        var guildId = membership?.Linkshell?.DiscordGuildId;
+        var candidates = await _inviteCandidates.GetDiscordRosterCandidatesAsync(linkshellId, guildId, cancellationToken);
 
-        var guildName = await _inviteCandidates.GetGuildNameAsync(guildId, cancellationToken);
-        // inGuild null = the bot can't read the server: an empty list, which the card explains.
-        var candidates = inGuild == true
-            ? await _inviteCandidates.GetDiscordRosterCandidatesAsync(linkshellId, guildId, cancellationToken)
-            : Array.Empty<DiscordRosterCandidate>();
-
-        return Ok(new ActivityDiscordRosterDto(
-            guildName,
-            candidates
-                .Select(candidate => new ActivityDiscordRosterCandidateDto(
-                    candidate.DiscordUserId,
-                    candidate.DisplayName,
-                    candidate.AvatarUrl ?? string.Empty,
-                    candidate.HasAccount))
-                .ToList()));
+        return Ok(candidates
+            .Select(candidate => new ActivityDiscordRosterCandidateDto(
+                candidate.DiscordUserId,
+                candidate.DisplayName,
+                candidate.AvatarUrl ?? string.Empty,
+                candidate.HasAccount))
+            .ToList());
     }
 
-    // Adds a member of the Discord server the app was opened in. If they already have
-    // an LSM account they're added straight to the roster (auto-join); if not, a
-    // Discord-keyed invite is stored that auto-joins them on first sign-in.
+    // Adds a member of the linkshell's Discord server (set in Configurations). If they
+    // already have an LSM account they're added straight to the roster (auto-join); if
+    // not, a Discord-keyed invite is stored that auto-joins them on first sign-in.
     [HttpPost("linkshells/{linkshellId:int}/invites/discord")]
     public async Task<IActionResult> SendDiscordInviteAsync(
         int linkshellId,
@@ -315,16 +278,8 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        var (guildId, inGuild) = await GetVerifiedLaunchGuildAsync(appUser.Id, cancellationToken);
-        if (guildId is not null && inGuild == false)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new { error = NotInLaunchGuildError });
-        }
-
-        // A null guild (the website) gets AddDiscordMemberAsync's "open LSM inside your
-        // Discord server" error; an unreadable one its "couldn't read this server".
         var result = await _inviteCandidates.AddDiscordMemberAsync(
-            linkshellId, guildId, request.DiscordUserId, cancellationToken);
+            linkshellId, membership?.Linkshell?.DiscordGuildId, request.DiscordUserId, cancellationToken);
 
         return result.Success
             ? Ok(new { success = true })

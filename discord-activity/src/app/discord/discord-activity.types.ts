@@ -1780,16 +1780,9 @@ export interface ActivityUserSearchResult {
   displayName: string;
   userName?: string | null;
   primaryLinkshellName?: string | null;
-  /** Inside Discord: whether they are in the server the app was opened in. Null on the
-   *  website, or when the bot can't read that server. */
+  /** Whether they are in the linkshell's Discord server (set in Configurations). Null when
+   *  none is set, or when the bot can't read it. */
   inDiscordServer?: boolean | null;
-}
-
-/** The invite card's "From My Discord Server": the server the app was opened in (its name
- *  for the card's note, null when unknown) and who in it can be added. */
-export interface ActivityDiscordRoster {
-  guildName: string | null;
-  members: ActivityDiscordRosterCandidate[];
 }
 
 export interface ActivityLinkshellSearchResult {

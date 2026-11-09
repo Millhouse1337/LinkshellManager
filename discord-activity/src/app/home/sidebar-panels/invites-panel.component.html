@@ -102,14 +102,15 @@
           }
         </div>
 
-        <!-- Which server "my Discord server" is: the one LSM was opened in, by name. -->
+        <!-- Which server "my Discord server" is: the one set for the linkshell in
+             Configurations, by name. -->
         @if (source() === 'discord') {
           <p class="invite-note">
             Members of
-            @if (activity.discordRosterGuildName(); as guildName) {
-              <strong>{{ guildName }}</strong>,
+            @if (targetDiscordServer()?.name; as serverName) {
+              <strong>{{ serverName }}</strong>,
             }
-            the Discord server you opened LSM in.
+            this linkshell's Discord server (set in Configurations).
           </p>
         }
 
@@ -129,7 +130,8 @@
                   }
                 </div>
                 @if (row.outsideServer) {
-                  <span class="tag warning" title="Not a member of the Discord server you opened LSM in.">
+                  <span class="tag warning" title="Not a member of this linkshell's Discord server (set in Configurations).">
+
                     Not in your Discord server
                   </span>
                 }
