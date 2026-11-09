@@ -241,6 +241,8 @@
           }
         </section>
 
+        <!-- DKP and Details share one row (two columns; stacked on a narrow screen). -->
+        <div class="cem__pair">
         <section class="cem__section">
           <div class="cem__section-head">
             <span class="cem__section-title">03 — {{ isHnmSelected() ? 'Camp DKP' : 'Points &amp; automation' }}</span>
@@ -260,10 +262,9 @@
                     <span class="cem__bonus-key">{{ field.suffix }}</span>
                   </div>
                 }
-                <span class="cem__spacer"></span>
-                <button type="button" class="cem__btn cem__btn--dashed"
-                  (click)="openHnmDkpOverride()">Change DKP</button>
               </div>
+              <button type="button" class="cem__btn cem__btn--dashed cem__btn--sm"
+                (click)="openHnmDkpOverride()">Change DKP</button>
               <small class="cem__hint">Linkshell defaults. DKP is credited when an officer posts the camp for review.</small>
             } @else {
               <!-- ngModel rather than [value]: a [value] binding rewrites the box on every
@@ -282,7 +283,7 @@
               <div class="cem__bonus-row">
                 <small class="cem__hint">This camp only — the linkshell's own settings are unchanged.</small>
                 <span class="cem__spacer"></span>
-                <button type="button" class="cem__btn cem__btn--dashed"
+                <button type="button" class="cem__btn cem__btn--dashed cem__btn--sm"
                   (click)="resetHnmDkpOverride()">Use linkshell defaults</button>
               </div>
             }
@@ -343,6 +344,7 @@
               placeholder="Loot rules, required jobs, meetup instructions…" />
           </div>
         </section>
+        </div>
 
         <!-- Party setup, on every path INCLUDING a live event: linking the wrong setup (or
              none at all) is something an officer only notices once the camp is running, so the

@@ -157,6 +157,19 @@
   gap: 14px;
 }
 
+/* Two sections side by side (Camp DKP | Details). Same gap as between stacked sections. */
+.cem__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 26px;
+  align-items: start;
+}
+
+/* Half a row is too narrow for the DKP/hour box beside the switches, so stack them there. */
+.cem__pair .cem__automation {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .cem__section-head {
   display: flex;
   align-items: center;
@@ -648,6 +661,16 @@
   color: #8fa6c0;
   font-size: 13.5px;
 }
+/* A small dashed button, e.g. "Change DKP" under the DKP chips. align-self keeps it its own width
+   inside a column flex section instead of stretching edge to edge. */
+.cem__btn--sm {
+  align-self: flex-start;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
 .cem__btn--dashed:hover {
   background: #101827;
   border-color: var(--cem-sel-line);
@@ -685,6 +708,7 @@
 
 @media (max-width: 720px) {
   .cem__grid,
+  .cem__pair,
   .cem__automation {
     grid-template-columns: minmax(0, 1fr);
   }
