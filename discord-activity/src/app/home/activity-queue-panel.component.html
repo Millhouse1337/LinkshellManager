@@ -57,22 +57,9 @@
             <span class="cem__rule"></span>
           </div>
 
-          <div class="cem__grid">
-            <label class="cem__field">
-              <span class="cem__label">Event name</span>
-              <input class="cem__input" [(ngModel)]="createModel.eventName" name="eventName"
-                placeholder="e.g. Dynamis — Xarcabard" required />
-            </label>
-
-            <label class="cem__field">
-              <span class="cem__label">Location <em>optional</em></span>
-              <input class="cem__input" [(ngModel)]="createModel.eventLocation" name="eventLocation"
-                placeholder="Zone or meetup point" />
-            </label>
-          </div>
-
           <!-- Chips instead of a dropdown: the option list is short enough to show at
-               once, so picking a type is one tap rather than open-scroll-select. -->
+               once, so picking a type is one tap rather than open-scroll-select. First in the
+               form because the type decides what follows (an HNM monster names the event). -->
           <div class="cem__field">
             <span class="cem__label">Event type</span>
             <div class="cem__chips">
@@ -90,6 +77,20 @@
             @if (eventTypeError) {
               <small class="cem__error">Event type is required.</small>
             }
+          </div>
+
+          <div class="cem__grid">
+            <label class="cem__field">
+              <span class="cem__label">Event name</span>
+              <input class="cem__input" [(ngModel)]="createModel.eventName" name="eventName"
+                placeholder="e.g. Dynamis — Xarcabard" required />
+            </label>
+
+            <label class="cem__field">
+              <span class="cem__label">Location <em>optional</em></span>
+              <input class="cem__input" [(ngModel)]="createModel.eventLocation" name="eventLocation"
+                placeholder="Zone or meetup point" />
+            </label>
           </div>
 
           @if (isHnmSelected()) {
