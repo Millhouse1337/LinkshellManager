@@ -77,8 +77,7 @@
       </div>
       <div class="card-body">
       @if ((activity.overview()?.linkshells?.length ?? 0) > 0 && canManageLinkshell(inviteTargetLinkshellId())) {
-        <!-- One search box, the dropdown saying where to look, and one list of what it found.
-             In a Linkshell adds a second dropdown to pick the linkshell whose roster to show. -->
+        <!-- One search box, the dropdown saying where to look, and one list of what it found. -->
         <div class="invite-search">
           <input
             [ngModel]="searchTerm"
@@ -95,25 +94,24 @@
               <option [value]="option.key">{{ option.label }}</option>
             }
           </select>
-          @if (source() === 'linkshell') {
-            <select
-              [ngModel]="rosterLinkshellId"
-              (ngModelChange)="onRosterLinkshellChange($event)"
-              name="inviteRosterLinkshell"
-              aria-label="Linkshell">
-              <option [ngValue]="null" disabled>Pick a linkshell…</option>
-              @for (link of activity.inviteSources(); track link.id) {
-                <option [ngValue]="link.id">{{ link.name }}</option>
-              }
-            </select>
-          }
-          <!-- Only Entire LSM Server asks the server; the other lists filter as you type. -->
+          <!-- Only Entire LSM Server asks the server; the Discord list filters as you type. -->
           @if (source() === 'all') {
             <button type="button" class="action-button" (click)="onSearch()">
               {{ activity.inviteBrowseBusy() ? 'Loading...' : 'Search' }}
             </button>
           }
         </div>
+
+        <!-- Which server "my Discord server" is: the one LSM was opened in, by name. -->
+        @if (source() === 'discord') {
+          <p class="invite-note">
+            Members of
+            @if (activity.discordRosterGuildName(); as guildName) {
+              <strong>{{ guildName }}</strong>,
+            }
+            the Discord server you opened LSM in.
+          </p>
+        }
 
         @if (busyMessage(); as busy) {
           <p class="notice">{{ busy }}</p>
@@ -131,18 +129,13 @@
                   }
                 </div>
                 @if (row.outsideServer) {
-                  <span class="tag warning"
-                    title="Your linkshell is locked to its Discord server. They can be invited, but must join that server before they can open the linkshell.">
+                  <span class="tag warning" title="Not a member of the Discord server you opened LSM in.">
                     Not in your Discord server
                   </span>
                 }
-                @if (row.status) {
-                  <span class="tag default">{{ row.status }}</span>
-                } @else if (row.invite) {
-                  <button type="button" class="action-button" [disabled]="isInviting(row)" (click)="invite(row)">
-                    {{ isInviting(row) ? 'Inviting...' : 'Invite' }}
-                  </button>
-                }
+                <button type="button" class="action-button" [disabled]="isInviting(row)" (click)="invite(row)">
+                  {{ isInviting(row) ? 'Inviting...' : 'Invite' }}
+                </button>
               </li>
             }
           </ul>

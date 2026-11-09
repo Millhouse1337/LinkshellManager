@@ -1299,22 +1299,19 @@ public sealed record ActivityDiscordRosterCandidateDto(
     string AvatarUrl,
     bool HasLsmAccount);
 
-// InDiscordServer: set by the invite browse when the linkshell is locked to a Discord
-// server (false = they must join it before they can open the linkshell); null otherwise.
+// The invite card's "From My Discord Server": the server the app was opened in (its name,
+// for the card's note; null when unknown) and who in it can be added.
+public sealed record ActivityDiscordRosterDto(
+    string? GuildName,
+    IReadOnlyList<ActivityDiscordRosterCandidateDto> Members);
+
+// InDiscordServer: set by the invite browse inside Discord — whether they are in the server
+// the app was opened in. Null on the website, or when the bot can't read that server.
 public sealed record ActivityUserSearchResultDto(
     string Id,
     string DisplayName,
     string? UserName,
     string? PrimaryLinkshellName,
-    bool? InDiscordServer);
-
-// Invite card, "In a Linkshell": the linkshells to pick from, then one's roster.
-public sealed record ActivityInviteSourceLinkshellDto(int Id, string Name);
-
-public sealed record ActivityInviteRosterRowDto(
-    string? AppUserId,
-    string DisplayName,
-    string State,
     bool? InDiscordServer);
 
 public sealed record ActivityLinkshellSearchResultDto(
@@ -1323,13 +1320,6 @@ public sealed record ActivityLinkshellSearchResultDto(
     string? Details,
     int MemberCount,
     string? Status);
-
-public sealed record ActivityParticipantInviteCandidateDto(
-    string AppUserId,
-    string DiscordUserId,
-    string DisplayName,
-    string? UserName,
-    string? PrimaryLinkshellName);
 
 public sealed record ActivityLootDto(
     int Id,
@@ -1565,8 +1555,6 @@ public sealed record ActivityGuildOptionDto(string Id, string Name);
 public sealed record ActivitySendInviteRequest(string AppUserId);
 
 public sealed record ActivityDiscordInviteRequest(string DiscordUserId);
-
-public sealed record ActivityParticipantInviteCandidatesRequest(int LinkshellId, IReadOnlyList<string> DiscordUserIds);
 
 public sealed record ActivityStartEventRequest(IReadOnlyList<int>? AbsentParticipantIds);
 

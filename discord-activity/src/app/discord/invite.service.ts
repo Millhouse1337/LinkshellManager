@@ -4,11 +4,9 @@ import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
+  ActivityDiscordRoster,
   ActivityDiscordRosterCandidate,
-  ActivityInviteRosterRow,
-  ActivityInviteSourceLinkshell,
   ActivityLinkshellSearchResult,
-  ActivityParticipantInviteCandidate,
   ActivityUserSearchResult
 } from './discord-activity.types';
 
@@ -25,20 +23,15 @@ export class InviteService {
   readonly inviteBrowseTotal = signal(0);
   readonly inviteBrowseBusy = signal(false);
   readonly busyInviteId = signal<number | null>(null);
-  readonly participantInviteCandidates = signal<ActivityParticipantInviteCandidate[]>([]);
-  readonly participantInviteBusy = signal(false);
   readonly linkshellSearchResults = signal<ActivityLinkshellSearchResult[]>([]);
   readonly linkshellSearchBusy = signal(false);
-  // "From your Discord server" roster: members of the linkshell's locked Discord
-  // server who can be invited straight from the roster (including people who
-  // have never used LSM).
+  // "From My Discord Server": members of the Discord server the app was opened in who
+  // can be added straight to the linkshell (including people who have never used LSM),
+  // and that server's name for the card's note.
   readonly discordRosterCandidates = signal<ActivityDiscordRosterCandidate[]>([]);
+  readonly discordRosterGuildName = signal<string | null>(null);
   readonly discordRosterBusy = signal(false);
   readonly busyDiscordUserId = signal<string | null>(null);
-  // Invite card, "In a Linkshell": every other linkshell, then the picked one's roster.
-  readonly inviteSources = signal<ActivityInviteSourceLinkshell[]>([]);
-  readonly inviteRoster = signal<ActivityInviteRosterRow[]>([]);
-  readonly inviteRosterBusy = signal(false);
 
   async searchPlayers(query: string, linkshellId: number): Promise<void> {
     if (!query.trim() || query.trim().length < 2 || linkshellId <= 0) {
@@ -94,6 +87,8 @@ export class InviteService {
     }
   }
 
+  // Through fetchActivityJson so the request carries X-Discord-Guild-Id: inside Discord each
+  // result then says whether they're in the server the app was opened in.
   async browsePlayers(
     linkshellId: number,
     options: { query?: string; page?: number; pageSize?: number }
@@ -114,36 +109,8 @@ export class InviteService {
       params.set('page', String(options.page ?? 1));
       params.set('pageSize', String(options.pageSize ?? 10));
 
-      const headers: Record<string, string> = {};
-      const accessToken = this.auth.currentAccessToken();
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
-
-      const response = await fetch(`/api/activity/players/browse?${params.toString()}`, {
-        headers,
-        cache: 'no-store',
-        credentials: 'include'
-      });
-
-      const responseText = await response.text();
-      let payload: { items?: ActivityUserSearchResult[]; total?: number; error?: unknown } = {};
-      if (responseText) {
-        try {
-          payload = JSON.parse(responseText);
-        } catch {
-          payload = { error: responseText };
-        }
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          typeof payload.error === 'string'
-            ? payload.error
-            : `Browsing players failed with status ${response.status}.`
-        );
-      }
-
+      const payload = await this.http.fetchActivityJson<{ items?: ActivityUserSearchResult[]; total?: number }>(
+        `/api/activity/players/browse?${params.toString()}`);
       this.inviteBrowseResults.set(payload.items ?? []);
       this.inviteBrowseTotal.set(payload.total ?? 0);
     } catch (error) {
@@ -159,44 +126,8 @@ export class InviteService {
     this.inviteSearchResults.set([]);
   }
 
-  clearParticipantInviteCandidates(): void {
-    this.participantInviteCandidates.set([]);
-  }
-
   clearLinkshellSearch(): void {
     this.linkshellSearchResults.set([]);
-  }
-
-  async loadParticipantInviteCandidates(linkshellId: number, discordUserIds: string[]): Promise<void> {
-    const normalizedIds = Array.from(
-      new Set(discordUserIds.map(id => id.trim()).filter(id => id.length > 0))
-    );
-
-    if (linkshellId <= 0 || normalizedIds.length === 0) {
-      this.participantInviteCandidates.set([]);
-      return;
-    }
-
-    this.participantInviteBusy.set(true);
-
-    try {
-      const response = await this.http.postActivityJson<ActivityParticipantInviteCandidate[]>(
-        '/api/activity/invites/participants',
-        {
-          linkshellId,
-          discordUserIds: normalizedIds
-        }
-      );
-
-      this.participantInviteCandidates.set(response);
-    } catch (error) {
-      this.participantInviteCandidates.set([]);
-      this.auth.setActionError(
-        formatActionError(error, 'Loading connected participant invite targets failed.')
-      );
-    } finally {
-      this.participantInviteBusy.set(false);
-    }
   }
 
   async sendInvite(linkshellId: number, appUserId: string): Promise<void> {
@@ -214,49 +145,23 @@ export class InviteService {
     }
   }
 
+  // The server reads which Discord server this is from X-Discord-Guild-Id, which
+  // fetchActivityJson sends.
   async loadDiscordRoster(linkshellId: number): Promise<void> {
     if (linkshellId <= 0) {
-      this.discordRosterCandidates.set([]);
+      this.clearDiscordRoster();
       return;
     }
 
     this.discordRosterBusy.set(true);
 
     try {
-      const headers: Record<string, string> = {};
-      const accessToken = this.auth.currentAccessToken();
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
-
-      const response = await fetch(`/api/activity/linkshells/${linkshellId}/discord-roster`, {
-        headers,
-        cache: 'no-store',
-        credentials: 'include'
-      });
-
-      const responseText = await response.text();
-      let payload: unknown = [];
-      if (responseText) {
-        try {
-          payload = JSON.parse(responseText);
-        } catch {
-          payload = { error: responseText };
-        }
-      }
-
-      if (!response.ok) {
-        const errorPayload = payload as { error?: unknown };
-        throw new Error(
-          typeof errorPayload.error === 'string'
-            ? errorPayload.error
-            : `Loading the Discord roster failed with status ${response.status}.`
-        );
-      }
-
-      this.discordRosterCandidates.set(payload as ActivityDiscordRosterCandidate[]);
+      const roster = await this.http.fetchActivityJson<ActivityDiscordRoster>(
+        `/api/activity/linkshells/${linkshellId}/discord-roster`);
+      this.discordRosterCandidates.set(roster.members ?? []);
+      this.discordRosterGuildName.set(roster.guildName ?? null);
     } catch (error) {
-      this.discordRosterCandidates.set([]);
+      this.clearDiscordRoster();
       this.auth.setActionError(formatActionError(error, 'Loading the Discord roster failed.'));
     } finally {
       this.discordRosterBusy.set(false);
@@ -287,38 +192,7 @@ export class InviteService {
 
   clearDiscordRoster(): void {
     this.discordRosterCandidates.set([]);
-  }
-
-  async loadInviteSources(linkshellId: number): Promise<void> {
-    if (linkshellId <= 0) {
-      this.inviteSources.set([]);
-      return;
-    }
-
-    try {
-      this.inviteSources.set(await this.http.fetchActivityJson<ActivityInviteSourceLinkshell[]>(
-        `/api/activity/linkshells/${linkshellId}/invite-sources`));
-    } catch (error) {
-      this.inviteSources.set([]);
-      this.auth.setActionError(formatActionError(error, 'Loading the linkshell list failed.'));
-    }
-  }
-
-  async loadInviteRoster(linkshellId: number, sourceLinkshellId: number): Promise<void> {
-    this.inviteRosterBusy.set(true);
-    try {
-      this.inviteRoster.set(await this.http.fetchActivityJson<ActivityInviteRosterRow[]>(
-        `/api/activity/linkshells/${linkshellId}/invite-sources/${sourceLinkshellId}/roster`));
-    } catch (error) {
-      this.inviteRoster.set([]);
-      this.auth.setActionError(formatActionError(error, 'Loading that roster failed.'));
-    } finally {
-      this.inviteRosterBusy.set(false);
-    }
-  }
-
-  clearInviteRoster(): void {
-    this.inviteRoster.set([]);
+    this.discordRosterGuildName.set(null);
   }
 
   async searchLinkshells(query: string): Promise<void> {

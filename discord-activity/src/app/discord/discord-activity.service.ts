@@ -110,7 +110,6 @@ export type {
   ActivityLootInput,
   ActivityLootStructure,
   ActivityOverview,
-  ActivityParticipantInviteCandidate,
   ActivityQuickJoinInput,
   ActivityRevenueEntry,
   ActivityRevenueInput,
@@ -197,16 +196,12 @@ export class DiscordActivityService {
   readonly inviteBrowseTotal = this.inviteService.inviteBrowseTotal;
   readonly inviteBrowseBusy = this.inviteService.inviteBrowseBusy;
   readonly busyInviteId = this.inviteService.busyInviteId;
-  readonly participantInviteCandidates = this.inviteService.participantInviteCandidates;
-  readonly participantInviteBusy = this.inviteService.participantInviteBusy;
   readonly linkshellSearchResults = this.inviteService.linkshellSearchResults;
   readonly linkshellSearchBusy = this.inviteService.linkshellSearchBusy;
   readonly discordRosterCandidates = this.inviteService.discordRosterCandidates;
   readonly discordRosterBusy = this.inviteService.discordRosterBusy;
+  readonly discordRosterGuildName = this.inviteService.discordRosterGuildName;
   readonly busyDiscordUserId = this.inviteService.busyDiscordUserId;
-  readonly inviteSources = this.inviteService.inviteSources;
-  readonly inviteRoster = this.inviteService.inviteRoster;
-  readonly inviteRosterBusy = this.inviteService.inviteRosterBusy;
   readonly dkpHistory = this.dkpService.dkpHistory;
   readonly dkpHistoryBusy = this.dkpService.dkpHistoryBusy;
   readonly busyDkpAudit = this.dkpService.busyDkpAudit;
@@ -891,13 +886,8 @@ export class DiscordActivityService {
   // --- InviteService ---
   searchPlayers(query: string, linkshellId: number): Promise<void> { return this.inviteService.searchPlayers(query, linkshellId); }
   browsePlayers(linkshellId: number, options: { query?: string; page?: number; pageSize?: number }): Promise<void> { return this.inviteService.browsePlayers(linkshellId, options); }
-  loadInviteSources(linkshellId: number): Promise<void> { return this.inviteService.loadInviteSources(linkshellId); }
-  loadInviteRoster(linkshellId: number, sourceLinkshellId: number): Promise<void> { return this.inviteService.loadInviteRoster(linkshellId, sourceLinkshellId); }
-  clearInviteRoster(): void { this.inviteService.clearInviteRoster(); }
   clearInviteSearch(): void { this.inviteService.clearInviteSearch(); }
-  clearParticipantInviteCandidates(): void { this.inviteService.clearParticipantInviteCandidates(); }
   clearLinkshellSearch(): void { this.inviteService.clearLinkshellSearch(); }
-  loadParticipantInviteCandidates(linkshellId: number, discordUserIds: string[]): Promise<void> { return this.inviteService.loadParticipantInviteCandidates(linkshellId, discordUserIds); }
   sendInvite(linkshellId: number, appUserId: string): Promise<void> { return this.inviteService.sendInvite(linkshellId, appUserId); }
   loadDiscordRoster(linkshellId: number): Promise<void> { return this.inviteService.loadDiscordRoster(linkshellId); }
   inviteDiscordUser(linkshellId: number, discordUserId: string): Promise<void> { return this.inviteService.inviteDiscordUser(linkshellId, discordUserId); }
