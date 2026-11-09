@@ -1,21 +1,11 @@
     <div class="panel-tab fade">
-      <!-- Three rows to save space: the label with the counts on its right, the title with the view
-           switch on its right, then Create Event on its own. On Current the heading is the queue's
-           (the first thing under it); Live / Live Events sits above the live cards further down.
+      <!-- Three rows to save space: the page's label with the counts on its right, the view's title
+           with the view switch on its right, then Create Event on its own. On Current the title is the
+           queue's (the first thing under it); "Live Events" heads the live cards further down.
            Pending (URL /events/pending) holds the ended events still waiting for their DKP post. -->
       <div class="section-head-rows">
         <div class="section-head-row">
-          @switch (eventsView()) {
-            @case ('current') {
-              <div class="section-label">{{ canCreateEvent() ? 'Queue' : 'Signups' }}</div>
-            }
-            @case ('pending') {
-              <div class="section-label">Officer To-Do</div>
-            }
-            @default {
-              <div class="section-label">History</div>
-            }
-          }
+          <div class="section-label">Event System</div>
           <!-- The counts are about Current, so Pending/Past make them invisible rather than removing
                them: the row keeps its height and the switch under it doesn't jump when clicked. -->
           <div class="section-head-counts" [style.visibility]="eventsView() === 'current' ? null : 'hidden'">
@@ -75,10 +65,7 @@
       <!-- ===== Current: everything still in play ===== -->
       <div [hidden]="eventsView() !== 'current'">
         <div class="section-head">
-          <div>
-            <div class="section-label">Live</div>
-            <div class="section-title">Live Events</div>
-          </div>
+          <div class="section-title">Live Events</div>
         </div>
 
         @if (showNoLiveActivity()) {
