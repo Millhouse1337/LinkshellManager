@@ -205,8 +205,9 @@
           @if (selectedUpcomingRepop(); as repop) {
             <small class="cem__hint cem__hint--inline">
               <span>
+                <!-- A live countdown; the exact pop time is on hover. -->
                 Next predicted pop for {{ repop.monsterName }}:
-                {{ activity.formatDateTimeWithSeconds(repop.repopTime) }}
+                <strong [title]="activity.formatDateTimeWithSeconds(repop.repopTime)">{{ startCountdown(repop.repopTime) }}</strong>
                 @if (isStartAtUpcomingRepop()) {
                   — Starts is set to it.
                 }
