@@ -24,23 +24,27 @@ public class EndCampTodDateEntryTests
     // A fixed, DST-free zone so "local" is arithmetic rather than a question. UTC-5 all year.
     private const string Zone = "America/Cancun";
 
+    // A fixed "now", so a rule about times AHEAD of the clock doesn't pass or fail with the hour the
+    // tests run. 9:10:24 AM in Zone. It is the moment of a real ToD that was saved 23 hours early.
+    private static readonly DateTime NowUtc = new(2026, 11, 8, 14, 10, 24, DateTimeKind.Utc);
+
     private static readonly TimeZoneConversionService TimeZones = new(
         DateTimeZoneProviders.Tzdb, NullLogger<TimeZoneConversionService>.Instance);
 
-    private static DateTime? Parse(string? date, string? time)
+    private static DateTime? Parse(string? date, string? time, string? zone = Zone)
     {
         Assert.True(
             DiscordInteractionsController.TryParseCampTod(
-                TimeZones, date, time, Zone, out var todUtc, out var error),
+                TimeZones, date, time, zone, out var todUtc, out var error, NowUtc),
             $"date=\"{date}\" time=\"{time}\" was rejected: {error}");
         return todUtc;
     }
 
-    private static string Reject(string? date, string? time)
+    private static string Reject(string? date, string? time, string? zone = Zone)
     {
         Assert.False(
             DiscordInteractionsController.TryParseCampTod(
-                TimeZones, date, time, Zone, out _, out var error),
+                TimeZones, date, time, zone, out _, out var error, NowUtc),
             $"date=\"{date}\" time=\"{time}\" was accepted; it should not parse.");
         Assert.False(string.IsNullOrWhiteSpace(error), "a rejection must explain itself.");
         return error!;
@@ -87,42 +91,142 @@ public class EndCampTodDateEntryTests
     [Fact]
     public void YesterdayIsExactlyOneDayBeforeToday()
     {
-        var yesterday = Parse("yesterday", "9:05 PM");
-        var today = Parse("today", "9:05 PM");
+        var yesterday = Parse("yesterday", "9:05 AM");
+        var today = Parse("today", "9:05 AM");
 
         Assert.NotNull(yesterday);
         Assert.NotNull(today);
         Assert.Equal(TimeSpan.FromDays(1), today!.Value - yesterday!.Value);
     }
 
-    /// <summary>
-    /// A blank date means today — and a "today" still ahead of the officer's own clock means last
-    /// night. This is the 2am kill logged at 9am, the commonest entry there is.
-    /// </summary>
+    /// <summary>A blank date means today: the 2am kill logged at 9am, the commonest entry there is.</summary>
     [Fact]
-    public void ABlankDate_RollsBackWhenTheTimeIsStillAhead()
+    public void ABlankDate_IsToday_WhenTheTimeHasPassed()
     {
-        var todUtc = Parse(null, "11:59 PM");
-
-        Assert.NotNull(todUtc);
-        Assert.True(todUtc!.Value <= DateTime.UtcNow, $"{todUtc:o} is in the future.");
-        Assert.True(todUtc.Value > DateTime.UtcNow.AddDays(-2), "it should be last night, not last week.");
+        // 2:00 AM at UTC-5 is 07:00 UTC, the same day.
+        Assert.Equal(new DateTime(2026, 11, 8, 7, 0, 0), Parse(null, "2:00 AM"));
     }
 
     /// <summary>
-    /// An EXPLICIT date is never second-guessed. The roll-back above applies only to a blank date;
-    /// applying it to a typed one would move an officer's deliberate answer by a day.
+    /// A blank-date time FAR ahead of the officer's clock means last night: the 11:50pm kill
+    /// logged after midnight. (Here it's 9:10 AM, so 11:50 PM is fourteen hours ahead.)
     /// </summary>
     [Fact]
-    public void AnExplicitTodayIsNotRolledBack()
+    public void ABlankDate_RollsBackWhenTheTimeIsWellAhead()
     {
-        var explicitToday = Parse("today", "11:59 PM");
-        var blank = Parse(null, "11:59 PM");
+        // Nov 7, 11:50 PM at UTC-5 is Nov 8, 04:50 UTC.
+        Assert.Equal(new DateTime(2026, 11, 8, 4, 50, 0), Parse(null, "11:50 PM"));
+    }
 
-        Assert.NotNull(explicitToday);
-        Assert.NotNull(blank);
-        // Same wall clock, but the blank one may have been pushed back a day; the typed one never is.
-        Assert.True(explicitToday!.Value >= blank!.Value);
+    /// <summary>
+    /// THE BUG this rule exists for. An officer whose real clock read 9:07:16 AM typed the kill in
+    /// three minutes later, but their Profile zone was an hour behind that clock, so by their LSM
+    /// clock it was only 8:10 AM. The time looked an hour "in the future", got rolled back a day, and
+    /// was saved 23 hours early; the board then showed the repop an hour off. Now it is refused,
+    /// and the message shows both clocks so they can see which one is wrong.
+    /// </summary>
+    [Fact]
+    public void ATimeAnHourAhead_IsRefused_NotSaved23HoursEarly()
+    {
+        var error = Reject(null, "9:07:16 AM", zone: "America/Chicago");
+
+        Assert.Contains("Nov 8, 9:07:16 AM", error); // what they typed
+        Assert.Contains("Nov 8, 8:10 AM", error);    // what their LSM clock says
+        Assert.Contains("America/Chicago", error);
+        Assert.Contains("Profile", error);
+        Assert.Contains("yesterday", error);         // the way out for a real kill from yesterday
+    }
+
+    /// <summary>A PC clock a couple of minutes fast is drift, not a wrong zone: taken as typed.</summary>
+    [Fact]
+    public void ATimeAFewMinutesAhead_IsTakenAsTyped()
+    {
+        Assert.Equal(new DateTime(2026, 11, 8, 14, 13, 0), Parse(null, "9:13 AM"));
+    }
+
+    /// <summary>
+    /// The line between "refuse" and "last night" is three hours ahead. Under it, the time is far
+    /// likelier a zone mistake than a kill from 21+ hours ago.
+    /// </summary>
+    [Fact]
+    public void ThreeHoursAhead_IsWhereLastNightBegins()
+    {
+        Reject(null, "12:05 PM"); // 2h55m ahead
+
+        // 3h05m ahead: Nov 7, 12:15 PM at UTC-5 is Nov 7, 17:15 UTC.
+        Assert.Equal(new DateTime(2026, 11, 7, 17, 15, 0), Parse(null, "12:15 PM"));
+    }
+
+    /// <summary>
+    /// An EXPLICIT date is never second-guessed: never rolled back, and never moved forward. One
+    /// that puts the kill in the future is refused, because a ToD cannot be ahead of the clock.
+    /// </summary>
+    [Fact]
+    public void AnExplicitDate_IsNeverRolledBack_AndNeverInTheFuture()
+    {
+        Assert.Equal(new DateTime(2026, 11, 8, 14, 0, 0), Parse("today", "9:00 AM"));
+
+        var error = Reject("today", "11:59 PM");
+        Assert.Contains("hasn't happened yet", error);
+        Assert.DoesNotContain("yesterday", error); // they already typed a date
+
+        Reject("11/9/2026", "8:00 AM");
+    }
+
+    /// <summary>With no zone on the Profile the ToD is read as UTC, and the refusal says so.</summary>
+    [Fact]
+    public void NoProfileZone_IsSpelledOutAsUtc()
+    {
+        var error = Reject(null, "3:00 PM", zone: null); // 14:10 UTC now, so 50 minutes ahead
+
+        Assert.Contains("UTC, no time zone on your Profile", error);
+    }
+
+    /// <summary>The End Camp form prints the officer's LSM clock, so a wrong zone is visible before submitting.</summary>
+    [Fact]
+    public void LsmClockNote_ShowsTheTimeInTheProfileZone()
+    {
+        Assert.Equal(
+            "Your LSM clock: Nov 8, 8:10 AM (America/Chicago). Enter the ToD in this time.",
+            DiscordInteractionsController.LsmClockNote(TimeZones, "America/Chicago", NowUtc));
+        Assert.Contains(
+            "(UTC, no time zone on your Profile)",
+            DiscordInteractionsController.LsmClockNote(TimeZones, null, NowUtc));
+    }
+
+    /// <summary>
+    /// The note is a Label description, which Discord caps at 100 characters; going over is a
+    /// rejected modal, so every zone has to fit, on the widest date and time there is.
+    /// </summary>
+    [Fact]
+    public void LsmClockNote_FitsDiscordsDescriptionLimit_ForEveryZone()
+    {
+        foreach (var zone in DateTimeZoneProviders.Tzdb.Ids)
+        {
+            foreach (var hour in new[] { 0, 6, 12, 18 })
+            {
+                var note = DiscordInteractionsController.LsmClockNote(
+                    TimeZones, zone, new DateTime(2026, 11, 28, hour, 10, 0, DateTimeKind.Utc));
+                Assert.InRange(note.Length, 1, 100);
+            }
+        }
+    }
+
+    /// <summary>The clock sits under the FIRST box, so it's read before anything is typed.</summary>
+    [Fact]
+    public void TheModalShowsTheLsmClock_UnderTheDateBox()
+    {
+        const string note = "Your LSM clock: Nov 8, 8:10 AM (America/Chicago). Enter the ToD in this time.";
+        var first = System.Text.Json.JsonSerializer.SerializeToElement(
+            DiscordInteractionsController.BuildWdPopModalFields(
+                new LinkshellManagerDiscordApp.Models.Event { Id = 1, AssignedMonsterName = "Fafnir", HnmWindowNumber = 1 },
+                null, null, note))[0];
+
+        Assert.Equal(18, first.GetProperty("type").GetInt32()); // a Label, the only row that carries a description
+        Assert.Equal(note, first.GetProperty("description").GetString());
+        Assert.Equal("wdpop_tod_date", first.GetProperty("component").GetProperty("custom_id").GetString());
+        // Discord refuses a text input that carries a label of its own inside a Label.
+        Assert.False(first.GetProperty("component").TryGetProperty("label", out _));
     }
 
     /// <summary>
@@ -139,10 +243,10 @@ public class EndCampTodDateEntryTests
 
             Assert.NotNull(todUtc);
             Assert.True(
-                todUtc!.Value <= DateTime.UtcNow,
+                todUtc!.Value <= NowUtc,
                 $"\"{monthDay}\" resolved to {todUtc:o}, which is in the future.");
             Assert.True(
-                todUtc.Value > DateTime.UtcNow.AddYears(-1).AddDays(-2),
+                todUtc.Value > NowUtc.AddYears(-1).AddDays(-2),
                 $"\"{monthDay}\" resolved to {todUtc:o}, further back than the most recent one.");
         }
     }
@@ -162,10 +266,7 @@ public class EndCampTodDateEntryTests
     [Fact]
     public void Now_IsThisMoment()
     {
-        var todUtc = Parse(null, "now");
-
-        Assert.NotNull(todUtc);
-        Assert.True(Math.Abs((DateTime.UtcNow - todUtc!.Value).TotalMinutes) < 1);
+        Assert.Equal(NowUtc, Parse(null, "now"));
     }
 
     /// <summary>
