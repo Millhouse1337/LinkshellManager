@@ -2396,7 +2396,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     //                    happened only looks an hour or two "in the future" when the officer's
     //                    Profile zone is behind the clock they read the time from. Rolling that back
     //                    a day used to save it 23 hours early, which on the board reads as a repop
-    //                    an hour off. See CampTodNotYetMessage.
+    //                    an hour off. See ClockMismatchMessage.
     //   any date   → a time still ahead of the LSM clock is refused the same way: a ToD cannot be
     //                in the future.
     //
@@ -2482,7 +2482,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             }
             else
             {
-                error = CampTodNotYetMessage(timeZones, timeZoneId, localDt, localNow, dateTyped: datePart.Length > 0);
+                error = ClockMismatchMessage(timeZones, timeZoneId, localNow);
                 return false;
             }
         }
@@ -2498,7 +2498,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // How far ahead a time with no date must be before it reads as last night. Below this it is
     // refused instead: being an hour or two "in the future" is what a Profile zone behind the
     // officer's own clock looks like, and the old roll-back saved those kills 23 hours early. A real
-    // kill from more than 21 hours ago gets refused too, and the message says to type `yesterday`.
+    // kill from more than 21 hours ago gets refused too; typing `yesterday` in Date gets it through.
     private static readonly TimeSpan LastNightThreshold = TimeSpan.FromHours(3);
 
     // The officer's LSM clock, for the End Camp form: "Your LSM clock: Nov 8, 8:10 AM
@@ -2513,25 +2513,24 @@ public sealed class DiscordInteractionsController : ControllerBase
         return note.Length <= 100 ? note : clock;
     }
 
-    // Why a ToD was refused for being ahead of the LSM clock, with both clocks spelled out so the
-    // officer can see which one is wrong.
-    private static string CampTodNotYetMessage(
-        TimeZoneConversionService timeZones, string? timeZoneId, DateTime typedLocal, DateTime localNow, bool dateTyped)
+    // Why a ToD ahead of the LSM clock was refused, said as the one thing the officer needs to know:
+    // their clock and their LSM time zone disagree. The time LSM thinks it is goes in the message,
+    // so they can see the difference for themselves.
+    private static string ClockMismatchMessage(
+        TimeZoneConversionService timeZones, string? timeZoneId, DateTime localNow)
     {
-        var message =
-            $"**{FormatLsmClock(typedLocal, withSeconds: typedLocal.Second != 0)}** hasn't happened yet by your "
-            + $"LSM clock: it's **{FormatLsmClock(localNow)}** ({LsmZoneLabel(timeZones, timeZoneId)}). Nothing was saved.\n"
-            + "• If your clock shows a different time, fix the time zone on your LSM Profile (or your computer's "
-            + "clock), then hit **End Camp** again.";
-        return dateTyped
-            ? message
-            : message + "\n• If it died yesterday, type `yesterday` in **Date**.";
+        var lsmTime = localNow.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture);
+        var zoneLine = timeZones.IsKnownZone(timeZoneId)
+            ? $"Your LSM time zone is **{timeZoneId}**, where it's **{lsmTime}** right now."
+            : $"Your LSM Profile has no time zone set, so LSM is using **UTC**, where it's **{lsmTime}** right now.";
+        return "⚠️ **Your clock and your LSM time zone don't match.**\n"
+            + zoneLine + "\n"
+            + "Set the time zone on your LSM Profile to match your clock, then hit **End Camp** again. Nothing was saved.";
     }
 
-    // "Nov 8, 8:10 AM", or with seconds "Nov 8, 9:07:16 AM".
-    private static string FormatLsmClock(DateTime local, bool withSeconds = false) =>
-        local.ToString(withSeconds ? "MMM d, h:mm:ss tt" : "MMM d, h:mm tt",
-            System.Globalization.CultureInfo.InvariantCulture);
+    // "Nov 8, 8:10 AM".
+    private static string FormatLsmClock(DateTime local) =>
+        local.ToString("MMM d, h:mm tt", System.Globalization.CultureInfo.InvariantCulture);
 
     // The zone the ToD is read in, as the officer should recognise it. With none on the Profile (or an
     // unknown one) TimeZoneConversionService reads it as UTC, so say exactly that.

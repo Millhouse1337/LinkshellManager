@@ -123,18 +123,17 @@ public class EndCampTodDateEntryTests
     /// three minutes later, but their Profile zone was an hour behind that clock, so by their LSM
     /// clock it was only 8:10 AM. The time looked an hour "in the future", got rolled back a day, and
     /// was saved 23 hours early; the board then showed the repop an hour off. Now it is refused,
-    /// and the message shows both clocks so they can see which one is wrong.
+    /// and the message says only that their clock and their LSM time zone don't match.
     /// </summary>
     [Fact]
     public void ATimeAnHourAhead_IsRefused_NotSaved23HoursEarly()
     {
         var error = Reject(null, "9:07:16 AM", zone: "America/Chicago");
 
-        Assert.Contains("Nov 8, 9:07:16 AM", error); // what they typed
-        Assert.Contains("Nov 8, 8:10 AM", error);    // what their LSM clock says
-        Assert.Contains("America/Chicago", error);
+        Assert.Contains("Your clock and your LSM time zone don't match", error);
+        Assert.Contains("**America/Chicago**, where it's **8:10 AM** right now", error);
         Assert.Contains("Profile", error);
-        Assert.Contains("yesterday", error);         // the way out for a real kill from yesterday
+        Assert.Contains("Nothing was saved", error);
     }
 
     /// <summary>A PC clock a couple of minutes fast is drift, not a wrong zone: taken as typed.</summary>
@@ -166,10 +165,7 @@ public class EndCampTodDateEntryTests
     {
         Assert.Equal(new DateTime(2026, 11, 8, 14, 0, 0), Parse("today", "9:00 AM"));
 
-        var error = Reject("today", "11:59 PM");
-        Assert.Contains("hasn't happened yet", error);
-        Assert.DoesNotContain("yesterday", error); // they already typed a date
-
+        Assert.Contains("don't match", Reject("today", "11:59 PM"));
         Reject("11/9/2026", "8:00 AM");
     }
 
@@ -179,7 +175,7 @@ public class EndCampTodDateEntryTests
     {
         var error = Reject(null, "3:00 PM", zone: null); // 14:10 UTC now, so 50 minutes ahead
 
-        Assert.Contains("UTC, no time zone on your Profile", error);
+        Assert.Contains("no time zone set, so LSM is using **UTC**, where it's **2:10 PM** right now", error);
     }
 
     /// <summary>The End Camp form prints the officer's LSM clock, so a wrong zone is visible before submitting.</summary>
