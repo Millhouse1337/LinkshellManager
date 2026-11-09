@@ -1,9 +1,6 @@
     <div class="panel-tab fade">
       <!-- Linkshell overview stat strip -->
       @if (selectedDashboardLinkshell(); as dashboardLinkshell) {
-        @if (dashboardLinkshell.bannerUrl) {
-          <img class="dash-banner" [src]="dashboardLinkshell.bannerUrl" alt="" />
-        }
         <div class="section-head">
           <div>
             <div class="section-label">Dashboard</div>
@@ -17,6 +14,11 @@
             }
           </div>
         </div>
+
+        <!-- The banner sits under the heading, above the stats. -->
+        @if (dashboardLinkshell.bannerUrl) {
+          <img class="dash-banner" [src]="dashboardLinkshell.bannerUrl" alt="" />
+        }
 
         <div class="stat-strip">
           <div class="stat-cell">
