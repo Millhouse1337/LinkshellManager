@@ -208,9 +208,6 @@
                 <!-- A live countdown; the exact pop time is on hover. -->
                 Next predicted pop for {{ repop.monsterName }}:
                 <strong [title]="activity.formatDateTimeWithSeconds(repop.repopTime)">{{ startCountdown(repop.repopTime) }}</strong>
-                @if (isStartAtUpcomingRepop()) {
-                  — Starts is set to it.
-                }
               </span>
               @if (!isStartAtUpcomingRepop()) {
                 <button type="button" class="cem__chip cem__chip--sm" (click)="useUpcomingRepopStartTime()">
