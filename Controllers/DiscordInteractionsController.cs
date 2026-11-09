@@ -2482,7 +2482,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             }
             else
             {
-                error = ClockMismatchMessage(timeZones, timeZoneId, localNow);
+                error = ClockMismatchMessage;
                 return false;
             }
         }
@@ -2514,19 +2514,11 @@ public sealed class DiscordInteractionsController : ControllerBase
     }
 
     // Why a ToD ahead of the LSM clock was refused, said as the one thing the officer needs to know:
-    // their clock and their LSM time zone disagree. The time LSM thinks it is goes in the message,
-    // so they can see the difference for themselves.
-    private static string ClockMismatchMessage(
-        TimeZoneConversionService timeZones, string? timeZoneId, DateTime localNow)
-    {
-        var lsmTime = localNow.ToString("h:mm tt", System.Globalization.CultureInfo.InvariantCulture);
-        var zoneLine = timeZones.IsKnownZone(timeZoneId)
-            ? $"Your LSM time zone is **{timeZoneId}**, where it's **{lsmTime}** right now."
-            : $"Your LSM Profile has no time zone set, so LSM is using **UTC**, where it's **{lsmTime}** right now.";
-        return "⚠️ **Your clock and your LSM time zone don't match.**\n"
-            + zoneLine + "\n"
-            + "Set the time zone on your LSM Profile to match your clock, then hit **End Camp** again. Nothing was saved.";
-    }
+    // their clock and their LSM time zone disagree. (The form's LSM clock line shows the time LSM
+    // thinks it is, so the message doesn't repeat it.)
+    private const string ClockMismatchMessage =
+        "⚠️ **Your clock and your LSM time zone don't match.**\n"
+        + "Set the time zone on your LSM Profile to match your clock, then hit **End Camp** again. Nothing was saved.";
 
     // "Nov 8, 8:10 AM".
     private static string FormatLsmClock(DateTime local) =>

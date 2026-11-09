@@ -128,12 +128,10 @@ public class EndCampTodDateEntryTests
     [Fact]
     public void ATimeAnHourAhead_IsRefused_NotSaved23HoursEarly()
     {
-        var error = Reject(null, "9:07:16 AM", zone: "America/Chicago");
-
-        Assert.Contains("Your clock and your LSM time zone don't match", error);
-        Assert.Contains("**America/Chicago**, where it's **8:10 AM** right now", error);
-        Assert.Contains("Profile", error);
-        Assert.Contains("Nothing was saved", error);
+        Assert.Equal(
+            "⚠️ **Your clock and your LSM time zone don't match.**\n"
+            + "Set the time zone on your LSM Profile to match your clock, then hit **End Camp** again. Nothing was saved.",
+            Reject(null, "9:07:16 AM", zone: "America/Chicago"));
     }
 
     /// <summary>A PC clock a couple of minutes fast is drift, not a wrong zone: taken as typed.</summary>
@@ -169,13 +167,12 @@ public class EndCampTodDateEntryTests
         Reject("11/9/2026", "8:00 AM");
     }
 
-    /// <summary>With no zone on the Profile the ToD is read as UTC, and the refusal says so.</summary>
+    /// <summary>With no zone on the Profile the ToD is read as UTC, and refused the same way.</summary>
     [Fact]
-    public void NoProfileZone_IsSpelledOutAsUtc()
+    public void NoProfileZone_IsReadAsUtc_AndRefusedTheSameWay()
     {
-        var error = Reject(null, "3:00 PM", zone: null); // 14:10 UTC now, so 50 minutes ahead
-
-        Assert.Contains("no time zone set, so LSM is using **UTC**, where it's **2:10 PM** right now", error);
+        // 14:10 UTC now, so 3:00 PM is 50 minutes ahead.
+        Assert.Contains("don't match", Reject(null, "3:00 PM", zone: null));
     }
 
     /// <summary>The End Camp form prints the officer's LSM clock, so a wrong zone is visible before submitting.</summary>
