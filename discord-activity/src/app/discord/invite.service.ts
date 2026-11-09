@@ -5,6 +5,8 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityDiscordRosterCandidate,
+  ActivityInviteRosterRow,
+  ActivityInviteSourceLinkshell,
   ActivityLinkshellSearchResult,
   ActivityParticipantInviteCandidate,
   ActivityUserSearchResult
@@ -33,6 +35,10 @@ export class InviteService {
   readonly discordRosterCandidates = signal<ActivityDiscordRosterCandidate[]>([]);
   readonly discordRosterBusy = signal(false);
   readonly busyDiscordUserId = signal<string | null>(null);
+  // Invite card, "In a Linkshell": every other linkshell, then the picked one's roster.
+  readonly inviteSources = signal<ActivityInviteSourceLinkshell[]>([]);
+  readonly inviteRoster = signal<ActivityInviteRosterRow[]>([]);
+  readonly inviteRosterBusy = signal(false);
 
   async searchPlayers(query: string, linkshellId: number): Promise<void> {
     if (!query.trim() || query.trim().length < 2 || linkshellId <= 0) {
@@ -90,7 +96,7 @@ export class InviteService {
 
   async browsePlayers(
     linkshellId: number,
-    options: { query?: string; filter?: string; page?: number; pageSize?: number }
+    options: { query?: string; page?: number; pageSize?: number }
   ): Promise<void> {
     if (linkshellId <= 0) {
       this.inviteBrowseResults.set([]);
@@ -105,7 +111,6 @@ export class InviteService {
       const params = new URLSearchParams();
       params.set('linkshellId', String(linkshellId));
       if (options.query && options.query.trim()) params.set('query', options.query.trim());
-      if (options.filter) params.set('filter', options.filter);
       params.set('page', String(options.page ?? 1));
       params.set('pageSize', String(options.pageSize ?? 10));
 
@@ -282,6 +287,38 @@ export class InviteService {
 
   clearDiscordRoster(): void {
     this.discordRosterCandidates.set([]);
+  }
+
+  async loadInviteSources(linkshellId: number): Promise<void> {
+    if (linkshellId <= 0) {
+      this.inviteSources.set([]);
+      return;
+    }
+
+    try {
+      this.inviteSources.set(await this.http.fetchActivityJson<ActivityInviteSourceLinkshell[]>(
+        `/api/activity/linkshells/${linkshellId}/invite-sources`));
+    } catch (error) {
+      this.inviteSources.set([]);
+      this.auth.setActionError(formatActionError(error, 'Loading the linkshell list failed.'));
+    }
+  }
+
+  async loadInviteRoster(linkshellId: number, sourceLinkshellId: number): Promise<void> {
+    this.inviteRosterBusy.set(true);
+    try {
+      this.inviteRoster.set(await this.http.fetchActivityJson<ActivityInviteRosterRow[]>(
+        `/api/activity/linkshells/${linkshellId}/invite-sources/${sourceLinkshellId}/roster`));
+    } catch (error) {
+      this.inviteRoster.set([]);
+      this.auth.setActionError(formatActionError(error, 'Loading that roster failed.'));
+    } finally {
+      this.inviteRosterBusy.set(false);
+    }
+  }
+
+  clearInviteRoster(): void {
+    this.inviteRoster.set([]);
   }
 
   async searchLinkshells(query: string): Promise<void> {

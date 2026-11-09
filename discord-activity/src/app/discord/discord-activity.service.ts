@@ -204,6 +204,9 @@ export class DiscordActivityService {
   readonly discordRosterCandidates = this.inviteService.discordRosterCandidates;
   readonly discordRosterBusy = this.inviteService.discordRosterBusy;
   readonly busyDiscordUserId = this.inviteService.busyDiscordUserId;
+  readonly inviteSources = this.inviteService.inviteSources;
+  readonly inviteRoster = this.inviteService.inviteRoster;
+  readonly inviteRosterBusy = this.inviteService.inviteRosterBusy;
   readonly dkpHistory = this.dkpService.dkpHistory;
   readonly dkpHistoryBusy = this.dkpService.dkpHistoryBusy;
   readonly busyDkpAudit = this.dkpService.busyDkpAudit;
@@ -887,7 +890,10 @@ export class DiscordActivityService {
 
   // --- InviteService ---
   searchPlayers(query: string, linkshellId: number): Promise<void> { return this.inviteService.searchPlayers(query, linkshellId); }
-  browsePlayers(linkshellId: number, options: { query?: string; filter?: string; page?: number; pageSize?: number }): Promise<void> { return this.inviteService.browsePlayers(linkshellId, options); }
+  browsePlayers(linkshellId: number, options: { query?: string; page?: number; pageSize?: number }): Promise<void> { return this.inviteService.browsePlayers(linkshellId, options); }
+  loadInviteSources(linkshellId: number): Promise<void> { return this.inviteService.loadInviteSources(linkshellId); }
+  loadInviteRoster(linkshellId: number, sourceLinkshellId: number): Promise<void> { return this.inviteService.loadInviteRoster(linkshellId, sourceLinkshellId); }
+  clearInviteRoster(): void { this.inviteService.clearInviteRoster(); }
   clearInviteSearch(): void { this.inviteService.clearInviteSearch(); }
   clearParticipantInviteCandidates(): void { this.inviteService.clearParticipantInviteCandidates(); }
   clearLinkshellSearch(): void { this.inviteService.clearLinkshellSearch(); }

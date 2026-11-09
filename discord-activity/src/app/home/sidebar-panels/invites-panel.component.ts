@@ -2,7 +2,36 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, effect, inject, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
+import type { ActivityInviteRosterState } from '../../discord/discord-activity.types';
 import { canManageLinkshellIn } from '../activity-home.helpers';
+
+/** Where the invite card looks: the dropdown beside its search box. */
+type InviteSource = 'all' | 'linkshell' | 'connected' | 'discord';
+
+/** One row of the invite card's results, whichever source it came from. */
+interface InviteResultRow {
+  key: string;
+  name: string;
+  detail: string | null;
+  avatarUrl: string | null;
+  /** In a linkshell locked to a Discord server, someone who isn't in that server. They can
+   *  still be invited, but must join the server before the lock lets them in. */
+  outsideServer: boolean;
+  /** What Invite does. Null when the row can't be invited (see `status`). */
+  invite: { appUserId: string } | { discordUserId: string } | null;
+  /** Shown in place of the Invite button: Member, Invited, You, ... */
+  status: string | null;
+}
+
+/** The label a roster row shows in place of Invite. */
+const ROSTER_STATUS: Record<ActivityInviteRosterState, string | null> = {
+  invite: null,
+  member: 'Member',
+  invited: 'Invited',
+  requested: 'Requested to join',
+  you: 'You',
+  noAccount: 'No LSM account'
+};
 
 @Component({
   selector: 'app-invites-panel',
@@ -21,21 +50,22 @@ export class InvitesPanelComponent {
   protected inviteLinkshellId = 0;
   private participantInviteSeed = '';
 
-  // Browse-all-members state: a paginated, searchable, filterable list of every
-  // LSM user eligible to invite (anyone who's used the app at least once). No
-  // Discord bot needed — these come from our own database.
-  protected browseTerm = '';
-  protected browseFilter: 'all' | 'unaffiliated' | 'affiliated' = 'all';
-  protected browsePage = 1;
-  protected readonly browsePageSize = 10;
+  // The invite card: one search box, the dropdown saying where to look, and one list.
+  // "Entire LSM Server" searches the server (Enter / Search) a page at a time; the other
+  // sources are already loaded, so the box filters them as you type.
+  protected searchTerm = '';
+  protected inviteSource: InviteSource = 'all';
+  /** "In a Linkshell": the linkshell whose roster is showing. */
+  protected rosterLinkshellId: number | null = null;
+  protected page = 1;
+  protected readonly pageSize = 10;
   private browseLoadedFor = 0;
+  private sourcesLoadedFor = 0;
+  private rosterResetFor = 0;
 
-  // Tracks which (locked) linkshell the "From your Discord server" roster has
+  // Tracks which (locked) linkshell the "From My Discord Server" roster has
   // been loaded for, so the effect doesn't refetch on every overview refresh.
   private discordRosterLoadedFor = 0;
-  protected discordRosterSearchTerm = '';
-  protected discordRosterPage = 1;
-  protected readonly discordRosterPageSize = 9;
 
   public constructor() {
     effect(() => {
@@ -51,8 +81,8 @@ export class InvitesPanelComponent {
       });
     });
 
-    // Connected-now quick invites: match current Discord participants to linked
-    // app users so they can be one-click invited.
+    // Connected Now: match current Discord participants to linked app users so
+    // they can be one-click invited.
     effect(() => {
       const linkshellId = this.inviteTargetLinkshellId();
       const participantIds = this.activity.participants().map(participant => participant.id).sort();
@@ -74,8 +104,8 @@ export class InvitesPanelComponent {
       void this.activity.loadParticipantInviteCandidates(linkshellId, participantIds);
     });
 
-    // Load the browse list once per target linkshell (page 1). User actions
-    // (search / filter / paging / invite) reload it explicitly.
+    // Load the Entire LSM Server list once per target linkshell (page 1). User
+    // actions (search / paging / invite) reload it explicitly.
     effect(() => {
       const linkshellId = this.inviteTargetLinkshellId();
       const canManage = linkshellId > 0 && this.canManageLinkshell(linkshellId);
@@ -83,12 +113,26 @@ export class InvitesPanelComponent {
       if (this.browseLoadedFor === linkshellId) return;
       this.browseLoadedFor = linkshellId;
       untracked(() => {
-        this.browsePage = 1;
+        if (this.inviteSource === 'all') this.page = 1;
         this.loadBrowse(1);
       });
     });
 
-    // Load the "From your Discord server" roster once per target linkshell, but
+    // In a Linkshell: a picked roster belongs to the target it was marked for (Member,
+    // Invited...), so a new target drops the pick and the list of linkshells to pick from.
+    effect(() => {
+      const linkshellId = this.inviteTargetLinkshellId();
+      if (linkshellId === this.rosterResetFor) return;
+      this.rosterResetFor = linkshellId;
+      untracked(() => {
+        this.rosterLinkshellId = null;
+        this.sourcesLoadedFor = 0;
+        this.activity.clearInviteRoster();
+        if (this.inviteSource === 'linkshell') this.loadSources();
+      });
+    });
+
+    // Load the "From My Discord Server" roster once per target linkshell, but
     // only when that linkshell is locked to a Discord server (otherwise there's
     // no roster to pull). Clears when switching to an unlocked linkshell.
     effect(() => {
@@ -99,22 +143,14 @@ export class InvitesPanelComponent {
       if (!canManage || !locked) {
         if (this.discordRosterLoadedFor !== 0) {
           this.discordRosterLoadedFor = 0;
-          untracked(() => {
-            this.discordRosterSearchTerm = '';
-            this.discordRosterPage = 1;
-            this.activity.clearDiscordRoster();
-          });
+          untracked(() => this.activity.clearDiscordRoster());
         }
         return;
       }
 
       if (this.discordRosterLoadedFor === linkshellId) return;
       this.discordRosterLoadedFor = linkshellId;
-      untracked(() => {
-        this.discordRosterSearchTerm = '';
-        this.discordRosterPage = 1;
-        void this.activity.loadDiscordRoster(linkshellId);
-      });
+      untracked(() => void this.activity.loadDiscordRoster(linkshellId));
     });
   }
 
@@ -124,23 +160,48 @@ export class InvitesPanelComponent {
     return !!link?.settings?.discordGuildId;
   }
 
-  protected async inviteFromDiscord(discordUserId: string): Promise<void> {
-    const linkshellId = this.inviteTargetLinkshellId();
-    if (!linkshellId) {
-      this.activity.actionError.set('Select a linkshell before sending invites.');
-      this.activity.actionMessage.set(null);
-      return;
+  /** The dropdown's choices. Connected Now needs the Discord Activity (the website has no
+   *  participants); From My Discord Server needs a linkshell locked to a server. */
+  protected sourceOptions(): { key: InviteSource; label: string }[] {
+    return [
+      { key: 'all', label: 'Entire LSM Server' },
+      { key: 'linkshell', label: 'In a Linkshell' },
+      ...(this.activity.isWebsite ? [] : [{ key: 'connected' as const, label: 'Connected Now' }]),
+      ...(this.targetLinkshellLocked() ? [{ key: 'discord' as const, label: 'From My Discord Server' }] : [])
+    ];
+  }
+
+  /** The picked source, or Entire LSM Server when the pick is no longer offered (the
+   *  linkshell stopped being locked, say). */
+  protected source(): InviteSource {
+    return this.sourceOptions().some(option => option.key === this.inviteSource) ? this.inviteSource : 'all';
+  }
+
+  protected onSourceChange(source: InviteSource): void {
+    this.inviteSource = source;
+    this.page = 1;
+    if (source === 'all') {
+      this.loadBrowse(1);
+    } else if (source === 'linkshell') {
+      this.loadSources();
     }
-    await this.activity.inviteDiscordUser(linkshellId, discordUserId);
   }
 
-  protected get discordRosterSearch(): string {
-    return this.discordRosterSearchTerm;
+  protected onRosterLinkshellChange(sourceLinkshellId: number | null): void {
+    this.rosterLinkshellId = sourceLinkshellId;
+    this.page = 1;
+    this.loadRoster();
   }
 
-  protected set discordRosterSearch(value: string) {
-    this.discordRosterSearchTerm = value;
-    this.discordRosterPage = 1;
+  protected onSearchTermChange(term: string): void {
+    this.searchTerm = term;
+    // Entire LSM Server waits for Enter / Search; the others filter as you type.
+    if (this.source() !== 'all') this.page = 1;
+  }
+
+  protected onSearch(): void {
+    this.page = 1;
+    if (this.source() === 'all') this.loadBrowse(1);
   }
 
   protected linkshellMemberships() {
@@ -178,104 +239,189 @@ export class InvitesPanelComponent {
       .filter(invite => invite.linkshellId === targetId);
   }
 
-  protected connectedInviteCandidates() {
-    const seen = new Set<string>();
-    return this.activity.participantInviteCandidates().filter(candidate => {
-      if (seen.has(candidate.appUserId)) return false;
-      seen.add(candidate.appUserId);
-      return true;
-    });
-  }
+  /** Every row the picked source has, already narrowed by the search box (except Entire
+   *  LSM Server, which the server searched, and which is only the current page). */
+  protected rows(): InviteResultRow[] {
+    const term = this.searchTerm.trim().toLowerCase();
+    const matches = (name: string) => !term || name.toLowerCase().includes(term);
 
-  // Hide anyone already shown under "Connected now" so they don't appear twice.
-  protected filteredBrowseResults() {
-    const connectedIds = new Set(
-      this.connectedInviteCandidates().map(candidate => candidate.appUserId)
-    );
-    return this.activity.inviteBrowseResults().filter(result => !connectedIds.has(result.id));
-  }
+    switch (this.source()) {
+      case 'all':
+        return this.activity.inviteBrowseResults().map(result => ({
+          key: `user:${result.id}`,
+          name: result.displayName,
+          detail: result.primaryLinkshellName ? `Primary: ${result.primaryLinkshellName}` : null,
+          avatarUrl: null,
+          outsideServer: result.inDiscordServer === false,
+          invite: { appUserId: result.id },
+          status: null
+        }));
 
-  protected filteredDiscordRosterCandidates() {
-    const term = this.discordRosterSearch.trim().toLowerCase();
-    const candidates = this.activity.discordRosterCandidates();
-    if (!term) {
-      return candidates;
+      case 'linkshell':
+        return this.activity.inviteRoster()
+          .filter(row => matches(row.displayName))
+          .map((row, index) => ({
+            key: row.appUserId ? `user:${row.appUserId}` : `row:${index}`,
+            name: row.displayName,
+            detail: null,
+            avatarUrl: null,
+            outsideServer: row.inDiscordServer === false,
+            invite: row.state === 'invite' && row.appUserId ? { appUserId: row.appUserId } : null,
+            status: ROSTER_STATUS[row.state] ?? null
+          }));
+
+      case 'connected': {
+        // Someone connected on two devices comes back twice; list them once.
+        const byUser = new Map(this.activity.participantInviteCandidates()
+          .map(candidate => [candidate.appUserId, candidate] as const));
+        return [...byUser.values()]
+          .filter(candidate => matches(candidate.displayName))
+          .map(candidate => ({
+            key: `user:${candidate.appUserId}`,
+            name: candidate.displayName,
+            detail: candidate.primaryLinkshellName ? `Primary: ${candidate.primaryLinkshellName}` : null,
+            avatarUrl: null,
+            outsideServer: false,
+            invite: { appUserId: candidate.appUserId },
+            status: null
+          }));
+      }
+
+      case 'discord':
+        return this.activity.discordRosterCandidates()
+          .filter(candidate => matches(candidate.displayName))
+          .map(candidate => ({
+            key: `discord:${candidate.discordUserId}`,
+            name: candidate.displayName,
+            detail: candidate.hasLsmAccount ? null : 'New to LSM — auto-joins on first sign-in',
+            avatarUrl: candidate.avatarUrl || null,
+            outsideServer: false,
+            invite: { discordUserId: candidate.discordUserId },
+            status: null
+          }));
     }
-
-    return candidates.filter(candidate => candidate.displayName.toLowerCase().includes(term));
   }
 
-  protected discordRosterTotalPages(): number {
-    return Math.max(1, Math.ceil(this.filteredDiscordRosterCandidates().length / this.discordRosterPageSize));
+  /** The rows on the current page. */
+  protected pageRows(): InviteResultRow[] {
+    const rows = this.rows();
+    if (this.source() === 'all') return rows;
+    const start = (this.currentPage() - 1) * this.pageSize;
+    return rows.slice(start, start + this.pageSize);
   }
 
-  protected discordRosterCurrentPage(): number {
-    return Math.min(Math.max(1, this.discordRosterPage), this.discordRosterTotalPages());
+  protected totalCount(): number {
+    return this.source() === 'all' ? this.activity.inviteBrowseTotal() : this.rows().length;
   }
 
-  protected pagedDiscordRosterCandidates() {
-    const start = (this.discordRosterCurrentPage() - 1) * this.discordRosterPageSize;
-    return this.filteredDiscordRosterCandidates().slice(start, start + this.discordRosterPageSize);
+  protected totalPages(): number {
+    return Math.max(1, Math.ceil(this.totalCount() / this.pageSize));
   }
 
-  protected discordRosterPrev(): void {
-    this.discordRosterPage = Math.max(1, this.discordRosterCurrentPage() - 1);
+  protected currentPage(): number {
+    return Math.min(Math.max(1, this.page), this.totalPages());
   }
 
-  protected discordRosterNext(): void {
-    this.discordRosterPage = Math.min(this.discordRosterTotalPages(), this.discordRosterCurrentPage() + 1);
+  protected prevPage(): void {
+    this.goToPage(this.currentPage() - 1);
   }
 
-  protected browseTotalPages(): number {
-    return Math.max(1, Math.ceil(this.activity.inviteBrowseTotal() / this.browsePageSize));
+  protected nextPage(): void {
+    this.goToPage(this.currentPage() + 1);
+  }
+
+  private goToPage(page: number): void {
+    if (page < 1 || page > this.totalPages()) return;
+    if (this.source() === 'all') {
+      this.loadBrowse(page);
+    } else {
+      this.page = page;
+    }
+  }
+
+  /** Null when the picked source isn't loading. */
+  protected busyMessage(): string | null {
+    switch (this.source()) {
+      case 'all': return this.activity.inviteBrowseBusy() ? 'Loading members...' : null;
+      case 'linkshell': return this.activity.inviteRosterBusy() ? 'Loading that roster...' : null;
+      case 'connected': return this.activity.participantInviteBusy() ? 'Matching who is connected to app users...' : null;
+      case 'discord': return this.activity.discordRosterBusy() ? 'Loading your Discord server roster...' : null;
+    }
+  }
+
+  protected emptyMessage(): string {
+    const searching = this.searchTerm.trim().length > 0;
+    switch (this.source()) {
+      case 'all':
+        return searching ? 'No one matched your search.' : 'No eligible members found.';
+      case 'linkshell':
+        if (this.rosterLinkshellId === null) return 'Pick a linkshell to see its roster.';
+        return searching ? 'No one on that roster matched your search.' : 'That linkshell has no members.';
+      case 'connected':
+        return searching
+          ? 'No one connected matched your search.'
+          : 'No one connected right now can be invited.';
+      case 'discord':
+        if (searching) return 'No Discord server members matched your search.';
+        return "No one left to add from your Discord server, or the bot can't read it yet.";
+    }
   }
 
   protected loadBrowse(page: number): void {
     const linkshellId = this.inviteTargetLinkshellId();
     if (!linkshellId || !this.canManageLinkshell(linkshellId)) return;
-    this.browsePage = page;
+    if (this.source() === 'all') this.page = page;
     void this.activity.browsePlayers(linkshellId, {
-      query: this.browseTerm,
-      filter: this.browseFilter,
+      query: this.searchTerm,
       page,
-      pageSize: this.browsePageSize
+      pageSize: this.pageSize
     });
   }
 
-  protected onBrowseSearch(): void {
-    this.loadBrowse(1);
-  }
-
-  protected onBrowseFilterChange(value: 'all' | 'unaffiliated' | 'affiliated'): void {
-    this.browseFilter = value;
-    this.loadBrowse(1);
-  }
-
-  protected browsePrev(): void {
-    if (this.browsePage > 1) this.loadBrowse(this.browsePage - 1);
-  }
-
-  protected browseNext(): void {
-    if (this.browsePage < this.browseTotalPages()) this.loadBrowse(this.browsePage + 1);
-  }
-
-  protected async sendInvite(appUserId: string): Promise<void> {
+  private loadSources(): void {
     const linkshellId = this.inviteTargetLinkshellId();
+    if (!linkshellId || this.sourcesLoadedFor === linkshellId) return;
+    this.sourcesLoadedFor = linkshellId;
+    void this.activity.loadInviteSources(linkshellId);
+  }
 
-    if (!linkshellId) {
+  private loadRoster(): void {
+    const linkshellId = this.inviteTargetLinkshellId();
+    if (!linkshellId || this.rosterLinkshellId === null) {
+      this.activity.clearInviteRoster();
+      return;
+    }
+    void this.activity.loadInviteRoster(linkshellId, this.rosterLinkshellId);
+  }
+
+  protected async invite(row: InviteResultRow): Promise<void> {
+    const linkshellId = this.inviteTargetLinkshellId();
+    if (!linkshellId || !row.invite) {
       this.activity.actionError.set('Select a linkshell before sending invites.');
       this.activity.actionMessage.set(null);
       return;
     }
 
-    await this.activity.sendInvite(linkshellId, appUserId);
-    // Refresh the current browse page (the invited user drops off) and the
-    // connected-now shortcut list.
-    this.loadBrowse(this.browsePage);
+    if ('discordUserId' in row.invite) {
+      // The service drops the added person from the Discord list itself.
+      await this.activity.inviteDiscordUser(linkshellId, row.invite.discordUserId);
+      return;
+    }
+
+    await this.activity.sendInvite(linkshellId, row.invite.appUserId);
+    // Refresh whatever is showing, so the added person drops off (or reads Member), and
+    // the Connected Now list.
+    if (this.source() === 'all') this.loadBrowse(this.currentPage());
+    if (this.source() === 'linkshell') this.loadRoster();
     await this.activity.loadParticipantInviteCandidates(
       linkshellId,
       this.activity.participants().map(participant => participant.id)
     );
+  }
+
+  protected isInviting(row: InviteResultRow): boolean {
+    return !!row.invite && 'discordUserId' in row.invite
+      && this.activity.busyDiscordUserId() === row.invite.discordUserId;
   }
 
   private inviteEligibilitySeed(linkshellId: number): string {

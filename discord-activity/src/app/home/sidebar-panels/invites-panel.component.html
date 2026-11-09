@@ -77,147 +77,86 @@
       </div>
       <div class="card-body">
       @if ((activity.overview()?.linkshells?.length ?? 0) > 0 && canManageLinkshell(inviteTargetLinkshellId())) {
+        <!-- One search box, the dropdown saying where to look, and one list of what it found.
+             In a Linkshell adds a second dropdown to pick the linkshell whose roster to show. -->
         <div class="invite-search">
           <input
-            [(ngModel)]="browseTerm"
-            name="browseTerm"
-            placeholder="Search by character or username"
-            (keyup.enter)="onBrowseSearch()" />
+            [ngModel]="searchTerm"
+            (ngModelChange)="onSearchTermChange($event)"
+            name="inviteSearchTerm"
+            [placeholder]="source() === 'all' ? 'Search by character or username' : 'Filter by name'"
+            (keyup.enter)="onSearch()" />
           <select
-            [(ngModel)]="browseFilter"
-            name="browseFilter"
-            aria-label="Filter members"
-            (ngModelChange)="onBrowseFilterChange($event)">
-            <option value="all">All members</option>
-            <option value="unaffiliated">Not in a linkshell</option>
-            <option value="affiliated">In a linkshell</option>
-          </select>
-          <button type="button" class="action-button" (click)="onBrowseSearch()">
-            {{ activity.inviteBrowseBusy() ? 'Loading...' : 'Search' }}
-          </button>
-        </div>
-
-        @if (activity.participantInviteBusy() || connectedInviteCandidates().length > 0 || activity.participants().length > 0) {
-          <div class="invite-section">
-            <h3>Connected now</h3>
-            @if (activity.participantInviteBusy()) {
-              <p class="notice">Matching current Discord participants to linked app users...</p>
-            } @else if (connectedInviteCandidates().length > 0) {
-              <ul class="compact-list compact-list--dense">
-                @for (candidate of connectedInviteCandidates(); track candidate.appUserId) {
-                  <li>
-                    <div>
-                      <strong>{{ candidate.displayName }}</strong>
-                      @if (candidate.primaryLinkshellName) {
-                        <span>Primary: {{ candidate.primaryLinkshellName }}</span>
-                      }
-                    </div>
-                    <div class="button-cluster">
-                      <button type="button" class="action-button" (click)="sendInvite(candidate.appUserId)">Invite</button>
-                    </div>
-                  </li>
-                }
-              </ul>
-            } @else {
-              <p class="notice">No connected participants are eligible for a quick invite right now.</p>
+            [ngModel]="source()"
+            (ngModelChange)="onSourceChange($event)"
+            name="inviteSource"
+            aria-label="Where to look">
+            @for (option of sourceOptions(); track option.key) {
+              <option [value]="option.key">{{ option.label }}</option>
             }
-          </div>
-        }
-
-        <div class="invite-section">
-          <h3>All members</h3>
-          @if (activity.inviteBrowseBusy()) {
-            <p class="notice">Loading members...</p>
-          } @else if (filteredBrowseResults().length > 0) {
-            <ul class="compact-list compact-list--dense">
-              @for (result of filteredBrowseResults(); track result.id) {
-                <li>
-                  <div>
-                    <strong>{{ result.displayName }}</strong>
-                    @if (result.primaryLinkshellName) {
-                      <span>Primary: {{ result.primaryLinkshellName }}</span>
-                    }
-                  </div>
-                  <div class="button-cluster">
-                    <button type="button" class="action-button" (click)="sendInvite(result.id)">Invite</button>
-                  </div>
-                </li>
+          </select>
+          @if (source() === 'linkshell') {
+            <select
+              [ngModel]="rosterLinkshellId"
+              (ngModelChange)="onRosterLinkshellChange($event)"
+              name="inviteRosterLinkshell"
+              aria-label="Linkshell">
+              <option [ngValue]="null" disabled>Pick a linkshell…</option>
+              @for (link of activity.inviteSources(); track link.id) {
+                <option [ngValue]="link.id">{{ link.name }}</option>
               }
-            </ul>
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px">
-              <button type="button" class="action-button action-button--secondary"
-                [disabled]="browsePage <= 1" (click)="browsePrev()">Prev</button>
-              <span class="notice" style="margin:0">
-                Page {{ browsePage }} of {{ browseTotalPages() }} · {{ activity.inviteBrowseTotal() }} total
-              </span>
-              <button type="button" class="action-button action-button--secondary"
-                [disabled]="browsePage >= browseTotalPages()" (click)="browseNext()">Next</button>
-            </div>
-          } @else {
-            <p class="notice">No eligible members found.</p>
+            </select>
+          }
+          <!-- Only Entire LSM Server asks the server; the other lists filter as you type. -->
+          @if (source() === 'all') {
+            <button type="button" class="action-button" (click)="onSearch()">
+              {{ activity.inviteBrowseBusy() ? 'Loading...' : 'Search' }}
+            </button>
           }
         </div>
 
-        @if (targetLinkshellLocked()) {
-          <div class="invite-section">
-            <h3>From your Discord server</h3>
-            @if (activity.discordRosterBusy()) {
-              <p class="notice">Loading your Discord server roster...</p>
-            } @else if (activity.discordRosterCandidates().length > 0) {
-              <div class="invite-search invite-search--discord-roster">
-                <input
-                  [(ngModel)]="discordRosterSearch"
-                  name="discordRosterSearch"
-                  placeholder="Search Discord server members" />
-                <span class="notice invite-search__count" style="margin:0">
-                  {{ filteredDiscordRosterCandidates().length }} member{{ filteredDiscordRosterCandidates().length === 1 ? '' : 's' }}
-                </span>
-              </div>
-              @if (filteredDiscordRosterCandidates().length > 0) {
-                <div class="discord-roster-grid">
-                  @for (candidate of pagedDiscordRosterCandidates(); track candidate.discordUserId) {
-                    <div class="discord-roster-card">
-                      <div class="discord-roster-card__identity">
-                        <img [src]="candidate.avatarUrl" alt="" width="24" height="24"
-                          class="discord-roster-card__avatar" />
-                        <div class="discord-roster-card__text">
-                          <strong>{{ candidate.displayName }}</strong>
-                          @if (!candidate.hasLsmAccount) {
-                            <span>New to LSM — auto-joins on first sign-in</span>
-                          }
-                        </div>
-                      </div>
-                      <div class="button-cluster">
-                        <button
-                          type="button"
-                          class="action-button"
-                          [disabled]="activity.busyDiscordUserId() === candidate.discordUserId"
-                          (click)="inviteFromDiscord(candidate.discordUserId)">
-                          {{ activity.busyDiscordUserId() === candidate.discordUserId ? 'Inviting...' : 'Invite' }}
-                        </button>
-                      </div>
-                    </div>
+        @if (busyMessage(); as busy) {
+          <p class="notice">{{ busy }}</p>
+        } @else if (pageRows().length > 0) {
+          <ul class="invite-results">
+            @for (row of pageRows(); track row.key) {
+              <li class="invite-result">
+                @if (row.avatarUrl) {
+                  <img class="invite-result__avatar" [src]="row.avatarUrl" alt="" width="24" height="24" />
+                }
+                <div class="invite-result__text">
+                  <strong>{{ row.name }}</strong>
+                  @if (row.detail) {
+                    <span>{{ row.detail }}</span>
                   }
                 </div>
-                @if (discordRosterTotalPages() > 1) {
-                  <div class="table-paginator table-paginator--invite-grid">
-                    <button type="button" class="action-button action-button--secondary"
-                      [disabled]="discordRosterCurrentPage() <= 1" (click)="discordRosterPrev()">Prev</button>
-                    <span class="notice" style="margin:0">
-                      Page {{ discordRosterCurrentPage() }} of {{ discordRosterTotalPages() }}
-                      &middot; {{ filteredDiscordRosterCandidates().length }} total
-                    </span>
-                    <button type="button" class="action-button action-button--secondary"
-                      [disabled]="discordRosterCurrentPage() >= discordRosterTotalPages()" (click)="discordRosterNext()">Next</button>
-                  </div>
+                @if (row.outsideServer) {
+                  <span class="tag warning"
+                    title="Your linkshell is locked to its Discord server. They can be invited, but must join that server before they can open the linkshell.">
+                    Not in your Discord server
+                  </span>
                 }
-              } @else {
-                <p class="notice">No Discord server members matched your search.</p>
-              }
-            } @else {
-              <p class="notice">No one left to add from your Discord server, or the bot can't read it yet.</p>
+                @if (row.status) {
+                  <span class="tag default">{{ row.status }}</span>
+                } @else if (row.invite) {
+                  <button type="button" class="action-button" [disabled]="isInviting(row)" (click)="invite(row)">
+                    {{ isInviting(row) ? 'Inviting...' : 'Invite' }}
+                  </button>
+                }
+              </li>
             }
-          </div>
+          </ul>
+          @if (totalPages() > 1) {
+            <div class="invite-results__pager">
+              <button type="button" class="action-button action-button--secondary"
+                [disabled]="currentPage() <= 1" (click)="prevPage()">Prev</button>
+              <span class="notice">Page {{ currentPage() }} of {{ totalPages() }} · {{ totalCount() }} total</span>
+              <button type="button" class="action-button action-button--secondary"
+                [disabled]="currentPage() >= totalPages()" (click)="nextPage()">Next</button>
+            </div>
+          }
+        } @else {
+          <p class="notice">{{ emptyMessage() }}</p>
         }
       } @else if ((activity.overview()?.linkshells?.length ?? 0) > 0) {
         <p class="notice">

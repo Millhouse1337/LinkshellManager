@@ -1780,6 +1780,27 @@ export interface ActivityUserSearchResult {
   displayName: string;
   userName?: string | null;
   primaryLinkshellName?: string | null;
+  /** Set when the inviting linkshell is locked to a Discord server: false means they must
+   *  join that server before they can open the linkshell. Null when it isn't locked. */
+  inDiscordServer?: boolean | null;
+}
+
+/** A linkshell the invite card's "In a Linkshell" picker offers. */
+export interface ActivityInviteSourceLinkshell {
+  id: number;
+  name: string;
+}
+
+/** What the inviting linkshell can do about one person on another linkshell's roster. */
+export type ActivityInviteRosterState = 'invite' | 'member' | 'invited' | 'requested' | 'you' | 'noAccount';
+
+/** One row of another linkshell's roster in the invite card: a name only, plus its state. */
+export interface ActivityInviteRosterRow {
+  /** Null for a row with no LSM account behind it (state 'noAccount'). */
+  appUserId: string | null;
+  displayName: string;
+  state: ActivityInviteRosterState;
+  inDiscordServer: boolean | null;
 }
 
 export interface ActivityLinkshellSearchResult {
