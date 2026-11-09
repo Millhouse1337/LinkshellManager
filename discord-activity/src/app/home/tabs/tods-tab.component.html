@@ -1,8 +1,9 @@
     <div class="panel-tab fade">
       <!-- The linkshell is already named in the top bar's switcher, so it isn't repeated here.
-           Rows, like the Event System's: the label with the count on its right, then the view switch
-           (reviewers only, since Pending is theirs), then Log ToD. Pending makes the count invisible
-           rather than removing it, so the switch under it doesn't jump when clicked. -->
+           Rows, like the Event System's: the label with the count on its right, then the view's title
+           (Main / Pending) with the view switch on its right (reviewers only, since Pending is
+           theirs), then Log ToD. Pending makes the count invisible rather than removing it, so the
+           switch under it doesn't jump when clicked. -->
       <div class="section-head-rows">
         <div class="section-head-row">
           <div class="section-label">ToD Tracker</div>
@@ -10,8 +11,9 @@
             <span class="tag default num">{{ selectedDashboardTods().length }} Tracked</span>
           </div>
         </div>
-        @if (canReviewSubmissions()) {
-          <div class="section-head-row section-head-row--end">
+        <div class="section-head-row">
+          <div class="section-title">{{ showingPending() ? 'Pending' : 'Main' }}</div>
+          @if (canReviewSubmissions()) {
             <div class="view-tabs" role="tablist" aria-label="ToD view">
               <button type="button" class="view-tab" role="tab"
                 [class.active]="!showingPending()"
@@ -23,8 +25,8 @@
                 [title]="pendingCount() > 0 ? pendingCount() + ' ToD submission(s) waiting for approval' : ''"
                 (click)="todsView.set('pending')">Pending{{ pendingCount() > 0 ? ' (' + pendingCount() + ')' : '' }}</button>
             </div>
-          </div>
-        }
+          }
+        </div>
         @if (!showingPending() && (activity.overview()?.linkshells?.length ?? 0) > 0) {
           <div class="section-head-row section-head-row--end">
             <button type="button" class="btn primary sm" (click)="todForm.openCreate(selectedDashboardLinkshellId())">+ Log ToD</button>
