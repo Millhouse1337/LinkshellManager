@@ -51,6 +51,4 @@ public class PendingTodSubmission
     // by the time an officer gets round to the queue the mob's band has cycled on and any fresh
     // reading would name a window it was never up in. Null = not recorded, same as everywhere else.
     public int? PopWindow { get; set; }
-
-    public ICollection<PendingTodLootSubmission> LootRows { get; set; } = new List<PendingTodLootSubmission>();
 }

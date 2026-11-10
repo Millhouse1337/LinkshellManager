@@ -44,7 +44,6 @@ TRUNCATE TABLE
     "WindowEvents",
     "WindowEventMemberDkps",
     "PendingTodSubmissions",
-    "PendingTodLootSubmissions",
     "ClaimShieldCaptures",
     "ClaimShieldCaptureMembers",
     -- Auctions

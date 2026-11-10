@@ -143,7 +143,7 @@ var tables = new[]
     "EventAttendanceWindows", "AppUserEventWindows",
     "WindowEvents",
     "AttendanceSnapshots", "AttendanceSnapshotEntries",
-    "PendingTodSubmissions", "PendingTodLootSubmissions",
+    "PendingTodSubmissions",
 };
 
 var quoted = string.Join(", ", tables.Select(t => $"\"{t}\""));
@@ -257,7 +257,6 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("PartySetups", "DELETE FROM \"PartySetups\" WHERE \"LinkshellId\" = @ls"),
 
         // --- Pending submissions ---
-        ("PendingTodLootSubmissions", "DELETE FROM \"PendingTodLootSubmissions\" WHERE \"PendingTodSubmissionId\" IN (SELECT \"Id\" FROM \"PendingTodSubmissions\" WHERE \"LinkshellId\" = @ls)"),
         ("PendingTodSubmissions", "DELETE FROM \"PendingTodSubmissions\" WHERE \"LinkshellId\" = @ls"),
 
         // --- DKP ledger + economy ---

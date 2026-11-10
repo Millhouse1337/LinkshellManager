@@ -1006,7 +1006,6 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<WindowEvent> WindowEvents => Set<WindowEvent>();
         public DbSet<WindowEventMemberDkp> WindowEventMemberDkps => Set<WindowEventMemberDkp>();
         public DbSet<PendingTodSubmission> PendingTodSubmissions => Set<PendingTodSubmission>();
-        public DbSet<PendingTodLootSubmission> PendingTodLootSubmissions => Set<PendingTodLootSubmission>();
         public DbSet<ClaimShieldCapture> ClaimShieldCaptures => Set<ClaimShieldCapture>();
         public DbSet<ClaimShieldCaptureMember> ClaimShieldCaptureMembers => Set<ClaimShieldCaptureMember>();
         public DbSet<LinkshellDiscordWebhook> LinkshellDiscordWebhooks => Set<LinkshellDiscordWebhook>();

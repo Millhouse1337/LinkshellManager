@@ -3510,35 +3510,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.ToTable("PartySetupSlots", (string)null);
                 });
 
-            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodLootSubmission", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ItemName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("ItemWinner")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int>("PendingTodSubmissionId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("WinningDkpSpent")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PendingTodSubmissionId");
-
-                    b.ToTable("PendingTodLootSubmissions");
-                });
-
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodSubmission", b =>
                 {
                     b.Property<int>("Id")
@@ -4912,17 +4883,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("Party");
                 });
 
-            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodLootSubmission", b =>
-                {
-                    b.HasOne("LinkshellManagerDiscordApp.Models.PendingTodSubmission", "PendingTodSubmission")
-                        .WithMany("LootRows")
-                        .HasForeignKey("PendingTodSubmissionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("PendingTodSubmission");
-                });
-
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodSubmission", b =>
                 {
                     b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
@@ -5191,11 +5151,6 @@ namespace LinkshellManagerDiscordApp.Migrations
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PartySetupParty", b =>
                 {
                     b.Navigation("Slots");
-                });
-
-            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PendingTodSubmission", b =>
-                {
-                    b.Navigation("LootRows");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Tod", b =>

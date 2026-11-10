@@ -66,18 +66,12 @@ public class SubmissionApprovalReviewTests
         Assert.Equal("Fafnir", db.PendingTodSubmissions.Single().MonsterName);
     }
 
-    // A ToD carries no loot. A submission queued before that, still holding loot rows, is approved
-    // as a plain ToD: no loot rows are created and nobody's DKP moves.
+    // A ToD carries no loot: approving a submission creates the ToD and moves nobody's DKP.
     [Fact]
-    public async Task Approve_ALegacySubmissionWithLoot_CreatesTheTodWithoutLoot()
+    public async Task Approve_CreatesTheTodWithoutLoot()
     {
         await using var db = NewInMemoryContext();
         var submission = await SeedTodAsync(db, HomeLinkshell);
-        submission.LootRows.Add(new PendingTodLootSubmission
-        {
-            ItemName = "Cerberus Claw", ItemWinner = "Millhouse", WinningDkpSpent = 2,
-        });
-        await db.SaveChangesAsync();
 
         var result = await NewService(db).ApproveTodWithEditsAsync(
             HomeLinkshell, submission.Id,

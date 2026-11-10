@@ -8,9 +8,9 @@ namespace LinkshellManagerDiscordApp.Services;
 // Encapsulates the queue-pending-row + approve-materializes-real-row pattern for ToDs that members
 // without the add-ToD permission submit for review.
 //
-// A ToD carries no loot. Submissions used to queue loot rows and approval charged DKP for them;
-// loot is recorded in the Loot tab against an event instead. PendingTodLootSubmission rows left
-// over from before that are ignored, and go with their submission when it is approved or rejected.
+// A ToD carries no loot. Submissions used to queue loot rows (PendingTodLootSubmissions, dropped
+// 2026-11-09) and approval charged DKP for them; loot is recorded in the Loot tab against an event
+// instead.
 //
 // Attendance used to be queued here too. It is not any more: addon attendance is either posted
 // directly by a member with "Manage attendance with the addon", or, for a `/lsm now` capture by
