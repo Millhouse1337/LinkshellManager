@@ -171,7 +171,7 @@
    The glow and the brightening are the primary View records link's hover; they ease here as they
    do in the panel's copy of it. */
 .lsm-page .erd-bar .btn { height: 32px; padding: 0 12px; transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, filter .15s ease; }
-.lsm-page .erd-bar .erd-bar__step { min-width: 32px; padding: 0; font-family: var(--font-mono); font-size: 14px; }
+.lsm-page .erd-bar .erd-bar__step { min-width: 32px; padding: 0; justify-content: center; font-family: var(--font-mono); font-size: 14px; }
 /* Keyboard focus is the :focus-visible outline, in the bar and in the panel. Bootstrap's
    .btn:focus halo, which would stay on after a mouse click and double the ring, is switched off
    in its favour; the primary View records link (in the bar, and in the panel's Selected section)
