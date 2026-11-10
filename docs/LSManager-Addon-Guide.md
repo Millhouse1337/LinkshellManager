@@ -1,4 +1,4 @@
-# LinkshellManager — In-Game Addon Guide (`lsm`)
+`# LinkshellManager — In-Game Addon Guide (`lsm`)
 
 > A Lua addon for **Ashita v3**. It runs your linkshell's **HNM camps** from inside the game: it posts
 > your alliance's attendance, catches the ToD, the Claim Shield lottery and the loot from chat, and
