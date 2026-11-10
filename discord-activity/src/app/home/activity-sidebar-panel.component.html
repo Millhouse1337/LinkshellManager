@@ -279,12 +279,9 @@
        opened on purpose, not a prompt that should go quiet once they're done. Step 1's form is
        the Profile tab's Profile view. -->
   @if (showSection('next-steps')) {
-  <article class="panel" aria-labelledby="next-steps-heading">
-    <div class="panel__header">
-      <div>
-        <p class="eyebrow eyebrow--small">Onboarding</p>
-        <h2 id="next-steps-heading">Next Steps</h2>
-      </div>
+  <article class="panel" aria-label="Next Steps">
+    <!-- No title here: the page head above already says "Onboarding". Just the counter, on the right. -->
+    <div class="panel__header" style="justify-content: flex-end">
       <span class="pill">
         {{
           (needsProfileSetup() ? 0 : 1) +
