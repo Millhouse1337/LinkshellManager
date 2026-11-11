@@ -1175,6 +1175,15 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany(item => item.AuctionItems)
                     .HasForeignKey(item => item.AuctionHistoryId)
                     .OnDelete(DeleteBehavior.Cascade);
+                // Closed-auction history rows keep SourceItemId, and closing an auction deletes the
+                // treasury Item once its stack runs out. Without a delete rule Postgres refused that
+                // DELETE whenever an older history row (one EF had not loaded) still pointed at the
+                // Item, rolling back the whole close. SET NULL lets the Item go; the history row keeps
+                // its ItemName, so nothing visible is lost.
+                entity.HasOne(item => item.SourceItem)
+                    .WithMany()
+                    .HasForeignKey(item => item.SourceItemId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             builder.Entity<Bid>(entity =>

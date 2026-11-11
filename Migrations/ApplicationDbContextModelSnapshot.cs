@@ -4303,7 +4303,8 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasOne("LinkshellManagerDiscordApp.Models.Item", "SourceItem")
                         .WithMany()
-                        .HasForeignKey("SourceItemId");
+                        .HasForeignKey("SourceItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Auction");
 
