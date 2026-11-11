@@ -226,6 +226,27 @@ export class WindowEventService {
       { dkpAmount, entryType, memberDkp, miscDkpAmount: miscDkpAmount ?? null, captureDkp }, "Updating the DKP sheet...");
   }
 
+  // Pays the people on a posted event who registered after it was posted. The server skips anyone
+  // already paid from it, so a second press pays nobody.
+  async payRegistered(windowEventId: number, linkshellId: number): Promise<void> {
+    this.busy.set(true);
+    this.auth.setActionError(null);
+    this.auth.setActionMessage(null);
+    try {
+      const result = await this.http.postActivityJson<{ paid: number }>(
+        `/api/activity/window-events/${windowEventId}/pay-registered`);
+      await this.load(linkshellId);
+      const paid = result?.paid ?? 0;
+      this.auth.setActionMessage(paid === 0
+        ? 'Nobody new to pay. Everyone registered on this event is already paid.'
+        : `Paid ${paid} newly registered member${paid === 1 ? '' : 's'}.`);
+    } catch (error) {
+      this.auth.setActionError(formatActionError(error, 'Paying newly registered members failed.'));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
   async deleteEvent(windowEventId: number, linkshellId: number): Promise<void> {
     await this.run(linkshellId, `/api/activity/window-events/${windowEventId}/delete`,
       undefined, 'Attendance event deleted.');

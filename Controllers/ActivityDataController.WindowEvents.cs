@@ -29,7 +29,11 @@ public sealed partial class ActivityDataController
         int UnlinkedDisplayCap,
         // The linkshell's Misc post rate: what an unlinked post pays when it has no price of its
         // own, and what the Unlinked Snapshots row's DKP box starts at.
-        double? MiscPostRate = null);
+        double? MiscPostRate = null,
+        // Posted cards that still owe someone: a member who was not registered when the card was
+        // posted and has registered since. Each carries UnpaidRegisteredMemberCount, and the card
+        // offers "Pay newly registered". Officers only; empty for everyone else.
+        IReadOnlyList<ActivityWindowEventDto>? PostedOwingEvents = null);
 
     public sealed record ActivityWindowEventDto(
         int Id,
@@ -78,7 +82,10 @@ public sealed partial class ActivityDataController
         // How many of CombinedMemberCount are NOT on the roster. Counted rather than subtracted:
         // every name stays listed, the unregistered ones are marked, and the officer is told how
         // many of the people they are about to Post for cannot be paid.
-        int UnregisteredMemberCount = 0);
+        int UnregisteredMemberCount = 0,
+        // On a POSTED card: how many accounts on it are registered now but have not been paid from
+        // it (they registered after Post). What "Pay newly registered" would pay. 0 elsewhere.
+        int UnpaidRegisteredMemberCount = 0);
 
     public sealed record ActivityWindowEventMemberDkpInput(string? CharacterName, double? DkpAmount);
 
@@ -197,6 +204,10 @@ public sealed partial class ActivityDataController
     // Closed events per page in the Activity's Attendance Archive.
     private const int ActivityClosedAttendancePageSize = 10;
 
+    // How far back the attendance payload looks for posted cards owing a newly registered member.
+    // Bounded because the payload is polled; most people register within days of their first camp.
+    private const int PayNewlyRegisteredLookbackDays = 30;
+
     // attQ / attPage are the archive's search and page. They are the ONLY paged part of this
     // payload: open events and unlinked snapshots are live work an officer has to see in full.
     [HttpGet("window-events")]
@@ -306,6 +317,33 @@ public sealed partial class ActivityDataController
 
         var miscPostRate = await MiscPostRateAsync(linkshellId, cancellationToken);
 
+        // Posted cards drop out of every list above, so a card still owing a newly registered
+        // member is listed on its own, for an officer to pay. Recent cards only: an older one can
+        // still be settled through the DKP audit's Add.
+        var postedOwingEvents = new List<ActivityWindowEventDto>();
+        if (canManage)
+        {
+            var owing = await _windowEventDkpLedger.CountUnpaidAccountsAsync(
+                linkshellId, DateTime.UtcNow.AddDays(-PayNewlyRegisteredLookbackDays), cancellationToken);
+            if (owing.Count > 0)
+            {
+                var owingIds = owing.Keys.ToList();
+                var owingCards = await _dbContext.WindowEvents
+                    .AsNoTracking()
+                    .Where(e => owingIds.Contains(e.Id))
+                    .OrderByDescending(e => e.PostedToSheetAt)
+                    .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
+                    .Include(e => e.MemberDkpOverrides)
+                    .ToListAsync(cancellationToken);
+                postedOwingEvents = owingCards
+                    .Select(e => MapActivityWindowEvent(e, roster, miscPostRate) with
+                    {
+                        UnpaidRegisteredMemberCount = owing[e.Id],
+                    })
+                    .ToList();
+            }
+        }
+
         return Ok(new ActivityWindowEventsResponse(
             openEvents.Select(e => MapActivityWindowEvent(e, roster, miscPostRate)).ToList(),
             closedEvents.Select(e => MapActivityWindowEvent(e, roster, miscPostRate)).ToList(),
@@ -327,7 +365,8 @@ public sealed partial class ActivityDataController
             closedTotalCount,
             unlinkedTotalCount,
             unlinkedDisplayCap,
-            miscPostRate));
+            miscPostRate,
+            postedOwingEvents));
     }
 
     // Sets DKP + Entry Type (and any per-character overrides) on an UNposted event
@@ -547,6 +586,39 @@ public sealed partial class ActivityDataController
 
         await _windowEventDkpLedger.ReconcilePostedWindowEventLedgerAsync(windowEvent.Value.Id, cancellationToken);
         return Ok(new { success = true });
+    }
+
+    // "Pay newly registered": Post pays only who is registered at that moment. Someone captured on
+    // the card who registers afterwards is paid here, once, at the card's posted rates. Everyone
+    // already paid from the card is skipped, so pressing it twice pays nobody twice.
+    [HttpPost("window-events/{windowEventId:int}/pay-registered")]
+    public async Task<IActionResult> PayNewlyRegisteredAsync(
+        int windowEventId,
+        CancellationToken cancellationToken)
+    {
+        var windowEvent = await LoadManageableWindowEventAsync(windowEventId, cancellationToken);
+        if (windowEvent.Result is not null) return windowEvent.Result;
+
+        if (!windowEvent.Value!.PostedToSheetAt.HasValue)
+        {
+            return BadRequest(new { error = "This event hasn't been published yet. Use Post to pay everyone on it." });
+        }
+
+        var linkshellId = windowEvent.Value.LinkshellId;
+        var paid = await _windowEventDkpLedger.PayNewlyRegisteredAsync(windowEventId, cancellationToken);
+        if (paid is null)
+        {
+            // Deleted between the check above and the payout's lock.
+            return NotFound(new { error = "Window Event not found." });
+        }
+
+        if (paid > 0)
+        {
+            var changeNotifier = HttpContext?.RequestServices.GetService<LinkshellChangeNotifier>();
+            changeNotifier?.Notify(linkshellId, LinkshellChangeNotifier.Areas.Windows);
+            changeNotifier?.Notify(linkshellId, LinkshellChangeNotifier.Areas.Dkp);
+        }
+        return Ok(new { paid = paid.Value });
     }
 
     // Permanently deletes a Window Event and the captures filed under it.

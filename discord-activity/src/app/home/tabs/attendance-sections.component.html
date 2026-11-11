@@ -103,6 +103,46 @@
       </div>
     }
 
+    <!-- Posted events that still owe someone. Post pays only who is registered at that moment, so
+         a person captured on the event who registers later is paid here, by an officer, once.
+         A short row rather than the full card: the event is posted, so its roster is not edited
+         here any more. Hidden when nothing is owed. -->
+    @if (section() === 'archive' && model.canManage && (model.postedOwingEvents?.length ?? 0) > 0) {
+      <section class="card we-owing-block">
+        <div class="card-head">
+          <div class="card-title">
+            Newly Registered, Not Paid
+            <span class="tag warning">{{ model.postedOwingEvents!.length }}</span>
+          </div>
+        </div>
+        <div class="we-triage__sub we-owing-block__sub">
+          These events were posted while some people on them were not registered. They have
+          registered since, so they can be paid now.
+        </div>
+        @for (event of model.postedOwingEvents!; track event.id) {
+          @let owed = event.unpaidRegisteredMemberCount ?? 0;
+          <div class="we-owing-row">
+            <div class="we-owing-row__info">
+              <strong>{{ event.name || 'Attendance event' }}</strong>
+              <span class="we-muted">
+                Posted {{ formatDate(event.postedToSheetUtc) }} · {{ owed }} member{{ owed === 1 ? '' : 's' }} not paid yet
+              </span>
+            </div>
+            @if (confirmPayRegisteredId() === event.id) {
+              <button type="button" class="btn sm primary" (click)="payRegistered(event)" [disabled]="windows.busy()"
+                title="Pays them this event's DKP. Anyone already paid from it is skipped.">
+                Pay {{ owed }} member{{ owed === 1 ? '' : 's' }}
+              </button>
+              <button type="button" class="btn sm ghost" (click)="confirmPayRegisteredId.set(null)">Cancel</button>
+            } @else {
+              <button type="button" class="btn sm primary" (click)="confirmPayRegisteredId.set(event.id)"
+                [disabled]="windows.busy()">Pay newly registered</button>
+            }
+          </div>
+        }
+      </section>
+    }
+
     <!-- One PAGE of the pending queue, searched and paged by the server. The count on the title
          is the whole queue's total, not this page's length. -->
     @if (section() === 'archive') {

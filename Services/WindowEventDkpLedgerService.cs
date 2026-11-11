@@ -114,6 +114,163 @@ public sealed class WindowEventDkpLedgerService
         ApplicationDbContext dbContext, Func<Task<T>> pay) =>
         UniqueRaceRetry.RunAsync(dbContext, pay, "DkpLedgerEntries");
 
+    // "Pay newly registered": pays the people on an ALREADY-posted card who had no account on the
+    // roster when it was posted and have registered since. Post pays only who is registered at that
+    // moment (nothing re-pays old cards on a page load any more), so this button is how they get
+    // their DKP.
+    //
+    // Returns null when the card does not exist or is not posted (Post pays everyone then);
+    // otherwise how many accounts were paid now. A second press pays 0: the payout skips every
+    // account that already has a row from this card.
+    //
+    // Holds the card's row lock for the whole payout, like Post's claim. Two officers pressing it
+    // at once take turns and the second finds everyone paid. Without the lock both would also add
+    // the new member to the camp's Past Event before the ledger index stopped the second payout,
+    // and that second archive row fails its own unique index.
+    public async Task<int?> PayNewlyRegisteredAsync(int windowEventId, CancellationToken cancellationToken)
+    {
+        var relational = _db.Database.IsRelational();
+        await using var transaction = relational
+            ? await _db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (relational)
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"""SELECT 1 FROM "WindowEvents" WHERE "Id" = {windowEventId} FOR UPDATE""",
+                cancellationToken);
+        }
+
+        // The caller loaded the card before the lock, to check the officer may manage it. Forget
+        // that copy so the payout reads the card as it is now (an Edit Posted may have just
+        // committed), not as it was a moment ago.
+        _db.ChangeTracker.Clear();
+
+        var postedAt = await _db.WindowEvents.AsNoTracking()
+            .Where(w => w.Id == windowEventId)
+            .Select(w => w.PostedToSheetAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!postedAt.HasValue)
+        {
+            return null;
+        }
+
+        var written = await RetryIfCampCreditRaceAsync(
+            _db, () => EnsurePostedWindowEventLedgerEntriesAsync(windowEventId, cancellationToken));
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+        return written;
+    }
+
+    // Posted cards that still owe someone, and how many accounts each owes: people on the card who
+    // resolve to a member now but have no ledger row from it. That is someone who registered after
+    // the card was posted -- exactly who PayNewlyRegisteredAsync would pay. Cards owing nobody are
+    // left out.
+    //
+    // Read-only, and light enough for the polled attendance payload: one roster load, the names on
+    // the cards (not their whole capture tree) and who is already paid, for cards posted since
+    // `postedSinceUtc` only. The names go through the same BuildCombinedMembers and roster lookup
+    // the payout uses, so the count and the payout cannot disagree about who is owed.
+    public async Task<Dictionary<int, int>> CountUnpaidAccountsAsync(
+        int linkshellId, DateTime postedSinceUtc, CancellationToken cancellationToken)
+    {
+        var owing = new Dictionary<int, int>();
+
+        // The same "can this card pay at all" test the payout starts with.
+        var cards = await _db.WindowEvents.AsNoTracking()
+            .Where(w => w.LinkshellId == linkshellId &&
+                        w.PostedToSheetAt != null &&
+                        w.PostedToSheetAt >= postedSinceUtc &&
+                        w.DkpAmount != null &&
+                        w.EntryType != null)
+            .Select(w => new { w.Id, w.EntryType })
+            .ToListAsync(cancellationToken);
+        var cardIds = cards
+            .Where(card => WindowEventEntryTypes.IsValid(card.EntryType))
+            .Select(card => card.Id)
+            .ToList();
+        if (cardIds.Count == 0)
+        {
+            return owing;
+        }
+
+        var names = await _db.AttendanceSnapshotEntries.AsNoTracking()
+            .Where(entry => entry.Snapshot!.WindowEventId != null &&
+                            cardIds.Contains(entry.Snapshot.WindowEventId.Value) &&
+                            entry.Snapshot.SnapshotStatus == AttendanceSnapshotStatuses.Active)
+            .Select(entry => new
+            {
+                CardId = entry.Snapshot!.WindowEventId!.Value,
+                entry.SnapshotId,
+                entry.Snapshot.CapturedAtUtc,
+                entry.CharacterName,
+                entry.AppUserId,
+            })
+            .ToListAsync(cancellationToken);
+        if (names.Count == 0)
+        {
+            return owing;
+        }
+
+        // Any row from the card counts as paid, the same rule the payout's "already paid" check uses.
+        var paidRows = await _db.DkpLedgerEntries.AsNoTracking()
+            .Where(entry => entry.SourceWindowEventId != null &&
+                            cardIds.Contains(entry.SourceWindowEventId.Value) &&
+                            entry.AppUserId != null)
+            .Select(entry => new { CardId = entry.SourceWindowEventId!.Value, AppUserId = entry.AppUserId! })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var paidByCard = paidRows
+            .GroupBy(row => row.CardId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(row => row.AppUserId).ToHashSet(StringComparer.OrdinalIgnoreCase));
+
+        var roster = await LoadPayoutRosterAsync(linkshellId, tracked: false, cancellationToken);
+
+        foreach (var card in names.GroupBy(row => row.CardId))
+        {
+            // Rebuilt as captures so each name is read from the same capture the payout would pick.
+            var snapshots = card
+                .GroupBy(row => row.SnapshotId)
+                .Select(capture =>
+                {
+                    var snapshot = new AttendanceSnapshot
+                    {
+                        Id = capture.Key,
+                        CapturedAtUtc = capture.First().CapturedAtUtc,
+                        SnapshotStatus = AttendanceSnapshotStatuses.Active,
+                    };
+                    foreach (var row in capture)
+                    {
+                        snapshot.Entries.Add(new AttendanceSnapshotEntry
+                        {
+                            CharacterName = row.CharacterName,
+                            AppUserId = row.AppUserId,
+                        });
+                    }
+                    return snapshot;
+                })
+                .ToList();
+
+            paidByCard.TryGetValue(card.Key, out var paid);
+            var unpaid = BuildCombinedMembers(snapshots)
+                .Select(item => roster.Resolve(item.Entry)?.AppUserId)
+                .OfType<string>()
+                .Where(appUserId => paid is null || !paid.Contains(appUserId))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            if (unpaid > 0)
+            {
+                owing[card.Key] = unpaid;
+            }
+        }
+
+        return owing;
+    }
+
     public async Task<int> EnsurePostedWindowEventLedgerEntriesAsync(
         int windowEventId,
         CancellationToken cancellationToken,
@@ -544,6 +701,24 @@ public sealed class WindowEventDkpLedgerService
                 ? v
                 : DefaultAmount;
 
+        // See PayoutRoster.Resolve.
+        public AppUserLinkshell? Resolve(AttendanceSnapshotEntry entry)
+            => PayoutRoster.Resolve(MembershipByAppUserId, MembershipsByCharacterName, entry);
+    }
+
+    // The linkshell's members, indexed the way a payout looks people up. Loaded once and shared,
+    // so the "who is still unpaid" count (CountUnpaidAccountsAsync) asks exactly the question the
+    // payout asks and the two can never disagree.
+    private sealed class PayoutRoster
+    {
+        public required Dictionary<string, AppUserLinkshell> MembershipsByCharacterName { get; init; }
+        public required Dictionary<string, AppUserLinkshell> MembershipByAppUserId { get; init; }
+        // Every name each account could have been captured under (membership name, account name, alts).
+        public required Dictionary<string, List<string>> NamesByAppUserId { get; init; }
+
+        public AppUserLinkshell? Resolve(AttendanceSnapshotEntry entry)
+            => Resolve(MembershipByAppUserId, MembershipsByCharacterName, entry);
+
         // Camp handoffs (HnmCampReviewHandoffService) stamp the account straight onto the entry,
         // so prefer that over the name lookup. Addon "/lsm now" captures leave AppUserId null and
         // fall through to the by-name path.
@@ -551,12 +726,15 @@ public sealed class WindowEventDkpLedgerService
         // This is what keeps a camp from silently underpaying: the roster is keyed on AppUserId,
         // but a member whose in-game character isn't one of the four indexed names would resolve
         // to nothing by name and simply never be credited — no error, no log.
-        public AppUserLinkshell? Resolve(AttendanceSnapshotEntry entry)
+        public static AppUserLinkshell? Resolve(
+            Dictionary<string, AppUserLinkshell> byAppUserId,
+            Dictionary<string, AppUserLinkshell> byCharacterName,
+            AttendanceSnapshotEntry entry)
         {
             var membership = (!string.IsNullOrWhiteSpace(entry.AppUserId)
-                    ? MembershipByAppUserId.GetValueOrDefault(entry.AppUserId!)
+                    ? byAppUserId.GetValueOrDefault(entry.AppUserId!)
                     : null)
-                ?? MembershipsByCharacterName.GetValueOrDefault(entry.CharacterName.Trim());
+                ?? byCharacterName.GetValueOrDefault(entry.CharacterName.Trim());
             return membership is not null && !string.IsNullOrWhiteSpace(membership.AppUserId) ? membership : null;
         }
     }
@@ -576,9 +754,70 @@ public sealed class WindowEventDkpLedgerService
         List<(AttendanceSnapshot Snapshot, AttendanceSnapshotEntry Entry)> combined,
         CancellationToken cancellationToken)
     {
-        var membershipsWithUser = await _db.AppUserLinkshells
-            .Where(link => link.LinkshellId == windowEvent.LinkshellId && link.AppUserId != null)
-            .Join(_db.Users,
+        var roster = await LoadPayoutRosterAsync(windowEvent.LinkshellId, tracked: true, cancellationToken);
+
+        // The per-character amounts the review settled on. A priced camp is paid from its
+        // CAPTURES: the sum of what each window a character was scanned in pays, plus the bonus
+        // capture that carries what no window does. The per-member override rows are not consulted
+        // at all there — the handoff writes none, and the officer edits the captures.
+        var overridesByName = windowEvent.PerCaptureDkp
+            ? WindowEventCaptureDkp.SumByCharacter(windowEvent.Snapshots)
+            : windowEvent.MemberDkpOverrides
+                .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
+                .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
+
+        var payout = new CardPayout
+        {
+            Combined = combined,
+            MembershipsByCharacterName = roster.MembershipsByCharacterName,
+            MembershipByAppUserId = roster.MembershipByAppUserId,
+            NamesByAppUserId = roster.NamesByAppUserId,
+            OverridesByName = overridesByName,
+            DefaultAmount = windowEvent.DkpAmount ?? 0d,
+            Accounts = new List<AccountPayout>(),
+            ByAppUserId = new Dictionary<string, AccountPayout>(StringComparer.OrdinalIgnoreCase),
+        };
+
+        var byAccount = combined
+            .Select((item, index) => (item.Snapshot, item.Entry, Index: index, Membership: payout.Resolve(item.Entry)))
+            .Where(item => item.Membership is not null)
+            .GroupBy(item => item.Membership!.AppUserId!, StringComparer.OrdinalIgnoreCase);
+        foreach (var group in byAccount)
+        {
+            var membership = group.First().Membership!;
+            // The combined roster already holds each name once, so these are distinct characters.
+            var amounts = group.Select(item => payout.AmountForCharacter(item.Entry.CharacterName)).ToList();
+            var amount = windowEvent.PerCaptureDkp ? amounts.Sum() : amounts.Max();
+
+            // The row is written from the membership's own character when it was captured, so the
+            // ledger and Past Events name the member the roster knows.
+            var representative = group
+                .Where(item => string.Equals(
+                    item.Entry.CharacterName.Trim(), membership.CharacterName?.Trim(), StringComparison.OrdinalIgnoreCase))
+                .DefaultIfEmpty(group.First())
+                .First();
+
+            var account = new AccountPayout(
+                membership, amount, representative.Snapshot, representative.Entry, representative.Index);
+            payout.Accounts.Add(account);
+            payout.ByAppUserId[group.Key] = account;
+        }
+
+        return payout;
+    }
+
+    // The linkshell's members with an account, indexed by every name they might be captured under.
+    // `tracked`: a payout writes through these memberships (their DKP balance), so it needs them
+    // tracked; a read-only count does not.
+    private async Task<PayoutRoster> LoadPayoutRosterAsync(
+        int linkshellId, bool tracked, CancellationToken cancellationToken)
+    {
+        var memberships = tracked ? _db.AppUserLinkshells : _db.AppUserLinkshells.AsNoTracking();
+        var users = tracked ? _db.Users : _db.Users.AsNoTracking();
+        var membershipsWithUser = await memberships
+            .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
+            .Join(users,
                   link => link.AppUserId,
                   user => user.Id,
                   (link, user) => new { Membership = link, User = user })
@@ -629,55 +868,12 @@ public sealed class WindowEventDkpLedgerService
             .GroupBy(pair => pair.Membership.AppUserId!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().Membership, StringComparer.OrdinalIgnoreCase);
 
-        // The per-character amounts the review settled on. A priced camp is paid from its
-        // CAPTURES: the sum of what each window a character was scanned in pays, plus the bonus
-        // capture that carries what no window does. The per-member override rows are not consulted
-        // at all there — the handoff writes none, and the officer edits the captures.
-        var overridesByName = windowEvent.PerCaptureDkp
-            ? WindowEventCaptureDkp.SumByCharacter(windowEvent.Snapshots)
-            : windowEvent.MemberDkpOverrides
-                .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
-                .GroupBy(o => o.CharacterName.Trim(), StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.First().DkpAmount, StringComparer.OrdinalIgnoreCase);
-
-        var payout = new CardPayout
+        return new PayoutRoster
         {
-            Combined = combined,
             MembershipsByCharacterName = membershipsByCharacterName,
             MembershipByAppUserId = membershipByAppUserId,
             NamesByAppUserId = namesByAppUserId,
-            OverridesByName = overridesByName,
-            DefaultAmount = windowEvent.DkpAmount ?? 0d,
-            Accounts = new List<AccountPayout>(),
-            ByAppUserId = new Dictionary<string, AccountPayout>(StringComparer.OrdinalIgnoreCase),
         };
-
-        var byAccount = combined
-            .Select((item, index) => (item.Snapshot, item.Entry, Index: index, Membership: payout.Resolve(item.Entry)))
-            .Where(item => item.Membership is not null)
-            .GroupBy(item => item.Membership!.AppUserId!, StringComparer.OrdinalIgnoreCase);
-        foreach (var group in byAccount)
-        {
-            var membership = group.First().Membership!;
-            // The combined roster already holds each name once, so these are distinct characters.
-            var amounts = group.Select(item => payout.AmountForCharacter(item.Entry.CharacterName)).ToList();
-            var amount = windowEvent.PerCaptureDkp ? amounts.Sum() : amounts.Max();
-
-            // The row is written from the membership's own character when it was captured, so the
-            // ledger and Past Events name the member the roster knows.
-            var representative = group
-                .Where(item => string.Equals(
-                    item.Entry.CharacterName.Trim(), membership.CharacterName?.Trim(), StringComparison.OrdinalIgnoreCase))
-                .DefaultIfEmpty(group.First())
-                .First();
-
-            var account = new AccountPayout(
-                membership, amount, representative.Snapshot, representative.Entry, representative.Index);
-            payout.Accounts.Add(account);
-            payout.ByAppUserId[group.Key] = account;
-        }
-
-        return payout;
     }
 
     private static List<(AttendanceSnapshot Snapshot, AttendanceSnapshotEntry Entry)> BuildCombinedMembers(IEnumerable<AttendanceSnapshot> snapshots)

@@ -1342,6 +1342,9 @@ export interface ActivityWindowEventsResponse {
   // The linkshell's Misc post rate: what an unlinked post pays with no price of its own, and what
   // the Unlinked Snapshots row's DKP box starts at.
   miscPostRate?: number | null;
+  // Posted events (last 30 days) where someone on them registered after the post and is still
+  // unpaid. Officers only. Each carries unpaidRegisteredMemberCount.
+  postedOwingEvents?: ActivityWindowEvent[] | null;
 }
 
 export interface ActivityWindowEventMemberDkpInput {
@@ -1399,6 +1402,9 @@ export interface ActivityWindowEvent {
   // subtracted: every name stays on the roster table, the unregistered ones are marked, and the
   // officer is told how many of the people they are about to Post for cannot be paid.
   unregisteredMemberCount?: number;
+  // On a POSTED card: how many people on it registered after it was posted and have not been
+  // paid from it yet. What "Pay newly registered" would pay.
+  unpaidRegisteredMemberCount?: number;
   snapshots: ActivityWindowSnapshot[];
   combinedMembers: ActivityWindowCombinedMember[];
   dkpAmount?: number | null;

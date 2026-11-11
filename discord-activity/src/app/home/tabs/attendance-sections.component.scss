@@ -379,6 +379,17 @@
    above it rather than as that panel's footer. */
 .we-archive-head { margin-top: 22px; }
 
+/* Posted events owing a newly registered member: one short row each, name left, button right. */
+.we-owing-block { margin-bottom: 14px; }
+.we-owing-block__sub { padding: 0 18px 8px; }
+.we-owing-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+}
+.we-owing-row__info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; font-size: 13px; }
+.we-owing-row__info .we-muted { font-size: 12px; }
+
 /* Search row, sitting between the card head and the list it filters. */
 .we-archive-search {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;

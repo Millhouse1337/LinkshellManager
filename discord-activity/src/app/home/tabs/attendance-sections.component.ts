@@ -87,6 +87,8 @@ export class AttendanceSectionsComponent {
   protected readonly confirmDeleteSnapshotId = signal<number | null>(null);
   protected readonly confirmRemoveEntryId = signal<number | null>(null);
   protected readonly confirmRejectSnapshotId = signal<number | null>(null);
+  // "Pay newly registered" moves DKP, so it takes the same two clicks.
+  protected readonly confirmPayRegisteredId = signal<number | null>(null);
 
   // Alliance numbers an officer can reassign a capture to. Mirrors
   // AttendanceSnapshotAlliances.MaxAllianceNumber on the server, which clamps anything higher —
@@ -488,6 +490,14 @@ export class AttendanceSectionsComponent {
   protected async reopen(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     if (id) await this.windows.reopen(event.id, id);
+  }
+
+  // Pays only the people on a posted event who registered after it was posted.
+  protected async payRegistered(event: ActivityWindowEvent): Promise<void> {
+    const id = this.primaryLinkshellId();
+    if (!id) return;
+    await this.windows.payRegistered(event.id, id);
+    this.confirmPayRegisteredId.set(null);
   }
 
   protected async deleteEvent(event: ActivityWindowEvent): Promise<void> {
