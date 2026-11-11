@@ -3,6 +3,7 @@ using System.Text;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace LinkshellManagerDiscordApp.Services;
 
@@ -15,6 +16,16 @@ public sealed class AddonApiAuthService
     // Issued tokens expire after this many days of inactivity. The addon will
     // need to re-pair after a long quiet period.
     private const int TokenInactivityExpiryDays = 90;
+    // Issued tokens also expire this many days after they were made, however busy they are.
+    // A polling addon refreshes LastUsedAt every minute, so the inactivity rule alone meant a
+    // token never died; this caps how long a leaked or forgotten one stays useful.
+    internal const int TokenAbsoluteLifetimeDays = 180;
+    // How long one token's "is the issuer still a member who may use the addon" answer is
+    // reused. Every addon request validates its token, so this keeps the membership check off
+    // the database on most calls. A kick or leave revokes the token outright (RevokedAt is read
+    // before the cache), so this only delays a role losing "Use the addon" by up to a minute.
+    private static readonly TimeSpan IssuerAccessCacheTtl = TimeSpan.FromSeconds(60);
+    private const string IssuerAccessCachePrefix = "addon-token-access:";
     // Throttle LastUsedAt writes so a polling addon doesn't issue a DB write per request.
     private const int LastUsedAtThrottleSeconds = 60;
 
@@ -25,11 +36,14 @@ public sealed class AddonApiAuthService
 
     private readonly ApplicationDbContext _dbContext;
     private readonly GlobalSettingsService _globalSettings;
+    private readonly IMemoryCache _cache;
 
-    public AddonApiAuthService(ApplicationDbContext dbContext, GlobalSettingsService globalSettings)
+    public AddonApiAuthService(
+        ApplicationDbContext dbContext, GlobalSettingsService globalSettings, IMemoryCache cache)
     {
         _dbContext = dbContext;
         _globalSettings = globalSettings;
+        _cache = cache;
     }
 
     public async Task<string> CreatePairingCodeAsync(
@@ -152,14 +166,24 @@ public sealed class AddonApiAuthService
         // Every other linkshell this user actually belongs to. Membership is
         // the authority -- we never mint a token for a linkshell they aren't
         // in, so this grants nothing they couldn't already reach on the web.
-        var otherMemberships = await _dbContext.AppUserLinkshells
+        var memberships = await _dbContext.AppUserLinkshells
             .AsNoTracking()
+            .Include(m => m.Linkshell)
             .Where(m => m.AppUserId == appUserId && m.LinkshellId != primary.Linkshell.Id)
-            .Join(_dbContext.Linkshells.AsNoTracking(),
-                  m => m.LinkshellId,
-                  ls => ls.Id,
-                  (m, ls) => ls)
             .ToListAsync(cancellationToken);
+
+        // ...and only the ones whose role may use the addon. Pairing on linkshell A must not
+        // hand out a token for linkshell B where this member's role has "Use the addon" off --
+        // that is the same check the Pair button runs, applied to every linkshell in the batch.
+        var otherMemberships = new List<Linkshell>();
+        foreach (var membership in memberships)
+        {
+            if (membership.Linkshell is null) continue;
+            if (await MemberCanUseAddonAsync(membership, cancellationToken))
+            {
+                otherMemberships.Add(membership.Linkshell);
+            }
+        }
 
         // Nothing to fan out to: leave the token unbatched. A "batch" of one
         // behaves identically to the pre-batch single-linkshell pairing.
@@ -217,6 +241,15 @@ public sealed class AddonApiAuthService
 
         var now = DateTime.UtcNow;
 
+        // Absolute lifetime: however often the addon polls, a token stops working this long
+        // after it was made, and the member pairs again.
+        if ((now - record.CreatedAt).TotalDays >= TokenAbsoluteLifetimeDays)
+        {
+            record.RevokedAt = now;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return null;
+        }
+
         // Inactivity expiry — tokens unused for more than the configured window
         // are treated as revoked. Anchored to LastUsedAt when set, otherwise to
         // CreatedAt so brand-new tokens can still be redeemed before first use.
@@ -228,6 +261,12 @@ public sealed class AddonApiAuthService
             return null;
         }
 
+        // The token is only as good as its owner's membership. Without this, a member who was
+        // kicked (or whose role lost "Use the addon") kept reading ToDs, camps and the roster in
+        // game for as long as their addon kept polling. Rejected, not revoked: if the role gets
+        // the permission back, the same pairing works again without a new code.
+        if (!await IssuerMayUseTokenAsync(record, cancellationToken)) return null;
+
         if (record.LastUsedAt is null
             || (now - record.LastUsedAt.Value).TotalSeconds >= LastUsedAtThrottleSeconds)
         {
@@ -236,6 +275,105 @@ public sealed class AddonApiAuthService
         }
 
         return record;
+    }
+
+    // Is the person this token was issued to still a member of its linkshell, with a role that
+    // may use the addon? Cached per token for IssuerAccessCacheTtl because every addon request
+    // asks. A token with no issuer (its account was deleted, or it predates IssuedToAppUserId)
+    // cannot prove whose membership it rides on, so it is refused outright.
+    private async Task<bool> IssuerMayUseTokenAsync(AddonApiToken token, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(token.IssuedToAppUserId)) return false;
+
+        var cacheKey = IssuerAccessCachePrefix + token.Id;
+        if (_cache.TryGetValue(cacheKey, out bool cached)) return cached;
+
+        var membership = await _dbContext.AppUserLinkshells
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                m => m.LinkshellId == token.LinkshellId && m.AppUserId == token.IssuedToAppUserId,
+                cancellationToken);
+        var allowed = await MemberCanUseAddonAsync(membership, cancellationToken);
+
+        _cache.Set(cacheKey, allowed, IssuerAccessCacheTtl);
+        return allowed;
+    }
+
+    // Can this member pair and use the game addon?
+    //
+    // Its own permission (LinkshellRole.CanUseAddon), granted to every default role. It used to be
+    // the Leader/Officer RANK, which meant a linkshell that wanted an ordinary member scanning
+    // rosters in game had to promote them -- and in the Activity the same card was gated on
+    // "Customize linkshell settings", so handing someone the addon handed them the linkshell's
+    // configuration with it.
+    //
+    // The leader is never locked out by a stale role row, matching ActivityDataController.CanAsync.
+    // A linkshell whose default roles were never seeded has no row to read, and falls back to the
+    // old rank test -- so this can only widen access, never take it from an officer who had it.
+    //
+    // Lives here (not in the controller) so the Pair button, the pairing fan-out and every
+    // token check read the one rule.
+    public async Task<bool> MemberCanUseAddonAsync(
+        AppUserLinkshell? membership, CancellationToken cancellationToken = default)
+    {
+        if (membership is null) return false;
+        if (LinkshellRanks.IsLeader(membership.Rank)) return true;
+
+        var rank = string.IsNullOrWhiteSpace(membership.Rank)
+            ? LinkshellRanks.Member
+            : membership.Rank.Trim();
+        var role = await _dbContext.LinkshellRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                r => r.LinkshellId == membership.LinkshellId && r.Name == rank, cancellationToken)
+            ?? await _dbContext.LinkshellRoles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    r => r.LinkshellId == membership.LinkshellId && r.Name == LinkshellRanks.Member,
+                    cancellationToken);
+
+        return role?.CanUseAddon ?? LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+    }
+
+    // Revokes every addon token one member holds for ONE linkshell, and drops their unused
+    // pairing codes there. Called when the member is removed or leaves, so their game client
+    // stops reading that linkshell at once instead of whenever the cache next looks.
+    //
+    // Only this linkshell: tokens from the same pairing for the member's OTHER linkshells keep
+    // working, because they are still a member there.
+    //
+    // Stages the changes and does NOT save: the caller's SaveChangesAsync writes them together
+    // with the membership removal, so a member can never end up removed with live tokens (or
+    // the other way round). Returns how many tokens it revoked.
+    public async Task<int> RevokeAllForMemberAsync(
+        string appUserId,
+        int linkshellId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(appUserId)) return 0;
+
+        var now = DateTime.UtcNow;
+        var tokens = await _dbContext.AddonApiTokens
+            .Where(t => t.IssuedToAppUserId == appUserId
+                        && t.LinkshellId == linkshellId
+                        && t.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+        foreach (var token in tokens)
+        {
+            token.RevokedAt = now;
+        }
+
+        var unusedCodes = await _dbContext.AddonPairingCodes
+            .Where(c => c.IssuedToAppUserId == appUserId
+                        && c.LinkshellId == linkshellId
+                        && c.ConsumedAt == null)
+            .ToListAsync(cancellationToken);
+        if (unusedCodes.Count > 0)
+        {
+            _dbContext.AddonPairingCodes.RemoveRange(unusedCodes);
+        }
+
+        return tokens.Count;
     }
 
     // Revokes a token AND every sibling minted from the same pairing code.

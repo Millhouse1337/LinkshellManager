@@ -14,7 +14,11 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public sealed partial class ActivityDataController
 {
     [HttpPost("linkshells/{linkshellId:int}/members/{memberId:int}/remove")]
-    public async Task<IActionResult> RemoveMemberAsync(int linkshellId, int memberId, CancellationToken cancellationToken)
+    public async Task<IActionResult> RemoveMemberAsync(
+        int linkshellId,
+        int memberId,
+        [FromServices] AddonApiAuthService addonAuth,
+        CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -100,6 +104,10 @@ public sealed partial class ActivityDataController
             {
                 _dbContext.Invites.RemoveRange(pendingInvites);
             }
+
+            // A removed member's game addon must stop reading this linkshell now. Staged here
+            // so the save below removes the membership and revokes the tokens together.
+            await addonAuth.RevokeAllForMemberAsync(targetMembership.AppUserId, linkshellId, cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

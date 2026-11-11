@@ -31,8 +31,11 @@ public class AddonTokenVisibilityTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static AddonApiAuthService NewService(ApplicationDbContext db) =>
-        new(db, new GlobalSettingsService(db, new MemoryCache(new MemoryCacheOptions())));
+    private static AddonApiAuthService NewService(ApplicationDbContext db)
+    {
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        return new(db, new GlobalSettingsService(db, cache), cache);
+    }
 
     private static AddonApiToken Token(
         int id, int linkshellId, string issuedTo, Guid? batch = null, DateTime? revokedAt = null)

@@ -860,7 +860,10 @@ public sealed partial class ActivityDataController
     }
 
     [HttpPost("linkshells/{linkshellId:int}/leave")]
-    public async Task<IActionResult> LeaveLinkshellAsync(int linkshellId, CancellationToken cancellationToken)
+    public async Task<IActionResult> LeaveLinkshellAsync(
+        int linkshellId,
+        [FromServices] AddonApiAuthService addonAuth,
+        CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -926,6 +929,10 @@ public sealed partial class ActivityDataController
         {
             _dbContext.Invites.RemoveRange(pendingInvites);
         }
+
+        // Leaving ends the game addon's access to this linkshell too. Staged so the save below
+        // writes it together with the membership removal.
+        await addonAuth.RevokeAllForMemberAsync(appUser.Id, linkshellId, cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
