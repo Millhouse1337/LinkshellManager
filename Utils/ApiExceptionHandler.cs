@@ -29,9 +29,20 @@ public sealed class ApiExceptionHandler : IExceptionHandler
 
     public static bool IsApiPath(PathString path) => path.StartsWithSegments("/api");
 
+    // The path the request was really for. UseExceptionHandler("/Home/Error") rewrites
+    // Request.Path to "/Home/Error" BEFORE it asks this handler, so Request.Path alone never
+    // looks like /api and every /api crash would still get the HTML page. The middleware keeps
+    // the original path on IExceptionHandlerPathFeature.
+    public static PathString OriginalPath(HttpContext httpContext)
+    {
+        var original = httpContext.Features.Get<IExceptionHandlerPathFeature>()?.Path;
+        return string.IsNullOrEmpty(original) ? httpContext.Request.Path : new PathString(original);
+    }
+
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        if (!IsApiPath(httpContext.Request.Path))
+        var path = OriginalPath(httpContext);
+        if (!IsApiPath(path))
         {
             return false;
         }
@@ -41,7 +52,7 @@ public sealed class ApiExceptionHandler : IExceptionHandler
         var correlationId = Guid.NewGuid().ToString("N");
         _logger.LogError(exception,
             "Unhandled error on {Method} {Path}. CorrelationId={CorrelationId}",
-            httpContext.Request.Method, httpContext.Request.Path.Value, correlationId);
+            httpContext.Request.Method, path.Value, correlationId);
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
         await httpContext.Response.WriteAsJsonAsync(new { error = ErrorMessage, correlationId }, cancellationToken);
