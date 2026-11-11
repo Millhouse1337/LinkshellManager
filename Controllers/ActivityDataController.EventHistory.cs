@@ -8,7 +8,8 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // Past-event (EventHistory) browsing + editing for the Discord Activity: any member
 // can view; leaders/officers (CanManageEvents) can edit metadata/DKP, correct an
 // attendee's DKP, or remove an attendee. DKP recompute is delegated to
-// EventHistoryEditService.
+// EventHistoryEditService. On an HNM camp's archive the DKP edits return 400: that camp
+// was paid from its review card, which these routes can't see.
 public sealed partial class ActivityDataController
 {
     // Constructed per call rather than injected — it's stateless apart from the scoped services it
@@ -87,6 +88,18 @@ public sealed partial class ActivityDataController
         var archivedMiscPostCounts = await EventHistoryWindowsReader.MiscPostCountsByHistoryAsync(
             _dbContext, histories.Select(h => h.Id).ToList(), cancellationToken);
 
+        // Which of these are HNM camp archives, and the review card each one belongs to. The card
+        // hides Save / Remove / Add for those: the camp's DKP lives on the card, so those edits
+        // are refused (EventHistoryEditService). Lowest id wins if two cards ever point at one.
+        var historyIds = histories.Select(h => h.Id).ToList();
+        var campWindowEventIds = (await _dbContext.WindowEvents
+                .AsNoTracking()
+                .Where(w => w.CampEventHistoryId != null && historyIds.Contains(w.CampEventHistoryId.Value))
+                .Select(w => new { HistoryId = w.CampEventHistoryId!.Value, w.Id })
+                .ToListAsync(cancellationToken))
+            .GroupBy(x => x.HistoryId)
+            .ToDictionary(g => g.Key, g => g.Min(x => x.Id));
+
         var result = histories.Select(h =>
         {
             var attendeeIds = h.AppUserEventHistories
@@ -115,6 +128,8 @@ public sealed partial class ActivityDataController
                 // archived before End Camp recorded it -- see EventHistory.PopWindow.
                 popWindow = h.PopWindow,
                 popWindowCount = h.PopWindowCount,
+                // The review card this camp was paid from; null on an ordinary timed event.
+                campWindowEventId = campWindowEventIds.TryGetValue(h.Id, out var campCardId) ? campCardId : (int?)null,
                 participants = h.AppUserEventHistories
                     .OrderBy(p => p.CharacterName)
                     .Select(p => new
@@ -236,12 +251,22 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        await EventHistoryEdits().EditEventAsync(history!.Id,
+        var outcome = await EventHistoryEdits().EditEventAsync(history!.Id,
             new EventHistoryEditInput(request.EventName, request.EventType, request.EventLocation,
                 request.Details, request.Duration, request.DkpPerHour),
             cancellationToken);
-        return Ok(new { success = true });
+        return outcome switch
+        {
+            EventHistoryEditOutcome.Done => Ok(new { success = true }),
+            EventHistoryEditOutcome.CampArchive => CampArchiveEditRefused(),
+            _ => NotFound(new { error = "Event not found." }),
+        };
     }
+
+    // A DKP edit on an HNM camp's archive. The camp was paid from its review card, which these
+    // routes cannot see -- see EventHistoryEditService.
+    private BadRequestObjectResult CampArchiveEditRefused() =>
+        BadRequest(new { error = EventHistoryEditService.CampArchiveMessage });
 
     [HttpPost("event-history/{id:int}/participants/{participantId:int}/dkp")]
     public async Task<IActionResult> SetEventHistoryParticipantDkpAsync(
@@ -250,9 +275,14 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        var ok = await EventHistoryEdits()
+        var outcome = await EventHistoryEdits()
             .SetParticipantDkpAsync(history!.Id, participantId, request.Amount, cancellationToken);
-        return ok ? Ok(new { success = true }) : NotFound(new { error = "Attendee not found." });
+        return outcome switch
+        {
+            EventHistoryEditOutcome.Done => Ok(new { success = true }),
+            EventHistoryEditOutcome.CampArchive => CampArchiveEditRefused(),
+            _ => NotFound(new { error = "Attendee not found." }),
+        };
     }
 
     [HttpPost("event-history/{id:int}/participants/{participantId:int}/remove")]
@@ -262,9 +292,14 @@ public sealed partial class ActivityDataController
         var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
         if (forbid is not null) return forbid;
 
-        var ok = await EventHistoryEdits()
+        var outcome = await EventHistoryEdits()
             .RemoveParticipantAsync(history!.Id, participantId, cancellationToken);
-        return ok ? Ok(new { success = true }) : NotFound(new { error = "Attendee not found." });
+        return outcome switch
+        {
+            EventHistoryEditOutcome.Done => Ok(new { success = true }),
+            EventHistoryEditOutcome.CampArchive => CampArchiveEditRefused(),
+            _ => NotFound(new { error = "Attendee not found." }),
+        };
     }
 
     [HttpPost("event-history/{id:int}/participants/{participantId:int}/active-credit")]
@@ -292,12 +327,15 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Select a member to add." });
         }
 
-        var ok = await EventHistoryEdits().AddParticipantAsync(
+        var outcome = await EventHistoryEdits().AddParticipantAsync(
             history!.Id, request.AppUserId, request.Dkp, request.JobType, request.JobName, request.SubJobName,
             activeCredit: true, cancellationToken);
-        return ok
-            ? Ok(new { success = true })
-            : BadRequest(new { error = "Couldn't add that member (already on the event, or not a member of the linkshell)." });
+        return outcome switch
+        {
+            EventHistoryEditOutcome.Done => Ok(new { success = true }),
+            EventHistoryEditOutcome.CampArchive => CampArchiveEditRefused(),
+            _ => BadRequest(new { error = "Couldn't add that member (already on the event, or not a member of the linkshell)." }),
+        };
     }
 
     // Undo active-status credit for the ENTIRE event (every attendee) — for events

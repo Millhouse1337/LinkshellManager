@@ -16,9 +16,19 @@ namespace LinkshellManagerDiscordApp.Services;
 // so a rate change rescales every member; the event-level Duration field is
 // display metadata. Loot on the event is edited separately via LootEditService
 // (Loot History), which already refunds/re-spends correctly.
+//
+// HNM CAMP ARCHIVES ARE READ-ONLY HERE for anything that moves DKP. A camp is paid from its
+// review card as "SnapshotEarned" rows, not "EventEarned" ones, so these edits could not see the
+// money they claimed to change: Remove dropped the attendee but kept their DKP, Save only changed
+// the label, and Add paid a second time on top of the card. The card's own re-sync then rewrote
+// the attendee list from the review anyway. Officers fix a camp on its review card (Edit Posted)
+// or with a DKP audit instead. Active credit, absences and Delete still work on a camp.
 public sealed class EventHistoryEditService
 {
     private const string EventEarnedEntryType = "EventEarned";
+
+    // The 400 the Past Events routes return for a DKP edit on a camp archive.
+    public const string CampArchiveMessage = "Edit this camp from its review card (Edit Posted) or the DKP audit.";
 
     private readonly ApplicationDbContext _db;
     private readonly DkpLedgerWriter _dkpLedger;
@@ -31,14 +41,34 @@ public sealed class EventHistoryEditService
         _dkpPools = dkpPools;
     }
 
+    // The review card (Window Event) this Past Event is the archive of, or null for an ordinary
+    // timed event. A camp archive's DKP lives on that card, not here -- see the class comment.
+    public Task<int?> CampWindowEventIdAsync(int historyId, CancellationToken cancellationToken) =>
+        _db.WindowEvents
+            .Where(w => w.CampEventHistoryId == historyId)
+            .OrderBy(w => w.Id)
+            .Select(w => (int?)w.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
     // Update event metadata and, if DkpPerHour changed, rescale every member's
-    // earned DKP. Returns false when the history row doesn't exist.
-    public async Task<bool> EditEventAsync(int historyId, EventHistoryEditInput input, CancellationToken cancellationToken)
+    // earned DKP. On a camp archive, name/type/location/details still save, but a new
+    // Duration or DkpPerHour is refused (CampArchive) before anything changes.
+    public async Task<EventHistoryEditOutcome> EditEventAsync(int historyId, EventHistoryEditInput input, CancellationToken cancellationToken)
     {
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)
             .FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
-        if (history is null) return false;
+        if (history is null) return EventHistoryEditOutcome.NotFound;
+
+        // Only an actual CHANGE is refused: the form sends the stored values back unchanged on
+        // every Save, and a rename of a camp must still go through.
+        var rateChanges = input.DkpPerHour.HasValue && input.DkpPerHour.Value != (history.DkpPerHour ?? 0);
+        var durationChanges = input.Duration.HasValue && input.Duration.Value != history.Duration;
+        if ((rateChanges || durationChanges)
+            && await CampWindowEventIdAsync(historyId, cancellationToken) is not null)
+        {
+            return EventHistoryEditOutcome.CampArchive;
+        }
 
         var oldEventType = history.EventType;
         if (!string.IsNullOrWhiteSpace(input.EventName)) history.EventName = input.EventName.Trim();
@@ -86,17 +116,18 @@ public sealed class EventHistoryEditService
 
         history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
         await _db.SaveChangesAsync(cancellationToken);
-        return true;
+        return EventHistoryEditOutcome.Done;
     }
 
     // Set one member's earned DKP to a specific value (officer correction).
-    public async Task<bool> SetParticipantDkpAsync(int historyId, int participantId, double amount, CancellationToken cancellationToken)
+    public async Task<EventHistoryEditOutcome> SetParticipantDkpAsync(int historyId, int participantId, double amount, CancellationToken cancellationToken)
     {
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)
             .FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
         var participant = history?.AppUserEventHistories.FirstOrDefault(p => p.Id == participantId);
-        if (history is null || participant is null) return false;
+        if (history is null || participant is null) return EventHistoryEditOutcome.NotFound;
+        if (await CampWindowEventIdAsync(historyId, cancellationToken) is not null) return EventHistoryEditOutcome.CampArchive;
 
         var step = await StepForAsync(history.LinkshellId, cancellationToken);
         var memberships = await MembershipsAsync(history.LinkshellId, cancellationToken);
@@ -107,15 +138,15 @@ public sealed class EventHistoryEditService
 
         history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
         await _db.SaveChangesAsync(cancellationToken);
-        return true;
+        return EventHistoryEditOutcome.Done;
     }
 
     // Add a member to a CLOSED event after the fact and grant them DKP — tied into the
     // DKP data exactly like an original attendee: creates the attendance row, the canonical
     // per-member "EventEarned" ledger entry, and adds the DKP to their spendable balance
-    // (and lifetime Total via the ledger sum). Returns false if the history/member is
-    // missing or they're already on the event. Recomputes the activity streak after.
-    public async Task<bool> AddParticipantAsync(
+    // (and lifetime Total via the ledger sum). Returns Rejected if they aren't a member or
+    // are already on the event. Recomputes the activity streak after.
+    public async Task<EventHistoryEditOutcome> AddParticipantAsync(
         int historyId,
         string appUserId,
         double dkp,
@@ -128,16 +159,17 @@ public sealed class EventHistoryEditService
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)
             .FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
-        if (history is null) return false;
+        if (history is null) return EventHistoryEditOutcome.NotFound;
+        if (await CampWindowEventIdAsync(historyId, cancellationToken) is not null) return EventHistoryEditOutcome.CampArchive;
         if (history.AppUserEventHistories.Any(p => string.Equals(p.AppUserId, appUserId, StringComparison.Ordinal)))
         {
-            return false; // already on the event — correct their DKP via SetParticipantDkp instead
+            return EventHistoryEditOutcome.Rejected; // already on the event — correct their DKP via SetParticipantDkp instead
         }
 
         var membership = await _db.AppUserLinkshells
             .Include(m => m.AppUser)
             .FirstOrDefaultAsync(m => m.LinkshellId == history.LinkshellId && m.AppUserId == appUserId, cancellationToken);
-        if (membership is null) return false; // not a member of this linkshell
+        if (membership is null) return EventHistoryEditOutcome.Rejected; // not a member of this linkshell
 
         var step = await StepForAsync(history.LinkshellId, cancellationToken);
         // Clamp to >= 0 on the SERVER (the client min=0 is only advisory and can be
@@ -191,11 +223,11 @@ public sealed class EventHistoryEditService
             // Concurrency: another officer added the same member to this event a moment
             // earlier, so this insert hit the unique (EventHistoryId, AppUserId) index.
             // Treat it as a no-op "already added" rather than surfacing a 500.
-            return false;
+            return EventHistoryEditOutcome.Rejected;
         }
 
         await new MemberActivityService(_db).ApplyComputedStatusAsync(history.LinkshellId, cancellationToken);
-        return true;
+        return EventHistoryEditOutcome.Done;
     }
 
     // Toggle a member's active-status credit for this event. Drives the activity
@@ -263,13 +295,14 @@ public sealed class EventHistoryEditService
 
     // Remove a member from the event: refund their earned DKP (subtract from
     // balance, delete the EventEarned ledger row) and drop the attendance record.
-    public async Task<bool> RemoveParticipantAsync(int historyId, int participantId, CancellationToken cancellationToken)
+    public async Task<EventHistoryEditOutcome> RemoveParticipantAsync(int historyId, int participantId, CancellationToken cancellationToken)
     {
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)
             .FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
         var participant = history?.AppUserEventHistories.FirstOrDefault(p => p.Id == participantId);
-        if (history is null || participant is null) return false;
+        if (history is null || participant is null) return EventHistoryEditOutcome.NotFound;
+        if (await CampWindowEventIdAsync(historyId, cancellationToken) is not null) return EventHistoryEditOutcome.CampArchive;
 
         if (!string.IsNullOrWhiteSpace(participant.AppUserId))
         {
@@ -293,7 +326,7 @@ public sealed class EventHistoryEditService
 
         // Attendance changed → recompute the activity streak (no-op if tracking off).
         await new MemberActivityService(_db).ApplyComputedStatusAsync(history.LinkshellId, cancellationToken);
-        return true;
+        return EventHistoryEditOutcome.Done;
     }
 
     // Delete a CLOSED event entirely and undo everything it did to DKP. The member's
@@ -419,6 +452,16 @@ public sealed class EventHistoryEditService
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
+
+// What a Past Event edit did. CampArchive: the event is an HNM camp's archive and the edit would
+// move DKP, which belongs to the camp's review card (see EventHistoryEditService).
+public enum EventHistoryEditOutcome
+{
+    Done,
+    NotFound,
+    Rejected,
+    CampArchive,
 }
 
 public sealed record EventHistoryEditInput(

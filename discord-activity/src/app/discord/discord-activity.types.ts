@@ -2055,6 +2055,9 @@ export interface ActivityEventHistory {
   // End Camp; null on a timed event and on any camp archived before that existed.
   popWindow?: number | null;
   popWindowCount?: number | null;
+  // The review card (Window Event) an HNM camp was paid from; null on an ordinary timed event.
+  // Set means the camp's DKP lives on that card, so Past Events refuses Save / Remove / Add.
+  campWindowEventId?: number | null;
 }
 
 export interface ActivityEventHistoryResponse {

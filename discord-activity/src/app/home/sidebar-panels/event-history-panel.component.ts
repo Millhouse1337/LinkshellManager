@@ -114,17 +114,22 @@ import type {
                          Duration are what an officer corrects together — where the camp was and
                          how long it ran — while Name and Type are what identifies it. -->
                     <label class="row-start">Location<input [(ngModel)]="draft.eventLocation" [name]="'eLoc' + h.id" /></label>
-                    <label>Duration
-                      <div class="duration">
-                        <input type="number" min="0" [value]="durationPart(draft, 'h')" (change)="setDurationPart(draft, 'h', $any($event.target).value)" [name]="'eDurH' + h.id" /><span>h</span>
-                        <input type="number" min="0" max="59" [value]="durationPart(draft, 'm')" (change)="setDurationPart(draft, 'm', $any($event.target).value)" [name]="'eDurM' + h.id" /><span>m</span>
-                        <input type="number" min="0" max="59" [value]="durationPart(draft, 's')" (change)="setDurationPart(draft, 's', $any($event.target).value)" [name]="'eDurS' + h.id" /><span>s</span>
-                      </div>
-                    </label>
+                    <!-- Omitted on a camp archive: the server refuses a new Duration there (the
+                         camp's DKP lives on its review card), and the draft round-trips the stored
+                         value so a rename still saves. -->
+                    @if (!isCampArchive(h)) {
+                      <label>Duration
+                        <div class="duration">
+                          <input type="number" min="0" [value]="durationPart(draft, 'h')" (change)="setDurationPart(draft, 'h', $any($event.target).value)" [name]="'eDurH' + h.id" /><span>h</span>
+                          <input type="number" min="0" max="59" [value]="durationPart(draft, 'm')" (change)="setDurationPart(draft, 'm', $any($event.target).value)" [name]="'eDurM' + h.id" /><span>m</span>
+                          <input type="number" min="0" max="59" [value]="durationPart(draft, 's')" (change)="setDurationPart(draft, 's', $any($event.target).value)" [name]="'eDurS' + h.id" /><span>s</span>
+                        </div>
+                      </label>
+                    }
                     <!-- Omitted on an HNM rather than disabled. draft.dkpPerHour is still
                          seeded from the stored rate in toggle(), so Save Event round-trips the
                          existing value unchanged instead of rescaling every attendee's DKP. -->
-                    @if (!isHnm(h)) {
+                    @if (!isHnm(h) && !isCampArchive(h)) {
                       <label>DKP per hour<input type="number" [(ngModel)]="draft.dkpPerHour" [name]="'eRate' + h.id" /></label>
                     }
                     <button type="button" class="primary" (click)="saveEvent(h)">
@@ -132,7 +137,9 @@ import type {
                       Save Event
                     </button>
                   </div>
-                  @if (!isHnm(h)) {
+                  @if (isCampArchive(h)) {
+                    <p class="hint">This camp's DKP was paid from its review card, so only the name, type and location change here.</p>
+                  } @else if (!isHnm(h)) {
                     <p class="hint">Changing DKP per hour rescales every attendee's earned DKP and balance.</p>
                   } @else {
                     <p class="hint">This camp pays per window, not by the hour.</p>
@@ -303,6 +310,16 @@ import type {
                       </div>
                     </div>
 
+                    <!-- A camp archive's DKP was paid from its review card, as rows these edits
+                         cannot see, so Save / Remove / Add are hidden (and refused by the server).
+                         Active credit is not money and still works here. -->
+                    @if (isCampArchive(h)) {
+                      <p class="hint camp-note">
+                        This HNM camp was paid from its review card, so its DKP can't be changed here.
+                        To correct someone's DKP, use <strong>DKP → DKP History → Add Audit</strong>.
+                      </p>
+                    }
+
                     <div class="table-wrap">
                       <table class="evt-table">
                         <thead>
@@ -358,14 +375,19 @@ import type {
                                         (click)="toggleCredit(h, p, p.activeCredit === false)"
                                         title="Absent = no active credit (counts toward the inactive threshold)"></button>
                               </td>
-                              <td>
-                                <input class="dkp" type="number" [step]="dkpStep()" min="0"
-                                       [(ngModel)]="dkpDraft[p.id]" [name]="'pDkp' + p.id" />
-                              </td>
-                              <td class="evt-actions">
-                                <button type="button" class="mini" (click)="saveDkp(h, p)">Save</button>
-                                <button type="button" class="danger" (click)="removeParticipant(h, p)">Remove</button>
-                              </td>
+                              @if (isCampArchive(h)) {
+                                <td>{{ p.eventDkp ?? 0 }}</td>
+                                <td></td>
+                              } @else {
+                                <td>
+                                  <input class="dkp" type="number" [step]="dkpStep()" min="0"
+                                         [(ngModel)]="dkpDraft[p.id]" [name]="'pDkp' + p.id" />
+                                </td>
+                                <td class="evt-actions">
+                                  <button type="button" class="mini" (click)="saveDkp(h, p)">Save</button>
+                                  <button type="button" class="danger" (click)="removeParticipant(h, p)">Remove</button>
+                                </td>
+                              }
                             </tr>
                           }
                         </tbody>
@@ -385,7 +407,11 @@ import type {
                         <span>All attendees were present.</span>
                       </div>
                     } @else {
-                      <p class="hint" style="margin-top:0;margin-bottom:12px">Roster members who missed this event. Add one to credit them &amp; grant DKP.</p>
+                      @if (isCampArchive(h)) {
+                        <p class="hint" style="margin-top:0;margin-bottom:12px">Roster members who missed this camp. To pay one, use a DKP audit.</p>
+                      } @else {
+                        <p class="hint" style="margin-top:0;margin-bottom:12px">Roster members who missed this event. Add one to credit them &amp; grant DKP.</p>
+                      }
                       <div class="absent-list">
                         @for (a of h.absentees!; track a.appUserId) {
                           <div class="absent-row">
@@ -394,7 +420,9 @@ import type {
                               <span class="absent-name">{{ a.characterName || 'Member' }}</span>
                               @if (a.altNames?.length) { <small class="alts">{{ a.altNames!.join(', ') }}</small> }
                             </span>
-                            <button type="button" class="primary mini" (click)="addAbsentee(h, a)">Add to Event</button>
+                            @if (!isCampArchive(h)) {
+                              <button type="button" class="primary mini" (click)="addAbsentee(h, a)">Add to Event</button>
+                            }
                           </div>
                         }
                       </div>
@@ -609,6 +637,7 @@ import type {
       border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 600;
     }
     .hint { color: var(--fg-3); margin: 10px 0 0; font-size: 12px; }
+    .hint.camp-note { margin: 0 0 12px; }
     .muted { color: var(--fg-3); }
 
     /* Inputs */
@@ -893,6 +922,13 @@ export class EventHistoryPanelComponent {
   // card is gated on this so it does not advertise a rate nobody set.
   protected isHnm(h: ActivityEventHistory): boolean {
     return (h.eventType ?? '').trim().toLowerCase() === 'hnm';
+  }
+
+  // An HNM camp's archive: its DKP was paid from the review card (Window Event), as rows the
+  // Past Events edits can't see, so the server refuses Save / Remove / Add and a new Duration or
+  // rate. Keyed on the card, not the type: an event retyped away from "HNM" is still a camp.
+  protected isCampArchive(h: ActivityEventHistory): boolean {
+    return h.campWindowEventId != null;
   }
 
   toggle(h: ActivityEventHistory): void {
