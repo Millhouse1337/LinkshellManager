@@ -27,8 +27,6 @@ public sealed partial class ActivityDataController
             });
         }
 
-        var displayName = SignupCharacters.Resolve(appUser, null, request.CharacterName);
-
         var eventEntity = await _dbContext.Events
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken);
@@ -37,6 +35,17 @@ public sealed partial class ActivityDataController
         {
             return NotFound(new { error = "The selected event was not found." });
         }
+
+        // Only members of the event's linkshell may sign up. Without this anyone could put
+        // their name on another linkshell's roster and Discord board by trying event ids.
+        // GetMembershipAsync also enforces the per-linkshell Discord guild lock.
+        var membership = await GetMembershipAsync(appUser.Id, eventEntity.LinkshellId, cancellationToken);
+        if (membership is null)
+        {
+            return Forbid();
+        }
+
+        var displayName = SignupCharacters.Resolve(appUser, membership, request.CharacterName);
 
         static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
@@ -54,22 +63,47 @@ public sealed partial class ActivityDataController
         }
         else
         {
-            _dbContext.AppUserEvents.Add(new AppUserEvent
-            {
-                AppUserId = appUser.Id,
-                EventId = eventId,
-                CharacterName = displayName,
-                JobName = Clean(request.JobName),
-                SubJobName = Clean(request.SubJobName),
-                JobType = Clean(request.JobType),
-                EventDkp = 0,
-                StartTime = eventEntity.CommencementStartTime
-            });
+            _dbContext.AppUserEvents.Add(NewSignupRow(
+                appUser.Id,
+                eventEntity,
+                displayName,
+                Clean(request.JobName),
+                Clean(request.SubJobName),
+                Clean(request.JobType),
+                DateTime.UtcNow));
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
+    }
+
+    // The attendance row a new /signup creates. Before the event starts the clock stays
+    // empty and starting the event stamps it (StartTime ??= commencement). Once the event
+    // is live this is a late join, so the clock starts NOW, exactly like quick-join. Using
+    // the event's start time here used to pay a last-minute signup for the whole event.
+    internal static AppUserEvent NewSignupRow(
+        string appUserId,
+        Event eventEntity,
+        string characterName,
+        string? jobName,
+        string? subJobName,
+        string? jobType,
+        DateTime nowUtc)
+    {
+        var started = eventEntity.CommencementStartTime.HasValue;
+        return new AppUserEvent
+        {
+            AppUserId = appUserId,
+            EventId = eventEntity.Id,
+            CharacterName = characterName,
+            JobName = jobName,
+            SubJobName = subJobName,
+            JobType = jobType,
+            EventDkp = 0,
+            StartTime = started ? nowUtc : null,
+            IsQuickJoin = started
+        };
     }
 
     [HttpPost("events/{eventId:int}/quick-join")]
