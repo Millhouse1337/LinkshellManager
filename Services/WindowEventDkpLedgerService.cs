@@ -253,12 +253,13 @@ public sealed class WindowEventDkpLedgerService
         // An audit correction keeps its AMOUNT, but it still follows the row it corrects into the
         // card's new pool on a retype — otherwise the payout and its correction end up in two
         // different wallets. A pinned correction stays put, same rule as Repoint everywhere.
-        var payoutRowIds = ledgerEntries.Select(entry => entry.Id).ToList();
+        //
+        // Every non-payout row carrying this card's id, not only the ones pointing straight at a
+        // payout row: the audit screen also lets an officer correct a correction, and that row
+        // points at the first audit row. It is still this card's money and has to move with it.
         var auditRows = await _db.DkpLedgerEntries
             .Where(entry => entry.SourceWindowEventId == windowEventId &&
-                            entry.EntryType != "SnapshotEarned" &&
-                            entry.AuditRelatedLedgerEntryId != null &&
-                            payoutRowIds.Contains(entry.AuditRelatedLedgerEntryId.Value))
+                            entry.EntryType != "SnapshotEarned")
             .ToListAsync(cancellationToken);
         foreach (var audit in auditRows.Where(audit => !audit.DkpPoolPinned))
         {

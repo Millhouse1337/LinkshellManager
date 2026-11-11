@@ -229,6 +229,54 @@ public class WindowEventOneCreditPerAccountTests
         Assert.Equal(8d, await BalanceAsync(db, BobId));
     }
 
+    // A retype moves the payout to the new pool, and every correction of it follows: the audit of
+    // the payout AND an audit of that audit (the audit screen offers AuditAdjustment rows too).
+    // Their amounts stay exactly as the officers left them.
+    [Fact]
+    public async Task Update_Retype_MovesEveryCorrectionWithThePayout()
+    {
+        using var db = await SeededAsync(
+            priced: false, dkpAmount: 10d,
+            new[] { ("Bob", (double?)null) });
+        db.DkpPools.Add(new DkpPool { Id = 100, LinkshellId = LinkshellId, Name = "Main", IsDefault = true });
+        db.DkpPools.Add(new DkpPool { Id = 101, LinkshellId = LinkshellId, Name = "Wyrms", SortOrder = 1 });
+        db.DkpPoolEventTypes.Add(new DkpPoolEventType
+        {
+            LinkshellId = LinkshellId,
+            DkpPoolId = 101,
+            EventType = WindowEventEntryTypes.WyrmsCamp,
+            NormalizedEventType = DkpPoolEventType.Normalize(WindowEventEntryTypes.WyrmsCamp),
+        });
+        await db.SaveChangesAsync();
+        await NewLedgerService(db).EnsurePostedWindowEventLedgerEntriesAsync(CardId, CancellationToken.None);
+
+        var earned = Assert.Single(await EarnedAsync(db, BobId));
+        Assert.Equal(100, earned.DkpPoolId);
+        var audit = new DkpLedgerEntry
+        {
+            AppUserId = BobId, LinkshellId = LinkshellId, EntryType = "AuditAdjustment", Amount = -2d,
+            OccurredAt = CampStart.AddHours(3), EventType = earned.EventType, DkpPoolId = 100,
+            SourceWindowEventId = CardId, AuditRelatedLedgerEntryId = earned.Id,
+        };
+        db.DkpLedgerEntries.Add(audit);
+        await db.SaveChangesAsync();
+        db.DkpLedgerEntries.Add(new DkpLedgerEntry
+        {
+            AppUserId = BobId, LinkshellId = LinkshellId, EntryType = "AuditAdjustment", Amount = 1d,
+            OccurredAt = CampStart.AddHours(4), EventType = earned.EventType, DkpPoolId = 100,
+            SourceWindowEventId = CardId, AuditRelatedLedgerEntryId = audit.Id,
+        });
+        (await db.WindowEvents.SingleAsync(w => w.Id == CardId)).EntryType = WindowEventEntryTypes.WyrmsCamp;
+        await db.SaveChangesAsync();
+
+        await NewLedgerService(db).ReconcilePostedWindowEventLedgerAsync(CardId, CancellationToken.None);
+
+        var rows = await db.DkpLedgerEntries.Where(e => e.AppUserId == BobId).OrderBy(e => e.Id).ToListAsync();
+        Assert.Equal(new[] { 10d, -2d, 1d }, rows.Select(r => r.Amount).ToArray());
+        Assert.All(rows, r => Assert.Equal(101, r.DkpPoolId));
+        Assert.All(rows, r => Assert.Equal(WindowEventEntryTypes.WyrmsCamp, r.EventType));
+    }
+
     // A card posted before one-row-per-account can still hold a row per character. Update puts the
     // account's figure on one row and zeroes the other, instead of pricing both at the main's rate.
     [Fact]
