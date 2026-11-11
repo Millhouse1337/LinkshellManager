@@ -70,11 +70,6 @@ export function formatBreakDuration(ms: number): string {
   return `${seconds}s`;
 }
 
-export function toDateTimeLocalValue(date: Date): string {
-  const pad = (value: number) => value.toString().padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
-
 // "16 additional seconds": how every form words a monster's Additional Seconds (Monster Setups).
 export function additionalSecondsLabel(seconds: number): string {
   return seconds === 1 ? '1 additional second' : `${seconds} additional seconds`;
@@ -105,13 +100,54 @@ export function parseDate(value?: string | null): number | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
 }
 
-export function parseLocalDateTime(value?: string | null): Date | null {
-  if (!value) {
+// The instant a form's "YYYY-MM-DDTHH:mm[:ss]" box means when read in `timeZone` (the viewer's
+// PROFILE zone), as epoch milliseconds. This is what the server does with the same text when the
+// form is saved, so a preview built on it matches what gets stored. `new Date(value)` must not be
+// used for this: it reads the text in the COMPUTER's zone, which is wrong whenever the two differ.
+//
+// Daylight-saving edges follow the server (NodaTime AtLeniently): a time that happens twice
+// (clocks go back) is the first one, and a time that never happens (clocks go forward) moves on
+// by the size of the gap. An unknown zone is read as UTC, as the server does. Null if unreadable.
+export function zonedLocalInputToUtcMs(value: string | null | undefined, timeZone: string): number | null {
+  const trimmed = (value ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(trimmed)) {
+    return null;
+  }
+  // The wall clock read as if it were UTC. The real instant is this minus the zone's offset.
+  const wall = Date.parse(`${trimmed.length === 16 ? `${trimmed}:00` : trimmed}Z`);
+  if (Number.isNaN(wall)) {
     return null;
   }
 
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  let format: Intl.DateTimeFormat;
+  try {
+    format = new Intl.DateTimeFormat('en-US', {
+      timeZone: timeZone || 'UTC',
+      hourCycle: 'h23',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  } catch {
+    return wall;
+  }
+  // How far the zone's clock is ahead of UTC at `instant`, in ms.
+  const offsetAt = (instant: number): number => {
+    const parts = format.formatToParts(instant);
+    const get = (type: Intl.DateTimeFormatPartTypes): number =>
+      Number(parts.find(part => part.type === type)?.value ?? 0);
+    const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+    return asUtc - Math.floor(instant / 1000) * 1000;
+  };
+
+  // The offsets a day either side surround any daylight-saving change near this time. An offset
+  // fits if the zone really has it at the instant it gives.
+  const before = offsetAt(wall - 86_400_000);
+  const after = offsetAt(wall + 86_400_000);
+  const fits = [...new Set([before, after])].filter(offset => offsetAt(wall - offset) === offset);
+  if (fits.length === 0) {
+    return wall - before;               // In the gap: read with the offset from before it.
+  }
+  return wall - Math.max(...fits);     // Twice over: the larger offset is the earlier instant.
 }
 
 export function formatElapsed(totalMilliseconds: number): string {

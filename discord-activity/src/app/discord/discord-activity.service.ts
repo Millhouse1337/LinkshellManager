@@ -764,7 +764,9 @@ export class DiscordActivityService {
       hour: '2-digit',
       minute: '2-digit',
       ...(includeSeconds ? { second: '2-digit' as const } : {}),
-      hour12: false
+      // h23, not hour12: false: Chromium (Discord's client) writes midnight as "24" with the
+      // latter, which the input cannot show and the server cannot parse.
+      hourCycle: 'h23'
     }).formatToParts(date);
 
     const lookup = (type: Intl.DateTimeFormatPartTypes): string =>

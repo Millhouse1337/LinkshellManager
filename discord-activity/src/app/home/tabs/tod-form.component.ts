@@ -10,9 +10,8 @@ import {
   DEFAULT_POP_WINDOWS,
   additionalSecondsLabel,
   formatElapsed,
-  parseLocalDateTime,
   parseTodDurationMinutes,
-  toDateTimeLocalValue
+  zonedLocalInputToUtcMs
 } from '../activity-home.helpers';
 import {
   hasHqVariant,
@@ -57,7 +56,9 @@ export class TodFormComponent {
     timeLocal: ''
   };
   protected todTimeLocalValue = '';
-  protected todRepopLocalValue = '';
+  // The repop preview as an instant (epoch ms), not as box text: it is only ever shown, and
+  // showing goes through the profile-zone formatters.
+  protected todRepopAtMs: number | null = null;
   protected todMonsterSearch = '';
   protected todMonsterPickerOpen = false;
   protected todMonsterActiveIndex = -1;
@@ -173,9 +174,11 @@ export class TodFormComponent {
     // Seeded AFTER the monster, because picking a monster recomputes the repop off the form's
     // current time -- so the time has to land last or it is calculated from a blank box.
     if (postedTod) {
-      const posted = postedTod.time ? new Date(postedTod.time) : null;
-      if (posted && !Number.isNaN(posted.getTime())) {
-        this.todTimeLocalValue = toDateTimeLocalValue(posted);
+      // In the PROFILE zone, because that is how the server reads the box back on save. The
+      // computer's zone here moved an untouched ToD whenever the two zones differed.
+      const posted = this.activity.toViewerLocalInputValue(postedTod.time, true);
+      if (posted) {
+        this.todTimeLocalValue = posted;
         this.todDraft.timeLocal = this.todTimeLocalValue;
       }
       // Claim and HQ come from the same post as the time and are the same facts this form asks
@@ -288,19 +291,19 @@ export class TodFormComponent {
   // Counts down to W1, then reads "Open" until the last window has opened and "Passed" after.
   // A monster with no grid stays "Open" once its repop is reached.
   protected repopCountdown(): string {
-    const first = parseLocalDateTime(this.todRepopLocalValue);
-    if (!first) {
+    const first = this.todRepopAtMs;
+    if (first == null) {
       return '--:--:--';
     }
     const now = this.now();
-    const opensIn = first.getTime() - now;
+    const opensIn = first - now;
     if (opensIn > 0) {
       return formatElapsed(opensIn);
     }
     if (!this.popWindowVisible()) {
       return 'Open';
     }
-    const lastOpens = first.getTime() + (this.popWindowCount() - 1) * (this.intervalMinutes() ?? 0) * 60_000;
+    const lastOpens = first + (this.popWindowCount() - 1) * (this.intervalMinutes() ?? 0) * 60_000;
     return now <= lastOpens ? 'Open' : 'Passed';
   }
 
@@ -628,20 +631,17 @@ export class TodFormComponent {
 
   protected updateTodRepopTime(): void {
     this.todDraft.timeLocal = this.todTimeLocalValue;
-    if (!this.todDraft.timeLocal) {
-      this.todRepopLocalValue = '';
-      return;
-    }
-
-    const todLocalTime = parseLocalDateTime(this.todDraft.timeLocal);
-    if (!todLocalTime) {
-      this.todRepopLocalValue = '';
+    // The box is the viewer's PROFILE-zone wall clock (the server reads it that way on save), so
+    // turn it into a real instant in that zone before adding the cooldown.
+    const todAt = zonedLocalInputToUtcMs(this.todDraft.timeLocal, this.activity.viewerTimeZone());
+    if (todAt == null) {
+      this.todRepopAtMs = null;
       return;
     }
 
     const cooldownHours = this.resolveCooldownHours();
     if (cooldownHours <= 0) {
-      this.todRepopLocalValue = '';
+      this.todRepopAtMs = null;
       return;
     }
     // Fine repop offset: the monster's configured "Additional seconds" (Monster setups).
@@ -650,16 +650,15 @@ export class TodFormComponent {
     // the repop it stores. setHours(getHours() + 48) moved the wall clock instead, so a cooldown
     // spanning a daylight-saving change previewed an hour off what was saved (and a fractional
     // cooldown like 22.5h lost its half hour).
-    const repop = new Date(todLocalTime.getTime() + cooldownHours * 3_600_000 + extraSeconds * 1000);
-    this.todRepopLocalValue = toDateTimeLocalValue(repop);
+    this.todRepopAtMs = todAt + cooldownHours * 3_600_000 + extraSeconds * 1000;
   }
 
   protected todRepopSummary(): string {
-    if (!this.todRepopLocalValue) {
+    if (this.todRepopAtMs == null) {
       return '—';
     }
 
-    return this.activity.formatDateTimeWithSeconds(this.todRepopLocalValue) ?? this.todRepopLocalValue;
+    return this.activity.formatDateTimeWithSeconds(new Date(this.todRepopAtMs).toISOString()) ?? '—';
   }
 
   private draftAdditionalSeconds(): number {
@@ -673,13 +672,12 @@ export class TodFormComponent {
   // cross noon or midnight (11:59:50 AM + 16 = 12:00:06 PM), where leaving it off would misread.
   protected todRepopSum(): { base: string; seconds: number; total: string } | null {
     const seconds = this.draftAdditionalSeconds();
-    const repop = parseLocalDateTime(this.todRepopLocalValue);
-    if (seconds <= 0 || !repop) {
+    const repop = this.todRepopAtMs;
+    if (seconds <= 0 || repop == null) {
       return null;
     }
-    const base = this.activity.formatDateTimeWithSeconds(
-      new Date(repop.getTime() - seconds * 1000).toISOString());
-    const total = this.activity.formatTimeWithSeconds(repop.toISOString());
+    const base = this.activity.formatDateTimeWithSeconds(new Date(repop - seconds * 1000).toISOString());
+    const total = this.activity.formatTimeWithSeconds(new Date(repop).toISOString());
     if (!base || !total) {
       return null;
     }
@@ -869,16 +867,9 @@ export class TodFormComponent {
     this.applyDurationLabel(tod.cooldown ?? '22 Hour', 'cooldown');
     this.applyDurationLabel(tod.interval ?? null, 'interval');
 
-    if (tod.time) {
-      const d = new Date(tod.time);
-      if (!Number.isNaN(d.getTime())) {
-        this.todTimeLocalValue = toDateTimeLocalValue(d);
-      } else {
-        this.todTimeLocalValue = '';
-      }
-    } else {
-      this.todTimeLocalValue = '';
-    }
+    // Profile zone, like every other form: the server reads the box back in that zone, so the
+    // computer's zone here moved the ToD on a plain open-and-Save when the two differed.
+    this.todTimeLocalValue = this.activity.toViewerLocalInputValue(tod.time, true);
     this.todDraft.timeLocal = this.todTimeLocalValue;
 
     this.todImagePath = tod.imagePath ?? null;
@@ -906,7 +897,7 @@ export class TodFormComponent {
     this.todIntervalValue = 10;
     this.todIntervalUnit = 'mins';
     this.todTimeLocalValue = '';
-    this.todRepopLocalValue = '';
+    this.todRepopAtMs = null;
     this.todMonsterSearch = this.todDraft.monsterName;
     this.todMonsterPickerOpen = false;
     this.todMonsterActiveIndex = -1;
