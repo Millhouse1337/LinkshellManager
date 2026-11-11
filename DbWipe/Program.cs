@@ -88,8 +88,8 @@ if (args.Length > 0 && args[0] == "reset-schema")
     if (args.Length < 2 || !string.Equals(args[1], c.Database, StringComparison.Ordinal))
     {
         Console.Error.WriteLine(
-            "Refusing to reset. To confirm, name the connected database:\n" +
-            $"  dotnet run --project DbWipe -- reset-schema {c.Database}");
+            "Refusing to reset. To confirm, type the name of the database LSM_CONN points at:\n" +
+            "  dotnet run --project DbWipe -- reset-schema <database-name>");
         return 1;
     }
 
@@ -108,8 +108,8 @@ if (args.Length > 0 && args[0] == "reset-schema")
 if (args.Length < 2 || args[0] != "wipe" || !string.Equals(args[1], c.Database, StringComparison.Ordinal))
 {
     Console.Error.WriteLine(
-        "Refusing to wipe. To confirm, name the connected database:\n" +
-        $"  dotnet run --project DbWipe -- wipe {c.Database}\n" +
+        "Refusing to wipe. To confirm, type the name of the database LSM_CONN points at:\n" +
+        "  dotnet run --project DbWipe -- wipe <database-name>\n" +
         "Use 'verify' to print row counts without changing anything.\n" +
         "Use 'scrub <database> <LinkshellName>' to reset a single linkshell's activity.");
     return 1;
@@ -167,7 +167,7 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
     {
         Console.Error.WriteLine(
             "Refusing to scrub. To confirm, name the connected database AND the linkshell:\n" +
-            $"  dotnet run --project DbWipe -- scrub {c.Database} \"<LinkshellName>\"");
+            "  dotnet run --project DbWipe -- scrub <database-name> \"<LinkshellName>\"");
         return 1;
     }
 
@@ -445,7 +445,7 @@ static async Task<int> ScrubTreasuryAsync(NpgsqlConnection c, string[] args)
     {
         Console.Error.WriteLine(
             "Refusing to clear a treasury. To confirm, name the connected database AND the linkshell:\n" +
-            $"  dotnet run --project DbWipe -- scrub-treasury {c.Database} <LinkshellName>\n" +
+            "  dotnet run --project DbWipe -- scrub-treasury <database-name> <LinkshellName>\n" +
             "Use 'treasury <LinkshellName>' first to see what is there without changing anything.");
         return 1;
     }

@@ -19,8 +19,10 @@
     DEFAULTS TO A DRY RUN (prints counts, changes nothing). Pass -Execute to apply.
 
     Connection string defaults to the web app's user-secrets
-    (ConnectionStrings:DefaultConnection) -- which on this machine points at the
-    PRODUCTION managed Postgres. Override with -ConnectionString.
+    (ConnectionStrings:DefaultConnection), which must point at a LOCAL database
+    (CONTRIBUTING.md: the dev machine never points at production). Check the
+    "Target DB" line it prints before passing -Execute. Pass -ConnectionString
+    only when you mean to target another database.
 
     Windows PowerShell 5.1 can't load the net8 Npgsql.dll, so this generates a
     tiny throwaway net8 console tool and runs it via `dotnet run` (Npgsql 8.0.6
@@ -36,7 +38,8 @@
 #>
 [CmdletBinding()]
 param(
-    # Postgres connection string. Defaults to the app's user-secrets value.
+    # Postgres connection string. Defaults to the app's user-secrets value
+    # (a local database; see CONTRIBUTING.md).
     [string]$ConnectionString,
 
     # Limit the purge to a single linkshell (by exact name). Omit = all linkshells.
