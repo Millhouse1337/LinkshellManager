@@ -45,6 +45,8 @@ public sealed class ChannelRouteEditor
 
     // Persists the desired routes for a linkshell. Returns null on success, or a
     // human-readable error (e.g. two routes claiming the same non-event type).
+    // availableChannels is the bot's list of text channels in the linkshell's OWN
+    // Discord server (null when no server is set or the bot couldn't list them).
     public async Task<string?> SaveAsync(
         int linkshellId,
         IReadOnlyList<ChannelRouteEdit> edits,
@@ -56,6 +58,14 @@ public sealed class ChannelRouteEditor
         var valid = edits
             .Where(e => IsSnowflake(e.ChannelId))
             .ToList();
+
+        // The bot posts wherever a route points, so every kept route must point at a
+        // channel in this linkshell's own server (see CheckChannelsInGuild).
+        var foreignChannel = CheckChannelsInGuild(valid.Select(e => e.ChannelId!), availableChannels);
+        if (foreignChannel is not null)
+        {
+            return foreignChannel;
+        }
 
         // This linkshell's monster catalog (built-ins + its own custom monsters), used to
         // canonicalise the per-route HNM narrowing below. Loaded once for the whole save.
@@ -195,7 +205,41 @@ public sealed class ChannelRouteEditor
         return picked.Count == 0 ? null : string.Join('|', picked);
     }
 
-    private static bool IsSnowflake(string? value)
+    // Why this exists: a channel id is just a number, and the bot will post into any
+    // channel it can reach in ANY server it is in. Without this check an officer could
+    // type in a channel id from someone else's Discord server and have the trusted bot
+    // post there. So a channel is only allowed when the bot lists it for the linkshell's
+    // own server. Returns null when every id passes, or an error to show the officer.
+    // guildChannels null = no server set, or the bot couldn't list its channels.
+    public static string? CheckChannelsInGuild(
+        IEnumerable<string?> channelIds,
+        IReadOnlyList<DiscordChannelInfo>? guildChannels)
+    {
+        var ids = channelIds
+            .Select(id => id?.Trim())
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Select(id => id!)
+            .ToList();
+        if (ids.Count == 0)
+        {
+            // Nothing to post anywhere (e.g. every route removed) — always allowed.
+            return null;
+        }
+
+        if (guildChannels is null)
+        {
+            return "Couldn't load the channels of this linkshell's Discord server. "
+                + "Set the server in Configurations, make sure the bot is in it, and try again.";
+        }
+
+        var allowed = new HashSet<string>(guildChannels.Select(c => c.Id), StringComparer.Ordinal);
+        return ids.All(allowed.Contains)
+            ? null
+            : "That channel isn't in this linkshell's Discord server. Pick the channel from the list again.";
+    }
+
+    // Digits only, at most 20 long: the shape of a Discord id.
+    public static bool IsSnowflake(string? value)
     {
         var v = value?.Trim();
         return !string.IsNullOrEmpty(v) && v.Length <= 20 && v.All(char.IsDigit);

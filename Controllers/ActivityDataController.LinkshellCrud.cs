@@ -297,23 +297,36 @@ public sealed partial class ActivityDataController
         // set-guild-lock endpoint governs the lock). Server-setting normally goes
         // through the dedicated set-guild/clear-guild endpoints now; this branch
         // remains for clients that still send DiscordGuildId on the main update.
-        if (request.DiscordGuildId is not null)
+        // It gets the same checks as set-guild/clear-guild: the bot reads the tied
+        // server's channels and members and posts there, so typing a stranger's
+        // server id here must not be enough to tie this linkshell to it.
+        switch (ClassifyGuildIdUpdate(request.DiscordGuildId, linkshell.DiscordGuildId))
         {
-            var trimmedGuildId = request.DiscordGuildId.Trim();
-            if (trimmedGuildId.Length == 0)
-            {
+            case GuildIdUpdate.Invalid:
+                return BadRequest(new { error = "Discord Server ID must be the numeric server ID (digits only). Leave blank to clear it." });
+            case GuildIdUpdate.Clear:
+                if (IsBlockedByGuildLock(linkshell))
+                {
+                    return Forbid();
+                }
                 linkshell.DiscordGuildId = null;
                 linkshell.DiscordGuildName = null;
                 linkshell.LockToDiscordGuild = false;
-            }
-            else if (trimmedGuildId.Length <= 20 && trimmedGuildId.All(char.IsDigit))
-            {
-                linkshell.DiscordGuildId = trimmedGuildId;
-            }
-            else
-            {
-                return BadRequest(new { error = "Discord Server ID must be the numeric server ID (digits only). Leave blank to clear it." });
-            }
+                break;
+            case GuildIdUpdate.Set:
+                if (IsBlockedByGuildLock(linkshell))
+                {
+                    return Forbid();
+                }
+                var newGuildId = request.DiscordGuildId!.Trim();
+                if (!await CallerIsInGuildAsync(appUser.Id, newGuildId, cancellationToken))
+                {
+                    return BadRequest(new { error = "You must be a member of the server you set." });
+                }
+                linkshell.DiscordGuildId = newGuildId;
+                linkshell.DiscordGuildName = (await _discordIdentityService.ListBotGuildsAsync(cancellationToken))
+                    ?.FirstOrDefault(guild => guild.Id == newGuildId)?.Name;
+                break;
         }
 
         // Manual Check In HNM attendance (null = leave unchanged). Mode fails closed to Standard;
@@ -417,6 +430,19 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Channel ID must be the numeric Discord channel ID (digits only), or blank to clear." });
         }
 
+        // The bot mirrors comments into this channel, so it must be one of the linkshell's
+        // own server's channels — not any id typed in (same rule as the channel routes).
+        if (!string.IsNullOrEmpty(trimmed))
+        {
+            var channelError = ChannelRouteEditor.CheckChannelsInGuild(
+                new[] { trimmed },
+                await ListGuildChannelsForCheckAsync(linkshell.DiscordGuildId, new[] { trimmed }, cancellationToken));
+            if (channelError is not null)
+            {
+                return BadRequest(new { error = channelError });
+            }
+        }
+
         linkshell.DiscussionChannelId = string.IsNullOrEmpty(trimmed) ? null : trimmed;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
@@ -486,44 +512,30 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        string guildId;
         var resolvedName = request.GuildName?.Trim();
-        var requestedGuildId = request.GuildId?.Trim();
 
-        if (!string.IsNullOrWhiteSpace(requestedGuildId))
+        // A server picked from the dropdown, or (no pick) the server the Activity is
+        // launched in. That second one comes from the X-Discord-Guild-Id header, which
+        // the client sends and could set to anything, so BOTH get the same checks:
+        // a real snowflake, and the caller is actually a member of that server.
+        var guildId = PickGuildToSet(request.GuildId, GetRequestGuildId());
+        if (guildId is null)
         {
-            // A server was picked from the dropdown — verify it's a real snowflake
-            // and that the caller is actually a member of it before setting it.
-            if (requestedGuildId.Length > 20 || !requestedGuildId.All(char.IsDigit))
-            {
-                return BadRequest(new { error = "Invalid Discord server selection." });
-            }
-
-            var discordUserId = await _dbContext.DiscordActivityUsers
-                .Where(link => link.IdentityUserId == appUser.Id)
-                .Select(link => link.DiscordUserId)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (string.IsNullOrWhiteSpace(discordUserId) ||
-                !await _discordIdentityService.IsUserInGuildAsync(requestedGuildId, discordUserId, cancellationToken))
-            {
-                return BadRequest(new { error = "You must be a member of the server you set." });
-            }
-
-            guildId = requestedGuildId;
-            if (string.IsNullOrWhiteSpace(resolvedName))
-            {
-                var botGuilds = await _discordIdentityService.ListBotGuildsAsync(cancellationToken);
-                resolvedName = botGuilds?.FirstOrDefault(guild => guild.Id == requestedGuildId)?.Name;
-            }
+            return BadRequest(new { error = "Pick a server from the list, or open the Activity inside the server you want to set." });
         }
-        else
+        if (!ChannelRouteEditor.IsSnowflake(guildId))
         {
-            // No explicit pick — use the server the Activity is launched in.
-            guildId = GetRequestGuildId() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(guildId))
-            {
-                return BadRequest(new { error = "Pick a server from the list, or open the Activity inside the server you want to set." });
-            }
+            return BadRequest(new { error = "Invalid Discord server selection." });
+        }
+        if (!await CallerIsInGuildAsync(appUser.Id, guildId, cancellationToken))
+        {
+            return BadRequest(new { error = "You must be a member of the server you set." });
+        }
+
+        if (string.IsNullOrWhiteSpace(resolvedName))
+        {
+            var botGuilds = await _discordIdentityService.ListBotGuildsAsync(cancellationToken);
+            resolvedName = botGuilds?.FirstOrDefault(guild => guild.Id == guildId)?.Name;
         }
 
         var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
@@ -729,11 +741,6 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected linkshell was not found." });
         }
 
-        var guild = linkshell.DiscordGuildId;
-        var available = string.IsNullOrWhiteSpace(guild)
-            ? null
-            : await _discordBot.ListTextChannelsAsync(guild, cancellationToken);
-
         var edits = (request.Routes ?? Array.Empty<ActivityChannelRouteInput>())
             .Select(r => new ChannelRouteEdit(
                 r.Id, r.Name, r.ChannelId,
@@ -741,12 +748,89 @@ public sealed partial class ActivityDataController
                 r.EventTypeFilter, r.HnmMonsterFilter))
             .ToList();
 
+        // The editor rejects any route whose channel isn't in this list.
+        var available = await ListGuildChannelsForCheckAsync(
+            linkshell.DiscordGuildId,
+            edits.Where(e => ChannelRouteEditor.IsSnowflake(e.ChannelId)).Select(e => e.ChannelId!.Trim()),
+            cancellationToken);
+
         var error = await _channelRoutes.SaveAsync(linkshellId, edits, available, cancellationToken);
         if (error is not null)
         {
             return BadRequest(new { error });
         }
         return Ok(new { success = true });
+    }
+
+    // The bot's text channels for the linkshell's own server, for checking picked channel
+    // ids against. The list is cached for a few minutes, so when an id isn't in it (a
+    // channel made in Discord a moment ago) it is fetched fresh once before saying no.
+    // Null when no server is set or the bot can't list it.
+    private async Task<IReadOnlyList<DiscordChannelInfo>?> ListGuildChannelsForCheckAsync(
+        string? guildId, IEnumerable<string> channelIds, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(guildId))
+        {
+            return null;
+        }
+        var ids = channelIds.ToList();
+        var channels = await _discordBot.ListTextChannelsAsync(guildId, cancellationToken);
+        if (channels is not null && ChannelRouteEditor.CheckChannelsInGuild(ids, channels) is not null)
+        {
+            channels = await _discordBot.ListTextChannelsAsync(guildId, cancellationToken, forceRefresh: true);
+        }
+        return channels;
+    }
+
+    // Whether the signed-in user is a member of this Discord server, asked through the bot
+    // (the same check the eligible-guilds dropdown uses). False when their Discord account
+    // isn't linked or Discord can't confirm it.
+    private async Task<bool> CallerIsInGuildAsync(string appUserId, string guildId, CancellationToken cancellationToken)
+    {
+        var discordUserId = await _dbContext.DiscordActivityUsers
+            .Where(link => link.IdentityUserId == appUserId)
+            .Select(link => link.DiscordUserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        return !string.IsNullOrWhiteSpace(discordUserId)
+            && await _discordIdentityService.IsUserInGuildAsync(guildId, discordUserId, cancellationToken);
+    }
+
+    // set-guild's server: the dropdown pick wins, else the server the Activity is open in
+    // (header). Null when neither was given. The caller still has to verify it.
+    internal static string? PickGuildToSet(string? pickedGuildId, string? headerGuildId)
+    {
+        var picked = pickedGuildId?.Trim();
+        if (!string.IsNullOrEmpty(picked))
+        {
+            return picked;
+        }
+        var header = headerGuildId?.Trim();
+        return string.IsNullOrEmpty(header) ? null : header;
+    }
+
+    internal enum GuildIdUpdate { Unchanged, Clear, Set, Invalid }
+
+    // What a DiscordGuildId on the main /update asks for. Null = leave it; blank = clear;
+    // the id already stored = nothing to do (so an old client echoing it back needs no
+    // Discord call); any other snowflake = a NEW server, which must be verified.
+    internal static GuildIdUpdate ClassifyGuildIdUpdate(string? requestedGuildId, string? currentGuildId)
+    {
+        if (requestedGuildId is null)
+        {
+            return GuildIdUpdate.Unchanged;
+        }
+        var trimmed = requestedGuildId.Trim();
+        if (trimmed.Length == 0)
+        {
+            return GuildIdUpdate.Clear;
+        }
+        if (!ChannelRouteEditor.IsSnowflake(trimmed))
+        {
+            return GuildIdUpdate.Invalid;
+        }
+        return string.Equals(trimmed, currentGuildId, StringComparison.Ordinal)
+            ? GuildIdUpdate.Unchanged
+            : GuildIdUpdate.Set;
     }
 
     private static IReadOnlyList<string> SplitEventTypeFilter(string? filter) =>
