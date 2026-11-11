@@ -48,8 +48,8 @@ public class DiscordBearerPrecheckTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    // UserManager is only reached after Discord accepts a token, which these tests never do.
-    private static DiscordIdentityService NewService(ApplicationDbContext db, CountingHandler handler, IMemoryCache cache) => new(
+    // UserManager is only reached after Discord accepts a token (see SignInIgnoringLocalUpsert).
+    private static DiscordIdentityService NewService(ApplicationDbContext db, HttpMessageHandler handler, IMemoryCache cache) => new(
         new Factory(handler),
         db,
         null!,
@@ -166,5 +166,90 @@ public class DiscordBearerPrecheckTests
         Assert.Equal("ip:203.0.113.7", ApiRateLimitPartition.ResolveKey(Request("/api/addon/events", "Bearer att_abc"), Ip, _ => null));
         Assert.Equal("ip:203.0.113.7", ApiRateLimitPartition.ResolveKey(Request("/api/web/me"), Ip, _ => null));
         Assert.Equal("ip:unknown", ApiRateLimitPartition.ResolveKey(Request("/API/web/me"), null, _ => null));
+    }
+
+    [Fact]
+    public void ToDScreenshots_GetTheirOwnIpBucket_SoImagesCantStarveApiCalls()
+    {
+        Assert.Equal("uploads:203.0.113.7",
+            ApiRateLimitPartition.ResolveKey(Request("/api/activity/uploads/tods/abc.png"), Ip, _ => null));
+    }
+
+    // ---- a token Discord accepted keeps its bucket past the 90 s validation ----
+
+    private sealed class FakeClock : Microsoft.Extensions.Internal.ISystemClock
+    {
+        public DateTimeOffset UtcNow { get; set; } = DateTimeOffset.UtcNow;
+    }
+
+    // Answers each call with the next queued status; a 200 carries an /oauth2/@me body for our app.
+    private sealed class ScriptedHandler : HttpMessageHandler
+    {
+        private readonly System.Collections.Generic.Queue<HttpStatusCode> _statuses;
+        public int Calls { get; private set; }
+        public ScriptedHandler(params HttpStatusCode[] statuses) => _statuses = new(statuses);
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Calls++;
+            var status = _statuses.Dequeue();
+            var response = new HttpResponseMessage(status);
+            if (status == HttpStatusCode.OK)
+            {
+                response.Content = new StringContent(
+                    "{\"application\":{\"id\":\"app\"},\"user\":{\"id\":\"42\",\"username\":\"bob\"}}",
+                    System.Text.Encoding.UTF8,
+                    "application/json");
+            }
+            return Task.FromResult(response);
+        }
+    }
+
+    private static async Task SignInIgnoringLocalUpsert(DiscordIdentityService service, string token)
+    {
+        // The local-user upsert needs a UserManager these tests don't build; the Discord
+        // check and its cache writes happen before it, which is all these tests look at.
+        try { await service.GetCurrentLocalUserAsync(token, CancellationToken.None); }
+        catch (Exception ex) when (ex is not DiscordApiException) { }
+    }
+
+    [Fact]
+    public async Task AnAcceptedToken_KeepsItsOwnBucket_AfterItsValidationExpires_UntilDiscordRejectsIt()
+    {
+        using var db = NewDb();
+        var clock = new FakeClock();
+        var cache = new MemoryCache(new MemoryCacheOptions { Clock = clock });
+        var handler = new ScriptedHandler(HttpStatusCode.OK, HttpStatusCode.Unauthorized);
+        var service = NewService(db, handler, cache);
+
+        await SignInIgnoringLocalUpsert(service, WellShapedToken);
+        var bucket = DiscordIdentityService.RecentlyValidatedTokenKey(cache, WellShapedToken);
+        Assert.NotNull(bucket);
+
+        // Past the 90 s validation: the token still has its bucket, so the Activity user
+        // doesn't fall into the shared proxy-IP bucket for their next request.
+        clock.UtcNow += TimeSpan.FromMinutes(5);
+        Assert.Equal(bucket, DiscordIdentityService.RecentlyValidatedTokenKey(cache, WellShapedToken));
+
+        // Discord now says no (revoked): the token loses its bucket.
+        await Assert.ThrowsAsync<DiscordApiException>(() => service.GetCurrentLocalUserAsync(WellShapedToken, CancellationToken.None));
+        Assert.Equal(2, handler.Calls);
+        Assert.Null(DiscordIdentityService.RecentlyValidatedTokenKey(cache, WellShapedToken));
+    }
+
+    [Fact]
+    public async Task AGuildCheckDiscordRefuses_IsRememberedAsNotAMember_InsteadOfAskedEveryPoll()
+    {
+        using var db = NewDb();
+        var handler = new ScriptedHandler(HttpStatusCode.Forbidden);
+        var service = NewService(db, handler, new MemoryCache(new MemoryCacheOptions()));
+
+        // First time: Discord's 403 is surfaced (the caller denies and logs it).
+        await Assert.ThrowsAsync<DiscordApiException>(
+            () => service.VerifyGuildMembershipAsync(WellShapedToken, "123", CancellationToken.None));
+
+        // Then: denied from memory, without another call that counts against our IP.
+        Assert.False(await service.VerifyGuildMembershipAsync(WellShapedToken, "123", CancellationToken.None));
+        Assert.Equal(1, handler.Calls);
     }
 }

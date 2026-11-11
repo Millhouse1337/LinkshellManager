@@ -31,6 +31,13 @@ public sealed class DiscordIdentityService
     // How long a token Discord rejected is refused without asking Discord again.
     private static readonly TimeSpan RejectedTokenTtl = TimeSpan.FromSeconds(60);
 
+    // How long a token Discord accepted keeps its own /api rate-limit bucket. Much longer
+    // than TokenValidationTtl on purpose: if the bucket lasted only 90 s, every Activity
+    // user would drop into the one shared proxy-IP bucket each time their validation
+    // expired, and anyone flooding that bucket with made-up tokens would break them all.
+    // This only picks a bucket; every request is still validated as usual.
+    private static readonly TimeSpan KnownTokenBucketTtl = TimeSpan.FromHours(12);
+
     // How long a guild-membership verdict (member / not-member) is trusted
     // before we re-check against discord.com. Short, because the Activity
     // read path can ask about several locked linkshells per poll — caching
@@ -106,16 +113,23 @@ public sealed class DiscordIdentityService
         return "discord-token-rejected:" + Convert.ToHexString(hash);
     }
 
-    // The cache key of a token Discord accepted within the last TokenValidationTtl,
-    // or null when it hasn't. The /api rate limiter uses this to give each signed-in
-    // Activity user their own bucket: every Activity request reaches us through
-    // Discord's proxy, which hides the player's IP, so a per-IP bucket alone would
-    // lump all Activity users together. A made-up token is never in this cache, so
-    // it can't buy its own bucket.
+    private static string BuildKnownTokenCacheKey(string accessToken)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(accessToken));
+        return "discord-token-known:" + Convert.ToHexString(hash);
+    }
+
+    // A rate-limit bucket key for a token Discord accepted within the last
+    // KnownTokenBucketTtl (and hasn't rejected since), or null otherwise. The /api
+    // rate limiter uses this to give each signed-in Activity user their own bucket:
+    // every Activity request reaches us through Discord's proxy, which hides the
+    // player's IP, so a per-IP bucket alone would lump all Activity users together.
+    // A made-up token is never accepted, so it can't buy its own bucket.
     public static string? RecentlyValidatedTokenKey(IMemoryCache cache, string accessToken)
     {
         if (!LooksLikeDiscordToken(accessToken)) { return null; }
-        var key = BuildTokenCacheKey(accessToken);
+        if (cache.TryGetValue(BuildRejectedTokenCacheKey(accessToken), out _)) { return null; }
+        var key = BuildKnownTokenCacheKey(accessToken);
         return cache.TryGetValue(key, out _) ? key : null;
     }
 
@@ -244,6 +258,7 @@ public sealed class DiscordIdentityService
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
                 _cache.Set(rejectedKey, true, RejectedTokenTtl);
+                _cache.Remove(BuildKnownTokenCacheKey(accessToken));
             }
 
             // Don't log Discord's response body — it may echo token validity hints.
@@ -264,6 +279,7 @@ public sealed class DiscordIdentityService
                 envelope.Application.Id,
                 _options.ClientId);
             _cache.Set(rejectedKey, true, RejectedTokenTtl);
+            _cache.Remove(BuildKnownTokenCacheKey(accessToken));
             throw new DiscordApiException(401, "Access token was issued to a different Discord application.");
         }
 
@@ -276,6 +292,7 @@ public sealed class DiscordIdentityService
             user.Avatar);
 
         _cache.Set(cacheKey, profile, TokenValidationTtl);
+        _cache.Set(BuildKnownTokenCacheKey(accessToken), true, KnownTokenBucketTtl);
         return profile;
     }
 
@@ -318,6 +335,16 @@ public sealed class DiscordIdentityService
 
         if (!response.IsSuccessStatusCode)
         {
+            // A 401/403 (token revoked, or missing the guilds.members.read scope) won't
+            // fix itself within a minute, and each one counts toward Discord's
+            // invalid-request limit that bans this server's IP. Remember it as "not a
+            // member" (the caller denies on a throw anyway) so the Activity's polling
+            // doesn't repeat it for every locked linkshell on every request.
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                _cache.Set(cacheKey, false, GuildMembershipTtl);
+            }
+
             // Don't cache transient failures — re-check on the next request.
             _logger.LogWarning("Discord guild-member lookup failed with status {Status}.", response.StatusCode);
             throw new DiscordApiException((int)response.StatusCode, "Discord guild membership check failed.");

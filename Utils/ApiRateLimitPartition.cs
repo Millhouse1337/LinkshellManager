@@ -15,7 +15,9 @@ namespace LinkshellManagerDiscordApp.Utils;
 //   board for everyone. The endpoint checks Discord's signature before doing anything
 //   else and never calls out to Discord for a bad request, so it can't be used to
 //   get the IP banned.
-// - A bearer token Discord accepted in the last 90 seconds: one bucket per token.
+// - /api/activity/uploads (ToD screenshots): a separate bucket per client IP, so image
+//   loads never use up the bucket API calls share.
+// - A bearer token Discord accepted in the last 12 hours: one bucket per token.
 //   The Activity reaches us through Discord's proxy, which hides players' IPs, so
 //   without this every Activity user would share one IP bucket.
 // - Everything else (website cookies, addon tokens, first Activity calls, made-up
@@ -41,6 +43,16 @@ public static class ApiRateLimitPartition
         if (request.Path.StartsWithSegments("/api/discord/interactions", StringComparison.OrdinalIgnoreCase))
         {
             return null;
+        }
+
+        // ToD screenshots load as plain <img> tags, so they carry no bearer, and through
+        // the Activity every viewer shares Discord's proxy IP. A ToD tab full of
+        // thumbnails would otherwise use up the shared IP bucket that other Activity
+        // users' sign-in calls need. They get their own per-IP bucket: the endpoint
+        // only reads a file and never calls Discord.
+        if (request.Path.StartsWithSegments("/api/activity/uploads", StringComparison.OrdinalIgnoreCase))
+        {
+            return "uploads:" + (remoteIp?.ToString() ?? "unknown");
         }
 
         if (AuthenticationHeaderValue.TryParse(request.Headers.Authorization, out var header)
