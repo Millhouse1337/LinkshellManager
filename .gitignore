@@ -20,3 +20,6 @@ artifacts/
 cloudflared.exe
 
 *.user
+
+# Personal Claude Code permissions; each developer keeps their own
+.claude/settings.local.json

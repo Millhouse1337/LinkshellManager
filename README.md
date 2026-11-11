@@ -153,13 +153,18 @@ Optional if you also want to override the client id locally:
 dotnet user-secrets set "Discord:ClientId" "<your-discord-client-id>"
 ```
 
-The PostgreSQL connection string is required and is **not** stored in `appsettings.json`. Set it via user secrets for local development:
+The PostgreSQL connection string is required and is **not** stored in `appsettings.json`. Set it via user secrets for local development, pointing at a **local** database (the Docker one from [Testing against a throwaway database](#testing-against-a-throwaway-database)):
 
 ```bash
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=linkshell_manager_discord_app;Username=postgres;Password=<your-password>"
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=55432;Database=lsm_test;Username=postgres;Password=<pw>"
 ```
 
 The app will fail to start if `ConnectionStrings:DefaultConnection` is not configured.
+
+**Never put the production connection string in user-secrets.** `dotnet run` and every `dotnet ef`
+command read them, so one routine command could migrate, roll back, or run background jobs against the
+live database. Keep the production string only in the `LSM_PROD_CS` environment variable, set for a
+single shell when you need it; only `tools/DbInspector` uses it, and read-only (see CONTRIBUTING.md).
 
 For production or hosted environments, set environment variables instead:
 
@@ -183,7 +188,8 @@ This writes the built SPA to `wwwroot/discord-activity/browser`.
 
 ### PostgreSQL setup
 
-Create the database and apply the EF migration:
+Create the local database and apply the EF migrations (this uses the user-secrets connection string, so
+check it points at `localhost` first with `dotnet user-secrets list`):
 
 ```bash
 "$env:USERPROFILE\\.dotnet\\tools\\dotnet-ef.exe" database update
@@ -194,11 +200,11 @@ Create the database and apply the EF migration:
 attendance snapshots, window events, party setup, and more. Run `dotnet ef migrations list` to see the
 full, current set.
 
-The default repo connection string targets:
+The recommended local connection string targets:
 
 - host: `localhost`
-- port: `5432`
-- database: `linkshell_manager_discord_app`
+- port: `55432` (the Docker container below)
+- database: `lsm_test`
 - username: `postgres`
 
 ### Run the ASP.NET app
@@ -222,10 +228,10 @@ Use the `https` profile. The Activity route should be available at:
 
 ### Testing against a throwaway database
 
-If your user secrets point `ConnectionStrings:DefaultConnection` at a shared or hosted database, don't
-run the app against it to test. Point a single run at a local database instead (environment variables
-override user secrets), and give it a dummy bot token so the startup jobs that configure the Discord
-application (`DiscordEntryPointConfigurator`) can't reach the real one:
+Your user secrets should already point at this local database (see above). Passing the connection string
+explicitly as well, as below, keeps a run safe even if they don't (environment variables override user
+secrets). Give it a dummy bot token so the startup jobs that configure the Discord application
+(`DiscordEntryPointConfigurator`) can't reach the real one:
 
 ```bash
 docker run -d --name lsm-test-db -e POSTGRES_PASSWORD=<pw> -e POSTGRES_DB=lsm_test -p 55432:5432 postgres:16

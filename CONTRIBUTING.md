@@ -12,14 +12,30 @@ the architecture overview and the Discord Activity / auth flow.
 
 ## One-time local setup
 
-Secrets are **not** stored in `appsettings.json`. Configure them with user-secrets:
+> **Your dev machine never points at production.** User-secrets are what `dotnet run`,
+> `dotnet ef database update` and `dotnet ef migrations ...` read by default, so they must always hold a
+> **local** database. One routine command against production can apply an unreleased migration while the
+> live app is running, or roll one back. The production connection string lives only in the `LSM_PROD_CS`
+> environment variable, which you set for a single shell when you mean it, and which only
+> `tools/DbInspector` (read-only) uses.
+
+Start a local Postgres in Docker (one time):
 
 ```bash
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=linkshell_manager_discord_app;Username=postgres;Password=<your-password>"
+docker run -d --name lsm-test-db -e POSTGRES_PASSWORD=<pw> -e POSTGRES_DB=lsm_test -p 55432:5432 postgres:16
+```
+
+Secrets are **not** stored in `appsettings.json`. Configure them with user-secrets, pointing at that local
+database:
+
+```bash
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=55432;Database=lsm_test;Username=postgres;Password=<pw>"
 dotnet user-secrets set "Discord:ClientSecret" "<your-discord-client-secret>"
 ```
 
-Apply the database schema:
+Check it with `dotnet user-secrets list` (the connection string must say `Host=localhost`).
+
+Apply the database schema to the local database:
 
 ```bash
 dotnet ef database update
@@ -61,6 +77,16 @@ In non-development environments the app applies pending migrations automatically
 
 The two utility projects are intentionally separate console apps, run by hand. Both refuse destructive
 operations unless you pass the connected database name as confirmation — never point them at production.
+
+DbInspector reads its connection string only from an environment variable you set for that run; it never
+falls back to user-secrets. Set exactly one:
+
+- `APP_CS` — a local database. Every mode works, including `reset-public <database-name>`.
+- `LSM_PROD_CS` — production. The session is opened read-only and `reset-public` is refused.
+
+```bash
+LSM_PROD_CS="<production connection string>" dotnet run --project tools/DbInspector -- history
+```
 
 ## Code style
 
