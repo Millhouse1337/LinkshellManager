@@ -60,6 +60,10 @@ public sealed partial class ActivityDataController
         {
             return BadRequest(new { error = "Role name must be 64 characters or fewer." });
         }
+        if (IsLeaderRoleName(name))
+        {
+            return BadRequest(new { error = LeaderRoleNameTakenError });
+        }
 
         await EnsureDefaultRolesAsync(linkshellId, cancellationToken);
 
@@ -127,6 +131,13 @@ public sealed partial class ActivityDataController
 
                 if (!string.Equals(role.Name, name, StringComparison.OrdinalIgnoreCase))
                 {
+                    // Renaming moves every holder's Rank to the new name (below), so a
+                    // custom role renamed "leader" would crown all of its holders.
+                    if (IsLeaderRoleName(name))
+                    {
+                        return BadRequest(new { error = LeaderRoleNameTakenError });
+                    }
+
                     var clash = await _dbContext.LinkshellRoles.AnyAsync(r =>
                         r.LinkshellId == linkshellId && r.Id != roleId && r.Name == name, cancellationToken);
                     if (clash)
@@ -154,6 +165,17 @@ public sealed partial class ActivityDataController
 
         return Ok(MapLinkshellRoleDto(role));
     }
+
+    private const string LeaderRoleNameTakenError = "\"Leader\" is the built-in Leader role. Pick a different name.";
+
+    /// <summary>
+    /// True when a custom role name would read as the Leader rank. Ranks match Leader
+    /// case-insensitively everywhere (<see cref="LinkshellRanks.IsLeader"/>), but the
+    /// duplicate-name check is case-sensitive. Without this, an officer with "Manage
+    /// roles" could make a role called "leader" (or rename one to it), give it to an alt,
+    /// and get full Leader powers without a Leader ever granting them.
+    /// </summary>
+    internal static bool IsLeaderRoleName(string? name) => LinkshellRanks.IsLeader(name?.Trim());
 
     [HttpPost("linkshells/{linkshellId:int}/roles/{roleId:int}/delete")]
     public async Task<IActionResult> DeleteLinkshellRoleAsync(

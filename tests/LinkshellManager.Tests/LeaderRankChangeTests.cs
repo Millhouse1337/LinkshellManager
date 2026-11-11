@@ -37,4 +37,18 @@ public class LeaderRankChangeTests
     [InlineData(null, "Officer")]
     public void OrdinaryRoleChanges_AreLeftToManageRoles(string? target, string newRank)
         => Assert.True(ActivityDataController.CanChangeRankTouchingLeader("Officer", false, target, newRank));
+
+    // The side door: a custom role created or renamed as "leader" moves its holders'
+    // Rank to a value IsLeader accepts, without ever going through the rail above.
+    [Theory]
+    [InlineData("Leader", true)]
+    [InlineData("leader", true)]
+    [InlineData("LEADER", true)]
+    [InlineData("  leader ", true)]
+    [InlineData("Raiders", false)]
+    [InlineData("Leaders", false)]
+    [InlineData("Officer", false)]
+    [InlineData(null, false)]
+    public void CustomRoleName_CannotPoseAsLeader(string? name, bool reserved)
+        => Assert.Equal(reserved, ActivityDataController.IsLeaderRoleName(name));
 }
