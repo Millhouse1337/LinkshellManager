@@ -190,11 +190,13 @@ export class TodService {
     }
   }
 
-  async uploadTodImage(file: File): Promise<string | null> {
+  // The server checks the uploader can log or submit ToDs in this linkshell.
+  async uploadTodImage(file: File, linkshellId: number): Promise<string | null> {
     this.auth.setActionError(null);
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('linkshellId', String(linkshellId));
 
       const payload = await this.http.sendActivityRequest<{ imagePath?: string } | undefined>(
         'POST', '/api/activity/tods/upload-image', formData);

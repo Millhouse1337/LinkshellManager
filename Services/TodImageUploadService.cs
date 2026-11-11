@@ -2,6 +2,13 @@ using Microsoft.AspNetCore.Hosting;
 
 namespace LinkshellManagerDiscordApp.Services;
 
+// Saves, finds and deletes ToD screenshots.
+//
+// The files live under the "Uploads:Root" setting, NOT inside the published app. The deploy
+// replaces /var/www/lsmanager on every release, so screenshots kept in wwwroot/uploads vanished
+// with each deploy while the ToD rows still pointed at them. Production sets
+// Uploads__Root=/var/lib/lsmanager/uploads (already writable in lsmanager.service). Left blank,
+// it falls back to wwwroot/uploads so a dev machine keeps working with no setup.
 public sealed class TodImageUploadService
 {
     public const int MaxBytes = 5_000_000;
@@ -11,11 +18,73 @@ public sealed class TodImageUploadService
         ".png", ".jpg", ".jpeg", ".webp",
     };
 
-    private readonly IWebHostEnvironment _webHostEnvironment;
+    private readonly string _todsDirectory;
 
-    public TodImageUploadService(IWebHostEnvironment webHostEnvironment)
+    public TodImageUploadService(IWebHostEnvironment webHostEnvironment, IConfiguration configuration)
+        : this(ResolveUploadsRoot(
+            configuration["Uploads:Root"], webHostEnvironment.WebRootPath, webHostEnvironment.ContentRootPath))
     {
-        _webHostEnvironment = webHostEnvironment;
+    }
+
+    internal TodImageUploadService(string uploadsRoot)
+    {
+        _todsDirectory = Path.Combine(uploadsRoot, "tods");
+    }
+
+    // The folder that holds every upload. A configured path wins; otherwise the old
+    // wwwroot/uploads spot (WebRootPath is blank when the app has no wwwroot folder).
+    internal static string ResolveUploadsRoot(string? configuredRoot, string? webRootPath, string contentRootPath)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        {
+            return configuredRoot.Trim();
+        }
+
+        var webRoot = string.IsNullOrWhiteSpace(webRootPath)
+            ? Path.Combine(contentRootPath, "wwwroot")
+            : webRootPath;
+        return Path.Combine(webRoot, "uploads");
+    }
+
+    // Full path of a stored screenshot, or null when the name is unsafe or the file is gone.
+    // Only a bare file name is accepted, so a caller can never reach outside the tods folder.
+    public string? FindExistingFile(string? fileName)
+    {
+        if (!IsSafeFileName(fileName))
+        {
+            return null;
+        }
+
+        var absolutePath = Path.Combine(_todsDirectory, fileName!);
+        return File.Exists(absolutePath) ? absolutePath : null;
+    }
+
+    // Best-effort removal: a missing or locked file is not worth failing the request over.
+    public void DeleteIfExists(string? fileName)
+    {
+        var absolutePath = FindExistingFile(fileName);
+        if (absolutePath is null)
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(absolutePath);
+        }
+        catch
+        {
+            // Best-effort cleanup.
+        }
+    }
+
+    internal static bool IsSafeFileName(string? fileName)
+    {
+        return !string.IsNullOrWhiteSpace(fileName)
+            && !fileName.Contains("..", StringComparison.Ordinal)
+            && !fileName.Contains('/')
+            && !fileName.Contains('\\')
+            && !fileName.Contains(':');
     }
 
     public async Task<TodImageUploadResult> SaveAsync(IFormFile file, CancellationToken cancellationToken)
@@ -51,17 +120,10 @@ public sealed class TodImageUploadService
             return TodImageUploadResult.Fail("Uploaded file is not a recognized PNG, JPG, or WEBP image.");
         }
 
-        var webRoot = _webHostEnvironment.WebRootPath;
-        if (string.IsNullOrWhiteSpace(webRoot))
-        {
-            webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-        }
-
-        var uploadsDir = Path.Combine(webRoot, "uploads", "tods");
-        Directory.CreateDirectory(uploadsDir);
+        Directory.CreateDirectory(_todsDirectory);
 
         var fileName = $"{Guid.NewGuid():N}{detectedExtension}";
-        var absolutePath = Path.Combine(uploadsDir, fileName);
+        var absolutePath = Path.Combine(_todsDirectory, fileName);
         await File.WriteAllBytesAsync(absolutePath, bytes, cancellationToken);
 
         return TodImageUploadResult.Ok($"/uploads/tods/{fileName}");

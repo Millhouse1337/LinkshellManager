@@ -230,7 +230,9 @@ public sealed partial class ActivityDataController
     [RequestFormLimits(MultipartBodyLengthLimit = 5_500_000)]
     public async Task<IActionResult> UploadTodImageAsync(
         [FromForm] IFormFile? file,
+        [FromForm] int? linkshellId,
         [FromServices] TodImageUploadService uploads,
+        [FromServices] TodImageUploadQuota quota,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
@@ -239,32 +241,51 @@ public sealed partial class ActivityDataController
             return Unauthorized(new { error = "Sign in to upload ToD images." });
         }
 
+        // Any signed-in account used to be able to fill the disk with images. Now only someone
+        // who can put a ToD (and so a screenshot) somewhere in this linkshell may upload one.
+        if (linkshellId is not > 0)
+        {
+            return BadRequest(new { error = "Reload the app and try the upload again." });
+        }
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId.Value, cancellationToken);
+        if (!await CanAsync(membership, RoleMayUploadTodImage, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        if (!quota.TryTake(appUser.Id))
+        {
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                error = $"You have uploaded {TodImageUploadQuota.DailyLimitPerUser} ToD images today. Try again tomorrow."
+            });
+        }
+
         var result = await uploads.SaveAsync(file!, cancellationToken);
         if (!result.Success)
         {
+            quota.Release(appUser.Id);
             return BadRequest(new { error = result.Error });
         }
         return Ok(new { imagePath = result.ImagePath });
     }
 
+    // The roles that can attach a screenshot to a ToD: logging one (Manage ToDs), sending one
+    // for approval (Submit ToD for approval), or posting one on an HNM board (Manage events).
+    internal static bool RoleMayUploadTodImage(LinkshellRole role) =>
+        role.CanManageTods || role.CanSubmitTodForApproval || role.CanManageEvents;
+
     // GET /api/activity/uploads/tods/{fileName}
-    // Proxies uploaded ToD screenshots so the Discord Activity (which only
-    // has /api/* mapped through Discord's proxy) can fetch them.  Files
-    // live in wwwroot/uploads/tods/ -- the same place the web serves them
-    // directly. Validates the filename so callers can't escape the
-    // uploads directory.
+    // Serves uploaded ToD screenshots to the website and the Discord Activity (which only
+    // has /api/* mapped through Discord's proxy). The files live under the Uploads:Root
+    // setting, outside the published app; the service only accepts a bare file name, so
+    // callers can't escape the uploads directory.
     [HttpGet("uploads/tods/{fileName}")]
     [AllowAnonymous]
-    public IActionResult GetTodImage(string fileName)
+    public IActionResult GetTodImage(string fileName, [FromServices] TodImageUploadService uploads)
     {
-        if (string.IsNullOrWhiteSpace(fileName)) return NotFound();
-        if (fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\')) return NotFound();
-
-        var webRoot = _webHostEnvironment.WebRootPath;
-        if (string.IsNullOrWhiteSpace(webRoot)) return NotFound();
-
-        var absolutePath = Path.Combine(webRoot, "uploads", "tods", fileName);
-        if (!System.IO.File.Exists(absolutePath)) return NotFound();
+        var absolutePath = uploads.FindExistingFile(fileName);
+        if (absolutePath is null) return NotFound();
 
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
         var contentType = extension switch

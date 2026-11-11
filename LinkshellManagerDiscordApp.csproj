@@ -41,6 +41,8 @@
     <Content Remove="DbWipe\\**" />
     <Compile Remove="tests\\**\\*.cs" />
     <Content Remove="tests\\**" />
+    <!-- Dev-machine ToD screenshots (the Uploads:Root fallback) must never ship in a deploy. -->
+    <Content Remove="wwwroot\\uploads\\**" />
   </ItemGroup>
 
 </Project>

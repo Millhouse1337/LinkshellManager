@@ -38,7 +38,8 @@ id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --shell /usr/sbin/nologin 
 # live outside $APP_DIR because the deploy script replaces $APP_DIR wholesale on
 # every release; keeping the keys here is what lets a Google Sheet connection
 # (and login sessions) survive redeploys.
-mkdir -p "$APP_DIR" /etc/lsmanager /var/log/lsmanager /var/lib/lsmanager/keys
+# /var/lib/lsmanager/uploads holds ToD screenshots for the same reason (Uploads__Root).
+mkdir -p "$APP_DIR" /etc/lsmanager /var/log/lsmanager /var/lib/lsmanager/keys /var/lib/lsmanager/uploads/tods
 chown -R "$APP_USER:$APP_USER" "$APP_DIR" /var/log/lsmanager /var/lib/lsmanager
 chmod 700 /var/lib/lsmanager/keys
 
@@ -89,6 +90,8 @@ ConnectionStrings__DefaultConnection=Host=127.0.0.1;Port=5432;Database=${DB_NAME
 # Persistent Data Protection key ring (outside the deploy artifact dir) so
 # Google Sheet connections and login sessions survive redeploys.
 DataProtection__KeyRingPath=/var/lib/lsmanager/keys
+# ToD screenshots, also outside the deploy artifact dir so they survive redeploys.
+Uploads__Root=/var/lib/lsmanager/uploads
 Discord__ClientId=REPLACE_ME
 Discord__ClientSecret=REPLACE_ME
 # Your own Discord user id (Discord: Settings > Advanced > Developer Mode, then

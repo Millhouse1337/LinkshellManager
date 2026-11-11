@@ -385,7 +385,7 @@ export class TodFormComponent {
 
     this.isUploadingTodImage = true;
     try {
-      const path = await this.activity.uploadTodImage(file);
+      const path = await this.activity.uploadTodImage(file, this.todDraft.linkshellId);
       if (path) {
         this.todImagePath = path;
       }

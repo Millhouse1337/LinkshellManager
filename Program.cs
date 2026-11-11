@@ -239,6 +239,7 @@ builder.Services.AddSingleton<AiCommentSummaryService>();
 builder.Services.AddSingleton<SignupCharacterChoiceCache>();
 builder.Services.AddSingleton<OfficerAddTargetCache>();
 builder.Services.AddScoped<TodImageUploadService>();
+builder.Services.AddSingleton<TodImageUploadQuota>();
 builder.Services.AddScoped<SubmissionApprovalService>();
 // Data Protection guards the encrypted Google refresh tokens, auth cookies and
 // antiforgery tokens. By default the key ring lands under the app's content

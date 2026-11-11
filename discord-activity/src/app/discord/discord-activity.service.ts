@@ -828,7 +828,7 @@ export class DiscordActivityService {
   updateTod(input: ActivityUpdateTodInput): Promise<void> { return this.todService.updateTod(input); }
   postBoardTod(eventId: number, fields: { timeLocal: string; cooldown: string | null; interval: string | null; dayNumber: number | null; claim: boolean | null; hq: boolean; additionalSeconds: number; popWindow?: number | null; killed?: boolean | null; repost?: boolean | null; repostLeadHours?: number | null; imagePath?: string | null }): Promise<void> { return this.todService.postBoardTod(eventId, fields); }
   deleteTod(todId: number): Promise<void> { return this.todService.deleteTod(todId); }
-  uploadTodImage(file: File): Promise<string | null> { return this.todService.uploadTodImage(file); }
+  uploadTodImage(file: File, linkshellId: number): Promise<string | null> { return this.todService.uploadTodImage(file, linkshellId); }
 
   // Rewrites a server-stored upload path (e.g. /uploads/tods/abc123.png) so it
   // hits the activity's API proxy. The Activity runs at <clientId>.discordsays.com

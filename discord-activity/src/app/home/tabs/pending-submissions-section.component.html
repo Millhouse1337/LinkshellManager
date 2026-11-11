@@ -70,7 +70,7 @@
             </div>
 
             @if (tod.imagePath) {
-              <a class="muted" [href]="tod.imagePath" target="_blank" rel="noopener">View the submitted screenshot</a>
+              <a class="muted" [href]="activity.resolveUploadUrl(tod.imagePath)" target="_blank" rel="noopener">View the submitted screenshot</a>
             }
 
             <div style="display:flex;gap:8px;flex-wrap:wrap">

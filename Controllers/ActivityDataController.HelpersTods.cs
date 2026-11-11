@@ -96,24 +96,7 @@ public sealed partial class ActivityDataController
             return;
         }
 
-        var webRoot = _webHostEnvironment.WebRootPath;
-        if (string.IsNullOrWhiteSpace(webRoot))
-        {
-            webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-        }
-
-        var absolutePath = Path.Combine(webRoot, "uploads", "tods", fileName);
-        try
-        {
-            if (System.IO.File.Exists(absolutePath))
-            {
-                System.IO.File.Delete(absolutePath);
-            }
-        }
-        catch
-        {
-            // Best-effort cleanup.
-        }
+        HttpContext.RequestServices.GetRequiredService<TodImageUploadService>().DeleteIfExists(fileName);
     }
 
     // True when any ToD other than excludingTodId, or a ToD still waiting for approval, points at

@@ -418,6 +418,35 @@ If any row is not you, clear it:
 UPDATE "AspNetUsers" SET "IsSuperAdmin" = false WHERE "Id" = '<their Id>';
 ```
 
+## ToD screenshots outside the deploy folder (November 2026)
+
+ToD screenshots used to be saved in `/var/www/lsmanager/wwwroot/uploads/tods`. Every deploy
+replaces that folder, so each release lost the earlier screenshots. They now live in
+`Uploads__Root` (`/var/lib/lsmanager/uploads`, already writable in `lsmanager.service`).
+**Do this before deploying this release**, so the files still in the current build move over:
+
+```bash
+ssh root@<IP>
+# 1. The new folder, owned by the service user.
+sudo mkdir -p /var/lib/lsmanager/uploads/tods
+
+# 2. Copy every screenshot that still exists. -n never overwrites; the .old folder may hold
+#    a few from the release before (it is fine if one of these paths does not exist).
+sudo cp -n /var/www/lsmanager/wwwroot/uploads/tods/* /var/lib/lsmanager/uploads/tods/ 2>/dev/null
+sudo cp -n /var/www/lsmanager.old/wwwroot/uploads/tods/* /var/lib/lsmanager/uploads/tods/ 2>/dev/null
+sudo chown -R lsmanager:lsmanager /var/lib/lsmanager/uploads
+ls /var/lib/lsmanager/uploads/tods | wc -l      # how many came across
+
+# 3. Point the app at it.
+echo 'Uploads__Root=/var/lib/lsmanager/uploads' | sudo tee -a /etc/lsmanager/env
+```
+
+Then deploy as usual. If you forget step 3, the app keeps using `wwwroot/uploads` and the next
+deploy throws new screenshots away again, exactly as before.
+
+Uploading a screenshot now also needs a linkshell role that can log a ToD, submit one for
+approval, or manage events (the Leader always can), and each account may upload 30 a day.
+
 ## Things to set up later (not blocking go-live)
 
 - Automated daily `pg_dump` to a DO Spaces bucket (or any object store). The pre-deploy dumps (**Database backups**) only live on the droplet, so they do not survive losing it.

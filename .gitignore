@@ -12,6 +12,10 @@ wwwroot/discord-activity/browser/
 wwwroot/discord-activity/3rdpartylicenses.txt
 wwwroot/discord-activity/prerendered-routes.json
 
+# Uploaded ToD screenshots. Production keeps them in /var/lib/lsmanager/uploads (Uploads:Root);
+# this folder is only the dev fallback, so its files never belong in git or a deploy.
+wwwroot/uploads/
+
 tmp-run*.err
 tmp-run*.out
 
