@@ -1517,6 +1517,15 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
+        // Changing a saved ToD's claim is editing that ToD, so it needs Manage ToDs - the same
+        // check as posting one straight to the saved list above. A member whose post only matched
+        // an officer's ToD gets that row's id back, but must not be able to rewrite it.
+        var role = await GetTokenIssuerRoleAsync(token, tod.LinkshellId, cancellationToken);
+        if (role?.CanManageTods != true)
+        {
+            return Forbid();
+        }
+
         tod.Claim = request.Claim;
         tod.TotalClaims = request.Claim == true ? 1 : 0;
         await _dbContext.SaveChangesAsync(cancellationToken);

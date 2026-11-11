@@ -72,6 +72,22 @@ public class TodEditPermissionTests
         Assert.DoesNotContain("if (membership is null)", body);
     }
 
+    // The addon's "settle the claim" call edits a saved ToD too. It used to check only that the
+    // ToD was in the token's linkshell, so any paired member could flip any ToD's claim.
+    [Fact]
+    public void AddonTodClaimUpdate_RequiresManageTods()
+    {
+        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "AddonApiController.AddonParticipation.cs"));
+
+        var from = text.IndexOf("UpdateTodClaimAsync(", StringComparison.Ordinal);
+        var to = text.IndexOf("tod.Claim = request.Claim", from, StringComparison.Ordinal);
+        Assert.True(from >= 0 && to > from, "UpdateTodClaimAsync not found.");
+
+        var body = text[from..to];
+        Assert.Contains("GetTokenIssuerRoleAsync(token, tod.LinkshellId", body);
+        Assert.Contains("role?.CanManageTods != true", body);
+    }
+
     // ---- Image on update.
 
     [Fact]
