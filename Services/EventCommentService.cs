@@ -7,7 +7,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // Post-event discussion comments on a closed event (EventHistory). Adds/lists/
 // deletes comments and — when the linkshell has a DiscussionChannelId — mirrors
 // each new comment to that Discord channel via DiscordBotClient (best-effort;
-// a failed mirror never blocks the in-app comment).
+// a failed mirror never blocks the in-app comment). Deleting a comment deletes
+// its Discord copy the same best-effort way.
 public sealed class EventCommentService
 {
     private readonly ApplicationDbContext _db;
@@ -53,7 +54,15 @@ public sealed class EventCommentService
             var who = isAnonymous ? "Anonymous" : (characterName ?? "Member");
             var content = $"💬 **{history.EventName ?? "Event"}** — {who}: {trimmed}";
             if (content.Length > 1900) { content = content[..1900] + "…"; }
-            var messageId = await _bot.PostMessageAsync(channelId!, new { content }, cancellationToken);
+            // No mentions are parsed: the body is free text from any member (anonymous too), so
+            // "@everyone" or a role mention typed into a comment must stay plain text, not ping
+            // the whole Discord server through the bot.
+            var payload = new
+            {
+                content,
+                allowed_mentions = new { parse = Array.Empty<string>() }
+            };
+            var messageId = await _bot.PostMessageAsync(channelId!, payload, cancellationToken);
             if (messageId is not null)
             {
                 comment.DiscordMessageId = messageId;
@@ -78,6 +87,30 @@ public sealed class EventCommentService
         if (!canManage && !string.Equals(comment.AppUserId, appUserId, StringComparison.Ordinal)) return false;
         _db.EventComments.Remove(comment);
         await _db.SaveChangesAsync(cancellationToken);
+
+        // Take the Discord copy down too, or a deleted comment lives on in the channel. It was
+        // posted to the linkshell's discussion channel, so that is where it is deleted.
+        // Best-effort: the comment is already gone in the app, and a Discord failure (bot
+        // removed, channel changed since, request cancelled) must not turn that into an error.
+        if (!string.IsNullOrWhiteSpace(comment.DiscordMessageId))
+        {
+            try
+            {
+                var channelId = await _db.Linkshells
+                    .Where(l => l.Id == comment.LinkshellId)
+                    .Select(l => l.DiscussionChannelId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (!string.IsNullOrWhiteSpace(channelId))
+                {
+                    await _bot.DeleteMessageAsync(channelId!, comment.DiscordMessageId!, cancellationToken);
+                }
+            }
+            catch (Exception)
+            {
+                // Swallowed on purpose (see above); DeleteMessageAsync logs its own failures.
+            }
+        }
+
         return true;
     }
 }
