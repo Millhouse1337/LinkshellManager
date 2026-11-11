@@ -97,6 +97,7 @@ public sealed class PlaceholderClaimService
         var ledger = await _db.DkpLedgerEntries
             .Where(e => e.AppUserId == placeholderAppUserId && claimedLs.Contains(e.LinkshellId))
             .ToListAsync(cancellationToken);
+        await FoldSharedCampPayoutsAsync(ledger, realAppUserId, cancellationToken);
         foreach (var e in ledger) { e.AppUserId = realAppUserId; }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -150,5 +151,59 @@ public sealed class PlaceholderClaimService
 
         await tx.CommitAsync(cancellationToken);
         return new ClaimResult(true, null, claimedLs);
+    }
+
+    // A review card pays each account ONE row (unique index IX_DkpLedgerEntries_SourceWindowEventId_
+    // AppUserId). One person can still hold two rows from the same card across these two accounts:
+    // captured on the main the real account owns and on an alt the DKP import put on the placeholder
+    // (dual-boxing, for one). Moving the placeholder's row over as-is would give the real account two
+    // and the index would refuse the whole claim.
+    //
+    // So each such pair becomes one row first, the way the OneCampCreditPerAccount migration folded
+    // old duplicates: the older row keeps the SUM, an audit that pointed at the removed row moves to
+    // the kept one, and the removed row goes. The real account's ledger total ends up exactly what a
+    // plain repoint would have given it. Removes the dropped placeholder row from `placeholderLedger`
+    // so the caller does not repoint it.
+    private async Task FoldSharedCampPayoutsAsync(
+        List<DkpLedgerEntry> placeholderLedger, string realAppUserId, CancellationToken cancellationToken)
+    {
+        var placeholderPayouts = placeholderLedger
+            .Where(e => e.EntryType == "SnapshotEarned" && e.SourceWindowEventId.HasValue)
+            .ToList();
+        if (placeholderPayouts.Count == 0) return;
+
+        var cardIds = placeholderPayouts.Select(e => e.SourceWindowEventId!.Value).Distinct().ToList();
+        var realPayouts = await _db.DkpLedgerEntries
+            .Where(e => e.AppUserId == realAppUserId &&
+                        e.EntryType == "SnapshotEarned" &&
+                        e.SourceWindowEventId.HasValue &&
+                        cardIds.Contains(e.SourceWindowEventId.Value))
+            .ToListAsync(cancellationToken);
+        if (realPayouts.Count == 0) return;
+
+        foreach (var real in realPayouts)
+        {
+            var mine = placeholderPayouts.FirstOrDefault(e => e.SourceWindowEventId == real.SourceWindowEventId);
+            if (mine is null) continue;
+            placeholderPayouts.Remove(mine);
+
+            var (keep, drop) = real.Id < mine.Id ? (real, mine) : (mine, real);
+            // Straight onto the row, not through DkpLedgerWriter: the money only changes rows, the
+            // account's total (and so its balance) is the same as before the fold.
+            keep.Amount += drop.Amount;
+
+            var audits = await _db.DkpLedgerEntries
+                .Where(e => e.AuditRelatedLedgerEntryId == drop.Id)
+                .ToListAsync(cancellationToken);
+            foreach (var audit in audits) audit.AuditRelatedLedgerEntryId = keep.Id;
+
+            _db.DkpLedgerEntries.Remove(drop);
+            placeholderLedger.Remove(drop);
+        }
+
+        // Saved before the repoint, so the removed row is gone before its twin takes the real
+        // account's id (the index is checked statement by statement). Still inside the claim's
+        // transaction, so a later failure undoes this too.
+        await _db.SaveChangesAsync(cancellationToken);
     }
 }
