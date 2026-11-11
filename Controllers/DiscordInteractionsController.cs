@@ -1967,6 +1967,8 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
         else
         {
+            // A sign-up on a live event starts its clock now, not at the event start.
+            var (startTime, isQuickJoin) = SignupClock.ForNewSignup(ev, DateTime.UtcNow);
             _db.AppUserEvents.Add(new AppUserEvent
             {
                 AppUserId = ctx.AppUserId,
@@ -1975,7 +1977,8 @@ public sealed class DiscordInteractionsController : ControllerBase
                 CharacterName = characterName,
                 JobName = job!.Trim(),
                 EventDkp = 0,
-                StartTime = ev.CommencementStartTime
+                StartTime = startTime,
+                IsQuickJoin = isQuickJoin
             });
         }
         await _db.SaveChangesAsync(cancellationToken);
@@ -4255,6 +4258,9 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
         else
         {
+            // A sign-up on a live event starts its clock now, not at the event start
+            // (same rule as the app's /signup, see SignupClock).
+            var (startTime, isQuickJoin) = SignupClock.ForNewSignup(ev, DateTime.UtcNow);
             _db.AppUserEvents.Add(new AppUserEvent
             {
                 AppUserId = ctx.AppUserId,
@@ -4265,7 +4271,8 @@ public sealed class DiscordInteractionsController : ControllerBase
                 JobName = NormalizeWizardValue(main),
                 SubJobName = NormalizeWizardValue(sub),
                 EventDkp = 0,
-                StartTime = ev.CommencementStartTime,
+                StartTime = startTime,
+                IsQuickJoin = isQuickJoin,
             });
         }
         await _db.SaveChangesAsync(cancellationToken);

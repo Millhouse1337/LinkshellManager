@@ -78,10 +78,8 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
-    // The attendance row a new /signup creates. Before the event starts the clock stays
-    // empty and starting the event stamps it (StartTime ??= commencement). Once the event
-    // is live this is a late join, so the clock starts NOW, exactly like quick-join. Using
-    // the event's start time here used to pay a last-minute signup for the whole event.
+    // The attendance row a new /signup creates. The clock follows SignupClock: empty
+    // before the event starts, NOW (a late join) once it is live.
     internal static AppUserEvent NewSignupRow(
         string appUserId,
         Event eventEntity,
@@ -91,7 +89,7 @@ public sealed partial class ActivityDataController
         string? jobType,
         DateTime nowUtc)
     {
-        var started = eventEntity.CommencementStartTime.HasValue;
+        var (startTime, isQuickJoin) = SignupClock.ForNewSignup(eventEntity, nowUtc);
         return new AppUserEvent
         {
             AppUserId = appUserId,
@@ -101,8 +99,8 @@ public sealed partial class ActivityDataController
             SubJobName = subJobName,
             JobType = jobType,
             EventDkp = 0,
-            StartTime = started ? nowUtc : null,
-            IsQuickJoin = started
+            StartTime = startTime,
+            IsQuickJoin = isQuickJoin
         };
     }
 

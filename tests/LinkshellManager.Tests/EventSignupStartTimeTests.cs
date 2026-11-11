@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -36,6 +37,26 @@ public class EventSignupStartTimeTests
 
         Assert.Equal(Now, row.StartTime);
         Assert.True(row.IsQuickJoin);
+    }
+
+    // The Discord board's Sign up wizard uses the same rule (SignupClock) for its new rows.
+    [Fact]
+    public void SignupClock_BeforeStart_IsEmpty()
+    {
+        var (startTime, isQuickJoin) = SignupClock.ForNewSignup(new Event { CommencementStartTime = null }, Now);
+
+        Assert.Null(startTime);
+        Assert.False(isQuickJoin);
+    }
+
+    [Fact]
+    public void SignupClock_OnALiveEvent_StartsNow()
+    {
+        var (startTime, isQuickJoin) = SignupClock.ForNewSignup(
+            new Event { CommencementStartTime = Now.AddHours(-3) }, Now);
+
+        Assert.Equal(Now, startTime);
+        Assert.True(isQuickJoin);
     }
 
     [Fact]
