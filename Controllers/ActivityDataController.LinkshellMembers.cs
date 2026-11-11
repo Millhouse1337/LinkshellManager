@@ -160,6 +160,35 @@ public sealed partial class ActivityDataController
         }
         normalizedRole = roleRow.Name;
 
+        // "Manage roles" lets an officer move people between ordinary roles, but the
+        // Leader rank is the linkshell owner's: without this rail an officer could crown
+        // an alt as a second Leader and then demote the real one. An active super-admin
+        // override counts as Leader here, same as the remove-member rail above.
+        var actorHasAdminOverride = await _adminOverride.IsActiveForAsync(appUser, cancellationToken);
+        if (!CanChangeRankTouchingLeader(currentMembership!.Rank, actorHasAdminOverride, targetMembership.Rank, normalizedRole))
+        {
+            return Forbid();
+        }
+
+        // Demoting the only Leader would leave the linkshell with nobody able to hand the
+        // rank on (only a Leader can now). A Leader can't demote themselves (blocked
+        // below), so this only bites an admin override - data integrity, not permission.
+        if (LinkshellRanks.IsLeader(targetMembership.Rank) && !LinkshellRanks.IsLeader(normalizedRole))
+        {
+            var otherLeaderExists = await _dbContext.AppUserLinkshells
+                .AnyAsync(link =>
+                    link.LinkshellId == linkshellId &&
+                    link.Id != targetMembership.Id &&
+                    link.Rank != null &&
+                    link.Rank.ToLower() == "leader",
+                    cancellationToken);
+
+            if (!otherLeaderExists)
+            {
+                return BadRequest(new { error = "Promote another member to Leader before changing the current Leader's role." });
+            }
+        }
+
         if (string.Equals(normalizedRole, "Leader", StringComparison.OrdinalIgnoreCase))
         {
             if (string.Equals(targetMembership.AppUserId, appUser.Id, StringComparison.Ordinal))
@@ -185,6 +214,28 @@ public sealed partial class ActivityDataController
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// The Leader-rank rail for <see cref="UpdateMemberRoleAsync"/>, kept separate so it
+    /// can be unit tested. A change that grants Leader, or that changes the role of
+    /// someone who is currently a Leader, needs the actor to be a Leader (or to have an
+    /// active admin override). Every other change only needs "Manage roles", which the
+    /// action checks before calling this.
+    /// </summary>
+    internal static bool CanChangeRankTouchingLeader(
+        string? actorRank,
+        bool actorHasAdminOverride,
+        string? targetCurrentRank,
+        string? newRank)
+    {
+        var touchesLeader = LinkshellRanks.IsLeader(newRank) || LinkshellRanks.IsLeader(targetCurrentRank);
+        if (!touchesLeader)
+        {
+            return true;
+        }
+
+        return LinkshellRanks.IsLeader(actorRank) || actorHasAdminOverride;
     }
 
     // Manually set a member's Active/Pending/Inactive status. Gated on
