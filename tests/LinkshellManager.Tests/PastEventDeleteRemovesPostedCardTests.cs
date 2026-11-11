@@ -141,7 +141,8 @@ public class PastEventDeleteRemovesPostedCardTests
         var (edits, ledger) = NewServices(db);
         await edits.DeleteEventAsync(HistoryId, CancellationToken.None);
 
-        // What loading the DKP page runs. Before the fix, this was the resurrection.
+        // The linkshell-wide sweep (the DKP page used to run it on every load). Before the fix,
+        // this was the resurrection.
         await ledger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(LinkshellId, CancellationToken.None);
 
         Assert.Empty(await db.EventHistories.ToListAsync());

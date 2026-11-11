@@ -67,7 +67,9 @@ public sealed partial class ActivityDataController
         }
 
         var selectedLinkshell = accessibleMemberships.First(link => link.LinkshellId == selectedLinkshellId);
-        await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(selectedLinkshellId, cancellationToken);
+        // Reading DKP never pays anyone. This page used to run the posted-camp ledger sweep on
+        // every load, so a reload landing while an officer pressed Post could credit the same
+        // camp twice. Posting a camp (PostWindowEventToSheetAsync) is the only place it pays out.
 
         var linkshellMembers = await _dbContext.AppUserLinkshells
             .Where(link => link.LinkshellId == selectedLinkshellId && link.AppUserId != null)
@@ -389,7 +391,7 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(linkshellId, cancellationToken);
+        // No ledger sweep here: a read must not write money (see GetDkpHistoryAsync).
 
         var creditedWindowEventIds = string.IsNullOrWhiteSpace(targetAppUserId)
             ? new HashSet<int>()
