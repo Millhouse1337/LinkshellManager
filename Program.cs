@@ -546,48 +546,31 @@ if (!app.Environment.IsDevelopment())
     }
 }
 
-// Promote the configured super admin account(s). Idempotent — only flips the
-// flag when not already set. Matched by normalized email and/or character name
-// so it lands regardless of whether Discord OAuth captured an email. Wrapped so
-// an un-migrated dev DB (no IsSuperAdmin column yet) doesn't abort startup.
+// Promote the configured super admin by Discord user id only (SuperAdminSeeder explains
+// why names/emails are not trusted). Idempotent — only flips the flag when not already
+// set. Wrapped so an un-migrated dev DB (no IsSuperAdmin column yet) doesn't abort startup.
 using (var seedScope = app.Services.CreateScope())
 {
     var seedLogger = seedScope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     try
     {
-        var superAdminEmail = app.Configuration["SuperAdmin:Email"];
-        var superAdminCharacter = app.Configuration["SuperAdmin:CharacterName"];
-        if (!string.IsNullOrWhiteSpace(superAdminEmail) || !string.IsNullOrWhiteSpace(superAdminCharacter))
+        var db = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var seed = await SuperAdminSeeder.SeedAsync(db, app.Configuration["SuperAdmin:DiscordUserId"]);
+        switch (seed.Outcome)
         {
-            var db = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var normalizedEmail = superAdminEmail?.Trim().ToUpperInvariant();
-            var matches = await db.Users
-                .Where(u =>
-                    (normalizedEmail != null && u.NormalizedEmail == normalizedEmail) ||
-                    (superAdminCharacter != null && u.CharacterName == superAdminCharacter))
-                .ToListAsync();
-
-            var promoted = 0;
-            foreach (var candidate in matches)
-            {
-                if (!candidate.IsSuperAdmin)
-                {
-                    candidate.IsSuperAdmin = true;
-                    promoted++;
-                }
-            }
-            if (promoted > 0)
-            {
-                await db.SaveChangesAsync();
-                seedLogger.LogInformation("SuperAdmin seeding: promoted {Count} account(s).", promoted);
-            }
-            else if (matches.Count == 0)
-            {
+            case SuperAdminSeeder.Outcome.NotConfigured:
                 seedLogger.LogWarning(
-                    "SuperAdmin seeding: no AppUser matched email '{Email}' or character '{Character}'. " +
-                    "The addon kill-switch toggle will be hidden until a matching account exists.",
-                    superAdminEmail, superAdminCharacter);
-            }
+                    "SuperAdmin seeding: SuperAdmin:DiscordUserId is not set (or not a Discord id), so nobody is promoted. " +
+                    "Set SuperAdmin__DiscordUserId in /etc/lsmanager/env.");
+                break;
+            case SuperAdminSeeder.Outcome.NoMatch:
+                seedLogger.LogWarning(
+                    "SuperAdmin seeding: no account is linked to the configured Discord user id yet. " +
+                    "Sign in once with that Discord account, then restart.");
+                break;
+            case SuperAdminSeeder.Outcome.Matched when seed.Promoted > 0:
+                seedLogger.LogInformation("SuperAdmin seeding: promoted {Count} account(s).", seed.Promoted);
+                break;
         }
     }
     catch (Exception ex)

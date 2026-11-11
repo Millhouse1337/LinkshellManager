@@ -7,7 +7,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // The super-admin permission override.
 //
 // When the global "admin.override" setting is on, a super admin (AppUser.IsSuperAdmin,
-// seeded at startup from SuperAdmin:Email / SuperAdmin:CharacterName — see Program.cs)
+// seeded at startup from SuperAdmin:DiscordUserId — see Services/SuperAdminSeeder.cs)
 // gets EVERY permission in EVERY linkshell they are a member of, without their stored
 // AppUserLinkshell.Rank being modified. The roster surfaces this as an "ADMIN" badge
 // next to their real rank.

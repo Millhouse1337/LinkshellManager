@@ -50,11 +50,18 @@ ssh root@<DROPLET_IP>
 sudo nano /etc/lsmanager/env
 ```
 
-Set these two values:
+Set these three values:
 - `Discord__ClientId=1320463503848636568`  (your existing client id)
 - `Discord__ClientSecret=...`              (from Discord Developer Portal)
+- `SuperAdmin__DiscordUserId=...`          (your own Discord user id: Discord Settings > Advanced >
+  Developer Mode on, then right-click your name > Copy User ID)
 
 Save. Don't change the `ConnectionStrings__DefaultConnection` line.
+
+`SuperAdmin__DiscordUserId` is the only way an account becomes super admin. On every start
+the app finds the account signed in with that Discord id and sets `IsSuperAdmin` on it. If it
+is missing, the log says `SuperAdmin seeding: SuperAdmin:DiscordUserId is not set` and nobody
+is promoted. See **Super admin by Discord id (November 2026)** for droplets set up earlier.
 
 ## Step 3 - Cloudflare Origin Certificate
 
@@ -384,6 +391,31 @@ startup without them. Before swapping the old app back in, open `psql` (the
 ALTER TABLE "Linkshells" ADD COLUMN "EventBoardTheme" character varying(16) NOT NULL DEFAULT 'Crystal';
 ALTER TABLE "Linkshells" ADD COLUMN "UseComponentsV2Boards" boolean NOT NULL DEFAULT false;
 DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261015084328_RemoveEventBoardImageSettings';
+```
+
+## Super admin by Discord id (November 2026)
+
+The super admin used to be matched by email or main character name from `appsettings.json`.
+Anyone could rename their main character to match, so that is gone: the app now reads
+`SuperAdmin__DiscordUserId` from `/etc/lsmanager/env` only. **Add it before deploying this
+release**, or you lose the super-admin tabs until you do:
+
+```bash
+ssh root@<IP>
+echo 'SuperAdmin__DiscordUserId=<your Discord user id>' | sudo tee -a /etc/lsmanager/env
+```
+
+The new code never removes the flag from anyone. Check who already has it (read-only, via
+the `/tmp/dbshell.sh` block under **Database access**):
+
+```sql
+SELECT "Id", "CharacterName", "UserName" FROM "AspNetUsers" WHERE "IsSuperAdmin";
+```
+
+If any row is not you, clear it:
+
+```sql
+UPDATE "AspNetUsers" SET "IsSuperAdmin" = false WHERE "Id" = '<their Id>';
 ```
 
 ## Things to set up later (not blocking go-live)

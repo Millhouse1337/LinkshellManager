@@ -91,6 +91,9 @@ ConnectionStrings__DefaultConnection=Host=127.0.0.1;Port=5432;Database=${DB_NAME
 DataProtection__KeyRingPath=/var/lib/lsmanager/keys
 Discord__ClientId=REPLACE_ME
 Discord__ClientSecret=REPLACE_ME
+# Your own Discord user id (Discord: Settings > Advanced > Developer Mode, then
+# right-click your name > Copy User ID). The ONLY way an account becomes super admin.
+SuperAdmin__DiscordUserId=REPLACE_ME
 # Cloudflare IPv4 / IPv6 ranges (https://www.cloudflare.com/ips/).
 # Update periodically; nginx also handles this via real_ip_from.
 ForwardedHeaders__KnownNetworks__0=173.245.48.0/20
@@ -122,7 +125,7 @@ EOF
   chmod 640 "$ENV_FILE"
   echo
   echo "Generated DB password: $DB_PASSWORD"
-  echo "Saved into $ENV_FILE. Edit it now to set Discord__ClientId and Discord__ClientSecret."
+  echo "Saved into $ENV_FILE. Edit it now to set Discord__ClientId, Discord__ClientSecret and SuperAdmin__DiscordUserId."
 else
   echo "$ENV_FILE already exists - leaving it alone."
 fi
@@ -130,7 +133,7 @@ fi
 echo
 echo "==> Bootstrap done."
 echo "Next steps:"
-echo "  1. Edit $ENV_FILE and fill in Discord__ClientId / Discord__ClientSecret."
+echo "  1. Edit $ENV_FILE and fill in Discord__ClientId / Discord__ClientSecret / SuperAdmin__DiscordUserId."
 echo "  2. Place the Cloudflare Origin Cert at /etc/ssl/cloudflare/origin.pem and key at /etc/ssl/cloudflare/origin.key (chmod 600)."
 echo "  3. Copy nginx-lsmanager.conf into /etc/nginx/sites-available/, symlink, and reload nginx."
 echo "  4. Copy lsmanager.service into /etc/systemd/system/, then 'systemctl daemon-reload && systemctl enable --now lsmanager'."
