@@ -188,6 +188,7 @@ public sealed partial class ActivityDataController
             request.ItemWinner,
             request.WinningDkpSpent.GetValueOrDefault(),
             request.DkpPoolId,
+            recordedByAppUserId: appUser.Id,
             cancellationToken);
 
         if (!result.Success)

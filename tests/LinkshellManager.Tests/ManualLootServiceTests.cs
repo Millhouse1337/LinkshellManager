@@ -54,7 +54,7 @@ public class ManualLootServiceTests
         using var db = await SeededAsync();
 
         var result = await NewService(db).AddAsync(
-            Ls, ManualLootTarget.Parse("live", LiveEventId, null), "Ridill", "Alice", 30, null, CancellationToken.None);
+            Ls, ManualLootTarget.Parse("live", LiveEventId, null), "Ridill", "Alice", 30, null, null, CancellationToken.None);
 
         Assert.True(result.Success, result.Error);
         var loot = await db.EventLootDetails.SingleAsync();
@@ -70,7 +70,7 @@ public class ManualLootServiceTests
         using var db = await SeededAsync();
 
         var result = await NewService(db).AddAsync(
-            Ls, ManualLootTarget.Parse("live", LiveEventId, null), "Ridill", "Alice", 500, null, CancellationToken.None);
+            Ls, ManualLootTarget.Parse("live", LiveEventId, null), "Ridill", "Alice", 500, null, null, CancellationToken.None);
 
         Assert.False(result.Success);
         Assert.Empty(await db.EventLootDetails.ToListAsync());
@@ -82,7 +82,7 @@ public class ManualLootServiceTests
         using var db = await SeededAsync();
 
         var result = await NewService(db).AddAsync(
-            Ls, ManualLootTarget.None, "Ridill", "Alice", 30, null, CancellationToken.None);
+            Ls, ManualLootTarget.None, "Ridill", "Alice", 30, null, null, CancellationToken.None);
 
         Assert.True(result.Success, result.Error);
         var loot = await db.EventLootDetails.SingleAsync();

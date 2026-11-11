@@ -79,6 +79,7 @@ public sealed class ManualLootService
         string? itemWinner,
         int dkpSpent,
         int? dkpPoolId,
+        string? recordedByAppUserId,
         CancellationToken cancellationToken)
     {
         itemName = itemName?.Trim();
@@ -144,6 +145,7 @@ public sealed class ManualLootService
             ItemWinner = winner.CharacterName ?? itemWinner,
             WinningDkpSpent = dkpSpent,
             DkpPoolId = poolId,
+            RecordedByAppUserId = recordedByAppUserId,
         };
 
         // Loot Council records history and spends nothing, so there is no balance to check and no

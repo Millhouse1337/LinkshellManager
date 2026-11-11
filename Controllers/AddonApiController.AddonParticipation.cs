@@ -1251,6 +1251,27 @@ public sealed partial class AddonApiController
         ManualLootService manualLoot,
         CancellationToken cancellationToken)
     {
+        // Posting loot takes DKP off the winner, so it needs a loot right -- the same one the app's
+        // Add loot asks for (CanAddLoot), or the addon's officer right. It used to need only a
+        // paired token, so any member (even a Trial, or someone since removed) could name anyone
+        // as the winner and take their DKP from the addon's Loot Pool panel.
+        var issuerMembership = string.IsNullOrEmpty(token.IssuedToAppUserId)
+            ? null
+            : await _dbContext.AppUserLinkshells
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    m => m.LinkshellId == token.LinkshellId && m.AppUserId == token.IssuedToAppUserId,
+                    cancellationToken);
+        var issuerRole = await GetTokenIssuerRoleAsync(token, token.LinkshellId, cancellationToken);
+        if (!CanPostAddonLoot(issuerMembership, issuerRole))
+        {
+            return new ObjectResult(new
+            {
+                error = "You don't have permission to post loot. Ask a linkshell officer to give your role Add loot."
+            })
+            { StatusCode = StatusCodes.Status403Forbidden };
+        }
+
         var itemName   = request.ItemName?.Trim();
         var itemWinner = request.ItemWinner?.Trim();
         if (string.IsNullOrWhiteSpace(itemName))
@@ -1302,8 +1323,9 @@ public sealed partial class AddonApiController
                 _dbContext, _dkpPoolBalances, winnerUserId, token.LinkshellId, poolId, cancellationToken);
             if (request.WinningDkpSpent.Value > availableDkp)
             {
+                // No number: this goes back to whoever posted, and a member's balance is theirs.
                 var poolLabel = poolMap.HasMultiplePools ? $" {poolMap.NameFor(poolId)}" : string.Empty;
-                return BadRequest(new { error = $"{rosterMatch} only has {availableDkp:0.##} available{poolLabel} DKP (the rest is locked by active auction bids)." });
+                return BadRequest(new { error = $"{rosterMatch} doesn't have enough available{poolLabel} DKP for that." });
             }
         }
 
@@ -1314,6 +1336,7 @@ public sealed partial class AddonApiController
             rosterMatch,
             request.WinningDkpSpent.Value,
             dkpPoolId: null,
+            recordedByAppUserId: token.IssuedToAppUserId,
             cancellationToken);
 
         if (!result.Success)
@@ -1331,6 +1354,19 @@ public sealed partial class AddonApiController
             // Echoed so the addon can say which camp it landed on, or that it landed on none.
             eventLinked       = target.Kind != ManualLootTargetKind.None
         });
+    }
+
+    // May this token's owner post loot from the addon?
+    //
+    // Still a member, and either the Leader (never locked out by a stale role row, as in
+    // ActivityDataController.CanAsync) or a role with Add loot or the addon's officer right
+    // (Manage attendance with the addon -- the same people who run the camp in game).
+    internal static bool CanPostAddonLoot(AppUserLinkshell? issuerMembership, LinkshellRole? issuerRole)
+    {
+        if (issuerMembership is null) return false;
+        if (LinkshellRanks.IsLeader(issuerMembership.Rank)) return true;
+        return issuerRole is not null
+            && (issuerRole.CanAddLoot || issuerRole.CanManageAttendanceWithAddon);
     }
 
     // Addon-side ToD posting. Mirrors the Discord Activity create-tod path in

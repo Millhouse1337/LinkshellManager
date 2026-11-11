@@ -511,7 +511,8 @@ public sealed partial class ActivityDataController
             EventId = eventId,
             ItemName = request.ItemName.Trim(),
             ItemWinner = request.ItemWinner?.Trim(),
-            WinningDkpSpent = request.WinningDkpSpent
+            WinningDkpSpent = request.WinningDkpSpent,
+            RecordedByAppUserId = appUser.Id
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);

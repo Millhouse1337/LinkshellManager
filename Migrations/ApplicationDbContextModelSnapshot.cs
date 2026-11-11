@@ -2046,6 +2046,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int?>("LinkshellId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("RecordedByAppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<int?>("WinningDkpSpent")
                         .HasColumnType("integer");
 

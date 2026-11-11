@@ -72,6 +72,13 @@ public class EventLootDetail
     // since the original debit. Mirrors TodLootDetail.ActualDeductedDkp.
     public double? ActualDeductedDkp { get; set; }
 
+    // Who POSTED this row (the officer or the addon token's owner), not who won it.
+    //
+    // Loot moves DKP, so a bad post has to be traceable to a person. Null on rows written before
+    // this was recorded.
+    [MaxLength(450)]
+    public string? RecordedByAppUserId { get; set; }
+
     // Audit fields populated by LootEditService when an officer corrects this
     // row. See TodLootDetail for the field semantics.
     public DateTime? EditedAt { get; set; }
