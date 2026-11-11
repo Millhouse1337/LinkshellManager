@@ -56,6 +56,9 @@ public sealed partial class ActivityDataController
             .Select(l => l.AuctionsLocked)
             .FirstOrDefaultAsync(cancellationToken);
 
+        // The action buttons on each card follow the same rule the endpoints enforce.
+        var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, selectedLinkshellId, cancellationToken);
+
         // Available DKP is now PER AUCTION, because each auction can draw from a different pool.
         // Computed once per distinct pool in play (normally one), not once per auction.
         var poolMap = await _dkpPools.GetMapAsync(selectedLinkshellId, cancellationToken);
@@ -71,7 +74,7 @@ public sealed partial class ActivityDataController
             {
                 var poolId = auction.DkpPoolId ?? poolMap.DefaultPoolId;
                 return MapAuctionDto(
-                    auction, appUser.Id, nowUtc, availableByPool.GetValueOrDefault(poolId), auctionsLocked,
+                    auction, CanControlAuction(appUser.Id, auction, isMember, canManageAuctions), nowUtc, availableByPool.GetValueOrDefault(poolId), auctionsLocked,
                     poolId,
                     // Only name the pool when there's more than one — that's the client's cue to
                     // hide the chip and look exactly like it did before pools existed.
@@ -195,8 +198,11 @@ public sealed partial class ActivityDataController
             return Unauthorized(new { error = "Sign in to create auctions." });
         }
 
+        // Creating needs Manage auctions, not just membership: Close pays treasury gil to the
+        // winner and draws inventory down, so a member could otherwise auction the whole
+        // treasury to themselves for 1 DKP.
         var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
-        if (membership is null)
+        if (!await CanAsync(membership, role => role.CanManageAuctions, cancellationToken))
         {
             return Forbid();
         }
@@ -268,7 +274,8 @@ public sealed partial class ActivityDataController
         _dbContext.Auctions.Add(auction);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(MapAuctionDto(auction, appUser.Id, DateTime.UtcNow));
+        // The creator passed the Manage auctions check above, so they control it.
+        return Ok(MapAuctionDto(auction, canControl: true, DateTime.UtcNow));
     }
 
     [HttpPost("auctions/{auctionId:int}/update")]
@@ -293,13 +300,16 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "Auction not found." });
         }
 
-        if (!CanEditAuction(appUser.Id, auction, DateTime.UtcNow))
+        // Authorize against the auction's OWN linkshell. The request's LinkshellId can't move the
+        // auction somewhere else: that would let a check in one linkshell write into another.
+        if (request.LinkshellId != auction.LinkshellId)
         {
-            return Forbid();
+            return BadRequest(new { error = "An auction can't be moved to a different linkshell." });
         }
 
-        var membership = await GetMembershipAsync(appUser.Id, request.LinkshellId, cancellationToken);
-        if (membership is null)
+        var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
+        var canControl = CanControlAuction(appUser.Id, auction, isMember, canManageAuctions);
+        if (!CanEditAuction(canControl, auction, DateTime.UtcNow))
         {
             return Forbid();
         }
@@ -381,7 +391,7 @@ public sealed partial class ActivityDataController
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(MapAuctionDto(auction, appUser.Id, DateTime.UtcNow));
+        return Ok(MapAuctionDto(auction, canControl, DateTime.UtcNow));
     }
 
     [HttpPost("auctions/{auctionId:int}/start")]
@@ -402,7 +412,9 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "Auction not found." });
         }
 
-        if (!CanStartAuction(appUser.Id, auction, DateTime.UtcNow))
+        var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
+        var canControl = CanControlAuction(appUser.Id, auction, isMember, canManageAuctions);
+        if (!CanStartAuction(canControl, auction, DateTime.UtcNow))
         {
             return Forbid();
         }
@@ -419,7 +431,7 @@ public sealed partial class ActivityDataController
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(MapAuctionDto(auction, appUser.Id, DateTime.UtcNow));
+        return Ok(MapAuctionDto(auction, canControl, DateTime.UtcNow));
     }
 
     [HttpPost("auction-items/{itemId:int}/bid")]
@@ -558,7 +570,8 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "Auction not found." });
         }
 
-        if (!IsAuctionCreator(appUser.Id, auction))
+        var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
+        if (!CanControlAuction(appUser.Id, auction, isMember, canManageAuctions))
         {
             return Forbid();
         }
@@ -581,7 +594,7 @@ public sealed partial class ActivityDataController
 
     // Throws an auction away -- a mistake, a duplicate, a test. Unlike Close it writes no history,
     // charges no winner and draws no inventory down (inventory only moves on Close, so there is
-    // nothing to give back). Any state, creator only, same as End and Close. Deleting the row also
+    // nothing to give back). Any state; the creator or Manage auctions, same as End and Close. Deleting the row also
     // takes its Discord cards down (ApplicationDbContext.CollectDeletedAuctionCards).
     [HttpPost("auctions/{auctionId:int}/delete")]
     public async Task<IActionResult> DeleteAuctionAsync(int auctionId, CancellationToken cancellationToken)
@@ -602,7 +615,8 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "Auction not found." });
         }
 
-        if (!IsAuctionCreator(appUser.Id, auction))
+        var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
+        if (!CanControlAuction(appUser.Id, auction, isMember, canManageAuctions))
         {
             return Forbid();
         }
@@ -638,7 +652,8 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "Auction not found." });
         }
 
-        if (!IsAuctionCreator(appUser.Id, auction))
+        var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
+        if (!CanControlAuction(appUser.Id, auction, isMember, canManageAuctions))
         {
             return Forbid();
         }

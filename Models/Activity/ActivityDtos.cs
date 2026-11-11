@@ -1222,15 +1222,15 @@ public sealed record ActivityAuctionDto(
     string Status,
     bool CanEdit,
     bool CanStart,
-    // Live, creator-only — stops bidding now without archiving the run.
+    // Live, creator or Manage auctions — stops bidding now without archiving the run.
     // Distinct from CanClose so the UI can offer two separate actions:
     // "End auction" while it's live, "Close auction" once the timer is up.
     bool CanEnd,
-    // Ended (timer expired), creator-only — runs the delivery confirmation,
+    // Ended (timer expired), creator or Manage auctions — runs the delivery confirmation,
     // archives to history, and removes any inventory-sourced items that the
     // creator marks as delivered.
     bool CanClose,
-    // Creator-only, in any state: throws the auction away with no history, no DKP charged and no
+    // Creator or Manage auctions, in any state: throws the auction away with no history, no DKP charged and no
     // inventory drawn down (POST auctions/{id}/delete).
     bool CanDelete,
     IReadOnlyList<ActivityAuctionItemDto> Items,

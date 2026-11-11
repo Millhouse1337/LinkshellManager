@@ -277,10 +277,10 @@ public sealed partial class ActivityDataController
     }
 
     private static ActivityAuctionDto MapAuctionDto(
-        Auction auction, string currentUserId, DateTime nowUtc, double? availableDkp = null, bool auctionsLocked = false,
+        Auction auction, bool canControl, DateTime nowUtc, double? availableDkp = null, bool auctionsLocked = false,
         int? dkpPoolId = null, string? dkpPoolName = null)
     {
-        var isCreator = IsAuctionCreator(currentUserId, auction);
+        // canControl = CanControlAuction(...): the creator, or Manage auctions, in this linkshell.
         var status = HasAuctionEnded(auction, nowUtc)
             ? "Ended"
             : HasAuctionStarted(auction, nowUtc)
@@ -296,16 +296,16 @@ public sealed partial class ActivityDataController
             auction.EndTime,
             auction.StartedAt,
             status,
-            CanEditAuction(currentUserId, auction, nowUtc),
-            CanStartAuction(currentUserId, auction, nowUtc),
-            // CanEnd: creator can stop bidding while the auction is live (no
+            CanEditAuction(canControl, auction, nowUtc),
+            CanStartAuction(canControl, auction, nowUtc),
+            // CanEnd: the controller can stop bidding while the auction is live (no
             // archive yet — the run lingers in the active board with status
             // Ended until they Close it).
-            isCreator && IsAuctionLive(auction, nowUtc),
+            canControl && IsAuctionLive(auction, nowUtc),
             // CanClose: only after the timer expires. Closing runs the delivery
             // confirmation + archive + inventory-removal flow.
-            isCreator && HasAuctionEnded(auction, nowUtc),
-            isCreator,
+            canControl && HasAuctionEnded(auction, nowUtc),
+            canControl,
             auction.AuctionItems
                 .OrderBy(item => item.Id)
                 .Select(item => new ActivityAuctionItemDto(

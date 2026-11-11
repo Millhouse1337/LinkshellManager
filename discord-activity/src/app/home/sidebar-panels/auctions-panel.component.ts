@@ -7,7 +7,7 @@ import {
   DiscordActivityService
 } from '../../discord/discord-activity.service';
 import { formatElapsed, parseDate } from '../sidebar-panel.helpers';
-import { canManageLinkshellIn } from '../activity-home.helpers';
+import { isLeaderTierIn } from '../activity-home.helpers';
 
 // Active = started (live, then ended-but-not-closed). Pending = start time still ahead.
 // History = closed auctions, one row per item.
@@ -97,8 +97,13 @@ export class AuctionsPanelComponent {
     return this.activity.overview()?.appUser?.primaryLinkshellId ?? this.activity.overview()?.primaryLinkshell?.id ?? null;
   }
 
-  protected canManageLinkshell(linkshellId: number): boolean {
-    return canManageLinkshellIn(this.activity.overview(), linkshellId);
+  // The Manage auctions permission the server checks on create, not the Leader/Officer rank -
+  // a custom role with it should see Create, and an Officer role without it should not.
+  // The Leader always passes on the server (CanAsync); isLeaderTierIn also covers the admin override.
+  protected canManageAuctions(): boolean {
+    const overview = this.activity.overview();
+    const link = overview?.linkshells?.find(l => l.id === this.selectedLinkshellId);
+    return link?.permissions?.canManageAuctions === true || isLeaderTierIn(overview, this.selectedLinkshellId);
   }
 
   // The CanLockAuctions permission for the selected linkshell (gates the toggle).

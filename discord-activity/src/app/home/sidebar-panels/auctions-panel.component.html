@@ -43,7 +43,7 @@
         </button>
       </div>
     </div>
-    @if (selectedLinkshell() && canManageLinkshell(selectedLinkshellId)) {
+    @if (selectedLinkshell() && canManageAuctions()) {
       <div class="auctions-head-create">
         <button type="button" class="btn primary sm" (click)="openCreateAuctionForm()">Create</button>
       </div>

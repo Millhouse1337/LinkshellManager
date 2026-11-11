@@ -91,15 +91,37 @@ public sealed partial class ActivityDataController
         return string.Equals(auction.CreatedByUserId, currentUserId, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool CanEditAuction(string currentUserId, Auction auction, DateTime referenceUtc)
+    // Who may run an EXISTING auction (edit, start, end, close, delete): its creator, or anyone whose
+    // role has Manage auctions (so an officer can clean up after someone else). Either way they must
+    // still be a member of the auction's OWN linkshell - a creator who was removed must not keep
+    // control of an auction that pays out treasury gil and draws inventory down on Close.
+    internal static bool CanControlAuction(
+        string currentUserId, Auction auction, bool isMemberOfAuctionLinkshell, bool canManageAuctions)
     {
-        return IsAuctionCreator(currentUserId, auction)
+        return isMemberOfAuctionLinkshell
+               && (canManageAuctions || IsAuctionCreator(currentUserId, auction));
+    }
+
+    // The caller's standing in the given linkshell. Callers pass the auction's own LinkshellId,
+    // never one from the request body. CanAsync already lets the Leader and the admin override through.
+    private async Task<(bool IsMember, bool CanManageAuctions)> GetAuctionRightsAsync(
+        string appUserId, int linkshellId, CancellationToken cancellationToken)
+    {
+        var membership = await GetMembershipAsync(appUserId, linkshellId, cancellationToken);
+        var canManage = await CanAsync(membership, role => role.CanManageAuctions, cancellationToken);
+        return (membership is not null, canManage);
+    }
+
+    // canControl is CanControlAuction(...) for the caller.
+    internal static bool CanEditAuction(bool canControl, Auction auction, DateTime referenceUtc)
+    {
+        return canControl
                && !HasAuctionEnded(auction, referenceUtc);
     }
 
-    private static bool CanStartAuction(string currentUserId, Auction auction, DateTime referenceUtc)
+    internal static bool CanStartAuction(bool canControl, Auction auction, DateTime referenceUtc)
     {
-        return IsAuctionCreator(currentUserId, auction)
+        return canControl
                && !auction.StartedAt.HasValue
                && (!auction.StartTime.HasValue || referenceUtc < auction.StartTime.Value)
                && !HasAuctionEnded(auction, referenceUtc);
