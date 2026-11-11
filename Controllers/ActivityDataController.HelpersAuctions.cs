@@ -86,20 +86,15 @@ public sealed partial class ActivityDataController
         return null;
     }
 
-    private static bool IsAuctionCreator(string currentUserId, Auction auction)
+    // Who may run an EXISTING auction (edit, start, end, close, delete): anyone whose role has Manage
+    // auctions in the auction's OWN linkshell (the Leader and the admin override always pass).
+    // Being the creator is deliberately NOT enough: Edit can add treasury gil or inventory items and
+    // Close pays them out, so a creator who was demoted - or a plain member who made an auction
+    // before create needed the permission - must not keep that power. Nobody loses anything
+    // legitimate: creating already needs Manage auctions.
+    internal static bool CanControlAuction(bool isMemberOfAuctionLinkshell, bool canManageAuctions)
     {
-        return string.Equals(auction.CreatedByUserId, currentUserId, StringComparison.OrdinalIgnoreCase);
-    }
-
-    // Who may run an EXISTING auction (edit, start, end, close, delete): its creator, or anyone whose
-    // role has Manage auctions (so an officer can clean up after someone else). Either way they must
-    // still be a member of the auction's OWN linkshell - a creator who was removed must not keep
-    // control of an auction that pays out treasury gil and draws inventory down on Close.
-    internal static bool CanControlAuction(
-        string currentUserId, Auction auction, bool isMemberOfAuctionLinkshell, bool canManageAuctions)
-    {
-        return isMemberOfAuctionLinkshell
-               && (canManageAuctions || IsAuctionCreator(currentUserId, auction));
+        return isMemberOfAuctionLinkshell && canManageAuctions;
     }
 
     // The caller's standing in the given linkshell. Callers pass the auction's own LinkshellId,

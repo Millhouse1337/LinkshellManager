@@ -74,7 +74,7 @@ public sealed partial class ActivityDataController
             {
                 var poolId = auction.DkpPoolId ?? poolMap.DefaultPoolId;
                 return MapAuctionDto(
-                    auction, CanControlAuction(appUser.Id, auction, isMember, canManageAuctions), nowUtc, availableByPool.GetValueOrDefault(poolId), auctionsLocked,
+                    auction, CanControlAuction(isMember, canManageAuctions), nowUtc, availableByPool.GetValueOrDefault(poolId), auctionsLocked,
                     poolId,
                     // Only name the pool when there's more than one — that's the client's cue to
                     // hide the chip and look exactly like it did before pools existed.
@@ -308,7 +308,7 @@ public sealed partial class ActivityDataController
         }
 
         var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
-        var canControl = CanControlAuction(appUser.Id, auction, isMember, canManageAuctions);
+        var canControl = CanControlAuction(isMember, canManageAuctions);
         if (!CanEditAuction(canControl, auction, DateTime.UtcNow))
         {
             return Forbid();
@@ -413,7 +413,7 @@ public sealed partial class ActivityDataController
         }
 
         var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
-        var canControl = CanControlAuction(appUser.Id, auction, isMember, canManageAuctions);
+        var canControl = CanControlAuction(isMember, canManageAuctions);
         if (!CanStartAuction(canControl, auction, DateTime.UtcNow))
         {
             return Forbid();
@@ -549,7 +549,7 @@ public sealed partial class ActivityDataController
     }
 
     // Stops bidding without archiving the run. Pulls the EndTime forward to
-    // "now" so the auction transitions from Live → Ended. The creator then
+    // "now" so the auction transitions from Live → Ended. Manage auctions then
     // archives via the separate /close endpoint, which is where the delivery
     // confirmation + inventory drawdown live.
     [HttpPost("auctions/{auctionId:int}/end")]
@@ -571,7 +571,7 @@ public sealed partial class ActivityDataController
         }
 
         var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
-        if (!CanControlAuction(appUser.Id, auction, isMember, canManageAuctions))
+        if (!CanControlAuction(isMember, canManageAuctions))
         {
             return Forbid();
         }
@@ -594,7 +594,7 @@ public sealed partial class ActivityDataController
 
     // Throws an auction away -- a mistake, a duplicate, a test. Unlike Close it writes no history,
     // charges no winner and draws no inventory down (inventory only moves on Close, so there is
-    // nothing to give back). Any state; the creator or Manage auctions, same as End and Close. Deleting the row also
+    // nothing to give back). Any state; Manage auctions, same as End and Close. Deleting the row also
     // takes its Discord cards down (ApplicationDbContext.CollectDeletedAuctionCards).
     [HttpPost("auctions/{auctionId:int}/delete")]
     public async Task<IActionResult> DeleteAuctionAsync(int auctionId, CancellationToken cancellationToken)
@@ -616,7 +616,7 @@ public sealed partial class ActivityDataController
         }
 
         var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
-        if (!CanControlAuction(appUser.Id, auction, isMember, canManageAuctions))
+        if (!CanControlAuction(isMember, canManageAuctions))
         {
             return Forbid();
         }
@@ -653,7 +653,7 @@ public sealed partial class ActivityDataController
         }
 
         var (isMember, canManageAuctions) = await GetAuctionRightsAsync(appUser.Id, auction.LinkshellId, cancellationToken);
-        if (!CanControlAuction(appUser.Id, auction, isMember, canManageAuctions))
+        if (!CanControlAuction(isMember, canManageAuctions))
         {
             return Forbid();
         }

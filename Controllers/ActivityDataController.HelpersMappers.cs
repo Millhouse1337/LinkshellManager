@@ -280,7 +280,7 @@ public sealed partial class ActivityDataController
         Auction auction, bool canControl, DateTime nowUtc, double? availableDkp = null, bool auctionsLocked = false,
         int? dkpPoolId = null, string? dkpPoolName = null)
     {
-        // canControl = CanControlAuction(...): the creator, or Manage auctions, in this linkshell.
+        // canControl = CanControlAuction(...): Manage auctions in this linkshell.
         var status = HasAuctionEnded(auction, nowUtc)
             ? "Ended"
             : HasAuctionStarted(auction, nowUtc)

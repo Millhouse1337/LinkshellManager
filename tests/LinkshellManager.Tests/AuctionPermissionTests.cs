@@ -12,68 +12,47 @@ namespace LinkshellManager.Tests;
 //
 // Close pays treasury gil to the winner and draws inventory down, so "any member" was too wide: a
 // member could auction the whole treasury, bid 1 DKP on it, and close it to themselves. Now create
-// needs Manage auctions, and the other actions need the creator OR Manage auctions - and either way
-// the caller must still be a member of the auction's own linkshell.
+// and every other action (edit, start, end, close, delete) need Manage auctions in the auction's
+// own linkshell. Being the creator no longer counts on its own.
 public class AuctionPermissionTests
 {
-    private const string CreatorId = "creator-user";
-    private const string OtherId = "other-user";
-
     private static readonly DateTime Now = new(2026, 11, 11, 12, 0, 0, DateTimeKind.Utc);
 
     private static Auction PendingAuction() => new()
     {
         Id = 1,
         LinkshellId = 7,
-        CreatedByUserId = CreatorId,
+        CreatedByUserId = "creator-user",
         StartTime = Now.AddHours(1),
         EndTime = Now.AddHours(2)
     };
 
+    // Being the creator is not enough on its own. A creator who was demoted, or a plain member who
+    // made an auction before create needed the permission, could otherwise edit in the treasury's
+    // gil and close it to themselves.
     [Fact]
-    public void Creator_WhoIsStillAMember_ControlsTheirAuction()
-    {
-        Assert.True(ActivityDataController.CanControlAuction(
-            CreatorId, PendingAuction(), isMemberOfAuctionLinkshell: true, canManageAuctions: false));
-    }
-
-    // Creator ids are compared the same way as before (case-insensitive).
-    [Fact]
-    public void Creator_IdMatch_IgnoresCase()
-    {
-        Assert.True(ActivityDataController.CanControlAuction(
-            CreatorId.ToUpperInvariant(), PendingAuction(), isMemberOfAuctionLinkshell: true, canManageAuctions: false));
-    }
-
-    // A creator who was removed from the linkshell must not keep control of what they left behind.
-    [Fact]
-    public void Creator_NoLongerAMember_LosesControl()
+    public void Member_WithoutManageAuctions_HasNoControl_EvenIfTheyCreatedIt()
     {
         Assert.False(ActivityDataController.CanControlAuction(
-            CreatorId, PendingAuction(), isMemberOfAuctionLinkshell: false, canManageAuctions: false));
+            isMemberOfAuctionLinkshell: true, canManageAuctions: false));
     }
 
-    // An officer can clean up an auction someone else started.
+    // An officer can run any auction in their linkshell, including one someone else started.
     [Fact]
-    public void OtherMember_WithManageAuctions_ControlsAnyAuction()
+    public void Member_WithManageAuctions_ControlsAnyAuction()
     {
         Assert.True(ActivityDataController.CanControlAuction(
-            OtherId, PendingAuction(), isMemberOfAuctionLinkshell: true, canManageAuctions: true));
+            isMemberOfAuctionLinkshell: true, canManageAuctions: true));
     }
 
-    // A plain member can't end, close or delete an auction someone else created.
-    [Fact]
-    public void OtherMember_WithoutManageAuctions_HasNoControl()
-    {
-        Assert.False(ActivityDataController.CanControlAuction(
-            OtherId, PendingAuction(), isMemberOfAuctionLinkshell: true, canManageAuctions: false));
-    }
-
+    // Someone who was removed from the linkshell must not keep control of what they left behind.
     [Fact]
     public void NonMember_HasNoControl_EvenWithThePermissionFlag()
     {
         Assert.False(ActivityDataController.CanControlAuction(
-            OtherId, PendingAuction(), isMemberOfAuctionLinkshell: false, canManageAuctions: true));
+            isMemberOfAuctionLinkshell: false, canManageAuctions: true));
+        Assert.False(ActivityDataController.CanControlAuction(
+            isMemberOfAuctionLinkshell: false, canManageAuctions: false));
     }
 
     [Fact]
