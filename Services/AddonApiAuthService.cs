@@ -319,10 +319,42 @@ public sealed class AddonApiAuthService
         if (membership is null) return false;
         if (LinkshellRanks.IsLeader(membership.Rank)) return true;
 
+        var role = await FindEffectiveRoleAsync(membership, cancellationToken);
+        return role?.CanUseAddon ?? LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
+    }
+
+    // May this member disconnect SOMEONE ELSE'S addon pairing on their linkshell?
+    //
+    // That is "Manage members" (LinkshellRole.CanManageMembers), the same right that kicks a member.
+    // It used to be "Use the addon", which every default role has -- so any member could loop the
+    // revoke endpoint over token ids and knock every officer's addon offline mid-camp.
+    //
+    // Same order as ActivityDataController.CanAsync: membership first, so the admin override can
+    // only lift a caller inside a linkshell they actually joined; then the Leader, who is never
+    // locked out by a stale role row. No role row at all fails closed -- unlike CanUseAddon there
+    // is no older rank rule to fall back to.
+    public async Task<bool> MemberCanManageMembersAsync(
+        AppUserLinkshell? membership,
+        bool callerHasAdminOverride,
+        CancellationToken cancellationToken = default)
+    {
+        if (membership is null) return false;
+        if (callerHasAdminOverride) return true;
+        if (LinkshellRanks.IsLeader(membership.Rank)) return true;
+
+        var role = await FindEffectiveRoleAsync(membership, cancellationToken);
+        return role?.CanManageMembers == true;
+    }
+
+    // The role row for a member's rank, falling back to the linkshell's Member role when the rank
+    // has no row of its own (a renamed or deleted custom rank). Null when neither exists.
+    private async Task<LinkshellRole?> FindEffectiveRoleAsync(
+        AppUserLinkshell membership, CancellationToken cancellationToken)
+    {
         var rank = string.IsNullOrWhiteSpace(membership.Rank)
             ? LinkshellRanks.Member
             : membership.Rank.Trim();
-        var role = await _dbContext.LinkshellRoles
+        return await _dbContext.LinkshellRoles
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 r => r.LinkshellId == membership.LinkshellId && r.Name == rank, cancellationToken)
@@ -331,8 +363,6 @@ public sealed class AddonApiAuthService
                 .FirstOrDefaultAsync(
                     r => r.LinkshellId == membership.LinkshellId && r.Name == LinkshellRanks.Member,
                     cancellationToken);
-
-        return role?.CanUseAddon ?? LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
     }
 
     // Revokes every addon token one member holds for ONE linkshell, and drops their unused
@@ -376,7 +406,15 @@ public sealed class AddonApiAuthService
         return tokens.Count;
     }
 
-    // Revokes a token AND every sibling minted from the same pairing code.
+    public enum RevokeResult
+    {
+        NotFound,
+        Forbidden,
+        Revoked
+    }
+
+    // Revokes a token AND every sibling minted from the same pairing code, on behalf of the
+    // signed-in caller.
     //
     // One code now pairs all of a user's linkshells, so revoking only the row
     // the page happens to show would leave the addon still authenticated
@@ -384,17 +422,47 @@ public sealed class AddonApiAuthService
     // and the addon keeps working. Killing the batch makes Revoke mean what it
     // looks like it means.
     //
+    // Who may revoke what:
+    //   * your own token (and its siblings) -- always; it is your device.
+    //   * someone else's -- only with "Manage members" on that token's linkshell (see
+    //     MemberCanManageMembersAsync), else Forbidden. Their siblings are revoked only in the
+    //     linkshells where you hold that right too: running one linkshell must not let you
+    //     disconnect the same person's addon in a linkshell you have no say over.
+    //
     // Tokens predating PairingBatchId (null) revoke individually, exactly as
     // they did when each linkshell was paired separately.
-    public async Task<bool> RevokeAsync(
+    public async Task<RevokeResult> RevokeAsync(
         int tokenId,
-        int linkshellId,
+        string callerAppUserId,
+        bool callerHasAdminOverride,
         CancellationToken cancellationToken = default)
     {
         var record = await _dbContext.AddonApiTokens
-            .FirstOrDefaultAsync(t => t.Id == tokenId && t.LinkshellId == linkshellId, cancellationToken);
-        if (record is null) return false;
-        if (record.RevokedAt is not null) return true;
+            .FirstOrDefaultAsync(t => t.Id == tokenId, cancellationToken);
+        if (record is null) return RevokeResult.NotFound;
+
+        // Siblings can ask the same "may I, in this linkshell?" question, so answer it once each.
+        var mayRevokeIn = new Dictionary<int, bool>();
+        async Task<bool> MayRevokeAsync(AddonApiToken token)
+        {
+            if (token.IssuedToAppUserId == callerAppUserId) return true;
+            if (!mayRevokeIn.TryGetValue(token.LinkshellId, out var allowed))
+            {
+                var membership = await _dbContext.AppUserLinkshells
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        m => m.AppUserId == callerAppUserId && m.LinkshellId == token.LinkshellId,
+                        cancellationToken);
+                allowed = await MemberCanManageMembersAsync(membership, callerHasAdminOverride, cancellationToken);
+                mayRevokeIn[token.LinkshellId] = allowed;
+            }
+            return allowed;
+        }
+
+        // Checked before the "already revoked" shortcut, so a caller without the right learns
+        // nothing about the token.
+        if (!await MayRevokeAsync(record)) return RevokeResult.Forbidden;
+        if (record.RevokedAt is not null) return RevokeResult.Revoked;
 
         var now = DateTime.UtcNow;
         record.RevokedAt = now;
@@ -408,12 +476,15 @@ public sealed class AddonApiAuthService
                 .ToListAsync(cancellationToken);
             foreach (var sibling in siblings)
             {
-                sibling.RevokedAt = now;
+                if (await MayRevokeAsync(sibling))
+                {
+                    sibling.RevokedAt = now;
+                }
             }
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return true;
+        return RevokeResult.Revoked;
     }
 
     // THE VIEWER'S OWN active pairings, and nobody else's.
@@ -425,8 +496,8 @@ public sealed class AddonApiAuthService
     // you, tagged "another member". Nobody asked their linkshell's settings page who else has the
     // addon installed.
     //
-    // Revoking someone else's is untouched as a CAPABILITY: RevokeTokenAsync still allows it with
-    // manage rights on that token's linkshell. It simply is not something this page volunteers.
+    // Revoking someone else's is untouched as a CAPABILITY: RevokeAsync still allows it with
+    // "Manage members" on that token's linkshell. It simply is not something this page volunteers.
     //
     // Not scoped to one linkshell, deliberately: one pairing code mints a token for every linkshell
     // the user belongs to, so the card must not read "no active tokens" merely because a different

@@ -220,47 +220,33 @@ public sealed partial class AddonApiController
     }
 
     // linkshellId is accepted for backwards compatibility with older callers but
-    // is no longer what authorizes the revoke: the listing now surfaces pairings
-    // bound to any of the viewer's linkshells, so the token's own linkshell (or
-    // the viewer owning it) is what decides.
+    // is no longer what authorizes the revoke: the token's own linkshell (or the
+    // viewer owning it) is what decides.
+    //
+    // Your own pairing is always yours to disconnect. Anyone else's needs "Manage
+    // members" on that token's linkshell -- the rule (and which batch siblings go
+    // with it) lives in AddonApiAuthService.RevokeAsync so it can be unit tested.
+    // AdminOverrideService comes in per action so the controller's constructor
+    // (built by hand in several tests) does not change.
     [HttpPost("management/tokens/{tokenId:int}/revoke")]
     public async Task<IActionResult> RevokeTokenAsync(
         int tokenId,
+        [FromServices] AdminOverrideService adminOverride,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveManagementUserAsync(cancellationToken);
         if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
 
-        var token = await _dbContext.AddonApiTokens
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == tokenId, cancellationToken);
+        // Only ever elevates inside a linkshell the caller has joined: RevokeAsync checks
+        // membership before it looks at this flag.
+        var hasAdminOverride = await adminOverride.IsActiveForAsync(appUser.Id, cancellationToken);
 
-        if (token is null)
+        var result = await _auth.RevokeAsync(tokenId, appUser.Id, hasAdminOverride, cancellationToken);
+        return result switch
         {
-            return NotFound(new { error = "Token not found." });
-        }
-
-        // Your own pairing is always yours to disconnect. Anyone else's needs
-        // manage rights on the linkshell that token is bound to.
-        if (token.IssuedToAppUserId != appUser.Id)
-        {
-            var membership = await _dbContext.AppUserLinkshells
-                .FirstOrDefaultAsync(
-                    m => m.AppUserId == appUser.Id && m.LinkshellId == token.LinkshellId,
-                    cancellationToken);
-
-            if (!await CanUseAddonAsync(membership, cancellationToken))
-            {
-                return Forbid();
-            }
-        }
-
-        var revoked = await _auth.RevokeAsync(tokenId, token.LinkshellId, cancellationToken);
-        if (!revoked)
-        {
-            return NotFound(new { error = "Token not found." });
-        }
-
-        return Ok(new { success = true });
+            AddonApiAuthService.RevokeResult.NotFound => NotFound(new { error = "Token not found." }),
+            AddonApiAuthService.RevokeResult.Forbidden => Forbid(),
+            _ => Ok(new { success = true })
+        };
     }
 }
