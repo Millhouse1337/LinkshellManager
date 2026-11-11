@@ -98,7 +98,14 @@ public sealed class DiscordIdentityService
         EnsureConfigured();
 
         var discordUser = await GetCurrentDiscordUserAsync(accessToken, cancellationToken);
-        return await UpsertLocalUserAsync(discordUser, preferredAppUser: null, cancellationToken);
+
+        // The upsert saves on every request (LastSeenAtUtc at least), and running it again lands on
+        // the same rows. Marked repeat-safe so that save does not stop ConcurrencyRetry from
+        // re-running the money action this sign-in starts (see ApplicationDbContext.RepeatSafeSaves).
+        using (_dbContext.RepeatSafeSaves())
+        {
+            return await UpsertLocalUserAsync(discordUser, preferredAppUser: null, cancellationToken);
+        }
     }
 
     private static string BuildTokenCacheKey(string accessToken)

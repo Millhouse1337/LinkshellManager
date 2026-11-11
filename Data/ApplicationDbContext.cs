@@ -919,9 +919,47 @@ namespace LinkshellManagerDiscordApp.Data
 
         private void CountCommittedSave()
         {
-            if (Database.CurrentTransaction is null)
+            if (Database.CurrentTransaction is null && _repeatSafeSaveScopes == 0)
             {
                 CommittedSaveCount++;
+            }
+        }
+
+        // Saves inside this scope are not counted in CommittedSaveCount, because running them again
+        // gives the same result. Why it exists: every Discord Activity request signs the caller in
+        // first (DiscordIdentityService stamps LastSeenAtUtc and saves), INSIDE the action that
+        // ConcurrencyRetry wraps. Counting that save turned the re-run off for every Post, End Event,
+        // auction close and DKP audit sent from the Activity, so a lost race always became a 409.
+        //
+        // Work already staged when the scope opens would be saved by the first save in here, and that
+        // work is not known to be safe to repeat, so then the scope changes nothing.
+        internal IDisposable RepeatSafeSaves()
+        {
+            if (ChangeTracker.HasChanges())
+            {
+                return RepeatSafeSaveScope.None;
+            }
+            _repeatSafeSaveScopes++;
+            return new RepeatSafeSaveScope(this);
+        }
+
+        private int _repeatSafeSaveScopes;
+
+        private sealed class RepeatSafeSaveScope : IDisposable
+        {
+            internal static readonly IDisposable None = new RepeatSafeSaveScope(null);
+
+            private ApplicationDbContext? _owner;
+
+            internal RepeatSafeSaveScope(ApplicationDbContext? owner) => _owner = owner;
+
+            public void Dispose()
+            {
+                if (_owner is not null)
+                {
+                    _owner._repeatSafeSaveScopes--;
+                    _owner = null;
+                }
             }
         }
 
