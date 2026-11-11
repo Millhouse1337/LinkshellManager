@@ -11,6 +11,7 @@
 #
 # Requires: dotnet 8 SDK, git, ssh + scp on PATH (Windows 10+ has these built in),
 #           Angular CLI deps already installed in discord-activity\.
+#           Docker Desktop running (the Postgres tests need it; not needed with -SkipTests).
 
 [CmdletBinding()]
 param(
@@ -70,6 +71,13 @@ Write-Host "    version: $version"
 
 # A broken test or a forgotten migration should stop here, not in production.
 if (-not $SkipTests) {
+    # The Postgres tests (tests\LinkshellManager.PostgresTests) start a database in Docker. Without
+    # Docker every one of them fails, and "Tests failed ... pass -SkipTests" would tempt skipping the
+    # unit tests too. Check first and say what is actually wrong. cmd /c keeps docker's stderr away
+    # from PowerShell, which would otherwise treat any warning line as an error here.
+    cmd /c "docker info >nul 2>&1"
+    if ($LASTEXITCODE -ne 0) { throw "Docker is not running. Start Docker Desktop (the Postgres tests need it), then deploy again." }
+
     Write-Host "==> Running tests" -ForegroundColor Cyan
     dotnet test .\LinkshellManagerDiscordApp.sln --nologo -v q
     if ($LASTEXITCODE -ne 0) { throw "Tests failed. Fix them, or pass -SkipTests if you are sure the failure is harmless." }
