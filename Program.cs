@@ -485,9 +485,57 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Requests per minute allowed in one /api bucket (see ApiRateLimitPartition for the buckets).
+// Generous on purpose: the addon and the Activity both poll, and a page load fires a burst.
+// Raise it with RateLimiting__ApiPermitPerMinute if real users ever see "too many requests".
+var apiPermitPerMinute = Math.Max(1,
+    builder.Configuration.GetValue<int?>("RateLimiting:ApiPermitPerMinute") ?? ApiRateLimitPartition.DefaultPermitPerMinute);
+
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Global /api limiter. Its main job is to stop a flood of made-up bearer tokens:
+    // each one makes us ask Discord, and enough failed asks get this server's IP banned
+    // by Discord (bot boards and every sign-in stop). Endpoint policies below still apply
+    // on top of this.
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    {
+        var cache = httpContext.RequestServices.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+        var key = ApiRateLimitPartition.ResolveKey(
+            httpContext.Request,
+            httpContext.Connection.RemoteIpAddress,
+            token => DiscordIdentityService.RecentlyValidatedTokenKey(cache, token));
+        if (key is null)
+        {
+            return RateLimitPartition.GetNoLimiter("unlimited");
+        }
+
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = apiPermitPerMinute,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+        });
+    });
+
+    // A JSON reason the Activity/addon can show, plus Retry-After when the limiter knows it.
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter =
+                ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (context.HttpContext.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+        {
+            await context.HttpContext.Response.WriteAsJsonAsync(
+                new { error = "Too many requests. Please wait a minute and try again." },
+                cancellationToken);
+        }
+    };
 
     // OAuth code exchange: per-IP fixed window. Each call hits Discord and may
     // create a new AppUser row, so unauthenticated flooding has both DB and

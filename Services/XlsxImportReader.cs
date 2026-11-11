@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -13,9 +14,22 @@ namespace LinkshellManagerDiscordApp.Services;
 // are needed (no styles/formulas), so the parse stays tiny and forgiving.
 public static class XlsxImportReader
 {
-    // Guardrail against a pathological upload — the template is a handful of
-    // columns and at most a few hundred members.
-    private const int MaxRows = 5000;
+    // Guardrails against a pathological upload — the template is a handful of
+    // columns and at most a few hundred members. A .xlsx is a ZIP, so a tiny
+    // crafted file can claim a cell in column 16,000 (and we'd pad every row
+    // out to it) or unpack to gigabytes of XML; either would run the one app
+    // process out of memory and take the site down for every linkshell.
+    internal const int MaxRows = 5000;
+
+    // Cells past this column are ignored (the template uses about ten).
+    internal const int MaxColumns = 64;
+
+    // A ZIP part may unpack to at most this many bytes. A real sheet for a few
+    // hundred members is well under 1 MB.
+    internal const long MaxEntryBytes = 4 * 1024 * 1024;
+
+    // A real .xlsx has around ten parts; hundreds means it isn't one.
+    private const int MaxZipEntries = 500;
 
     public static List<IList<object>> Read(Stream stream, string? fileName)
     {
@@ -40,13 +54,16 @@ public static class XlsxImportReader
     private static List<IList<object>> ReadXlsx(MemoryStream buffer)
     {
         using var zip = new ZipArchive(buffer, ZipArchiveMode.Read, leaveOpen: true);
+        if (zip.Entries.Count > MaxZipEntries)
+        {
+            throw new InvalidOperationException("The .xlsx file has too many parts to be a DKP sheet.");
+        }
 
         var shared = ReadSharedStrings(zip);
         var sheetEntry = FindFirstSheet(zip)
             ?? throw new InvalidOperationException("The .xlsx file has no worksheet.");
 
-        XDocument doc;
-        using (var s = sheetEntry.Open()) { doc = XDocument.Load(s); }
+        var doc = LoadEntry(sheetEntry);
 
         var rows = new List<IList<object>>();
         var sheetData = doc.Root?.Elements().FirstOrDefault(e => e.Name.LocalName == "sheetData");
@@ -57,10 +74,15 @@ public static class XlsxImportReader
             var cells = new List<object>();
             foreach (var c in rowEl.Elements().Where(e => e.Name.LocalName == "c"))
             {
+                // A row never grows past MaxColumns, however many <c> it has.
+                if (cells.Count >= MaxColumns) { break; }
+
                 // Honor the cell reference (e.g. "C5") so gaps map to the right
                 // columns; fall back to append order when a ref is missing.
                 var refAttr = (string?)c.Attribute("r");
                 var targetCol = refAttr is not null ? ColumnIndex(refAttr) : cells.Count;
+                // A stray note far off to the right is skipped, not padded out to.
+                if (targetCol >= MaxColumns) { continue; }
                 while (cells.Count < targetCol) { cells.Add(string.Empty); }
                 cells.Add(CellValue(c, shared));
             }
@@ -98,14 +120,30 @@ public static class XlsxImportReader
             string.Equals(e.FullName, "xl/sharedStrings.xml", StringComparison.OrdinalIgnoreCase));
         if (entry is null) { return list; }
 
-        XDocument doc;
-        using (var s = entry.Open()) { doc = XDocument.Load(s); }
+        var doc = LoadEntry(entry);
         foreach (var si in doc.Root?.Elements().Where(e => e.Name.LocalName == "si")
                            ?? Enumerable.Empty<XElement>())
         {
             list.Add(InlineText(si));
         }
         return list;
+    }
+
+    // Parse one ZIP part as XML, refusing anything that unpacks past MaxEntryBytes.
+    // The declared size (Length) is checked first, but a crafted file can lie
+    // about it, so the read itself is capped as well.
+    private static XDocument LoadEntry(ZipArchiveEntry entry)
+    {
+        if (entry.Length > MaxEntryBytes)
+        {
+            throw new InvalidOperationException("The .xlsx file is too large to be a DKP sheet.");
+        }
+
+        using var s = new CappedReadStream(entry.Open(), MaxEntryBytes);
+        // Real .xlsx parts never carry a DTD; refusing one stops entity-expansion
+        // tricks from growing a small part into a huge document.
+        using var reader = XmlReader.Create(s, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+        return XDocument.Load(reader);
     }
 
     private static ZipArchiveEntry? FindFirstSheet(ZipArchive zip)
@@ -122,8 +160,9 @@ public static class XlsxImportReader
     private static string InlineText(XElement el) =>
         string.Concat(el.Descendants().Where(e => e.Name.LocalName == "t").Select(e => e.Value));
 
-    // "C5" / "AB12" -> 0-based column index (2 / 27).
-    private static int ColumnIndex(string cellRef)
+    // "C5" / "AB12" -> 0-based column index (2 / 27). Stops counting once past
+    // MaxColumns, so a reference like "ZZZZZZZZ1" can't overflow the int.
+    internal static int ColumnIndex(string cellRef)
     {
         var col = 0;
         foreach (var ch in cellRef)
@@ -131,6 +170,7 @@ public static class XlsxImportReader
             if (ch is >= 'A' and <= 'Z') { col = col * 26 + (ch - 'A' + 1); }
             else if (ch is >= 'a' and <= 'z') { col = col * 26 + (ch - 'a' + 1); }
             else { break; }
+            if (col > MaxColumns) { return MaxColumns; }
         }
         return col > 0 ? col - 1 : 0;
     }
@@ -168,10 +208,16 @@ public static class XlsxImportReader
             switch (ch)
             {
                 case '"': inQuotes = true; break;
-                case ',': row.Add(field.ToString()); field.Clear(); break;
+                case ',':
+                    // Same column cap as .xlsx: extra fields are dropped, so a
+                    // line of a million commas can't build a million-cell row.
+                    if (row.Count < MaxColumns) { row.Add(field.ToString()); }
+                    field.Clear();
+                    break;
                 case '\r': break;
                 case '\n':
-                    row.Add(field.ToString()); field.Clear();
+                    if (row.Count < MaxColumns) { row.Add(field.ToString()); }
+                    field.Clear();
                     rows.Add(row); row = new List<object>();
                     if (rows.Count >= MaxRows) { return rows; }
                     break;
@@ -181,9 +227,55 @@ public static class XlsxImportReader
 
         if (field.Length > 0 || row.Count > 0)
         {
-            row.Add(field.ToString());
+            if (row.Count < MaxColumns) { row.Add(field.ToString()); }
             rows.Add(row);
         }
         return rows;
+    }
+
+    // Read-only wrapper that throws once more than `limit` bytes have been read,
+    // so a ZIP part that lies about its size still can't unpack without bound.
+    private sealed class CappedReadStream : Stream
+    {
+        private readonly Stream _inner;
+        private readonly long _limit;
+        private long _read;
+
+        public CappedReadStream(Stream inner, long limit)
+        {
+            _inner = inner;
+            _limit = limit;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var n = _inner.Read(buffer, offset, count);
+            _read += n;
+            if (_read > _limit)
+            {
+                throw new InvalidOperationException("The .xlsx file is too large to be a DKP sheet.");
+            }
+            return n;
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => _read;
+            set => throw new NotSupportedException();
+        }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) { _inner.Dispose(); }
+            base.Dispose(disposing);
+        }
     }
 }

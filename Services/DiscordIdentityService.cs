@@ -28,6 +28,9 @@ public sealed class DiscordIdentityService
     // trip + LastSeen write during normal Activity polling.
     private static readonly TimeSpan TokenValidationTtl = TimeSpan.FromSeconds(90);
 
+    // How long a token Discord rejected is refused without asking Discord again.
+    private static readonly TimeSpan RejectedTokenTtl = TimeSpan.FromSeconds(60);
+
     // How long a guild-membership verdict (member / not-member) is trusted
     // before we re-check against discord.com. Short, because the Activity
     // read path can ask about several locked linkshells per poll — caching
@@ -95,6 +98,42 @@ public sealed class DiscordIdentityService
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(accessToken));
         return "discord-token-profile:" + Convert.ToHexString(hash);
+    }
+
+    private static string BuildRejectedTokenCacheKey(string accessToken)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(accessToken));
+        return "discord-token-rejected:" + Convert.ToHexString(hash);
+    }
+
+    // The cache key of a token Discord accepted within the last TokenValidationTtl,
+    // or null when it hasn't. The /api rate limiter uses this to give each signed-in
+    // Activity user their own bucket: every Activity request reaches us through
+    // Discord's proxy, which hides the player's IP, so a per-IP bucket alone would
+    // lump all Activity users together. A made-up token is never in this cache, so
+    // it can't buy its own bucket.
+    public static string? RecentlyValidatedTokenKey(IMemoryCache cache, string accessToken)
+    {
+        if (!LooksLikeDiscordToken(accessToken)) { return null; }
+        var key = BuildTokenCacheKey(accessToken);
+        return cache.TryGetValue(key, out _) ? key : null;
+    }
+
+    // Discord OAuth access tokens are short runs of letters and digits (about 30
+    // today). Anything outside a generous version of that shape can't be one, so
+    // it's refused without asking Discord: each failed call to Discord counts
+    // toward its invalid-request limit, and tripping that limit bans this server's
+    // IP — which stops bot boards and every user's sign-in.
+    internal static bool LooksLikeDiscordToken(string? accessToken)
+    {
+        if (accessToken is null || accessToken.Length is < 20 or > 256) { return false; }
+        foreach (var ch in accessToken)
+        {
+            var ok = ch is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9'
+                or '-' or '_' or '.' or '~' or '+' or '/' or '=';
+            if (!ok) { return false; }
+        }
+        return true;
     }
 
     public async Task<DiscordWebsiteSignInResult> ResolveWebsiteSignInAsync(
@@ -171,10 +210,24 @@ public sealed class DiscordIdentityService
         // raid-time polling risks rate-limiting the whole linkshell. Local data
         // and LastSeenAtUtc still refresh every request via the upsert below;
         // only successful validations are cached, so a bad token always re-checks.
+        if (!LooksLikeDiscordToken(accessToken))
+        {
+            throw new DiscordApiException(401, "Discord token validation failed.");
+        }
+
         var cacheKey = BuildTokenCacheKey(accessToken);
         if (_cache.TryGetValue<DiscordIdentityProfile>(cacheKey, out var cachedProfile) && cachedProfile is not null)
         {
             return cachedProfile;
+        }
+
+        // A token Discord just turned down is refused from memory for a minute, so
+        // a client (or a script) repeating a bad token doesn't make us ask Discord
+        // again each time — see LooksLikeDiscordToken for why that matters.
+        var rejectedKey = BuildRejectedTokenCacheKey(accessToken);
+        if (_cache.TryGetValue(rejectedKey, out _))
+        {
+            throw new DiscordApiException(401, "Discord token validation failed.");
         }
 
         var client = _httpClientFactory.CreateClient();
@@ -186,6 +239,13 @@ public sealed class DiscordIdentityService
         using var response = await client.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
+            // Only Discord's "this token is no good" answers are remembered; a 429 or
+            // 5xx is Discord's trouble, not the token's, so the next try re-checks.
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                _cache.Set(rejectedKey, true, RejectedTokenTtl);
+            }
+
             // Don't log Discord's response body — it may echo token validity hints.
             _logger.LogWarning("Discord oauth2/@me lookup failed with status {Status}.", response.StatusCode);
             throw new DiscordApiException((int)response.StatusCode, "Discord token validation failed.");
@@ -203,6 +263,7 @@ public sealed class DiscordIdentityService
                 "Rejecting Discord access token issued to application {ApplicationId} (expected {ExpectedId}).",
                 envelope.Application.Id,
                 _options.ClientId);
+            _cache.Set(rejectedKey, true, RejectedTokenTtl);
             throw new DiscordApiException(401, "Access token was issued to a different Discord application.");
         }
 
