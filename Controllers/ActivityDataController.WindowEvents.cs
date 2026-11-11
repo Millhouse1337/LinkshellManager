@@ -1,3 +1,4 @@
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -483,9 +484,27 @@ public sealed partial class ActivityDataController
 
         // Publish = credit DKP. Materialize the per-member SnapshotEarned ledger
         // rows now that the event is marked posted (idempotent).
-        await _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesAsync(windowEvent.Value.Id, cancellationToken);
+        var postedId = windowEvent.Value.Id;
+        await RetryIfCampCreditRaceAsync(
+            _dbContext,
+            () => _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesAsync(postedId, cancellationToken));
         return Ok(new { success = true });
     }
+
+    // Pays a posted card, re-running the payout if it lost a race on an account (see UniqueRaceRetry).
+    //
+    // The payout reads "who has a row from this card already", then inserts the rest. Two payouts at
+    // the same moment both read before either saved, and the one-credit-per-account index rejects
+    // the later save as a whole (nobody on it is paid, no balance moves). The re-run reads again,
+    // finds the other payout's rows, and pays only who is still missing -- usually nobody.
+    //
+    // Safe to repeat: before its ledger save the payout only syncs the camp archive to the review,
+    // which lands on the same result every time. The ledger writer keeps the failed attempt's staged
+    // credits in its per-request memo; that memo only feeds overdraft checks on debits, and a payout
+    // writes credits only.
+    internal static Task<T> RetryIfCampCreditRaceAsync<T>(
+        ApplicationDbContext dbContext, Func<Task<T>> pay) =>
+        UniqueRaceRetry.RunAsync(dbContext, pay, "DkpLedgerEntries");
 
     // Edits a published event's DKP + Entry Type (and overrides) and reconciles
     // the existing ledger entries + per-member LinkshellDkp totals by the delta.

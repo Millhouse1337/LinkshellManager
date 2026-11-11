@@ -1585,6 +1585,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("LinkshellId", "DkpPoolId");
 
+                    b.HasIndex("SourceWindowEventId", "AppUserId")
+                        .IsUnique()
+                        .HasFilter("\"EntryType\" = 'SnapshotEarned' AND \"AppUserId\" IS NOT NULL AND \"SourceWindowEventId\" IS NOT NULL");
+
                     b.HasIndex("LinkshellId", "AppUserId", "OccurredAt", "Sequence");
 
                     b.ToTable("DkpLedgerEntries", (string)null);

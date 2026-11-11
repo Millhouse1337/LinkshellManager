@@ -1273,6 +1273,14 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => item.SourceTodLootDetailId);
                 entity.HasIndex(item => item.SourceEventLootDetailId);
                 entity.HasIndex(item => item.SourceWindowEventId);
+                // One payout row per account per review card. Post checks "already paid?" before
+                // inserting, but two Posts (or a Post and an Update) at the same moment both pass that
+                // check; this index is what turns the second credit into an error instead of double
+                // DKP. Post re-runs on that error (UniqueRaceRetry) and then pays nobody twice. Audit
+                // rows carry the card's id too, so the filter keeps them out.
+                entity.HasIndex(item => new { item.SourceWindowEventId, item.AppUserId })
+                    .IsUnique()
+                    .HasFilter("\"EntryType\" = 'SnapshotEarned' AND \"AppUserId\" IS NOT NULL AND \"SourceWindowEventId\" IS NOT NULL");
                 entity.HasIndex(item => item.SourceAuctionHistoryId);
                 entity.HasIndex(item => item.AttInputRowNumber);
                 entity.HasIndex(item => item.AuditRelatedLedgerEntryId);

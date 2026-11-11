@@ -16,6 +16,8 @@
          helpers on a controller / provisioner, not public API), and both are exactly the kind of
          pure logic that wants direct test coverage rather than a round trip through an endpoint. -->
     <InternalsVisibleTo Include="LinkshellManager.Tests" />
+    <!-- The Postgres tests run the real races through the same internal retry helpers Post uses. -->
+    <InternalsVisibleTo Include="LinkshellManager.PostgresTests" />
   </ItemGroup>
 
   <ItemGroup>

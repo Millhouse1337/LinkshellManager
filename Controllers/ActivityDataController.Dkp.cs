@@ -364,7 +364,17 @@ public sealed partial class ActivityDataController
             targetMembership, entryType, deltaAmount, occurredAtUtc, poolRef, entryContext, cancellationToken,
             DkpOverdraft.Allow);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsUniqueRejectionOn(ex, new[] { "DkpLedgerEntries" }))
+        {
+            // "Add" passed the already-recorded check above, but a Post (or a second officer's Add)
+            // paid the member for this card in the same moment. The one-credit-per-account index
+            // refused this row, so nothing was saved; say so the way the check above does.
+            return BadRequest(new { error = "That member already has DKP recorded for the selected snapshot entry." });
+        }
         return Ok(new { success = true });
     }
 

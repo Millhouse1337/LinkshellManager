@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -62,7 +63,10 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     // A fresh context on the shared database. Make a second one when a test needs two "requests"
     // (for example two officers pressing Post at once).
-    public ApplicationDbContext CreateContext()
+    //
+    // interceptors: hooks into this context's saves, for a test that needs something to happen at an
+    // exact moment (another request committing between this one's read and its save).
+    public ApplicationDbContext CreateContext(params IInterceptor[] interceptors)
     {
         if (_dataSource == null)
         {
@@ -71,6 +75,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseNpgsql(_dataSource)
+            .AddInterceptors(interceptors)
             .Options;
         return new ApplicationDbContext(options);
     }
