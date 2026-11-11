@@ -485,6 +485,11 @@ builder.Services.AddCors(options =>
     });
 });
 
+// A crash in an /api request answers with JSON { error, correlationId } instead of the HTML
+// error page (ApiExceptionHandler explains why). UseExceptionHandler below asks it first;
+// pages still fall through to /Home/Error.
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+
 // Requests per minute allowed in one /api bucket (see ApiRateLimitPartition for the buckets).
 // Generous on purpose: the addon and the Activity both poll, and a page load fires a burst.
 // Raise it with RateLimiting__ApiPermitPerMinute if real users ever see "too many requests".
@@ -636,6 +641,8 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
+    // ApiExceptionHandler (registered above) answers /api crashes with JSON; everything
+    // else re-runs as the /Home/Error page.
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }

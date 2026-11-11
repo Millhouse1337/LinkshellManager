@@ -52,10 +52,10 @@ export class ActivityHttpClient {
       if (response.status === 401) {
         this.auth.noteUnauthorized();
       }
-      const errorPayload = parsedJson ? (payload as { error?: unknown }) : null;
+      const errorPayload = parsedJson ? (payload as ActivityErrorBody) : null;
       const message =
         errorPayload && typeof errorPayload.error === 'string'
-          ? errorPayload.error
+          ? withCorrelationId(errorPayload)
           : this.nonJsonMessage(response, responseText);
       throw new Error(message);
     }
@@ -151,7 +151,7 @@ export class ActivityHttpClient {
     if (parsed?.error) {
       // Carries the status and the whole body for the few callers that need more than the
       // message (Data Admin's 422 brings the form back with each field's error).
-      throw new ActivityRequestError(parsed.error, response.status, parsed);
+      throw new ActivityRequestError(withCorrelationId(parsed), response.status, parsed);
     }
     // ASP.NET ProblemDetails — what [ApiController] returns on its own when model
     // binding/validation rejects the body, BEFORE the action runs, so there is no
@@ -220,6 +220,12 @@ export class ActivityHttpClient {
     if (response.status === 502 || response.status === 503 || response.status === 504) {
       return `The server is temporarily unavailable (HTTP ${response.status}). Please try again in a moment.`;
     }
+    // A server crash is not a login problem. /api crashes now come back as JSON, but an
+    // HTML 500 can still reach us (e.g. a crash before the /api handler runs), and calling
+    // that "session expired" sends people to reload and retry a save that may have half-run.
+    if (response.status >= 500) {
+      return `Something went wrong on the server (HTTP ${response.status}).`;
+    }
     const looksHtml = /^\s*</.test(text ?? '');
     if (response.redirected || looksHtml) {
       return 'Your session may have expired — reload the Activity and try again.';
@@ -277,10 +283,20 @@ function isAntiforgeryRejection(responseText: string): boolean {
   }
 }
 
+// The server's crash reply (ApiExceptionHandler) carries a correlationId: the same id sits in
+// the server log next to the real exception. Showing it lets a screenshot of the message be
+// matched to that log line. Bodies without one read exactly as before.
+function withCorrelationId(body: ActivityErrorBody): string {
+  const message = body.error ?? '';
+  const id = typeof body.correlationId === 'string' ? body.correlationId.trim() : '';
+  return id ? `${message} (Error id: ${id})` : message;
+}
+
 // Every error-body shape this client knows how to read: the app’s own { error },
 // plus the ProblemDetails ASP.NET emits for model-validation failures.
 interface ActivityErrorBody {
   error?: string | null;
+  correlationId?: string | null;
   title?: string | null;
   detail?: string | null;
   errors?: Record<string, string[] | string> | null;
