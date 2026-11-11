@@ -16,7 +16,10 @@ ENV_FILE=/etc/lsmanager/env
 BACKUP_DIR=/var/backups/lsmanager
 KEEP=7
 MIN_BYTES=1000000   # a real dump is ~13 MB; an empty database dumps to under 1 KB
-MIN_TABLES=60       # the real database has ~74 tables
+# The real database has ~70 tables and an empty one has 0. The bar sits well below 70 on
+# purpose: the dead-schema cleanup plans to drop about 10 tables, and a bar near 60 would
+# then fail every deploy even though the dump is fine.
+MIN_TABLES=40
 
 # Read the password etc. from the env file instead of typing it, so it never
 # lands in shell history or on the ssh command line.

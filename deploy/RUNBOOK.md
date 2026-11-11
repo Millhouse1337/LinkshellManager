@@ -177,12 +177,14 @@ After 24-48h of stable running:
 
 ### deploy.ps1 safety checks
 
-Each one stops the deploy before anything on the droplet changes (except the last):
+Each one stops the deploy before the running app is touched (except the last). If the
+backup fails, the new build is left unpacked in `/var/www/lsmanager.new`; that is harmless
+and the next deploy clears it.
 
 | Check | Skip with | Why it exists |
 |---|---|---|
 | Git tree has no uncommitted changes | `-AllowDirty` (version then ends in `-dirty`) | So what is live is always a real commit |
-| `dotnet test` passes | `-SkipTests` | A broken test or a forgotten migration stops here, not in production |
+| `dotnet test` passes | `-SkipTests` | A broken test or a forgotten migration (`MigrationsUpToDateTests`) stops here, not in production |
 | Database dump succeeds and looks real | `-SkipBackup` | Startup migrations can delete data; the dump is the quick way back |
 | `/readyz` answers within ~90 s after start | — | `systemctl is-active` says "active" even while the app crash-loops. On failure the script prints the last 50 log lines and exits 1; the new build stays in place, so roll back by hand |
 
@@ -249,9 +251,10 @@ What it does:
 - Reads the connection string from `/etc/lsmanager/env` (the password never goes on a
   command line) and runs `pg_dump --no-owner --no-acl` against the managed database.
 - Writes `/var/backups/lsmanager/lsmanager-prod-YYYYMMDD-HHMMSS.sql` (UTC time, root only).
-- **Fails the deploy** if the dump is under 1 MB or has 60 or fewer `CREATE TABLE`
-  lines — the "empty database looks like a valid dump" trap above. The bad file is
-  kept as `...sql.suspect` for a look.
+- **Fails the deploy** if the dump is under 1 MB or has fewer than 40 `CREATE TABLE`
+  lines — the "empty database looks like a valid dump" trap above. (The real database
+  has ~70 tables; the bar is low so dropping unused tables later does not trip it.) The
+  bad file is kept as `...sql.suspect` for a look.
 - Keeps the newest 7 good dumps and deletes older ones (only after a good dump).
 
 Run it by hand any time: `ssh root@<IP> 'sudo /usr/local/bin/lsm-backup.sh'`.
