@@ -53,7 +53,12 @@ public sealed class EventHistoryEditService
     // Update event metadata and, if DkpPerHour changed, rescale every member's
     // earned DKP. On a camp archive, name/type/location/details still save, but a new
     // Duration or DkpPerHour is refused (CampArchive) before anything changes.
-    public async Task<EventHistoryEditOutcome> EditEventAsync(int historyId, EventHistoryEditInput input, CancellationToken cancellationToken)
+    // Every DKP-moving edit below re-runs from the top when a member's balance changed under it
+    // (Data/ConcurrencyRetry.cs), so the edit lands on top of the other change instead of erasing it.
+    public Task<EventHistoryEditOutcome> EditEventAsync(int historyId, EventHistoryEditInput input, CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_db, () => EditEventOnceAsync(historyId, input, cancellationToken));
+
+    private async Task<EventHistoryEditOutcome> EditEventOnceAsync(int historyId, EventHistoryEditInput input, CancellationToken cancellationToken)
     {
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)
@@ -120,7 +125,15 @@ public sealed class EventHistoryEditService
     }
 
     // Set one member's earned DKP to a specific value (officer correction).
-    public async Task<EventHistoryEditOutcome> SetParticipantDkpAsync(int historyId, int participantId, double amount, CancellationToken cancellationToken)
+    // Re-run on a lost balance race (see EditEventAsync).
+    public Task<EventHistoryEditOutcome> SetParticipantDkpAsync(
+        int historyId,
+        int participantId,
+        double amount,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_db, () => SetParticipantDkpOnceAsync(historyId, participantId, amount, cancellationToken));
+
+    private async Task<EventHistoryEditOutcome> SetParticipantDkpOnceAsync(int historyId, int participantId, double amount, CancellationToken cancellationToken)
     {
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)
@@ -146,7 +159,19 @@ public sealed class EventHistoryEditService
     // per-member "EventEarned" ledger entry, and adds the DKP to their spendable balance
     // (and lifetime Total via the ledger sum). Returns Rejected if they aren't a member or
     // are already on the event. Recomputes the activity streak after.
-    public async Task<EventHistoryEditOutcome> AddParticipantAsync(
+    // Re-run on a lost balance race (see EditEventAsync).
+    public Task<EventHistoryEditOutcome> AddParticipantAsync(
+        int historyId,
+        string appUserId,
+        double dkp,
+        string? jobType,
+        string? jobName,
+        string? subJobName,
+        bool activeCredit,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_db, () => AddParticipantOnceAsync(historyId, appUserId, dkp, jobType, jobName, subJobName, activeCredit, cancellationToken));
+
+    private async Task<EventHistoryEditOutcome> AddParticipantOnceAsync(
         int historyId,
         string appUserId,
         double dkp,
@@ -218,11 +243,12 @@ public sealed class EventHistoryEditService
         {
             await _db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (ex is not DbUpdateConcurrencyException)
         {
             // Concurrency: another officer added the same member to this event a moment
             // earlier, so this insert hit the unique (EventHistoryId, AppUserId) index.
             // Treat it as a no-op "already added" rather than surfacing a 500.
+            // (A lost balance race is not this: AddParticipantAsync re-runs the add for it.)
             return EventHistoryEditOutcome.Rejected;
         }
 
@@ -295,7 +321,11 @@ public sealed class EventHistoryEditService
 
     // Remove a member from the event: refund their earned DKP (subtract from
     // balance, delete the EventEarned ledger row) and drop the attendance record.
-    public async Task<EventHistoryEditOutcome> RemoveParticipantAsync(int historyId, int participantId, CancellationToken cancellationToken)
+    // Re-run on a lost balance race (see EditEventAsync).
+    public Task<EventHistoryEditOutcome> RemoveParticipantAsync(int historyId, int participantId, CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_db, () => RemoveParticipantOnceAsync(historyId, participantId, cancellationToken));
+
+    private async Task<EventHistoryEditOutcome> RemoveParticipantOnceAsync(int historyId, int participantId, CancellationToken cancellationToken)
     {
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)
@@ -335,7 +365,11 @@ public sealed class EventHistoryEditService
     // entry's amount, then delete those ledger rows, the event's loot rows, its
     // attendance rows, and the history itself (discussion comments cascade in the DB).
     // Recomputes active status after. Returns false when the history doesn't exist.
-    public async Task<bool> DeleteEventAsync(int historyId, CancellationToken cancellationToken)
+    // Re-run on a lost balance race (see EditEventAsync).
+    public Task<bool> DeleteEventAsync(int historyId, CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_db, () => DeleteEventOnceAsync(historyId, cancellationToken));
+
+    private async Task<bool> DeleteEventOnceAsync(int historyId, CancellationToken cancellationToken)
     {
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)

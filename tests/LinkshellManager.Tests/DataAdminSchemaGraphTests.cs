@@ -157,6 +157,8 @@ public class DataAdminSchemaGraphTests
 
     // ---- columns ----
 
+    // Every mapped column except a row version: Event.Version and AppUserLinkshell.Version are
+    // Postgres's xmin, which every row has, so the diagram leaves them out (DataAdminModel.IsRowVersion).
     [Fact]
     public void EveryTable_ListsEveryMappedColumn_PrimaryKeyFirst()
     {
@@ -167,10 +169,11 @@ public class DataAdminSchemaGraphTests
         {
             var table = Table(graph, IdOf(entityType));
             var columns = table.Columns.Select(column => column.Name).ToList();
+            var mapped = entityType.GetProperties().Where(property => !DataAdminModel.IsRowVersion(property)).ToList();
 
-            Assert.Equal(entityType.GetProperties().Count(), columns.Count);
+            Assert.Equal(mapped.Count, columns.Count);
             Assert.Equal(
-                entityType.GetProperties().Select(property => property.GetColumnName()).OrderBy(name => name, StringComparer.Ordinal),
+                mapped.Select(property => property.GetColumnName()).OrderBy(name => name, StringComparer.Ordinal),
                 columns.OrderBy(name => name, StringComparer.Ordinal));
 
             var key = entityType.FindPrimaryKey()?.Properties.Select(property => property.GetColumnName()).ToList() ?? new List<string>();
@@ -179,6 +182,9 @@ public class DataAdminSchemaGraphTests
             Assert.All(table.Columns.Skip(key.Count), column => Assert.False(column.Pk, $"{table.Id}.{column.Name}"));
         }
         Assert.Equal(graph.Tables.Sum(table => table.Columns.Count), graph.ColumnCount);
+
+        Assert.DoesNotContain("Version", Table(graph, nameof(Event)).Columns.Select(column => column.Name));
+        Assert.DoesNotContain("Version", Table(graph, nameof(AppUserLinkshell)).Columns.Select(column => column.Name));
     }
 
     // After the key, a catalog table reads like its row pages (declaration order); an Identity

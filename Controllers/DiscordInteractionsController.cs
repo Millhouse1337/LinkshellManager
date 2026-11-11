@@ -1640,18 +1640,29 @@ public sealed class DiscordInteractionsController : ControllerBase
 
             var isWd = DiscordEventMessageBuilder.IsWd(ev);
             var popService = HttpContext.RequestServices.GetRequiredService<HnmCampPopService>();
-            var result = await popService.PopAsync(new HnmCampPopService.Request(
-                EventId: popEventId,
-                TodTimeUtc: todUtc,
-                Cooldown: null,
-                Interval: null,
-                DayNumber: dayNumber,
-                Claimed: claimed,
-                Killed: killed,
-                PopWindow: popWindow, // null → the pop service falls back to the board's counter
-                Hq: hq ?? false,
-                Repost: repost,
-                RepostLeadHours: repostLead), cancellationToken);
+            HnmCampPopService.Result result;
+            try
+            {
+                result = await popService.PopAsync(new HnmCampPopService.Request(
+                    EventId: popEventId,
+                    TodTimeUtc: todUtc,
+                    Cooldown: null,
+                    Interval: null,
+                    DayNumber: dayNumber,
+                    Claimed: claimed,
+                    Killed: killed,
+                    PopWindow: popWindow, // null → the pop service falls back to the board's counter
+                    Hq: hq ?? false,
+                    Repost: repost,
+                    RepostLeadHours: repostLead), cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // The camp (or a member's balance) was saved by someone else while this ran, so the
+                // event's xmin check turned the save away. Say so in Discord rather than letting the
+                // interaction fail with no message (see HnmCampPopService.PopAsync).
+                return Ephemeral(ConcurrencyRetry.ConflictMessage);
+            }
             if (!result.Success)
             {
                 return Ephemeral(result.Error ?? "Couldn't end the camp.");

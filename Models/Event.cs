@@ -39,6 +39,12 @@ public class Event
 
     public DateTime? CommencementStartTime { get; set; }
 
+    // Postgres's hidden xmin value (see AppUserLinkshell.Version). Ending, starting and paying an
+    // event all read it and then save it; checking this on save means two of those landing at the
+    // same moment cannot both act on the same "not ended yet" event -- the later save fails and is
+    // re-run (Data/ConcurrencyRetry.cs) or skipped until the next tick, where it sees the change.
+    public uint Version { get; set; }
+
     // When true, a background service stamps CommencementStartTime (i.e. "starts"
     // the event) automatically once StartTime is reached, instead of waiting for
     // an officer to click Start. Opt-in per event; never applies to HNM events

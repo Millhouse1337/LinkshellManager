@@ -72,7 +72,20 @@ public sealed class ManualLootService
 
     // Adds one loot row and charges it. Returns an error string for anything the officer can fix;
     // NOTHING is saved when an error comes back.
-    public async Task<ManualLootResult> AddAsync(
+    // Charges the winner in one save. Re-run from the top when their balance changed under it
+    // (Data/ConcurrencyRetry.cs), so the affordability check and the charge use their balance as it is now.
+    public Task<ManualLootResult> AddAsync(
+        int linkshellId,
+        ManualLootTarget target,
+        string? itemName,
+        string? itemWinner,
+        int dkpSpent,
+        int? dkpPoolId,
+        string? recordedByAppUserId,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_db, () => AddOnceAsync(linkshellId, target, itemName, itemWinner, dkpSpent, dkpPoolId, recordedByAppUserId, cancellationToken));
+
+    private async Task<ManualLootResult> AddOnceAsync(
         int linkshellId,
         ManualLootTarget target,
         string? itemName,

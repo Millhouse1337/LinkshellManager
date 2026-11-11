@@ -35,11 +35,18 @@ public sealed class EventAutoStartBackgroundService : BackgroundService
         {
             try
             {
-                await StartDueEventsAsync(stoppingToken);
+                // The tick saves all due events at once. If an officer saved one of them between our
+                // read and our save, the event's xmin check (Event.Version) turns the whole save away
+                // and nothing is started; the tick simply runs again with fresh reads.
+                await ConcurrencyRetry.RunFreshTickAsync(() => StartDueEventsAsync(stoppingToken));
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogInformation(ex, "Auto-start kept losing to concurrent event edits; retrying next tick.");
             }
             catch (Exception ex)
             {

@@ -53,11 +53,19 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
         {
             try
             {
-                await AdvanceLiveCampsAsync(stoppingToken);
+                // The tick saves every live camp at once. An officer's edit or End Camp on one of them
+                // between our read and our save trips the event's xmin check (Event.Version): nothing
+                // is saved -- so an ended camp is never marched on -- and the tick runs again with
+                // fresh reads.
+                await ConcurrencyRetry.RunFreshTickAsync(() => AdvanceLiveCampsAsync(stoppingToken));
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogInformation(ex, "Window advance kept losing to concurrent camp edits; retrying next tick.");
             }
             catch (Exception ex)
             {

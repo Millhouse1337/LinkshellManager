@@ -643,11 +643,20 @@ public sealed partial class AddonApiController
     // a choice made here, after the addon already posted the ToD, re-posts the same way.
     public sealed record AddonEndEventRequest(bool? Repost, double? RepostLeadHours);
 
+    // Pays the roster (EventEndService) or hands an HNM camp off, each in one save. Re-run from the
+    // top when a member's balance or the event changed under it (Data/ConcurrencyRetry.cs): the
+    // re-run reads the event again, so an End that lost to another End finds it already ended.
     [HttpPost("events/{eventId:int}/end")]
     [AddonApiAuth]
-    public async Task<IActionResult> EndEventAsync(
+    public Task<IActionResult> EndEventAsync(
         int eventId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] AddonEndEventRequest? request,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_dbContext, () => EndEventOnceAsync(eventId, request, cancellationToken));
+
+    private async Task<IActionResult> EndEventOnceAsync(
+        int eventId,
+        AddonEndEventRequest? request,
         CancellationToken cancellationToken)
     {
         var token = AddonApiAuthAttribute.GetToken(HttpContext);

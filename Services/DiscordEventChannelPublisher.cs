@@ -39,6 +39,11 @@ public sealed class DiscordEventChannelPublisher
 
     public async Task HandleAsync(int eventId, CancellationToken cancellationToken)
     {
+        // Every save here goes through ConcurrencyRetry.SaveOwnEventColumnsAsync: it writes only the
+        // board's Discord ids, after a Discord call, while officers may be editing the same event.
+        // A plain save would be turned away by the event's xmin check and the new message id lost,
+        // so the next refresh would post a second board.
+        //
         // Events post via the bot ONLY (no webhook fallback) because the inline
         // job-signup select + Withdraw button are components, which Discord
         // strips from webhook messages. Each skip below is logged so an officer
@@ -86,7 +91,7 @@ public sealed class DiscordEventChannelPublisher
                 // clears DiscordExtraMessageIds after deleting those messages, but it only stages
                 // those changes. Returning without saving left Discord and the database
                 // disagreeing: the messages were gone while the event still listed their ids.
-                await _db.SaveChangesAsync(cancellationToken);
+                await ConcurrencyRetry.SaveOwnEventColumnsAsync(_db, cancellationToken);
 
                 _logger.LogInformation("Event {EventId} board set to defeated note (message {MessageId}).",
                     eventId, ev.DiscordMessageId);
@@ -113,7 +118,7 @@ public sealed class DiscordEventChannelPublisher
                 {
                     if (await DeleteLeftoverWideMessagesAsync(ev, cancellationToken))
                     {
-                        await _db.SaveChangesAsync(cancellationToken);
+                        await ConcurrencyRetry.SaveOwnEventColumnsAsync(_db, cancellationToken);
                     }
                     _logger.LogInformation(
                         "Event {EventId} board updated in place (message {MessageId}).",
@@ -141,7 +146,7 @@ public sealed class DiscordEventChannelPublisher
                 var reposted = await _poster.PostAsync(channel, ev, signups, slotSignups, cancellationToken);
                 ev.DiscordMessageId = string.IsNullOrEmpty(reposted) ? null : reposted;
                 await DeleteLeftoverWideMessagesAsync(ev, cancellationToken);
-                await _db.SaveChangesAsync(cancellationToken);
+                await ConcurrencyRetry.SaveOwnEventColumnsAsync(_db, cancellationToken);
                 _logger.LogInformation(
                     "Event {EventId} board re-posted after a failed edit ({Result}); new message {MessageId}.",
                     eventId, edit, ev.DiscordMessageId ?? "(post failed)");
@@ -167,7 +172,7 @@ public sealed class DiscordEventChannelPublisher
 
             ev.DiscordChannelId = channelId;
             ev.DiscordMessageId = messageId;
-            await _db.SaveChangesAsync(cancellationToken);
+            await ConcurrencyRetry.SaveOwnEventColumnsAsync(_db, cancellationToken);
             _logger.LogInformation(
                 "Event {EventId} announced to channel {ChannelId} (message {MessageId}).",
                 eventId, channelId, messageId);

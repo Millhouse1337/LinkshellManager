@@ -152,9 +152,16 @@ public sealed partial class ActivityDataController
             pendingLootByUser.GetValueOrDefault(selectedAppUserId ?? string.Empty)));
     }
 
+    // One save; re-run from the top when the member's balance changed under it
+    // (Data/ConcurrencyRetry.cs), so the audit lands on top of the other change instead of erasing it.
     [HttpPost("dkp-audit")]
-    public async Task<IActionResult> CreateDkpAuditAsync(
+    public Task<IActionResult> CreateDkpAuditAsync(
         [FromBody] ActivityDkpAuditRequest request,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_dbContext, () => CreateDkpAuditOnceAsync(request, cancellationToken));
+
+    private async Task<IActionResult> CreateDkpAuditOnceAsync(
+        ActivityDkpAuditRequest request,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);

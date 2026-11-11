@@ -50,6 +50,10 @@ public sealed class DkpPoolResolver
     {
         _db = db;
         _provisioner = provisioner;
+
+        // The map holds tracked DkpPool rows; a re-run after a lost race (Data/ConcurrencyRetry.cs)
+        // clears the tracker, so it loads them again.
+        _db.ResetForRetryRequested += _cache.Clear;
     }
 
     public async Task<DkpPoolMap> GetMapAsync(int linkshellId, CancellationToken cancellationToken)

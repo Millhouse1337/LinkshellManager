@@ -63,6 +63,14 @@ public sealed class HnmCampPopService
         bool Success, string? Error, DateTime? RepopTimeUtc, DateTime? RepostAtUtc,
         string? Cooldown = null, int AdditionalSeconds = 0);
 
+    // NOT re-run on a lost race (Data/ConcurrencyRetry.cs), on purpose. It saves the ToD (and the
+    // End Camp re-post choice) before the main save, so a re-run after a conflict on the main save
+    // would log a second ToD for the same kill. Wrapping it in a transaction instead would let the
+    // "Event ended" summary queued by the main save read the database before the commit. So a
+    // conflict (the camp or a paid member saved by someone else meanwhile) fails the main save --
+    // the camp is not handed off, nobody is paid twice -- and the officer is asked to retry (409 /
+    // an ephemeral Discord reply). Conflicts need two saves of the same camp or member within
+    // milliseconds, so this should be rare.
     public async Task<Result> PopAsync(Request request, CancellationToken cancellationToken)
     {
         var ev = await _db.Events.FirstOrDefaultAsync(e => e.Id == request.EventId, cancellationToken);

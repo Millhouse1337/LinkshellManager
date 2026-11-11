@@ -112,6 +112,18 @@ public sealed class DkpLedgerWriter
         _db = db;
         _resolver = resolver;
         _logger = logger;
+
+        // A re-run after a lost race (Data/ConcurrencyRetry.cs) must not build on this memo: the
+        // failed attempt's staged amounts were never saved, and the committed sums and next
+        // Sequence may have moved with the other request's save.
+        _db.ResetForRetryRequested += ForgetRequestMemo;
+    }
+
+    private void ForgetRequestMemo()
+    {
+        _nextSequence.Clear();
+        _committedNonDefault.Clear();
+        _stagedByPool.Clear();
     }
 
     // Append one ledger row and move the member's balance by the same amount.

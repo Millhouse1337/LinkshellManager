@@ -1,5 +1,7 @@
 using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace LinkshellManagerDiscordApp.Services;
 
@@ -293,8 +295,51 @@ public sealed class MemberActivityService
 
         if (changed > 0)
         {
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveStatusesAsync(cancellationToken);
         }
         return changed;
     }
+
+    // Saves the Status changes above. Usually runs right after a DKP change was saved, so another
+    // request moving one of these members' balances in between is possible: the member's xmin
+    // check (AppUserLinkshell.Version) then turns this save away. The status is worked out from
+    // attendance alone, so the fix is to take each such member as it is now and put only the status
+    // back on top -- re-running the caller instead would repeat a DKP change that already went
+    // through. Anything else in the failed save is not ours to merge, so it is rethrown.
+    private async Task SaveStatusesAsync(CancellationToken cancellationToken)
+    {
+        for (var retries = 0; ; retries++)
+        {
+            try
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+                return;
+            }
+            catch (DbUpdateConcurrencyException ex) when (
+                retries < ConcurrencyRetry.MaxRetries && ex.Entries.All(OnlyStatusChanged))
+            {
+                foreach (var entry in ex.Entries)
+                {
+                    var status = ((AppUserLinkshell)entry.Entity).Status;
+                    await entry.ReloadAsync(cancellationToken);
+                    if (entry.State == EntityState.Detached)
+                    {
+                        continue; // the member was removed meanwhile; nothing to set
+                    }
+                    var member = (AppUserLinkshell)entry.Entity;
+                    // Pending is set by leadership by hand; never overwrite one that appeared.
+                    if (!string.Equals(member.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+                    {
+                        member.Status = status;
+                    }
+                }
+            }
+        }
+    }
+
+    private static bool OnlyStatusChanged(EntityEntry entry) =>
+        entry.Entity is AppUserLinkshell
+        && entry.State == EntityState.Modified
+        && entry.Properties.Where(property => property.IsModified)
+            .All(property => property.Metadata.Name == nameof(AppUserLinkshell.Status));
 }

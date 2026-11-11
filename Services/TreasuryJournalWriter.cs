@@ -98,6 +98,15 @@ public sealed class TreasuryJournalWriter
         _db = db;
         _accounts = accounts;
         _periods = periods;
+
+        // Same as DkpLedgerWriter: a re-run after a lost race (Data/ConcurrencyRetry.cs) starts
+        // with an empty tracker, so the cached categories are no longer tracked entities and the
+        // next Sequence may have been taken by the other request.
+        _db.ResetForRetryRequested += () =>
+        {
+            _nextSequence.Clear();
+            _accountsByLinkshell.Clear();
+        };
     }
 
     // Build an editable draft. Nothing is on the books until ConfirmAsync.

@@ -1,5 +1,7 @@
+using LinkshellManagerDiscordApp.Data;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace LinkshellManagerDiscordApp.Utils;
@@ -45,6 +47,18 @@ public sealed class ApiExceptionHandler : IExceptionHandler
         if (!IsApiPath(path))
         {
             return false;
+        }
+
+        // Lost a race on a member's balance or an event (see Data/ConcurrencyRetry.cs) and could not
+        // safely re-run, or lost every re-run. Nothing from this request was saved, so it is not a
+        // crash: tell the officer to try again, which reads the other request's change first.
+        if (exception is DbUpdateConcurrencyException)
+        {
+            _logger.LogWarning(exception,
+                "Concurrent change on {Method} {Path}; answered 409.", httpContext.Request.Method, path.Value);
+            httpContext.Response.StatusCode = StatusCodes.Status409Conflict;
+            await httpContext.Response.WriteAsJsonAsync(new { error = ConcurrencyRetry.ConflictMessage }, cancellationToken);
+            return true;
         }
 
         // Same shape as the hand-written catch in End Event: a short random id, logged with

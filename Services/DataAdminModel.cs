@@ -151,6 +151,10 @@ public abstract class DataAdminModel
             {
                 continue; // shadow property: nothing to read or bind
             }
+            if (IsRowVersion(property))
+            {
+                continue; // the database's save counter, never edited by hand (see IsRowVersion)
+            }
             var clrType = property.ClrType;
             columns.Add(new DataAdminColumn
             {
@@ -386,6 +390,13 @@ public abstract class DataAdminModel
         Check(policy.SyncedCopies.Select(copy => copy.TargetColumn), "SyncedCopies.TargetColumn");
         Check(policy.SyncedCopies.Select(copy => copy.ViaForeignKey), "SyncedCopies.ViaForeignKey");
     }
+
+    // A row version (Event.Version, AppUserLinkshell.Version) is Postgres's xmin: bookkeeping the
+    // database changes on every save, not data. Data Admin neither shows nor binds it, and the schema
+    // diagram leaves it out. Identity's ConcurrencyStamp is a plain string the app writes itself
+    // (never store-generated), so it is not one of these and stays visible.
+    internal static bool IsRowVersion(IReadOnlyProperty property) =>
+        property.IsConcurrencyToken && property.ValueGenerated == ValueGenerated.OnAddOrUpdate;
 
     private static int InheritanceDepth(Type? type)
     {

@@ -168,7 +168,17 @@ public sealed class DkpImportService
 
     // ---- commit -------------------------------------------------------------
 
-    public async Task<DkpImportResult> CommitAsync(
+    // Re-run from the top when a member was saved by another request while the import ran
+    // (Data/ConcurrencyRetry.cs). The import's own transaction rolled back, so the re-run restates every
+    // balance from the member rows as they are now.
+    public Task<DkpImportResult> CommitAsync(
+        int linkshellId,
+        IReadOnlyList<DkpImportRow> parsed,
+        string sourceLabel,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_db, () => CommitOnceAsync(linkshellId, parsed, sourceLabel, cancellationToken));
+
+    private async Task<DkpImportResult> CommitOnceAsync(
         int linkshellId, IReadOnlyList<DkpImportRow> parsed, string sourceLabel, CancellationToken cancellationToken)
     {
         var linkshell = await _db.Linkshells.AsNoTracking()

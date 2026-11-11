@@ -274,6 +274,10 @@ public sealed class DataAdminSchemaGraph
         {
             foreach (var property in properties)
             {
+                if (DataAdminModel.IsRowVersion(property))
+                {
+                    continue; // xmin: every Postgres row has it (see DataAdminModel.IsRowVersion)
+                }
                 if (taken.Add(property))
                 {
                     ordered.Add(property);

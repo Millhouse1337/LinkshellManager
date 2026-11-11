@@ -51,6 +51,13 @@ public class AppUserLinkshell
 
     public double? LinkshellDkp { get; set; }
 
+    // Postgres's hidden xmin value, which changes every time the row is saved. EF checks it on each
+    // save of this row: if someone else saved the member between our read and our save, our save
+    // fails instead of quietly overwriting their balance change (two officers paying and charging
+    // Bob at the same moment used to leave him at 105 or 97 instead of 102). Not a real column --
+    // see Data/ConcurrencyRetry.cs for what happens after the failure.
+    public uint Version { get; set; }
+
     // Lifetime DKP totals seeded from the generic DKP template import. The
     // app's live totals = these seeds + the DkpLedgerEntry rows recorded AFTER
     // DkpSeedLedgerId (the ledger Id watermark at import time). This lets a

@@ -81,7 +81,18 @@ public sealed class LootEditService
             || string.Equals(link.AppUser?.AltCharacterName2, name, StringComparison.OrdinalIgnoreCase));
     }
 
-    public async Task<LootEditResult> EditTodLootAsync(
+    // Re-run from the top when the winner's balance changed under it (Data/ConcurrencyRetry.cs). A
+    // second edit of the same row at the same moment lands here too, and its re-run reads the row as
+    // the first edit left it, so the refund is never paid twice.
+    public Task<LootEditResult> EditTodLootAsync(
+        int lootDetailId,
+        LootEditRequest request,
+        AppUser actor,
+        DateTime occurredAtUtc,
+        CancellationToken cancellationToken = default) =>
+        ConcurrencyRetry.RunAsync(_db, () => EditTodLootOnceAsync(lootDetailId, request, actor, occurredAtUtc, cancellationToken));
+
+    private async Task<LootEditResult> EditTodLootOnceAsync(
         int lootDetailId,
         LootEditRequest request,
         AppUser actor,
@@ -165,7 +176,16 @@ public sealed class LootEditService
         return new LootEditResult(true, null, detail.Id, "Tod");
     }
 
-    public async Task<LootEditResult> EditEventLootAsync(
+    // Re-run on a lost balance race, like EditTodLootAsync.
+    public Task<LootEditResult> EditEventLootAsync(
+        int lootDetailId,
+        LootEditRequest request,
+        AppUser actor,
+        DateTime occurredAtUtc,
+        CancellationToken cancellationToken = default) =>
+        ConcurrencyRetry.RunAsync(_db, () => EditEventLootOnceAsync(lootDetailId, request, actor, occurredAtUtc, cancellationToken));
+
+    private async Task<LootEditResult> EditEventLootOnceAsync(
         int lootDetailId,
         LootEditRequest request,
         AppUser actor,
@@ -340,7 +360,17 @@ public sealed class LootEditService
     // no replacement debit). LootCouncil rows carry no DKP, so they're just
     // removed. The backing ToD is left intact — it may hold other loot or be a
     // real ToD; the ManualPoints day column self-corrects on recompute.
-    public async Task<LootEditResult> DeleteTodLootAsync(
+    // Re-run on a lost balance race, like EditTodLootAsync. A second delete at the same moment
+    // re-runs, finds the row gone and refunds nothing.
+    public Task<LootEditResult> DeleteTodLootAsync(
+        int lootDetailId,
+        AppUser actor,
+        string reason,
+        DateTime occurredAtUtc,
+        CancellationToken cancellationToken = default) =>
+        ConcurrencyRetry.RunAsync(_db, () => DeleteTodLootOnceAsync(lootDetailId, actor, reason, occurredAtUtc, cancellationToken));
+
+    private async Task<LootEditResult> DeleteTodLootOnceAsync(
         int lootDetailId,
         AppUser actor,
         string reason,
@@ -399,7 +429,16 @@ public sealed class LootEditService
     // (closed EventHistory, active Event, or a "No event" row's own linkshell)
     // the same way EditEventLootAsync does. Event loot is always flat DKP
     // (Hybrid is ToD-only).
-    public async Task<LootEditResult> DeleteEventLootAsync(
+    // Re-run on a lost balance race, like DeleteTodLootAsync.
+    public Task<LootEditResult> DeleteEventLootAsync(
+        int lootDetailId,
+        AppUser actor,
+        string reason,
+        DateTime occurredAtUtc,
+        CancellationToken cancellationToken = default) =>
+        ConcurrencyRetry.RunAsync(_db, () => DeleteEventLootOnceAsync(lootDetailId, actor, reason, occurredAtUtc, cancellationToken));
+
+    private async Task<LootEditResult> DeleteEventLootOnceAsync(
         int lootDetailId,
         AppUser actor,
         string reason,

@@ -629,11 +629,17 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
+    // Charges every winner in one save. Re-run from the top when a winner's balance changed under
+    // it (Data/ConcurrencyRetry.cs); a second officer closing the same auction at the same moment
+    // also lands here (the auction delete finds no row) and the re-run answers "not found".
     [HttpPost("auctions/{auctionId:int}/close")]
-    public async Task<IActionResult> CloseAuctionAsync(
+    public Task<IActionResult> CloseAuctionAsync(
         int auctionId,
         [FromBody] ActivityCloseAuctionRequest? request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_dbContext, () => CloseAuctionOnceAsync(auctionId, cancellationToken));
+
+    private async Task<IActionResult> CloseAuctionOnceAsync(int auctionId, CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)

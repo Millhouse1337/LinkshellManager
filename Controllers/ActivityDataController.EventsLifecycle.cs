@@ -495,8 +495,14 @@ public sealed partial class ActivityDataController
         return Ok(new { success = true });
     }
 
+    // Pays the whole roster (or hands an HNM camp off) in one save. Re-run from the top when a
+    // member's balance or the event itself changed under it (Data/ConcurrencyRetry.cs): the re-run
+    // reads the event again, so a second End pressed at the same moment finds it already ended.
     [HttpPost("events/{eventId:int}/end")]
-    public async Task<IActionResult> EndEventAsync(int eventId, CancellationToken cancellationToken)
+    public Task<IActionResult> EndEventAsync(int eventId, CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_dbContext, () => EndEventOnceAsync(eventId, cancellationToken));
+
+    private async Task<IActionResult> EndEventOnceAsync(int eventId, CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -854,7 +860,7 @@ public sealed partial class ActivityDataController
             // request abort (the client cancellation token) can't cancel the save mid-write.
             await _dbContext.SaveChangesAsync(CancellationToken.None);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException and not DbUpdateConcurrencyException)
         {
             // Return actionable JSON instead of letting it bubble to the generic HTML error
             // page — which the SPA can only read back as the misleading "your session may have
@@ -862,6 +868,9 @@ public sealed partial class ActivityDataController
             // non-DbUpdate exceptions (EF tracking, etc.) escape. Don't echo the raw EF/Npgsql
             // message to the client (it leaks schema/constraint/SQL detail); log the full
             // exception with a correlation id and surface only that id for support to trace.
+            //
+            // A lost race (DbUpdateConcurrencyException) is left out on purpose: nothing was
+            // saved, and EndEventAsync above re-runs the whole close for it.
             var correlationId = Guid.NewGuid().ToString("N");
             _logger.LogError(ex,
                 "Failed to end event {EventId} for linkshell {LinkshellId}. CorrelationId={CorrelationId}",

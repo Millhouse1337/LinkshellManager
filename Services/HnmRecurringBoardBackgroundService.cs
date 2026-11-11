@@ -93,6 +93,17 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
             {
                 await ProcessBoardAsync(db, board, nowUtc, cancellationToken);
             }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                // An officer saved this board's event between our read and our save, so the event's
+                // xmin check (Event.Version) turned the save away and nothing was saved. Stop this
+                // tick here: the failed changes are still in this scope's tracker and would ride
+                // along with the next board's save. The next tick reads everything afresh.
+                _logger.LogInformation(ex,
+                    "HNM recurring board {BoardId} (monster '{Monster}') lost to a concurrent event edit; retrying next tick.",
+                    board.Id, board.MonsterName);
+                return;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing HNM recurring board {BoardId} (monster '{Monster}').",

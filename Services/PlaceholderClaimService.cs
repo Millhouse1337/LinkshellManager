@@ -36,7 +36,17 @@ public sealed class PlaceholderClaimService
 
     public sealed record ClaimResult(bool Success, string? Error, IReadOnlyList<int> ClaimedLinkshellIds);
 
-    public async Task<ClaimResult> ClaimPlaceholderAsync(
+    // Re-run from the top when one of the memberships was saved by another request (a DKP move)
+    // during the claim (Data/ConcurrencyRetry.cs). The claim's transaction rolled back, so the re-run
+    // merges from the balances as they are now.
+    public Task<ClaimResult> ClaimPlaceholderAsync(
+        string placeholderAppUserId,
+        string realAppUserId,
+        int? linkshellId,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_db, () => ClaimPlaceholderOnceAsync(placeholderAppUserId, realAppUserId, linkshellId, cancellationToken));
+
+    private async Task<ClaimResult> ClaimPlaceholderOnceAsync(
         string placeholderAppUserId, string realAppUserId, int? linkshellId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(placeholderAppUserId) || string.IsNullOrWhiteSpace(realAppUserId)

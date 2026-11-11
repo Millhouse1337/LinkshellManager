@@ -893,6 +893,38 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // ---- Data/ConcurrencyRetry.cs bookkeeping ------------------------------------------------
+
+        // How many ConcurrencyRetry.RunAsync calls are running on this context. Only the outermost
+        // one re-runs its action: an inner one clearing the tracker would drop entities the outer
+        // action still holds.
+        internal int ConcurrencyRetryDepth { get; set; }
+
+        // Saves that committed on their own (no transaction open). ConcurrencyRetry compares it
+        // before and after an attempt: a re-run must never repeat a save that already went through.
+        internal int CommittedSaveCount { get; private set; }
+
+        // Raised by ResetForRetry. Request-scoped services that remember things between saves
+        // (DkpLedgerWriter's sequence numbers and staged pool amounts, TreasuryJournalWriter's)
+        // forget them here, or the re-run would build on numbers from the failed attempt.
+        internal event Action? ResetForRetryRequested;
+
+        // Forget everything the failed attempt loaded or staged, so the re-run starts from what is
+        // in the database now.
+        internal void ResetForRetry()
+        {
+            ChangeTracker.Clear();
+            ResetForRetryRequested?.Invoke();
+        }
+
+        private void CountCommittedSave()
+        {
+            if (Database.CurrentTransaction is null)
+            {
+                CommittedSaveCount++;
+            }
+        }
+
         public override async Task<int> SaveChangesAsync(
             bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
@@ -912,6 +944,7 @@ namespace LinkshellManagerDiscordApp.Data
             var dkpChangedLinkshells = CollectDkpChangedLinkshellIds();
             var liveChanges = CollectLiveChanges();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            CountCommittedSave();
             EnqueueTodBoardRefreshes(affected);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
@@ -943,6 +976,7 @@ namespace LinkshellManagerDiscordApp.Data
             var dkpChangedLinkshells = CollectDkpChangedLinkshellIds();
             var liveChanges = CollectLiveChanges();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
+            CountCommittedSave();
             EnqueueTodBoardRefreshes(affected);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
@@ -1064,6 +1098,18 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.PartySetupId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.PartySetupId);
+
+                // Npgsql maps a uint row version to Postgres's built-in xmin, so this adds no
+                // column: it only makes every UPDATE/DELETE of an event check nobody saved it since
+                // we read it. Why: Models/Event.cs (Version).
+                entity.Property(item => item.Version).IsRowVersion();
+            });
+
+            builder.Entity<AppUserLinkshell>(entity =>
+            {
+                // Same xmin check for memberships: a balance (LinkshellDkp) is read, changed and
+                // written back, so without it two overlapping DKP moves lose one of them.
+                entity.Property(item => item.Version).IsRowVersion();
             });
 
             builder.Entity<HnmRecurringBoard>(entity =>

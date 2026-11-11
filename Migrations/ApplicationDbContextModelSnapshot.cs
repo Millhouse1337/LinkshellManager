@@ -635,6 +635,12 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int[]>("StrongJobs")
                         .HasColumnType("jsonb");
 
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AppUserId");
@@ -1799,6 +1805,12 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<DateTime?>("TimeStamp")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.Property<DateTime?>("WdAwaitingProcessingSince")
                         .HasColumnType("timestamp with time zone");

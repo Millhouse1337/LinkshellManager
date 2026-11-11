@@ -462,10 +462,21 @@ public sealed partial class ActivityDataController
     // Publishes a window event: sets DKP + Entry Type (and any per-character
     // overrides), marks it posted, and materializes the per-member SnapshotEarned
     // DKP ledger.
+    //
+    // Re-run from the top when a paid member's balance was changed by another request between our
+    // read and our save (Data/ConcurrencyRetry.cs). The failed attempt's transaction rolled the
+    // claim back too, so the re-run claims and pays as if it had arrived a moment later.
     [HttpPost("window-events/{windowEventId:int}/post")]
-    public async Task<IActionResult> PostWindowEventToSheetAsync(
+    public Task<IActionResult> PostWindowEventToSheetAsync(
         int windowEventId,
         [FromBody] ActivityWindowEventDkpRequest request,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(
+            _dbContext, () => PostWindowEventToSheetOnceAsync(windowEventId, request, cancellationToken));
+
+    private async Task<IActionResult> PostWindowEventToSheetOnceAsync(
+        int windowEventId,
+        ActivityWindowEventDkpRequest request,
         CancellationToken cancellationToken)
     {
         var windowEvent = await LoadManageableWindowEventAsync(
@@ -539,10 +550,23 @@ public sealed partial class ActivityDataController
 
     // Edits a published event's DKP + Entry Type (and overrides) and reconciles
     // the existing ledger entries + per-member LinkshellDkp totals by the delta.
+    //
+    // Re-run from the top on a lost balance race (Data/ConcurrencyRetry.cs). It saves twice (the
+    // draft, then Reconcile's balance moves), so both run in one transaction: a conflict on the
+    // second undoes the first and the re-run starts clean.
     [HttpPost("window-events/{windowEventId:int}/edit-posted")]
-    public async Task<IActionResult> EditPostedWindowEventAsync(
+    public Task<IActionResult> EditPostedWindowEventAsync(
         int windowEventId,
         [FromBody] ActivityWindowEventDkpRequest request,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunInTransactionAsync(
+            _dbContext,
+            () => EditPostedWindowEventOnceAsync(windowEventId, request, cancellationToken),
+            cancellationToken);
+
+    private async Task<IActionResult> EditPostedWindowEventOnceAsync(
+        int windowEventId,
+        ActivityWindowEventDkpRequest request,
         CancellationToken cancellationToken)
     {
         var windowEvent = await LoadManageableWindowEventAsync(
@@ -591,8 +615,17 @@ public sealed partial class ActivityDataController
     // "Pay newly registered": Post pays only who is registered at that moment. Someone captured on
     // the card who registers afterwards is paid here, once, at the card's posted rates. Everyone
     // already paid from the card is skipped, so pressing it twice pays nobody twice.
+    //
+    // Re-run from the top on a lost balance race (Data/ConcurrencyRetry.cs); the payout's
+    // transaction rolled back, so the re-run pays whoever is still unpaid.
     [HttpPost("window-events/{windowEventId:int}/pay-registered")]
-    public async Task<IActionResult> PayNewlyRegisteredAsync(
+    public Task<IActionResult> PayNewlyRegisteredAsync(
+        int windowEventId,
+        CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(
+            _dbContext, () => PayNewlyRegisteredOnceAsync(windowEventId, cancellationToken));
+
+    private async Task<IActionResult> PayNewlyRegisteredOnceAsync(
         int windowEventId,
         CancellationToken cancellationToken)
     {
