@@ -187,8 +187,11 @@ public static class HnmRecurringBoardService
     // post twice. LIVE camps are deliberately left alone: their window grid is anchored to
     // StartTime, so moving it mid-camp would scramble the window counter and the attendance
     // windows. Self-committing; a no-op when nothing is parked.
+    // nowUtc is only for tests: the stuck-cycle check compares against the clock, so a test
+    // with fixed dates needs to pass its own "now" or it starts failing once those dates pass.
     public static async Task SyncParkedBoardsForTodAsync(
-        ApplicationDbContext db, int linkshellId, string? monsterName, CancellationToken cancellationToken)
+        ApplicationDbContext db, int linkshellId, string? monsterName, CancellationToken cancellationToken,
+        DateTime? nowUtc = null)
     {
         var monster = monsterName?.Trim();
         if (string.IsNullOrWhiteSpace(monster))
@@ -225,7 +228,7 @@ public static class HnmRecurringBoardService
             .Select(tod => new { tod.Id, tod.RepopTime })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var nowUtc = DateTime.UtcNow;
+        var now = nowUtc ?? DateTime.UtcNow;
         var board = await FindAsync(db, linkshellId, monster, cancellationToken);
         var changed = false;
 
@@ -237,10 +240,10 @@ public static class HnmRecurringBoardService
             && latest is not null
             && board.LastSourceTodId == latest.Id
             && repopUtc is { } stuckRepop
-            && nowUtc <= stuckRepop.Add(HnmRecurringBoardBackgroundService.PostGrace))
+            && now <= stuckRepop.Add(HnmRecurringBoardBackgroundService.PostGrace))
         {
             board.LastSourceTodId = null;
-            board.UpdatedAt = nowUtc;
+            board.UpdatedAt = now;
             changed = true;
         }
 

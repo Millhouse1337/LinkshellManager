@@ -168,7 +168,7 @@ public class HnmEventStartMovesTodTests
         board.StartTime = newStart;
         HnmRecurringBoardService.MoveTodToRepop(tod, newStart, Now);
         await db.SaveChangesAsync();
-        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(db, LinkshellId, tod.MonsterName, CancellationToken.None);
+        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(db, LinkshellId, tod.MonsterName, CancellationToken.None, Now);
         await HnmRecurringBoardService.RefreshRepostAtAsync(db, board, board.AssignedMonsterName, CancellationToken.None);
         return await HnmRecurringBoardService.ReviveDueParkedBoardAfterEditAsync(
             db, board, Now, newStart, editedDayNumber: null, CancellationToken.None);
