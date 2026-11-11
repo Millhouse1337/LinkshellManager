@@ -667,14 +667,17 @@ public sealed partial class ActivityDataController
             int? windowsAttended = isWindowed
                 ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
                 : (int?)null;
-            var eventDkp = isLootCouncil
-                ? 0
-                : EventAttendanceDkpCalculator.Compute(
-                    isWindowed,
-                    windowsAttended ?? 0,
-                    durationHours,
-                    eventEntity.DkpPerHour ?? 0,
-                    roundingStep);
+            // A member an officer marked Absent gets 0 and no Active credit — the same rule
+            // EventEndService.EndEventCoreAsync applies, via the same helper.
+            var credit = EventAttendanceDkpCalculator.ForParticipant(
+                participation.IsVerified,
+                eventEntity.CountsTowardActive,
+                isWindowed,
+                windowsAttended ?? 0,
+                durationHours,
+                eventEntity.DkpPerHour ?? 0,
+                roundingStep);
+            var eventDkp = isLootCouncil ? 0 : credit.Dkp;
 
             participation.Duration = durationHours;
             participation.EventDkp = eventDkp;
@@ -692,7 +695,7 @@ public sealed partial class ActivityDataController
                 IsQuickJoin = participation.IsQuickJoin,
                 IsVerified = participation.IsVerified,
                 Proctor = participation.Proctor,
-                ActiveCredit = eventEntity.CountsTowardActive,
+                ActiveCredit = credit.ActiveCredit,
                 WindowsAttended = windowsAttended
             });
 
@@ -712,7 +715,7 @@ public sealed partial class ActivityDataController
                         EventLocation: eventEntity.EventLocation,
                         EventStartTime: eventEntity.StartTime,
                         EventEndTime: endTimeUtc,
-                        Details: "DKP earned from completed event.",
+                        Details: credit.LedgerDetails,
                         EventHistory: history),
                     cancellationToken);
             }

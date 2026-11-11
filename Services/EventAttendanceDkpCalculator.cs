@@ -45,4 +45,45 @@ public static class EventAttendanceDkpCalculator
 
         return DkpRounding.Round(durationHours * dkpPerHour, roundingStep);
     }
+
+    /// <summary>
+    /// What ONE participant is credited at close: DKP plus whether the event counts toward
+    /// their Active status. Both end-event loops call this, so the Absent rule lives in one place.
+    ///
+    /// An officer marking a live attendee Absent stores <c>IsVerified == false</c>. Before this,
+    /// neither close loop looked at it, so an Absent member was paid in full and got Active
+    /// credit. Now they earn 0 and no Active credit. Their history row is still written (with
+    /// IsVerified = false) so the denial stays on record. <c>null</c> (not yet checked) is NOT
+    /// absent: those members are paid as before.
+    /// </summary>
+    public static ParticipantCredit ForParticipant(
+        bool? isVerified,
+        bool countsTowardActive,
+        bool isWindowed,
+        int windowsAttended,
+        double durationHours,
+        double dkpPerHour,
+        double roundingStep)
+    {
+        if (isVerified == false)
+        {
+            return new ParticipantCredit(Dkp: 0, ActiveCredit: false, IsAbsent: true);
+        }
+
+        return new ParticipantCredit(
+            Dkp: Compute(isWindowed, windowsAttended, durationHours, dkpPerHour, roundingStep),
+            ActiveCredit: countsTowardActive,
+            IsAbsent: false);
+    }
+}
+
+/// <summary>Result of <see cref="EventAttendanceDkpCalculator.ForParticipant"/>.</summary>
+public readonly record struct ParticipantCredit(double Dkp, bool ActiveCredit, bool IsAbsent)
+{
+    // An Absent member still gets a 0 "EventEarned" ledger row, not none: Past Events edits
+    // (EventHistoryEditService) find the member's ledger row to move their balance, so without
+    // it an officer who later corrects a wrong Absent would only change the label, not the DKP.
+    public string LedgerDetails => IsAbsent
+        ? "Marked absent - no DKP for this event."
+        : "DKP earned from completed event.";
 }

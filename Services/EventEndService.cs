@@ -134,15 +134,19 @@ public static class EventEndService
             int? windowsAttended = isWindowed
                 ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
                 : (int?)null;
-            // Windowed pays per window attended; timed pays for the ACTUAL time present. Shared
-            // with ActivityDataController.EndEventAsync so the two end-event paths can't drift —
-            // see EventAttendanceDkpCalculator.
-            var eventDkp = EventAttendanceDkpCalculator.Compute(
+            // Windowed pays per window attended; timed pays for the ACTUAL time present; a member
+            // an officer marked Absent gets 0 and no Active credit. Shared with
+            // ActivityDataController.EndEventAsync so the two end-event paths can't drift —
+            // see EventAttendanceDkpCalculator.ForParticipant.
+            var credit = EventAttendanceDkpCalculator.ForParticipant(
+                participation.IsVerified,
+                eventEntity.CountsTowardActive,
                 isWindowed,
                 windowsAttended ?? 0,
                 durationHours,
                 eventEntity.DkpPerHour ?? 0,
                 DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement));
+            var eventDkp = credit.Dkp;
 
             participation.Duration = durationHours;
             participation.EventDkp = eventDkp;
@@ -168,7 +172,7 @@ public static class EventEndService
                 IsQuickJoin = participation.IsQuickJoin,
                 IsVerified = participation.IsVerified,
                 Proctor = participation.Proctor,
-                ActiveCredit = eventEntity.CountsTowardActive,
+                ActiveCredit = credit.ActiveCredit,
                 // Null on a timed event. On a windowed one this is the numerator of the DKP row
                 // above, so the closed event can explain its own payout.
                 WindowsAttended = windowsAttended
@@ -190,7 +194,7 @@ public static class EventEndService
                         EventLocation: eventEntity.EventLocation,
                         EventStartTime: eventEntity.StartTime,
                         EventEndTime: endTimeUtc,
-                        Details: "DKP earned from completed event.",
+                        Details: credit.LedgerDetails,
                         EventHistory: history),
                     CancellationToken.None);
             }
