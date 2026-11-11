@@ -232,23 +232,8 @@ public sealed partial class ActivityDataController
                 .ToListAsync(cancellationToken)
             : new List<Item>();
 
-        // The legacy revenueEntries payload, kept for ONE release and now fed from the treasury journal
-        // rather than the old RevenueEntries table.
-        //
-        // The Angular bundle ships separately from the server and there is no API versioning, so a
-        // browser holding a cached bundle will call the new server. Reading the old table would show
-        // such a client a treasury frozen at conversion day; dropping the field outright would render
-        // NaN gil. Projecting the journal back into the old shape keeps it correct until the field goes.
-        var primaryRevenue = primaryLinkshellId.HasValue
-            ? await _dbContext.JournalEntries
-                .AsNoTracking()
-                .Include(entry => entry.Lines)
-                .Where(entry => entry.LinkshellId == primaryLinkshellId.Value
-                    && entry.Status == JournalEntryStatuses.Confirmed)
-                .OrderByDescending(entry => entry.TransactionDate)
-                .ThenByDescending(entry => entry.Sequence)
-                .ToListAsync(cancellationToken)
-            : new List<JournalEntry>();
+        // No treasury entries here on purpose: the Treasury tab loads them from its own endpoint, and
+        // the overview runs on every page load, so shipping the whole journal here cost every visit.
 
         // News-feed sources for the dashboard: recent auctions + DKP adjustments.
         var primaryAuctions = primaryLinkshellId.HasValue
@@ -917,7 +902,6 @@ public sealed partial class ActivityDataController
                         item.IsSold,
                         item.SoldPrice,
                         item.SoldByCharacterName)).ToList(),
-                    primaryRevenue.Select(ToLegacyRevenueDto).ToList(),
                     primaryAuctions.Select(auction =>
                     {
                         var closed = auction.EndTime is { } end && end <= DateTime.UtcNow;

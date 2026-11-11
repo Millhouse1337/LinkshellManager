@@ -634,29 +634,4 @@ public sealed partial class ActivityDataController
         // One release. The next one turns these into 410 Gone.
         Response.Headers["Sunset"] = DateTime.UtcNow.AddDays(30).ToString("R");
     }
-
-    // Projects a treasury entry back into the shape the old revenue payload had, so a cached client
-    // still reads a correct balance for the one release the field survives.
-    private static ActivityRevenueEntryDto ToLegacyRevenueDto(JournalEntry entry)
-    {
-        var lines = entry.Lines.OrderBy(line => line.LineNumber).ToList();
-        var cashDelta = lines
-            .Where(line => line.AccountNumber == TreasuryAccounts.GilOnHand)
-            .Sum(line => line.Amount);
-        var category = lines
-            .FirstOrDefault(line => line.AccountNumber != TreasuryAccounts.GilOnHand)?.AccountName;
-
-        return new ActivityRevenueEntryDto(
-            entry.Id,
-            entry.LinkshellId,
-            // The old client computed its totals by matching exactly these two words.
-            cashDelta < 0 ? "Expense" : "Income",
-            category,
-            Math.Abs(cashDelta),
-            entry.Memo,
-            entry.TransactionDate,
-            entry.CreatedByAppUserId,
-            entry.ConfirmedByCharacterName ?? entry.CreatedByCharacterName,
-            entry.CreatedAt);
-    }
 }

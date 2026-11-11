@@ -471,7 +471,6 @@ export interface ActivityPrimaryLinkshell {
   rules: ActivityRule[];
   announcements: ActivityAnnouncement[];
   items: ActivityItem[];
-  revenueEntries: ActivityRevenueEntry[];
   // News & Updates feed sources.
   recentAuctions: ActivityNewsAuction[];
   recentDkpAudits: ActivityNewsDkp[];
@@ -527,19 +526,6 @@ export interface ActivityItem {
   isSold?: boolean;
   soldPrice?: number | null;
   soldByCharacterName?: string | null;
-}
-
-export interface ActivityRevenueEntry {
-  id: number;
-  linkshellId: number;
-  entryType: string;
-  category?: string | null;
-  value: number;
-  details?: string | null;
-  occurredAt: string;
-  createdByAppUserId?: string | null;
-  createdByCharacterName?: string | null;
-  createdAt: string;
 }
 
 export interface ActivityItemInput {

@@ -111,7 +111,6 @@ export type {
   ActivityLootStructure,
   ActivityOverview,
   ActivityQuickJoinInput,
-  ActivityRevenueEntry,
   ActivityRevenueInput,
   ActivityRule,
   ActivityStatusLedgerEntry,

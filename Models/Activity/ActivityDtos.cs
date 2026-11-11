@@ -325,7 +325,6 @@ public sealed record ActivityPrimaryLinkshellDto(
     IReadOnlyList<ActivityRuleDto> Rules,
     IReadOnlyList<ActivityAnnouncementDto> Announcements,
     IReadOnlyList<ActivityItemDto> Items,
-    IReadOnlyList<ActivityRevenueEntryDto> RevenueEntries,
     // News-feed sources: recent auctions (open/close) and DKP adjustments.
     IReadOnlyList<ActivityNewsAuctionDto> RecentAuctions,
     IReadOnlyList<ActivityNewsDkpDto> RecentDkpAudits);
@@ -351,18 +350,6 @@ public sealed record ActivityItemDto(
     bool IsSold = false,
     long? SoldPrice = null,
     string? SoldByCharacterName = null);
-
-public sealed record ActivityRevenueEntryDto(
-    int Id,
-    int LinkshellId,
-    string EntryType,
-    string? Category,
-    long Value,
-    string? Details,
-    DateTime OccurredAt,
-    string? CreatedByAppUserId,
-    string? CreatedByCharacterName,
-    DateTime CreatedAt);
 
 public sealed record ActivityCreateItemRequest(string ItemName, string? ItemType, int Quantity, string? Notes);
 
