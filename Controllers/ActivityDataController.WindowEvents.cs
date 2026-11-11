@@ -479,32 +479,24 @@ public sealed partial class ActivityDataController
                         DkpAmount = m.DkpAmount,
                     })));
         }
-        windowEvent.Value.PostedToSheetAt = DateTime.UtcNow;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        // Marks the card posted (with the draft above) and pays it, in one step that only one
+        // request can win. The check at the top is only a fast answer: two Posts at the same moment
+        // both pass it, and the loser is caught here.
+        var paid = await _windowEventDkpLedger.PostAndPayAsync(
+            windowEvent.Value, DateTime.UtcNow, cancellationToken);
+        if (paid is null)
+        {
+            return Conflict(new { error = "This card has already been posted." });
+        }
 
-        // Publish = credit DKP. Materialize the per-member SnapshotEarned ledger
-        // rows now that the event is marked posted (idempotent).
-        var postedId = windowEvent.Value.Id;
-        await RetryIfCampCreditRaceAsync(
-            _dbContext,
-            () => _windowEventDkpLedger.EnsurePostedWindowEventLedgerEntriesAsync(postedId, cancellationToken));
+        // The saves inside PostAndPayAsync already told open clients to refresh, but before the
+        // transaction committed, so a quick client could re-read the card while it still looked
+        // unposted. Tell them again now that it is.
+        var changeNotifier = HttpContext?.RequestServices.GetService<LinkshellChangeNotifier>();
+        changeNotifier?.Notify(windowEvent.Value.LinkshellId, LinkshellChangeNotifier.Areas.Windows);
+        changeNotifier?.Notify(windowEvent.Value.LinkshellId, LinkshellChangeNotifier.Areas.Dkp);
         return Ok(new { success = true });
     }
-
-    // Pays a posted card, re-running the payout if it lost a race on an account (see UniqueRaceRetry).
-    //
-    // The payout reads "who has a row from this card already", then inserts the rest. Two payouts at
-    // the same moment both read before either saved, and the one-credit-per-account index rejects
-    // the later save as a whole (nobody on it is paid, no balance moves). The re-run reads again,
-    // finds the other payout's rows, and pays only who is still missing -- usually nobody.
-    //
-    // Safe to repeat: before its ledger save the payout only syncs the camp archive to the review,
-    // which lands on the same result every time. The ledger writer keeps the failed attempt's staged
-    // credits in its per-request memo; that memo only feeds overdraft checks on debits, and a payout
-    // writes credits only.
-    internal static Task<T> RetryIfCampCreditRaceAsync<T>(
-        ApplicationDbContext dbContext, Func<Task<T>> pay) =>
-        UniqueRaceRetry.RunAsync(dbContext, pay, "DkpLedgerEntries");
 
     // Edits a published event's DKP + Entry Type (and overrides) and reconciles
     // the existing ledger entries + per-member LinkshellDkp totals by the delta.

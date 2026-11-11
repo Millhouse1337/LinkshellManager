@@ -27,6 +27,93 @@ public sealed class WindowEventDkpLedgerService
         _logger = logger;
     }
 
+    // Post: marks a reviewed card posted and pays it, as ONE step that only one request can win.
+    //
+    // `windowEvent` is the tracked card with the officer's DKP draft already staged on it; it is
+    // saved here together with the posted mark. Returns null when another request posted the card
+    // first (nothing is saved, nobody is paid); otherwise how many payout rows were written.
+    //
+    // Why a claim: Post used to read "not posted yet", save the posted mark, then pay. Two officers
+    // pressing Post together (two tabs, or the Activity plus the website) both read "not posted"
+    // and both paid. Now the posted mark is set by one UPDATE that only matches while the card is
+    // still unposted. Postgres runs the two UPDATEs one after the other: the second waits for the
+    // first to finish, then matches no row and stops.
+    //
+    // Why a transaction: the claim, the draft, the archive sync and the payout commit together.
+    // If the payout fails (or the officer's request is cancelled half way), the card goes back to
+    // unposted, so Post can simply be pressed again instead of leaving a posted card nobody was
+    // paid for. While it runs, the claim also holds the card's row, so anything else that writes
+    // the card waits for the payout to finish.
+    //
+    // In-memory tests have neither transactions nor ExecuteUpdate and run one request at a time,
+    // so there the claim is a plain "is it still unposted?" read of the stored row.
+    public async Task<int?> PostAndPayAsync(
+        WindowEvent windowEvent, DateTime postedAtUtc, CancellationToken cancellationToken)
+    {
+        var relational = _db.Database.IsRelational();
+        await using var transaction = relational
+            ? await _db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        var cardId = windowEvent.Id;
+        if (relational)
+        {
+            var claimed = await _db.WindowEvents
+                .Where(w => w.Id == cardId && w.PostedToSheetAt == null)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(w => w.PostedToSheetAt, postedAtUtc),
+                    cancellationToken);
+            if (claimed == 0)
+            {
+                // Disposing the transaction without a commit rolls it back.
+                return null;
+            }
+        }
+        else
+        {
+            var storedPostedAt = await _db.WindowEvents.AsNoTracking()
+                .Where(w => w.Id == cardId)
+                .Select(w => w.PostedToSheetAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (storedPostedAt.HasValue)
+            {
+                return null;
+            }
+        }
+
+        // Saves the draft, and keeps the tracked copy in step with the claim just written.
+        windowEvent.PostedToSheetAt = postedAtUtc;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        // Publish = credit DKP. Every other payout skips a card that is not posted, and nobody else
+        // sees this one as posted until we commit, so a lost race here should not happen; the retry
+        // stays as a safety net. Inside the transaction a rejected save rolls back only to the
+        // savepoint EF takes before each save, so the re-run still belongs to this Post.
+        var written = await RetryIfCampCreditRaceAsync(
+            _db, () => EnsurePostedWindowEventLedgerEntriesAsync(cardId, cancellationToken));
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+        return written;
+    }
+
+    // Pays a posted card, re-running the payout if it lost a race on an account (see UniqueRaceRetry).
+    //
+    // The payout reads "who has a row from this card already", then inserts the rest. Two payouts at
+    // the same moment both read before either saved, and the one-credit-per-account index rejects
+    // the later save as a whole (nobody on it is paid, no balance moves). The re-run reads again,
+    // finds the other payout's rows, and pays only who is still missing -- usually nobody.
+    //
+    // Safe to repeat: before its ledger save the payout only syncs the camp archive to the review,
+    // which lands on the same result every time. The ledger writer keeps the failed attempt's staged
+    // credits in its per-request memo; that memo only feeds overdraft checks on debits, and a payout
+    // writes credits only.
+    internal static Task<T> RetryIfCampCreditRaceAsync<T>(
+        ApplicationDbContext dbContext, Func<Task<T>> pay) =>
+        UniqueRaceRetry.RunAsync(dbContext, pay, "DkpLedgerEntries");
+
     public async Task<int> EnsurePostedWindowEventLedgerEntriesAsync(
         int windowEventId,
         CancellationToken cancellationToken,

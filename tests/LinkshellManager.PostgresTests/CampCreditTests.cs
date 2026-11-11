@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
@@ -277,7 +276,7 @@ public class CampCreditTests : IAsyncLifetime
         var officerAPays = new BeforeLedgerSave(async () =>
         {
             await using var dbA = _pg.CreateContext();
-            paidByA = await ActivityDataController.RetryIfCampCreditRaceAsync(
+            paidByA = await WindowEventDkpLedgerService.RetryIfCampCreditRaceAsync(
                 dbA, () => NewLedgerService(dbA).EnsurePostedWindowEventLedgerEntriesAsync(cardId, CancellationToken.None));
         });
 
@@ -285,7 +284,7 @@ public class CampCreditTests : IAsyncLifetime
         await using (var dbB = _pg.CreateContext(officerAPays))
         {
             var ledger = NewLedgerService(dbB);
-            paidByB = await ActivityDataController.RetryIfCampCreditRaceAsync(dbB, () =>
+            paidByB = await WindowEventDkpLedgerService.RetryIfCampCreditRaceAsync(dbB, () =>
             {
                 attemptsByB++;
                 return ledger.EnsurePostedWindowEventLedgerEntriesAsync(cardId, CancellationToken.None);

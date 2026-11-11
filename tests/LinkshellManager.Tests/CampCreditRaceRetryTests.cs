@@ -1,9 +1,9 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Xunit;
@@ -30,7 +30,7 @@ public class CampCreditRaceRetryTests
         await using var db = NewDb();
         var attempts = 0;
 
-        var paid = await ActivityDataController.RetryIfCampCreditRaceAsync(db, () =>
+        var paid = await WindowEventDkpLedgerService.RetryIfCampCreditRaceAsync(db, () =>
         {
             attempts++;
             if (attempts == 1)
@@ -56,7 +56,7 @@ public class CampCreditRaceRetryTests
         var attempts = 0;
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
-            ActivityDataController.RetryIfCampCreditRaceAsync<int>(db, () =>
+            WindowEventDkpLedgerService.RetryIfCampCreditRaceAsync<int>(db, () =>
             {
                 attempts++;
                 throw Rejection(sqlState, table);
