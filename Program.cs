@@ -658,6 +658,19 @@ if (Directory.Exists(activityPhysicalPath))
     app.MapFallbackToFile("/discord-activity/{*path}", "discord-activity/browser/index.html");
 }
 
+// The stock ASP.NET Identity pages (ExternalLogin, Manage/*, ...) answer 404 for every method,
+// so nobody can make an account with a typed email or set a password behind the app's back.
+// Only our sign-in page and the cookie's logout/access-denied pages stay. See IdentityPathGate.
+app.Use(async (context, next) =>
+{
+    if (!IdentityPathGate.IsAllowed(context.Request.Path))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+    await next();
+});
+
 // The old website's page addresses (bookmarks, Discord bot posts, old tabs) go to the same place
 // in the Activity UI, which is the website now. Permanent (301): the old pages are deleted, so
 // browsers and search engines may remember the new address. GET/HEAD only — the old pages' forms
