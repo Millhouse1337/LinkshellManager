@@ -703,7 +703,15 @@ app.MapControllerRoute(
 app.MapRazorPages();
 
 // Liveness: process is up. Readiness: database is reachable.
-app.MapHealthChecks("/healthz", new HealthCheckOptions { Predicate = _ => false });
+// /healthz also names the deployed git commit (version.txt, written by deploy.ps1),
+// so you can confirm which build the droplet is actually running.
+var appVersion = AppVersion.Read(app.Environment.ContentRootPath);
+app.MapHealthChecks("/healthz", new HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = (context, report) =>
+        context.Response.WriteAsJsonAsync(new { status = report.Status.ToString(), version = appVersion })
+});
 app.MapHealthChecks("/readyz", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("ready")

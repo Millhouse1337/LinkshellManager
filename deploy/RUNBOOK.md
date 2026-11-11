@@ -111,7 +111,9 @@ From your dev machine, in the repo root:
 .\deploy\deploy.ps1 -DropletHost root@<DROPLET_IP>
 ```
 
-This builds the Angular activity, publishes the .NET app, syncs to the droplet, and starts the service. The first start will run EF migrations against the empty Postgres DB and create the schema.
+This checks the git tree is clean, runs the tests, builds the Angular activity, publishes the .NET app, uploads it, dumps the database (see **Database backups**), swaps the new build in, starts the service and waits for `/readyz`. The first start will run EF migrations against the empty Postgres DB and create the schema.
+
+On a brand-new droplet there is no database to back up yet, so pass `-SkipBackup` for the first deploy only.
 
 When the script finishes, tail the logs to verify:
 
@@ -165,11 +167,27 @@ After 24-48h of stable running:
 | Task | Command |
 |---|---|
 | Redeploy after code change | `.\deploy\deploy.ps1 -DropletHost root@<IP>` |
+| Which commit is live | `ssh root@<IP> 'curl -s http://127.0.0.1:5000/healthz'` → `{"status":"Healthy","version":"3f2a9c1"}` |
 | Tail logs | `ssh root@<IP> 'sudo journalctl -u lsmanager -f'` |
 | Service status | `ssh root@<IP> 'sudo systemctl status lsmanager'` |
 | Restart service | `ssh root@<IP> 'sudo systemctl restart lsmanager'` |
 | Postgres shell | `ssh root@<IP> '/tmp/dbshell.sh'` — see **Database access** below |
-| Backup DB | `ssh root@<IP> '/tmp/dbbackup.sh'` — see **Database access** below |
+| Backup DB | `ssh root@<IP> 'sudo /usr/local/bin/lsm-backup.sh'` — see **Database backups** below |
+| Roll back a bad deploy | see **Rollback** below |
+
+### deploy.ps1 safety checks
+
+Each one stops the deploy before anything on the droplet changes (except the last):
+
+| Check | Skip with | Why it exists |
+|---|---|---|
+| Git tree has no uncommitted changes | `-AllowDirty` (version then ends in `-dirty`) | So what is live is always a real commit |
+| `dotnet test` passes | `-SkipTests` | A broken test or a forgotten migration stops here, not in production |
+| Database dump succeeds and looks real | `-SkipBackup` | Startup migrations can delete data; the dump is the quick way back |
+| `/readyz` answers within ~90 s after start | — | `systemctl is-active` says "active" even while the app crash-loops. On failure the script prints the last 50 log lines and exits 1; the new build stays in place, so roll back by hand |
+
+The script writes the commit (`git rev-parse --short HEAD`) into `version.txt` next to the app, and
+`/healthz` shows it, so the end of each deploy prints which commit is running.
 
 ## Database access — READ THIS BEFORE BACKING UP
 
@@ -203,22 +221,107 @@ does not land in your shell history:
 
 ```bash
 #!/bin/bash
-# /tmp/dbbackup.sh — dump the REAL production database.
-conn=$(grep -m1 'ConnectionStrings__DefaultConnection' /etc/lsmanager/env | cut -d= -f2-)
-get() { echo "$conn" | tr ';' '
-' | grep -i "^ *$1=" | head -1 | cut -d= -f2- | xargs; }
+# /tmp/dbshell.sh — interactive psql on the REAL production database.
+conn=$(grep -m1 '^ConnectionStrings__DefaultConnection=' /etc/lsmanager/env | cut -d= -f2-)
+get() { echo "$conn" | tr ';' '\n' | grep -i "^ *$1=" | head -1 | cut -d= -f2- | xargs; }
 export PGPASSWORD="$(get Password)"; export PGSSLMODE=require
-OUT=/root/lsmanager-prod-$(date +%F-%H%M).sql
-pg_dump -h "$(get Host)" -p "$(get Port)" -U "$(get Username)" -d "$(get Database)"   --no-owner --no-acl > "$OUT"
+psql -h "$(get Host)" -p "$(get Port)" -U "$(get Username)" -d "$(get Database)"
 unset PGPASSWORD
-ls -lh "$OUT"; grep -c '^CREATE TABLE' "$OUT"   # sanity: expect ~74, not 0
 ```
 
-Swap `pg_dump` for `psql` in the last block for an interactive shell.
+For a dump, use `/usr/local/bin/lsm-backup.sh` (next section) instead of a hand-made
+`pg_dump`: it checks the result for you.
 
 Note DigitalOcean managed databases also take their own automated daily backups
 with point-in-time recovery, so the console is the faster path for a real
-restore. The dump above is for pre-deploy safety and for moving data around.
+restore. The dump below is for pre-deploy safety and for moving data around.
+
+## Database backups
+
+`deploy.ps1` dumps the production database **before every deploy**, because the new
+build migrates the database on startup and some migrations delete rows. It uses
+`/usr/local/bin/lsm-backup.sh` on the droplet. The source is `deploy/lsm-backup.sh` in
+this repo; the deploy copies it to the droplet each time, so edit the repo copy, never
+the droplet one.
+
+What it does:
+
+- Reads the connection string from `/etc/lsmanager/env` (the password never goes on a
+  command line) and runs `pg_dump --no-owner --no-acl` against the managed database.
+- Writes `/var/backups/lsmanager/lsmanager-prod-YYYYMMDD-HHMMSS.sql` (UTC time, root only).
+- **Fails the deploy** if the dump is under 1 MB or has 60 or fewer `CREATE TABLE`
+  lines — the "empty database looks like a valid dump" trap above. The bad file is
+  kept as `...sql.suspect` for a look.
+- Keeps the newest 7 good dumps and deletes older ones (only after a good dump).
+
+Run it by hand any time: `ssh root@<IP> 'sudo /usr/local/bin/lsm-backup.sh'`.
+Dumps made with the older `/tmp/dbbackup.sh` recipe sit in `/root/lsmanager-prod-*.sql`
+and can be deleted once you no longer need them.
+
+### Restoring a dump
+
+Restore into a **new** database and point the app at it. That leaves the damaged
+database untouched in case you need to look at it, and needs no `DROP`. (This recipe
+has not been rehearsed yet — try it once on a quiet day before you need it.)
+
+```bash
+ssh root@<IP>
+sudo systemctl stop lsmanager
+
+# Same connection helper as the psql block above.
+conn=$(grep -m1 '^ConnectionStrings__DefaultConnection=' /etc/lsmanager/env | cut -d= -f2-)
+get() { echo "$conn" | tr ';' '\n' | grep -i "^ *$1=" | head -1 | cut -d= -f2- | xargs; }
+export PGPASSWORD="$(get Password)" PGSSLMODE=require PGHOST="$(get Host)" PGPORT="$(get Port)" PGUSER="$(get Username)"
+
+ls -lt /var/backups/lsmanager/                      # pick the dump to restore
+DUMP=/var/backups/lsmanager/lsmanager-prod-YYYYMMDD-HHMMSS.sql
+NEWDB=lsm_restore_$(date -u +%Y%m%d_%H%M)
+
+psql -d "$(get Database)" -c "CREATE DATABASE $NEWDB"
+psql -d "$NEWDB" -v ON_ERROR_STOP=1 -f "$DUMP"      # stops at the first error
+psql -d "$NEWDB" -c 'SELECT count(*) FROM "AspNetUsers"'   # sanity check
+unset PGPASSWORD
+echo "$NEWDB"                                        # note the name
+```
+
+Then:
+
+1. Point the app at the new database: edit `/etc/lsmanager/env` and change
+   `Database=<old name>` to `Database=<NEWDB>` in `ConnectionStrings__DefaultConnection`
+   (`sudo nano /etc/lsmanager/env`).
+2. The dump was taken **before** the bad build's migrations ran. If you start the bad
+   build again it will migrate the restored copy the same way, so first put the old
+   build back (**Rollback** below, steps 2–3).
+3. `sudo systemctl start lsmanager` and check `curl -s http://127.0.0.1:5000/readyz`.
+
+Anything written between the dump and the restore (DKP posts, ToDs, sign-ups) is lost.
+Drop the old database later, once you are sure you do not need it.
+
+## Rollback
+
+Each deploy keeps the previous build in `/var/www/lsmanager.old` (only one level back).
+
+**When it is safe to just swap the folders back:** when the new build added **no
+migrations**, or only migrations that add things (new tables, new nullable columns). The
+old build simply ignores those. Check with `git log --stat <old commit>..<new commit> -- Migrations/`
+(the commits are what `/healthz` printed before and after the deploy).
+
+**When it is not:** if a new migration dropped or renamed a column/table, or changed data,
+the old build may fail on startup or misread data. Then either undo that migration by hand
+(like the SQL under **Board images removed** below) or restore the pre-deploy dump
+(**Restoring a dump** above) together with the swap.
+
+```bash
+ssh root@<IP>
+sudo systemctl stop lsmanager                                         # 1
+sudo mv /var/www/lsmanager /var/www/lsmanager.bad                     # 2
+sudo mv /var/www/lsmanager.old /var/www/lsmanager                     # 3
+sudo systemctl start lsmanager                                        # 4
+curl -s http://127.0.0.1:5000/readyz; echo; curl -s http://127.0.0.1:5000/healthz; echo
+sudo rm -rf /var/www/lsmanager.bad                                    # once you are happy
+```
+
+The next normal deploy overwrites `lsmanager.old` again, so roll back before deploying anything else.
 
 ## One-time migration: persistent Data Protection keys
 
@@ -272,8 +375,7 @@ sudo systemctl restart lsmanager
 (`RemoveEventBoardImageSettings`) drops `Linkshells.EventBoardTheme` and
 `Linkshells.UseComponentsV2Boards`, and the older app reads both, so it fails on
 startup without them. Before swapping the old app back in, open `psql` (the
-connection block under **Database access** above, with `pg_dump` swapped for `psql`)
-and run:
+`/tmp/dbshell.sh` block under **Database access** above) and run:
 
 ```sql
 ALTER TABLE "Linkshells" ADD COLUMN "EventBoardTheme" character varying(16) NOT NULL DEFAULT 'Crystal';
@@ -283,7 +385,7 @@ DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261015084328_Remove
 
 ## Things to set up later (not blocking go-live)
 
-- Automated daily `pg_dump` to a DO Spaces bucket (or any object store).
+- Automated daily `pg_dump` to a DO Spaces bucket (or any object store). The pre-deploy dumps (**Database backups**) only live on the droplet, so they do not survive losing it.
 - Cloudflare **Authenticated Origin Pulls** (commented out in `nginx-lsmanager.conf`) so the droplet only accepts traffic from your CF zone, not just any CF customer.
 - A non-root deploy user (create `lsmanager-deploy` with sudo NOPASSWD limited to `systemctl restart lsmanager` and the file copy paths).
 - Fail2ban for SSH.
