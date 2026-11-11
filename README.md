@@ -242,6 +242,21 @@ Discord__BotToken=disabled dotnet run --launch-profile https
 
 Development doesn't migrate on startup, hence the explicit `database update`.
 
+### Postgres tests (need Docker Desktop running)
+
+`tests/LinkshellManager.Tests` runs on EF's in-memory database: fast, but it ignores unique indexes,
+foreign-key delete rules, transactions and row locks. `tests/LinkshellManager.PostgresTests` covers those.
+It starts a throwaway `postgres:18` container (Testcontainers), applies every migration once, and wipes
+the tables before each test. It never touches your user-secrets database.
+
+```bash
+dotnet test tests/LinkshellManager.PostgresTests/LinkshellManager.PostgresTests.csproj
+```
+
+Add a test here whenever a change relies on a database rule. Put `[Collection("postgres")]` on the class,
+take `PostgresFixture` in the constructor, call `ResetAsync()` at the start of each test, and use
+`CreateContext()` (twice for a two-request race). CI runs these too (`dotnet test` on the solution).
+
 ## Deployment notes
 
 - Build the Angular app before publishing the ASP.NET app, or add that build step to your deployment pipeline.
