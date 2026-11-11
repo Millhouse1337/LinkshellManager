@@ -187,8 +187,10 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected ToD entry was not found." });
         }
 
+        // Membership alone is not enough: deleting a ToD moves every parked board, the Discord ToD
+        // board and the in-game tracker off this pop. Same right as logging one directly.
         var membership = await GetMembershipAsync(appUser.Id, tod.LinkshellId, cancellationToken);
-        if (membership is null)
+        if (!await CanAsync(membership, r => r.CanManageTods, cancellationToken))
         {
             return Forbid();
         }
@@ -208,9 +210,12 @@ public sealed partial class ActivityDataController
             linkedEvent.SourceTodId = null;
         }
 
-        DeleteUploadedTodImage(tod.ImagePath);
+        var deletedImage = tod.ImagePath;
         _dbContext.Tods.Remove(tod);
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Only once the row is gone, and only if no other ToD still shows the same file.
+        await DeleteUploadedTodImageIfUnusedAsync(deletedImage, tod.Id, cancellationToken);
 
         // Deleting the ToD a parked board was counting on leaves it advertising a pop that no
         // longer exists — fall back to the monster's next-newest ToD, or to no time at all.
@@ -295,8 +300,10 @@ public sealed partial class ActivityDataController
             return NotFound(new { error = "The selected ToD entry was not found." });
         }
 
+        // Membership alone is not enough: moving a ToD's time re-points every parked board, the
+        // Discord ToD board and the in-game tracker. Same right as logging one directly.
         var membership = await GetMembershipAsync(appUser.Id, tod.LinkshellId, cancellationToken);
-        if (membership is null)
+        if (!await CanAsync(membership, r => r.CanManageTods, cancellationToken))
         {
             return Forbid();
         }
@@ -316,6 +323,14 @@ public sealed partial class ActivityDataController
         if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
         {
             return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
+        }
+
+        // Keep, clear or a fresh upload only: never another ToD's picture (see the helper).
+        var (imageAllowed, newImage) = await ResolveTodImageForUpdateAsync(
+            _dbContext, tod, request.ImagePath, cancellationToken);
+        if (!imageAllowed)
+        {
+            return BadRequest(new { error = "That image can't be used here. Upload a new screenshot instead." });
         }
 
         var cooldown = string.IsNullOrWhiteSpace(request.Cooldown)
@@ -360,7 +375,6 @@ public sealed partial class ActivityDataController
         tod.TotalClaims = request.Claim == true ? 1 : 0;
 
         var previousImage = tod.ImagePath;
-        var newImage = SanitizeUploadedImagePath(request.ImagePath);
         tod.ImagePath = newImage;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -370,9 +384,14 @@ public sealed partial class ActivityDataController
         await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
             _dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(previousImage) && !string.Equals(previousImage, newImage, StringComparison.Ordinal))
+        // Compared by file name: two spellings of the same file must not delete the picture we keep.
+        if (!string.IsNullOrWhiteSpace(previousImage)
+            && !string.Equals(
+                Path.GetFileName(previousImage.Trim()),
+                newImage is null ? null : Path.GetFileName(newImage.Trim()),
+                StringComparison.Ordinal))
         {
-            DeleteUploadedTodImage(previousImage);
+            await DeleteUploadedTodImageIfUnusedAsync(previousImage, tod.Id, cancellationToken);
         }
 
         return Ok(MapTodDto(tod));
