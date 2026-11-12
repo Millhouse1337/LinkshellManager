@@ -4,14 +4,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-public sealed record AuctionBidResult(bool Success, string? Error, string? ItemName, int Amount);
+public sealed record AuctionBidResult(bool Success, string? Error, string? ItemName, int Amount, Bid? Bid = null);
 
-// Places a bid on an auction item with the same validation as the Activity
-// bid endpoint (auction live, above the minimum, within available DKP). Used by
-// the Discord interactions endpoint for inline modal bidding, where there's no
-// controller context to reuse. The Activity endpoint keeps its own
-// guild-lock-aware path; this service does a plain linkshell-membership check,
-// which is the right gate for a click that originated inside the guild's channel.
+// Places a bid on an auction item. Used by the Discord interactions endpoint for inline modal
+// bidding (PlaceBidAsync: a plain linkshell-membership check, which is the right gate for a click
+// that originated inside the guild's channel) and by the Activity bid endpoint (which runs its own
+// guild-lock-aware gate first). Both then go through CommitBidAsync, so the amount rules and the
+// locking live in one place.
 public static class AuctionBidService
 {
     // custom_id prefixes routed by DiscordInteractionsController:
@@ -38,9 +37,10 @@ public static class AuctionBidService
         int bidAmount,
         CancellationToken cancellationToken)
     {
+        // Read-only: CommitBidAsync reads the item again under its lock.
         var item = await db.AuctionItems
+            .AsNoTracking()
             .Include(auctionItem => auctionItem.Auction)
-            .Include(auctionItem => auctionItem.Bids)
             .FirstOrDefaultAsync(auctionItem => auctionItem.Id == itemId, cancellationToken);
         if (item is null || item.Auction is null)
         {
@@ -48,6 +48,7 @@ public static class AuctionBidService
         }
 
         var membership = await db.AppUserLinkshells
+            .AsNoTracking()
             .FirstOrDefaultAsync(
                 link => link.AppUserId == appUserId && link.LinkshellId == item.Auction.LinkshellId,
                 cancellationToken);
@@ -83,6 +84,37 @@ public static class AuctionBidService
             return Fail("This auction has already ended.");
         }
 
+        var characterName = membership.CharacterName ?? characterNameFallback;
+        return await CommitBidAsync(
+            db, dkpPools, dkpPoolBalances, appUserId, characterName,
+            item.Auction.LinkshellId, itemId, bidAmount, now, cancellationToken);
+    }
+
+    // The part of a bid that can race: check the amount against the item's current high bid and
+    // the bidder's available DKP, then save. The caller has already checked who may bid and that
+    // the auction is live.
+    //
+    // Two row locks, held until the bid commits (in-memory tests have neither, and bid one at a time):
+    //   1. the bidder's membership. One member's bids take turns, so two bids at once on two items
+    //      can't each see the full balance and together commit more DKP than the member has.
+    //   2. the item. Bids on one item take turns, so the later one reads the high bid the earlier
+    //      one saved. Before, Alice (60) and Bob (55) could both beat a high of 50; if Bob's save
+    //      landed last the item showed Bob at 55, and Bob won with the lower bid.
+    // Every bid takes them in that order and holds one of each, so two bids never wait on each
+    // other in a circle. A row lock does not change xmin, so it never trips the membership's
+    // concurrency token for anyone else.
+    public static async Task<AuctionBidResult> CommitBidAsync(
+        ApplicationDbContext db,
+        DkpPoolResolver dkpPools,
+        DkpPoolBalanceService dkpPoolBalances,
+        string appUserId,
+        string characterName,
+        int linkshellId,
+        int itemId,
+        int bidAmount,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
         if (bidAmount <= 0)
         {
             return Fail("Bid amount must be a positive number.");
@@ -90,6 +122,37 @@ public static class AuctionBidService
         if (bidAmount > MaxBidAmount)
         {
             return Fail($"Bid amount cannot exceed {MaxBidAmount:N0}.");
+        }
+
+        var relational = db.Database.IsRelational();
+        await using var transaction = relational
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (relational)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""SELECT 1 FROM "AppUserLinkshells" WHERE "AppUserId" = {appUserId} AND "LinkshellId" = {linkshellId} FOR UPDATE""",
+                cancellationToken);
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""SELECT 1 FROM "AuctionItems" WHERE "Id" = {itemId} FOR UPDATE""",
+                cancellationToken);
+        }
+
+        // The caller may have read the item before the lock. Forget any copy it is tracking so this
+        // reads the high bid as it is now (another bid may have just committed), not a moment ago.
+        db.ChangeTracker.Clear();
+
+        var item = await db.AuctionItems
+            .Include(auctionItem => auctionItem.Auction)
+            .FirstOrDefaultAsync(auctionItem => auctionItem.Id == itemId, cancellationToken);
+        // Closing an auction deletes its items, and an officer may have ended it while this bid waited.
+        if (item is null || item.Auction is null || item.Auction.LinkshellId != linkshellId)
+        {
+            return Fail("That auction item was not found.");
+        }
+        if (item.Auction.EndTime.HasValue && nowUtc >= item.Auction.EndTime.Value)
+        {
+            return Fail("This auction has already ended.");
         }
 
         // The starting bid is the floor — no bid may come in under it. Once there's
@@ -105,11 +168,13 @@ public static class AuctionBidService
         }
 
         // Bids are paid out of the DKP pool the officer picked when they created the auction, so
-        // that's the balance to validate against — not the bidder's grand total.
-        var map = await dkpPools.GetMapAsync(item.Auction.LinkshellId, cancellationToken);
+        // that's the balance to validate against — not the bidder's grand total. Available = that
+        // balance minus DKP locked by bids the member is winning on OTHER items. This item is left
+        // out so raising a bid you already hold compares against the replacement, not old + new.
+        var map = await dkpPools.GetMapAsync(linkshellId, cancellationToken);
         var auctionPoolId = item.Auction.DkpPoolId ?? map.DefaultPoolId;
         var availableDkp = await AuctionDkpService.ComputePoolAvailableDkpAsync(
-            db, dkpPoolBalances, appUserId, item.Auction.LinkshellId, auctionPoolId,
+            db, dkpPoolBalances, appUserId, linkshellId, auctionPoolId,
             cancellationToken, excludeAuctionItemId: itemId);
         if (bidAmount > availableDkp)
         {
@@ -118,22 +183,26 @@ public static class AuctionBidService
                 + "(the rest is locked by bids you're currently winning).");
         }
 
-        var characterName = membership.CharacterName ?? characterNameFallback;
-        item.Bids.Add(new Bid
+        var bid = new Bid
         {
             AuctionItemId = itemId,
             AppUserId = appUserId,
             CharacterName = characterName,
             BidAmount = bidAmount,
-            CreatedAt = now
-        });
+            CreatedAt = nowUtc
+        };
+        db.Bids.Add(bid);
         item.CurrentHighestBid = bidAmount;
         item.CurrentHighestBidder = characterName;
         item.CurrentHighestBidderAppUserId = appUserId;
         item.Status = "BidPlaced";
 
         await db.SaveChangesAsync(cancellationToken);
-        return new AuctionBidResult(true, null, item.ItemName, bidAmount);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+        return new AuctionBidResult(true, null, item.ItemName, bidAmount, bid);
     }
 
     private static AuctionBidResult Fail(string error) => new(false, error, null, 0);

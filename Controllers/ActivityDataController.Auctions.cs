@@ -488,63 +488,18 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Bidding is locked by leadership right now." });
         }
 
-        var bidAmount = request.BidAmount;
-        if (bidAmount <= 0)
+        // The amount rules (positive, above the high bid, within available DKP) and the locks that
+        // stop two bids at once from racing live in one place, shared with the Discord bid modal.
+        var characterName = appUser.CharacterName ?? appUser.UserName ?? "User";
+        var result = await AuctionBidService.CommitBidAsync(
+            _dbContext, _dkpPools, _dkpPoolBalances, appUser.Id, characterName,
+            auctionItem.Auction.LinkshellId, itemId, request.BidAmount, nowUtc, cancellationToken);
+        if (!result.Success || result.Bid is null)
         {
-            return BadRequest(new { error = "Bid amount must be a positive number." });
+            return BadRequest(new { error = result.Error ?? "Placing your bid failed." });
         }
 
-        const int MaxBidAmount = 1_000_000;
-        if (bidAmount > MaxBidAmount)
-        {
-            return BadRequest(new { error = $"Bid amount cannot exceed {MaxBidAmount:N0}." });
-        }
-
-        // Starting bid is the floor — no bid may come in under it. After that, each
-        // bid must also beat the current high by at least 1.
-        var currentHigh = auctionItem.CurrentHighestBid ?? 0;
-        var startingBid = auctionItem.StartingBidDkp ?? 0;
-        var minimumBid = Math.Max(startingBid, currentHigh + 1);
-        if (bidAmount < minimumBid)
-        {
-            return BadRequest(new
-            {
-                error = currentHigh > 0 && minimumBid == currentHigh + 1
-                    ? $"Bid amount must be greater than the current high bid of {currentHigh}."
-                    : $"Bid amount must be at least the starting bid of {startingBid} DKP."
-            });
-        }
-
-        // Available = the balance in the auction's DKP pool, minus DKP locked by bids the user is
-        // currently winning on OTHER live items drawing from it. Exclude this item so raising a bid
-        // you already hold compares against the replacement, not old + new.
-        var bidPoolMap = await _dkpPools.GetMapAsync(auctionItem.Auction.LinkshellId, cancellationToken);
-        var bidPoolId = auctionItem.Auction.DkpPoolId ?? bidPoolMap.DefaultPoolId;
-        var availableDkp = await AuctionDkpService.ComputePoolAvailableDkpAsync(
-            _dbContext, _dkpPoolBalances, appUser.Id, auctionItem.Auction.LinkshellId, bidPoolId,
-            cancellationToken, excludeAuctionItemId: itemId);
-        if (bidAmount > availableDkp)
-        {
-            var poolLabel = bidPoolMap.HasMultiplePools ? $" {bidPoolMap.NameFor(bidPoolId)}" : string.Empty;
-            return BadRequest(new { error = $"Insufficient available{poolLabel} DKP. You have {availableDkp:0.##} available (the rest is locked by bids you're currently winning)." });
-        }
-
-        var bid = new Bid
-        {
-            AuctionItemId = itemId,
-            AppUserId = appUser.Id,
-            CharacterName = appUser.CharacterName ?? appUser.UserName ?? "User",
-            BidAmount = bidAmount,
-            CreatedAt = nowUtc
-        };
-
-        auctionItem.Bids.Add(bid);
-        auctionItem.CurrentHighestBid = bidAmount;
-        auctionItem.CurrentHighestBidder = bid.CharacterName;
-        auctionItem.CurrentHighestBidderAppUserId = appUser.Id;
-        auctionItem.Status = "BidPlaced";
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var bid = result.Bid;
         return Ok(new ActivityAuctionBidDto(bid.Id, bid.CharacterName, bid.BidAmount, bid.CreatedAt));
     }
 
