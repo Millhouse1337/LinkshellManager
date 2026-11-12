@@ -127,6 +127,10 @@
               <span class="we-muted">
                 Posted {{ formatDate(event.postedToSheetUtc) }} · {{ owed }} member{{ owed === 1 ? '' : 's' }} not paid yet
               </span>
+              <!-- Who the button pays, so a name that shouldn't be there is seen before paying. -->
+              @if (event.unpaidRegisteredMemberNames?.length) {
+                <span class="we-owing-row__names">Will pay: {{ event.unpaidRegisteredMemberNames!.join(', ') }}</span>
+              }
             </div>
             @if (confirmPayRegisteredId() === event.id) {
               <button type="button" class="btn sm primary" (click)="payRegistered(event)" [disabled]="windows.busy()"

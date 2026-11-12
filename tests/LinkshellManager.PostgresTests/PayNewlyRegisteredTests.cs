@@ -130,8 +130,8 @@ public class PayNewlyRegisteredTests : IAsyncLifetime
     {
         var cardId = await SeedPostedCampThenRegisterCarolAsync();
 
-        // The attendance payload's count runs as real SQL here: it lists the card, owing Carol.
-        Assert.Equal(1, Assert.Single(await OwingAsync()).Value);
+        // The attendance payload's list runs as real SQL here: it lists the card, owing Carol.
+        Assert.Equal(["Carol"], Assert.Single(await OwingAsync()).Value);
 
         Task<int?>? officerB = null;
         var bWasWaiting = false;
@@ -160,11 +160,11 @@ public class PayNewlyRegisteredTests : IAsyncLifetime
         Assert.Empty(await OwingAsync());
     }
 
-    private async Task<Dictionary<int, int>> OwingAsync()
+    private async Task<Dictionary<int, IReadOnlyList<string>>> OwingAsync()
     {
         await using var db = _pg.CreateContext();
         var linkshellId = await db.Linkshells.Select(l => l.Id).SingleAsync();
-        return await NewLedgerService(db).CountUnpaidAccountsAsync(linkshellId, Now.AddDays(-1), CancellationToken.None);
+        return await NewLedgerService(db).FindUnpaidAccountsAsync(linkshellId, Now.AddDays(-1), CancellationToken.None);
     }
 
     // Many presses with no pause: whatever the interleaving, Carol is paid exactly once.

@@ -17,7 +17,7 @@ namespace LinkshellManager.Tests;
 // Post pays only who is registered at that moment; the page-load sweep that used to pay latecomers
 // (and could pay a camp twice) is gone. So someone captured on a card who registers afterwards is
 // paid by an officer pressing the button: once, at the card's rate, and never anyone already paid.
-// The attendance payload finds those cards with CountUnpaidAccountsAsync, which has to agree with
+// The attendance payload finds those cards with FindUnpaidAccountsAsync, which has to agree with
 // what the button would pay.
 public class PayNewlyRegisteredTests
 {
@@ -129,8 +129,8 @@ public class PayNewlyRegisteredTests
     private static Task<List<DkpLedgerEntry>> EarnedAsync(ApplicationDbContext db) =>
         db.DkpLedgerEntries.AsNoTracking().Where(e => e.EntryType == "SnapshotEarned").ToListAsync();
 
-    private static Task<Dictionary<int, int>> OwingAsync(ApplicationDbContext db, DateTime? since = null) =>
-        NewLedgerService(db).CountUnpaidAccountsAsync(
+    private static Task<Dictionary<int, IReadOnlyList<string>>> OwingAsync(ApplicationDbContext db, DateTime? since = null) =>
+        NewLedgerService(db).FindUnpaidAccountsAsync(
             LinkshellId, since ?? CapturedAt.AddDays(-1), CancellationToken.None);
 
     [Fact]
@@ -232,11 +232,11 @@ public class PayNewlyRegisteredTests
 
         await RegisterCarolAsync(db);
         var owing = await OwingAsync(db);
-        Assert.Equal(1, Assert.Single(owing).Value);
+        Assert.Equal(["Carol"], Assert.Single(owing).Value);
         Assert.Equal(CardId, owing.Keys.Single());
 
-        // What the count promised is what the button pays.
-        Assert.Equal(owing[CardId], await NewLedgerService(db).PayNewlyRegisteredAsync(CardId, CancellationToken.None));
+        // Who the list promised is who the button pays.
+        Assert.Equal(owing[CardId].Count, await NewLedgerService(db).PayNewlyRegisteredAsync(CardId, CancellationToken.None));
         Assert.Empty(await OwingAsync(db));
     }
 
@@ -279,7 +279,8 @@ public class PayNewlyRegisteredTests
             Id = 2, LinkshellId = LinkshellId, AppUserId = CarolId, CharacterName = "Carol", LinkshellDkp = 0,
         });
         await db.SaveChangesAsync();
-        Assert.Equal(1, (await OwingAsync(db))[CardId]);
+        // Listed once, by her main name, though the card has her alt.
+        Assert.Equal(["Carol"], (await OwingAsync(db))[CardId]);
 
         db.DkpLedgerEntries.Add(new DkpLedgerEntry
         {

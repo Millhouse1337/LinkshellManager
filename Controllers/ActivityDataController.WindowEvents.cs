@@ -85,7 +85,10 @@ public sealed partial class ActivityDataController
         int UnregisteredMemberCount = 0,
         // On a POSTED card: how many accounts on it are registered now but have not been paid from
         // it (they registered after Post). What "Pay newly registered" would pay. 0 elsewhere.
-        int UnpaidRegisteredMemberCount = 0);
+        int UnpaidRegisteredMemberCount = 0,
+        // The same people by name (one per account), so the officer sees who that button pays
+        // before pressing it. Null except on a posted card that owes someone.
+        IReadOnlyList<string>? UnpaidRegisteredMemberNames = null);
 
     public sealed record ActivityWindowEventMemberDkpInput(string? CharacterName, double? DkpAmount);
 
@@ -323,7 +326,7 @@ public sealed partial class ActivityDataController
         var postedOwingEvents = new List<ActivityWindowEventDto>();
         if (canManage)
         {
-            var owing = await _windowEventDkpLedger.CountUnpaidAccountsAsync(
+            var owing = await _windowEventDkpLedger.FindUnpaidAccountsAsync(
                 linkshellId, DateTime.UtcNow.AddDays(-PayNewlyRegisteredLookbackDays), cancellationToken);
             if (owing.Count > 0)
             {
@@ -338,7 +341,8 @@ public sealed partial class ActivityDataController
                 postedOwingEvents = owingCards
                     .Select(e => MapActivityWindowEvent(e, roster, miscPostRate) with
                     {
-                        UnpaidRegisteredMemberCount = owing[e.Id],
+                        UnpaidRegisteredMemberCount = owing[e.Id].Count,
+                        UnpaidRegisteredMemberNames = owing[e.Id],
                     })
                     .ToList();
             }

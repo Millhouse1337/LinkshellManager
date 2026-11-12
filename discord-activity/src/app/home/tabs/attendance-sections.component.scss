@@ -389,6 +389,8 @@
 }
 .we-owing-row__info { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; font-size: 13px; }
 .we-owing-row__info .we-muted { font-size: 12px; }
+// Long rosters wrap rather than pushing the Pay button off the row.
+.we-owing-row__names { font-size: 12px; overflow-wrap: anywhere; }
 
 /* Search row, sitting between the card head and the list it filters. */
 .we-archive-search {

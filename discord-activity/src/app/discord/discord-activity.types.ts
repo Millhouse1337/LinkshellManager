@@ -1405,6 +1405,8 @@ export interface ActivityWindowEvent {
   // On a POSTED card: how many people on it registered after it was posted and have not been
   // paid from it yet. What "Pay newly registered" would pay.
   unpaidRegisteredMemberCount?: number;
+  // The same people by name (one per member), so the officer sees who the button pays.
+  unpaidRegisteredMemberNames?: string[] | null;
   snapshots: ActivityWindowSnapshot[];
   combinedMembers: ActivityWindowCombinedMember[];
   dkpAmount?: number | null;

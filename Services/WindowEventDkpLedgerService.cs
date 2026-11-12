@@ -176,19 +176,22 @@ public sealed class WindowEventDkpLedgerService
         return written;
     }
 
-    // Posted cards that still owe someone, and how many accounts each owes: people on the card who
-    // resolve to a member now but have no ledger row from it. That is someone who registered after
-    // the card was posted -- exactly who PayNewlyRegisteredAsync would pay. Cards owing nobody are
-    // left out.
+    // Posted cards that still owe someone, and WHO each owes: people on the card who resolve to a
+    // member now but have no ledger row from it. That is someone who registered after the card was
+    // posted -- exactly who PayNewlyRegisteredAsync would pay. One name per account (the member's
+    // character name, else the name captured on the card), sorted. Cards owing nobody are left out.
+    //
+    // Names rather than a count so the officer sees who the button pays before pressing it: a
+    // count alone could not show a name that should not be there.
     //
     // Read-only, and light enough for the polled attendance payload: one roster load, the names on
     // the cards (not their whole capture tree) and who is already paid, for cards posted since
     // `postedSinceUtc` only. The names go through the same BuildCombinedMembers and roster lookup
-    // the payout uses, so the count and the payout cannot disagree about who is owed.
-    public async Task<Dictionary<int, int>> CountUnpaidAccountsAsync(
+    // the payout uses, so the list and the payout cannot disagree about who is owed.
+    public async Task<Dictionary<int, IReadOnlyList<string>>> FindUnpaidAccountsAsync(
         int linkshellId, DateTime postedSinceUtc, CancellationToken cancellationToken)
     {
-        var owing = new Dictionary<int, int>();
+        var owing = new Dictionary<int, IReadOnlyList<string>>();
 
         // The same "can this card pay at all" test the payout starts with.
         var cards = await _db.WindowEvents.AsNoTracking()
@@ -269,12 +272,17 @@ public sealed class WindowEventDkpLedgerService
 
             paidByCard.TryGetValue(card.Key, out var paid);
             var unpaid = BuildCombinedMembers(snapshots)
-                .Select(item => roster.Resolve(item.Entry)?.AppUserId)
-                .OfType<string>()
-                .Where(appUserId => paid is null || !paid.Contains(appUserId))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Count();
-            if (unpaid > 0)
+                .Select(item => (item.Entry, Membership: roster.Resolve(item.Entry)))
+                .Where(row => row.Membership?.AppUserId is { } appUserId
+                              && (paid is null || !paid.Contains(appUserId)))
+                .GroupBy(row => row.Membership!.AppUserId!, StringComparer.OrdinalIgnoreCase)
+                .Select(account => account.First())
+                .Select(row => string.IsNullOrWhiteSpace(row.Membership!.CharacterName)
+                    ? row.Entry.CharacterName.Trim()
+                    : row.Membership.CharacterName.Trim())
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (unpaid.Count > 0)
             {
                 owing[card.Key] = unpaid;
             }
