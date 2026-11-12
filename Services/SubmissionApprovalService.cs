@@ -128,7 +128,16 @@ public sealed class SubmissionApprovalService
             .FirstOrDefaultAsync(s => s.Id == submissionId && s.LinkshellId == linkshellId, cancellationToken);
         if (submission is null) return ApprovalResult.NotFound;
 
-        submission.MonsterName = string.IsNullOrWhiteSpace(edits.MonsterName) ? submission.MonsterName : edits.MonsterName.Trim();
+        var monsterName = string.IsNullOrWhiteSpace(edits.MonsterName) ? submission.MonsterName : edits.MonsterName.Trim();
+        // A reviewer who picks a different monster has corrected which one died, and the editor has
+        // no HQ box. So the new name decides HQ, as it did before the queue kept Hq: "Nidhogg" is the
+        // HQ, "Fafnir" or "Fafnir/Nidhogg" the NQ, anything else neither. Without this, a member's
+        // Nidhogg corrected to the NQ was still approved as HQ and sent the next board back to Day 1.
+        if (!string.Equals(monsterName?.Trim(), submission.MonsterName?.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            submission.Hq = HnmConfig.ResolveClaimHalf(monsterName, false).IsHq;
+        }
+        submission.MonsterName = monsterName;
         submission.DayNumber = edits.DayNumber;
         submission.Claim = edits.Claim;
         submission.Time = edits.Time;

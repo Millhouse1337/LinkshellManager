@@ -76,6 +76,45 @@ public class PendingTodHqAndSecondsTests
         Assert.False((await db.Tods.SingleAsync()).Hq);
     }
 
+    // A reviewer who corrects the monster has said which one died, and the editor has no HQ box: the
+    // new name decides HQ. Leaving the name alone keeps what the member submitted.
+    [Theory]
+    [InlineData("Nidhogg", true)]          // unchanged: the member's HQ stands
+    [InlineData("Fafnir/Nidhogg", false)]  // the combined label names no half: NQ, as before Hq was kept
+    [InlineData("Fafnir", false)]
+    [InlineData("Cerberus", false)]
+    public async Task AReviewerWhoChangesTheMonster_DecidesHqByTheNewName(string reviewed, bool expectedHq)
+    {
+        await using var db = await TodCallers.SeededAsync(canManageTods: false);
+        await TodCallers.AddonPostAsync(db, "Nidhogg", KilledAt);
+        var pending = await db.PendingTodSubmissions.SingleAsync();
+        Assert.True(pending.Hq);
+
+        await TodCallers.Approvals(db).ApproveTodWithEditsAsync(
+            TodCallers.LinkshellId, pending.Id,
+            new PendingTodEdits(reviewed, null, null, KilledAt, null, null, pending.RepopTime),
+            CancellationToken.None);
+
+        Assert.Equal(expectedHq, (await db.Tods.SingleAsync()).Hq);
+    }
+
+    // The app queues a member's Nidhogg as "Fafnir/Nidhogg" + HQ; a reviewer who keeps that name keeps HQ.
+    [Fact]
+    public async Task AReviewerWhoKeepsTheCombinedName_KeepsTheMembersHq()
+    {
+        await using var db = await TodCallers.SeededAsync(canManageTods: false);
+        await TodCallers.AppPostAsync(db, TodCallers.AppRequest("Nidhogg", KilledAt));
+        var pending = await db.PendingTodSubmissions.SingleAsync();
+        Assert.Equal("Fafnir/Nidhogg", pending.MonsterName);
+
+        await TodCallers.Approvals(db).ApproveTodWithEditsAsync(
+            TodCallers.LinkshellId, pending.Id,
+            new PendingTodEdits("Fafnir/Nidhogg", null, null, KilledAt, null, null, pending.RepopTime),
+            CancellationToken.None);
+
+        Assert.True((await db.Tods.SingleAsync()).Hq);
+    }
+
     // A reviewer who blanks the repop gets it worked out again, with the seconds this time.
     [Fact]
     public async Task ABlankRepop_IsWorkedOutWithTheSeconds()
