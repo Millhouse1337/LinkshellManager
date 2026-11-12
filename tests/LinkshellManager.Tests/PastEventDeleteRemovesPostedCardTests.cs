@@ -89,7 +89,6 @@ public class PastEventDeleteRemovesPostedCardTests
                 LinkshellId = LinkshellId,
                 WindowEventId = card.Id,
                 CapturedAtUtc = CampStart.AddMinutes(5),
-                CreatedAtUtc = CampStart.AddMinutes(5),
                 SnapshotStatus = AttendanceSnapshotStatuses.Active,
                 EntryCount = 1,
             });

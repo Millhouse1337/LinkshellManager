@@ -32,7 +32,6 @@ public static class BreakReturnDenial
         ApplicationDbContext db,
         Event eventEntity,
         int ledgerEntryId,
-        string? deniedBy,
         CancellationToken cancellationToken)
     {
         // The in-memory test provider has no transactions or row locks.
@@ -71,7 +70,7 @@ public static class BreakReturnDenial
         var participantLedger = await db.AppUserEventStatusLedgers
             .Where(item => item.AppUserEventId == participation.Id)
             .ToListAsync(cancellationToken);
-        Apply(eventEntity, participation, deniedReturn, participantLedger, DateTime.UtcNow, deniedBy);
+        Apply(eventEntity, participation, deniedReturn, participantLedger, DateTime.UtcNow);
 
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
@@ -88,11 +87,9 @@ public static class BreakReturnDenial
         AppUserEvent participation,
         AppUserEventStatusLedger deniedReturn,
         IEnumerable<AppUserEventStatusLedger> participantLedger,
-        DateTime nowUtc,
-        string? deniedBy)
+        DateTime nowUtc)
     {
         deniedReturn.DeniedAt = nowUtc;
-        deniedReturn.DeniedBy = deniedBy;
         deniedReturn.RequiresVerification = false;
 
         if (EventBreakPolicy.IsWindowedAttendance(eventEntity))
@@ -125,7 +122,6 @@ public static class BreakReturnDenial
         }
 
         participation.IsOnBreak = true;
-        participation.PauseTime = returnedAt;
         participation.ResumeTime = null;
     }
 }

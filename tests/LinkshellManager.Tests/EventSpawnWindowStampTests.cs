@@ -79,7 +79,6 @@ public class EventSpawnWindowStampTests
     public void AddonPostCount_IsUnaffectedByTheStamp()
     {
         var camp = Camp(spawnWindowCount: 12, spawnWindowMinutes: 30, windowCountOverride: 2);
-        camp.CreationSource = "Addon";
 
         Assert.Equal(12, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
         // AttendancePostCount comes off the monster's tier for a curated HNM, not off the stamp,

@@ -21,7 +21,6 @@ public class DiscordAdHocBoardTests
         EventLocation = "Mount Zhayolm",
         StartTime = Start,
         DkpPerHour = dkpPerHour,
-        CreationSource = "App",
     };
 
     private static string Board(Event ev, params EventSignupLine[] signups) =>

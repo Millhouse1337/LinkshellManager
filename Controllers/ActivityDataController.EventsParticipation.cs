@@ -106,7 +106,6 @@ public sealed partial class ActivityDataController
             JobName = jobName,
             SubJobName = subJobName,
             JobType = jobType,
-            EventDkp = 0,
             StartTime = startTime,
             IsQuickJoin = isQuickJoin
         };
@@ -182,7 +181,6 @@ public sealed partial class ActivityDataController
                     SubJobName = request.SubJobName.Trim(),
                     JobType = request.JobType.Trim(),
                     StartTime = DateTime.UtcNow,
-                    EventDkp = 0,
                     IsQuickJoin = true
                 });
             }
@@ -324,7 +322,6 @@ public sealed partial class ActivityDataController
             SubJobName = request.SubJobName.Trim(),
             JobType = request.JobType.Trim(),
             StartTime = DateTime.UtcNow,
-            EventDkp = 0,
             IsQuickJoin = true,
             IsVerified = null
         });
@@ -466,7 +463,6 @@ public sealed partial class ActivityDataController
         }
 
         participation.IsVerified = request.IsVerified;
-        participation.Proctor = appUser.CharacterName ?? appUser.UserName;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
@@ -511,7 +507,6 @@ public sealed partial class ActivityDataController
         }
 
         participation.IsVerified = null;
-        participation.Proctor = null;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });

@@ -33,7 +33,6 @@ public class AllianceIdentityTests
             LinkshellId = Ls,
             WindowEventId = windowEventId,
             CapturedAtUtc = Anchor,
-            CreatedAtUtc = Anchor,
             AllianceKey = key,
             AllianceNumber = number,
             SnapshotStatus = AttendanceSnapshotStatuses.Active,

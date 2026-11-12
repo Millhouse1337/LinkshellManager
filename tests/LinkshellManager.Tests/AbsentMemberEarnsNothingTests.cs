@@ -88,7 +88,6 @@ public class AbsentMemberEarnsNothingTests
 
         Assert.Equal(0, absent.EventDkp);
         Assert.False(absent.ActiveCredit);
-        Assert.False(absent.IsVerified); // the denial stays on record
 
         // The absent member's balance did not move. Their ledger row exists at 0, so a later
         // Past Events correction can still move their balance through it.

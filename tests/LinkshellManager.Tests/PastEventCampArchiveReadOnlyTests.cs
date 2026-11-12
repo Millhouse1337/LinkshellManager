@@ -68,7 +68,6 @@ public class PastEventCampArchiveReadOnlyTests
                 TimeStamp = CampStart.AddHours(1),
                 Duration = 1,
                 DkpPerHour = type == "HNM" ? null : 10,
-                EventDkp = 10,
             });
             db.AppUserEventHistories.Add(new AppUserEventHistory
             {
@@ -78,7 +77,6 @@ public class PastEventCampArchiveReadOnlyTests
                 CharacterName = "Alice",
                 Duration = 1,
                 EventDkp = 10,
-                IsVerified = true,
                 ActiveCredit = true,
             });
             db.DkpLedgerEntries.Add(new DkpLedgerEntry
@@ -180,9 +178,9 @@ public class PastEventCampArchiveReadOnlyTests
         var (edits, _) = NewServices(db);
 
         var newRate = await edits.EditEventAsync(CampHistoryId,
-            new EventHistoryEditInput("renamed", "HNM", null, null, 1, 25), CancellationToken.None);
+            new EventHistoryEditInput("renamed", "HNM", null, 1, 25), CancellationToken.None);
         var newDuration = await edits.EditEventAsync(CampHistoryId,
-            new EventHistoryEditInput("renamed", "HNM", null, null, 2, null), CancellationToken.None);
+            new EventHistoryEditInput("renamed", "HNM", null, 2, null), CancellationToken.None);
 
         Assert.Equal(EventHistoryEditOutcome.CampArchive, newRate);
         Assert.Equal(EventHistoryEditOutcome.CampArchive, newDuration);
@@ -202,7 +200,7 @@ public class PastEventCampArchiveReadOnlyTests
         var (edits, _) = NewServices(db);
 
         var outcome = await edits.EditEventAsync(CampHistoryId,
-            new EventHistoryEditInput("Fafnir", "HNM", "Dragon's Aery", null, 1, null), CancellationToken.None);
+            new EventHistoryEditInput("Fafnir", "HNM", "Dragon's Aery", 1, null), CancellationToken.None);
 
         Assert.Equal(EventHistoryEditOutcome.Done, outcome);
         var history = await db.EventHistories.AsNoTracking().SingleAsync(h => h.Id == CampHistoryId);

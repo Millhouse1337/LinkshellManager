@@ -252,7 +252,6 @@ public class OneMembershipOneParticipationTests : IAsyncLifetime
         EventId = eventId,
         AppUserId = appUserId,
         StartTime = Now,
-        EventDkp = 0,
     };
 
     [Fact]
@@ -308,7 +307,7 @@ public class OneMembershipOneParticipationTests : IAsyncLifetime
                     new AppUserEventWindow { EventAttendanceWindowId = w1, AppUserEventId = carolId, AppUserId = "carol", VerifiedAt = Now });
                 db.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
                 {
-                    AppUserEventId = dupId, EventId = eventId, AppUserId = "bob", ActionType = "Verify", OccurredAt = Now,
+                    AppUserEventId = dupId, EventId = eventId, ActionType = "BreakStart", OccurredAt = Now,
                 });
                 await db.SaveChangesAsync();
             }

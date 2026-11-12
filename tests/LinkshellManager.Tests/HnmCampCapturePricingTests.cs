@@ -506,7 +506,6 @@ public class HnmCampCapturePricingTests
             Name = "Runs to the zone",
             SlotKind = AttendanceSnapshotSlotKinds.Misc,
             CapturedAtUtc = CampStart.AddMinutes(30),
-            CreatedAtUtc = CampStart.AddMinutes(30),
             SnapshotStatus = AttendanceSnapshotStatuses.Active,
             EntryCount = characterNames.Length,
         };

@@ -978,12 +978,9 @@ export interface ActivityEventParticipant {
   withdrewFromEvent?: boolean | null;
   // Spendable DKP right now (committed − bid locks − pending live-event loot spend).
   biddableDkp?: number;
-  proctor?: string | null;
   startTime?: string | null;
   resumeTime?: string | null;
-  pauseTime?: string | null;
   duration?: number | null;
-  eventDkp?: number | null;
   statusLedger: ActivityStatusLedgerEntry[];
   // Manual Check In only. The window this member first checked in for, and the one they
   // checked out on (null = still in). Credit runs arrival..min(departure, popWindow),
@@ -1155,8 +1152,7 @@ export interface ActivityEvent {
   dkpPoolName?: string | null;
   // Live HNM camp state. attendanceMode 'Wd' = Manual Check In, null = Standard. nextWindowAt is
   // when the next window opens (null on the final window / not timed). wdFinalizedAt is stamped at
-  // End Camp (always null on a Standard board); wdAwaitingProcessingSince is a legacy column that
-  // nothing writes any more — camps hand their roster to the attendance sections of the Event System tab for review instead.
+  // End Camp (always null on a Standard board).
   attendanceMode?: string | null;
   // The window that has already OPENED. Pop-window semantics use this (End Camp treats it as the
   // window it popped on). Do NOT show it — it reads one lower than the Discord board.
@@ -1165,7 +1161,6 @@ export interface ActivityEvent {
   // this for any "Window N of M" the user reads.
   hnmFocusWindow?: number;
   nextWindowAt?: string | null;
-  wdAwaitingProcessingSince?: string | null;
   wdFinalizedAt?: string | null;
   wdPopWindow?: number | null;
   // What End Camp would pay out if the camp ended now. Null on anything but a Standard HNM camp.
@@ -1531,9 +1526,7 @@ export interface ActivityStatusLedgerEntry {
   occurredAt: string;
   requiresVerification: boolean;
   verifiedAt?: string | null;
-  verifiedBy?: string | null;
   deniedAt?: string | null;
-  deniedBy?: string | null;
 }
 
 export interface ActivityHistory {
@@ -1545,32 +1538,6 @@ export interface ActivityHistory {
   endTime?: string | null;
   duration?: number | null;
   participantCount: number;
-}
-
-export interface ActivityHistoryParticipant {
-  id: number;
-  appUserId?: string | null;
-  characterName?: string | null;
-  jobName?: string | null;
-  subJobName?: string | null;
-  jobType?: string | null;
-  duration?: number | null;
-  eventDkp?: number | null;
-  isVerified?: boolean | null;
-}
-
-export interface ActivityHistoryDetail {
-  id: number;
-  linkshellId: number;
-  name?: string | null;
-  type?: string | null;
-  location?: string | null;
-  startTime?: string | null;
-  endTime?: string | null;
-  duration?: number | null;
-  dkpPerHour?: number | null;
-  details?: string | null;
-  participants: ActivityHistoryParticipant[];
 }
 
 // Game Addon (att) pairing.
@@ -2143,7 +2110,6 @@ export interface ActivityEditEventHistoryInput {
   eventName?: string | null;
   eventType?: string | null;
   eventLocation?: string | null;
-  details?: string | null;
   duration?: number | null;
   dkpPerHour?: number | null;
 }

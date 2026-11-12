@@ -938,10 +938,7 @@ public sealed partial class ActivityDataController
                                 item.OccurredAt,
                                 item.RequiresVerification,
                                 item.VerifiedAt,
-                                item.VerifiedBy,
-                                item.DeniedAt,
-                                item.DeniedBy,
-                                item.Source))
+                                item.DeniedAt))
                             .ToList()))
                     .FirstOrDefault(),
                 evt.AppUserEvents
@@ -956,14 +953,11 @@ public sealed partial class ActivityDataController
                         participation.JobType,
                         participation.IsQuickJoin,
                         participation.IsVerified,
-                        participation.Proctor,
                         participation.StartTime,
                         participation.ResumeTime,
-                        participation.PauseTime,
                         participation.IsOnBreak,
                         participation.WithdrewFromEvent,
                         participation.Duration,
-                        participation.EventDkp,
                         participation.StatusLedgerEntries
                             .OrderBy(item => item.OccurredAt)
                             .Select(item => new ActivityStatusLedgerDto(
@@ -972,10 +966,7 @@ public sealed partial class ActivityDataController
                                 item.OccurredAt,
                                 item.RequiresVerification,
                                 item.VerifiedAt,
-                                item.VerifiedBy,
-                                item.DeniedAt,
-                                item.DeniedBy,
-                                item.Source))
+                                item.DeniedAt))
                             .ToList(),
                         EventBiddableDkp(evt.LinkshellId, evt.EventType, participation.AppUserId),
                         participation.WdArrivalWindow,
@@ -1069,7 +1060,6 @@ public sealed partial class ActivityDataController
                 evt.AttendanceMode,
                 evt.HnmWindowNumber,
                 evt.NextWindowAt,
-                evt.WdAwaitingProcessingSince,
                 evt.WdFinalizedAt,
                 evt.WdPopWindow,
                 // What the UI shows — same helper the Discord board uses, so the two can't
@@ -1199,123 +1189,5 @@ public sealed partial class ActivityDataController
                 LeadFor(timing.MonsterName),
                 WindowMethod: MonsterTimingDefaults.DefaultWindowMethod(timing.MonsterName)))
             .ToList();
-    }
-
-    [HttpGet("history")]
-    public async Task<IActionResult> GetHistoryAsync(CancellationToken cancellationToken)
-    {
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null)
-        {
-            return Unauthorized(new
-            {
-                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to load event history."
-            });
-        }
-
-        // Only *locked* linkshells gate access (same as the overview); a
-        // set-but-unlocked server passes null so it's always allowed.
-        var linkshellCandidates = await _dbContext.AppUserLinkshells
-            .Where(link => link.AppUserId == appUser.Id)
-            .Select(link => new
-            {
-                link.LinkshellId,
-                LockedGuildId = link.Linkshell!.LockToDiscordGuild ? link.Linkshell.DiscordGuildId : null
-            })
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        var accessibleLinkshellIds = await FilterAccessibleLinkshellIdsAsync(
-            linkshellCandidates.Select(c => (c.LinkshellId, c.LockedGuildId)).ToList(),
-            cancellationToken);
-        var linkshellIds = accessibleLinkshellIds.ToList();
-
-        if (linkshellIds.Count == 0)
-        {
-            return Ok(Array.Empty<ActivityHistoryDto>());
-        }
-
-        var historyQuery = _dbContext.EventHistories
-            .Include(history => history.AppUserEventHistories)
-            .Where(history => linkshellIds.Contains(history.LinkshellId));
-
-        if (appUser.PrimaryLinkshellId.HasValue)
-        {
-            historyQuery = historyQuery.Where(history => history.LinkshellId == appUser.PrimaryLinkshellId.Value);
-        }
-
-        var histories = await historyQuery
-            .OrderByDescending(history => history.EndTime ?? history.TimeStamp)
-            .Take(50)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        return Ok(histories.Select(history => new ActivityHistoryDto(
-            history.Id,
-            history.LinkshellId,
-            history.EventName,
-            history.EventType,
-            history.EventLocation,
-            history.EndTime,
-            history.Duration,
-            history.AppUserEventHistories.Count)).ToList());
-    }
-
-    [HttpGet("history/{historyId:int}")]
-    public async Task<IActionResult> GetHistoryDetailAsync(int historyId, CancellationToken cancellationToken)
-    {
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null)
-        {
-            return Unauthorized(new
-            {
-                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to load event history details."
-            });
-        }
-
-        var history = await _dbContext.EventHistories
-            .Include(item => item.AppUserEventHistories)
-            .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Id == historyId, cancellationToken);
-
-        if (history is null)
-        {
-            return NotFound(new { error = "The requested history entry was not found." });
-        }
-
-        // GetMembershipAsync also enforces the per-linkshell Discord guild lock.
-        var membership = await GetMembershipAsync(appUser.Id, history.LinkshellId, cancellationToken);
-        if (membership is null)
-        {
-            return Forbid();
-        }
-
-        // Each attendee's DKP from the ledger, the same figure the Past Events list shows.
-        var dkp = await PastEventDkp.LoadAsync(_dbContext, new[] { history.Id }, cancellationToken);
-
-        return Ok(new ActivityHistoryDetailDto(
-            history.Id,
-            history.LinkshellId,
-            history.EventName,
-            history.EventType,
-            history.EventLocation,
-            history.StartTime,
-            history.EndTime,
-            history.Duration,
-            history.DkpPerHour,
-            history.Details,
-            history.AppUserEventHistories
-                .OrderBy(item => item.CharacterName)
-                .Select(item => new ActivityHistoryParticipantDto(
-                    item.Id,
-                    item.AppUserId,
-                    item.CharacterName,
-                    item.JobName,
-                    item.SubJobName,
-                    item.JobType,
-                    item.Duration,
-                    dkp.For(item),
-                    item.IsVerified))
-                .ToList()));
     }
 }

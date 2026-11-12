@@ -21,8 +21,7 @@ namespace LinkshellManager.Tests;
 // stale whenever money moved without patching it: an audit written before audits moved it, an
 // audit of a camp payout, an officer's "Add" on a camp.
 //
-// These go through the real routes: the DKP audit an officer submits, then the Past Events list and
-// the history detail a member opens.
+// These go through the real routes: the DKP audit an officer submits, then the Past Events list.
 public class PastEventDkpFromLedgerTests
 {
     private const int Ls = 7;
@@ -85,7 +84,7 @@ public class PastEventDkpFromLedgerTests
             new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bob", Rank = LinkshellRanks.Member, LinkshellDkp = 0 });
         db.EventHistories.Add(new EventHistory
         {
-            Id = TimedHistoryId, LinkshellId = Ls, EventName = "Sky", EventType = "Sky", DkpPerHour = 10, EventDkp = 20,
+            Id = TimedHistoryId, LinkshellId = Ls, EventName = "Sky", EventType = "Sky", DkpPerHour = 10,
             EndTime = DateTime.UtcNow.AddHours(-1),
             AppUserEventHistories =
             {
@@ -122,14 +121,6 @@ public class PastEventDkpFromLedgerTests
         return (byName, history.GetProperty("eventDkp").GetDouble());
     }
 
-    // The history detail route (the member DKP sheet's event drill-down).
-    private static async Task<Dictionary<string, double?>> DetailShowsAsync(ApplicationDbContext db, int historyId)
-    {
-        var result = await NewController(db).GetHistoryDetailAsync(historyId, CancellationToken.None);
-        var detail = Assert.IsType<ActivityHistoryDetailDto>(Assert.IsType<OkObjectResult>(result).Value);
-        return detail.Participants.ToDictionary(p => p.CharacterName!, p => p.EventDkp);
-    }
-
     private static double Balance(ApplicationDbContext db, string appUserId) =>
         db.AppUserLinkshells.AsNoTracking().Single(m => m.AppUserId == appUserId).LinkshellDkp ?? 0;
 
@@ -145,7 +136,6 @@ public class PastEventDkpFromLedgerTests
         Assert.Equal(10, byName["Alice"]);
         Assert.Equal(10, byName["Bob"]);
         Assert.Equal(20, total);
-        Assert.Equal(10, (await DetailShowsAsync(db, TimedHistoryId))["Bob"]);
     }
 
     [Fact]
@@ -165,7 +155,6 @@ public class PastEventDkpFromLedgerTests
         Assert.Equal(8, byName["Bob"]);
         Assert.Equal(10, byName["Alice"]);
         Assert.Equal(18, total);
-        Assert.Equal(8, (await DetailShowsAsync(db, TimedHistoryId))["Bob"]);
 
         // The audit path wrote only the ledger row; the stored copy is no longer what anyone reads.
         Assert.Equal(10, db.AppUserEventHistories.AsNoTracking().Single(p => p.AppUserId == "bob").EventDkp);
@@ -267,7 +256,6 @@ public class PastEventDkpFromLedgerTests
         Assert.Equal(4, byName["Bob"]);
         Assert.Equal(3, byName["Guest"]);
         Assert.Equal(14, total);
-        Assert.Equal(4, (await DetailShowsAsync(db, CampHistoryId))["Bob"]);
         // And it is what their balances actually got (10 from the timed event each, plus the camp).
         Assert.Equal(17, Balance(db, "alice"));
         Assert.Equal(14, Balance(db, "bob"));
@@ -300,6 +288,5 @@ public class PastEventDkpFromLedgerTests
         var (byName, total) = await ListShowsAsync(db, CampHistoryId);
         Assert.Equal(8.2, byName["Alice"]);
         Assert.Equal(8.2, total);
-        Assert.Equal(8.2, (await DetailShowsAsync(db, CampHistoryId))["Alice"]);
     }
 }

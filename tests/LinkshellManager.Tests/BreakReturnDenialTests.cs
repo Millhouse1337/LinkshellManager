@@ -72,17 +72,15 @@ public class BreakReturnDenialTests
         var (participation, ledger) = BackFromBreak();
         var now = ReturnAt.AddMinutes(45);
 
-        BreakReturnDenial.Apply(TimedEvent(), participation, ledger[1], ledger, now, "Officer");
+        BreakReturnDenial.Apply(TimedEvent(), participation, ledger[1], ledger, now);
 
         Assert.True(participation.IsOnBreak);
-        Assert.Equal(ReturnAt, participation.PauseTime);
         Assert.Null(participation.ResumeTime);
         Assert.Equal(1, participation.Duration);
         // The 45 minutes since the return no longer count.
         Assert.Equal(1, EventEndService.CalculateAccumulatedDurationHours(participation, now, Start));
 
         Assert.Equal(now, ledger[1].DeniedAt);
-        Assert.Equal("Officer", ledger[1].DeniedBy);
         Assert.False(ledger[1].RequiresVerification);
     }
 
@@ -94,19 +92,17 @@ public class BreakReturnDenialTests
         var secondBreak = ReturnAt.AddMinutes(30);
         participation.Duration = 1.5;
         participation.IsOnBreak = true;
-        participation.PauseTime = secondBreak;
         participation.ResumeTime = null;
         ledger.Add(new AppUserEventStatusLedger
         {
             Id = 3, AppUserEventId = 1, EventId = 10, ActionType = "BreakStart", OccurredAt = secondBreak,
         });
 
-        BreakReturnDenial.Apply(TimedEvent(), participation, ledger[1], ledger, secondBreak.AddHours(1), "Officer");
+        BreakReturnDenial.Apply(TimedEvent(), participation, ledger[1], ledger, secondBreak.AddHours(1));
 
         Assert.Equal(1, participation.Duration!.Value, 6);
         // Their current break is left as it was.
         Assert.True(participation.IsOnBreak);
-        Assert.Equal(secondBreak, participation.PauseTime);
         Assert.NotNull(ledger[1].DeniedAt);
     }
 
@@ -129,7 +125,7 @@ public class BreakReturnDenialTests
             RequiresVerification = true,
         });
 
-        BreakReturnDenial.Apply(TimedEvent(), participation, ledger[1], ledger, secondReturn.AddHours(1), "Officer");
+        BreakReturnDenial.Apply(TimedEvent(), participation, ledger[1], ledger, secondReturn.AddHours(1));
 
         Assert.Equal(1, participation.Duration!.Value, 6);
         Assert.False(participation.IsOnBreak);
@@ -143,7 +139,7 @@ public class BreakReturnDenialTests
     {
         var (participation, ledger) = BackFromBreak();
 
-        BreakReturnDenial.Apply(WindowedEvent(), participation, ledger[1], ledger, ReturnAt.AddHours(1), "Officer");
+        BreakReturnDenial.Apply(WindowedEvent(), participation, ledger[1], ledger, ReturnAt.AddHours(1));
 
         Assert.False(participation.IsOnBreak);
         Assert.Equal(ReturnAt, participation.ResumeTime);
@@ -157,13 +153,11 @@ public class BreakReturnDenialTests
     {
         var (participation, ledger) = BackFromBreak();
         participation.IsOnBreak = true;
-        participation.PauseTime = ReturnAt.AddMinutes(10);
         participation.ResumeTime = null;
 
-        BreakReturnDenial.Apply(TimedEvent(), participation, ledger[1], ledger, ReturnAt.AddHours(1), "Officer");
+        BreakReturnDenial.Apply(TimedEvent(), participation, ledger[1], ledger, ReturnAt.AddHours(1));
 
         Assert.Equal(1, participation.Duration);
-        Assert.Equal(ReturnAt.AddMinutes(10), participation.PauseTime);
         Assert.NotNull(ledger[1].DeniedAt);
     }
 
@@ -200,7 +194,6 @@ public class BreakReturnDenialTests
         Assert.IsType<OkObjectResult>(result);
         var participation = await db.AppUserEvents.SingleAsync();
         Assert.True(participation.IsOnBreak);
-        Assert.Equal(ReturnAt, participation.PauseTime);
         Assert.Equal(1, participation.Duration);
         var denied = await db.AppUserEventStatusLedgers.SingleAsync(entry => entry.Id == 2);
         Assert.NotNull(denied.DeniedAt);
@@ -218,7 +211,6 @@ public class BreakReturnDenialTests
         Assert.IsType<OkObjectResult>(result);
         var participation = await db.AppUserEvents.SingleAsync();
         Assert.True(participation.IsOnBreak);
-        Assert.Equal(ReturnAt, participation.PauseTime);
         Assert.Equal(1, participation.Duration);
         Assert.NotNull((await db.AppUserEventStatusLedgers.SingleAsync(entry => entry.Id == 2)).DeniedAt);
     }

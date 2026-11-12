@@ -344,18 +344,11 @@ public static class DiscordEventMessageBuilder
             };
         }
 
-        // Addon-run HNM camps are scored from the addon's in-game window snapshots, so this
-        // board is a notice, not a sign-up sheet: no job select, no Withdraw, no roster.
-        var snapshotOnly = IsAddonSnapshotCamp(ev);
         return new
         {
             content = BuildStartHeading(ev),
-            embeds = new[] { BuildEmbed(ev, signups, snapshotOnly) },
-            // A snapshot camp's board keeps only "Open LSManager App". Always sending the field
-            // matters: omitting it on an edit would leave the old buttons in place.
-            components = snapshotOnly
-                ? WithOpenAppButton(Array.Empty<object[]>())
-                : BuildComponents(ev.Id),
+            embeds = new[] { BuildEmbed(ev, signups) },
+            components = BuildComponents(ev.Id),
             attachments = Array.Empty<object>(),
             allowed_mentions = new { parse = Array.Empty<string>() },
         };
@@ -764,11 +757,7 @@ public static class DiscordEventMessageBuilder
         return string.Join(" - ", new[] { role, job }.Where(s => !string.IsNullOrEmpty(s)));
     }
 
-    // `snapshotOnly` (see IsAddonSnapshotCamp) swaps the "Signed up (N)" roster for a line saying
-    // where attendance actually comes from. Dropping the field silently would read as the board
-    // failing to render it, and it's the roster itself — not just the select — that misleads:
-    // a camp listing three names looks like three people are credited.
-    private static object BuildEmbed(Event ev, IReadOnlyList<EventSignupLine> signups, bool snapshotOnly = false)
+    private static object BuildEmbed(Event ev, IReadOnlyList<EventSignupLine> signups)
     {
         var fields = new List<object>();
         // Windowed HNM camps show the officer-entered StartTime (= Window 1) rather than the
@@ -797,25 +786,12 @@ public static class DiscordEventMessageBuilder
             fields.Add(new { name = "Location", value = Escape(ev.EventLocation!.Trim()), inline = true });
         }
 
-        if (snapshotOnly)
+        fields.Add(new
         {
-            fields.Add(new
-            {
-                name = "Attendance",
-                value = "_Recorded in game — the LSM addon posts a roster snapshot each window. "
-                      + "There is no Discord sign-up for this camp._",
-                inline = false,
-            });
-        }
-        else
-        {
-            fields.Add(new
-            {
-                name = $"Signed up ({signups.Count})",
-                value = BuildRoster(signups),
-                inline = false,
-            });
-        }
+            name = $"Signed up ({signups.Count})",
+            value = BuildRoster(signups),
+            inline = false,
+        });
 
         var typePrefix = string.IsNullOrWhiteSpace(ev.EventType) ? string.Empty : $"{ev.EventType!.Trim()}: ";
         var title = Truncate($"⚔️ {typePrefix}{ev.EventName ?? $"Event #{ev.Id}"}", 250);
@@ -933,18 +909,6 @@ public static class DiscordEventMessageBuilder
 
     public static bool IsHnm(Event ev) =>
         string.Equals((ev.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
-
-    // An HNM camp the LSM addon created and runs. Its roster is the per-window snapshot the
-    // addon scans and posts from in game, so NOTHING clicked in Discord counts toward it — and a
-    // board offering a "Sign up" button next to a "Signed up (N)" list reads exactly like
-    // the way to get credit. It isn't, so those camps get a board with neither.
-    //
-    // Deliberately narrower than "every HNM event". An HNM board created in the app (web or
-    // Activity) exists to COLLECT Discord signups, so it keeps its buttons; only the addon's own
-    // camps, which score themselves off in-game scans, lose them. CreationSource is the existing
-    // discriminator for addon-made rows — see Event.CreationSource.
-    public static bool IsAddonSnapshotCamp(Event ev) =>
-        IsHnm(ev) && string.Equals(ev.CreationSource, "Addon", StringComparison.OrdinalIgnoreCase);
 
     // A board "uses windows" (shows Window N of M + Prev/Next + the timed countdown) when its
     // monster runs a multi-window spawn cycle — the long-window wyrms OR the short-window

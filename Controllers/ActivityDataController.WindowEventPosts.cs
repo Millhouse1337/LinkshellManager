@@ -113,7 +113,6 @@ public sealed partial class ActivityDataController
         {
             LinkshellId = windowEvent.LinkshellId,
             CapturedAtUtc = nowUtc,
-            CreatedAtUtc = nowUtc,
             CapturedByCharacterName = TrimToNull(actorName, 256),
             Name = TrimToNull(request.Name, 128) ?? "Misc post",
             PostedByAppUserId = actor?.Id,

@@ -79,10 +79,6 @@ public sealed class EventHistoryEditService
         if (!string.IsNullOrWhiteSpace(input.EventName)) history.EventName = input.EventName.Trim();
         history.EventType = Clean(input.EventType);
         history.EventLocation = Clean(input.EventLocation);
-        // The Past Events form has no Details box and sends null, so null means "not sent" and the
-        // stored text stays. Writing null here wiped every event's Details on any Save (a rename,
-        // a retype). An empty string still clears it.
-        if (input.Details is not null) history.Details = Clean(input.Details);
         if (input.Duration.HasValue) history.Duration = input.Duration.Value;
 
         // Retyping a closed event (Sky -> Sea) moves its DKP to the other event type's pool. The
@@ -127,7 +123,6 @@ public sealed class EventHistoryEditService
             history.DkpPerHour = newRate;
         }
 
-        history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
         await _db.SaveChangesAsync(cancellationToken);
         return EventHistoryEditOutcome.Done;
     }
@@ -158,7 +153,6 @@ public sealed class EventHistoryEditService
         ApplyEarnedChange(participant, DkpRounding.Round(amount, step),
             memberships, earnedEntries, audits, "DKP earned from completed event (edited).");
 
-        history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
         await _db.SaveChangesAsync(cancellationToken);
         return EventHistoryEditOutcome.Done;
     }
@@ -219,11 +213,8 @@ public sealed class EventHistoryEditService
             JobType = Clean(jobType),
             JobName = Clean(jobName),
             SubJobName = Clean(subJobName),
-            StartTime = history.StartTime,
             Duration = history.Duration,
             EventDkp = earned,
-            IsQuickJoin = true, // added after the fact, not part of the original roster
-            IsVerified = true,  // an officer is adding them, so treat as verified
             ActiveCredit = activeCredit,
         });
 
@@ -247,7 +238,6 @@ public sealed class EventHistoryEditService
                 EventHistoryId: history.Id),
             cancellationToken);
 
-        history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
         try
         {
             await _db.SaveChangesAsync(cancellationToken);
@@ -368,8 +358,6 @@ public sealed class EventHistoryEditService
         }
 
         _db.Remove(participant);
-        history.EventDkp = history.AppUserEventHistories
-            .Where(p => p.Id != participantId).Sum(p => p.EventDkp ?? 0);
         await _db.SaveChangesAsync(cancellationToken);
 
         // Attendance changed → recompute the activity streak (no-op if tracking off).
@@ -551,6 +539,5 @@ public sealed record EventHistoryEditInput(
     string? EventName,
     string? EventType,
     string? EventLocation,
-    string? Details,
     double? Duration,
     int? DkpPerHour);

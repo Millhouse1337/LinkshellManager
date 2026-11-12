@@ -109,7 +109,6 @@ public class WindowEventOneCreditPerAccountTests
                 LinkshellId = LinkshellId,
                 WindowEventId = CardId,
                 CapturedAtUtc = CampStart.AddMinutes(10 * (i + 1)),
-                CreatedAtUtc = CampStart.AddMinutes(10 * (i + 1)),
                 SnapshotStatus = AttendanceSnapshotStatuses.Active,
                 EntryCount = captures[i].Length,
             });

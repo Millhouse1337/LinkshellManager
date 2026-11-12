@@ -72,7 +72,6 @@ public class WindowEventLedgerTests : IAsyncLifetime
                     Linkshell = linkshell,
                     WindowEvent = card,
                     CapturedAtUtc = now,
-                    CreatedAtUtc = now,
                     SnapshotStatus = AttendanceSnapshotStatuses.Active,
                     EntryCount = 1,
                     Entries = { new AttendanceSnapshotEntry { CharacterName = name } },

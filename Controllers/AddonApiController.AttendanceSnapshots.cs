@@ -19,6 +19,8 @@ public sealed partial class AddonApiController
     public sealed record AddonAttendanceSnapshotRequest(
         DateTime? CapturedAtUtc,
         string? CapturedByCharacterName,
+        // ACCEPTED AND IGNORED: the addon still sends its clock offset, but nothing ever read the
+        // stored copy. Kept on the wire so those addons don't get a 400.
         string? UtcOffset,
         IReadOnlyList<AddonAttendanceSnapshotEntryDto>? Entries,
         string? Name,
@@ -199,8 +201,6 @@ public sealed partial class AddonApiController
             LinkshellId = token.LinkshellId,
             CapturedAtUtc = capturedAt,
             CapturedByCharacterName = TruncateString(request.CapturedByCharacterName, 256),
-            UtcOffset = TruncateString(request.UtcOffset, 8),
-            CreatedAtUtc = nowUtc,
             Name = trimmedName,
             // Filed by an officer, never here. WindowNumber stays null until then, and SlotKind
             // keeps its Window default so an unfiled capture is never mistaken for a Misc post.
@@ -440,7 +440,7 @@ public sealed partial class AddonApiController
     }
 
     // Closes a Window Event from the addon's HNM session "End Event" button.
-    // It only flips the status + stamps ClosedAtUtc. It deliberately does NOT enqueue any sheet
+    // It only flips the status to Closed. It deliberately does NOT enqueue any sheet
     // sync — posting a Window Event to the DKP sheet stays an explicit,
     // officer-initiated action on the Window Events page.
     [HttpPost("window-events/{windowEventId:int}/close")]
@@ -467,7 +467,6 @@ public sealed partial class AddonApiController
         if (windowEvent.Status != WindowEventStatuses.Closed)
         {
             windowEvent.Status = WindowEventStatuses.Closed;
-            windowEvent.ClosedAtUtc = DateTime.UtcNow;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 

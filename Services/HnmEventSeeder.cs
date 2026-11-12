@@ -41,15 +41,11 @@ public static class HnmEventSeeder
     // it being null — the camp vanished from /api/addon/wd-camps, the Discord Check In row stopped
     // rendering, FocusWindow froze the counter, the advance poller skipped it, and End Camp refused.
     //
-    // All five move TOGETHER, which is the reason this is one named method rather than five lines at
-    // the call site: WdProcessingBackgroundService selects on (AttendanceMode == Wd &&
-    // WdAwaitingProcessingSince != null && WdFinalizedAt == null), so clearing WdFinalizedAt while
-    // leaving WdAwaitingProcessingSince set would match the fresh board against the PREVIOUS pop's
-    // long-elapsed grace and re-finalize it on the next tick — crediting nobody and re-locking it.
+    // All four move TOGETHER, which is the reason this is one named method rather than four lines at
+    // the call site.
     public static void ClearWdCampState(Event ev)
     {
         ev.WdFinalizedAt = null;
-        ev.WdAwaitingProcessingSince = null;
         ev.WdPopWindow = null;
         ev.WdClaimed = false;
         ev.WdKilled = false;
@@ -186,7 +182,6 @@ public static class HnmEventSeeder
                         && e.EventType == "HNM"
                         && e.EndTime == null
                         && e.HnmDefeatedAt == null
-                        && e.WdAwaitingProcessingSince == null
                         && e.WdFinalizedAt == null)
             .ToListAsync(ct);
 

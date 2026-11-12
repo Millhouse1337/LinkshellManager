@@ -148,10 +148,6 @@ public sealed partial class AddonApiController
         var shapes = raw.ToDictionary(evt => evt.Id, AddonEventWindowShape.For);
         var monsterTimings = await _monsterTimings.GetMapAsync(linkshellId, cancellationToken);
 
-        // createdFromAddon is sourced from the explicit CreationSource column. Legacy
-        // rows (CreationSource null) fall back to a Details-prefix check so events
-        // created before the column existed still show the cancel button if they
-        // were originally posted by the addon.
         var events = raw.Select(evt => new
         {
             id = evt.Id,
@@ -260,10 +256,6 @@ public sealed partial class AddonApiController
             // What window 1 was anchored to. Re-stamped when an officer steps the window
             // manually, which is why the addon must not re-derive the window from StartTime.
             windowAnchorAt = evt.WindowAnchorAt,
-            createdFromAddon = evt.CreationSource == "Addon"
-                || (evt.CreationSource is null
-                    && (evt.Details ?? string.Empty)
-                        .StartsWith("Created from addon.", StringComparison.Ordinal)),
             // Whether this camp's monster has an ENABLED standing signup board, and how many hours
             // before the next predicted pop it re-posts. Both null/false for a non-HNM event and
             // for a monster with recurrence switched off.
@@ -314,151 +306,6 @@ public sealed partial class AddonApiController
             .ToListAsync(cancellationToken);
 
         return Ok(new { partySetups = setups });
-    }
-
-    [HttpPost("events")]
-    [AddonApiAuth]
-    public async Task<IActionResult> CreateEventAsync(
-        [FromBody] AddonCreateEventRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(request.Name))
-        {
-            return BadRequest(new { error = "Event name is required." });
-        }
-
-        var token = AddonApiAuthAttribute.GetToken(HttpContext);
-        if (!await TokenIssuerCanModerateAsync(token, token.LinkshellId, cancellationToken))
-        {
-            return Forbid();
-        }
-
-        var nowUtc = DateTime.UtcNow;
-
-        // Attach a party-setup template if the addon asked for one. Two guards,
-        // matching the Activity's create path:
-        //   * it must belong to THIS linkshell (cross-linkshell defense)
-        //   * it must be a reusable template, not another event's private
-        //     snapshot (OwnerEventId != null) -- sharing a snapshot would let
-        //     two events edit the same board
-        // A setup that fails either check is dropped rather than rejected, so a
-        // stale id in the addon's cached list can't block event creation.
-        int? partySetupId = null;
-        if (request.PartySetupId is int requestedSetupId)
-        {
-            var setupIsUsable = await _dbContext.PartySetups
-                .AsNoTracking()
-                .AnyAsync(p => p.Id == requestedSetupId
-                               && p.LinkshellId == token.LinkshellId
-                               && p.OwnerEventId == null,
-                          cancellationToken);
-            if (setupIsUsable) partySetupId = requestedSetupId;
-        }
-
-        // Note: CommencementStartTime is intentionally null on create so the event
-        // appears as "Queued". Callers that want to start immediately should follow
-        // up with POST /api/addon/events/{id}/start.
-        var eventEntity = new Event
-        {
-            PartySetupId = partySetupId,
-            LinkshellId = token.LinkshellId,
-            EventName = request.Name.Trim(),
-            EventType = string.IsNullOrWhiteSpace(request.Type) ? null : request.Type.Trim(),
-            EventLocation = string.IsNullOrWhiteSpace(request.Location) ? null : request.Location.Trim(),
-            CreatorUserId = token.IssuedToAppUserId,
-            StartTime = request.StartUtc ?? nowUtc,
-            DkpPerHour = request.DkpPerHour,
-            Details = string.IsNullOrWhiteSpace(request.Details) ? "Created from lsm addon." : request.Details.Trim(),
-            CreationSource = "Addon",
-            // Persist explicit window-count override only when the addon
-            // actually picked a multi-post style. Storing >=2 keeps the
-            // column meaningful (1 = default, no need to record).
-            WindowCountOverride = request.WindowCount is > 1 ? request.WindowCount : null,
-            TimeStamp = nowUtc
-        };
-
-        // HNM camps carry a monster and a day as REAL columns, not just as text inside the
-        // name. Without them an addon-made camp opened blank in the web Edit form, the sign-up
-        // board couldn't pick the right half of a merge pair, and End Camp refused outright
-        // ("this HNM camp has no monster assigned").
-        if (string.Equals(eventEntity.EventType, "HNM", StringComparison.OrdinalIgnoreCase))
-        {
-            var (derivedMonster, derivedDay) = DeriveHnmFromEventName(eventEntity.EventName);
-            var monster = TrimToNullString(request.MonsterName) ?? derivedMonster;
-            eventEntity.AssignedMonsterName = monster;
-            eventEntity.DayNumber = request.DayNumber ?? derivedDay;
-
-            // The addon sends the officer's current zone; fall back to the monster's canonical
-            // camp so the board still says where to go when it doesn't.
-            if (string.IsNullOrWhiteSpace(eventEntity.EventLocation))
-            {
-                eventEntity.EventLocation = HnmConfig.ZoneFor(monster);
-            }
-
-            // Only the Manual Check In stamp, NOT HnmEventSeeder.SeedHnmEventAsync: that also writes
-            // the monster's SPAWN window count into WindowCountOverride, and this camp's override is
-            // already holding the other number — the count of attendance POSTS the officer takes
-            // (Open + Close = 2 on a king/dragon, one per window on a wyrm), which is what that column
-            // is for. Both numbers matter and they are not the same: the 7 spawn windows are pop
-            // chances the camp sits through, while a Standard camp reads the roster twice.
-            //
-            // The spawn count doesn't need storing anyway — DiscordEventMessageBuilder.EffectiveWindowCount
-            // derives it from the monster's built-in cadence, so the board still traverses all 7 while
-            // the addon still posts Open / Close off this column.
-            eventEntity.AttendanceMode = HnmEventSeeder.ResolveMode(
-                await _dbContext.Linkshells
-                    .Where(l => l.Id == token.LinkshellId)
-                    .Select(l => l.HnmAttendanceMode)
-                    .FirstOrDefaultAsync(cancellationToken),
-                monster);
-
-            // The spawn grid and Window Method from the linkshell's monster setup, the same stamp an
-            // app-made camp gets. Without it an addon-made camp ignored Monster Setups entirely. The
-            // override above is left alone: a stamped camp reads its post count from the method.
-            await HnmEventSeeder.StampSpawnGridAsync(_dbContext, eventEntity, monster, cancellationToken);
-        }
-
-        _dbContext.Events.Add(eventEntity);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return Ok(new
-        {
-            eventId = eventEntity.Id,
-            name = eventEntity.EventName,
-            commencementStartTime = eventEntity.CommencementStartTime,
-            assignedMonsterName = eventEntity.AssignedMonsterName,
-            dayNumber = eventEntity.DayNumber
-        });
-    }
-
-    private static string? TrimToNullString(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    // Reads the monster and day back out of a camp name the addon built, e.g.
-    // "Behemoth/King Behemoth D1" -> ("Behemoth/King Behemoth", 1).
-    //
-    // The fallback for addon builds that predate sending them as fields. Only returns a monster
-    // the catalog actually recognises, so an ad-hoc camp ("Goblin Furrier test") doesn't get a
-    // made-up monster stamped on it from its own title.
-    private static (string? Monster, int? Day) DeriveHnmFromEventName(string? eventName)
-    {
-        if (string.IsNullOrWhiteSpace(eventName)) return (null, null);
-
-        var name = eventName.Trim();
-        int? day = null;
-        var match = System.Text.RegularExpressions.Regex.Match(
-            name, @"^(?<base>.*?)\s+D(?<day>\d+)$",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (match.Success)
-        {
-            name = match.Groups["base"].Value.Trim();
-            if (int.TryParse(match.Groups["day"].Value, out var parsedDay) && parsedDay > 0)
-            {
-                day = parsedDay;
-            }
-        }
-
-        return (HnmConfig.IsTrueHnm(name) ? name : null, day);
     }
 
     // PATCH /api/addon/events/{eventId}

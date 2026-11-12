@@ -58,7 +58,6 @@ public sealed partial class AddonApiController
             subJobName = p.SubJobName,
             isOnBreak = p.IsOnBreak == true,
             startTime = p.StartTime,
-            pauseTime = p.PauseTime,
             resumeTime = p.ResumeTime,
             accumulatedHours = p.Duration,
             isSelf = !string.IsNullOrEmpty(token.IssuedToAppUserId)
@@ -100,13 +99,11 @@ public sealed partial class AddonApiController
         participation.Duration = EventEndService.CalculateAccumulatedDurationHours(
             participation, nowUtc, eventEntity.CommencementStartTime);
         participation.IsOnBreak = true;
-        participation.PauseTime = nowUtc;
         participation.ResumeTime = null;
         _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
         {
             AppUserEventId = participation.Id,
             EventId = eventId,
-            AppUserId = participation.AppUserId,
             ActionType = "BreakStart",
             OccurredAt = nowUtc,
             RequiresVerification = false
@@ -134,7 +131,6 @@ public sealed partial class AddonApiController
 
         var nowUtc = DateTime.UtcNow;
         participation.IsOnBreak = false;
-        participation.PauseTime = null;
         participation.ResumeTime = nowUtc;
 
         // Officer-driven returns auto-verify any pending self-return ledger entries
@@ -149,23 +145,19 @@ public sealed partial class AddonApiController
                     && entry.VerifiedAt == null
                     && entry.DeniedAt == null)
                 .ToListAsync(cancellationToken);
-            var verifierName = await ResolveTokenIssuerNameAsync(ctx.Token!, cancellationToken);
             foreach (var pending in pendingReturns)
             {
                 pending.VerifiedAt = nowUtc;
-                pending.VerifiedBy = verifierName;
                 pending.RequiresVerification = false;
             }
             _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
             {
                 AppUserEventId = participation.Id,
                 EventId = eventId,
-                AppUserId = participation.AppUserId,
                 ActionType = "BreakReturn",
                 OccurredAt = nowUtc,
                 RequiresVerification = false,
                 VerifiedAt = nowUtc,
-                VerifiedBy = verifierName
             });
         }
         else
@@ -174,7 +166,6 @@ public sealed partial class AddonApiController
             {
                 AppUserEventId = participation.Id,
                 EventId = eventId,
-                AppUserId = participation.AppUserId,
                 ActionType = "BreakReturn",
                 OccurredAt = nowUtc,
                 RequiresVerification = true
@@ -210,7 +201,6 @@ public sealed partial class AddonApiController
         }
 
         entry.VerifiedAt = DateTime.UtcNow;
-        entry.VerifiedBy = await ResolveTokenIssuerNameAsync(token, cancellationToken);
         entry.RequiresVerification = false;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
@@ -232,8 +222,7 @@ public sealed partial class AddonApiController
 
         // Deny takes the time back, not just the request -- see BreakReturnDenial.
         var outcome = await BreakReturnDenial.DenyAsync(
-            _dbContext, eventEntity, request.LedgerEntryId,
-            await ResolveTokenIssuerNameAsync(token, cancellationToken), cancellationToken);
+            _dbContext, eventEntity, request.LedgerEntryId, cancellationToken);
         return outcome switch
         {
             BreakReturnDenial.Outcome.ReturnNotFound => NotFound(new { error = "Ledger entry not found." }),
@@ -416,7 +405,6 @@ public sealed partial class AddonApiController
         var matched = 0;
         var alreadyVerified = 0;
         var unmatched = new List<string>();
-        var pendingLedgers = new List<AppUserEventStatusLedger>();
         // Per-attendee credit info so the addon can print a "+N DKP" line per
         // user immediately after a window post. Only populated for windowed
         // events (single-window events award DKP at end-of-event, not per post).
@@ -649,35 +637,18 @@ public sealed partial class AddonApiController
                 });
             }
 
+            // No "Verify" status-ledger row any more: nothing ever read it. On a windowed camp the
+            // AppUserEventWindow row above is the record of who was scanned in which window.
             matched++;
-
-            var ledger = new AppUserEventStatusLedger
-            {
-                AppUserEvent = participation,
-                EventId = eventId,
-                AppUserId = membership.AppUserId,
-                ActionType = "Verify",
-                OccurredAt = nowUtc,
-                RequiresVerification = false,
-                VerifiedAt = nowUtc,
-                VerifiedBy = verifiedBy,
-                Source = AddonSource,
-                EventAttendanceWindow = attendanceWindow
-            };
-            _dbContext.AppUserEventStatusLedgers.Add(ledger);
-            pendingLedgers.Add(ledger);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-
-        var ledgerIds = pendingLedgers.Select(l => l.Id).ToList();
 
         return Ok(new
         {
             matched,
             alreadyVerified,
             unmatched,
-            ledgerEntryIds = ledgerIds,
             windowSequence = attendanceWindow?.SequenceNumber,
             windowId = attendanceWindow?.Id,
             // Normalized, not raw — a window written before the Open/Close rename would otherwise
@@ -743,9 +714,8 @@ public sealed partial class AddonApiController
     // the post that should never have happened -- the wrong camp, the wrong window, the Post
     // pressed twice while the officer was still gathering.
     //
-    // Deletes the window and everything the post wrote for it: the per-attendee rows and the
-    // "Verify" ledger entries that recorded them, exactly as RemoveWindowAttendeeRowAsync does one
-    // at a time, so a re-post lands as cleanly as a first post.
+    // Deletes the window and everything the post wrote for it (the per-attendee rows), exactly as
+    // RemoveWindowAttendeeRowAsync does one at a time, so a re-post lands as cleanly as a first post.
     //
     // WHAT IT DELIBERATELY LEAVES. The participations (AppUserEvent). A post CREATES one for
     // anyone who had none, but it does not own them -- a member who signed up on the Discord board
@@ -827,19 +797,7 @@ public sealed partial class AddonApiController
             });
         }
 
-        var windowId = attendanceWindow.Id;
         var removed = attendanceWindow.Attendees.Count;
-
-        // The Verify rows the post wrote. Matched on the WINDOW alone rather than per attendee:
-        // the participation a row pointed at may since have been cleared away (the wyrm camps clear
-        // every window), and a ledger row orphaned by that would otherwise survive its own window.
-        var ledgerEntries = await _dbContext.AppUserEventStatusLedgers
-            .Where(l => l.EventAttendanceWindowId == windowId && l.ActionType == "Verify")
-            .ToListAsync(cancellationToken);
-        if (ledgerEntries.Count > 0)
-        {
-            _dbContext.AppUserEventStatusLedgers.RemoveRange(ledgerEntries);
-        }
 
         _dbContext.AppUserEventWindows.RemoveRange(attendanceWindow.Attendees);
         _dbContext.EventAttendanceWindows.Remove(attendanceWindow);
@@ -941,24 +899,10 @@ public sealed partial class AddonApiController
             SubJobName = request.SubJob.Trim(),
             JobType = string.IsNullOrWhiteSpace(request.JobType) ? null : request.JobType.Trim(),
             StartTime = nowUtc,
-            EventDkp = 0,
             IsQuickJoin = true,
             IsVerified = true
         };
         _dbContext.AppUserEvents.Add(participation);
-
-        _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
-        {
-            AppUserEvent = participation,
-            EventId = eventId,
-            AppUserId = token.IssuedToAppUserId,
-            ActionType = "Verify",
-            OccurredAt = nowUtc,
-            RequiresVerification = false,
-            VerifiedAt = nowUtc,
-            VerifiedBy = (token.Label ?? "lsm-addon") + " (self-join)",
-            Source = AddonSource
-        });
 
         try
         {

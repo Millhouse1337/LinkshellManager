@@ -290,7 +290,7 @@ public class CharacterResolverCharacterizationTests
         });
         db.AttendanceSnapshots.Add(new AttendanceSnapshot
         {
-            Id = 1, LinkshellId = Ls, WindowEventId = 1, CapturedAtUtc = now, CreatedAtUtc = now,
+            Id = 1, LinkshellId = Ls, WindowEventId = 1, CapturedAtUtc = now,
             SnapshotStatus = AttendanceSnapshotStatuses.Active, EntryCount = 1,
         });
         db.AttendanceSnapshotEntries.Add(new AttendanceSnapshotEntry { Id = 1, SnapshotId = 1, CharacterName = typed });

@@ -76,7 +76,6 @@ public class CampDkpPoolTests
             LinkshellId = LinkshellId,
             WindowEventId = CardId,
             CapturedAtUtc = CampStart.AddMinutes(10),
-            CreatedAtUtc = CampStart.AddMinutes(10),
             SnapshotStatus = AttendanceSnapshotStatuses.Active,
             EntryCount = 1,
         });

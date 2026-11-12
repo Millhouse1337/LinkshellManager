@@ -35,10 +35,12 @@ public class AppUserEvent
 
     public DateTime? StartTime { get; set; }
 
+    // PHASE4B-DROP: AppUserEvents.EndTime - never written or read.
     public DateTime? EndTime { get; set; }
 
     public double? Duration { get; set; }
 
+    // PHASE4B-DROP: AppUserEvents.EventDkp - no longer written or sent; DKP lives on the history row and the ledger.
     public double? EventDkp { get; set; }
 
     public bool IsQuickJoin { get; set; }
@@ -67,6 +69,7 @@ public class AppUserEvent
 
     public bool? IsVerified { get; set; }
 
+    // PHASE4B-DROP: AppUserEvents.Proctor - no longer written or sent; nothing showed it.
     public string? Proctor { get; set; }
 
     public bool? IsOnBreak { get; set; }
@@ -78,6 +81,7 @@ public class AppUserEvent
     // ActivityDataController UnsignAsync / ReturnFromBreakAsync / ForceResumeAsync.
     public bool WithdrewFromEvent { get; set; }
 
+    // PHASE4B-DROP: AppUserEvents.PauseTime - no longer written or sent; break start times live in the BreakStart ledger rows.
     public DateTime? PauseTime { get; set; }
 
     public DateTime? ResumeTime { get; set; }

@@ -480,7 +480,6 @@ export class ActivitySidebarPanelComponent {
   protected readonly browserTimeZone = resolveBrowserTimeZone();
   protected readonly timeZoneOptions = resolveTimeZoneOptions(this.activity.overview()?.appUser?.timeZone, this.browserTimeZone);
   private profileSeed = '';
-  private historySeed = '';
 
   // Bumped after a brand-new linkshell is created in the roster panel so
   // the invites panel re-anchors its target to the freshly-resolved
@@ -627,28 +626,6 @@ export class ActivitySidebarPanelComponent {
         await this.activity.loadAuctionHistory(selectedLinkshellId);
       })();
     });
-
-    effect(() => {
-      const overview = this.activity.overview();
-      if (!overview) {
-        this.historySeed = '';
-        this.activity.clearHistoryList();
-        this.activity.clearHistoryDetail();
-        return;
-      }
-
-      const primaryLinkshellId = overview.appUser?.primaryLinkshellId ?? overview.primaryLinkshell?.id ?? 0;
-      const recentHistoryIds = (overview.recentHistory ?? []).map(history => history.id).sort((left, right) => left - right);
-      const nextSeed = `${primaryLinkshellId}|${recentHistoryIds.join(',')}`;
-
-      if (nextSeed === this.historySeed) {
-        return;
-      }
-
-      this.historySeed = nextSeed;
-      this.activity.clearHistoryDetail();
-      void this.activity.loadHistoryList();
-    });
   }
 
   protected selectedLinkshell() {
@@ -741,50 +718,6 @@ export class ActivitySidebarPanelComponent {
     });
   }
 
-  protected historyList() {
-    return this.activity.historyList();
-  }
-
-  // ---------- Event History pagination (10 per page) ----------
-  protected readonly historyPageSize = 10;
-  protected readonly historyPage = signal(1);
-
-  protected historyTotalPages(): number {
-    return Math.max(1, Math.ceil(this.historyList().length / this.historyPageSize));
-  }
-
-  protected historyPageItems() {
-    const all = this.historyList();
-    // Clamp the page so deletes/refreshes that shrink the list can never
-    // leave us pointing at a non-existent page.
-    const page = Math.min(Math.max(1, this.historyPage()), this.historyTotalPages());
-    if (page !== this.historyPage()) {
-      // Defer the corrective set so we don't synchronously mutate during
-      // change detection — a microtask keeps Angular happy.
-      queueMicrotask(() => this.historyPage.set(page));
-    }
-    const start = (page - 1) * this.historyPageSize;
-    return all.slice(start, start + this.historyPageSize);
-  }
-
-  protected historyPageGoto(page: number): void {
-    const clamped = Math.min(Math.max(1, page), this.historyTotalPages());
-    this.historyPage.set(clamped);
-  }
-
-  protected historyPageRangeLabel(): string {
-    const total = this.historyList().length;
-    if (total === 0) return '0';
-    const page = Math.min(Math.max(1, this.historyPage()), this.historyTotalPages());
-    const start = (page - 1) * this.historyPageSize + 1;
-    const end = Math.min(start + this.historyPageSize - 1, total);
-    return `${start}–${end} of ${total}`;
-  }
-
-  protected historyDetail() {
-    return this.activity.historyDetail();
-  }
-
   protected formatDuration(duration: number | null | undefined): string {
     // Exact elapsed time (second precision), never rounded down to a misleading
     // "0h". Long events read "2h 15m"; short ones "35m" / "35s".
@@ -863,7 +796,7 @@ export class ActivitySidebarPanelComponent {
     const clamped = currentPage >= totalPages ? totalPages - 1 : currentPage;
     if (clamped !== currentPage) {
       // Defer corrective set so we don't synchronously mutate during change
-      // detection — same pattern as historyPageItems above.
+      // detection; a microtask keeps Angular happy.
       queueMicrotask(() => this.dkpPage.set(clamped));
     }
     const start = clamped * size;
@@ -1089,14 +1022,6 @@ export class ActivitySidebarPanelComponent {
       this.selectedDkpHistoryAppUserId = this.dkpAuditModel.targetAppUserId;
       this.isDkpAuditOpen = false;
     }
-  }
-
-  protected async openHistoryDetail(historyId: number): Promise<void> {
-    await this.activity.loadHistoryDetail(historyId);
-  }
-
-  protected closeHistoryDetail(): void {
-    this.activity.clearHistoryDetail();
   }
 
   private async reloadDkpHistory(): Promise<void> {

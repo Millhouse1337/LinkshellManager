@@ -1068,13 +1068,10 @@ export class EventsTabComponent {
         // account) so the Active Room shows it for everyone — not only members who
         // already have a materialized participation row carrying the value.
         biddableDkp: slot.signedUpAppUserId ? biddableByUser.get(slot.signedUpAppUserId) : undefined,
-        proctor: 'Discord channel signup',
         startTime: event.commencementStartTime ?? event.startTime ?? null,
         resumeTime: null,
-        pauseTime: null,
         isOnBreak: false,
         duration: 0,
-        eventDkp: 0,
         statusLedger: []
       } satisfies ActivityEventParticipant));
   }

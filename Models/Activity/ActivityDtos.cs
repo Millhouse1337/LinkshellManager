@@ -772,15 +772,14 @@ public sealed record ActivityEventDto(
     string? DkpPoolName = null,
     // Live HNM camp state, so the Activity can render a started camp (window N of M + a next-window
     // countdown) and offer End Camp. AttendanceMode "Wd" ⇒ Manual Check In; null ⇒ Standard.
-    // NextWindowAt is when the next window opens (null on the final window / not timed). The Wd*
-    // fields mark the Awaiting-Processing / finalized states (always null on a Standard board).
+    // NextWindowAt is when the next window opens (null on the final window / not timed). WdFinalizedAt
+    // marks a finalized camp (always null on a Standard board).
     string? AttendanceMode = null,
     // The window that has already OPENED (Event.HnmWindowNumber). Pop-window semantics key off
     // this — End Camp pre-fills it as "the window it popped on" — so it must stay the raw
     // counter. For anything the user READS, use HnmFocusWindow instead.
     int HnmWindowNumber = 1,
     DateTime? NextWindowAt = null,
-    DateTime? WdAwaitingProcessingSince = null,
     DateTime? WdFinalizedAt = null,
     int? WdPopWindow = null,
     // The window number to DISPLAY — the one the Discord board shows (the window being awaited).
@@ -976,14 +975,11 @@ public sealed record ActivityEventParticipantDto(
     string? JobType,
     bool IsQuickJoin,
     bool? IsVerified,
-    string? Proctor,
     DateTime? StartTime,
     DateTime? ResumeTime,
-    DateTime? PauseTime,
     bool? IsOnBreak,
     bool WithdrewFromEvent,
     double? Duration,
-    double? EventDkp,
     IReadOnlyList<ActivityStatusLedgerDto> StatusLedger,
     // Spendable DKP right now = LinkshellDkp − bid locks − pending live-event loot spend.
     // Shown next to each live participant so bidding power is clear during the event.
@@ -1008,10 +1004,7 @@ public sealed record ActivityStatusLedgerDto(
     DateTime OccurredAt,
     bool RequiresVerification,
     DateTime? VerifiedAt,
-    string? VerifiedBy,
-    DateTime? DeniedAt,
-    string? DeniedBy,
-    string? Source);
+    DateTime? DeniedAt);
 
 public sealed record ActivityHistoryDto(
     int Id,
@@ -1022,30 +1015,6 @@ public sealed record ActivityHistoryDto(
     DateTime? EndTime,
     double? Duration,
     int ParticipantCount);
-
-public sealed record ActivityHistoryDetailDto(
-    int Id,
-    int LinkshellId,
-    string? Name,
-    string? Type,
-    string? Location,
-    DateTime? StartTime,
-    DateTime? EndTime,
-    double? Duration,
-    int? DkpPerHour,
-    string? Details,
-    IReadOnlyList<ActivityHistoryParticipantDto> Participants);
-
-public sealed record ActivityHistoryParticipantDto(
-    int Id,
-    string? AppUserId,
-    string? CharacterName,
-    string? JobName,
-    string? SubJobName,
-    string? JobType,
-    double? Duration,
-    double? EventDkp,
-    bool? IsVerified);
 
 public sealed record ActivityLinkshellRolePermissions(
     string? Name,
@@ -1619,7 +1588,6 @@ public sealed record ActivityEditEventHistoryRequest(
     string? EventName,
     string? EventType,
     string? EventLocation,
-    string? Details,
     double? Duration,
     int? DkpPerHour);
 

@@ -200,21 +200,10 @@ public sealed partial class AddonApiController : ControllerBase
         return membership?.CharacterName ?? token.Label;
     }
 
-    // Shared deletion path: drop the join row plus any matching ledger entries that
-    // recorded the original verify, so re-posting the same attendee posts cleanly.
+    // Shared deletion path: drop the join row, so re-posting the same attendee posts cleanly.
     private async Task RemoveWindowAttendeeRowAsync(
         AppUserEventWindow attendee, CancellationToken cancellationToken)
     {
-        var ledgerEntries = await _dbContext.AppUserEventStatusLedgers
-            .Where(l => l.EventAttendanceWindowId == attendee.EventAttendanceWindowId
-                     && l.AppUserEventId == attendee.AppUserEventId
-                     && l.ActionType == "Verify")
-            .ToListAsync(cancellationToken);
-        if (ledgerEntries.Count > 0)
-        {
-            _dbContext.AppUserEventStatusLedgers.RemoveRange(ledgerEntries);
-        }
-
         _dbContext.AppUserEventWindows.Remove(attendee);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -240,25 +229,6 @@ public sealed partial class AddonApiController : ControllerBase
     // ---------------------------------------------------------------------
 
     public sealed record PairRequest(string Code);
-
-    public sealed record AddonCreateEventRequest(
-        string Name,
-        string? Type,
-        string? Location,
-        DateTime? StartUtc,
-        int? DkpPerHour,
-        string? Details,
-        int? WindowCount = null,
-        // Optional reusable party-setup template to attach. Setting this is
-        // what makes the event's Discord post carry a sign-up board -- the
-        // same column and the same effect as picking one on the website.
-        int? PartySetupId = null,
-        // HNM only. The COMBINED "Base/Stronger" label ("Behemoth/King Behemoth"),
-        // matching what Event.AssignedMonsterName stores everywhere else, plus the
-        // day cycle. Null falls back to reading both out of Name -- older addon
-        // builds send neither, and the name has always carried them as text.
-        string? MonsterName = null,
-        int? DayNumber = null);
 
     public sealed record AddonAttendanceRequest(
         DateTime? RecordedAtUtc,

@@ -70,6 +70,5 @@ public class EventSignupStartTimeTests
         Assert.Equal("WAR", row.JobName);
         Assert.Equal("NIN", row.SubJobName);
         Assert.Equal("Tank", row.JobType);
-        Assert.Equal<double?>(0, row.EventDkp);
     }
 }

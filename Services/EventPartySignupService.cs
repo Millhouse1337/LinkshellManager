@@ -470,7 +470,6 @@ public static class EventPartySignupService
                 PartySortOrder = s.PartySetupSlot?.Party?.SortOrder ?? 0,
                 SlotSortOrder = s.PartySetupSlot?.SortOrder ?? 0,
                 SlotLabel = s.PartySetupSlot?.Label,
-                AppUserId = s.AppUserId,
                 CharacterName = s.CharacterName,
                 Role = s.Role,
                 MainJob = s.MainJob,
@@ -581,7 +580,6 @@ public static class EventPartySignupService
                 SubJobName = signup.SubJob,
                 JobType = signup.Role,
                 StartTime = participationStartTime,
-                EventDkp = 0,
                 // Pending → shows in the Attendance room until a leader verifies,
                 // mirroring the Activity "Join" flow (IsVerified left null).
                 IsVerified = null,
@@ -670,7 +668,6 @@ public static class EventPartySignupService
                 SubJobName = signup.SubJob,
                 JobType = signup.Role,
                 StartTime = DateTime.UtcNow,
-                EventDkp = 0,
                 IsVerified = null,
                 IsQuickJoin = true,
             });
@@ -810,7 +807,6 @@ public static class EventPartySignupService
             SubJobName = signup.SubJob,
             JobType = signup.Role,
             StartTime = startTime,
-            EventDkp = 0,
         });
         if (hasUser)
         {

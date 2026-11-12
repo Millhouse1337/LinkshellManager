@@ -51,24 +51,23 @@ public class BreakReturnDenialRaceTests : IAsyncLifetime
             StartTime = Start,
             Duration = 1.5,
             IsOnBreak = true,
-            PauseTime = Start.AddHours(2.5),
         };
         db.AppUserEvents.Add(participation);
         var pendingReturn = new AppUserEventStatusLedger
         {
-            AppUserEvent = participation, Event = ev, AppUserId = "member",
+            AppUserEvent = participation, Event = ev,
             ActionType = "BreakReturn", OccurredAt = Start.AddHours(2), RequiresVerification = true,
         };
         db.AppUserEventStatusLedgers.AddRange(
             new AppUserEventStatusLedger
             {
-                AppUserEvent = participation, Event = ev, AppUserId = "member",
+                AppUserEvent = participation, Event = ev,
                 ActionType = "BreakStart", OccurredAt = Start.AddHours(1),
             },
             pendingReturn,
             new AppUserEventStatusLedger
             {
-                AppUserEvent = participation, Event = ev, AppUserId = "member",
+                AppUserEvent = participation, Event = ev,
                 ActionType = "BreakStart", OccurredAt = Start.AddHours(2.5),
             });
         await db.SaveChangesAsync();
@@ -79,7 +78,7 @@ public class BreakReturnDenialRaceTests : IAsyncLifetime
     {
         await using var db = _pg.CreateContext();
         var ev = await db.Events.AsNoTracking().SingleAsync(e => e.Id == eventId);
-        return await BreakReturnDenial.DenyAsync(db, ev, returnId, "Officer", CancellationToken.None);
+        return await BreakReturnDenial.DenyAsync(db, ev, returnId, CancellationToken.None);
     }
 
     [Fact]

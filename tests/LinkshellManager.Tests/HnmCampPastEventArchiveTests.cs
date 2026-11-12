@@ -359,7 +359,6 @@ public class HnmCampPastEventArchiveTests
         var history = await db.EventHistories.SingleAsync();
         Assert.Equal(CampStart, history.StartTime);
         Assert.Equal(CampStart, history.CommencementStartTime);
-        Assert.Equal(CampStart.Date, history.StartDate);
         Assert.NotNull(history.EndTime);
         Assert.True(history.EndTime > CampStart, "the camp cannot have ended before it started");
     }
@@ -611,7 +610,6 @@ public class HnmCampPastEventArchiveTests
             SlotKind = slotKind,
             WindowNumber = windowNumber,
             CapturedAtUtc = CampStart.AddMinutes(30),
-            CreatedAtUtc = CampStart.AddMinutes(30),
             SnapshotStatus = AttendanceSnapshotStatuses.Active,
             EntryCount = 1,
         };

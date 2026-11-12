@@ -64,9 +64,9 @@ public class AddonHnmBoardParityTests
         return (setup, signups);
     }
 
-    // A live King Behemoth camp. `creationSource` is the ONLY thing that differs between the addon
-    // and app versions once both are seeded the same way.
-    private static Event Camp(int id, string? creationSource, int? windowCountOverride) => new()
+    // A live King Behemoth camp. The addon and app versions differ only in what each
+    // creation path stored in WindowCountOverride.
+    private static Event Camp(int id, int? windowCountOverride) => new()
     {
         Id = id,
         EventName = "Behemoth/King Behemoth D1",
@@ -78,7 +78,6 @@ public class AddonHnmBoardParityTests
         WindowAnchorAt = CampStart,
         HnmWindowNumber = 3,
         NextWindowAt = CampStart.AddMinutes(30),
-        CreationSource = creationSource,
         WindowCountOverride = windowCountOverride,
     };
 
@@ -95,7 +94,7 @@ public class AddonHnmBoardParityTests
     [Fact]
     public void AddonCamp_KeepsItsPostCount_AndStillRunsTheFullSpawnCycle()
     {
-        var addon = Camp(1, "Addon", windowCountOverride: 2);
+        var addon = Camp(1, windowCountOverride: 2);
 
         Assert.Equal(7, DiscordEventMessageBuilder.EffectiveWindowCount(addon));
         // The post count is untouched — it is what the addon labels Open / Close from.
@@ -109,8 +108,8 @@ public class AddonHnmBoardParityTests
     [Fact]
     public void AddonAndAppCamps_TraverseTheSameSpawnCycle()
     {
-        var addon = Camp(1, "Addon", windowCountOverride: 2);
-        var app = Camp(2, null, HnmConfig.EffectiveWindowCount("Behemoth/King Behemoth"));
+        var addon = Camp(1, windowCountOverride: 2);
+        var app = Camp(2, HnmConfig.EffectiveWindowCount("Behemoth/King Behemoth"));
 
         Assert.Equal(
             DiscordEventMessageBuilder.EffectiveWindowCount(app),
@@ -124,8 +123,8 @@ public class AddonHnmBoardParityTests
     [Fact]
     public void PostCount_ComesFromTheMonster_NotFromWhoFiledTheCamp()
     {
-        var addon = Camp(1, "Addon", windowCountOverride: 2);
-        var app = Camp(2, null, HnmConfig.EffectiveWindowCount("Behemoth/King Behemoth"));
+        var addon = Camp(1, windowCountOverride: 2);
+        var app = Camp(2, HnmConfig.EffectiveWindowCount("Behemoth/King Behemoth"));
 
         Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(addon));
         Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(app));
@@ -135,7 +134,7 @@ public class AddonHnmBoardParityTests
     [Fact]
     public void SpawnAndPostCounts_AreBothRightOnTheSameCamp()
     {
-        var camp = Camp(1, "Addon", windowCountOverride: 2);
+        var camp = Camp(1, windowCountOverride: 2);
 
         Assert.Equal(7, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
         Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(camp));
@@ -147,7 +146,7 @@ public class AddonHnmBoardParityTests
     [Fact]
     public void PostCount_NamesTheWindowsOpenAndClose()
     {
-        var camp = Camp(1, "Addon", windowCountOverride: 2);
+        var camp = Camp(1, windowCountOverride: 2);
         var posts = DiscordEventMessageBuilder.AttendancePostCount(camp);
 
         Assert.Equal("Open", HnmConfig.GetDefaultWindowLabel(camp.EventName, 1, posts));
@@ -167,7 +166,7 @@ public class AddonHnmBoardParityTests
     [Fact]
     public void Wyrm_PostsPerWindow_AndStaysNumbered()
     {
-        var camp = Camp(1, "Addon", windowCountOverride: 24);
+        var camp = Camp(1, windowCountOverride: 24);
         camp.AssignedMonsterName = "Tiamat";
 
         Assert.Equal(25, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
@@ -187,7 +186,6 @@ public class AddonHnmBoardParityTests
             EventName = "Old Sabertooth Tiger",
             EventType = "HNM",
             StartTime = CampStart,
-            CreationSource = "Addon",
             WindowCountOverride = 2,
         };
 
@@ -202,12 +200,12 @@ public class AddonHnmBoardParityTests
     [Fact]
     public void ExplicitOverrideOfOne_StillUnwindowsACadenceMonster()
     {
-        var camp = Camp(1, null, windowCountOverride: 1);
+        var camp = Camp(1, windowCountOverride: 1);
 
         Assert.Equal(1, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
     }
 
-    // "The same sign up buttons": no button gate anywhere reads CreationSource, so two identically
+    // "The same sign up buttons": no button gate depends on who created the camp, so two identically
     // seeded camps render byte-identical component trees. Compared as whole wire JSON rather than by
     // hunting individual custom_ids, so a gate added later that DOES branch on the addon fails here.
     [Fact]
@@ -215,8 +213,8 @@ public class AddonHnmBoardParityTests
     {
         // Same Id on both so the custom_ids (which embed the event id) are comparable, and each side
         // carrying what its own creation path actually stores in that column.
-        var addonJson = ComponentsJson(Camp(1, "Addon", windowCountOverride: 2));
-        var appJson = ComponentsJson(Camp(1, null, HnmConfig.EffectiveWindowCount("Behemoth/King Behemoth")));
+        var addonJson = ComponentsJson(Camp(1, windowCountOverride: 2));
+        var appJson = ComponentsJson(Camp(1, HnmConfig.EffectiveWindowCount("Behemoth/King Behemoth")));
 
         Assert.Equal(appJson, addonJson);
     }
@@ -226,7 +224,7 @@ public class AddonHnmBoardParityTests
     [Fact]
     public void AddonBoard_WithItsMonsterStamped_ShowsTheWindowRow()
     {
-        var camp = Camp(1, "Addon", windowCountOverride: 2);
+        var camp = Camp(1, windowCountOverride: 2);
 
         Assert.True(DiscordEventMessageBuilder.UsesWindows(camp));
 
@@ -242,7 +240,7 @@ public class AddonHnmBoardParityTests
     [Fact]
     public void CampWithNoMonster_HasNoWindowRowAtAll()
     {
-        var camp = Camp(1, "Addon", windowCountOverride: null);
+        var camp = Camp(1, windowCountOverride: null);
         camp.AssignedMonsterName = null;
 
         Assert.False(DiscordEventMessageBuilder.UsesWindows(camp));
@@ -266,7 +264,6 @@ public class AddonHnmBoardParityTests
             EventName = "Old Sabertooth Tiger",
             EventType = "HNM",
             StartTime = CampStart,
-            CreationSource = "Addon",
             WindowCountOverride = 2,
         };
 

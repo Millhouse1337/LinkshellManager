@@ -107,15 +107,14 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
         }, _logger, "HNM camp window advance for event", cancellationToken);
     }
 
-    // Live, un-popped HNM boards. The Manual Check In-only sentinels (WdAwaitingProcessingSince /
-    // WdFinalizedAt) are always null on a Standard board, so filtering on them is a no-op
+    // Live, un-popped HNM boards. The Manual Check In-only sentinel (WdFinalizedAt)
+    // is always null on a Standard board, so filtering on it is a no-op
     // there and correctly excludes a Manual Check In camp that already popped.
     private static IQueryable<Event> Live(IQueryable<Event> events) =>
         events.Where(e => e.EventType == "HNM"
                           && e.EndTime == null
                           && e.CommencementStartTime != null   // don't march a queued board
                           && e.HnmDefeatedAt == null
-                          && e.WdAwaitingProcessingSince == null
                           && e.WdFinalizedAt == null
                           && e.StartTime != null);
 

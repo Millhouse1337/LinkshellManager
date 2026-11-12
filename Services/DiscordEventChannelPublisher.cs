@@ -87,10 +87,9 @@ public sealed class DiscordEventChannelPublisher
                 var noticeDetails = await HnmBoardNoticeService.ResolveDetailsAsync(_db, ev, cancellationToken);
                 await _hnmBoardNotice.PostDefeatedNoticeAsync(ev, cancellationToken, archiveId, summary, noticeDetails);
 
-                // SAVE. The notice can repoint DiscordMessageId (a note it had to re-post) and
-                // clears DiscordExtraMessageIds after deleting those messages, but it only stages
-                // those changes. Returning without saving left Discord and the database
-                // disagreeing: the messages were gone while the event still listed their ids.
+                // SAVE. The notice can repoint DiscordMessageId (a note it had to re-post),
+                // but it only stages that change. Returning without saving left Discord and the
+                // database disagreeing about which message is the board.
                 await ConcurrencyRetry.SaveOwnEventColumnsAsync(_db, cancellationToken);
 
                 _logger.LogInformation("Event {EventId} board set to defeated note (message {MessageId}).",
@@ -116,10 +115,6 @@ public sealed class DiscordEventChannelPublisher
                 var edit = await _poster.EditAsync(channel, ev.DiscordMessageId!, ev, signups, slotSignups, cancellationToken);
                 if (edit == DiscordEditResult.Edited)
                 {
-                    if (await DeleteLeftoverWideMessagesAsync(ev, cancellationToken))
-                    {
-                        await ConcurrencyRetry.SaveOwnEventColumnsAsync(_db, cancellationToken);
-                    }
                     _logger.LogInformation(
                         "Event {EventId} board updated in place (message {MessageId}).",
                         eventId, ev.DiscordMessageId);
@@ -145,7 +140,6 @@ public sealed class DiscordEventChannelPublisher
 
                 var reposted = await _poster.PostAsync(channel, ev, signups, slotSignups, cancellationToken);
                 ev.DiscordMessageId = string.IsNullOrEmpty(reposted) ? null : reposted;
-                await DeleteLeftoverWideMessagesAsync(ev, cancellationToken);
                 await ConcurrencyRetry.SaveOwnEventColumnsAsync(_db, cancellationToken);
                 _logger.LogInformation(
                     "Event {EventId} board re-posted after a failed edit ({Result}); new message {MessageId}.",
@@ -185,31 +179,6 @@ public sealed class DiscordEventChannelPublisher
         {
             _logger.LogWarning(ex, "Event announce for event {EventId} failed.", eventId);
         }
-    }
-
-    // Boards posted by the old full-width mode were one message per alliance, the extras listed
-    // in DiscordExtraMessageIds. A board is a single message now, so those extras are deleted —
-    // left alone they linger in the channel as live-looking alliances with Sign Up buttons. Ids
-    // whose delete failed are kept for the next refresh. Stages the change; the caller saves.
-    // Returns true when there was anything to clean up.
-    private async Task<bool> DeleteLeftoverWideMessagesAsync(Event ev, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(ev.DiscordExtraMessageIds) || string.IsNullOrWhiteSpace(ev.DiscordChannelId))
-        {
-            return false;
-        }
-
-        var kept = new List<string>();
-        foreach (var extra in ev.DiscordExtraMessageIds!
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (!await _bot.DeleteMessageAsync(ev.DiscordChannelId!, extra, cancellationToken))
-            {
-                kept.Add(extra);
-            }
-        }
-        ev.DiscordExtraMessageIds = kept.Count > 0 ? string.Join(',', kept) : null;
-        return true;
     }
 
     private void LogNoRoute(int eventId, Event ev)

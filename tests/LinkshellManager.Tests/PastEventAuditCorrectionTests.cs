@@ -41,7 +41,7 @@ public class PastEventAuditCorrectionTests
         db.AppUserLinkshells.Add(bob);
         db.EventHistories.Add(new EventHistory
         {
-            Id = HistoryId, LinkshellId = Ls, EventName = "Sky", EventType = "Sky", DkpPerHour = 10, EventDkp = 10,
+            Id = HistoryId, LinkshellId = Ls, EventName = "Sky", EventType = "Sky", DkpPerHour = 10,
         });
         db.AppUserEventHistories.Add(new AppUserEventHistory
         {
@@ -122,7 +122,7 @@ public class PastEventAuditCorrectionTests
         var (_, audit) = await SeedAsync(db, auditCarriesEvent);
 
         var outcome = await NewServices(db).Edits.EditEventAsync(HistoryId,
-            new EventHistoryEditInput("Sky", "Sky", null, null, null, 20), CancellationToken.None);
+            new EventHistoryEditInput("Sky", "Sky", null, null, 20), CancellationToken.None);
 
         Assert.Equal(EventHistoryEditOutcome.Done, outcome);
         Assert.Equal(16, BobDkp(db));

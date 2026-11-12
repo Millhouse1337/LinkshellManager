@@ -71,7 +71,6 @@ public class SnapshotAllianceVerificationTests
             LinkshellId = Ls,
             WindowEventId = camp.Id,
             CapturedAtUtc = capturedAt,
-            CreatedAtUtc = capturedAt,
             WindowNumber = 1,
             AllianceNumber = alliance,
             SnapshotStatus = status,
@@ -100,7 +99,6 @@ public class SnapshotAllianceVerificationTests
             LinkshellId = Ls,
             WindowEventId = null,
             CapturedAtUtc = capturedAt,
-            CreatedAtUtc = capturedAt,
             WindowNumber = null,
             // The IDENTITY is what merges now, not a typed number -- see AllianceIdentityService.
             AllianceKey = allianceKey,

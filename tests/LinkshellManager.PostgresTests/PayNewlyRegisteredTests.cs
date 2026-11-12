@@ -84,7 +84,6 @@ public class PayNewlyRegisteredTests : IAsyncLifetime
                 Linkshell = linkshell,
                 WindowEvent = card,
                 CapturedAtUtc = Now,
-                CreatedAtUtc = Now,
                 SnapshotStatus = AttendanceSnapshotStatuses.Active,
                 EntryCount = 2,
                 Entries =

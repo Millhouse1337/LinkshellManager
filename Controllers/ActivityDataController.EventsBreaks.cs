@@ -57,13 +57,11 @@ public sealed partial class ActivityDataController
         var nowUtc = DateTime.UtcNow;
         participation.Duration = EventEndService.CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
         participation.IsOnBreak = true;
-        participation.PauseTime = nowUtc;
         participation.ResumeTime = null;
         _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
         {
             AppUserEventId = participation.Id,
             EventId = eventId,
-            AppUserId = appUser.Id,
             ActionType = "BreakStart",
             OccurredAt = nowUtc,
             RequiresVerification = false
@@ -110,7 +108,6 @@ public sealed partial class ActivityDataController
         }
 
         participation.IsOnBreak = false;
-        participation.PauseTime = null;
         participation.ResumeTime = DateTime.UtcNow;
         // They came back after all — drop the "not returning" mark a Withdraw set.
         participation.WithdrewFromEvent = false;
@@ -118,7 +115,6 @@ public sealed partial class ActivityDataController
         {
             AppUserEventId = participation.Id,
             EventId = eventId,
-            AppUserId = appUser.Id,
             ActionType = "BreakReturn",
             OccurredAt = participation.ResumeTime.Value,
             RequiresVerification = true
@@ -181,13 +177,11 @@ public sealed partial class ActivityDataController
         var nowUtc = DateTime.UtcNow;
         participation.Duration = EventEndService.CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
         participation.IsOnBreak = true;
-        participation.PauseTime = nowUtc;
         participation.ResumeTime = null;
         _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
         {
             AppUserEventId = participation.Id,
             EventId = eventId,
-            AppUserId = participation.AppUserId,
             ActionType = "BreakStart",
             OccurredAt = nowUtc,
             RequiresVerification = false
@@ -244,7 +238,6 @@ public sealed partial class ActivityDataController
 
         var nowUtc = DateTime.UtcNow;
         participation.IsOnBreak = false;
-        participation.PauseTime = null;
         participation.ResumeTime = nowUtc;
         // Officer resumed them — clear any "not returning" mark from a Withdraw.
         participation.WithdrewFromEvent = false;
@@ -260,19 +253,16 @@ public sealed partial class ActivityDataController
         foreach (var pending in pendingReturns)
         {
             pending.VerifiedAt = nowUtc;
-            pending.VerifiedBy = appUser.CharacterName ?? appUser.UserName;
         }
 
         _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
         {
             AppUserEventId = participation.Id,
             EventId = eventId,
-            AppUserId = participation.AppUserId,
             ActionType = "BreakReturn",
             OccurredAt = nowUtc,
             RequiresVerification = false,
             VerifiedAt = nowUtc,
-            VerifiedBy = appUser.CharacterName ?? appUser.UserName
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -324,7 +314,6 @@ public sealed partial class ActivityDataController
         }
 
         ledgerEntry.VerifiedAt = DateTime.UtcNow;
-        ledgerEntry.VerifiedBy = appUser.CharacterName ?? appUser.UserName;
         ledgerEntry.RequiresVerification = false;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -360,8 +349,7 @@ public sealed partial class ActivityDataController
 
         // Deny takes the time back, not just the request -- see BreakReturnDenial.
         var outcome = await BreakReturnDenial.DenyAsync(
-            _dbContext, eventEntity, request.LedgerEntryId,
-            appUser.CharacterName ?? appUser.UserName, cancellationToken);
+            _dbContext, eventEntity, request.LedgerEntryId, cancellationToken);
         return outcome switch
         {
             BreakReturnDenial.Outcome.ReturnNotFound =>
@@ -392,13 +380,11 @@ public sealed partial class ActivityDataController
     {
         participation.Duration = EventEndService.CalculateAccumulatedDurationHours(participation, nowUtc, commencementStart);
         participation.IsOnBreak = true;
-        participation.PauseTime = nowUtc;
         participation.ResumeTime = null;
         _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
         {
             AppUserEventId = participation.Id,
             EventId = eventId,
-            AppUserId = participation.AppUserId,
             ActionType = "BreakStart",
             OccurredAt = nowUtc,
             RequiresVerification = false

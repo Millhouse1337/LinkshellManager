@@ -258,7 +258,7 @@ public sealed partial class ActivityDataController
 
         var outcome = await EventHistoryEdits().EditEventAsync(history!.Id,
             new EventHistoryEditInput(request.EventName, request.EventType, request.EventLocation,
-                request.Details, request.Duration, request.DkpPerHour),
+                request.Duration, request.DkpPerHour),
             cancellationToken);
         return outcome switch
         {

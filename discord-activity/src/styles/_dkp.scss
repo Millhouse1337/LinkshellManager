@@ -52,28 +52,6 @@
   margin-top: 8px;
 }
 
-// Pagination controls under the Event History table.
-.history-pager {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 4px 0;
-  font-size: 12px;
-  color: var(--fg-2);
-}
-
-.history-pager__controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.history-pager__page {
-  font-family: var(--font-mono, inherit);
-  color: var(--fg);
-}
-
 .panel-tab .history-detail-card .history-detail-meta__line,
 .history-detail-card .history-detail-meta__line {
   margin: 0;
@@ -82,15 +60,6 @@
   font-weight: 400;
   letter-spacing: 0;
   color: var(--fg-2);
-}
-
-.history-table th,
-.history-table td {
-  white-space: nowrap;
-}
-
-.history-table td:nth-child(2) {
-  white-space: normal;
 }
 
 /* DKP ledger entries */

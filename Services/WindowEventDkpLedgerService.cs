@@ -596,13 +596,10 @@ public sealed class WindowEventDkpLedgerService
             EventName = windowEvent.Name,
             EventType = windowEvent.CampEventType,
             EventLocation = windowEvent.CampEventLocation,
-            StartDate = windowEvent.CampStartedAtUtc?.Date,
             StartTime = windowEvent.CampStartedAtUtc,
             EndTime = windowEvent.CampEndedAtUtc,
             CommencementStartTime = windowEvent.CampStartedAtUtc,
             Duration = null,
-            EventDkp = null,
-            Details = $"HNM camp, reviewed and posted as Window Event #{windowEvent.Id}.",
             CountsTowardActive = true,
             TimeStamp = windowEvent.PostedToSheetAt ?? windowEvent.CampEndedAtUtc,
             AppUserEventHistories = new List<AppUserEventHistory>(),
@@ -664,10 +661,7 @@ public sealed class WindowEventDkpLedgerService
                 row = new AppUserEventHistory
                 {
                     CharacterName = characterName,
-                    StartTime = windowEvent.CampStartedAtUtc,
                     Duration = null,
-                    IsQuickJoin = true,
-                    IsVerified = true,
                     ActiveCredit = true,
                 };
                 history.AppUserEventHistories.Add(row);

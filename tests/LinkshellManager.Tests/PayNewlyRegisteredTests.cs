@@ -95,7 +95,6 @@ public class PayNewlyRegisteredTests
             LinkshellId = LinkshellId,
             WindowEventId = CardId,
             CapturedAtUtc = CapturedAt,
-            CreatedAtUtc = CapturedAt,
             SnapshotStatus = AttendanceSnapshotStatuses.Active,
             EntryCount = 2,
         });
@@ -308,7 +307,6 @@ public class PayNewlyRegisteredTests
             LinkshellId = LinkshellId,
             WindowEventId = CardId,
             CapturedAtUtc = CapturedAt,
-            CreatedAtUtc = CapturedAt,
             SnapshotStatus = AttendanceSnapshotStatuses.Ignored,
             EntryCount = 1,
         });

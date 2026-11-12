@@ -34,10 +34,8 @@ import type {
   ActivityEventCommentsResponse,
   ActivityEventHistoryResponse,
   ActivityEventHistoryWindowsResponse,
-  ActivityHistory,
   ActivityLootEditInput,
   ActivityLootHistoryList,
-  ActivityHistoryDetail,
   ActivityItemInput,
   ActivityGuildOption,
   ActivityJobRatingCommentSummary,
@@ -92,8 +90,6 @@ export type {
   ActivityEventAddMemberCandidate,
   ActivityEventParticipant,
   ActivityGuildOption,
-  ActivityHistory,
-  ActivityHistoryDetail,
   ActivityItem,
   ActivityItemInput,
   ActivityJobsRoster,
@@ -164,9 +160,6 @@ export class DiscordActivityService {
   readonly actionError = this.auth.actionError;
   readonly busyProfileSave = signal(false);
   readonly busyRefresh = signal(false);
-  readonly historyList = signal<ActivityHistory[]>([]);
-  readonly historyDetail = signal<ActivityHistoryDetail | null>(null);
-  readonly historyBusy = signal(false);
   readonly busyRuleSave = this.linkshellContentService.busyRuleSave;
   readonly busyRuleId = this.linkshellContentService.busyRuleId;
   readonly busyAnnouncementSave = this.linkshellContentService.busyAnnouncementSave;
@@ -437,7 +430,7 @@ export class DiscordActivityService {
     this.error.set(message);
   }
 
-  // --- Top-level coordination methods (overview, refresh, history) ---
+  // --- Top-level coordination methods (overview, refresh) ---
   refreshOverview(): Promise<void> {
     return this.auth.refreshOverview();
   }
@@ -475,56 +468,6 @@ export class DiscordActivityService {
     } finally {
       this.busyRefresh.set(false);
     }
-  }
-
-  async loadHistoryList(): Promise<void> {
-    this.historyBusy.set(true);
-
-    try {
-      const accessToken = this.auth.currentAccessToken();
-      this.historyList.set(
-        await this.http.fetchActivityJson<ActivityHistory[]>('/api/activity/history', accessToken)
-      );
-    } catch (error) {
-      this.historyList.set([]);
-      this.auth.setActionError(this.formatActionErrorMsg(error, 'Loading event history failed.'));
-    } finally {
-      this.historyBusy.set(false);
-    }
-  }
-
-  async loadHistoryDetail(historyId: number): Promise<void> {
-    if (historyId <= 0) {
-      this.historyDetail.set(null);
-      return;
-    }
-
-    this.historyBusy.set(true);
-
-    try {
-      const accessToken = this.auth.currentAccessToken();
-      this.historyDetail.set(
-        await this.http.fetchActivityJson<ActivityHistoryDetail>(
-          `/api/activity/history/${historyId}`,
-          accessToken
-        )
-      );
-    } catch (error) {
-      this.historyDetail.set(null);
-      this.auth.setActionError(
-        this.formatActionErrorMsg(error, 'Loading event history details failed.')
-      );
-    } finally {
-      this.historyBusy.set(false);
-    }
-  }
-
-  clearHistoryDetail(): void {
-    this.historyDetail.set(null);
-  }
-
-  clearHistoryList(): void {
-    this.historyList.set([]);
   }
 
   clearActionState(): void {

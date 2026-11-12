@@ -1130,13 +1130,6 @@ public sealed class DiscordInteractionsController : ControllerBase
         return string.Join("\n", lines);
     }
 
-    // Reply for a click that arrives from a board copy predating the no-signup change
-    // (DiscordEventMessageBuilder.IsAddonSnapshotCamp). Names where credit DOES come from so the
-    // member knows what to do instead of assuming the button is broken.
-    private const string SnapshotCampNoSignupNotice =
-        "This camp doesn't use Discord sign-ups — attendance is recorded from the roster snapshots "
-        + "the LSM addon posts in game each window. Just be in the zone when a window is posted.";
-
     // The outside-signup gate, one flag for every event type. HNM used to have its own
     // (HnmOutsideSignupEnabled) on the theory that HNM boards were a different kind of
     // thing; they aren't any more, so a linkshell makes this decision once.
@@ -1948,14 +1941,6 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("That event is no longer open.");
         }
-        // These camps no longer post a job select (DiscordEventMessageBuilder.Build), but a client
-        // holding an older copy of the message can still fire one — and a signup recorded here
-        // would show up on a board that has no way to display or withdraw it.
-        if (DiscordEventMessageBuilder.IsAddonSnapshotCamp(ev))
-        {
-            return Ephemeral(SnapshotCampNoSignupNotice);
-        }
-
         var ctx = await ResolveSignupContextAsync(ev, appUserId, $"job:{eventId}:{job}", cancellationToken);
         if (ctx.ShouldStop)
         {
@@ -1986,7 +1971,6 @@ public sealed class DiscordInteractionsController : ControllerBase
                 EventId = eventId,
                 CharacterName = characterName,
                 JobName = job!.Trim(),
-                EventDkp = 0,
                 StartTime = startTime,
                 IsQuickJoin = isQuickJoin
             });
@@ -2068,7 +2052,6 @@ public sealed class DiscordInteractionsController : ControllerBase
                 WdArrivalWindow = arrivalWindow,
                 IsVerified = true,
                 IsQuickJoin = true,
-                EventDkp = 0,
                 StartTime = ev.CommencementStartTime,
             });
         }
@@ -2600,13 +2583,6 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("That event is no longer open.");
         }
-        // Same stale-message case as the job select above: there is nothing to withdraw FROM on a
-        // snapshot camp, so say why rather than silently reporting "you weren't signed up".
-        if (DiscordEventMessageBuilder.IsAddonSnapshotCamp(ev))
-        {
-            return Ephemeral(SnapshotCampNoSignupNotice);
-        }
-
         var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
         if (identity is null)
         {
@@ -4169,13 +4145,6 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("That event is no longer open.");
         }
-        // The plain board's "Sign up" lands here too now. An addon-run camp's board has no
-        // buttons, but an older copy of one might.
-        if (DiscordEventMessageBuilder.IsAddonSnapshotCamp(ev))
-        {
-            return Ephemeral(SnapshotCampNoSignupNotice);
-        }
-
         // Gate + name prompt (the role/job picks come next; the name is cached now).
         var ctx = await ResolveSignupContextAsync(ev, appUserId, $"join:{eventId}", cancellationToken);
         if (ctx.ShouldStop)
@@ -4306,7 +4275,6 @@ public sealed class DiscordInteractionsController : ControllerBase
                 JobType = NormalizeWizardValue(role),
                 JobName = NormalizeWizardValue(main),
                 SubJobName = NormalizeWizardValue(sub),
-                EventDkp = 0,
                 StartTime = startTime,
                 IsQuickJoin = isQuickJoin,
             });

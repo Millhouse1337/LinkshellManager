@@ -206,11 +206,11 @@ public class EndEventOnePathTests
             .OrderBy(s => s, StringComparer.Ordinal));
         lines.AddRange(db.EventHistories.AsNoTracking().ToList()
             .Select(h => $"history {h.LinkshellId}|{h.EventName}|{h.EventType}|{h.EventLocation}|{h.DkpPerHour}"
-                + $"|{h.EventDkp}|{h.CountsTowardActive}|{Math.Round(h.Duration ?? -1, 3)}|setup={h.PartySetupId}"));
+                + $"|{h.CountsTowardActive}|{Math.Round(h.Duration ?? -1, 3)}|setup={h.PartySetupId}"));
         lines.AddRange(db.AppUserEventHistories.AsNoTracking().ToList()
             .Select(h => $"row {h.AppUserId}|{h.CharacterName}|{h.JobName}|{h.SubJobName}|{h.JobType}"
-                + $"|{Math.Round(h.Duration ?? -1, 3)}|{h.EventDkp}|verified={h.IsVerified}|active={h.ActiveCredit}"
-                + $"|windows={h.WindowsAttended}|quick={h.IsQuickJoin}|{h.Proctor}")
+                + $"|{Math.Round(h.Duration ?? -1, 3)}|{h.EventDkp}|active={h.ActiveCredit}"
+                + $"|windows={h.WindowsAttended}")
             .OrderBy(s => s, StringComparer.Ordinal));
         lines.AddRange(db.EventLootDetails.AsNoTracking().ToList()
             .Select(l => $"loot {l.Id}|event={l.EventId}|history={(l.EventHistoryId is null ? "none" : "set")}"
@@ -268,7 +268,7 @@ public class EndEventOnePathTests
         Assert.DoesNotContain(rows, r => r.Contains("|EventEarned|", StringComparison.Ordinal));
         Assert.DoesNotContain(rows, r => r.Contains("|LootSpent|", StringComparison.Ordinal));
         Assert.All(rows.Where(r => r.StartsWith("row ", StringComparison.Ordinal)),
-            r => Assert.Contains("|0|verified=", r));
+            r => Assert.Contains("|0|active=", r));
         Assert.Equal(100, Balance(rows, "alice"));
     }
 

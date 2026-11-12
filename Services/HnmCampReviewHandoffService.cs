@@ -300,7 +300,6 @@ public sealed class HnmCampReviewHandoffService
                 // The window's OWN timestamps and identity, so the card reads as the camp
                 // happened rather than as one lump filed at End Camp.
                 CapturedAtUtc = window.PostedAt,
-                CreatedAtUtc = nowUtc,
                 SnapshotStatus = AttendanceSnapshotStatuses.Active,
                 // Named for the ROLE the window is paid as, which is the one thing an officer
                 // reviewing the money needs from it: "Open", "Close", "Kill", or "Window N" for the
@@ -406,7 +405,6 @@ public sealed class HnmCampReviewHandoffService
                     WindowEvent = windowEvent,
                     LinkedEventId = ev.Id,
                     CapturedAtUtc = window.PostedAt,
-                    CreatedAtUtc = nowUtc,
                     SnapshotStatus = AttendanceSnapshotStatuses.Active,
                     Name = HnmConfig.CloseWindowLabel,
                     WindowNumber = windowSnapshot.WindowNumber,
@@ -478,7 +476,6 @@ public sealed class HnmCampReviewHandoffService
                 WindowEvent = windowEvent,
                 LinkedEventId = ev.Id,
                 CapturedAtUtc = nowUtc,
-                CreatedAtUtc = nowUtc,
                 SnapshotStatus = AttendanceSnapshotStatuses.Active,
                 Name = perCapture ? AttendanceSnapshotAlliances.ClaimShieldCaptureName : "Credited without a window",
                 SlotKind = AttendanceSnapshotSlotKinds.Window,
@@ -786,7 +783,6 @@ public sealed class HnmCampReviewHandoffService
             // with its event, so storing one here would dangle. Same call EndEventCoreAsync makes,
             // and it is what lets the next pop of this camp inherit the board.
             PartySetupId = await PartySetupInheritance.ResolveTemplateIdAsync(_db, ev, cancellationToken),
-            StartDate = startedAtUtc?.Date,
             StartTime = startedAtUtc,
             EndTime = endedAtUtc,
             CommencementStartTime = ev.CommencementStartTime,
@@ -794,8 +790,6 @@ public sealed class HnmCampReviewHandoffService
                 ? (endedAtUtc - startedAt).TotalHours
                 : ev.Duration,
             DkpPerHour = ev.DkpPerHour,
-            EventDkp = ev.EventDkp,
-            Details = ev.Details,
             CountsTowardActive = ev.CountsTowardActive,
             TimeStamp = endedAtUtc,
             AppUserEventHistories = new List<AppUserEventHistory>(),
@@ -815,11 +809,8 @@ public sealed class HnmCampReviewHandoffService
                 CharacterName = member.CharacterName,
                 JobName = member.JobName,
                 SubJobName = member.SubJobName,
-                StartTime = startedAtUtc,
                 Duration = null,
                 EventDkp = member.Dkp,
-                IsQuickJoin = true,
-                IsVerified = true,
                 ActiveCredit = true,
             };
 

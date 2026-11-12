@@ -61,6 +61,7 @@ public class Event
 
     public int? DkpPerHour { get; set; }
 
+    // PHASE4B-DROP: Events.EventDkp - never written; nothing reads it any more.
     public double? EventDkp { get; set; }
 
     // Per-camp overrides for the HNM payout amounts. Null (the default) means "use the
@@ -88,11 +89,9 @@ public class Event
 
     public string? Details { get; set; }
 
-    // Identifies who created the event so clients can show source-specific
-    // controls (e.g. the lsm addon shows a Cancel button only on rows it
-    // created itself). Currently set to "Addon" by AddonApiController; null
-    // for everything else (web app, legacy rows). Keep this short — it's an
-    // internal discriminator, not a free-form label.
+    // Was "Addon" on events the addon's old create endpoint made. That endpoint is gone and nothing
+    // reads the column any more.
+    // PHASE4B-DROP: Events.CreationSource - its only writer (the addon create endpoint) and all readers are gone.
     [MaxLength(32)]
     public string? CreationSource { get; set; }
 
@@ -104,6 +103,7 @@ public class Event
 
     // Idempotency stamp left over from the (removed) event-close sheet append.
     // Retained as a harmless nullable column; no longer written.
+    // PHASE4B-DROP: Events.AttInputAppendedAt - Google Sheets leftover, never written or read.
     public DateTime? AttInputAppendedAt { get; set; }
 
     // Set when this event was auto-created from a ToD post (HNM workflow).
@@ -166,11 +166,13 @@ public class Event
     [MaxLength(16)]
     public string? AttendanceMode { get; set; }
 
-    // Two-phase close for Manual Check In camps. When the officer logs the ToD the camp enters "Awaiting
-    // Processing" (WdAwaitingProcessingSince set) instead of finalizing immediately — late
-    // x-ins/corrections still work during the grace period. WdFinalizedAt is stamped once DKP
-    // has been written (idempotency guard: a second finalize is a no-op). WdClaimed/WdKilled
-    // capture whether the camp claimed/killed, driving the claim/kill bonuses at finalize.
+    // Manual Check In close. WdFinalizedAt is stamped once DKP has been written (idempotency guard:
+    // a second finalize is a no-op). WdClaimed/WdKilled capture whether the camp claimed/killed,
+    // driving the claim/kill bonuses at finalize.
+    //
+    // WdAwaitingProcessingSince belonged to the old "Awaiting Processing" grace period, which is
+    // gone: nothing sets it, and nothing reads it any more.
+    // PHASE4B-DROP: Events.WdAwaitingProcessingSince - never written; the filters that read it are gone.
     public DateTime? WdAwaitingProcessingSince { get; set; }
     public DateTime? WdFinalizedAt { get; set; }
     public bool WdClaimed { get; set; }
@@ -240,10 +242,9 @@ public class Event
     // The board's CONTINUATION messages, comma-separated, in display order — everything after
     // DiscordMessageId, which stays the first.
     //
-    // Only boards posted by the old full-width mode have these: it posted one message per
-    // ALLIANCE. Every board posted now is a single message, so this is null for them, and the
-    // publisher deletes any leftovers on a board's next refresh
-    // (DiscordEventChannelPublisher.DeleteLeftoverWideMessagesAsync).
+    // Only boards posted by the old full-width mode had these: it posted one message per
+    // ALLIANCE. Every board posted now is a single message, and nothing reads or clears this any more.
+    // PHASE4B-DROP: Events.DiscordExtraMessageIds - old full-width boards only; the clean-up code is gone.
     public string? DiscordExtraMessageIds { get; set; }
 
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();

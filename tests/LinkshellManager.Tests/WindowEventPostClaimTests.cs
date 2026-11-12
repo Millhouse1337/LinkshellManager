@@ -65,7 +65,6 @@ public class WindowEventPostClaimTests
             LinkshellId = LinkshellId,
             WindowEventId = CardId,
             CapturedAtUtc = Now,
-            CreatedAtUtc = Now,
             SnapshotStatus = AttendanceSnapshotStatuses.Active,
             EntryCount = 1,
         });

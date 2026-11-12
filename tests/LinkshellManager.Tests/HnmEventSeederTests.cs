@@ -56,7 +56,6 @@ public class ClearWdCampStateTests
         EventType = "HNM",
         AttendanceMode = HnmAttendanceModes.Wd,
         WdFinalizedAt = new DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc),
-        WdAwaitingProcessingSince = new DateTime(2026, 7, 30, 11, 0, 0, DateTimeKind.Utc),
         WdPopWindow = 6,
         WdClaimed = true,
         WdKilled = true,
@@ -73,21 +72,6 @@ public class ClearWdCampStateTests
         Assert.Null(ev.WdPopWindow);
         Assert.False(ev.WdClaimed);
         Assert.False(ev.WdKilled);
-    }
-
-    [Fact]
-    public void ClearsAwaitingProcessing_SoTheFreshBoardIsNotInstantlyReFinalized()
-    {
-        // The dangerous half-reset: WdProcessingBackgroundService selects on
-        // (AttendanceMode == Wd && WdAwaitingProcessingSince != null && WdFinalizedAt == null).
-        // Leaving this set would match the revived board against the PREVIOUS pop's elapsed grace
-        // and finalize it on the next 60s tick, crediting nobody.
-        var ev = FinalizedCamp();
-
-        HnmEventSeeder.ClearWdCampState(ev);
-
-        Assert.Null(ev.WdAwaitingProcessingSince);
-        Assert.False(ev.WdAwaitingProcessingSince is not null && ev.WdFinalizedAt is null);
     }
 }
 
@@ -180,12 +164,12 @@ public class ReStampNotStartedCampsTests
     public async Task PoppedAndFinalizedCamps_AreNeverTouched()
     {
         using var db = NewInMemoryContext();
-        var awaiting = Camp("Fafnir", mode: HnmAttendanceModes.Wd,
+        var finalized = Camp("Fafnir", mode: HnmAttendanceModes.Wd,
             commenced: new DateTime(2026, 7, 30, 10, 0, 0, DateTimeKind.Utc));
-        awaiting.WdAwaitingProcessingSince = new DateTime(2026, 7, 30, 11, 0, 0, DateTimeKind.Utc);
+        finalized.WdFinalizedAt = new DateTime(2026, 7, 30, 11, 0, 0, DateTimeKind.Utc);
         var defeated = Camp("Nidhogg", mode: HnmAttendanceModes.Wd);
         defeated.HnmDefeatedAt = new DateTime(2026, 7, 30, 11, 0, 0, DateTimeKind.Utc);
-        db.Events.AddRange(awaiting, defeated);
+        db.Events.AddRange(finalized, defeated);
         await db.SaveChangesAsync();
 
         var (restamped, skipped) = await HnmEventSeeder.ReStampNotStartedCampsAsync(
@@ -193,7 +177,7 @@ public class ReStampNotStartedCampsTests
 
         Assert.Equal(0, restamped);
         Assert.Equal(0, skipped); // filtered out by the query, not counted as "running"
-        Assert.Equal(HnmAttendanceModes.Wd, awaiting.AttendanceMode);
+        Assert.Equal(HnmAttendanceModes.Wd, finalized.AttendanceMode);
         Assert.Equal(HnmAttendanceModes.Wd, defeated.AttendanceMode);
     }
 

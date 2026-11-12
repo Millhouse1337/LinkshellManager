@@ -424,7 +424,6 @@ public sealed partial class ActivityDataController
 
         await ApplyDkpDraftAsync(windowEvent.Value, request, cancellationToken);
         windowEvent.Value.Status = WindowEventStatuses.Closed;
-        windowEvent.Value.ClosedAtUtc = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -895,7 +894,6 @@ public sealed partial class ActivityDataController
         if (windowEvent.Result is not null) return windowEvent.Result;
 
         windowEvent.Value!.Status = WindowEventStatuses.Closed;
-        windowEvent.Value.ClosedAtUtc = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -907,7 +905,6 @@ public sealed partial class ActivityDataController
         if (windowEvent.Result is not null) return windowEvent.Result;
 
         windowEvent.Value!.Status = WindowEventStatuses.Open;
-        windowEvent.Value.ClosedAtUtc = null;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }

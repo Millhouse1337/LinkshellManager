@@ -80,6 +80,7 @@ public class EventAttendanceWindow
 
     // Idempotency stamp for AttInput appends. Set once after a successful
     // append so retries / reposts don't duplicate rows in the sheet.
+    // PHASE4B-DROP: EventAttendanceWindows.AttInputAppendedAt - Google Sheets leftover, never written or read.
     public DateTime? AttInputAppendedAt { get; set; }
 
     public ICollection<AppUserEventWindow> Attendees { get; set; } = new List<AppUserEventWindow>();

@@ -32,6 +32,7 @@ public class EventHistory
     [ForeignKey(nameof(PartySetupId))]
     public PartySetup? PartySetup { get; set; }
 
+    // PHASE4B-DROP: EventHistories.StartDate - no longer written; StartTime already holds it.
     public DateTime? StartDate { get; set; }
 
     public DateTime? StartTime { get; set; }
@@ -44,8 +45,10 @@ public class EventHistory
 
     public int? DkpPerHour { get; set; }
 
+    // PHASE4B-DROP: EventHistories.EventDkp - no longer written; Past Events totals the ledger (PastEventDkp).
     public double? EventDkp { get; set; }
 
+    // PHASE4B-DROP: EventHistories.Details - only the removed hidden history panel showed it; no longer copied or edited.
     public string? Details { get; set; }
 
     // Copied from Event.CountsTowardActive at close (the live Event is deleted, so

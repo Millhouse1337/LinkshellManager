@@ -151,14 +151,11 @@ public static class EventEndService
             // and it is what lets the next pop come back with the same setup attached.
             PartySetupId = await PartySetupInheritance.ResolveTemplateIdAsync(
                 dbContext, eventEntity, CancellationToken.None),
-            StartDate = eventEntity.StartTime?.Date,
             StartTime = eventEntity.StartTime,
             EndTime = endTimeUtc,
             CommencementStartTime = eventEntity.CommencementStartTime,
             Duration = eventEntity.CommencementStartTime.HasValue ? (endTimeUtc - eventEntity.CommencementStartTime.Value).TotalHours : eventEntity.Duration,
             DkpPerHour = eventEntity.DkpPerHour,
-            EventDkp = eventEntity.EventDkp,
-            Details = eventEntity.Details,
             CountsTowardActive = eventEntity.CountsTowardActive,
             TimeStamp = DateTime.UtcNow,
             AppUserEventHistories = new List<AppUserEventHistory>()
@@ -227,7 +224,6 @@ public static class EventEndService
             var eventDkp = paysNoDkp ? 0 : credit.Dkp;
 
             participation.Duration = durationHours;
-            participation.EventDkp = eventDkp;
 
             participantSummaries.Add(new EndEventParticipantSummary(
                 participation.CharacterName,
@@ -244,12 +240,8 @@ public static class EventEndService
                 JobName = participation.JobName,
                 SubJobName = participation.SubJobName,
                 JobType = participation.JobType,
-                StartTime = participation.StartTime,
                 Duration = durationHours,
                 EventDkp = eventDkp,
-                IsQuickJoin = participation.IsQuickJoin,
-                IsVerified = participation.IsVerified,
-                Proctor = participation.Proctor,
                 ActiveCredit = credit.ActiveCredit,
                 // Null on a timed event. On a windowed one this is the numerator of the DKP row
                 // above, so the closed event can explain its own payout.

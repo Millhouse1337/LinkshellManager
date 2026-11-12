@@ -76,9 +76,6 @@ public sealed partial class AddonApiController
                         evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt)),
                     windowCount = DiscordEventMessageBuilder.EffectiveWindowCount(evt),
                     nextWindowAt = evt.NextWindowAt,
-                    // Popped and inside the finalize grace: still open to late check-ins, but the
-                    // addon labels it so nobody thinks the camp is still running.
-                    awaitingProcessing = evt.WdAwaitingProcessingSince != null,
                     started = evt.CommencementStartTime != null,
                     checkedIn = mine is not null,
                     arrivalWindow = mine?.WdArrivalWindow,
@@ -180,7 +177,6 @@ public sealed partial class AddonApiController
                 WdArrivalWindow = arrivalWindow,
                 IsVerified = true,
                 IsQuickJoin = true,
-                EventDkp = 0,
                 StartTime = eventEntity.CommencementStartTime,
             });
         }

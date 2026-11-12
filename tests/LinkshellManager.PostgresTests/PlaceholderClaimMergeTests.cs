@@ -71,7 +71,7 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             await db.SaveChangesAsync();
             db.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
             {
-                AppUserEventId = phSignup.Id, EventId = shared.Id, AppUserId = Ph, ActionType = "Join", OccurredAt = When,
+                AppUserEventId = phSignup.Id, EventId = shared.Id, ActionType = "Join", OccurredAt = When,
             });
 
             // Window credits: window 1 credited both (one person, counted twice); window 2 only

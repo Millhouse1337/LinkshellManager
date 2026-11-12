@@ -21,7 +21,6 @@ public class OpenAppButtonTests
         EventType = "HNM",
         AssignedMonsterName = "Tiamat",
         StartTime = Start,
-        CreationSource = "App",
     };
 
     private static PartySetup Setup() => new()

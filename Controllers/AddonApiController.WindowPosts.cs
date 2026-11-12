@@ -329,19 +329,6 @@ public sealed partial class AddonApiController
                 VerifiedAt = nowUtc,
                 VerifiedBy = source,
             });
-            _dbContext.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
-            {
-                AppUserEvent = participation,
-                EventId = camp.Id,
-                AppUserId = appUserId,
-                ActionType = "Verify",
-                OccurredAt = nowUtc,
-                RequiresVerification = false,
-                VerifiedAt = nowUtc,
-                VerifiedBy = source,
-                Source = "app",
-                EventAttendanceWindow = window,
-            });
             added++;
         }
 
@@ -388,7 +375,6 @@ public sealed partial class AddonApiController
         {
             LinkshellId = camp.LinkshellId,
             CapturedAtUtc = nowUtc,
-            CreatedAtUtc = nowUtc,
             CapturedByCharacterName = actorName,
             Name = TruncateString(request.Name?.Trim(), 128) is { Length: > 0 } name ? name : "Misc post",
             PostedByAppUserId = actor.Id,

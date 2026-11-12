@@ -123,7 +123,7 @@ public sealed class HnmCampPopService
         // otherwise log a fresh ToD for this pop.
         Tod? tod = null;
         if (ev.SourceTodId is { } sourceTodId
-            && (ev.HnmDefeatedAt is not null || ev.WdAwaitingProcessingSince is not null))
+            && ev.HnmDefeatedAt is not null)
         {
             tod = await _db.Tods.FirstOrDefaultAsync(t => t.Id == sourceTodId, cancellationToken);
         }

@@ -101,19 +101,6 @@ public sealed class HnmBoardNoticeService
             ok = !string.IsNullOrWhiteSpace(replacementId);
         }
 
-        // A board posted by the old full-width mode is one message per alliance. The note replaces
-        // the FIRST; the rest have to go, or the channel keeps showing a live-looking roster for a
-        // monster that is already down — buttons and all.
-        if (!string.IsNullOrWhiteSpace(ev.DiscordExtraMessageIds))
-        {
-            foreach (var extra in ev.DiscordExtraMessageIds!
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                await _bot.DeleteMessageAsync(ev.DiscordChannelId!, extra, cancellationToken);
-            }
-            ev.DiscordExtraMessageIds = null;
-        }
-
         return ok;
     }
 

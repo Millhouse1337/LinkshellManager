@@ -938,7 +938,6 @@ export class EventHistoryPanelComponent {
       eventName: h.eventName ?? null,
       eventType: h.eventType ?? null,
       eventLocation: h.eventLocation ?? null,
-      details: null,
       duration: h.duration ?? null,
       dkpPerHour: h.dkpPerHour ?? null
     };
