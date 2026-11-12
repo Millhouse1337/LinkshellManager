@@ -1811,6 +1811,13 @@ namespace LinkshellManagerDiscordApp.Data
                 // Powers the indexed EXISTS behind "has this been reversed?", which is how the
                 // reversal state is read without ever updating a confirmed row.
                 entity.HasIndex(item => item.ReversesJournalEntryId);
+                // One reversal per entry: a second one would take the same gil off the books twice.
+                // TreasuryJournalWriter checks first; this stops two reversals saved at the same
+                // moment. Corrections share the column (a Fix is a Reversal plus a Correction), so
+                // only Reversal rows count. The migration skips it if old duplicates exist.
+                entity.HasIndex(item => item.ReversesJournalEntryId, "IX_JournalEntries_OneReversalPerEntry")
+                    .IsUnique()
+                    .HasFilter("\"Kind\" = 'Reversal'");
                 // Makes the one-time conversion replayable: if it aborts halfway, re-run it rather
                 // than restoring a snapshot.
                 entity.HasIndex(item => item.LegacyRevenueEntryId)

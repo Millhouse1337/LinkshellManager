@@ -2585,6 +2585,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("LinkshellId", "TransactionDate");
 
+                    b.HasIndex(new[] { "ReversesJournalEntryId" }, "IX_JournalEntries_OneReversalPerEntry")
+                        .IsUnique()
+                        .HasFilter("\"Kind\" = 'Reversal'");
+
                     b.ToTable("JournalEntries", null, t =>
                         {
                             t.HasCheckConstraint("CK_JournalEntries_ReasonRequiredForFixes", "\"Kind\" NOT IN ('Reversal', 'Correction') OR (\"CorrectionReason\" IS NOT NULL AND length(btrim(\"CorrectionReason\")) > 0)");

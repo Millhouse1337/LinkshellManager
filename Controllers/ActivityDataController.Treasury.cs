@@ -1,3 +1,4 @@
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -246,10 +247,27 @@ public sealed partial class ActivityDataController
     }
 
     // Cancel a confirmed entry by recording its opposite. The original stays in the list.
+    //
+    // Two reversals of one entry at the same moment (a double click, two officers): the database
+    // turns the later save away (IX_JournalEntries_OneReversalPerEntry), and the re-run reads again,
+    // finds the first reversal, and answers "already reversed" instead of taking the gil off twice.
     [HttpPost("treasury/entries/{entryId:int}/reverse")]
-    public async Task<IActionResult> ReverseTreasuryEntryAsync(
+    public Task<IActionResult> ReverseTreasuryEntryAsync(
         int entryId,
         [FromBody] ActivityReverseTreasuryEntryRequest request,
+        CancellationToken cancellationToken) =>
+        UniqueRaceRetry.RunAsync(
+            _dbContext,
+            () => ReverseTreasuryEntryCoreAsync(entryId, request, cancellationToken),
+            TreasuryJournalTable);
+
+    // The table whose unique rejections mean another treasury write landed first: the reversal
+    // index, and the per-linkshell entry number two writes at once can both pick.
+    private const string TreasuryJournalTable = "JournalEntries";
+
+    private async Task<IActionResult> ReverseTreasuryEntryCoreAsync(
+        int entryId,
+        ActivityReverseTreasuryEntryRequest request,
         CancellationToken cancellationToken)
     {
         var found = await LoadTreasuryEntryForWriteAsync(entryId, cancellationToken);
@@ -272,6 +290,10 @@ public sealed partial class ActivityDataController
         {
             return Conflict(new { error = notConfirmed.Message });
         }
+        catch (AlreadyReversedTreasuryEntryException alreadyReversed)
+        {
+            return Conflict(new { error = alreadyReversed.Message });
+        }
         catch (TreasuryPeriodLockedException locked)
         {
             return LockedResponse(locked);
@@ -279,11 +301,20 @@ public sealed partial class ActivityDataController
     }
 
     // "Fix": one reversal plus one replacement, recorded together, so correcting a typo is a single
-    // action rather than two.
+    // action rather than two. A Fix reverses the entry, so the same one-reversal rule and re-run apply.
     [HttpPost("treasury/entries/{entryId:int}/fix")]
-    public async Task<IActionResult> FixTreasuryEntryAsync(
+    public Task<IActionResult> FixTreasuryEntryAsync(
         int entryId,
         [FromBody] ActivityFixTreasuryEntryRequest request,
+        CancellationToken cancellationToken) =>
+        UniqueRaceRetry.RunAsync(
+            _dbContext,
+            () => FixTreasuryEntryCoreAsync(entryId, request, cancellationToken),
+            TreasuryJournalTable);
+
+    private async Task<IActionResult> FixTreasuryEntryCoreAsync(
+        int entryId,
+        ActivityFixTreasuryEntryRequest request,
         CancellationToken cancellationToken)
     {
         var found = await LoadTreasuryEntryForWriteAsync(entryId, cancellationToken);
@@ -345,6 +376,10 @@ public sealed partial class ActivityDataController
         catch (ConfirmedTreasuryEntryException notConfirmed)
         {
             return Conflict(new { error = notConfirmed.Message });
+        }
+        catch (AlreadyReversedTreasuryEntryException alreadyReversed)
+        {
+            return Conflict(new { error = alreadyReversed.Message });
         }
         catch (TreasuryPeriodLockedException locked)
         {

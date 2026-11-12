@@ -90,7 +90,9 @@ public sealed class ItemSaleRecorder
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
 
         var entry = await FindSaleEntryAsync(item, cancellationToken);
-        if (entry is not null)
+        // An officer may already have reversed the sale's entry from the treasury list. The gil is
+        // already off the books then, so only the item goes back to unsold.
+        if (entry is not null && !await _journal.HasReversalAsync(entry, cancellationToken))
         {
             await _journal.ReverseAsync(
                 entry,

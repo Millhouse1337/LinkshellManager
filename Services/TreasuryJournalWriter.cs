@@ -65,6 +65,16 @@ public sealed class ConfirmedTreasuryEntryException : Exception
     }
 }
 
+// Thrown when an entry that has already been reversed (or fixed) is reversed or fixed again. A
+// second reversal would take the same gil off the books twice.
+public sealed class AlreadyReversedTreasuryEntryException : Exception
+{
+    public AlreadyReversedTreasuryEntryException(string entryNumber)
+        : base($"Entry {TreasuryLabels.EntryReference(entryNumber)} has already been reversed.")
+    {
+    }
+}
+
 // THE single place gil moves.
 //
 // Before this, six call sites each hand-rolled the same few lines: pick an EntryType string, decide a
@@ -209,6 +219,24 @@ public sealed class TreasuryJournalWriter
         JournalEntry original, string reason, TreasuryActor actor, CancellationToken cancellationToken)
     {
         return await MirrorAsync(original, reason, actor, JournalEntryKinds.Reversal, cancellationToken);
+    }
+
+    // Has this entry already been reversed (by a Reverse or a Fix)? Counts a reversal this request has
+    // staged but not saved yet, so one request cannot reverse the same entry twice either.
+    public async Task<bool> HasReversalAsync(JournalEntry original, CancellationToken cancellationToken)
+    {
+        var staged = _db.ChangeTracker.Entries<JournalEntry>()
+            .Any(tracked => tracked.State == EntityState.Added
+                && tracked.Entity.Kind == JournalEntryKinds.Reversal
+                && tracked.Entity.ReversesJournalEntryId == original.Id);
+        if (staged)
+        {
+            return true;
+        }
+
+        return await _db.JournalEntries.AnyAsync(
+            entry => entry.ReversesJournalEntryId == original.Id && entry.Kind == JournalEntryKinds.Reversal,
+            cancellationToken);
     }
 
     // Fix a confirmed entry: one reversal plus one replacement, recorded together, so correcting a
@@ -374,6 +402,13 @@ public sealed class TreasuryJournalWriter
         if (string.IsNullOrWhiteSpace(reason))
         {
             throw new ArgumentException("A reason is required to reverse or correct an entry.", nameof(reason));
+        }
+        // One reversal per entry. A Fix records a reversal too, so this also refuses fixing an entry
+        // twice, or reversing one that was fixed. Two requests at the same moment both pass this
+        // check; the unique index IX_JournalEntries_OneReversalPerEntry refuses the second save.
+        if (await HasReversalAsync(original, cancellationToken))
+        {
+            throw new AlreadyReversedTreasuryEntryException(original.EntryNumber);
         }
         await _periods.EnsureOpenAsync(original.LinkshellId, original.TransactionDate, cancellationToken);
 

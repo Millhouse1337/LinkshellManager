@@ -474,8 +474,18 @@ public sealed partial class ActivityDataController
         }
 
         var characterName = membership!.CharacterName ?? appUser.CharacterName;
-        await _itemSales.ReverseSaleAsync(
-            item, new TreasuryActor(appUser.Id, characterName), cancellationToken);
+        try
+        {
+            await _itemSales.ReverseSaleAsync(
+                item, new TreasuryActor(appUser.Id, characterName), cancellationToken);
+        }
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsUniqueRejectionOn(ex, new[] { "JournalEntries" }))
+        {
+            // Another treasury write landed at the same moment -- most likely a second undo of this
+            // sale, which the database turns away (IX_JournalEntries_OneReversalPerEntry) so the gil
+            // comes off once. Nothing from this request was saved.
+            return Conflict(new { error = "Another treasury change landed at the same moment. Refresh and try again." });
+        }
 
         return Ok(new { success = true });
     }
