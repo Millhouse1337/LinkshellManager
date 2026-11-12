@@ -101,7 +101,7 @@ public class DkpLedgerEntry
     public AuctionHistory? SourceAuctionHistory { get; set; }
 
     // Populated when a Window Event built from attendance snapshots is posted
-    // to AttInput. This lets DKP history/audits show the snapshot-derived DKP
+    // (paid). This lets DKP history/audits show the snapshot-derived DKP
     // rows and prevents backfills from creating duplicates.
     public int? SourceWindowEventId { get; set; }
 

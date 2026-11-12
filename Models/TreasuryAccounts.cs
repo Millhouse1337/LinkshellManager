@@ -13,7 +13,8 @@ public static class TreasuryAccounts
     public const int WeOwe = 2000;
 
     // --- 3000s: what it is worth ---
-    // Never posted to: worth is the residual of holdings minus obligations. IsPostable = false.
+    // Never posted to: worth is the residual of holdings minus obligations. No
+    // TreasuryTransactionKind names it (TreasuryVocabularyTests checks that).
     public const int NetWorth = 3000;
     // The gil a linkshell already had when it adopted LSManager. Postable exactly once, and the
     // reason an adopting linkshell does not have to book its existing treasury as gil received.
