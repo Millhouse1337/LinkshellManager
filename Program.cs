@@ -243,6 +243,8 @@ builder.Services.AddSingleton<OfficerAddTargetCache>();
 builder.Services.AddScoped<TodImageUploadService>();
 builder.Services.AddSingleton<TodImageUploadQuota>();
 builder.Services.AddScoped<SubmissionApprovalService>();
+// The one way a Time of Death is saved: the app, the addon, approval and End Camp all call it.
+builder.Services.AddScoped<TodRecorder>();
 // Data Protection guards the encrypted Google refresh tokens, auth cookies and
 // antiforgery tokens. By default the key ring lands under the app's content
 // root, which the deploy script replaces wholesale on every release -- new keys

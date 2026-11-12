@@ -1386,7 +1386,6 @@ public sealed partial class AddonApiController
         }
 
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
-        var nowUtc = DateTime.UtcNow;
 
         // The LINKSHELL'S configured values, not the global defaults. An addon-posted ToD used to
         // ignore the configuration entirely, because it only ever reached the Activity's client.
@@ -1399,9 +1398,6 @@ public sealed partial class AddonApiController
         // exactly that many seconds, and every window on it with them.
         var timing = await _monsterTimings.ResolveAsync(token.LinkshellId, monsterName, cancellationToken);
         var additionalSeconds = Math.Max(0, timing.AdditionalSeconds);
-        var repopTimeUtc = defeatedAtUtc
-            .AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown))
-            .AddSeconds(additionalSeconds);
 
         // Claim arrives verbatim on the request — tri-state:
         //   true  -> "Post (Claimed)" pressed in the ToD Capturing panel
@@ -1427,84 +1423,77 @@ public sealed partial class AddonApiController
         var dayNumber = request.DayNumber.HasValue && request.DayNumber.Value > 0
             ? request.DayNumber
             : null;
-        // A live camp for this spawn decides the day -- see HnmDayCycle.DayForAddonTodAsync.
-        dayNumber = await HnmDayCycle.DayForAddonTodAsync(
-            _dbContext, token.LinkshellId, monsterName, dayNumber, cancellationToken);
 
         // Only a positive window is a reading; 0 / negative is the addon saying it has none, and
         // must stay null so "Popped on window" renders as "not recorded" rather than as window 0.
-        // Resolved BEFORE the approval branch below, which needs it too.
         var popWindow = request.PopWindow is { } pw && pw > 0 ? pw : (int?)null;
 
-        // Another character already posted this kill: this post is the same ToD, not a second one.
-        // Nothing below runs for it. In particular the sign-up reset, which would wipe anyone who
-        // signed up for the next pop since the first post. Only someone who can manage ToDs adds to
-        // the saved row; anyone else's post has nothing left to queue for approval.
+        if (canManage)
+        {
+            // Saved the one shared way. When another character already posted this kill, this post
+            // is the same ToD, not a second one: its claim and window are added to that row and
+            // nothing else runs (TodRecorder).
+            var recorder = HttpContext.RequestServices.GetRequiredService<TodRecorder>();
+            var recorded = await recorder.RecordAsync(
+                new TodRecordInput(
+                    token.LinkshellId,
+                    monsterName,
+                    Hq: null, // the name says it: the addon posts the half that died
+                    defeatedAtUtc,
+                    additionalSeconds,
+                    popWindow,
+                    claimed,
+                    Killed: null,
+                    dayNumber,
+                    TodSources.Addon,
+                    token.IssuedToAppUserId)
+                {
+                    Cooldown = cooldown,
+                    Interval = interval,
+                    DayFromLiveCamp = true,
+                },
+                cancellationToken);
+
+            // Recording a Time of Death does NOT put a board up. It used to queue the next pop's camp
+            // on the spot, for any tracked HNM, which meant entering a ToD created an event nobody had
+            // asked for -- and, when the camp it belonged to was still live, a second one beside it.
+            // A board comes back only through Repeat-on-ToD, at the lead the create form set
+            // (HnmRecurringBoardBackgroundService).
+            return Ok(TodPostResponse(recorded.Tod, alreadyPosted: recorded.MergedIntoExisting));
+        }
+
+        // A member whose kill another character already posted has nothing left to queue for
+        // approval, and may not change the saved row.
         var sameKill = await TodSameKill.FindAsync(
             _dbContext, token.LinkshellId, monsterName, defeatedAtUtc, cancellationToken);
         if (sameKill is not null)
         {
-            if (canManage && TodSameKill.Merge(sameKill, claimed, popWindow))
-            {
-                await _dbContext.SaveChangesAsync(cancellationToken);
-            }
             return Ok(TodPostResponse(sameKill, alreadyPosted: true));
         }
 
-        if (!canManage)
-        {
-            var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
-            var input = new TodSubmissionInput(
-                monsterName,
-                dayNumber,
-                claimed,
-                defeatedAtUtc,
-                cooldown,
-                interval,
-                repopTimeUtc,
-                null,
-                // Carried into the queue, not dropped: the tracker stamped this when the mob
-                // popped, and it is no less true for the submitter lacking ToD-manage rights.
-                popWindow,
-                // The addon posts the half that died ("Nidhogg"), so the name says whether it was HQ.
-                HnmConfig.ResolveClaimHalf(monsterName, false).IsHq,
-                additionalSeconds);
-            var submissionId = await approvalSvc.QueueTodAsync(token.LinkshellId, token.IssuedToAppUserId!, input, cancellationToken);
-            return Ok(new { pending = true, submissionId, monsterName });
-        }
+        // A live camp for this spawn decides the day -- see HnmDayCycle.DayForAddonTodAsync. (A
+        // saved ToD gets this from TodRecorder.)
+        dayNumber = await HnmDayCycle.DayForAddonTodAsync(
+            _dbContext, token.LinkshellId, monsterName, dayNumber, cancellationToken);
 
-        var tod = new Tod
-        {
-            LinkshellId = token.LinkshellId,
-            MonsterName = monsterName,
-            DayNumber = dayNumber,
-            Claim = claimed,
-            PopWindow = popWindow,
-            AdditionalSeconds = additionalSeconds,
-            Time = defeatedAtUtc,
-            Cooldown = cooldown,
-            RepopTime = repopTimeUtc,
-            Interval = interval,
-            TimeStamp = nowUtc,
-            TotalTods = 1,
-            TotalClaims = claimed == true ? 1 : 0,
-            ImagePath = null
-        };
-
-        _dbContext.Tods.Add(tod);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        // A new ToD = a new pop window, so reset any party sign-ups assigned to
-        // this monster (the old roster is for the pop that just happened).
-        await PartySetupSignupReset.ClearSignupsForMonsterAsync(_dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
-
-        // Recording a Time of Death does NOT put a board up. It used to queue the next pop's camp
-        // on the spot, for any tracked HNM, which meant entering a ToD created an event nobody had
-        // asked for -- and, when the camp it belonged to was still live, a second one beside it.
-        // A board comes back only through Repeat-on-ToD, at the lead the create form set
-        // (HnmRecurringBoardBackgroundService).
-
-        return Ok(TodPostResponse(tod, alreadyPosted: false));
+        var approvalSvc = HttpContext.RequestServices.GetRequiredService<SubmissionApprovalService>();
+        var input = new TodSubmissionInput(
+            monsterName,
+            dayNumber,
+            claimed,
+            defeatedAtUtc,
+            cooldown,
+            interval,
+            TodRecorder.RepopFor(defeatedAtUtc, cooldown, additionalSeconds),
+            null,
+            // Carried into the queue, not dropped: the tracker stamped this when the mob
+            // popped, and it is no less true for the submitter lacking ToD-manage rights.
+            popWindow,
+            // The addon posts the half that died ("Nidhogg"), so the name says whether it was HQ.
+            HnmConfig.ResolveClaimHalf(monsterName, false).IsHq,
+            additionalSeconds);
+        var submissionId = await approvalSvc.QueueTodAsync(token.LinkshellId, token.IssuedToAppUserId!, input, cancellationToken);
+        return Ok(new { pending = true, submissionId, monsterName });
     }
 
     private static object TodPostResponse(Tod tod, bool alreadyPosted) => new

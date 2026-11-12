@@ -3,8 +3,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Moved out of the old website's PartySetupController so it outlives it: every "new ToD created"
-// path (Activity, addon, submission approval) calls it. Self-committing.
+// Moved out of the old website's PartySetupController so it outlives
+// it: TodRecorder calls it for every new ToD (the app, the addon, approval and End Camp). Self-committing.
 public static class PartySetupSignupReset
 {
     // A fresh ToD for a monster means the previous pop's roster is stale, so

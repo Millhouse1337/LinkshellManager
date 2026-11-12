@@ -18,13 +18,16 @@ namespace LinkshellManagerDiscordApp.Services;
 public sealed class SubmissionApprovalService
 {
     private readonly ApplicationDbContext _db;
+    private readonly TodRecorder _recorder;
     private readonly ILogger<SubmissionApprovalService> _logger;
 
     public SubmissionApprovalService(
         ApplicationDbContext db,
+        TodRecorder recorder,
         ILogger<SubmissionApprovalService> logger)
     {
         _db = db;
+        _recorder = recorder;
         _logger = logger;
     }
 
@@ -75,53 +78,36 @@ public sealed class SubmissionApprovalService
             .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
         if (pending is null) return ApprovalResult.NotFound;
 
-        var occurredAt = DateTime.UtcNow;
-        var todTimeUtc = pending.Time;
-
-        // The kill got its ToD while this waited, from an officer's post. Approving adds what this
-        // one knew to that ToD, not a second row. The sign-up reset below already ran for it.
-        if (todTimeUtc is { } defeatedAtUtc
-            && await TodSameKill.FindAsync(_db, pending.LinkshellId, pending.MonsterName, defeatedAtUtc, cancellationToken) is { } sameKill)
-        {
-            TodSameKill.Merge(sameKill, pending.Claim, pending.PopWindow);
-            _db.PendingTodSubmissions.Remove(pending);
-            await _db.SaveChangesAsync(cancellationToken);
-            return ApprovalResult.Approved;
-        }
-
-        var tod = new Tod
-        {
-            MonsterName = pending.MonsterName,
-            DayNumber = pending.DayNumber,
-            Claim = pending.Claim,
-            // Carried from the submission. Approving used to drop both, so an HQ kill was saved as
-            // the NQ and the day cycle never went back to Day 1.
-            Hq = pending.Hq,
-            AdditionalSeconds = pending.AdditionalSeconds,
-            Time = todTimeUtc,
-            Cooldown = pending.Cooldown,
-            Interval = pending.Interval,
-            RepopTime = pending.RepopTime
-                ?? todTimeUtc?.AddHours(ResolveCooldownHours(pending.Cooldown)).AddSeconds(pending.AdditionalSeconds),
-            LinkshellId = pending.LinkshellId,
-            TimeStamp = occurredAt,
-            TotalTods = 1,
-            TotalClaims = pending.Claim == true ? 1 : 0,
-            ImagePath = pending.ImagePath,
-            // Recorded when the pop was seen, not when the officer got round to approving it.
-            PopWindow = pending.PopWindow,
-        };
-
-        _db.Tods.Add(tod);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        // Delete the pending submission (any legacy loot child rows cascade with it).
+        // Staged first, so the recorder's save takes the submission off the queue in the same commit
+        // as the ToD it becomes. The save below covers a kill that was already saved with nothing new
+        // to add, where the recorder has nothing of its own to save.
         _db.PendingTodSubmissions.Remove(pending);
-        await _db.SaveChangesAsync(cancellationToken);
 
-        // A new ToD = a new pop window, so reset any party sign-ups assigned to
-        // this monster (the old roster is for the pop that just happened).
-        await PartySetupSignupReset.ClearSignupsForMonsterAsync(_db, tod.LinkshellId, tod.MonsterName, cancellationToken);
+        // Saved the one shared way. When the kill got its ToD while this waited (an officer's post),
+        // approving adds what this one knew to that ToD instead of saving a second row.
+        await _recorder.RecordAsync(
+            new TodRecordInput(
+                pending.LinkshellId,
+                pending.MonsterName,
+                pending.Hq,
+                pending.Time,
+                pending.AdditionalSeconds,
+                // Recorded when the pop was seen, not when the officer got round to approving it.
+                pending.PopWindow,
+                pending.Claim,
+                Killed: null,
+                pending.DayNumber,
+                TodSources.Approval,
+                pending.SubmittedByAppUserId)
+            {
+                Cooldown = pending.Cooldown,
+                Interval = pending.Interval,
+                ImagePath = pending.ImagePath,
+                // The repop the member submitted, or the one the reviewer typed. Blank = worked out.
+                RepopUtcOverride = pending.RepopTime,
+            },
+            cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
 
         // Approving a member's ToD puts no board up either, for the same reason the addon's own
         // post doesn't: a board comes back only through Repeat-on-ToD, at its lead.
@@ -167,13 +153,6 @@ public sealed class SubmissionApprovalService
         await _db.SaveChangesAsync(cancellationToken);
         return ApprovalResult.Rejected;
     }
-
-    // ---------- Helpers ----------
-
-    // This used to compare against "72 Hour" alone, so approving a member-submitted 84/71/2 Hour
-    // or 5 Min ToD recomputed its repop at 22 hours.
-    private static double ResolveCooldownHours(string? cooldown) =>
-        Controllers.ActivityDataController.ResolveTodCooldownHours(cooldown);
 }
 
 public enum ApprovalResult { Approved, Rejected, NotFound }

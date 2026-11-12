@@ -27,7 +27,9 @@ export class TodService {
     try {
       // Use postActivityJson so we can inspect the {pending} flag the server
       // returns when the caller has only CanSubmitTodForApproval (member-tier).
-      const response = await this.http.postActivityJson<{ pending?: boolean }>('/api/activity/tods', {
+      // alreadyPosted: the kill was already saved (the addon or another officer, within a couple of
+      // minutes), so this one's answers were added to that ToD instead of saving a second.
+      const response = await this.http.postActivityJson<{ pending?: boolean; alreadyPosted?: boolean }>('/api/activity/tods', {
         linkshellId: input.linkshellId,
         monsterName: input.monsterName,
         dayNumber: input.dayNumber ?? null,
@@ -43,7 +45,9 @@ export class TodService {
       await this.auth.refreshOverview();
       this.auth.setActionMessage(response?.pending
         ? 'ToD submitted for officer approval.'
-        : 'ToD entry saved.');
+        : response?.alreadyPosted
+          ? 'This kill was already logged, so your answers were added to that ToD.'
+          : 'ToD entry saved.');
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Saving the ToD entry failed.'));
       throw error;

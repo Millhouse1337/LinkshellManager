@@ -51,7 +51,7 @@ public class TodSameKillTests
     }
 
     private static SubmissionApprovalService Approvals(ApplicationDbContext db) =>
-        new(db, NullLogger<SubmissionApprovalService>.Instance);
+        new(db, TodCallers.Recorder(db), NullLogger<SubmissionApprovalService>.Instance);
 
     private static async Task<JsonElement> PostAsync(
         ApplicationDbContext db, string monster, DateTime killedAt, bool? claim = true, int? popWindow = null)
@@ -59,6 +59,7 @@ public class TodSameKillTests
         var services = new ServiceCollection();
         services.AddSingleton(db);
         services.AddSingleton(Approvals(db));
+        services.AddSingleton(TodCallers.Recorder(db));
 
         var http = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         http.Items[AddonApiAuthAttribute.TokenContextKey] = new AddonApiToken

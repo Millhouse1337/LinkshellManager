@@ -40,7 +40,7 @@ public class HnmCampPopServiceTests
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance),
             pools,
             NullLogger<HnmCampReviewHandoffService>.Instance);
-        return new HnmCampPopService(db, handoff, new MonsterTimingResolver(db), NullLogger<HnmCampPopService>.Instance);
+        return new HnmCampPopService(db, handoff, new MonsterTimingResolver(db), TodCallers.Recorder(db), NullLogger<HnmCampPopService>.Instance);
     }
 
     /// <summary>A live Standard-mode HNM camp on its 6th window, scheduled to have popped an hour ago.</summary>

@@ -23,7 +23,7 @@ public class SubmissionApprovalReviewTests
             .Options);
 
     private static SubmissionApprovalService NewService(ApplicationDbContext db) =>
-        new(db, NullLogger<SubmissionApprovalService>.Instance);
+        new(db, TodCallers.Recorder(db), NullLogger<SubmissionApprovalService>.Instance);
 
     private static async Task<PendingTodSubmission> SeedTodAsync(ApplicationDbContext db, int linkshellId)
     {

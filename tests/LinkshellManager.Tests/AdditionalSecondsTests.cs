@@ -73,7 +73,8 @@ public class AdditionalSecondsTests
     {
         var services = new ServiceCollection();
         services.AddSingleton(db);
-        services.AddSingleton(new SubmissionApprovalService(db, NullLogger<SubmissionApprovalService>.Instance));
+        services.AddSingleton(new SubmissionApprovalService(db, TodCallers.Recorder(db), NullLogger<SubmissionApprovalService>.Instance));
+        services.AddSingleton(TodCallers.Recorder(db));
 
         var http = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         http.Items[AddonApiAuthAttribute.TokenContextKey] = new AddonApiToken

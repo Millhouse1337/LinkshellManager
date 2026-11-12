@@ -47,9 +47,9 @@ public sealed partial class ActivityDataController
         }
 
         // Stored as the combined pair name, with Hq carrying which half. See
-        // NormalizeMergePairTod -- this is what makes an Activity-logged ToD match one logged
+        // TodRecorder.Normalize -- this is what makes an Activity-logged ToD match one logged
         // from the addon or the camp board.
-        var (normalizedMonsterName, normalizedHq) = NormalizeMergePairTod(monsterName, request.Hq);
+        var (normalizedMonsterName, normalizedHq) = TodRecorder.Normalize(monsterName, request.Hq);
         monsterName = normalizedMonsterName;
 
         if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
@@ -93,8 +93,6 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        var nowUtc = DateTime.UtcNow;
-
         if (!canManage)
         {
             // Member submit-for-approval path. Persist exactly what was sent.
@@ -106,7 +104,7 @@ public sealed partial class ActivityDataController
                 todTimeUtc,
                 cooldown,
                 interval,
-                todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(Math.Max(0, requestedAdditionalSeconds)),
+                TodRecorder.RepopFor(todTimeUtc.Value, cooldown, requestedAdditionalSeconds),
                 SanitizeUploadedImagePath(request.ImagePath),
                 // Queued with the rest, so approving gives the same ToD an officer would have saved.
                 NormalizePopWindow(request.PopWindow),
@@ -117,57 +115,35 @@ public sealed partial class ActivityDataController
         }
 
         var additionalSeconds = Math.Max(0, requestedAdditionalSeconds);
-        var tod = new Tod
+        var recorder = HttpContext.RequestServices.GetRequiredService<TodRecorder>();
+        var recorded = await recorder.RecordAsync(
+            new TodRecordInput(
+                request.LinkshellId,
+                monsterName,
+                normalizedHq,
+                todTimeUtc,
+                additionalSeconds,
+                NormalizePopWindow(request.PopWindow),
+                request.Claim,
+                Killed: null,
+                request.DayNumber,
+                TodSources.App,
+                appUser.Id)
+            {
+                Cooldown = cooldown,
+                Interval = interval,
+                ImagePath = SanitizeUploadedImagePath(request.ImagePath),
+            },
+            cancellationToken);
+
+        // The addon (or another officer) already saved this kill: one ToD per kill, so this one's
+        // answers were added to that row instead. Said so, so the officer doesn't log it again.
+        if (recorded.MergedIntoExisting)
         {
-            LinkshellId = request.LinkshellId,
-            MonsterName = monsterName,
-            DayNumber = request.DayNumber,
-            PopWindow = NormalizePopWindow(request.PopWindow),
-            Claim = request.Claim,
-            Hq = normalizedHq,
-            AdditionalSeconds = additionalSeconds,
-            Time = todTimeUtc,
-            Cooldown = cooldown,
-            RepopTime = todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(additionalSeconds),
-            Interval = interval,
-            TimeStamp = nowUtc,
-            TotalTods = 1,
-            TotalClaims = request.Claim == true ? 1 : 0,
-            ImagePath = SanitizeUploadedImagePath(request.ImagePath)
-        };
+            return Ok(new { alreadyPosted = true, tod = MapTodDto(recorded.Tod) });
+        }
 
-        _dbContext.Tods.Add(tod);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        // A new ToD = a new pop window, so reset any party sign-ups assigned to
-        // this monster (the old roster is for the pop that just happened).
-        await PartySetupSignupReset.ClearSignupsForMonsterAsync(_dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
-
-        // The tracker writes only the Tod row, so any board parked waiting to re-post would keep
-        // showing the old pop time until it actually re-posted. Re-point it at this ToD's repop.
-        await HnmRecurringBoardService.SyncParkedBoardsForTodAsync(
-            _dbContext, tod.LinkshellId, tod.MonsterName, cancellationToken);
-
-        return Ok(MapTodDto(tod));
-    }
-
-    // A merge pair is stored under its COMBINED name, with Hq carrying which half it was.
-    //
-    // The addon and the HNM board both write the board's AssignedMonsterName, which on a merge
-    // pair is "Fafnir/Nidhogg". The Activity wrote whatever the picker held -- "Fafnir" -- so the
-    // same kill was recorded under two different names depending on where it was logged, and
-    // every lookup keyed on the name (the tracker, recurring boards, claim stats) had to guess.
-    //
-    // ResolveClaimHalf is what makes this lossless. Picking "Nidhogg" explicitly IS an HQ answer
-    // even if the toggle was never touched, so it returns isHq true and that is written to Hq
-    // before the name collapses -- the half survives in the field built to hold it, which is
-    // exactly what the HQ question is for. Non-pair monsters come back untouched.
-    private static (string Name, bool Hq) NormalizeMergePairTod(string? monsterName, bool hq)
-    {
-        var (_, isHq, hasHqVariant) = HnmConfig.ResolveClaimHalf(monsterName, hq);
-        return hasHqVariant
-            ? (HnmConfig.ClaimGroupName(monsterName), isHq)
-            : (monsterName?.Trim() ?? string.Empty, hq);
+        return Ok(MapTodDto(recorded.Tod));
     }
 
     [HttpPost("tods/{todId:int}/delete")]
@@ -340,9 +316,9 @@ public sealed partial class ActivityDataController
         }
 
         // Stored as the combined pair name, with Hq carrying which half. See
-        // NormalizeMergePairTod -- this is what makes an Activity-logged ToD match one logged
+        // TodRecorder.Normalize -- this is what makes an Activity-logged ToD match one logged
         // from the addon or the camp board.
-        var (normalizedMonsterName, normalizedHq) = NormalizeMergePairTod(monsterName, request.Hq);
+        var (normalizedMonsterName, normalizedHq) = TodRecorder.Normalize(monsterName, request.Hq);
         monsterName = normalizedMonsterName;
 
         if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)

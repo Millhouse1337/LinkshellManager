@@ -59,14 +59,18 @@ internal static class TodCallers
         return db;
     }
 
+    internal static TodRecorder Recorder(ApplicationDbContext db) =>
+        new(db, new MonsterTimingResolver(db), NullLogger<TodRecorder>.Instance);
+
     internal static SubmissionApprovalService Approvals(ApplicationDbContext db) =>
-        new(db, NullLogger<SubmissionApprovalService>.Instance);
+        new(db, Recorder(db), NullLogger<SubmissionApprovalService>.Instance);
 
     private static IServiceProvider Services(ApplicationDbContext db)
     {
         var services = new ServiceCollection();
         services.AddSingleton(db);
         services.AddSingleton(Approvals(db));
+        services.AddSingleton(Recorder(db));
         return services.BuildServiceProvider();
     }
 
@@ -165,7 +169,7 @@ internal static class TodCallers
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance),
             pools,
             NullLogger<HnmCampReviewHandoffService>.Instance);
-        return new HnmCampPopService(db, handoff, new MonsterTimingResolver(db), NullLogger<HnmCampPopService>.Instance);
+        return new HnmCampPopService(db, handoff, new MonsterTimingResolver(db), TodCallers.Recorder(db), NullLogger<HnmCampPopService>.Instance);
     }
 
     // ---- shared seeds ----

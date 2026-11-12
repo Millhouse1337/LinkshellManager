@@ -23,17 +23,20 @@ public sealed class HnmCampPopService
     private readonly ApplicationDbContext _db;
     private readonly HnmCampReviewHandoffService _handoff;
     private readonly MonsterTimingResolver _monsterTimings;
+    private readonly TodRecorder _recorder;
     private readonly ILogger<HnmCampPopService> _logger;
 
     public HnmCampPopService(
         ApplicationDbContext db,
         HnmCampReviewHandoffService handoff,
         MonsterTimingResolver monsterTimings,
+        TodRecorder recorder,
         ILogger<HnmCampPopService> logger)
     {
         _db = db;
         _handoff = handoff;
         _monsterTimings = monsterTimings;
+        _recorder = recorder;
         _logger = logger;
     }
 
@@ -65,7 +68,8 @@ public sealed class HnmCampPopService
 
     // NOT re-run on a lost race (Data/ConcurrencyRetry.cs), on purpose. It saves the ToD (and the
     // End Camp re-post choice) before the main save, so a re-run after a conflict on the main save
-    // would log a second ToD for the same kill. Wrapping it in a transaction instead would let the
+    // would repeat those. (A ToD with a time would only be added to, since TodRecorder finds the
+    // same kill; a "not entered" one has no time to match on.) Wrapping it in a transaction instead would let the
     // "Event ended" summary queued by the main save read the database before the commit. So a
     // conflict (the camp or a paid member saved by someone else meanwhile) fails the main save --
     // the camp is not handed off, nobody is paid twice -- and the officer is asked to retry (409 /
@@ -174,19 +178,47 @@ public sealed class HnmCampPopService
                 .AddSeconds(additionalSeconds);
         }
 
+        // A fresh pop: saved the one shared way (TodRecorder). It holds a lock per spawn while it
+        // looks for this kill, so End Camp pressed twice at once, or a kill the addon posted before
+        // the camp went live, finds the ToD already saved for it and adds to that instead of saving
+        // a second. A ToD found that way is then treated exactly like an adopted one below.
         if (tod is null)
         {
-            tod = new Tod { LinkshellId = ev.LinkshellId, TotalTods = 1 };
-            _db.Tods.Add(tod);
+            var recorded = await _recorder.RecordAsync(
+                new TodRecordInput(
+                    ev.LinkshellId,
+                    monster,
+                    request.Hq ?? false,
+                    todTimeUtc,
+                    additionalSeconds,
+                    PopWindow: null, // decided below, once the camp's own counter is known
+                    claimed,
+                    killed,
+                    request.DayNumber ?? ev.DayNumber,
+                    TodSources.EndCamp,
+                    ActorAppUserId: null)
+                {
+                    Cooldown = cooldown,
+                    Interval = request.Interval,
+                    ImagePath = request.ImagePath,
+                },
+                cancellationToken);
+            tod = recorded.Tod;
+            adoptedPostedTod = recorded.MergedIntoExisting;
         }
-        tod.MonsterName = monster;
+
+        // Every answer on the End Camp form goes onto the ToD -- a fresh one, the camp's own being
+        // re-logged, or an adopted one. Stored under the pair's combined name like every other ToD
+        // (TodRecorder.Normalize).
+        var (todName, todHq) = TodRecorder.Normalize(monster, request.Hq ?? false);
+        tod.MonsterName = todName;
         tod.DayNumber = request.DayNumber ?? ev.DayNumber;
         tod.Claim = claimed;
         // Persist the kill outcome beside the claim. Both End Camp surfaces (the Activity form and
         // the Discord modal) already collect it and it already drives the kill bonus in both
         // modes — it just wasn't recorded anywhere queryable until now.
         tod.Killed = killed;
-        tod.Hq = request.Hq ?? false;
+        tod.Hq = todHq;
         tod.AdditionalSeconds = additionalSeconds;
         tod.Time = todTimeUtc;
         tod.Cooldown = cooldown;
