@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -14,6 +15,29 @@ namespace LinkshellManagerDiscordApp.Services;
 // is separately required to be a roster member by the callers).
 public static class LootDkpGuard
 {
+    // The member a typed winner name belongs to (main OR alt), case-insensitively, or null. Loaded
+    // into memory so the comparison isn't at the mercy of the DB collation. Same match as
+    // ManualLootService, so both ways of adding loot agree on who a name is.
+    public static async Task<AppUserLinkshell?> ResolveWinnerAsync(
+        ApplicationDbContext db, int linkshellId, string? winnerName, CancellationToken cancellationToken)
+    {
+        var name = winnerName?.Trim();
+        if (string.IsNullOrEmpty(name))
+        {
+            return null;
+        }
+
+        var members = await db.AppUserLinkshells
+            .Include(m => m.AppUser)
+            .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
+            .ToListAsync(cancellationToken);
+
+        return members.FirstOrDefault(m =>
+            string.Equals(m.CharacterName, name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(m.AppUser?.AltCharacterName1, name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(m.AppUser?.AltCharacterName2, name, StringComparison.OrdinalIgnoreCase));
+    }
+
     // Returns null when the award is allowed, or a human-readable error to surface.
     public static async Task<string?> CheckEventLootAsync(
         ApplicationDbContext db,
@@ -41,17 +65,7 @@ public static class LootDkpGuard
 
         var name = winnerName.Trim();
 
-        // Resolve the winner (main OR alt) to a member, case-insensitively. Loaded
-        // into memory so the comparison isn't at the mercy of the DB collation.
-        var members = await db.AppUserLinkshells
-            .Include(m => m.AppUser)
-            .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
-            .ToListAsync(cancellationToken);
-
-        var member = members.FirstOrDefault(m =>
-            string.Equals(m.CharacterName, name, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(m.AppUser?.AltCharacterName1, name, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(m.AppUser?.AltCharacterName2, name, StringComparison.OrdinalIgnoreCase));
+        var member = await ResolveWinnerAsync(db, linkshellId, name, cancellationToken);
         if (member?.AppUserId is null)
         {
             return null; // Unknown / free-text winner — can't balance-check.

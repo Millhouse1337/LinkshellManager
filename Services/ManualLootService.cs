@@ -156,6 +156,7 @@ public sealed class ManualLootService
             EventHistoryId = resolved.EventHistoryId,
             ItemName = itemName,
             ItemWinner = winner.CharacterName ?? itemWinner,
+            ItemWinnerAppUserId = winner.AppUserId,
             WinningDkpSpent = dkpSpent,
             DkpPoolId = poolId,
             RecordedByAppUserId = recordedByAppUserId,

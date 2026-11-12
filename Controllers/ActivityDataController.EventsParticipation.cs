@@ -552,6 +552,25 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        // The winner has to be a member, as on Loot History's Add loot (ManualLootService): a name
+        // nobody has was saved with a price and then silently never charged at close. A blank
+        // winner is still fine for an item that costs nothing (Loot Council, a free drop).
+        var winnerName = request.ItemWinner?.Trim();
+        AppUserLinkshell? winner = null;
+        if (!string.IsNullOrEmpty(winnerName))
+        {
+            winner = await LootDkpGuard.ResolveWinnerAsync(
+                _dbContext, eventEntity.LinkshellId, winnerName, cancellationToken);
+            if (winner?.AppUserId is null)
+            {
+                return BadRequest(new { error = "Winner must be a current linkshell member." });
+            }
+        }
+        else if ((request.WinningDkpSpent ?? 0) > 0)
+        {
+            return BadRequest(new { error = "Pick a winner to charge DKP for this item." });
+        }
+
         // Block awarding loot the winner can't afford (DKP is deducted at close,
         // so this is the only point we can stop the balance going negative).
         var insufficient = await LootDkpGuard.CheckEventLootAsync(
@@ -566,7 +585,8 @@ public sealed partial class ActivityDataController
         {
             EventId = eventId,
             ItemName = request.ItemName.Trim(),
-            ItemWinner = request.ItemWinner?.Trim(),
+            ItemWinner = winnerName,
+            ItemWinnerAppUserId = winner?.AppUserId,
             WinningDkpSpent = request.WinningDkpSpent,
             RecordedByAppUserId = appUser.Id
         });

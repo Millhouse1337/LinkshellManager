@@ -680,7 +680,7 @@ public sealed class HnmCampReviewHandoffService
             foreach (var detail in owed)
             {
                 var winner = EventEndService.ResolveLootWinnerMembership(
-                    detail.ItemWinner, membershipsByAppUserId, participantsByCharacterName, memberships);
+                    detail, membershipsByAppUserId, participantsByCharacterName, memberships);
                 if (winner?.AppUserId is null)
                 {
                     _logger.LogWarning(

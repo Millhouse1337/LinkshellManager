@@ -2059,6 +2059,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<string>("ItemWinnerAppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<string>("LastEditReason")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");

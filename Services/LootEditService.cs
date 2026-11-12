@@ -83,6 +83,25 @@ public sealed class LootEditService
             || string.Equals(link.AppUser?.AltCharacterName2, name, StringComparison.OrdinalIgnoreCase));
     }
 
+    // A loot row's winner: by the recorded account (EventLootDetail.ItemWinnerAppUserId) when there
+    // is one, so a refund reaches the member who actually paid even after a rename; by name only
+    // for rows without it (ToD loot, rows the backfill could not match). An account that has left
+    // the linkshell finds nobody -- never a different member who happens to have the name.
+    private async Task<AppUserLinkshell?> ResolveRowWinnerAsync(
+        int linkshellId, string? winnerAppUserId, string? winnerName, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(winnerAppUserId))
+        {
+            return await ResolveWinnerAsync(linkshellId, winnerName, cancellationToken);
+        }
+
+        return await _db.AppUserLinkshells
+            .Include(link => link.AppUser)
+            .Where(link => link.LinkshellId == linkshellId && link.AppUserId == winnerAppUserId)
+            .OrderBy(link => link.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     // Re-run from the top when the winner's balance changed under it (Data/ConcurrencyRetry.cs). A
     // second edit of the same row at the same moment lands here too, and its re-run reads the row as
     // the first edit left it, so the refund is never paid twice.
@@ -275,10 +294,25 @@ public sealed class LootEditService
 
         var structure = ActivityDataController.NormalizeLootStructure(lootStructure ?? "Dkp");
 
+        // The new winner's account. Keeping the same name keeps the recorded account, so a price
+        // fix still finds a winner who has since renamed; a new name is matched to a member.
+        var keptWinnerAppUserId = string.Equals(newItemWinner, (detail.ItemWinner ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase)
+            ? detail.ItemWinnerAppUserId
+            : null;
+        var newWinner = await ResolveRowWinnerAsync(linkshellId, keptWinnerAppUserId, newItemWinner, cancellationToken);
+
         if (structure == "LootCouncil")
         {
+            // Loot Council charges nothing, so any name is allowed; the account is kept when known.
+            detail.ItemWinnerAppUserId = newWinner?.AppUserId;
             await ApplyLootCouncilEditAsync(detail, newItemName, newItemWinner, request, actor, occurredAtUtc, cancellationToken);
             return new LootEditResult(true, null, detail.Id, "Event");
+        }
+
+        if (newWinner?.AppUserId is null)
+        {
+            return new LootEditResult(false,
+                $"Winner '{newItemWinner}' is not a member of the linkshell. Pick an active linkshell member.");
         }
 
         // Not charged yet: change the row and move no DKP. ReconcileLootDkpAsync below assumes a
@@ -286,15 +320,11 @@ public sealed class LootEditService
         // paid and charge the new amount early.
         if (IsPendingCharge(detail))
         {
-            if (await ResolveWinnerAsync(linkshellId, newItemWinner, cancellationToken) is null)
-            {
-                return new LootEditResult(false,
-                    $"Winner '{newItemWinner}' is not a member of the linkshell. Pick an active linkshell member.");
-            }
             var pendingOldWinner = (detail.ItemWinner ?? string.Empty).Trim();
             var pendingOldDkp = detail.WinningDkpSpent.GetValueOrDefault();
             detail.ItemName = newItemName;
             detail.ItemWinner = newItemWinner;
+            detail.ItemWinnerAppUserId = newWinner.AppUserId;
             detail.WinningDkpSpent = request.WinningDkpSpent;
             detail.EditedAt = occurredAtUtc;
             detail.EditedByAppUserId = actor.Id;
@@ -322,6 +352,8 @@ public sealed class LootEditService
             newWinnerName: newItemWinner,
             newDkpRaw: request.WinningDkpSpent.Value,
             isHybrid: isHybrid,
+            oldWinnerAppUserId: detail.ItemWinnerAppUserId,
+            newWinnerAppUserId: newWinner.AppUserId,
             // Event loot FOLLOWS its event type, so a remap moves the original debit and these
             // compensating rows together — the refund can never be stranded in the old pool.
             //
@@ -347,6 +379,7 @@ public sealed class LootEditService
 
         detail.ItemName = newItemName;
         detail.ItemWinner = newItemWinner;
+        detail.ItemWinnerAppUserId = newWinner.AppUserId;
         detail.WinningDkpSpent = request.WinningDkpSpent;
         detail.ActualDeductedDkp = newActualDeducted;
         detail.EditedAt = occurredAtUtc;
@@ -523,6 +556,7 @@ public sealed class LootEditService
             await RefundDeletedLootAsync(
                 linkshellId: linkshellId,
                 winnerName: winnerName,
+                winnerAppUserId: detail.ItemWinnerAppUserId,
                 dkpRaw: dkpRaw,
                 actualDeducted: detail.ActualDeductedDkp,
                 isHybrid: structure == "Hybrid",
@@ -597,14 +631,15 @@ public sealed class LootEditService
         string itemName,
         string reason,
         DateTime occurredAtUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? winnerAppUserId = null)
     {
         if (string.IsNullOrWhiteSpace(winnerName) || dkpRaw <= 0)
         {
             return;
         }
 
-        var membership = await ResolveWinnerAsync(linkshellId, winnerName, cancellationToken);
+        var membership = await ResolveRowWinnerAsync(linkshellId, winnerAppUserId, winnerName, cancellationToken);
         if (membership is null || string.IsNullOrWhiteSpace(membership.AppUserId))
         {
             _logger.LogWarning(
@@ -753,12 +788,14 @@ public sealed class LootEditService
         string itemName,
         string reason,
         DateTime occurredAtUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? oldWinnerAppUserId = null,
+        string? newWinnerAppUserId = null)
     {
         double? newActualDeducted = null;
 
-        var oldMembership = await ResolveWinnerAsync(linkshellId, oldWinnerName, cancellationToken);
-        var newMembership = await ResolveWinnerAsync(linkshellId, newWinnerName, cancellationToken);
+        var oldMembership = await ResolveRowWinnerAsync(linkshellId, oldWinnerAppUserId, oldWinnerName, cancellationToken);
+        var newMembership = await ResolveRowWinnerAsync(linkshellId, newWinnerAppUserId, newWinnerName, cancellationToken);
 
         if (newMembership is null)
         {

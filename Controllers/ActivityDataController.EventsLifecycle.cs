@@ -740,8 +740,10 @@ public sealed partial class ActivityDataController
                     continue;
                 }
 
-                var winnerMembership = ResolveLootWinnerMembership(
-                    lootDetail.ItemWinner,
+                // The shared resolver: the recorded winner account first, then the name (main or
+                // alt). This path used to keep its own copy that ignored alts.
+                var winnerMembership = EventEndService.ResolveLootWinnerMembership(
+                    lootDetail,
                     membershipsByAppUserId,
                     participantsByCharacterName,
                     linkshellMemberships);

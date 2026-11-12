@@ -86,8 +86,8 @@ public static class AuctionDkpService
                 // already, and counting it here too took it off the member's spendable DKP twice.
                 && l.DkpDebitedAt == null
                 && l.WinningDkpSpent != null && l.WinningDkpSpent > 0
-                && l.ItemWinner != null)
-            .Select(l => new { l.ItemWinner, Dkp = l.WinningDkpSpent!.Value })
+                && (l.ItemWinner != null || l.ItemWinnerAppUserId != null))
+            .Select(l => new { l.ItemWinner, l.ItemWinnerAppUserId, Dkp = l.WinningDkpSpent!.Value })
             .ToListAsync(cancellationToken);
         if (pendingLoot.Count == 0)
         {
@@ -118,7 +118,10 @@ public static class AuctionDkpService
         var result = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var loot in pendingLoot)
         {
-            if (appUserIdByName.TryGetValue(loot.ItemWinner!.Trim(), out var appUserId))
+            // The recorded winner account when the row has one (EventLootDetail.ItemWinnerAppUserId), else the name.
+            var appUserId = loot.ItemWinnerAppUserId
+                ?? (appUserIdByName.TryGetValue(loot.ItemWinner!.Trim(), out var byName) ? byName : null);
+            if (appUserId is not null)
             {
                 result[appUserId] = result.GetValueOrDefault(appUserId) + loot.Dkp;
             }
@@ -293,8 +296,8 @@ public static class AuctionDkpService
                 && l.Event.CommencementStartTime != null   // live: commenced, not yet ended
                 && l.DkpDebitedAt == null                  // not charged yet -- see the linkshell-wide twin
                 && l.WinningDkpSpent != null && l.WinningDkpSpent > 0
-                && l.ItemWinner != null)
-            .Select(l => new { l.ItemWinner, Dkp = l.WinningDkpSpent!.Value, EventType = l.Event!.EventType })
+                && (l.ItemWinner != null || l.ItemWinnerAppUserId != null))
+            .Select(l => new { l.ItemWinner, l.ItemWinnerAppUserId, Dkp = l.WinningDkpSpent!.Value, EventType = l.Event!.EventType })
             .ToListAsync(cancellationToken);
         if (pendingLoot.Count == 0)
         {
@@ -347,7 +350,10 @@ public static class AuctionDkpService
             {
                 continue;
             }
-            if (appUserIdByName.TryGetValue(loot.ItemWinner!.Trim(), out var appUserId))
+            // The recorded winner account when the row has one (EventLootDetail.ItemWinnerAppUserId), else the name.
+            var appUserId = loot.ItemWinnerAppUserId
+                ?? (appUserIdByName.TryGetValue(loot.ItemWinner!.Trim(), out var byName) ? byName : null);
+            if (appUserId is not null)
             {
                 result[appUserId] = result.GetValueOrDefault(appUserId) + loot.Dkp;
             }

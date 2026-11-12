@@ -110,6 +110,17 @@ public sealed class PlaceholderClaimService
         await FoldSharedCampPayoutsAsync(ledger, realAppUserId, cancellationToken);
         foreach (var e in ledger) { e.AppUserId = realAppUserId; }
 
+        // Loot is charged and refunded by the winner's account (EventLootDetail.ItemWinnerAppUserId),
+        // so loot the placeholder won follows the claim too -- otherwise its close or refund would
+        // look for an account that is about to be gone.
+        var wonLoot = await _db.EventLootDetails
+            .Where(d => d.ItemWinnerAppUserId == placeholderAppUserId
+                && ((d.LinkshellId != null && claimedLs.Contains(d.LinkshellId.Value))
+                    || (d.Event != null && claimedLs.Contains(d.Event.LinkshellId))
+                    || (d.EventHistory != null && claimedLs.Contains(d.EventHistory.LinkshellId))))
+            .ToListAsync(cancellationToken);
+        foreach (var d in wonLoot) { d.ItemWinnerAppUserId = realAppUserId; }
+
         await _db.SaveChangesAsync(cancellationToken);
 
         // For merged linkshells, advance the seed watermark to the real account's

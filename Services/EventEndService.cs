@@ -221,7 +221,7 @@ public static class EventEndService
             }
 
             var winnerMembership = ResolveLootWinnerMembership(
-                lootDetail.ItemWinner,
+                lootDetail,
                 membershipsByAppUserId,
                 participantsByCharacterName,
                 linkshellMemberships);
@@ -372,6 +372,24 @@ public static class EventEndService
 
         var segmentHours = Math.Max(0, (referenceUtc - segmentStart.Value).TotalHours);
         return accumulatedHours + segmentHours;
+    }
+
+    // The winner's membership: by the row's ItemWinnerAppUserId when it has one, else by name.
+    internal static AppUserLinkshell? ResolveLootWinnerMembership(
+        EventLootDetail loot,
+        IReadOnlyDictionary<string, AppUserLinkshell> membershipsByAppUserId,
+        IReadOnlyDictionary<string, AppUserEvent> participantsByCharacterName,
+        IEnumerable<AppUserLinkshell> linkshellMemberships)
+    {
+        // A recorded account is the answer, even if a different member now has that name. If that
+        // account has left the linkshell there is nobody to charge -- never fall back to a name.
+        if (!string.IsNullOrWhiteSpace(loot.ItemWinnerAppUserId))
+        {
+            return membershipsByAppUserId.TryGetValue(loot.ItemWinnerAppUserId, out var recorded) ? recorded : null;
+        }
+
+        return ResolveLootWinnerMembership(
+            loot.ItemWinner, membershipsByAppUserId, participantsByCharacterName, linkshellMemberships);
     }
 
     internal static AppUserLinkshell? ResolveLootWinnerMembership(

@@ -65,6 +65,14 @@ public class EventLootDetail
 
     public string? ItemWinner { get; set; }
 
+    // The ACCOUNT that won the item. ItemWinner stays the name shown; charging and refunds go by
+    // this. Matching by typed name meant loot given to a renamed or departed member (or a name
+    // nobody has) was saved with a price and never charged, with nobody told. Set whenever loot is
+    // recorded or its winner edited. Null on rows the backfill could not match to exactly one
+    // member -- those keep the old name match. Not a foreign key, like RecordedByAppUserId.
+    [MaxLength(450)]
+    public string? ItemWinnerAppUserId { get; set; }
+
     public int? WinningDkpSpent { get; set; }
 
     // Stamped at event close (and on every Loot History edit) so refund-then-

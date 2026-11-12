@@ -172,34 +172,6 @@ public sealed partial class ActivityDataController : ControllerBase
         return accumulatedHours + segmentHours;
     }
 
-    private static AppUserLinkshell? ResolveLootWinnerMembership(
-        string? itemWinner,
-        IReadOnlyDictionary<string, AppUserLinkshell> membershipsByAppUserId,
-        IReadOnlyDictionary<string, AppUserEvent> participantsByCharacterName,
-        IEnumerable<AppUserLinkshell> linkshellMemberships)
-    {
-        var normalizedWinner = NormalizeLookupKey(itemWinner);
-        if (normalizedWinner is null)
-        {
-            return null;
-        }
-
-        if (participantsByCharacterName.TryGetValue(normalizedWinner, out var participation) &&
-            !string.IsNullOrWhiteSpace(participation.AppUserId) &&
-            membershipsByAppUserId.TryGetValue(participation.AppUserId, out var participantMembership))
-        {
-            return participantMembership;
-        }
-
-        return linkshellMemberships.FirstOrDefault(link =>
-            string.Equals(NormalizeLookupKey(link.CharacterName), normalizedWinner, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string? NormalizeLookupKey(string? value)
-    {
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    }
-
     private static bool IsLeader(AppUserLinkshell? membership)
     {
         return membership?.Rank?.Equals(LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase) == true;
