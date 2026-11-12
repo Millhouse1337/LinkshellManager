@@ -53,6 +53,10 @@ public class DataAdminPolicyTests
             Assert.True(Table(catalog, ledger).IsReadOnly, $"{ledger.Name} should be read-only.");
         }
 
+        // PHASE4B-DROP: remove with the TodLootDetails table. Nothing reads ToD loot any more, so
+        // Data Admin must not create it either.
+        Assert.True(Table(catalog, typeof(TodLootDetail)).IsReadOnly, "TodLootDetail should be read-only.");
+
         var linkshell = Table(catalog, typeof(Linkshell));
         Assert.False(linkshell.CanDelete);
         Assert.True(linkshell.CanEdit);
@@ -182,7 +186,7 @@ public class DataAdminPolicyTests
     {
         var catalog = NewCatalog();
 
-        foreach (var watched in new[] { typeof(Tod), typeof(DkpPool), typeof(DkpPoolEventType), typeof(Event), typeof(EventHistory), typeof(Auction), typeof(Bid), typeof(TodLootDetail), typeof(EventLootDetail) })
+        foreach (var watched in new[] { typeof(Tod), typeof(DkpPool), typeof(DkpPoolEventType), typeof(Event), typeof(EventHistory), typeof(Auction), typeof(Bid), typeof(EventLootDetail) })
         {
             Assert.False(string.IsNullOrWhiteSpace(Table(catalog, watched).Policy.DiscordSideEffect), $"{watched.Name} needs a Discord side-effect note.");
         }

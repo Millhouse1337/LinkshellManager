@@ -130,7 +130,8 @@ var tables = new[]
     "Events", "AppUserEvents", "AppUserEventStatusLedgers", "DkpLedgerEntries",
     "EventHistories", "AppUserEventHistories",
     "EventLootDetails",
-    "Tods", "TodLootDetails",
+    "Tods",
+    "TodLootDetails", // PHASE4B-DROP: remove once the table is dropped (TRUNCATE fails on a missing table).
     "Notifications", // PHASE4B-DROP: remove once the table is dropped (TRUNCATE fails on a missing table).
     "Rules",
     "Announcements",
@@ -243,6 +244,7 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("EventHistories", "DELETE FROM \"EventHistories\" WHERE \"LinkshellId\" = @ls"),
 
         // --- ToDs (Events.SourceTodId already gone above) ---
+        // PHASE4B-DROP: remove with the TodLootDetails table.
         ("TodLootDetails", "DELETE FROM \"TodLootDetails\" WHERE \"TodId\" IN (SELECT \"Id\" FROM \"Tods\" WHERE \"LinkshellId\" = @ls)"),
         ("Tods", "DELETE FROM \"Tods\" WHERE \"LinkshellId\" = @ls"),
 

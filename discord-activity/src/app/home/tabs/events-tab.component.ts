@@ -2285,7 +2285,7 @@ export class EventsTabComponent {
   }
 
   protected async deleteLoot(loot: ActivityLootEntry): Promise<void> {
-    const ok = await this.activity.deleteLoot('Event', loot.id, 'Removed from the live event card.');
+    const ok = await this.activity.deleteLoot(loot.id, 'Removed from the live event card.');
     this.confirmingDeleteLootId.set(null);
     // The shared delete message promises a refund; only a row that was already charged gets one.
     if (ok && loot.actualDeductedDkp == null) {

@@ -65,7 +65,7 @@ public class JournalEntry
     public string? Memo { get; set; }
 
     // Set on Reversal and Correction entries. NOT a foreign key, deliberately — matching
-    // DkpLedgerEntry.SourceTodLootDetailId and friends: immutable history must not participate
+    // DkpLedgerEntry.SourceEventLootDetailId and friends: immutable history must not participate
     // in anyone else's cascade choreography.
     //
     // There is intentionally no ReversedByJournalEntryId back-pointer, because setting one would

@@ -1148,7 +1148,6 @@ public sealed partial class AddonApiController
 
         var tod = await _dbContext.Tods
             .Include(t => t.Linkshell)
-            .Include(t => t.TodLootDetails)
             .FirstOrDefaultAsync(t => t.Id == todId, cancellationToken);
         if (tod is null)
         {

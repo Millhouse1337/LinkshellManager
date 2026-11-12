@@ -97,6 +97,9 @@ public sealed class DataAdminPolicy
             [typeof(JournalEntryLine)] = readOnly,
             // PHASE4B-DROP: remove with the LedgerPeriods table.
             [typeof(LedgerPeriod)] = readOnly,
+            // PHASE4B-DROP: remove with the TodLootDetails table. Read-only so nobody adds ToD loot here:
+            // nothing would announce it, show it in Loot History or let it be refunded.
+            [typeof(TodLootDetail)] = readOnly,
             [typeof(AuctionHistory)] = readOnly with
             {
                 DiscordSideEffect = "Changing a settled auction reposts its Discord card.",
@@ -171,7 +174,6 @@ public sealed class DataAdminPolicy
 
             // ---- rows whose SaveChanges posts to Discord -----------------------------------------
             [typeof(Tod)] = new() { DiscordSideEffect = "Saving or deleting a ToD rebuilds the linkshell's Discord ToD board." },
-            [typeof(TodLootDetail)] = new() { DiscordSideEffect = "Adding loot posts a loot announcement to Discord." },
             [typeof(EventLootDetail)] = new() { DiscordSideEffect = "Adding loot posts a loot announcement to Discord." },
             [typeof(Event)] = new()
             {

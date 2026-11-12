@@ -217,9 +217,9 @@ The Loot Pool panel fills from in-game drop messages. After a kill:
 5. Post each loot result.
 ```
 
-Loot posts are tied to the current event or ToD context where possible. This
-keeps event history, member ledgers, and ToD loot history aligned without
-manual re-entry on the website.
+Loot posts are filed against the camp (event) they dropped in. This keeps
+event history, member ledgers, and loot history aligned without manual
+re-entry on the website.
 
 ---
 

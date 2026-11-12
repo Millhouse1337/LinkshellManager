@@ -25,13 +25,11 @@ public sealed record LootEditResult(
 // stamps, and writes a refund/spend ledger pair so DKP history surfaces the
 // edit with the officer's reason.
 //
-// The DKP math mirrors how each kind of loot was charged when it was created:
-//   - ToD: DKP / Hybrid / LootCouncil structures via the linkshell's LootStructure. (ToD loot can no
-//     longer be created -- a ToD carries no loot -- but older rows can still be edited here.)
-//   - Event: EventEndService.EndEventCoreAsync, End Camp and ManualLootService, which charge a
-//     Hybrid linkshell a percentage of the winner's pool balance and everyone else the flat DKP.
-//     An edit has to use the same rule, or fixing a Hybrid item's name refunds the real cost and
-//     re-charges the percent number as flat DKP.
+// Only event loot (EventLootDetail) exists: a ToD carries no loot. The DKP math mirrors how that
+// loot was charged when it was created -- EventEndService.EndEventCoreAsync, End Camp and
+// ManualLootService charge a Hybrid linkshell a percentage of the winner's pool balance and
+// everyone else the flat DKP. An edit has to use the same rule, or fixing a Hybrid item's name
+// refunds the real cost and re-charges the percent number as flat DKP.
 //
 // LootCouncil linkshells skip all DKP work — only the loot row's metadata
 // changes. The edit reason is still required so a rename is auditable.
@@ -66,7 +64,7 @@ public sealed class LootEditService
 
     // A loot row's winner: by the recorded account (EventLootDetail.ItemWinnerAppUserId) when there
     // is one, so a refund reaches the member who actually paid even after a rename; by name only
-    // for rows without it (ToD loot, rows the backfill could not match). An account that has left
+    // for rows without it (rows the backfill could not match). An account that has left
     // the linkshell finds nobody -- never a different member who happens to have the name.
     private async Task<AppUserLinkshell?> ResolveRowWinnerAsync(
         int linkshellId, string? winnerAppUserId, string? winnerName, CancellationToken cancellationToken)
@@ -86,100 +84,6 @@ public sealed class LootEditService
     // Re-run from the top when the winner's balance changed under it (Data/ConcurrencyRetry.cs). A
     // second edit of the same row at the same moment lands here too, and its re-run reads the row as
     // the first edit left it, so the refund is never paid twice.
-    public Task<LootEditResult> EditTodLootAsync(
-        int lootDetailId,
-        LootEditRequest request,
-        AppUser actor,
-        DateTime occurredAtUtc,
-        CancellationToken cancellationToken = default) =>
-        ConcurrencyRetry.RunAsync(_db, () => EditTodLootOnceAsync(lootDetailId, request, actor, occurredAtUtc, cancellationToken));
-
-    private async Task<LootEditResult> EditTodLootOnceAsync(
-        int lootDetailId,
-        LootEditRequest request,
-        AppUser actor,
-        DateTime occurredAtUtc,
-        CancellationToken cancellationToken = default)
-    {
-        var validation = ValidateRequest(request);
-        if (validation is not null)
-        {
-            return new LootEditResult(false, validation);
-        }
-
-        var detail = await _db.TodLootDetails
-            .Include(item => item.Tod)
-                .ThenInclude(tod => tod!.Linkshell)
-            .FirstOrDefaultAsync(item => item.Id == lootDetailId, cancellationToken);
-
-        if (detail is null || detail.Tod is null)
-        {
-            return new LootEditResult(false, "Loot record not found.");
-        }
-
-        var newItemName = (request.ItemName ?? string.Empty).Trim();
-        var newItemWinner = (request.ItemWinner ?? string.Empty).Trim();
-        if (string.IsNullOrEmpty(newItemName) || string.IsNullOrEmpty(newItemWinner) || !request.WinningDkpSpent.HasValue)
-        {
-            return new LootEditResult(false, "Item, winner, and DKP amount are all required.");
-        }
-
-        var linkshellId = detail.Tod.LinkshellId;
-        var structure = ActivityDataController.NormalizeLootStructure(detail.Tod.Linkshell?.LootStructure ?? "Dkp");
-        var monsterName = detail.Tod.MonsterName ?? "Unknown monster";
-
-        if (structure == "LootCouncil")
-        {
-            await ApplyLootCouncilEditAsync(detail, newItemName, newItemWinner, request, actor, occurredAtUtc, cancellationToken);
-            return new LootEditResult(true, null, detail.Id, "Tod");
-        }
-
-        var oldWinnerName = (detail.ItemWinner ?? string.Empty).Trim();
-        var oldDkpValue = detail.WinningDkpSpent.GetValueOrDefault();
-        var oldActual = detail.ActualDeductedDkp;
-        var isHybrid = structure == "Hybrid";
-
-        var newActualDeducted = await ReconcileLootDkpAsync(
-            linkshellId: linkshellId,
-            oldWinnerName: oldWinnerName,
-            oldDkpRaw: oldDkpValue,
-            oldActualDeducted: oldActual,
-            newWinnerName: newItemWinner,
-            newDkpRaw: request.WinningDkpSpent.Value,
-            isHybrid: isHybrid,
-            // ToD loot is PINNED to the pool it was originally paid from, so an edit refunds and
-            // re-debits the same wallet even if HNM has been remapped since.
-            poolRef: DkpPoolRef.Pinned(detail.DkpPoolId ?? await DefaultPoolIdAsync(linkshellId, cancellationToken)),
-            sourceTodLootDetailId: detail.Id,
-            sourceEventLootDetailId: null,
-            eventHistoryId: null,
-            eventName: monsterName,
-            eventType: null,
-            eventLocation: null,
-            eventStartTime: null,
-            eventEndTime: null,
-            itemName: newItemName,
-            reason: request.Reason,
-            occurredAtUtc: occurredAtUtc,
-            cancellationToken: cancellationToken);
-
-        detail.ItemName = newItemName;
-        detail.ItemWinner = newItemWinner;
-        detail.WinningDkpSpent = request.WinningDkpSpent;
-        detail.ActualDeductedDkp = newActualDeducted;
-        detail.EditedAt = occurredAtUtc;
-        detail.EditedByAppUserId = actor.Id;
-        detail.EditedByCharacterName = actor.CharacterName ?? actor.UserName;
-        detail.LastEditReason = request.Reason.Trim();
-
-        await _db.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation(
-            "Loot edit applied (ToD #{LootDetailId}) by {Actor}: '{OldWinner}' ({OldDkp} DKP) -> '{NewWinner}' ({NewDkp} DKP).",
-            detail.Id, actor.Id, oldWinnerName, oldDkpValue, newItemWinner, request.WinningDkpSpent);
-        return new LootEditResult(true, null, detail.Id, "Tod");
-    }
-
-    // Re-run on a lost balance race, like EditTodLootAsync.
     public Task<LootEditResult> EditEventLootAsync(
         int lootDetailId,
         LootEditRequest request,
@@ -321,7 +225,7 @@ public sealed class LootEditService
         var oldWinnerName = (detail.ItemWinner ?? string.Empty).Trim();
         var oldDkpValue = detail.WinningDkpSpent.GetValueOrDefault();
         var oldActual = detail.ActualDeductedDkp;
-        // Event loot is charged like ToD loot: a percentage of the pool balance under Hybrid
+        // Event loot is charged a percentage of the pool balance under Hybrid
         // (EventEndService, End Camp, ManualLootService), flat DKP otherwise.
         var isHybrid = structure == "Hybrid";
 
@@ -344,7 +248,6 @@ public sealed class LootEditService
             poolRef: detail.DkpPoolId is int pinnedPool
                 ? DkpPoolRef.Pinned(pinnedPool)
                 : DkpPoolRef.Derived(eventType),
-            sourceTodLootDetailId: null,
             sourceEventLootDetailId: detail.Id,
             // Filed under the past event too, so deleting that event reverses this edit with it.
             eventHistoryId: detail.EventHistoryId,
@@ -375,82 +278,14 @@ public sealed class LootEditService
         return new LootEditResult(true, null, detail.Id, "Event");
     }
 
-    // Removes a ToD loot row entirely and refunds the winner the DKP that was
-    // debited for it (mirrors the "refund the OLD debit" half of an edit, with
-    // no replacement debit). LootCouncil rows carry no DKP, so they're just
-    // removed. The backing ToD is left intact — it may hold other loot or be a
-    // real ToD; the ManualPoints day column self-corrects on recompute.
-    // Re-run on a lost balance race, like EditTodLootAsync. A second delete at the same moment
-    // re-runs, finds the row gone and refunds nothing.
-    public Task<LootEditResult> DeleteTodLootAsync(
-        int lootDetailId,
-        AppUser actor,
-        string reason,
-        DateTime occurredAtUtc,
-        CancellationToken cancellationToken = default) =>
-        ConcurrencyRetry.RunAsync(_db, () => DeleteTodLootOnceAsync(lootDetailId, actor, reason, occurredAtUtc, cancellationToken));
-
-    private async Task<LootEditResult> DeleteTodLootOnceAsync(
-        int lootDetailId,
-        AppUser actor,
-        string reason,
-        DateTime occurredAtUtc,
-        CancellationToken cancellationToken = default)
-    {
-        var detail = await _db.TodLootDetails
-            .Include(item => item.Tod)
-                .ThenInclude(tod => tod!.Linkshell)
-            .FirstOrDefaultAsync(item => item.Id == lootDetailId, cancellationToken);
-
-        if (detail is null || detail.Tod is null)
-        {
-            return new LootEditResult(false, "Loot record not found.");
-        }
-
-        var linkshellId = detail.Tod.LinkshellId;
-        var todId = detail.Tod.Id;
-        var structure = ActivityDataController.NormalizeLootStructure(detail.Tod.Linkshell?.LootStructure ?? "Dkp");
-        var monsterName = detail.Tod.MonsterName ?? "Unknown monster";
-        var winnerName = (detail.ItemWinner ?? string.Empty).Trim();
-        var itemName = (detail.ItemName ?? string.Empty).Trim();
-        var dkpRaw = detail.WinningDkpSpent.GetValueOrDefault();
-
-        if (structure != "LootCouncil")
-        {
-            await RefundDeletedLootAsync(
-                linkshellId: linkshellId,
-                winnerName: winnerName,
-                dkpRaw: dkpRaw,
-                actualDeducted: detail.ActualDeductedDkp,
-                isHybrid: structure == "Hybrid",
-                poolRef: DkpPoolRef.Pinned(detail.DkpPoolId ?? await DefaultPoolIdAsync(linkshellId, cancellationToken)),
-                sourceTodLootDetailId: detail.Id,
-                sourceEventLootDetailId: null,
-                eventHistoryId: null,
-                eventName: monsterName,
-                eventType: null,
-                eventLocation: null,
-                eventStartTime: null,
-                eventEndTime: null,
-                itemName: itemName,
-                reason: reason,
-                occurredAtUtc: occurredAtUtc,
-                cancellationToken: cancellationToken);
-        }
-
-        _db.TodLootDetails.Remove(detail);
-        await _db.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation(
-            "Loot deleted (ToD #{LootDetailId}) by {Actor}: '{Winner}' ({Dkp} DKP). Reason: {Reason}",
-            lootDetailId, actor.Id, winnerName, dkpRaw, reason);
-        return new LootEditResult(true, null, lootDetailId, "Tod");
-    }
-
-    // Event counterpart of DeleteTodLootAsync. Resolves the parent context
+    // Removes an event loot row entirely and refunds the winner the DKP that was debited for it
+    // (the "refund the OLD debit" half of an edit, with no replacement debit). LootCouncil rows
+    // carry no DKP, so they're just removed. Resolves the parent context
     // (closed EventHistory, active Event, or a "No event" row's own linkshell)
     // the same way EditEventLootAsync does. Under Hybrid the refund is the stored
     // ActualDeductedDkp; only a legacy row without it falls back to the percent inverse.
-    // Re-run on a lost balance race, like DeleteTodLootAsync.
+    // Re-run on a lost balance race, like EditEventLootAsync. A second delete at the same moment
+    // re-runs, finds the row gone and refunds nothing.
     public Task<LootEditResult> DeleteEventLootAsync(
         int lootDetailId,
         AppUser actor,
@@ -546,7 +381,6 @@ public sealed class LootEditService
                 poolRef: detail.DkpPoolId is int pinnedPool
                     ? DkpPoolRef.Pinned(pinnedPool)
                     : DkpPoolRef.Derived(eventType),
-                sourceTodLootDetailId: null,
                 sourceEventLootDetailId: detail.Id,
                 // Filed under the past event too, so deleting that event takes this refund back with
                 // the charge it undoes -- otherwise the winner kept the refund for an event that is gone.
@@ -576,9 +410,6 @@ public sealed class LootEditService
     // The grid step (0.25 / 0.5) for the linkshell's DKP rounding setting, so
     // Hybrid loot spends/refunds land on the same increment as every other DKP
     // value. One lightweight lookup per loot edit (an infrequent action).
-    private async Task<int> DefaultPoolIdAsync(int linkshellId, CancellationToken cancellationToken)
-        => (await _dkpPools.GetMapAsync(linkshellId, cancellationToken)).DefaultPoolId;
-
     private async Task<double> GetRoundingStepAsync(int linkshellId, CancellationToken cancellationToken)
     {
         var increment = await _db.Linkshells
@@ -601,7 +432,6 @@ public sealed class LootEditService
         double? actualDeducted,
         bool isHybrid,
         DkpPoolRef poolRef,
-        int? sourceTodLootDetailId,
         int? sourceEventLootDetailId,
         int? eventHistoryId,
         string? eventName,
@@ -676,7 +506,6 @@ public sealed class LootEditService
                 ItemName: itemName,
                 Details: $"Loot deleted: record removed and DKP refunded. Reason: {Truncate(reason, 800)}",
                 EditReason: Truncate(reason, 512),
-                SourceTodLootDetailId: sourceTodLootDetailId,
                 SourceEventLootDetailId: sourceEventLootDetailId,
                 EventHistoryId: eventHistoryId),
             cancellationToken);
@@ -695,7 +524,7 @@ public sealed class LootEditService
     }
 
     private async Task ApplyLootCouncilEditAsync(
-        TodLootDetail detail,
+        EventLootDetail detail,
         string newItemName,
         string newItemWinner,
         LootEditRequest request,
@@ -706,25 +535,6 @@ public sealed class LootEditService
         // LootCouncil: no DKP math, just metadata + audit. The edit reason
         // is still required (set by ValidateRequest), so the rename has an
         // auditable trail on the row itself.
-        detail.ItemName = newItemName;
-        detail.ItemWinner = newItemWinner;
-        detail.WinningDkpSpent = request.WinningDkpSpent;
-        detail.EditedAt = occurredAtUtc;
-        detail.EditedByAppUserId = actor.Id;
-        detail.EditedByCharacterName = actor.CharacterName ?? actor.UserName;
-        detail.LastEditReason = request.Reason.Trim();
-        await _db.SaveChangesAsync(cancellationToken);
-    }
-
-    private async Task ApplyLootCouncilEditAsync(
-        EventLootDetail detail,
-        string newItemName,
-        string newItemWinner,
-        LootEditRequest request,
-        AppUser actor,
-        DateTime occurredAtUtc,
-        CancellationToken cancellationToken)
-    {
         detail.ItemName = newItemName;
         detail.ItemWinner = newItemWinner;
         detail.WinningDkpSpent = request.WinningDkpSpent;
@@ -758,7 +568,6 @@ public sealed class LootEditService
         int newDkpRaw,
         bool isHybrid,
         DkpPoolRef poolRef,
-        int? sourceTodLootDetailId,
         int? sourceEventLootDetailId,
         int? eventHistoryId,
         string? eventName,
@@ -806,7 +615,6 @@ public sealed class LootEditService
             EventEndTime: eventEndTime,
             ItemName: itemName,
             EditReason: Truncate(reason, 512),
-            SourceTodLootDetailId: sourceTodLootDetailId,
             SourceEventLootDetailId: sourceEventLootDetailId,
             EventHistoryId: eventHistoryId);
 

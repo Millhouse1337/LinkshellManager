@@ -806,20 +806,13 @@ export class DiscordActivityService {
   loadLootHistory(page = 1, pageSize = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(page, pageSize); }
   loadLootEventOptions(query?: string | null) { return this.lootHistoryService.loadLootEventOptions(query); }
   addManualLoot(input: { sourceKind: "none" | "live" | "past"; eventId: number | null; eventHistoryId: number | null; itemName: string; itemWinner: string; winningDkpSpent: number }): Promise<boolean> { return this.lootHistoryService.addLoot(input); }
-  async editTodLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
-    const ok = await this.lootHistoryService.editTodLoot(lootDetailId, input);
-    if (ok) { await this.auth.refreshOverview(); }
-    return ok;
-  }
   async editEventLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
     const ok = await this.lootHistoryService.editEventLoot(lootDetailId, input);
     if (ok) { await this.auth.refreshOverview(); }
     return ok;
   }
-  async deleteLoot(source: 'Tod' | 'Event', lootDetailId: number, reason: string): Promise<boolean> {
-    const ok = source === 'Tod'
-      ? await this.lootHistoryService.deleteTodLoot(lootDetailId, reason)
-      : await this.lootHistoryService.deleteEventLoot(lootDetailId, reason);
+  async deleteLoot(lootDetailId: number, reason: string): Promise<boolean> {
+    const ok = await this.lootHistoryService.deleteEventLoot(lootDetailId, reason);
     if (ok) { await this.auth.refreshOverview(); }
     return ok;
   }

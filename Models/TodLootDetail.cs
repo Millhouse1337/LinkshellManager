@@ -3,6 +3,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LinkshellManagerDiscordApp.Models;
 
+// PHASE4B-DROP: TodLootDetails table - a ToD carries no loot; no code creates or reads these rows
+// (the last production row was moved to EventLootDetails on 2026-11-09).
 public class TodLootDetail
 {
     [Key]

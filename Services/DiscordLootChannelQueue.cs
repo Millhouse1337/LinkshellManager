@@ -2,22 +2,15 @@ using System.Threading.Channels;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Which loot table a queued post refers to.
-public enum LootJobSource
-{
-    Tod,
-    Event,
-}
-
-// EntityId is the TodLootDetail id (Tod) or EventLootDetail id (Event).
-public readonly record struct DiscordLootJob(LootJobSource Source, int EntityId);
+// One awarded event-loot row to announce. Only EventLootDetail rows are posted:
+// a ToD carries no loot, so nothing creates TodLootDetail rows any more.
+public readonly record struct DiscordLootJob(int EventLootDetailId);
 
 // Fire-and-forget queue of awarded-loot rows to announce to a linkshell's Loot
 // Discord channel. Enqueued from ApplicationDbContext on a successful commit
-// whenever a new TodLootDetail / EventLootDetail with a winner is added (any
-// path — web, Activity, addon, ToD, event loot). Drained by
-// DiscordLootChannelBackgroundService. Singleton, single-reader; mirrors
-// DiscordAuctionChannelQueue.
+// whenever a new EventLootDetail with a winner is added (any path — web,
+// Activity, addon, event loot). Drained by DiscordLootChannelBackgroundService.
+// Singleton, single-reader; mirrors DiscordAuctionChannelQueue.
 public sealed class DiscordLootChannelQueue
 {
     private readonly Channel<DiscordLootJob> _channel =
@@ -29,7 +22,7 @@ public sealed class DiscordLootChannelQueue
 
     public void Enqueue(DiscordLootJob job)
     {
-        if (job.EntityId <= 0)
+        if (job.EventLootDetailId <= 0)
         {
             return;
         }

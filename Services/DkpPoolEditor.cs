@@ -320,7 +320,7 @@ public sealed class DkpPoolEditor
         defaultPool!.IsDefault = true;
 
         // ---- merge away the dropped pools
-        // Their PINNED references (an auction's history, ToD loot, adjustments, imports) can't just
+        // Their PINNED references (an auction's history, adjustments, imports) can't just
         // be orphaned — the ledger row still has to say which wallet it came out of. Repoint them at
         // the default pool; the derived balances then simply re-derive.
         if (dropped.Count > 0)
@@ -338,9 +338,6 @@ public sealed class DkpPoolEditor
                 .Where(item => item.LinkshellId == linkshellId
                     && item.DkpPoolId != null
                     && droppedIds.Contains(item.DkpPoolId!.Value))
-                .ExecuteUpdateAsync(setter => setter.SetProperty(item => item.DkpPoolId, defaultPool.Id), cancellationToken);
-            await _db.TodLootDetails
-                .Where(item => item.DkpPoolId != null && droppedIds.Contains(item.DkpPoolId!.Value))
                 .ExecuteUpdateAsync(setter => setter.SetProperty(item => item.DkpPoolId, defaultPool.Id), cancellationToken);
 
             foreach (var pool in dropped)

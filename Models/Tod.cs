@@ -69,5 +69,6 @@ public class Tod
     [MaxLength(512)]
     public string? ImagePath { get; set; }
 
+    // PHASE4B-DROP: navigation to TodLootDetails - a ToD carries no loot; goes with the table.
     public ICollection<TodLootDetail> TodLootDetails { get; set; } = new List<TodLootDetail>();
 }

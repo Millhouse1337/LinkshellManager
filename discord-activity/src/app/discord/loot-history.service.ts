@@ -92,19 +92,11 @@ export class LootHistoryService {
     }
   }
 
-  async editTodLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
-    return this.editLoot(`/api/activity/loot-history/tod/${lootDetailId}/edit`, input);
-  }
-
   async editEventLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
     return this.editLoot(`/api/activity/loot-history/event/${lootDetailId}/edit`, input);
   }
 
   // Removes the row and refunds the winner's DKP. A blank reason gets a server-side default.
-  async deleteTodLoot(lootDetailId: number, reason: string): Promise<boolean> {
-    return this.deleteLoot(`/api/activity/loot-history/tod/${lootDetailId}/delete`, reason);
-  }
-
   async deleteEventLoot(lootDetailId: number, reason: string): Promise<boolean> {
     return this.deleteLoot(`/api/activity/loot-history/event/${lootDetailId}/delete`, reason);
   }

@@ -10,11 +10,11 @@ public sealed partial class ActivityDataController
 {
     // GET /api/activity/loot-history?page=1&pageSize=20
     //
-    // Unified list of loot rows across TodLootDetail (joined to Tod) and
-    // EventLootDetail (joined to Event for active events or EventHistory for
-    // closed events). Scoped to the caller's primary linkshell. The CanEdit
-    // flag on each row is derived from the caller's CanAddLoot role flag so
-    // the activity client can show/hide the Edit button per row.
+    // Every loot row of the linkshell: EventLootDetail joined to Event for active events or
+    // EventHistory for closed events (a "No event" row carries the linkshell itself). A ToD
+    // carries no loot, so there is no second source any more. Scoped to the caller's primary
+    // linkshell. The CanEdit flag on each row is derived from the caller's CanAddLoot role flag
+    // so the activity client can show/hide the Edit button per row.
     [HttpGet("loot-history")]
     public async Task<IActionResult> GetLootHistoryAsync(
         [FromQuery] int page = 1,
@@ -42,32 +42,6 @@ public sealed partial class ActivityDataController
         var canEdit = await CanAsync(membership, role => role.CanAddLoot, cancellationToken);
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
-
-        // Two materialised lists (ToD + Event), unioned and sorted by
-        // occurred-at desc in memory. The dataset for a single linkshell is
-        // small enough that this is simpler than crafting a UNION query
-        // across two different shapes.
-        // Loot is no longer split by where it came from -- every new row is an EventLootDetail
-        // filed against a live event, a past event, or nothing -- so the source filter went with
-        // it. ToD rows are still READ: the addon and the old Log ToD form wrote real ones.
-        var todRows = await _dbContext.TodLootDetails
-                .AsNoTracking()
-                .Where(detail => detail.Tod != null && detail.Tod.LinkshellId == linkshellId)
-                .Select(detail => new
-                {
-                    detail.Id,
-                    ParentId = detail.TodId ?? 0,
-                    Context = detail.Tod!.MonsterName,
-                    OccurredAt = (DateTime?)(detail.Tod.Time ?? detail.Tod.TimeStamp),
-                    detail.ItemName,
-                    detail.ItemWinner,
-                    detail.WinningDkpSpent,
-                    detail.ActualDeductedDkp,
-                    detail.EditedAt,
-                    detail.EditedByCharacterName,
-                    detail.LastEditReason
-                })
-                .ToListAsync(cancellationToken);
 
         var eventRows = await _dbContext.EventLootDetails
                 .AsNoTracking()
@@ -100,10 +74,11 @@ public sealed partial class ActivityDataController
                 })
                 .ToListAsync(cancellationToken);
 
-        var unified = todRows
+        // Sorted in memory: OccurredAt falls back across three parents, and one linkshell's loot
+        // is small enough that this is simpler than ordering it in SQL.
+        var unified = eventRows
             .Select(row => new ActivityLootHistoryItemDto(
                 LootDetailId: row.Id,
-                Source: "Tod",
                 ParentId: row.ParentId,
                 Context: row.Context,
                 OccurredAt: row.OccurredAt,
@@ -116,21 +91,6 @@ public sealed partial class ActivityDataController
                 EditedAt: row.EditedAt,
                 EditedByCharacterName: row.EditedByCharacterName,
                 CanEdit: canEdit))
-            .Concat(eventRows.Select(row => new ActivityLootHistoryItemDto(
-                LootDetailId: row.Id,
-                Source: "Event",
-                ParentId: row.ParentId,
-                Context: row.Context,
-                OccurredAt: row.OccurredAt,
-                ItemName: row.ItemName,
-                ItemWinner: row.ItemWinner,
-                WinningDkpSpent: row.WinningDkpSpent,
-                ActualDeductedDkp: row.ActualDeductedDkp,
-                IsEdited: row.EditedAt.HasValue,
-                LastEditReason: row.LastEditReason,
-                EditedAt: row.EditedAt,
-                EditedByCharacterName: row.EditedByCharacterName,
-                CanEdit: canEdit)))
             .OrderByDescending(item => item.OccurredAt ?? DateTime.MinValue)
             .ThenByDescending(item => item.LootDetailId)
             .ToList();
@@ -148,9 +108,6 @@ public sealed partial class ActivityDataController
     //
     // Manual loot entry for the caller's primary linkshell. The loot is filed against a LIVE
     // event, a PAST event, or nothing at all.
-    //
-    // It used to mint a throwaway ToD per submission and hang a TodLootDetail off it, which is why
-    // every hand-entered drop showed up in history as source "ToD".
     [HttpPost("loot-history")]
     public async Task<IActionResult> AddLootHistoryAsync(
         [FromBody] ActivityLootAddRequest request,
@@ -265,21 +222,6 @@ public sealed partial class ActivityDataController
     }
 
 
-    [HttpPost("loot-history/tod/{lootDetailId:int}/edit")]
-    public async Task<IActionResult> EditTodLootHistoryAsync(
-        int lootDetailId,
-        [FromBody] ActivityLootEditRequest request,
-        [FromServices] LootEditService lootEditService,
-        CancellationToken cancellationToken)
-    {
-        return await EditLootInternalAsync(
-            request,
-            lootEditService,
-            isTod: true,
-            lootDetailId,
-            cancellationToken);
-    }
-
     [HttpPost("loot-history/event/{lootDetailId:int}/edit")]
     public async Task<IActionResult> EditEventLootHistoryAsync(
         int lootDetailId,
@@ -287,26 +229,11 @@ public sealed partial class ActivityDataController
         [FromServices] LootEditService lootEditService,
         CancellationToken cancellationToken)
     {
-        return await EditLootInternalAsync(
-            request,
-            lootEditService,
-            isTod: false,
-            lootDetailId,
-            cancellationToken);
+        return await EditLootInternalAsync(request, lootEditService, lootDetailId, cancellationToken);
     }
 
     // Deleting a loot row removes it and refunds the winner's DKP (LootEditService). The same
     // CanAddLoot flag that gates Edit gates Delete — it is the "manage recorded loot" permission.
-    [HttpPost("loot-history/tod/{lootDetailId:int}/delete")]
-    public async Task<IActionResult> DeleteTodLootHistoryAsync(
-        int lootDetailId,
-        [FromBody] ActivityLootDeleteRequest request,
-        [FromServices] LootEditService lootEditService,
-        CancellationToken cancellationToken)
-    {
-        return await DeleteLootInternalAsync(request, lootEditService, isTod: true, lootDetailId, cancellationToken);
-    }
-
     [HttpPost("loot-history/event/{lootDetailId:int}/delete")]
     public async Task<IActionResult> DeleteEventLootHistoryAsync(
         int lootDetailId,
@@ -314,13 +241,12 @@ public sealed partial class ActivityDataController
         [FromServices] LootEditService lootEditService,
         CancellationToken cancellationToken)
     {
-        return await DeleteLootInternalAsync(request, lootEditService, isTod: false, lootDetailId, cancellationToken);
+        return await DeleteLootInternalAsync(request, lootEditService, lootDetailId, cancellationToken);
     }
 
     private async Task<IActionResult> DeleteLootInternalAsync(
         ActivityLootDeleteRequest request,
         LootEditService lootEditService,
-        bool isTod,
         int lootDetailId,
         CancellationToken cancellationToken)
     {
@@ -330,7 +256,7 @@ public sealed partial class ActivityDataController
             return Unauthorized(new { error = "Sign in to delete loot history." });
         }
 
-        var denied = await AuthorizeLootRowAsync(appUser.Id, isTod, lootDetailId, cancellationToken);
+        var denied = await AuthorizeLootRowAsync(appUser.Id, lootDetailId, cancellationToken);
         if (denied is not null)
         {
             return denied;
@@ -340,9 +266,7 @@ public sealed partial class ActivityDataController
             ? "Loot record deleted via Loot History."
             : request.Reason.Trim();
         var occurredAtUtc = DateTime.UtcNow;
-        var result = isTod
-            ? await lootEditService.DeleteTodLootAsync(lootDetailId, appUser, reason, occurredAtUtc, cancellationToken)
-            : await lootEditService.DeleteEventLootAsync(lootDetailId, appUser, reason, occurredAtUtc, cancellationToken);
+        var result = await lootEditService.DeleteEventLootAsync(lootDetailId, appUser, reason, occurredAtUtc, cancellationToken);
 
         if (!result.Success)
         {
@@ -355,9 +279,9 @@ public sealed partial class ActivityDataController
     // Resolves the loot row's linkshell and checks CanAddLoot there, before LootEditService touches
     // any data. Null = allowed; otherwise the response to return.
     private async Task<IActionResult?> AuthorizeLootRowAsync(
-        string appUserId, bool isTod, int lootDetailId, CancellationToken cancellationToken)
+        string appUserId, int lootDetailId, CancellationToken cancellationToken)
     {
-        var linkshellId = await LootRowLinkshellIdAsync(_dbContext, isTod, lootDetailId, cancellationToken);
+        var linkshellId = await LootRowLinkshellIdAsync(_dbContext, lootDetailId, cancellationToken);
 
         if (!linkshellId.HasValue || linkshellId.Value == 0)
         {
@@ -383,16 +307,8 @@ public sealed partial class ActivityDataController
     // LinkshellId stamped on the row itself — the only owner a "No event" row has. Leaving that
     // last step out made every "No event" row answer "not found" to Edit and Delete.
     internal static async Task<int?> LootRowLinkshellIdAsync(
-        ApplicationDbContext db, bool isTod, int lootDetailId, CancellationToken cancellationToken)
+        ApplicationDbContext db, int lootDetailId, CancellationToken cancellationToken)
     {
-        if (isTod)
-        {
-            return await db.TodLootDetails
-                .Where(detail => detail.Id == lootDetailId)
-                .Select(detail => (int?)(detail.Tod != null ? detail.Tod.LinkshellId : 0))
-                .FirstOrDefaultAsync(cancellationToken);
-        }
-
         return await db.EventLootDetails
             .Where(detail => detail.Id == lootDetailId)
             .Select(detail => detail.EventHistory != null
@@ -406,7 +322,6 @@ public sealed partial class ActivityDataController
     private async Task<IActionResult> EditLootInternalAsync(
         ActivityLootEditRequest request,
         LootEditService lootEditService,
-        bool isTod,
         int lootDetailId,
         CancellationToken cancellationToken)
     {
@@ -416,7 +331,7 @@ public sealed partial class ActivityDataController
             return Unauthorized(new { error = "Sign in to edit loot history." });
         }
 
-        var denied = await AuthorizeLootRowAsync(appUser.Id, isTod, lootDetailId, cancellationToken);
+        var denied = await AuthorizeLootRowAsync(appUser.Id, lootDetailId, cancellationToken);
         if (denied is not null)
         {
             return denied;
@@ -432,9 +347,7 @@ public sealed partial class ActivityDataController
         LootEditResult result;
         try
         {
-            result = isTod
-                ? await lootEditService.EditTodLootAsync(lootDetailId, serviceRequest, appUser, occurredAtUtc, cancellationToken)
-                : await lootEditService.EditEventLootAsync(lootDetailId, serviceRequest, appUser, occurredAtUtc, cancellationToken);
+            result = await lootEditService.EditEventLootAsync(lootDetailId, serviceRequest, appUser, occurredAtUtc, cancellationToken);
         }
         catch (InvalidOperationException ex)
         {

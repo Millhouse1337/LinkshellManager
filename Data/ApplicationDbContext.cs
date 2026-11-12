@@ -379,26 +379,19 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
-        // Newly-awarded loot rows (ToD or event loot with a winner) → announce to
-        // the linkshell's Loot channel. Captured as entity references pre-save
+        // Newly-awarded event loot rows (with a winner) → announce to the
+        // linkshell's Loot channel. Captured as entity references pre-save
         // because the db-generated Id isn't known until after commit. Only
         // *Added* rows with a winner; edits (Modified) and close-out reattaches
         // are ignored. The publisher no-ops when no Loot channel is configured.
-        private (List<TodLootDetail> tod, List<EventLootDetail> evt) CollectAddedLoot()
+        // Only event loot is watched: nothing creates ToD loot rows any more.
+        private List<EventLootDetail> CollectAddedLoot()
         {
+            var evt = new List<EventLootDetail>();
             if (_lootChannelQueue is null)
             {
-                return (new List<TodLootDetail>(), new List<EventLootDetail>());
+                return evt;
             }
-            var tod = new List<TodLootDetail>();
-            foreach (var entry in ChangeTracker.Entries<TodLootDetail>())
-            {
-                if (entry.State == EntityState.Added && !string.IsNullOrWhiteSpace(entry.Entity.ItemWinner))
-                {
-                    tod.Add(entry.Entity);
-                }
-            }
-            var evt = new List<EventLootDetail>();
             foreach (var entry in ChangeTracker.Entries<EventLootDetail>())
             {
                 if (entry.State == EntityState.Added && !string.IsNullOrWhiteSpace(entry.Entity.ItemWinner))
@@ -406,21 +399,14 @@ namespace LinkshellManagerDiscordApp.Data
                     evt.Add(entry.Entity);
                 }
             }
-            return (tod, evt);
+            return evt;
         }
 
-        private void EnqueueLootPosts(IReadOnlyList<TodLootDetail> tod, IReadOnlyList<EventLootDetail> evt)
+        private void EnqueueLootPosts(IReadOnlyList<EventLootDetail> evt)
         {
             if (_lootChannelQueue is null)
             {
                 return;
-            }
-            foreach (var detail in tod)
-            {
-                if (detail.Id > 0)
-                {
-                    _lootChannelQueue.Enqueue(new DiscordLootJob(LootJobSource.Tod, detail.Id));
-                }
             }
             foreach (var detail in evt)
             {
@@ -432,7 +418,7 @@ namespace LinkshellManagerDiscordApp.Data
                         _eventLootPostsHeld.Add(detail.Id);
                         continue;
                     }
-                    _lootChannelQueue.Enqueue(new DiscordLootJob(LootJobSource.Event, detail.Id));
+                    _lootChannelQueue.Enqueue(new DiscordLootJob(detail.Id));
                 }
             }
         }
@@ -458,7 +444,7 @@ namespace LinkshellManagerDiscordApp.Data
             }
             foreach (var lootId in held)
             {
-                _lootChannelQueue.Enqueue(new DiscordLootJob(LootJobSource.Event, lootId));
+                _lootChannelQueue.Enqueue(new DiscordLootJob(lootId));
             }
         }
 
@@ -609,12 +595,11 @@ namespace LinkshellManagerDiscordApp.Data
             public readonly HashSet<(int LinkshellId, string Area)> Direct = new();
             public readonly HashSet<int> BidAuctionItemIds = new();
             public readonly HashSet<int> ParticipationEventIds = new();
-            public readonly HashSet<int> LootTodIds = new();
             public readonly HashSet<int> LootEventIds = new();
 
             public bool HasWork =>
                 Direct.Count > 0 || BidAuctionItemIds.Count > 0 || ParticipationEventIds.Count > 0
-                || LootTodIds.Count > 0 || LootEventIds.Count > 0;
+                || LootEventIds.Count > 0;
         }
 
         // Scans the change tracker once for entities that drive the live tabs and
@@ -681,9 +666,6 @@ namespace LinkshellManagerDiscordApp.Data
                     case EventPartySlotSignup eps when eps.EventId > 0:
                         work.ParticipationEventIds.Add(eps.EventId);
                         break;
-                    case TodLootDetail tl when tl.TodId is int todId && todId > 0:
-                        work.LootTodIds.Add(todId);
-                        break;
                     case EventLootDetail el when el.EventId is int eventId && eventId > 0:
                         work.LootEventIds.Add(eventId);
                         break;
@@ -729,17 +711,6 @@ namespace LinkshellManagerDiscordApp.Data
                         .Distinct()
                         .ToListAsync(CancellationToken.None);
                     AddResolved(notifications, linkshellIds, LinkshellChangeNotifier.Areas.Events);
-                }
-
-                if (work.LootTodIds.Count > 0)
-                {
-                    var todIds = work.LootTodIds.ToList();
-                    var linkshellIds = await Tods
-                        .Where(t => todIds.Contains(t.Id))
-                        .Select(t => t.LinkshellId)
-                        .Distinct()
-                        .ToListAsync(CancellationToken.None);
-                    AddResolved(notifications, linkshellIds, LinkshellChangeNotifier.Areas.Loot);
                 }
 
                 if (work.LootEventIds.Count > 0)
@@ -1068,7 +1039,7 @@ namespace LinkshellManagerDiscordApp.Data
             var (createdAuctions, closedAuctions, retimedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
             var editedEvents = CollectEditedEvents();
-            var (todLoot, eventLoot) = CollectAddedLoot();
+            var eventLoot = CollectAddedLoot();
             var endedEvents = CollectAddedEventHistories();
             var deletedEventBoards = CollectDeletedEventBoards();
             var deletedAuctionCards = CollectDeletedAuctionCards();
@@ -1089,7 +1060,7 @@ namespace LinkshellManagerDiscordApp.Data
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
             EnqueueEventPosts(editedEvents);
-            EnqueueLootPosts(todLoot, eventLoot);
+            EnqueueLootPosts(eventLoot);
             EnqueueEventEndedSummaries(endedEvents);
             EnqueueMessageDeletions(deletedEventBoards);
             EnqueueMessageDeletions(deletedAuctionCards);
@@ -1109,7 +1080,7 @@ namespace LinkshellManagerDiscordApp.Data
             var (createdAuctions, closedAuctions, retimedAuctions) = CollectAuctionChannelWork();
             var createdEvents = CollectAddedEvents();
             var editedEvents = CollectEditedEvents();
-            var (todLoot, eventLoot) = CollectAddedLoot();
+            var eventLoot = CollectAddedLoot();
             var endedEvents = CollectAddedEventHistories();
             var deletedEventBoards = CollectDeletedEventBoards();
             var deletedAuctionCards = CollectDeletedAuctionCards();
@@ -1121,7 +1092,7 @@ namespace LinkshellManagerDiscordApp.Data
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
             EnqueueEventPosts(editedEvents);
-            EnqueueLootPosts(todLoot, eventLoot);
+            EnqueueLootPosts(eventLoot);
             EnqueueEventEndedSummaries(endedEvents);
             EnqueueMessageDeletions(deletedEventBoards);
             EnqueueMessageDeletions(deletedAuctionCards);
@@ -1151,6 +1122,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<EventPartySlotSignup> EventPartySlotSignups => Set<EventPartySlotSignup>();
         public DbSet<EventWindowRosterSnapshot> EventWindowRosterSnapshots => Set<EventWindowRosterSnapshot>();
         public DbSet<Tod> Tods => Set<Tod>();
+        // PHASE4B-DROP: TodLootDetails table - a ToD carries no loot; nothing creates or reads these rows (prod table is empty).
         public DbSet<TodLootDetail> TodLootDetails => Set<TodLootDetail>();
         public DbSet<PartySetup> PartySetups => Set<PartySetup>();
         public DbSet<PartySetupAlliance> PartySetupAlliances => Set<PartySetupAlliance>();
@@ -1493,6 +1465,7 @@ namespace LinkshellManagerDiscordApp.Data
                 // Index the loot-source FKs so the Loot History view can
                 // quickly find the edit-pair ledger entries for a given
                 // loot row without scanning the full ledger.
+                // PHASE4B-DROP: this index goes with DkpLedgerEntries.SourceTodLootDetailId and TodLootDetails.
                 entity.HasIndex(item => item.SourceTodLootDetailId);
                 entity.HasIndex(item => item.SourceEventLootDetailId);
                 entity.HasIndex(item => item.SourceWindowEventId);
@@ -1558,6 +1531,7 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
+                // PHASE4B-DROP: goes with the TodLootDetails table (keeps the database cascade until then).
                 entity.HasMany(item => item.TodLootDetails)
                     .WithOne(item => item.Tod)
                     .HasForeignKey(item => item.TodId)
@@ -1566,6 +1540,7 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.LinkshellId, item.MonsterName });
             });
 
+            // PHASE4B-DROP: TodLootDetails table - unused, config kept only so the model matches the database.
             builder.Entity<TodLootDetail>(entity =>
             {
                 entity.ToTable("TodLootDetails");
@@ -1692,7 +1667,7 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
-                // SetNull, like TodLootDetail: deleting a pool must not destroy the loot record.
+                // SetNull: deleting a pool must not destroy the loot record.
                 entity.HasOne(item => item.DkpPool)
                     .WithMany()
                     .HasForeignKey(item => item.DkpPoolId)

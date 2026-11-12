@@ -49,15 +49,11 @@
           </tr>
         </thead>
         <tbody>
-          @for (row of filteredItems(); track row.lootDetailId + ':' + row.source) {
+          @for (row of filteredItems(); track row.lootDetailId) {
             <tr>
               <td>{{ formatTimestamp(row.occurredAt) }}</td>
               <td>
-                @if (row.source === 'Tod') {
-                  <span class="tag default">ToD</span>
-                } @else {
-                  <span class="tag accent">Event</span>
-                }
+                <span class="tag accent">Event</span>
               </td>
               <td>{{ row.context || '—' }}</td>
               <td>{{ row.itemName || '—' }}</td>
@@ -112,7 +108,7 @@
           <div class="loot-edit-form__header">
             <div>
               <strong>Edit loot record</strong>
-              <p class="muted">{{ item.source === 'Tod' ? 'ToD' : 'Event' }}@if (item.context) {<span> · {{ item.context }}</span>}</p>
+              <p class="muted">Event@if (item.context) {<span> · {{ item.context }}</span>}</p>
             </div>
             <button type="button" class="action-button action-button--secondary" (click)="closeEdit()">Close</button>
           </div>

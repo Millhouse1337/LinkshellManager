@@ -32,7 +32,7 @@ public class DkpLedgerEntry
     // pool" — that's the state of every row written before pools existed, and of every row
     // in a linkshell that never customized its pools, so it never needs backfilling.
     //
-    // Intentionally NOT a foreign key, matching SourceTodLootDetailId / SourceEventLootDetailId
+    // Intentionally NOT a foreign key, matching SourceEventLootDetailId
     // below: the ledger is immutable history and must survive whatever happens to the rows it
     // points at.
     public int? DkpPoolId { get; set; }
@@ -79,13 +79,14 @@ public class DkpLedgerEntry
     [MaxLength(512)]
     public string? EditReason { get; set; }
 
-    // Optional back-references so a ledger entry can be traced to the loot
-    // row it was generated from. Exactly one is set on edit-driven entries,
-    // both null on legacy / non-loot entries. Not foreign-key-enforced — the
-    // loot row could be deleted later, and we want the ledger to remain
-    // immutable regardless.
+    // PHASE4B-DROP: DkpLedgerEntries.SourceTodLootDetailId (+ its index) - ToD loot is gone, so
+    // nothing writes or reads it any more.
     public int? SourceTodLootDetailId { get; set; }
 
+    // Optional back-reference so a ledger entry can be traced to the loot
+    // row it was generated from. Set on edit/delete-driven entries, null on
+    // legacy / non-loot entries. Not foreign-key-enforced — the loot row could
+    // be deleted later, and we want the ledger to remain immutable regardless.
     public int? SourceEventLootDetailId { get; set; }
 
     // Populated on the deduction rows created at ActivityDataController.CloseAuctionAsync

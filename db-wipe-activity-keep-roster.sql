@@ -38,7 +38,8 @@ TRUNCATE TABLE
     "EventAttendanceWindows",
     "EventLootDetails",
     "EventPartySlotSignups",
-    -- ToDs / window events / claim shields
+    -- ToDs / window events / claim shields (PHASE4B-DROP: remove the TodLootDetails line once that
+    -- table is dropped; no code uses it)
     "Tods",
     "TodLootDetails",
     "WindowEvents",

@@ -24,7 +24,7 @@ public class EventLootDetail
     [ForeignKey(nameof(LinkshellId))]
     public Linkshell? Linkshell { get; set; }
 
-    // The DKP pool this loot was paid from, mirroring TodLootDetail.
+    // The DKP pool this loot was paid from.
     //
     // Event-linked loot can derive a pool from the event type, but a "No event" row has no type to
     // derive from -- and a refund has to credit the pool the debit came out of even if an officer
@@ -77,7 +77,7 @@ public class EventLootDetail
 
     // Stamped at event close (and on every Loot History edit) so refund-then-
     // reapply math stays correct even when a player's balance has drifted
-    // since the original debit. Mirrors TodLootDetail.ActualDeductedDkp.
+    // since the original debit.
     public double? ActualDeductedDkp { get; set; }
 
     // Who POSTED this row (the officer or the addon token's owner), not who won it.
@@ -88,7 +88,9 @@ public class EventLootDetail
     public string? RecordedByAppUserId { get; set; }
 
     // Audit fields populated by LootEditService when an officer corrects this
-    // row. See TodLootDetail for the field semantics.
+    // row. Read by the loot-history list to show an "Edited" tag and the most
+    // recent reason on hover; the full audit trail lives in DkpLedgerEntry
+    // pairs (LootEditRefund + LootEditSpent) tagged with the same reason.
     public DateTime? EditedAt { get; set; }
 
     [MaxLength(450)]

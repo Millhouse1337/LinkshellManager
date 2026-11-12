@@ -159,7 +159,6 @@ public sealed partial class ActivityDataController
         }
 
         var tod = await _dbContext.Tods
-            .Include(item => item.TodLootDetails)
             .FirstOrDefaultAsync(item => item.Id == todId, cancellationToken);
 
         if (tod is null)
@@ -175,10 +174,8 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        // Deleting a ToD never changes anyone's DKP. Its loot rows go with it, but the DKP charged
-        // for that loot stays charged: the ledger rows keep only the loot's id (not a foreign key),
-        // so they survive the delete. Refunding loot is the Loot tab's job, one item at a time.
-        _dbContext.TodLootDetails.RemoveRange(tod.TodLootDetails);
+        // Deleting a ToD never changes anyone's DKP: a ToD carries no loot, so there is nothing to
+        // refund. Loot lives on events and is refunded from the Loot tab, one item at a time.
 
         // Events posted from this ToD point back at it, and that FK has no delete rule, so the
         // database refuses the delete while any of them still do. Unlink them; the events stay.
@@ -292,7 +289,6 @@ public sealed partial class ActivityDataController
         }
 
         var tod = await _dbContext.Tods
-            .Include(item => item.TodLootDetails)
             .Include(item => item.Linkshell)
             .FirstOrDefaultAsync(item => item.Id == todId, cancellationToken);
 

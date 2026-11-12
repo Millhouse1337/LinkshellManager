@@ -79,7 +79,6 @@ public class SubmissionApprovalReviewTests
 
         Assert.Equal(ApprovalResult.Approved, result);
         Assert.Single(db.Tods);
-        Assert.Empty(db.TodLootDetails);
         Assert.Empty(db.DkpLedgerEntries);
         Assert.Empty(db.PendingTodSubmissions);
     }

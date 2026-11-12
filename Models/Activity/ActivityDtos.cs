@@ -1322,8 +1322,6 @@ public sealed record ActivityTodDto(
     string? Cooldown,
     DateTime? RepopTime,
     string? Interval,
-    int LootCount,
-    IReadOnlyList<ActivityTodLootDto> LootDetails,
     string? ImagePath,
     // Whether the kill was HQ (shown in the ToD list).
     bool Hq = false,
@@ -1335,12 +1333,6 @@ public sealed record ActivityTodDto(
     // no ToD has a null Time, so the client sorts on Time ?? TimeStamp to keep that row as the
     // monster's newest entry instead of letting the pop it superseded show as current.
     DateTime? TimeStamp = null);
-
-public sealed record ActivityTodLootDto(
-    int Id,
-    string? ItemName,
-    string? ItemWinner,
-    int? WinningDkpSpent);
 
 // One row of the HNM claim-rate chart: Claimed of Attempts (every ToD marked Claimed or
 // Unclaimed), and ClaimRate, the two as a percentage. ColorClass is the palette letter the row
@@ -1711,13 +1703,11 @@ public sealed record ActivityAuctionsLockRequest(bool Locked);
 
 public sealed record ActivityCloseAuctionRequest(IReadOnlyList<int>? DeliveredItemIds);
 
-// One row in the Loot History view. Unifies TodLootDetail + EventLootDetail
-// behind a `Source` discriminator so the client can render a single table.
-// ParentId is the Tod.Id (when Source == "Tod") or the Event.Id /
-// EventHistory.Id (when Source == "Event").
+// One row in the Loot History view: an EventLootDetail. ParentId is its EventHistory.Id (closed
+// event) or Event.Id (live event), 0 for a "No event" row. (The old `Source` field told ToD loot
+// apart; a ToD carries no loot any more, so every row is event loot.)
 public sealed record ActivityLootHistoryItemDto(
     int LootDetailId,
-    string Source,
     int ParentId,
     string? Context,
     DateTime? OccurredAt,

@@ -46,7 +46,7 @@ public class PartySetupSlot
     // Member sign-up. A linkshell member can claim an open slot from the ToD
     // Tracker's inline setup panel. Stored as a plain id + a snapshot of the
     // member's linkshell character name (mirrors the EditedByAppUserId /
-    // EditedByCharacterName pattern on TodLootDetail -- no navigation, so
+    // EditedByCharacterName pattern on EventLootDetail -- no navigation, so
     // there's no FK cascade to reason about). Null = open.
     [MaxLength(450)]
     public string? SignedUpAppUserId { get; set; }

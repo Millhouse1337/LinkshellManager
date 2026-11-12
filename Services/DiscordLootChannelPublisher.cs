@@ -43,9 +43,7 @@ public sealed class DiscordLootChannelPublisher
 
         try
         {
-            var loot = job.Source == LootJobSource.Tod
-                ? await LoadTodLootAsync(job.EntityId, cancellationToken)
-                : await LoadEventLootAsync(job.EntityId, cancellationToken);
+            var loot = await LoadEventLootAsync(job.EventLootDetailId, cancellationToken);
             if (loot is null || string.IsNullOrWhiteSpace(loot.ItemWinner))
             {
                 return;
@@ -66,22 +64,8 @@ public sealed class DiscordLootChannelPublisher
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Loot announce for {Source} #{EntityId} failed.", job.Source, job.EntityId);
+            _logger.LogWarning(ex, "Loot announce for event loot #{LootId} failed.", job.EventLootDetailId);
         }
-    }
-
-    private async Task<LootLine?> LoadTodLootAsync(int detailId, CancellationToken cancellationToken)
-    {
-        var row = await _db.TodLootDetails
-            .AsNoTracking()
-            .Include(detail => detail.Tod)
-            .FirstOrDefaultAsync(detail => detail.Id == detailId, cancellationToken);
-        if (row?.Tod is null)
-        {
-            return null;
-        }
-        return new LootLine(
-            row.Tod.LinkshellId, row.ItemName, row.ItemWinner, row.WinningDkpSpent, row.Tod.MonsterName);
     }
 
     private async Task<LootLine?> LoadEventLootAsync(int detailId, CancellationToken cancellationToken)

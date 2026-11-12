@@ -155,6 +155,7 @@ public sealed class UserMergeService
         yield return Column(_db.EventLootDetails, x => x.ItemWinnerAppUserId);
         yield return Column(_db.EventLootDetails, x => x.RecordedByAppUserId);
         yield return Column(_db.EventLootDetails, x => x.EditedByAppUserId);
+        // PHASE4B-DROP: stays while the TodLootDetails table exists, so a merge leaves no old id behind.
         yield return Column(_db.TodLootDetails, x => x.EditedByAppUserId);
         yield return Column(_db.Events, x => x.CreatorUserId);
         yield return Column(_db.Events, x => x.StarterUserId);

@@ -236,7 +236,7 @@ export class LootHistoryPanelComponent implements OnInit {
     if (!item) return;
     this.editError.set(null);
     const ok = await this.activity.deleteLoot(
-      item.source, item.lootDetailId, (this.editFormModel.reason ?? '').trim());
+      item.lootDetailId, (this.editFormModel.reason ?? '').trim());
     if (ok) {
       this.closeEdit();
       await this.refresh();
@@ -267,13 +267,9 @@ export class LootHistoryPanelComponent implements OnInit {
     }
 
     this.editError.set(null);
-    const ok = item.source === 'Tod'
-      ? await this.activity.editTodLoot(item.lootDetailId, {
-          itemName, itemWinner, winningDkpSpent: dkp, reason
-        })
-      : await this.activity.editEventLoot(item.lootDetailId, {
-          itemName, itemWinner, winningDkpSpent: dkp, reason
-        });
+    const ok = await this.activity.editEventLoot(item.lootDetailId, {
+      itemName, itemWinner, winningDkpSpent: dkp, reason
+    });
 
     if (ok) {
       this.closeEdit();

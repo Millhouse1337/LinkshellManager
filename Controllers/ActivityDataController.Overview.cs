@@ -119,7 +119,6 @@ public sealed partial class ActivityDataController
         var recentTods = primaryLinkshellId.HasValue
             ? await _dbContext.Tods
                 .AsNoTracking()
-                .Include(tod => tod.TodLootDetails)
                 .Where(tod => tod.LinkshellId == primaryLinkshellId.Value)
                 // Time ?? TimeStamp: a ToD that was never entered (camp ended without a kill) has
                 // no Time, but it's still the monster's most recent event — fall back to when the

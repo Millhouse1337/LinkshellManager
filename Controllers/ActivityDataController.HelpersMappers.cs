@@ -260,15 +260,6 @@ public sealed partial class ActivityDataController
             tod.Cooldown,
             tod.RepopTime,
             tod.Interval,
-            tod.TodLootDetails.Count,
-            tod.TodLootDetails
-                .OrderBy(detail => detail.Id)
-                .Select(detail => new ActivityTodLootDto(
-                    detail.Id,
-                    detail.ItemName,
-                    detail.ItemWinner,
-                    detail.WinningDkpSpent))
-                .ToList(),
             tod.ImagePath,
             tod.Hq,
             tod.AdditionalSeconds,

@@ -109,7 +109,7 @@ public class LootDeleteTests
         var (_, loot) = Seed(db, winner: "Edicius", noEvent: true);
 
         Assert.Equal(Ls, await ActivityDataController.LootRowLinkshellIdAsync(
-            db, isTod: false, loot.Id, CancellationToken.None));
+            db, loot.Id, CancellationToken.None));
     }
 
     [Fact]

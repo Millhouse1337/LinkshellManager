@@ -56,7 +56,7 @@ public class ChartPopItem
 
     // Who is physically holding it. The NAME is the record and the membership id is a convenience
     // that survives a character rename — an unsynced character is a real member of the linkshell,
-    // they just have no account behind the name. Same split as TodLootDetail.ItemWinner.
+    // they just have no account behind the name. Same split as EventLootDetail.ItemWinner.
     //
     // HeldByMembershipId is deliberately a plain nullable int with no relationship: Linkshells
     // already cascades into AppUserLinkshells, so an FK from here would be a second cascade path

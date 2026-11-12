@@ -1010,13 +1010,6 @@ export interface ActivityLootEntry {
   actualDeductedDkp?: number | null;
 }
 
-export interface ActivityTodLootEntry {
-  id: number;
-  itemName?: string | null;
-  itemWinner?: string | null;
-  winningDkpSpent?: number | null;
-}
-
 export interface ActivityTodEntry {
   id: number;
   linkshellId: number;
@@ -1041,8 +1034,6 @@ export interface ActivityTodEntry {
   cooldown?: string | null;
   repopTime?: string | null;
   interval?: string | null;
-  lootCount: number;
-  lootDetails: ActivityTodLootEntry[];
   imagePath?: string | null;
 }
 
@@ -1637,13 +1628,12 @@ export interface ActivityDkpLedgerEntry {
   editReason?: string | null;
 }
 
-// One row in the unified Loot History view. The `source` discriminator
-// tells the client whether to call the /tod/{id}/edit or /event/{id}/edit
-// endpoint when the officer hits Save. `canEdit` is computed server-side
-// from the caller's CanAddLoot role flag so the UI just toggles the button.
+// One row in the Loot History view (always event loot: a ToD carries no
+// loot, so the old ToD/Event `source` field is gone). `canEdit` is computed
+// server-side from the caller's CanAddLoot role flag so the UI just toggles
+// the button.
 export interface ActivityLootHistoryItem {
   lootDetailId: number;
-  source: 'Tod' | 'Event';
   parentId: number;
   context?: string | null;
   occurredAt?: string | null;
