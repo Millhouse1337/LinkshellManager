@@ -205,7 +205,7 @@ public class EndCampLootRaceTests : IAsyncLifetime
             NullLogger<ActivityDataController>.Instance, null!, null!, new MemberActivityService(db), null!,
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
             new DkpPoolBalanceService(db, pools),
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
             permissions)
         {
             ControllerContext = new ControllerContext { HttpContext = http },

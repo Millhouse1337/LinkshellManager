@@ -95,6 +95,7 @@ public sealed class DataAdminPolicy
                     (nameof(JournalEntry.TransactionKind), TreasuryTransactionKinds.All.Select(kind => kind.Key).ToArray())),
             },
             [typeof(JournalEntryLine)] = readOnly,
+            // PHASE4B-DROP: remove with the LedgerPeriods table.
             [typeof(LedgerPeriod)] = readOnly,
             [typeof(AuctionHistory)] = readOnly with
             {
@@ -252,6 +253,7 @@ public sealed class DataAdminPolicy
             [typeof(Rule)] = new() { SyncedCopies = linkshellNameCopy },
             [typeof(Announcement)] = new() { SyncedCopies = linkshellNameCopy },
             [typeof(Item)] = new() { SyncedCopies = linkshellNameCopy },
+            // PHASE4B-DROP: remove with the RevenueEntries table.
             [typeof(RevenueEntry)] = new() { SyncedCopies = linkshellNameCopy },
         };
     }

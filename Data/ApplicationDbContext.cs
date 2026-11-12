@@ -1161,10 +1161,12 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<Rule> Rules => Set<Rule>();
         public DbSet<Announcement> Announcements => Set<Announcement>();
         public DbSet<Item> Items => Set<Item>();
+        // PHASE4B-DROP: RevenueEntries table - converted to JournalEntries long ago, nothing reads or writes it.
         public DbSet<RevenueEntry> RevenueEntries => Set<RevenueEntry>();
         public DbSet<LedgerAccount> LedgerAccounts => Set<LedgerAccount>();
         public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
         public DbSet<JournalEntryLine> JournalEntryLines => Set<JournalEntryLine>();
+        // PHASE4B-DROP: LedgerPeriods table - the treasury lock feature was removed (never had a button).
         public DbSet<LedgerPeriod> LedgerPeriods => Set<LedgerPeriod>();
         public DbSet<LinkshellRole> LinkshellRoles => Set<LinkshellRole>();
         public DbSet<JobRating> JobRatings => Set<JobRating>();
@@ -1810,6 +1812,7 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.LinkshellId, item.ItemName });
             });
 
+            // PHASE4B-DROP: RevenueEntries table - unused, config kept only so the model matches the database.
             builder.Entity<RevenueEntry>(entity =>
             {
                 entity.ToTable("RevenueEntries");
@@ -1826,10 +1829,9 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.LinkshellId, item.OccurredAt });
             });
 
-            // --- Gil treasury: categories, transactions, their two halves, and the lock. ---
-            // RevenueEntry above is the shape these replace. It stays in place, readable and
-            // unmodified, for a full release after the conversion so a binary rollback is a
-            // non-event; RemoveRevenueEntries is a later migration.
+            // --- Gil treasury: categories, transactions and their two halves. ---
+            // RevenueEntry above is the shape these replace. No code uses it any more; Phase 4B
+            // drops the table.
 
             builder.Entity<LedgerAccount>(entity =>
             {
@@ -1890,6 +1892,7 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasFilter("\"Kind\" = 'Reversal'");
                 // Makes the one-time conversion replayable: if it aborts halfway, re-run it rather
                 // than restoring a snapshot.
+                // PHASE4B-DROP: this index goes with JournalEntries.LegacyRevenueEntryId and RevenueEntries.
                 entity.HasIndex(item => item.LegacyRevenueEntryId)
                     .HasDatabaseName("IX_JournalEntries_LegacyRevenueEntryId")
                     .IsUnique()
@@ -1933,6 +1936,7 @@ namespace LinkshellManagerDiscordApp.Data
                     "CK_JournalEntryLines_LineNumber_Positive", "\"LineNumber\" >= 1"));
             });
 
+            // PHASE4B-DROP: LedgerPeriods table - lock feature removed, config kept only so the model matches the database.
             builder.Entity<LedgerPeriod>(entity =>
             {
                 entity.ToTable("LedgerPeriods");

@@ -57,8 +57,9 @@ TRUNCATE TABLE
     "AttendanceSnapshots",
     "AttendanceSnapshotEntries",
     -- Finances (gil/treasury) + inventory
-    -- RevenueEntries is the pre-conversion shape, kept readable for one release; the four
-    -- treasury tables are the live ones. TRUNCATE takes them all in one statement, so the FK
+    -- RevenueEntries is the pre-conversion shape and LedgerPeriods the removed lock feature; no
+    -- code uses either (PHASE4B-DROP: remove both lines here once the tables are dropped). The
+    -- other three treasury tables are the live ones. TRUNCATE takes them all in one statement, so the FK
     -- ordering between them does not matter here (it does in DbWipe, which uses DELETE).
     "RevenueEntries",
     "JournalEntryLines",
@@ -87,6 +88,7 @@ SELECT
     (SELECT count(*) FROM "Tods")              AS tods,
     (SELECT count(*) FROM "Auctions")          AS auctions,
     (SELECT count(*) FROM "DkpLedgerEntries")  AS dkp_ledger,
+    -- PHASE4B-DROP: remove with the RevenueEntries table.
     (SELECT count(*) FROM "RevenueEntries")    AS revenue_legacy,
     (SELECT count(*) FROM "JournalEntries")    AS treasury_entries,
     (SELECT count(*) FROM "JournalEntryLines") AS treasury_halves,

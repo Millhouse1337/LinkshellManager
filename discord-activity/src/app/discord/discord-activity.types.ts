@@ -711,7 +711,6 @@ export interface ActivityTreasurySnapshot {
   netWorth: number;
   startingBalance: number;
   balances: boolean;
-  lockedThroughUtc?: string | null;
   basisNote: string;
   /** Who `weOwe` is owed to, largest first. Projected from the same lines, so it always adds up. */
   owedToMembers: ActivityTreasuryMemberObligation[];

@@ -21,7 +21,7 @@ public class TreasuryJournalWriterTests
             .Options);
 
     private static TreasuryJournalWriter NewWriter(ApplicationDbContext db) =>
-        new(db, new LedgerAccountProvisioner(db), new LedgerPeriodGuard(db));
+        new(db, new LedgerAccountProvisioner(db));
 
     private static readonly TreasuryActor Officer = new("user-1", "Millhouse");
 

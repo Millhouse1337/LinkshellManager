@@ -63,7 +63,7 @@ public class EndEventThroughTheAppTests : IAsyncLifetime
             db, null!, null!, null!, null!, userManager, null!, null!, null!, null!, null!, null!,
             NullLogger<ActivityDataController>.Instance, null!, null!, new MemberActivityService(db), null!,
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
             permissions)
         {
             ControllerContext = new ControllerContext { HttpContext = http },

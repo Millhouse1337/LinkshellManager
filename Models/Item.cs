@@ -26,16 +26,15 @@ namespace LinkshellManagerDiscordApp.Models
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
         // --- Sold state: marking an item sold records the sale price and creates a
-        // matching Income RevenueEntry so the treasury updates automatically. The
+        // matching treasury entry so the treasury updates automatically. The
         // item stays in the list (flagged Sold) as a record; "unsell" reverses it. ---
         public bool IsSold { get; set; }
         public long? SoldPrice { get; set; }
         public DateTime? SoldAt { get; set; }
         public string? SoldByCharacterName { get; set; }
-        // The RevenueEntry created for this sale, so unselling can remove exactly it.
-        //
-        // SUPERSEDED by JournalEntryId below. Both are written for one release so rolling the
-        // app binary back is a non-event; the column goes when RevenueEntries does.
+        // The old RevenueEntries row for a sale made before the treasury journal existed.
+        // Replaced by JournalEntryId below; no code reads or writes it any more.
+        // PHASE4B-DROP: Items.RevenueEntryId - goes with the RevenueEntries table.
         public int? RevenueEntryId { get; set; }
 
         // The treasury entry recorded for this sale. Unselling REVERSES it rather than deleting

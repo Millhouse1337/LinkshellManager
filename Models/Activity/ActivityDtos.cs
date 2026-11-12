@@ -540,7 +540,6 @@ public sealed record ActivityTreasurySnapshotDto(
     long StartingBalance,
     // Whether what we hold minus what we owe still matches what we started with plus the net movement.
     bool Balances,
-    DateTime? LockedThroughUtc,
     // Disclosed as data, not baked into the front-end.
     string BasisNote,
     // Who the WeOwe figure above is owed to. Sent to every reader, not just officers — the treasury
@@ -605,8 +604,6 @@ public sealed record ActivityReverseTreasuryEntryRequest(string Reason);
 
 // The gil actually sitting on the mule, counted by hand. The app works out which way the difference
 // goes; the officer never picks.
-
-public sealed record ActivityLockTreasuryRequest(DateTime? LockedThrough, string? Reason);
 
 // SoldByCharacterName is who actually sold the thing, which is NOT the same as who is clicking the
 // button — an officer records sales somebody else made all the time, and the old code recorded the

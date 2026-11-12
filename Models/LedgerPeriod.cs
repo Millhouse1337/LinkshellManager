@@ -3,14 +3,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LinkshellManagerDiscordApp.Models;
 
-// How far back a linkshell's treasury is locked. One row per linkshell, at most.
+// How far back a linkshell's treasury was locked. One row per linkshell, at most.
 //
-// ABSENCE OF A ROW MEANS NOTHING IS LOCKED. That is the same absence-is-the-default idiom as
-// DkpLedgerEntry.DkpPoolId == null meaning "the default pool": it needs no backfill, and a
-// linkshell that never touches this feature is never locked by it.
-//
-// Enforced by LedgerPeriodGuard, which is called from INSIDE TreasuryJournalWriter rather than
-// from a controller, so no present or future endpoint can post around it.
+// The lock feature was removed (it never had a button in the app), so nothing reads or writes
+// this table any more. The class stays only so the EF model still matches the database until
+// Phase 4B drops the table.
+// PHASE4B-DROP: LedgerPeriods table - treasury lock feature removed.
 public class LedgerPeriod
 {
     [Key]

@@ -161,8 +161,10 @@ public sealed class UserMergeService
         yield return Column(_db.HnmRecurringBoards, x => x.CreatedByAppUserId);
         yield return Column(_db.Announcements, x => x.CreatedByAppUserId);
         yield return Column(_db.Items, x => x.CreatedByAppUserId);
+        // PHASE4B-DROP: stays while the RevenueEntries table exists, so a merge leaves no old id behind.
         yield return Column(_db.RevenueEntries, x => x.CreatedByAppUserId);
         yield return Column(_db.Rules, x => x.CreatedByAppUserId);
+        // PHASE4B-DROP: stays while the LedgerPeriods table exists, so a merge leaves no old id behind.
         yield return Column(_db.LedgerPeriods, x => x.LockedByAppUserId);
         yield return Column(_db.LedgerPeriods, x => x.UnlockedByAppUserId);
         // PHASE4B-DROP: stays while the ChartBossProgresses table exists, so a merge leaves no old id behind.

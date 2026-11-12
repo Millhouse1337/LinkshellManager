@@ -135,9 +135,10 @@ var tables = new[]
     "Rules",
     "Announcements",
     "Items",
-    "RevenueEntries",
+    "RevenueEntries", // PHASE4B-DROP: remove once the table is dropped (TRUNCATE fails on a missing table).
     // Treasury: halves before entries (FK), and categories last since entries point at them.
-    "JournalEntryLines", "JournalEntries", "LedgerAccounts", "LedgerPeriods",
+    "JournalEntryLines", "JournalEntries", "LedgerAccounts",
+    "LedgerPeriods", // PHASE4B-DROP: remove once the table is dropped (TRUNCATE fails on a missing table).
     "LinkshellRoles",
     "AddonApiTokens", "AddonPairingCodes",
     "EventAttendanceWindows", "AppUserEventWindows",
@@ -261,6 +262,7 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         // --- DKP ledger + economy ---
         ("DkpLedgerEntries", "DELETE FROM \"DkpLedgerEntries\" WHERE \"LinkshellId\" = @ls"),
         ("Items", "DELETE FROM \"Items\" WHERE \"LinkshellId\" = @ls"),
+        // PHASE4B-DROP: remove with the RevenueEntries table.
         ("RevenueEntries", "DELETE FROM \"RevenueEntries\" WHERE \"LinkshellId\" = @ls"),
 
         // --- Gil treasury ---
@@ -269,6 +271,7 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("JournalEntryLines", "DELETE FROM \"JournalEntryLines\" WHERE \"LinkshellId\" = @ls"),
         ("JournalEntries", "DELETE FROM \"JournalEntries\" WHERE \"LinkshellId\" = @ls"),
         ("LedgerAccounts", "DELETE FROM \"LedgerAccounts\" WHERE \"LinkshellId\" = @ls"),
+        // PHASE4B-DROP: remove with the LedgerPeriods table.
         ("LedgerPeriods", "DELETE FROM \"LedgerPeriods\" WHERE \"LinkshellId\" = @ls"),
 
         // --- Addon tokens (user chose to revoke/delete) ---
@@ -379,6 +382,7 @@ static async Task<int> ShowTreasuryAsync(NpgsqlConnection c, string[] args)
         ("  of those, drafts", "SELECT COUNT(*) FROM \"JournalEntries\" WHERE \"LinkshellId\" = @ls AND \"Status\" <> 'Confirmed'"),
         ("Halves", "SELECT COUNT(*) FROM \"JournalEntryLines\" WHERE \"LinkshellId\" = @ls"),
         ("Categories", "SELECT COUNT(*) FROM \"LedgerAccounts\" WHERE \"LinkshellId\" = @ls"),
+        // PHASE4B-DROP: remove these two counts with the LedgerPeriods and RevenueEntries tables.
         ("Lock rows", "SELECT COUNT(*) FROM \"LedgerPeriods\" WHERE \"LinkshellId\" = @ls"),
         ("Legacy revenue rows", "SELECT COUNT(*) FROM \"RevenueEntries\" WHERE \"LinkshellId\" = @ls"),
         ("Items marked sold", "SELECT COUNT(*) FROM \"Items\" WHERE \"LinkshellId\" = @ls AND \"IsSold\" = true"),
@@ -464,7 +468,9 @@ static async Task<int> ScrubTreasuryAsync(NpgsqlConnection c, string[] args)
         // Self-referencing (a reversal points at what it reversed), so break the link before the rows.
         ("JournalEntries (unlink reversals)", "UPDATE \"JournalEntries\" SET \"ReversesJournalEntryId\" = NULL WHERE \"LinkshellId\" = @ls"),
         ("JournalEntries", "DELETE FROM \"JournalEntries\" WHERE \"LinkshellId\" = @ls"),
+        // PHASE4B-DROP: remove with the LedgerPeriods table.
         ("LedgerPeriods", "DELETE FROM \"LedgerPeriods\" WHERE \"LinkshellId\" = @ls"),
+        // PHASE4B-DROP: remove with the RevenueEntries table (and the RevenueEntryId part of the next line).
         ("RevenueEntries (legacy)", "DELETE FROM \"RevenueEntries\" WHERE \"LinkshellId\" = @ls"),
         ("Items (un-mark sold)", "UPDATE \"Items\" SET \"IsSold\" = false, \"SoldPrice\" = NULL, \"RevenueEntryId\" = NULL WHERE \"LinkshellId\" = @ls AND (\"IsSold\" = true OR \"RevenueEntryId\" IS NOT NULL)"),
     };

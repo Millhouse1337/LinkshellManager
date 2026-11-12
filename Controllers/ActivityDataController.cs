@@ -48,7 +48,6 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly TreasuryJournalWriter _treasuryJournal;
     private readonly TreasurySettlementService _treasurySettlements;
     private readonly LedgerAccountProvisioner _ledgerAccounts;
-    private readonly LedgerPeriodGuard _ledgerPeriods;
     private readonly ItemSaleRecorder _itemSales;
     private readonly ChartBoardService _chartBoards;
     private readonly ChartWishlistService _chartWishlist;
@@ -84,7 +83,6 @@ public sealed partial class ActivityDataController : ControllerBase
         TreasuryJournalWriter treasuryJournal,
         TreasurySettlementService treasurySettlements,
         LedgerAccountProvisioner ledgerAccounts,
-        LedgerPeriodGuard ledgerPeriods,
         ItemSaleRecorder itemSales,
         ChartBoardService chartBoards,
         ChartWishlistService chartWishlist,
@@ -120,7 +118,6 @@ public sealed partial class ActivityDataController : ControllerBase
         _treasuryJournal = treasuryJournal;
         _treasurySettlements = treasurySettlements;
         _ledgerAccounts = ledgerAccounts;
-        _ledgerPeriods = ledgerPeriods;
         _itemSales = itemSales;
         _chartBoards = chartBoards;
         _chartWishlist = chartWishlist;

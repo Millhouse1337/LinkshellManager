@@ -117,8 +117,6 @@ public sealed class ItemSaleRecorder
         item.SoldAt = null;
         item.SoldByCharacterName = null;
         item.JournalEntryId = null;
-        // Cleared for the old binary's benefit too, for the one release both columns are live.
-        item.RevenueEntryId = null;
         item.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(cancellationToken);

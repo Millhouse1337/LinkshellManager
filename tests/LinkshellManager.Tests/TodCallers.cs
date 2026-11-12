@@ -100,7 +100,7 @@ internal static class TodCallers
         return new ActivityDataController(
             db, null!, null!, null!, null!, userManager, null!, null!, timeZones, null!, null!, null!,
             NullLogger<ActivityDataController>.Instance, null!, null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
             new MonsterTimingResolver(db), null!, null!,
             TestPermissions.For(db))
         {

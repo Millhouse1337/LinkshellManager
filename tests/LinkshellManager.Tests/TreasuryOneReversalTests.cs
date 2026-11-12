@@ -22,7 +22,7 @@ public class TreasuryOneReversalTests
             .Options);
 
     private static TreasuryJournalWriter NewWriter(ApplicationDbContext db) =>
-        new(db, new LedgerAccountProvisioner(db), new LedgerPeriodGuard(db));
+        new(db, new LedgerAccountProvisioner(db));
 
     private static async Task<ApplicationDbContext> SeededAsync()
     {

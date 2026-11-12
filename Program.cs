@@ -279,7 +279,6 @@ builder.Services.AddScoped<DkpLedgerWriter>();
 // cached total to drift. Five call sites used to compute this independently and four of them
 // disagreed; one of those numbers gates whether a gil auction may be created.
 builder.Services.AddScoped<LedgerAccountProvisioner>();
-builder.Services.AddScoped<LedgerPeriodGuard>();
 builder.Services.AddScoped<TreasuryBalanceService>();
 builder.Services.AddScoped<TreasuryJournalWriter>();
 // Paying members off the balance sheet's "who we owe" list.

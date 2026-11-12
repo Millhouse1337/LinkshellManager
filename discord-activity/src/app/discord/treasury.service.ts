@@ -199,19 +199,6 @@ export class TreasuryService {
     }
   }
 
-
-  async setLock(linkshellId: number, lockedThrough: string | null, reason?: string | null): Promise<void> {
-    await this.write(
-      () =>
-        this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/treasury/lock`, {
-          lockedThrough,
-          reason: reason ?? null
-        }),
-      lockedThrough ? 'Older entries locked.' : 'Entries unlocked.',
-      'Changing the lock failed.'
-    );
-  }
-
   // Every write shares the same shape: flag busy, clear the banners, act, reload, report. Reloading
   // rather than patching in place keeps the summary figures honest — they are derived server-side, so
   // guessing at them here is how the old panel ended up showing three different totals.

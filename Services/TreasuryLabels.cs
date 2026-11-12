@@ -169,8 +169,6 @@ public static class TreasuryLabels
     public const string CollectConfirm =
         "Record these as paid? This adds the gil to gil on hand, so only do it once the gil has "
         + "actually arrived.";
-    public const string LockAction = "Lock older entries";
-    public const string UnlockAction = "Unlock";
     public const string ShowDetails = "Show the bookkeeping details";
     // A split writes one line per member on the same category, so this panel is a who-got-what list
     // rather than two halves. Say so, or nobody thinks to open it.
@@ -194,7 +192,6 @@ public static class TreasuryLabels
         "This adds an opposite entry that cancels this one out. The original stays in the list.";
     public const string DiscardConfirm = "Discard this draft? Nothing has been recorded yet.";
     public const string BasisNote = "Recorded when gil actually moves · amounts in gil";
-    public const string LockHelp = "Locks every entry dated on or before this date.";
 
     // The five kinds of category, in the officer's words. Returns the consts above rather than
     // its own literals, so the balance sheet's section headings and a line's class label are

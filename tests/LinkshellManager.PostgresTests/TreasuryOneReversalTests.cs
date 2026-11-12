@@ -29,7 +29,7 @@ public class TreasuryOneReversalTests : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     private static TreasuryJournalWriter NewWriter(ApplicationDbContext db) =>
-        new(db, new LedgerAccountProvisioner(db), new LedgerPeriodGuard(db));
+        new(db, new LedgerAccountProvisioner(db));
 
     private static TreasuryEntryRequest Sale(long amount) =>
         new(TreasuryTransactionKinds.SoldAnItem, amount, new DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc));

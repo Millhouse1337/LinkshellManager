@@ -59,7 +59,7 @@ public class PostedCardCaptureEditTests
             db, null!, null!, null!, null!, userManager, null!, null!, null!, null!, null!, null!,
             NullLogger<ActivityDataController>.Instance, null!, null!, new MemberActivityService(db), null!,
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
             TestPermissions.For(db))
         {
             ControllerContext = new ControllerContext { HttpContext = http },

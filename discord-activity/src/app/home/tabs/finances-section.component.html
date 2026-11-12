@@ -43,14 +43,9 @@
 
               <!-- Only the FAILURE is worth a chip. "Adds up" was the answer on every healthy board,
                    which is a lot of green to say nothing; a sheet that does not balance still says so. -->
-              @if (!totals.balances || totals.lockedThroughUtc) {
+              @if (!totals.balances) {
                 <div class="fin-bal-status">
-                  @if (!totals.balances) {
-                    <span class="tag warning">Does not add up</span>
-                  }
-                  @if (totals.lockedThroughUtc) {
-                    <span class="tag default">Locked through {{ activity.formatDate(totals.lockedThroughUtc) }}</span>
-                  }
+                  <span class="tag warning">Does not add up</span>
                 </div>
               }
             </div>

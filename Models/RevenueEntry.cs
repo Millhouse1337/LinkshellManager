@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LinkshellManagerDiscordApp.Models
 {
+    // PHASE4B-DROP: RevenueEntries table - the old gil list, converted to JournalEntries; nothing reads or writes it.
     public class RevenueEntry
     {
         [Key]

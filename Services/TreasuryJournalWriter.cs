@@ -78,8 +78,8 @@ public sealed class AlreadyReversedTreasuryEntryException : Exception
 // THE single place gil moves.
 //
 // Before this, six call sites each hand-rolled the same few lines: pick an EntryType string, decide a
-// sign, and add a RevenueEntry. That is fine right up until a seventh thing has to happen on every
-// write — like keeping both halves balanced, or honouring a lock — at which point six copies are six
+// sign, and add a row to the old revenue table. That is fine right up until a seventh thing has to
+// happen on every write — like keeping both halves balanced — at which point six copies are six
 // chances to drift. Two of them had already drifted into a different vocabulary.
 //
 // Everything here upholds two invariants, both asserted in DEBUG by ApplicationDbContext:
@@ -92,7 +92,6 @@ public sealed class TreasuryJournalWriter
 {
     private readonly ApplicationDbContext _db;
     private readonly LedgerAccountProvisioner _accounts;
-    private readonly LedgerPeriodGuard _periods;
 
     // Next Sequence per linkshell, lazily seeded from MAX(Sequence) + 1. Same scheme as
     // DkpLedgerWriter: it is what stops two entries written in one request from colliding on the
@@ -103,11 +102,10 @@ public sealed class TreasuryJournalWriter
     private readonly Dictionary<int, Dictionary<int, LedgerAccount>> _accountsByLinkshell = new();
 
     public TreasuryJournalWriter(
-        ApplicationDbContext db, LedgerAccountProvisioner accounts, LedgerPeriodGuard periods)
+        ApplicationDbContext db, LedgerAccountProvisioner accounts)
     {
         _db = db;
         _accounts = accounts;
-        _periods = periods;
 
         // Same as DkpLedgerWriter: a re-run after a lost race (Data/ConcurrencyRetry.cs) starts
         // with an empty tracker, so the cached categories are no longer tracked entities and the
@@ -186,22 +184,24 @@ public sealed class TreasuryJournalWriter
     }
 
     // Put a draft on the books.
-    public async Task<JournalEntry> ConfirmAsync(
+    //
+    // Still returns a Task so the callers keep awaiting it unchanged. It used to read the treasury
+    // lock here; that feature is gone, so there is nothing left to wait for.
+    public Task<JournalEntry> ConfirmAsync(
         JournalEntry draft, TreasuryActor actor, CancellationToken cancellationToken)
     {
         if (JournalEntryStatuses.IsConfirmed(draft.Status))
         {
             // Idempotent: confirming twice is a double-tap, not an error.
-            return draft;
+            return Task.FromResult(draft);
         }
         RequireDraft(draft);
-        await _periods.EnsureOpenAsync(draft.LinkshellId, draft.TransactionDate, cancellationToken);
 
         draft.Status = JournalEntryStatuses.Confirmed;
         draft.ConfirmedAt = DateTime.UtcNow;
         draft.ConfirmedByAppUserId = actor.AppUserId;
         draft.ConfirmedByCharacterName = actor.CharacterName;
-        return draft;
+        return Task.FromResult(draft);
     }
 
     // Draft and confirm in one step. What every machine-recorded entry uses — an item sale and a gil
@@ -410,7 +410,6 @@ public sealed class TreasuryJournalWriter
         {
             throw new AlreadyReversedTreasuryEntryException(original.EntryNumber);
         }
-        await _periods.EnsureOpenAsync(original.LinkshellId, original.TransactionDate, cancellationToken);
 
         var lines = original.Lines.Count > 0
             ? original.Lines.ToList()

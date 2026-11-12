@@ -104,6 +104,8 @@ public class JournalEntry
     // Which RevenueEntries row this was built from and exactly what strings it carried. A
     // one-way conversion of real gil has to stay auditable row by row, and the pre-conversion
     // classification is itself part of the record.
+    // PHASE4B-DROP: JournalEntries.LegacyRevenueEntryId (+ IX_JournalEntries_LegacyRevenueEntryId) -
+    // points at the RevenueEntries table, which 4B drops. LegacyEntryType/LegacyCategory below stay.
     public int? LegacyRevenueEntryId { get; set; }
 
     [MaxLength(32)]

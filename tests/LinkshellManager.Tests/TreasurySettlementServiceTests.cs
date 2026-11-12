@@ -37,7 +37,7 @@ public class TreasurySettlementServiceTests
     }
 
     private static TreasuryJournalWriter NewWriter(ApplicationDbContext db) =>
-        new(db, new LedgerAccountProvisioner(db), new LedgerPeriodGuard(db));
+        new(db, new LedgerAccountProvisioner(db));
 
     private static TreasurySettlementService NewSettlements(ApplicationDbContext db) =>
         new(new TreasuryBalanceService(db), NewWriter(db));
@@ -303,26 +303,6 @@ public class TreasurySettlementServiceTests
         Assert.Single(result.Skipped);
         Assert.Equal(5_000_000, await new TreasuryBalanceService(db)
             .GetCashOnHandAsync(Linkshell, CancellationToken.None));
-    }
-
-    // A locked period has to stop a batch the same way it stops a typed entry — and stop the WHOLE
-    // batch, because the caller's single save is what makes a payout run atomic.
-    [Fact]
-    public async Task Settle_IsRefusedInsideALockedPeriod()
-    {
-        using var db = await OwingThreeMembersAsync(5_000_000, 900_000);
-        db.LedgerPeriods.Add(new LedgerPeriod
-        {
-            LinkshellId = Linkshell,
-            LockedThroughUtc = DateTime.UtcNow.AddDays(1),
-            LockedAt = DateTime.UtcNow,
-        });
-        await db.SaveChangesAsync();
-
-        var settlements = NewSettlements(db);
-        await Assert.ThrowsAsync<TreasuryPeriodLockedException>(() => settlements.SettleAsync(
-            Linkshell, new[] { new TreasurySettlementPick("Ashira", 300_000) },
-            Officer, CancellationToken.None));
     }
 
     // ---- the mirror panel: recording gil that has ARRIVED ------------------------------------

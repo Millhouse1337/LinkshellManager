@@ -132,21 +132,14 @@ public sealed partial class ActivityDataController
             return shared.Failure;
         }
 
-        try
+        var entry = await _treasuryJournal.DraftAsync(
+            linkshellId, BuildTreasuryRequest(request, shared.Recipients), gate.Actor, cancellationToken);
+        if (request.Confirm)
         {
-            var entry = await _treasuryJournal.DraftAsync(
-                linkshellId, BuildTreasuryRequest(request, shared.Recipients), gate.Actor, cancellationToken);
-            if (request.Confirm)
-            {
-                await _treasuryJournal.ConfirmAsync(entry, gate.Actor, cancellationToken);
-            }
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            return Ok(new { success = true, id = entry.Id, entryNumber = entry.EntryNumber });
+            await _treasuryJournal.ConfirmAsync(entry, gate.Actor, cancellationToken);
         }
-        catch (TreasuryPeriodLockedException locked)
-        {
-            return LockedResponse(locked);
-        }
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true, id = entry.Id, entryNumber = entry.EntryNumber });
     }
 
     [HttpPost("treasury/entries/{entryId:int}/confirm")]
@@ -158,16 +151,9 @@ public sealed partial class ActivityDataController
             return found.Failure;
         }
 
-        try
-        {
-            await _treasuryJournal.ConfirmAsync(found.Entry!, found.Actor, cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            return Ok(new { success = true });
-        }
-        catch (TreasuryPeriodLockedException locked)
-        {
-            return LockedResponse(locked);
-        }
+        await _treasuryJournal.ConfirmAsync(found.Entry!, found.Actor, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new { success = true });
     }
 
     // Drafts only. A confirmed entry is fixed or reversed, never edited.
@@ -218,10 +204,6 @@ public sealed partial class ActivityDataController
         catch (ConfirmedTreasuryEntryException already)
         {
             return Conflict(new { error = already.Message });
-        }
-        catch (TreasuryPeriodLockedException locked)
-        {
-            return LockedResponse(locked);
         }
     }
 
@@ -293,10 +275,6 @@ public sealed partial class ActivityDataController
         catch (AlreadyReversedTreasuryEntryException alreadyReversed)
         {
             return Conflict(new { error = alreadyReversed.Message });
-        }
-        catch (TreasuryPeriodLockedException locked)
-        {
-            return LockedResponse(locked);
         }
     }
 
@@ -381,10 +359,6 @@ public sealed partial class ActivityDataController
         {
             return Conflict(new { error = alreadyReversed.Message });
         }
-        catch (TreasuryPeriodLockedException locked)
-        {
-            return LockedResponse(locked);
-        }
     }
 
     // Pay the ticked members straight off the balance sheet's "who we owe" list, in full.
@@ -445,80 +419,20 @@ public sealed partial class ActivityDataController
             });
         }
 
-        try
-        {
-            var result = await _treasurySettlements.SettleAsync(
-                linkshellId, picks, direction,
-                new TreasuryHolder(request.HolderAppUserId, request.HolderCharacterName.Trim()),
-                gate.Actor, cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            // 200 even when every tick was skipped: nothing failed, the books had simply moved on.
-            // The panel reads Success to decide whether that is a confirmation or a warning.
-            return Ok(new ActivitySettleOwedResultDto(
-                !result.DidNothing,
-                result.Message,
-                result.TotalPaid,
-                result.Settled.Select(line => line.CharacterName).ToList(),
-                result.Skipped.Select(skip => skip.CharacterName).ToList()));
-        }
-        catch (TreasuryPeriodLockedException locked)
-        {
-            return LockedResponse(locked);
-        }
-    }
-
-    // Locking is a leader's call, deliberately a tier above recording: it is the one action here that
-    // stops other officers from fixing their own mistakes.
-    [HttpPost("linkshells/{linkshellId:int}/treasury/lock")]
-    public async Task<IActionResult> LockTreasuryAsync(
-        int linkshellId,
-        [FromBody] ActivityLockTreasuryRequest request,
-        CancellationToken cancellationToken)
-    {
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null)
-        {
-            return Unauthorized(new { error = "Sign in to manage the treasury." });
-        }
-        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (membership is null ||
-            !(LinkshellRanks.IsLeader(membership.Rank) ||
-              await _adminOverride.IsActiveForAsync(appUser, cancellationToken)))
-        {
-            return Forbid();
-        }
-
-        var period = await _dbContext.LedgerPeriods
-            .FirstOrDefaultAsync(item => item.LinkshellId == linkshellId, cancellationToken);
-        if (period is null)
-        {
-            period = new LedgerPeriod { LinkshellId = linkshellId };
-            _dbContext.LedgerPeriods.Add(period);
-        }
-
-        var now = DateTime.UtcNow;
-        var characterName = membership.CharacterName ?? appUser.CharacterName;
-        if (request.LockedThrough.HasValue)
-        {
-            period.LockedThroughUtc = request.LockedThrough.Value.ToUniversalTime();
-            period.LockedAt = now;
-            period.LockedByAppUserId = appUser.Id;
-            period.LockedByCharacterName = characterName;
-        }
-        else
-        {
-            // Unlocking keeps the row rather than deleting it, so the fact it was ever locked survives.
-            period.LockedThroughUtc = null;
-            period.UnlockedAt = now;
-            period.UnlockedByAppUserId = appUser.Id;
-            period.UnlockedByCharacterName = characterName;
-            period.UnlockReason = request.Reason;
-        }
-
+        var result = await _treasurySettlements.SettleAsync(
+            linkshellId, picks, direction,
+            new TreasuryHolder(request.HolderAppUserId, request.HolderCharacterName.Trim()),
+            gate.Actor, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        _ledgerPeriods.Forget(linkshellId);
-        return Ok(new { success = true, lockedThroughUtc = period.LockedThroughUtc });
+
+        // 200 even when every tick was skipped: nothing failed, the books had simply moved on.
+        // The panel reads Success to decide whether that is a confirmation or a warning.
+        return Ok(new ActivitySettleOwedResultDto(
+            !result.DidNothing,
+            result.Message,
+            result.TotalPaid,
+            result.Settled.Select(line => line.CharacterName).ToList(),
+            result.Skipped.Select(skip => skip.CharacterName).ToList()));
     }
 
     // ---- helpers ----------------------------------------------------------------
@@ -538,7 +452,6 @@ public sealed partial class ActivityDataController
             snapshot.NetWorth,
             snapshot.StartingBalance,
             snapshot.Balances,
-            await _ledgerPeriods.GetLockedThroughAsync(linkshellId, cancellationToken),
             TreasuryLabels.BasisNote,
             // The word for "nobody was named" is decided here, once.
             // CanSettle comes off the obligation rather than the displayed name for the same reason:
@@ -861,13 +774,6 @@ public sealed partial class ActivityDataController
         }
         return null;
     }
-
-    private IActionResult LockedResponse(TreasuryPeriodLockedException locked) =>
-        Conflict(new
-        {
-            error = "Entries on or before the locked date cannot be changed. A leader can unlock them.",
-            lockedThroughUtc = locked.LockedThroughUtc,
-        });
 
     private async Task<(IActionResult? Failure, TreasuryActor Actor)> AuthorizeTreasuryWriteAsync(
         int linkshellId, CancellationToken cancellationToken)
