@@ -272,4 +272,34 @@ public class PastEventDkpFromLedgerTests
         Assert.Equal(17, Balance(db, "alice"));
         Assert.Equal(14, Balance(db, "bob"));
     }
+
+    // Typed decimals added in floating point leave leftovers (10.3 - 2.1 = 8.200000000000001), and
+    // the Past Events table prints the number as it comes. The shown figure and total are clean.
+    [Fact]
+    public async Task ATypedDecimalAudit_ShowsACleanFigure()
+    {
+        await using var db = NewDb();
+        await SeedTimedEventAsync(db);
+        db.EventHistories.Add(new EventHistory
+        {
+            Id = CampHistoryId, LinkshellId = Ls, EventName = "Fafnir", EventType = "HNM", EndTime = DateTime.UtcNow,
+            AppUserEventHistories = { new AppUserEventHistory { Id = 80, AppUserId = "alice", CharacterName = "Alice", EventDkp = 10.3 } },
+        });
+        await db.SaveChangesAsync();
+        var alice = db.AppUserLinkshells.Single(m => m.AppUserId == "alice");
+        var writer = NewWriter(db);
+        var paid = await writer.AppendAsync(alice, "SnapshotEarned", 10.3, DateTime.UtcNow, DkpPoolRef.Derived("HNM"),
+            new DkpEntryContext(CharacterName: "Alice", EventType: "HNM", EventHistoryId: CampHistoryId), CancellationToken.None);
+        await db.SaveChangesAsync();
+        await writer.AppendAsync(alice, "AuditAdjustment", -2.1, DateTime.UtcNow, DkpPoolRef.Derived("HNM"),
+            new DkpEntryContext(CharacterName: "Alice", EventHistoryId: CampHistoryId, AuditRelatedLedgerEntryId: paid!.Id),
+            CancellationToken.None);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var (byName, total) = await ListShowsAsync(db, CampHistoryId);
+        Assert.Equal(8.2, byName["Alice"]);
+        Assert.Equal(8.2, total);
+        Assert.Equal(8.2, (await DetailShowsAsync(db, CampHistoryId))["Alice"]);
+    }
 }

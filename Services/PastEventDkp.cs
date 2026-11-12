@@ -80,11 +80,18 @@ public sealed class PastEventDkpTotals
         if (!string.IsNullOrWhiteSpace(attendee.AppUserId)
             && _totals.TryGetValue((attendee.EventHistoryId, attendee.AppUserId), out var total))
         {
-            return total;
+            return WithoutFloatNoise(total);
         }
         return attendee.EventDkp;
     }
 
     // The event's total: what its attendees are shown, added up.
-    public double TotalFor(IEnumerable<AppUserEventHistory> attendees) => attendees.Sum(a => For(a) ?? 0);
+    public double TotalFor(IEnumerable<AppUserEventHistory> attendees) =>
+        WithoutFloatNoise(attendees.Sum(a => For(a) ?? 0));
+
+    // Adding typed amounts in floating point leaves tiny leftovers: a 10.3 payout audited by -2.1
+    // adds up to 8.200000000000001, and the Past Events table prints the number as it is. Six
+    // places is far finer than any DKP amount, so this only clears the leftover, never a real figure.
+    // Display only: the ledger rows and balances are untouched.
+    private static double WithoutFloatNoise(double value) => Math.Round(value, 6);
 }
