@@ -454,6 +454,12 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 if (history.Id > 0)
                 {
+                    if (_auctionClosesHeld is not null)
+                    {
+                        // Not committed yet (see HoldAuctionCloseAnnouncements).
+                        _auctionClosesHeld.Add(history.Id);
+                        continue;
+                    }
                     _auctionChannelQueue.Enqueue(
                         new AuctionChannelJob(AuctionChannelJobKind.Close, history.Id));
                 }
@@ -508,6 +514,33 @@ namespace LinkshellManagerDiscordApp.Data
         }
 
         internal void DropHeldBidAnnouncements() => _bidAnnouncementsHeld = null;
+
+        // Auction histories saved but not committed yet; null when nothing is being held.
+        private List<int>? _auctionClosesHeld;
+
+        // Closing an auction saves inside its own transaction (it holds the items' row locks until
+        // COMMIT). The "auction closed" Discord post reads the new history row back by id, and
+        // queued right after the save -- before the commit -- the in-process worker could look for
+        // it first, find nothing, and skip the post for good. While held, those posts wait for
+        // ReleaseHeldAuctionCloseAnnouncements after COMMIT; DropHeldAuctionCloseAnnouncements
+        // forgets them when the close did not commit.
+        internal void HoldAuctionCloseAnnouncements() => _auctionClosesHeld ??= new List<int>();
+
+        internal void ReleaseHeldAuctionCloseAnnouncements()
+        {
+            var held = _auctionClosesHeld;
+            _auctionClosesHeld = null;
+            if (held is null || _auctionChannelQueue is null)
+            {
+                return;
+            }
+            foreach (var historyId in held)
+            {
+                _auctionChannelQueue.Enqueue(new AuctionChannelJob(AuctionChannelJobKind.Close, historyId));
+            }
+        }
+
+        internal void DropHeldAuctionCloseAnnouncements() => _auctionClosesHeld = null;
 
         private async Task EnqueueAuctionBidUpdatesAsync(HashSet<int> bidItemIds)
         {

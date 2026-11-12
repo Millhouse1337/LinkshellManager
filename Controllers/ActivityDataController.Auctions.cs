@@ -592,7 +592,78 @@ public sealed partial class ActivityDataController
         CancellationToken cancellationToken) =>
         ConcurrencyRetry.RunAsync(_dbContext, () => CloseAuctionOnceAsync(auctionId, cancellationToken));
 
+    // How many times the close starts over when a late bid changed an item's winner while it was
+    // taking its locks (see LockAuctionForCloseAsync). One more go normally settles it: the auction
+    // has ended, so no further bid can land.
+    private const int CloseAuctionLockAttempts = 3;
+
     private async Task<IActionResult> CloseAuctionOnceAsync(int auctionId, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var result = await CloseAuctionAttemptAsync(
+                auctionId, lastAttempt: attempt >= CloseAuctionLockAttempts, cancellationToken);
+            if (result is not null)
+            {
+                return result;
+            }
+            // The attempt's transaction rolled back (locks released, nothing saved). Start over
+            // from what is in the database now.
+            _dbContext.ChangeTracker.Clear();
+        }
+    }
+
+    // Takes the row locks the close needs, in the SAME ORDER a bid takes them (AuctionBidService):
+    // first the memberships of everyone currently winning an item, then the auction's items, both
+    // by Id. Returns false when the winners changed while the locks were being taken -- a bid that
+    // had its locks before the auction ended committed in between -- and the caller starts over.
+    //
+    // Why the items: the close reads each item's high bid and charges that bidder. A bid that took
+    // the item's lock just before the end could still commit after the close read it; the close
+    // then charged the old high bidder and deleted the new winning bid. Holding the items, the
+    // close waits for that bid to commit and reads the high bid it saved. A bid that arrives after
+    // this waits for the close and then finds the item gone.
+    //
+    // Why the memberships first: the close's save writes the winners' balances. A bid holds its
+    // bidder's membership while it waits for an item, so if the close took the items first, a
+    // winner bidding again at that moment would hold the membership the close needs while waiting
+    // on an item the close holds -- each waiting on the other until Postgres killed one of them.
+    private async Task<bool> LockAuctionForCloseAsync(
+        int auctionId, int linkshellId, CancellationToken cancellationToken)
+    {
+        var winners = await AuctionWinnerIdsAsync(auctionId, cancellationToken);
+        if (winners.Count > 0)
+        {
+            await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                 SELECT 1 FROM "AppUserLinkshells"
+                 WHERE "LinkshellId" = {linkshellId} AND "AppUserId" = ANY({winners.ToArray()})
+                 ORDER BY "Id" FOR UPDATE
+                 """,
+                cancellationToken);
+        }
+        await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""SELECT 1 FROM "AuctionItems" WHERE "AuctionId" = {auctionId} ORDER BY "Id" FOR UPDATE""",
+            cancellationToken);
+
+        // Read again now that no bid can change them: every winner must be one we locked.
+        var lockedWinners = await AuctionWinnerIdsAsync(auctionId, cancellationToken);
+        return lockedWinners.All(winners.Contains);
+    }
+
+    private async Task<HashSet<string>> AuctionWinnerIdsAsync(int auctionId, CancellationToken cancellationToken)
+        => (await _dbContext.AuctionItems
+                .AsNoTracking()
+                .Where(item => item.AuctionId == auctionId && item.CurrentHighestBidderAppUserId != null)
+                .Select(item => item.CurrentHighestBidderAppUserId!)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+
+    // One go at the close. Null = the winners moved while locking; nothing was saved and the
+    // caller starts over (or, on the last attempt, a 409 asks the officer to press Close again).
+    private async Task<IActionResult?> CloseAuctionAttemptAsync(
+        int auctionId, bool lastAttempt, CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -620,6 +691,35 @@ public sealed partial class ActivityDataController
         if (!HasAuctionEnded(auction, DateTime.UtcNow))
         {
             return BadRequest(new { error = "End the auction before closing it." });
+        }
+
+        // The locks are held until the close commits (LockAuctionForCloseAsync). In-memory tests
+        // have neither transactions nor row locks, and close one auction at a time.
+        var relational = _dbContext.Database.IsRelational() && _dbContext.Database.CurrentTransaction is null;
+        await using var transaction = relational
+            ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (transaction is not null)
+        {
+            if (!await LockAuctionForCloseAsync(auction.Id, auction.LinkshellId, cancellationToken))
+            {
+                // Disposing the transaction without a commit rolls it back and frees the locks.
+                return lastAttempt ? Conflict(new { error = ConcurrencyRetry.ConflictMessage }) : null;
+            }
+
+            // Read the auction again under the locks: the copy above may hold a high bid that a
+            // bid committed over while the close waited. Gone now = another officer's close (or a
+            // delete) got there first.
+            _dbContext.ChangeTracker.Clear();
+            auction = await _dbContext.Auctions
+                .Include(item => item.Linkshell)
+                .Include(item => item.AuctionItems)
+                    .ThenInclude(item => item.Bids)
+                .FirstOrDefaultAsync(item => item.Id == auctionId, cancellationToken);
+            if (auction is null)
+            {
+                return NotFound(new { error = "Auction not found." });
+            }
         }
 
         // Inventory now auto-draws down on close for any inventory-sourced item
@@ -752,8 +852,32 @@ public sealed partial class ActivityDataController
         _dbContext.Bids.RemoveRange(auction.AuctionItems.SelectMany(item => item.Bids));
         _dbContext.AuctionItems.RemoveRange(auction.AuctionItems);
         _dbContext.Auctions.Remove(auction);
-        await _dbContext.SaveChangesAsync(cancellationToken);
 
+        if (transaction is null)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Ok(new { success = true });
+        }
+
+        // The "auction closed" Discord post waits for the COMMIT, so the worker can read the new
+        // history row (ApplicationDbContext.HoldAuctionCloseAnnouncements).
+        _dbContext.HoldAuctionCloseAnnouncements();
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            _dbContext.ReleaseHeldAuctionCloseAnnouncements();
+        }
+        finally
+        {
+            _dbContext.DropHeldAuctionCloseAnnouncements();
+        }
+
+        // The save already told open clients to refresh, but before the commit, so a quick one
+        // could re-read the auction while it still looked open. Tell them again now that it is gone.
+        var changeNotifier = HttpContext?.RequestServices.GetService<LinkshellChangeNotifier>();
+        changeNotifier?.Notify(auction.LinkshellId, LinkshellChangeNotifier.Areas.Auctions);
+        changeNotifier?.Notify(auction.LinkshellId, LinkshellChangeNotifier.Areas.Dkp);
         return Ok(new { success = true });
     }
 
