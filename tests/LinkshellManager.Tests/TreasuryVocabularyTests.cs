@@ -62,23 +62,21 @@ public class TreasuryVocabularyTests
         var accounts = LedgerAccountDefaults.BuildDefaultAccounts(7).ToList();
 
         Assert.All(accounts, account => Assert.Equal(7, account.LinkshellId));
-        Assert.All(accounts, account => Assert.True(account.IsSystem));
         Assert.All(accounts, account => Assert.NotNull(account.AccountClass));
         Assert.All(accounts, account => Assert.False(string.IsNullOrWhiteSpace(account.Name)));
         // Names are what the UI shows, so a duplicate would be genuinely ambiguous on screen.
         Assert.Equal(accounts.Count, accounts.Select(a => a.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.Equal(accounts.Count, accounts.Select(a => a.AccountNumber).Distinct().Count());
-        Assert.Equal(accounts.Count, accounts.Select(a => a.SortOrder).Distinct().Count());
+        // The provisioner lists categories by AccountNumber, so the seed is kept in that order too.
+        Assert.Equal(accounts.Select(a => a.AccountNumber).Order(), accounts.Select(a => a.AccountNumber));
 
         // Exactly one gil-on-hand category: its balance IS the treasury balance, so two would make
         // "how much gil do we have" ambiguous again. A partial unique index enforces the same thing.
         var cash = Assert.Single(accounts, account => account.IsCash);
         Assert.Equal(TreasuryAccounts.GilOnHand, cash.AccountNumber);
 
-        // "What we're worth" is worked out, never recorded against — that is what removes the whole
-        // "did the close run, and did it run twice?" class of failure.
-        var notPostable = Assert.Single(accounts, account => !account.IsPostable);
-        Assert.Equal(TreasuryAccounts.NetWorth, notPostable.AccountNumber);
+        // "What we're worth" is worked out, never recorded against — EveryTransactionKindNamesRealPostableCategories
+        // checks that no kind names it.
     }
 
     // Every number in TreasuryAccounts has to be seeded, or a call site can name a category that does
@@ -107,9 +105,10 @@ public class TreasuryVocabularyTests
         {
             Assert.True(byNumber.ContainsKey(kind.AddTo), $"{kind.Key} adds to a category that is not seeded");
             Assert.True(byNumber.ContainsKey(kind.TakeFrom), $"{kind.Key} takes from a category that is not seeded");
-            // Nothing may post to "what we're worth" — it is derived.
-            Assert.True(byNumber[kind.AddTo].IsPostable, $"{kind.Key} posts to a derived category");
-            Assert.True(byNumber[kind.TakeFrom].IsPostable, $"{kind.Key} posts to a derived category");
+            // Nothing may post to "what we're worth" — it is derived. That is what removes the whole
+            // "did the close run, and did it run twice?" class of failure.
+            Assert.NotEqual(TreasuryAccounts.NetWorth, kind.AddTo);
+            Assert.NotEqual(TreasuryAccounts.NetWorth, kind.TakeFrom);
             Assert.NotEqual(kind.AddTo, kind.TakeFrom);
             Assert.False(string.IsNullOrWhiteSpace(kind.Label));
             Assert.False(string.IsNullOrWhiteSpace(kind.Help));
@@ -540,11 +539,8 @@ public class TreasuryVocabularyTests
                 (Source: $"{kind.Key}.PreviewTemplate", Text: kind.PreviewTemplate),
                 (Source: $"{kind.Key}.CounterpartyLabel", Text: kind.CounterpartyLabel),
             }))
-            .Concat(LedgerAccountDefaults.BuildDefaultAccounts(1).SelectMany(account => new[]
-            {
-                (Source: $"category {account.AccountNumber}.Name", Text: account.Name),
-                (Source: $"category {account.AccountNumber}.Description", Text: account.Description ?? string.Empty),
-            }))
+            .Concat(LedgerAccountDefaults.BuildDefaultAccounts(1).Select(account =>
+                (Source: $"category {account.AccountNumber}.Name", Text: account.Name)))
             .ToList();
 
         // Sanity: this only proves anything if it is actually looking at the strings.

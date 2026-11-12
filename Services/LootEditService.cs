@@ -133,8 +133,6 @@ public sealed class LootEditService
         string? eventName;
         string? eventType;
         string? eventLocation;
-        DateTime? eventStartTime;
-        DateTime? eventEndTime;
 
         if (detail.EventHistory is not null)
         {
@@ -143,8 +141,6 @@ public sealed class LootEditService
             eventName = detail.EventHistory.EventName;
             eventType = detail.EventHistory.EventType;
             eventLocation = detail.EventHistory.EventLocation;
-            eventStartTime = detail.EventHistory.StartTime;
-            eventEndTime = detail.EventHistory.EndTime;
         }
         else if (detail.Event is not null)
         {
@@ -153,8 +149,6 @@ public sealed class LootEditService
             eventName = detail.Event.EventName;
             eventType = detail.Event.EventType;
             eventLocation = detail.Event.EventLocation;
-            eventStartTime = detail.Event.StartTime;
-            eventEndTime = detail.Event.EndTime;
         }
         else if (detail.LinkshellId is int ownerLinkshellId)
         {
@@ -169,8 +163,6 @@ public sealed class LootEditService
             eventName = null;
             eventType = null;
             eventLocation = null;
-            eventStartTime = null;
-            eventEndTime = null;
         }
         else
         {
@@ -254,8 +246,6 @@ public sealed class LootEditService
             eventName: eventName,
             eventType: eventType,
             eventLocation: eventLocation,
-            eventStartTime: eventStartTime,
-            eventEndTime: eventEndTime,
             itemName: newItemName,
             reason: request.Reason,
             occurredAtUtc: occurredAtUtc,
@@ -318,8 +308,6 @@ public sealed class LootEditService
         string? eventName;
         string? eventType;
         string? eventLocation;
-        DateTime? eventStartTime;
-        DateTime? eventEndTime;
 
         if (detail.EventHistory is not null)
         {
@@ -328,8 +316,6 @@ public sealed class LootEditService
             eventName = detail.EventHistory.EventName;
             eventType = detail.EventHistory.EventType;
             eventLocation = detail.EventHistory.EventLocation;
-            eventStartTime = detail.EventHistory.StartTime;
-            eventEndTime = detail.EventHistory.EndTime;
         }
         else if (detail.Event is not null)
         {
@@ -338,8 +324,6 @@ public sealed class LootEditService
             eventName = detail.Event.EventName;
             eventType = detail.Event.EventType;
             eventLocation = detail.Event.EventLocation;
-            eventStartTime = detail.Event.StartTime;
-            eventEndTime = detail.Event.EndTime;
         }
         else if (detail.LinkshellId is int ownerLinkshellId)
         {
@@ -353,8 +337,6 @@ public sealed class LootEditService
             eventName = null;
             eventType = null;
             eventLocation = null;
-            eventStartTime = null;
-            eventEndTime = null;
         }
         else
         {
@@ -388,8 +370,6 @@ public sealed class LootEditService
                 eventName: eventName,
                 eventType: eventType,
                 eventLocation: eventLocation,
-                eventStartTime: eventStartTime,
-                eventEndTime: eventEndTime,
                 itemName: itemName,
                 reason: reason,
                 occurredAtUtc: occurredAtUtc,
@@ -437,8 +417,6 @@ public sealed class LootEditService
         string? eventName,
         string? eventType,
         string? eventLocation,
-        DateTime? eventStartTime,
-        DateTime? eventEndTime,
         string itemName,
         string reason,
         DateTime occurredAtUtc,
@@ -501,8 +479,6 @@ public sealed class LootEditService
                 EventName: eventName,
                 EventType: eventType,
                 EventLocation: eventLocation,
-                EventStartTime: eventStartTime,
-                EventEndTime: eventEndTime,
                 ItemName: itemName,
                 Details: $"Loot deleted: record removed and DKP refunded. Reason: {Truncate(reason, 800)}",
                 EditReason: Truncate(reason, 512),
@@ -573,8 +549,6 @@ public sealed class LootEditService
         string? eventName,
         string? eventType,
         string? eventLocation,
-        DateTime? eventStartTime,
-        DateTime? eventEndTime,
         string itemName,
         string reason,
         DateTime occurredAtUtc,
@@ -611,8 +585,6 @@ public sealed class LootEditService
             EventName: eventName,
             EventType: eventType,
             EventLocation: eventLocation,
-            EventStartTime: eventStartTime,
-            EventEndTime: eventEndTime,
             ItemName: itemName,
             EditReason: Truncate(reason, 512),
             SourceEventLootDetailId: sourceEventLootDetailId,

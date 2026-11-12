@@ -62,8 +62,10 @@ public class Tod
     [DataType(DataType.DateTime)]
     public DateTime? TimeStamp { get; set; }
 
+    // PHASE4B-DROP: Tods.TotalClaims - a 0/1 copy of Claim that nothing reads; claim stats count Claim.
     public int? TotalClaims { get; set; }
 
+    // PHASE4B-DROP: Tods.TotalTods - always 1 (one row per kill), nothing reads it.
     public int? TotalTods { get; set; }
 
     [MaxLength(512)]

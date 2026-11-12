@@ -51,6 +51,8 @@ public class JournalEntryLine
 
     public int LineNumber { get; set; }   // 1-based
 
+    // PHASE4B-DROP: JournalEntryLines.LineMemo - always null, nothing reads it; the old category
+    // text survives in JournalEntries.LegacyCategory.
     [MaxLength(256)]
     public string? LineMemo { get; set; }
 

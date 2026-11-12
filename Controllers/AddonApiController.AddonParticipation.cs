@@ -346,7 +346,8 @@ public sealed partial class AddonApiController
             }
         }
 
-        var verifiedBy = (token.Label ?? "lsm-addon") + " (lsm)";
+        // The same text every addon post has always stored (tokens never had a label to put first).
+        const string verifiedBy = "lsm-addon (lsm)";
 
         // What one window is actually worth, for the "+N DKP" line the addon prints after a post.
         // Null when the number would be fiction, and the addon suppresses the whole block.
@@ -1483,7 +1484,6 @@ public sealed partial class AddonApiController
         }
 
         tod.Claim = request.Claim;
-        tod.TotalClaims = request.Claim == true ? 1 : 0;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new { todId = tod.Id, claim = tod.Claim });

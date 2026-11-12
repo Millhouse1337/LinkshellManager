@@ -302,7 +302,7 @@ public class AddonTokenMembershipTests
         await db.SaveChangesAsync();
 
         var service = NewService(db);
-        var code = await service.CreatePairingCodeAsync(LinkshellId, Me, label: null);
+        var code = await service.CreatePairingCodeAsync(LinkshellId, Me);
         var results = await service.RedeemPairingCodeForAllAsync(code);
 
         Assert.Equal(

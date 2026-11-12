@@ -12,9 +12,7 @@
 //           events, loot, auctions/AH, ToDs, window events, attendance
 //           snapshots, claim shields, party setups, pending submissions, DKP
 //           ledger, inventory items, revenue, and addon tokens. Also zeroes
-//           each member's LinkshellDkp + cached JobLevels and disconnects the
-//           Google Sheet integration (clears spreadsheet id / OAuth token /
-//           email / connected-at and sets SheetSyncEnabled = false).
+//           each member's LinkshellDkp + cached JobLevels.
 //
 // Excluded from the main web-app build (see LinkshellManagerDiscordApp.csproj);
 // run by hand against a local or test database only. NEVER point it at production.
@@ -283,8 +281,8 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         // --- Reset member DKP balances + cached job levels ---
         ("AppUserLinkshells (reset DKP/jobs)", "UPDATE \"AppUserLinkshells\" SET \"LinkshellDkp\" = 0, \"JobLevels\" = NULL WHERE \"LinkshellId\" = @ls"),
 
-        // --- Disconnect Google Sheet integration ---
-        ("Linkshells (disconnect Google Sheet)", "UPDATE \"Linkshells\" SET \"GoogleSpreadsheetId\" = NULL, \"GoogleSheetTabName\" = NULL, \"GoogleOAuthRefreshTokenEnc\" = NULL, \"GoogleOAuthUserEmail\" = NULL, \"GoogleOAuthConnectedAt\" = NULL, \"SheetSyncEnabled\" = false WHERE \"Id\" = @ls"),
+        // (The old "disconnect Google Sheet" UPDATE is gone: Google Sheets was removed, and it named
+        // two columns dropped in June, so it failed and rolled the whole scrub back.)
     };
 
     await using var tx = await c.BeginTransactionAsync();

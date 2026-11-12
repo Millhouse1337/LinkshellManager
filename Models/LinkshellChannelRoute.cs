@@ -30,7 +30,8 @@ public class LinkshellChannelRoute
     [MaxLength(20)]
     public string ChannelId { get; set; } = string.Empty;
 
-    // Cached channel name (e.g. "henm-events") for display in the config UI.
+    // Cached channel name (e.g. "henm-events"). The route editor shows it on a saved route when
+    // Discord can't list the server's channels right now, instead of a bare channel id.
     [MaxLength(128)]
     public string? ChannelName { get; set; }
 

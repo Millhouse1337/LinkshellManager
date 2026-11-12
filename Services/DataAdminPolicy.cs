@@ -118,6 +118,7 @@ public sealed class DataAdminPolicy
                 Flags = DataAdminPolicyFlags.NoDelete,
                 Options = Opts(
                     (nameof(Linkshell.HnmAttendanceMode), HnmAttendanceModes.All)),
+                // PHASE4B-DROP: goes with Linkshells.GoogleOAuthRefreshTokenEnc; hides the old token until then.
                 ProtectedColumns = Names(nameof(Linkshell.GoogleOAuthRefreshTokenEnc)),
             },
             [typeof(AppUser)] = new()
@@ -189,6 +190,7 @@ public sealed class DataAdminPolicy
             {
                 Flags = DataAdminPolicyFlags.NoCreate,
                 ProtectedColumns = Names(nameof(AddonApiToken.TokenHash)),
+                // PHASE4B-DROP: take AddonApiTokens.Label out of both lists when the column is dropped.
                 EditableAllowList = new[] { nameof(AddonApiToken.Label), nameof(AddonApiToken.RevokedAt) },
                 LabelColumns = new[] { nameof(AddonApiToken.Label), nameof(AddonApiToken.TokenPrefix) },
             },
@@ -253,6 +255,9 @@ public sealed class DataAdminPolicy
             },
 
             // ---- denormalised LinkshellName copies ------------------------------------------------
+            // PHASE4B-DROP: these three go with Rules/Announcements/Items.LinkshellName. The app no
+            // longer writes or reads those copies; Data Admin keeps them in step only until the drop
+            // (DataAdminEditorTests use Rule to test SyncedCopies and need a new home then).
             [typeof(Rule)] = new() { SyncedCopies = linkshellNameCopy },
             [typeof(Announcement)] = new() { SyncedCopies = linkshellNameCopy },
             [typeof(Item)] = new() { SyncedCopies = linkshellNameCopy },

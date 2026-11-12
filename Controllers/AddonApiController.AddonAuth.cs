@@ -53,19 +53,18 @@ public sealed partial class AddonApiController
         // The redeemed linkshell stays in the top-level fields so an addon
         // built before `pairings` existed keeps working unchanged; newer
         // addons read the array and store all of them.
+        // (`label` is no longer sent: tokens never had one. The addon treats a missing label as ''.)
         var primary = results[0];
         return Ok(new
         {
             token = primary.RawToken,
             linkshellId = primary.Linkshell.Id,
             linkshellName = primary.Linkshell.LinkshellName,
-            label = primary.Record.Label,
             pairings = results.Select(r => new
             {
                 token = r.RawToken,
                 linkshellId = r.Linkshell.Id,
                 linkshellName = r.Linkshell.LinkshellName,
-                label = r.Record.Label
             }).ToList()
         });
     }
@@ -111,7 +110,6 @@ public sealed partial class AddonApiController
             issuedToCharacterName,
             issuedToAppUserId = token.IssuedToAppUserId,
             canModerateLiveEvent = canModerate,
-            label = token.Label,
             // Manual Check In HNM attendance mode (Standard | Wd). In Manual Check In mode, HNM attendance
             // is Discord-button-driven (self-serve x-in), so the addon can hide its
             // leader-driven "post window" UI. Normalized; fail-closed to Standard.

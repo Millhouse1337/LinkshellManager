@@ -219,42 +219,45 @@ public class Linkshell
     // verified). Setting a server never implies locking.
     public bool LockToDiscordGuild { get; set; } = false;
 
-    // DEPRECATED — the Google Sheets integration was removed 2026-06-24 (replaced by the
-    // app-native DKP sheet; see DkpSheetService). These columns are retained ONLY to keep
-    // migrations additive (a destructive drop is a separate, riskier change). Nothing reads
-    // or writes them anymore — the only references are EF migration snapshots and the
-    // DbWipe utility's NULL-out SQL.
+    // The Google Sheets integration was removed 2026-06-24 (replaced by the app-native DKP sheet;
+    // see DkpSheetService). Nothing reads or writes these seven columns; Data Admin only hides
+    // the old refresh token. All seven go in Phase 4B.
+    // PHASE4B-DROP: Linkshells.GoogleSpreadsheetId - Google Sheets leftover.
     [MaxLength(128)]
     public string? GoogleSpreadsheetId { get; set; }
 
+    // PHASE4B-DROP: Linkshells.GoogleSheetAppCreated - Google Sheets leftover.
     public bool GoogleSheetAppCreated { get; set; }
 
+    // PHASE4B-DROP: Linkshells.DkpTemplateTabName - Google Sheets leftover.
     [MaxLength(64)]
     public string? DkpTemplateTabName { get; set; }
 
+    // PHASE4B-DROP: Linkshells.SheetTemplateSyncEnabled - Google Sheets leftover.
     public bool SheetTemplateSyncEnabled { get; set; } = false;
 
+    // PHASE4B-DROP: Linkshells.GoogleOAuthRefreshTokenEnc - Google Sheets leftover (null it in prod first).
     public string? GoogleOAuthRefreshTokenEnc { get; set; }
 
+    // PHASE4B-DROP: Linkshells.GoogleOAuthUserEmail - Google Sheets leftover (null it in prod first).
     [MaxLength(256)]
     public string? GoogleOAuthUserEmail { get; set; }
 
+    // PHASE4B-DROP: Linkshells.GoogleOAuthConnectedAt - Google Sheets leftover.
     public DateTime? GoogleOAuthConnectedAt { get; set; }
 
-    // Discord channel the live DKP sheet auto-posts to (full member table embed + the
-    // .xlsx attached), refreshed in place whenever DKP changes. Null = don't post to
-    // Discord (the feature is off). The name is cached for the picker. The bot posts
-    // here directly, so it must be a channel the bot can post in (any channel a route
-    // already uses).
+    // The old single DKP-sheet channel. Replaced by a channel route with PostDkpSheet ticked
+    // (LinkshellChannelRoute.DkpSheetMessageId holds the live post now); nothing reads or writes
+    // these three any more.
+    // PHASE4B-DROP: Linkshells.DkpExportDiscordChannelId - replaced by channel routes.
     [MaxLength(20)]
     public string? DkpExportDiscordChannelId { get; set; }
 
+    // PHASE4B-DROP: Linkshells.DkpExportDiscordChannelName - replaced by channel routes.
     [MaxLength(128)]
     public string? DkpExportDiscordChannelName { get; set; }
 
-    // The Discord message id of the live, edit-in-place DKP sheet post. Null until the
-    // first post; set from the create response and used for subsequent edits. Cleared
-    // when the message is gone (so it reposts) or the channel changes.
+    // PHASE4B-DROP: Linkshells.DkpSheetDiscordMessageId - replaced by LinkshellChannelRoute.DkpSheetMessageId.
     [MaxLength(32)]
     public string? DkpSheetDiscordMessageId { get; set; }
 

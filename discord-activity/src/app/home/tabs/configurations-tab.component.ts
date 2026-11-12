@@ -25,6 +25,9 @@ interface RouteDraft {
   id: number | null;
   name: string;
   channelId: string;
+  // The channel's name as the server last saved it. Only a fallback label, for when Discord
+  // can't list the channels right now; never sent back on save.
+  savedChannelName: string | null;
   postEvents: boolean;
   postLoot: boolean;
   postAuctions: boolean;
@@ -740,6 +743,7 @@ export class ConfigurationsTabComponent {
       id: route.id,
       name: route.name ?? '',
       channelId: route.channelId,
+      savedChannelName: route.channelName ?? null,
       postEvents: route.postEvents,
       postLoot: route.postLoot,
       postAuctions: route.postAuctions,
@@ -756,7 +760,7 @@ export class ConfigurationsTabComponent {
     this.channelRoutes = [
       ...this.channelRoutes,
       {
-        id: null, name: '', channelId: '',
+        id: null, name: '', channelId: '', savedChannelName: null,
         postEvents: false, postLoot: false, postAuctions: false,
         postTodBoard: false, postDkpSheet: false, eventTypeFilter: [],
         hnmMonsterFilter: [],
@@ -785,10 +789,14 @@ export class ConfigurationsTabComponent {
     return this.isRouteSaved(route) && !route.expanded;
   }
 
-  // The "#channel" label shown on a collapsed route, resolved from its channel id.
+  // The "#channel" label shown on a collapsed route, resolved from its channel id. When Discord
+  // can't list the channels, the name saved with the route stands in (a collapsed route is never
+  // dirty, so its channel id is still the saved one), then the raw id.
   protected routeChannelLabel(route: RouteDraft): string {
     const ch = this.discordChannelsAvailable().find(c => String(c.id) === String(route.channelId));
-    return ch ? `#${ch.name}` : (route.channelId || 'No channel selected');
+    if (ch) return `#${ch.name}`;
+    if (route.savedChannelName) return `#${route.savedChannelName}`;
+    return route.channelId || 'No channel selected';
   }
 
   protected isEventTypeOn(route: RouteDraft, type: string): boolean {

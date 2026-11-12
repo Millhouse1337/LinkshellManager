@@ -41,7 +41,9 @@ public sealed partial class ActivityDataController
         }
 
         var canManage = await CanAsync(membership, role => role.CanManageTreasury, cancellationToken);
-        var categories = await _ledgerAccounts.EnsureAccountsAsync(linkshellId, cancellationToken);
+        // Still called for its side effect: a linkshell's first treasury visit seeds its categories.
+        // The list itself is no longer sent (the app never read it).
+        await _ledgerAccounts.EnsureAccountsAsync(linkshellId, cancellationToken);
 
         var query = _dbContext.JournalEntries
             .AsNoTracking()
@@ -88,7 +90,6 @@ public sealed partial class ActivityDataController
             total,
             pageIndex,
             TreasuryPageSize,
-            categories.Select(MapTreasuryCategory).ToList(),
             // ALL of them, not just the pickable ones. The client resolves the selected kind out of
             // this list and the whole form hangs off the result — the split picker, the member box,
             // the preview, and whether Submit does anything. Send only the pickable ones and a Fix
@@ -340,8 +341,6 @@ public sealed partial class ActivityDataController
             HolderCharacterName: request.HolderCharacterName,
             Source: found.Entry!.Source,
             SourceItemId: found.Entry.SourceItemId,
-            SourceAuctionItemId: found.Entry.SourceAuctionItemId,
-            SourceAuctionHistoryId: found.Entry.SourceAuctionHistoryId,
             Recipients: shared.Recipients.Count > 0 ? shared.Recipients : null);
 
         try
@@ -635,17 +634,6 @@ public sealed partial class ActivityDataController
             ? byCharacter
             : null;
     }
-
-    private static ActivityTreasuryCategoryDto MapTreasuryCategory(LedgerAccount account) =>
-        new(account.Id,
-            account.AccountNumber,
-            account.Name,
-            account.Description,
-            TreasuryLabels.ClassLabel(account.AccountClass),
-            account.IsCash,
-            account.IsPostable,
-            account.IsActive,
-            account.SortOrder);
 
     private static ActivityTreasuryKindDto MapTreasuryKind(TreasuryTransactionKind kind) =>
         new(kind.Key, kind.Label, kind.ReasonLabel, kind.Help, kind.Action, kind.ShowsMember, kind.RequiresMember,

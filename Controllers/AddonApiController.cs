@@ -194,10 +194,12 @@ public sealed partial class AddonApiController : ControllerBase
     private async Task<string?> ResolveTokenIssuerNameAsync(
         AddonApiToken token, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(token.IssuedToAppUserId)) return token.Label;
+        // Null when the issuer is unknown. (It used to fall back to the token's Label, which was
+        // always null: nothing ever set one.)
+        if (string.IsNullOrEmpty(token.IssuedToAppUserId)) return null;
         var membership = await _dbContext.AppUserLinkshells
             .FirstOrDefaultAsync(m => m.LinkshellId == token.LinkshellId && m.AppUserId == token.IssuedToAppUserId, cancellationToken);
-        return membership?.CharacterName ?? token.Label;
+        return membership?.CharacterName;
     }
 
     // Shared deletion path: drop the join row, so re-posting the same attendee posts cleanly.
@@ -283,9 +285,9 @@ public sealed partial class AddonApiController : ControllerBase
         string? SubJob,
         string? Zone);
 
+    // A "label" in the body (nothing sends one) is ignored like any unknown JSON field.
     public sealed record CreatePairingCodeRequest(
-        int LinkshellId,
-        string? Label);
+        int LinkshellId);
 
     public sealed record AddonPostTodRequest(
         string MonsterName,

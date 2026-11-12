@@ -232,8 +232,6 @@ public sealed class EventHistoryEditService
                 EventName: history.EventName,
                 EventType: history.EventType,
                 EventLocation: history.EventLocation,
-                EventStartTime: history.StartTime,
-                EventEndTime: history.EndTime,
                 Details: "DKP earned from completed event (member added afterward).",
                 EventHistoryId: history.Id),
             cancellationToken);

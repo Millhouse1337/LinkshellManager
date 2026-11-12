@@ -207,7 +207,6 @@ public class HnmCampPopServiceTests
         Time = timeUtc,
         TimeStamp = Now.AddHours(-1).AddMinutes(minutesIntoCamp),
         Cooldown = "22 Hour",
-        TotalTods = 1,
     };
 
     [Fact]

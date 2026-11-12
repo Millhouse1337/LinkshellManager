@@ -118,9 +118,13 @@ public sealed class ChannelRouteEditor
                 }
             }
 
+            // The saved name is the label the route editor falls back to when Discord can't list
+            // the channels. Keep the old name only while the channel stays the same: a new channel
+            // whose name we can't look up must not show the previous channel's name.
+            var sameChannel = route.Id != 0 && string.Equals(route.ChannelId, channelId, StringComparison.Ordinal);
             route.Name = name;
             route.ChannelId = channelId;
-            route.ChannelName = channelName ?? (route.Id != 0 ? route.ChannelName : null);
+            route.ChannelName = channelName ?? (sameChannel ? route.ChannelName : null);
             route.PostEvents = edit.PostEvents;
             route.PostLoot = edit.PostLoot;
             route.PostAuctions = edit.PostAuctions;

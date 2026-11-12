@@ -54,7 +54,6 @@ public sealed partial class ActivityDataController
         var rule = new Rule
         {
             LinkshellId = linkshellId,
-            LinkshellName = linkshell.LinkshellName,
             RuleTitle = title,
             RuleDetails = details,
             Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim(),
@@ -182,7 +181,6 @@ public sealed partial class ActivityDataController
         var announcement = new Announcement
         {
             LinkshellId = linkshellId,
-            LinkshellName = linkshell.LinkshellName,
             AnnouncementTitle = title,
             AnnouncementDetails = details,
             Category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim(),
@@ -310,7 +308,6 @@ public sealed partial class ActivityDataController
         var item = new Item
         {
             LinkshellId = linkshellId,
-            LinkshellName = linkshell.LinkshellName,
             ItemName = itemName,
             ItemType = string.IsNullOrWhiteSpace(request.ItemType) ? null : request.ItemType.Trim(),
             Quantity = request.Quantity,

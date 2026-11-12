@@ -160,16 +160,20 @@ public static class RevenueEntryConversionMap
     // The seeded categories as a VALUES list, generated from LedgerAccountDefaults so a converted
     // linkshell and a fresh one get identical wording. The migration needs this because it has to
     // resolve category ids before it can write any lines, and the lazy provisioner has not run yet.
+    //
+    // The old migration's INSERT still names Description, IsPostable and SortOrder. Nothing reads
+    // those any more (PHASE4B-DROP), so they get plain fill-in values here: no description, "not
+    // postable" only for what we're worth, and the seed order.
     public static string SeedAccountsValuesSql()
     {
         var rows = LedgerAccountDefaults.BuildDefaultAccounts(0)
-            .Select(account => "("
+            .Select((account, index) => "("
                 + $"{account.AccountNumber}, "
                 + $"{SqlLiteral(account.Name)}, "
-                + $"{(account.Description is null ? "NULL" : SqlLiteral(account.Description))}, "
+                + "NULL, "
                 + $"{(account.IsCash ? "TRUE" : "FALSE")}, "
-                + $"{(account.IsPostable ? "TRUE" : "FALSE")}, "
-                + $"{account.SortOrder}"
+                + $"{(account.AccountNumber != TreasuryAccounts.NetWorth ? "TRUE" : "FALSE")}, "
+                + $"{index}"
                 + ")");
         return string.Join(",\n                        ", rows);
     }

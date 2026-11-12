@@ -22,6 +22,7 @@ public class AddonPairingCode
     [ForeignKey(nameof(IssuedToAppUserId))]
     public AppUser? IssuedToAppUser { get; set; }
 
+    // PHASE4B-DROP: AddonPairingCodes.Label - always null (nothing sent one); no longer written or read.
     [MaxLength(128)]
     public string? Label { get; set; }
 
@@ -31,5 +32,7 @@ public class AddonPairingCode
 
     public DateTime? ConsumedAt { get; set; }
 
+    // PHASE4B-DROP: AddonPairingCodes.ConsumedTokenId - written on redeem but never read; used codes
+    // are deleted the next time a code is made anyway.
     public int? ConsumedTokenId { get; set; }
 }

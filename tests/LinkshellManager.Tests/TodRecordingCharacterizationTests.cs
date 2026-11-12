@@ -57,8 +57,6 @@ public class TodRecordingCharacterizationTests
         Assert.Equal(2, tod.DayNumber);
         Assert.Equal(4, tod.PopWindow);
         Assert.True(tod.Claim);
-        Assert.Equal(1, tod.TotalClaims);
-        Assert.Equal(1, tod.TotalTods);
         Assert.Null(tod.Killed);
     }
 
@@ -121,7 +119,6 @@ public class TodRecordingCharacterizationTests
         Assert.Equal(16, tod.AdditionalSeconds);
         Assert.Equal(2, tod.PopWindow);
         Assert.Null(tod.Claim);
-        Assert.Equal(0, tod.TotalClaims);
         Assert.False(body.GetProperty("alreadyPosted").GetBoolean());
         Assert.Equal(tod.Id, body.GetProperty("todId").GetInt32());
     }
@@ -204,7 +201,6 @@ public class TodRecordingCharacterizationTests
         Assert.Equal("48 Hour", tod.Cooldown);
         Assert.Equal("10 Min", tod.Interval);
         Assert.False(tod.Claim);
-        Assert.Equal(0, tod.TotalClaims);
         Assert.Equal("/uploads/tods/kill.png", tod.ImagePath);
         Assert.Empty(await db.PendingTodSubmissions.ToListAsync());
     }

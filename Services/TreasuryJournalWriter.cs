@@ -37,8 +37,6 @@ public sealed record TreasuryEntryRequest(
     string? HolderCharacterName = null,
     string Source = JournalEntrySources.Manual,
     int? SourceItemId = null,
-    int? SourceAuctionItemId = null,
-    int? SourceAuctionHistoryId = null,
     // Everyone sharing the amount, for a kind that names a SplitAccount. Null or empty records the
     // ordinary two halves, so every existing caller behaves exactly as it did.
     //
@@ -148,8 +146,6 @@ public sealed class TreasuryJournalWriter
             CreatedByAppUserId = actor.AppUserId,
             CreatedByCharacterName = actor.CharacterName,
             SourceItemId = request.SourceItemId,
-            SourceAuctionItemId = request.SourceAuctionItemId,
-            SourceAuctionHistoryId = request.SourceAuctionHistoryId,
         };
 
         await BuildHalvesAsync(entry, kind, request, cancellationToken);
@@ -364,7 +360,6 @@ public sealed class TreasuryJournalWriter
             Amount = amount,
             TransactionDate = entry.TransactionDate,
             LineNumber = lineNumber,
-            LineMemo = null,
             // The member is recorded against the half that concerns them, not against gil on hand:
             // "who did we pay" belongs on the gil-paid-to-members side.
             CounterpartyAppUserId = accountNumber == TreasuryAccounts.GilOnHand
@@ -440,8 +435,6 @@ public sealed class TreasuryJournalWriter
             CreatedByAppUserId = actor.AppUserId,
             CreatedByCharacterName = actor.CharacterName,
             SourceItemId = original.SourceItemId,
-            SourceAuctionItemId = original.SourceAuctionItemId,
-            SourceAuctionHistoryId = original.SourceAuctionHistoryId,
         };
 
         foreach (var line in lines)
@@ -456,7 +449,6 @@ public sealed class TreasuryJournalWriter
                 Amount = -line.Amount,
                 TransactionDate = mirror.TransactionDate,
                 LineNumber = line.LineNumber,
-                LineMemo = line.LineMemo,
                 CounterpartyAppUserId = line.CounterpartyAppUserId,
                 CounterpartyCharacterName = line.CounterpartyCharacterName,
                 // Copied, not cleared. A reversal has to take the gil back off the SAME mule it was

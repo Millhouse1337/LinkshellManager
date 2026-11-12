@@ -49,19 +49,14 @@ public sealed record DkpEntryContext(
     string? EventName = null,
     string? EventType = null,
     string? EventLocation = null,
-    DateTime? EventStartTime = null,
-    DateTime? EventEndTime = null,
     string? ItemName = null,
     string? Details = null,
     string? EditReason = null,
     EventHistory? EventHistory = null,
     int? EventHistoryId = null,
     int? SourceEventLootDetailId = null,
-    AuctionHistory? SourceAuctionHistory = null,
-    int? SourceAuctionHistoryId = null,
     int? SourceWindowEventId = null,
-    int? AuditRelatedLedgerEntryId = null,
-    int? AttInputRowNumber = null);
+    int? AuditRelatedLedgerEntryId = null);
 
 // THE single place DKP moves.
 //
@@ -176,19 +171,14 @@ public sealed class DkpLedgerWriter
             EventName = context.EventName,
             EventType = context.EventType ?? pool.DerivedFromEventType,
             EventLocation = context.EventLocation,
-            EventStartTime = context.EventStartTime,
-            EventEndTime = context.EventEndTime,
             ItemName = context.ItemName,
             Details = context.Details,
             EditReason = context.EditReason,
             EventHistory = context.EventHistory,
             EventHistoryId = context.EventHistory is null ? context.EventHistoryId : null,
             SourceEventLootDetailId = context.SourceEventLootDetailId,
-            SourceAuctionHistory = context.SourceAuctionHistory,
-            SourceAuctionHistoryId = context.SourceAuctionHistory is null ? context.SourceAuctionHistoryId : null,
             SourceWindowEventId = context.SourceWindowEventId,
             AuditRelatedLedgerEntryId = context.AuditRelatedLedgerEntryId,
-            AttInputRowNumber = context.AttInputRowNumber,
         };
 
         _db.DkpLedgerEntries.Add(entry);

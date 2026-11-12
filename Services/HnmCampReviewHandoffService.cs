@@ -728,8 +728,6 @@ public sealed class HnmCampReviewHandoffService
                         EventName: ev.EventName,
                         EventType: ev.EventType,
                         EventLocation: ev.EventLocation,
-                        EventStartTime: ev.CommencementStartTime ?? ev.StartTime,
-                        EventEndTime: nowUtc,
                         ItemName: detail.ItemName,
                         Details: details,
                         EventHistory: archive,

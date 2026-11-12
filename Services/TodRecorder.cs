@@ -161,8 +161,6 @@ public sealed class TodRecorder
                     RepopTime = repopUtc,
                     Interval = string.IsNullOrWhiteSpace(input.Interval) ? null : input.Interval.Trim(),
                     TimeStamp = DateTime.UtcNow,
-                    TotalTods = 1,
-                    TotalClaims = input.Claim == true ? 1 : 0,
                     ImagePath = string.IsNullOrWhiteSpace(input.ImagePath) ? null : input.ImagePath.Trim(),
                 };
                 _db.Tods.Add(tod);

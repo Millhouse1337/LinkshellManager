@@ -196,7 +196,6 @@ public class TodSameKillTests
 
         var tod = await db.Tods.SingleAsync();
         Assert.True(tod.Claim);
-        Assert.Equal(1, tod.TotalClaims);
         Assert.True(second.GetProperty("claim").GetBoolean());
     }
 

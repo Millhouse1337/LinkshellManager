@@ -263,8 +263,6 @@ public static class EventEndService
                         EventName: eventEntity.EventName,
                         EventType: eventEntity.EventType,
                         EventLocation: eventEntity.EventLocation,
-                        EventStartTime: eventEntity.StartTime,
-                        EventEndTime: endTimeUtc,
                         Details: credit.LedgerDetails,
                         EventHistory: history),
                     CancellationToken.None);
@@ -335,8 +333,6 @@ public static class EventEndService
                     EventName: eventEntity.EventName,
                     EventType: eventEntity.EventType,
                     EventLocation: eventEntity.EventLocation,
-                    EventStartTime: eventEntity.StartTime,
-                    EventEndTime: endTimeUtc,
                     ItemName: lootDetail.ItemName,
                     Details: lootDetailsText,
                     EventHistory: history,

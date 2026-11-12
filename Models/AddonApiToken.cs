@@ -25,6 +25,8 @@ public class AddonApiToken
     [MaxLength(16)]
     public string TokenPrefix { get; set; } = string.Empty;
 
+    // PHASE4B-DROP: AddonApiTokens.Label - the app never sent a device name, so it was always null;
+    // no longer written or read (the token list names the pairing by its linkshells and prefix).
     [MaxLength(128)]
     public string? Label { get; set; }
 

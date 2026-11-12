@@ -225,7 +225,6 @@ public sealed class HnmCampPopService
         tod.RepopTime = repopUtc;
         tod.Interval = string.IsNullOrWhiteSpace(request.Interval) ? null : request.Interval.Trim();
         tod.TimeStamp = nowUtc;
-        tod.TotalClaims = claimed ? 1 : 0;
         if (!string.IsNullOrWhiteSpace(request.ImagePath))
         {
             tod.ImagePath = request.ImagePath.Trim();

@@ -51,7 +51,6 @@ public sealed class AddonApiAuthService
     public async Task<string> CreatePairingCodeAsync(
         int linkshellId,
         string appUserId,
-        string? label,
         CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
@@ -79,7 +78,6 @@ public sealed class AddonApiAuthService
                 Code = code,
                 LinkshellId = linkshellId,
                 IssuedToAppUserId = appUserId,
-                Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
                 CreatedAt = now,
                 ExpiresAt = now.AddMinutes(PairingCodeTtlMinutes)
             });
@@ -118,18 +116,14 @@ public sealed class AddonApiAuthService
             IssuedToAppUserId = pairing.IssuedToAppUserId,
             TokenHash = HashToken(rawToken),
             TokenPrefix = rawToken[..Math.Min(rawToken.Length, 12)],
-            Label = pairing.Label,
             CreatedAt = now
         };
 
-        await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        // One save adds the token and marks the code used together. (It used to be two saves in a
+        // transaction only so the code could store the new token's id, which nothing read.)
         _dbContext.AddonApiTokens.Add(record);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
         pairing.ConsumedAt = now;
-        pairing.ConsumedTokenId = record.Id;
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await tx.CommitAsync(cancellationToken);
 
         return new RedeemResult(rawToken, record, pairing.Linkshell);
     }
@@ -209,7 +203,6 @@ public sealed class AddonApiAuthService
                 IssuedToAppUserId = appUserId,
                 TokenHash = HashToken(rawToken),
                 TokenPrefix = rawToken[..Math.Min(rawToken.Length, 12)],
-                Label = primary.Record.Label,
                 PairingBatchId = batchId,
                 CreatedAt = now
             };

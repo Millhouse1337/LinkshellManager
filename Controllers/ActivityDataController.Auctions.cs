@@ -784,13 +784,8 @@ public sealed partial class ActivityDataController
                 new DkpEntryContext(
                     CharacterName: winnerMembership.CharacterName,
                     EventName: auction.AuctionTitle,
-                    EventStartTime: auction.StartedAt ?? auction.StartTime,
-                    EventEndTime: auction.EndTime ?? closedAt,
                     ItemName: item.ItemName,
-                    Details: $"Auction spend from {auction.AuctionTitle ?? "auction"}.",
-                    // Link to the new history row so ManualPoints batches this close into one sheet
-                    // column.
-                    SourceAuctionHistory: history),
+                    Details: $"Auction spend from {auction.AuctionTitle ?? "auction"}."),
                 cancellationToken,
                 // Affordability was enforced at bid time (AuctionBidService). Re-blocking at close
                 // would strand a whole auction over one winner whose balance moved since.
@@ -814,8 +809,7 @@ public sealed partial class ActivityDataController
                         Memo: $"Gil auction: {item.ItemName} won by {winnerMembership.CharacterName} for {winningBid} DKP.",
                         CounterpartyAppUserId: winnerMembership.AppUserId,
                         CounterpartyCharacterName: winnerMembership.CharacterName,
-                        Source: JournalEntrySources.GilAuction,
-                        SourceAuctionItemId: item.Id),
+                        Source: JournalEntrySources.GilAuction),
                     new TreasuryActor(appUser.Id, appUser.CharacterName),
                     cancellationToken);
             }

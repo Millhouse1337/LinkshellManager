@@ -429,17 +429,6 @@ public sealed record ActivityTreasuryEntryDto(
     // answer "where did that 8M go" without opening the bookkeeping details.
     string? HolderCharacterName = null);
 
-public sealed record ActivityTreasuryCategoryDto(
-    int Id,
-    int AccountNumber,
-    string Name,
-    string? Description,
-    string ClassLabel,
-    bool IsCash,
-    bool IsPostable,
-    bool IsActive,
-    int SortOrder);
-
 // One of the four things that can happen to gil. The picker asks for this first.
 public sealed record ActivityTreasuryActionDto(string Key, string Label);
 
@@ -559,7 +548,6 @@ public sealed record ActivityTreasuryPageDto(
     int TotalEntries,
     int Page,
     int PageSize,
-    IReadOnlyList<ActivityTreasuryCategoryDto> Categories,
     IReadOnlyList<ActivityTreasuryKindDto> Kinds,
     // The picker's top level, in display order. Server-supplied so the action names live in
     // TreasuryLabels with every other word this feature shows — the group headings they replace
@@ -1156,8 +1144,6 @@ public sealed record ActivityDkpLedgerEntryDto(
     string? EventName,
     string? EventType,
     string? EventLocation,
-    DateTime? EventStartTime,
-    DateTime? EventEndTime,
     string? ItemName,
     string? Details,
     // Surfaces the officer's reason for "LootEditRefund" / "LootEditSpent"

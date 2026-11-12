@@ -132,8 +132,6 @@ public sealed partial class ActivityDataController
                     entry.EventName,
                     entry.EventType,
                     entry.EventLocation,
-                    entry.EventStartTime,
-                    entry.EventEndTime,
                     entry.ItemName,
                     entry.Details,
                     entry.EditReason);
@@ -275,16 +273,13 @@ public sealed partial class ActivityDataController
                 EventName: original.EventName,
                 EventType: original.EventType,
                 EventLocation: original.EventLocation,
-                EventStartTime: original.EventStartTime,
-                EventEndTime: original.EventEndTime,
                 ItemName: original.ItemName,
                 Details: $"Audit adjustment by {officerName}: {reason} (entry #{original.Id} was {currentAuditedAmount:+0.##;-0.##;0}, corrected to {request.Amount:+0.##;-0.##;0}).",
                 // Filed under the same past event as the row it corrects, so deleting that event
                 // reverses the correction too instead of leaving the member short (or long) by it.
                 EventHistoryId: original.EventHistoryId,
                 SourceWindowEventId: original.SourceWindowEventId,
-                AuditRelatedLedgerEntryId: original.Id,
-                AttInputRowNumber: original.AttInputRowNumber);
+                AuditRelatedLedgerEntryId: original.Id);
         }
         else if (string.Equals(mode, "Add", StringComparison.OrdinalIgnoreCase))
         {
@@ -348,8 +343,6 @@ public sealed partial class ActivityDataController
                 EventName: string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
                 EventType: poolEventType,
                 EventLocation: primaryZone,
-                EventStartTime: windowEvent.FirstCapturedAtUtc,
-                EventEndTime: windowEvent.LastCapturedAtUtc,
                 Details: $"Added to snapshot entry by {officerName}: {reason}",
                 // The camp's Past Event, like the payout rows Post wrote, so deleting that Past
                 // Event takes this credit back with the rest of the camp.

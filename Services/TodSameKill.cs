@@ -63,7 +63,6 @@ public static class TodSameKill
         if (tod.Claim is null && claim is not null)
         {
             tod.Claim = claim;
-            tod.TotalClaims = claim == true ? 1 : 0;
             changed = true;
         }
         var window = EarliestWindow(tod.PopWindow, popWindow);

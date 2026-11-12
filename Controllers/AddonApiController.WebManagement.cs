@@ -96,7 +96,7 @@ public sealed partial class AddonApiController
         }
 
         var code = await _auth.CreatePairingCodeAsync(
-            request.LinkshellId, appUser.Id, request.Label, cancellationToken);
+            request.LinkshellId, appUser.Id, cancellationToken);
 
         return Ok(new
         {
@@ -198,7 +198,6 @@ public sealed partial class AddonApiController
                     id = representative.Id,
                     linkshellId = representative.LinkshellId,
                     prefix = representative.TokenPrefix,
-                    label = representative.Label,
                     createdAt = group.Min(t => t.CreatedAt),
                     lastUsedAt = group.Max(t => t.LastUsedAt),
                     issuedToAppUserId = representative.IssuedToAppUserId,

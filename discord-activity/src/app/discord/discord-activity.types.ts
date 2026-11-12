@@ -603,18 +603,6 @@ export interface ActivityTreasuryEntry {
   holderCharacterName?: string | null;
 }
 
-export interface ActivityTreasuryCategory {
-  id: number;
-  accountNumber: number;
-  name: string;
-  description?: string | null;
-  classLabel: string;
-  isCash: boolean;
-  isPostable: boolean;
-  isActive: boolean;
-  sortOrder: number;
-}
-
 /** One option in the "What happened?" picker. */
 /** One of the things that can happen to gil. The picker asks for this first, then for a reason. */
 export interface ActivityTreasuryAction {
@@ -735,7 +723,6 @@ export interface ActivityTreasuryPage {
   totalEntries: number;
   page: number;
   pageSize: number;
-  categories: ActivityTreasuryCategory[];
   kinds: ActivityTreasuryKind[];
   /** The picker's top level, in display order. Server-supplied — the group headings these replaced
       were hardcoded separately in the old website and here. */
@@ -1545,7 +1532,6 @@ export interface ActivityAddonToken {
   // several, so this is not necessarily the linkshell currently selected.
   linkshellId: number;
   prefix: string;
-  label?: string | null;
   createdAt: string;
   lastUsedAt?: string | null;
   issuedToAppUserId?: string | null;
@@ -1583,8 +1569,6 @@ export interface ActivityDkpLedgerEntry {
   eventName?: string | null;
   eventType?: string | null;
   eventLocation?: string | null;
-  eventStartTime?: string | null;
-  eventEndTime?: string | null;
   itemName?: string | null;
   details?: string | null;
   // Populated on "LootEditRefund" / "LootEditSpent" entries — the officer's

@@ -4,9 +4,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Materializes reviewed snapshot/window-event DKP into the local ledger after
-// the rows have been posted to AttInput. The sheet remains the external sink,
-// but DKP history/audit needs local rows to correct a prior snapshot entry.
+// Writes reviewed snapshot/window-event DKP into the ledger when a card is
+// posted, so DKP history and audits can see (and correct) each payout row.
 public sealed class WindowEventDkpLedgerService
 {
     private readonly ApplicationDbContext _db;
@@ -293,8 +292,7 @@ public sealed class WindowEventDkpLedgerService
 
     public async Task<int> EnsurePostedWindowEventLedgerEntriesAsync(
         int windowEventId,
-        CancellationToken cancellationToken,
-        int? firstAttInputMemberRowNumber = null)
+        CancellationToken cancellationToken)
     {
         var windowEvent = await _db.WindowEvents
             .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
@@ -365,10 +363,6 @@ public sealed class WindowEventDkpLedgerService
         var written = 0;
         foreach (var account in toPay)
         {
-            int? attInputRowNumber = firstAttInputMemberRowNumber.HasValue
-                ? firstAttInputMemberRowNumber.Value + account.CombinedIndex
-                : null;
-
             // ONE row per account, however many characters it was captured under. Two rows was a
             // flat card paying a member twice for being there on their main and their alt.
             await _dkpLedger.AppendAsync(
@@ -382,13 +376,10 @@ public sealed class WindowEventDkpLedgerService
                     EventName: string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
                     EventType: poolEventType,
                     EventLocation: campHistory is not null ? windowEvent.CampEventLocation : account.Entry.Zone,
-                    EventStartTime: campHistory is not null ? windowEvent.CampStartedAtUtc : windowEvent.FirstCapturedAtUtc,
-                    EventEndTime: campHistory is not null ? windowEvent.CampEndedAtUtc : windowEvent.LastCapturedAtUtc,
                     Details: campHistory is not null
                         ? $"HNM camp DKP, reviewed and posted as Window Event #{windowEvent.Id}."
                         : $"DKP earned from posted snapshot Window Event #{windowEvent.Id}.",
                     SourceWindowEventId: windowEvent.Id,
-                    AttInputRowNumber: attInputRowNumber,
                     EventHistory: campHistory),
                 cancellationToken);
             written++;
@@ -696,8 +687,7 @@ public sealed class WindowEventDkpLedgerService
         AppUserLinkshell Membership,
         double Amount,
         AttendanceSnapshot Snapshot,
-        AttendanceSnapshotEntry Entry,
-        int CombinedIndex);
+        AttendanceSnapshotEntry Entry);
 
     // Everything Post, Update and the archive need to agree on who is paid what.
     private sealed class CardPayout
@@ -798,7 +788,7 @@ public sealed class WindowEventDkpLedgerService
         };
 
         var byAccount = combined
-            .Select((item, index) => (item.Snapshot, item.Entry, Index: index, Membership: payout.Resolve(item.Entry)))
+            .Select(item => (item.Snapshot, item.Entry, Membership: payout.Resolve(item.Entry)))
             .Where(item => item.Membership is not null)
             .GroupBy(item => item.Membership!.AppUserId!, StringComparer.OrdinalIgnoreCase);
         foreach (var group in byAccount)
@@ -817,7 +807,7 @@ public sealed class WindowEventDkpLedgerService
                 .First();
 
             var account = new AccountPayout(
-                membership, amount, representative.Snapshot, representative.Entry, representative.Index);
+                membership, amount, representative.Snapshot, representative.Entry);
             payout.Accounts.Add(account);
             payout.ByAppUserId[group.Key] = account;
         }

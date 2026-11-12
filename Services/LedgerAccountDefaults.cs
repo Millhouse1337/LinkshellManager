@@ -14,57 +14,43 @@ namespace LinkshellManagerDiscordApp.Services;
 // Mirrors LinkshellRoleDefaults + DkpPoolDefaults.
 public static class LedgerAccountDefaults
 {
-    // (number, name, description, sortOrder). Class and normal side are derived from the number.
-    private static readonly (int Number, string Name, string? Description)[] Seed =
+    // (number, name), in AccountNumber order. Class and normal side are derived from the number.
+    // The comment after each one says what it holds; no screen shows a description, so none is stored.
+    private static readonly (int Number, string Name)[] Seed =
     {
-        (TreasuryAccounts.GilOnHand, "Gil on hand",
-            "The gil the linkshell actually has. Every other category feeds this one."),
-        (TreasuryAccounts.OwedToUs, "Owed to us",
-            "Gil someone has agreed to pay the linkshell but has not handed over yet."),
+        (TreasuryAccounts.GilOnHand, "Gil on hand"),             // what the linkshell actually has
+        (TreasuryAccounts.OwedToUs, "Owed to us"),               // promised to us, not handed over yet
 
-        (TreasuryAccounts.WeOwe, "We owe",
-            "Gil the linkshell has promised to a member but has not handed over yet."),
+        (TreasuryAccounts.WeOwe, "We owe"),                      // promised to a member, not handed over yet
 
-        (TreasuryAccounts.NetWorth, "What we're worth",
-            "Gil on hand plus what we're owed, minus what we owe. Worked out automatically — "
-                + "nothing is ever recorded against it."),
-        (TreasuryAccounts.StartingBalance, "Starting balance",
-            "The gil the linkshell already had before it started tracking any of this."),
+        // Gil on hand plus what we're owed, minus what we owe. Worked out, never recorded against:
+        // no TreasuryTransactionKind names it.
+        (TreasuryAccounts.NetWorth, "What we're worth"),
+        (TreasuryAccounts.StartingBalance, "Starting balance"),  // what we had before tracking began
 
-        (TreasuryAccounts.MemberDonations, "Member donations", "Gil members gave to the linkshell."),
-        (TreasuryAccounts.ItemSales, "Item sales", "Gil from selling items the linkshell owned."),
-        (TreasuryAccounts.PaidWork, "Paid work", "Gil earned doing runs, escorts or crafts for others."),
-        (TreasuryAccounts.OtherMoneyIn, "Other gil in", "Gil in that does not fit another category yet."),
+        (TreasuryAccounts.MemberDonations, "Member donations"),
+        (TreasuryAccounts.ItemSales, "Item sales"),
+        (TreasuryAccounts.PaidWork, "Paid work"),                // runs, escorts or crafts for others
+        (TreasuryAccounts.OtherMoneyIn, "Other gil in"),
 
-        (TreasuryAccounts.GilToMembers, "Gil paid to members",
-            "Gil handed out to members — gil auction wins, splits, reimbursements."),
-        (TreasuryAccounts.Supplies, "Supplies",
-            "Food, medicine, entry items and gear bought out of the treasury."),
-        (TreasuryAccounts.OtherMoneyOut, "Other gil out", "Gil out that does not fit another category yet."),
-        (TreasuryAccounts.BalanceAdjustment, "Balance adjustment",
-            "The difference when someone counts the linkshell's gil and it does not match the books."),
+        (TreasuryAccounts.GilToMembers, "Gil paid to members"),  // gil auction wins, splits, reimbursements
+        (TreasuryAccounts.Supplies, "Supplies"),                 // food, medicine, entry items, gear
+        (TreasuryAccounts.OtherMoneyOut, "Other gil out"),
+        (TreasuryAccounts.BalanceAdjustment, "Balance adjustment"), // a recount that does not match the books
     };
 
     public static IEnumerable<LedgerAccount> BuildDefaultAccounts(int linkshellId)
     {
         var createdAt = DateTime.UtcNow;
-        var sortOrder = 0;
-        foreach (var (number, name, description) in Seed)
+        foreach (var (number, name) in Seed)
         {
             yield return new LedgerAccount
             {
                 LinkshellId = linkshellId,
                 AccountNumber = number,
                 Name = name,
-                Description = description,
                 IsCash = number == TreasuryAccounts.GilOnHand,
-                // "What we're worth" is worked out, not recorded against. Leaving it unpostable is
-                // what removes the whole "did the year-end close run, and did it run twice?"
-                // failure class.
-                IsPostable = number != TreasuryAccounts.NetWorth,
-                IsSystem = true,
                 IsActive = true,
-                SortOrder = sortOrder++,
                 CreatedAt = createdAt,
             };
         }
@@ -94,7 +80,7 @@ public sealed class LedgerAccountProvisioner
     {
         var existing = await _db.LedgerAccounts
             .Where(account => account.LinkshellId == linkshellId)
-            .OrderBy(account => account.SortOrder)
+            .OrderBy(account => account.AccountNumber)
             .ToListAsync(cancellationToken);
         if (existing.Count > 0)
         {
@@ -116,13 +102,6 @@ public sealed class LedgerAccountProvisioner
         return await SaveAndRereadAsync(linkshellId, seeded, cancellationToken);
     }
 
-    // The category a linkshell's gil lives in. Every balance is this one's.
-    public async Task<LedgerAccount> EnsureCashAccountAsync(int linkshellId, CancellationToken cancellationToken)
-    {
-        var accounts = await EnsureAccountsAsync(linkshellId, cancellationToken);
-        return accounts.First(account => account.IsCash);
-    }
-
     private async Task<List<LedgerAccount>> SaveAndRereadAsync(
         int linkshellId, List<LedgerAccount> added, CancellationToken cancellationToken)
     {
@@ -142,7 +121,7 @@ public sealed class LedgerAccountProvisioner
 
         return await _db.LedgerAccounts
             .Where(account => account.LinkshellId == linkshellId)
-            .OrderBy(account => account.SortOrder)
+            .OrderBy(account => account.AccountNumber)
             .ToListAsync(cancellationToken);
     }
 }
