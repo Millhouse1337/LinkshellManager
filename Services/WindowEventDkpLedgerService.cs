@@ -27,6 +27,18 @@ public sealed class WindowEventDkpLedgerService
         _logger = logger;
     }
 
+    // The event type a card's DKP is filed under, which is what picks its pool.
+    //
+    // An HNM camp's review card carries the camp's real type (CampEventType, "HNM"), saved at End
+    // Camp. Its EntryType ("Kings Camp", "Kill") is a leftover Google Sheets tag nobody can map on
+    // the DKP grouping card, so filing by it sent camp DKP to the default pool while that camp's
+    // loot was charged from the HNM pool. A "/lsm now" card has no camp type, so its entry type is
+    // still what it is filed under.
+    public static string? PoolEventTypeFor(WindowEvent windowEvent) =>
+        string.IsNullOrWhiteSpace(windowEvent.CampEventType)
+            ? windowEvent.EntryType
+            : windowEvent.CampEventType.Trim();
+
     // Post: marks a reviewed card posted and pays it, as ONE step that only one request can win.
     //
     // `windowEvent` is the tracked card with the officer's DKP draft already staged on it; it is
@@ -337,10 +349,10 @@ public sealed class WindowEventDkpLedgerService
             return 0;
         }
 
-        // A window event's entry type ("Kings Camp", "Kill", …) is written straight into the
-        // ledger's EventType column so it resolves to a pool, but those camp tags aren't assignable
-        // on the DKP grouping card — they fall through to the default pool like any unmapped type.
-        var windowEventPool = DkpPoolRef.Derived(windowEvent.EntryType);
+        // The ledger's EventType decides the pool (and a remap re-derives it from that column), so
+        // it is the camp's real event type -- see PoolEventTypeFor.
+        var poolEventType = PoolEventTypeFor(windowEvent);
+        var windowEventPool = DkpPoolRef.Derived(poolEventType);
 
         var written = 0;
         foreach (var account in toPay)
@@ -360,7 +372,7 @@ public sealed class WindowEventDkpLedgerService
                 new DkpEntryContext(
                     CharacterName: account.Membership.CharacterName,
                     EventName: string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
-                    EventType: windowEvent.EntryType,
+                    EventType: poolEventType,
                     EventLocation: campHistory is not null ? windowEvent.CampEventLocation : account.Entry.Zone,
                     EventStartTime: campHistory is not null ? windowEvent.CampStartedAtUtc : windowEvent.FirstCapturedAtUtc,
                     EventEndTime: campHistory is not null ? windowEvent.CampEndedAtUtc : windowEvent.LastCapturedAtUtc,
@@ -407,7 +419,10 @@ public sealed class WindowEventDkpLedgerService
             return 0;
         }
 
-        var newEntryType = windowEvent.EntryType!;
+        // The type the rows are filed under, which picks their pool: the camp's event type, or the
+        // entry type on a "/lsm now" card (PoolEventTypeFor). Rows posted before this used the
+        // entry type even on a camp; an Update moves them to the camp's pool here.
+        var newEntryType = PoolEventTypeFor(windowEvent)!;
 
         // The PAYOUT rows only. An officer's AuditAdjustment carries this card's id too, but it is
         // a correction on top of the payout, not a payout: re-pricing it to the card amount turned

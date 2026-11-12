@@ -341,14 +341,14 @@ public sealed partial class ActivityDataController
             deltaAmount = windowEvent.DkpAmount.Value;
             entryType = "SnapshotEarned";
             occurredAtUtc = occurredAt;
-            // A window event's entry type ("Kings Camp", "Kill", …) is written into the ledger's
-            // EventType column so it resolves to a pool, but those camp tags aren't assignable on
-            // the DKP grouping card — they fall through to the default pool like any unmapped type.
-            poolRef = DkpPoolRef.Derived(windowEvent.EntryType);
+            // Filed under the same type -- and so the same pool -- as the payout rows Post wrote:
+            // the camp's event type, or the entry type on a "/lsm now" card.
+            var poolEventType = WindowEventDkpLedgerService.PoolEventTypeFor(windowEvent);
+            poolRef = DkpPoolRef.Derived(poolEventType);
             entryContext = new DkpEntryContext(
                 CharacterName: targetMembership.CharacterName,
                 EventName: string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
-                EventType: windowEvent.EntryType,
+                EventType: poolEventType,
                 EventLocation: primaryZone,
                 EventStartTime: windowEvent.FirstCapturedAtUtc,
                 EventEndTime: windowEvent.LastCapturedAtUtc,

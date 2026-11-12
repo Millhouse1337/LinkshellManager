@@ -18,8 +18,9 @@ public sealed record DkpPoolEventTypeOption(string Key, bool IsCustom, double Ea
 //
 // The window-event camp tags (Kings Camp, Wyrms Camp, Misc Camp, Kill) are DELIBERATELY excluded:
 // they're attendance camp labels, not content event types, and officers don't group DKP by them.
-// Window-event ledger rows are still stamped with them, but since they're never assignable they
-// just fall through to the default pool like any unmapped type.
+// An HNM camp's payout is filed under the camp's own event type (WindowEventDkpLedgerService.
+// PoolEventTypeFor); only "/lsm now" cards and rows posted before that still carry a camp tag,
+// and since it is never assignable they fall through to the default pool like any unmapped type.
 public sealed class DkpPoolEventTypeCatalog
 {
     // The pseudo event type DkpImportService stamps on its reconciliation rows.
