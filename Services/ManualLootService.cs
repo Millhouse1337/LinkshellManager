@@ -51,6 +51,9 @@ public sealed record ManualLootResult(bool Success, string? Error, EventLootDeta
 //     spot, so a camp's loot came off balances before the camp was over.)
 //   * a PAST event or no event -- immediately: there is no close left for it to ride. The row is
 //     stamped DkpDebitedAt, which every close path skips, so nothing charges it twice.
+//   * an event that is NOT running (EventRunState) -- an HNM board End Camp has parked, or one
+//     still queued -- goes to the board's newest camp archive and is charged immediately, as past
+//     loot. With no archive, or for a timed event that has not started, it is refused.
 public sealed class ManualLootService
 {
     private readonly ApplicationDbContext _db;
@@ -168,9 +171,11 @@ public sealed class ManualLootService
         var nowUtc = DateTime.UtcNow;
         detail.DkpDebitedAt = nowUtc;
 
-        // Loot on a LIVE event waits for the event to end (see the class note): checked for
-        // affordability now, charged by the close.
-        var chargeAtClose = target.Kind == ManualLootTargetKind.LiveEvent && !isLootCouncil && dkpSpent > 0;
+        // Loot on a RUNNING event waits for the event to end (see the class note): checked for
+        // affordability now, charged by the close. Read off the RESOLVED target, not the request:
+        // a "live" pick whose camp has already ended was moved to that camp's archive above, and
+        // must be charged now -- there is no close coming for it.
+        var chargeAtClose = resolved.EventId is not null && !isLootCouncil && dkpSpent > 0;
 
         if (!isLootCouncil && dkpSpent > 0)
         {
@@ -260,25 +265,52 @@ public sealed class ManualLootService
                 var evt = await _db.Events
                     .AsNoTracking()
                     .Where(item => item.Id == target.EventId && item.LinkshellId == linkshellId)
-                    .Select(item => new { item.Id, item.EventName, item.EventType })
                     .FirstOrDefaultAsync(cancellationToken);
-                return evt is null
-                    ? new ResolvedTarget(null, null, null, null, "That event no longer exists.")
-                    : new ResolvedTarget(evt.Id, null, evt.EventName, evt.EventType, null);
+                if (evt is null)
+                {
+                    return new ResolvedTarget(null, null, null, null, "That event no longer exists.");
+                }
+                if (EventRunState.IsRunning(evt))
+                {
+                    return new ResolvedTarget(evt.Id, null, evt.EventName, evt.EventType, null);
+                }
+
+                // NOT running. Filing it on the row anyway is what left loot uncharged until the
+                // NEXT camp: End Camp keeps an HNM board's row for the next pop, so the camp the
+                // loot belongs to is the one that just ended -- its archive. Charged now, like any
+                // past-event loot.
+                var eventName = evt.EventName ?? "That event";
+                if (!DiscordEventMessageBuilder.IsHnm(evt))
+                {
+                    return new ResolvedTarget(null, null, null, null,
+                        $"{eventName} isn't running. Start it first, or add the loot to a past event.");
+                }
+                var archiveId = await EventRunState.NewestCampArchiveIdAsync(_db, evt.Id, cancellationToken);
+                if (archiveId is null)
+                {
+                    return new ResolvedTarget(null, null, null, null,
+                        $"{eventName} isn't running and has no ended camp to file this loot under. "
+                        + "Start the camp first, or add the loot to a past event.");
+                }
+                return await ResolvePastEventAsync(linkshellId, archiveId.Value, cancellationToken);
             }
             case ManualLootTargetKind.PastEvent:
-            {
-                var history = await _db.EventHistories
-                    .AsNoTracking()
-                    .Where(item => item.Id == target.EventHistoryId && item.LinkshellId == linkshellId)
-                    .Select(item => new { item.Id, item.EventName, item.EventType })
-                    .FirstOrDefaultAsync(cancellationToken);
-                return history is null
-                    ? new ResolvedTarget(null, null, null, null, "That past event no longer exists.")
-                    : new ResolvedTarget(null, history.Id, history.EventName, history.EventType, null);
-            }
+                return await ResolvePastEventAsync(linkshellId, target.EventHistoryId, cancellationToken);
             default:
                 return new ResolvedTarget(null, null, null, null, null);
         }
+    }
+
+    private async Task<ResolvedTarget> ResolvePastEventAsync(
+        int linkshellId, int? eventHistoryId, CancellationToken cancellationToken)
+    {
+        var history = await _db.EventHistories
+            .AsNoTracking()
+            .Where(item => item.Id == eventHistoryId && item.LinkshellId == linkshellId)
+            .Select(item => new { item.Id, item.EventName, item.EventType })
+            .FirstOrDefaultAsync(cancellationToken);
+        return history is null
+            ? new ResolvedTarget(null, null, null, null, "That past event no longer exists.")
+            : new ResolvedTarget(null, history.Id, history.EventName, history.EventType, null);
     }
 }

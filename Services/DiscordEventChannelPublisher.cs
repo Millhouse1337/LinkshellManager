@@ -229,14 +229,8 @@ public sealed class DiscordEventChannelPublisher
     //
     // Null for a camp that ended with nobody on it (no review row, no archive) and for any camp
     // ended before the archive moved to End Camp. The button is simply not drawn.
-    private async Task<int?> ResolveCampArchiveIdAsync(int eventId, CancellationToken cancellationToken)
-        => await _db.WindowEvents
-            .AsNoTracking()
-            .Where(w => w.SourceEventId == eventId && w.CampEventHistoryId != null)
-            .OrderByDescending(w => w.CampEndedAtUtc)
-            .ThenByDescending(w => w.Id)
-            .Select(w => w.CampEventHistoryId)
-            .FirstOrDefaultAsync(cancellationToken);
+    private Task<int?> ResolveCampArchiveIdAsync(int eventId, CancellationToken cancellationToken)
+        => EventRunState.NewestCampArchiveIdAsync(_db, eventId, cancellationToken);
 
     private async Task<List<EventSignupLine>> LoadSignupsAsync(int eventId, CancellationToken cancellationToken)
     {

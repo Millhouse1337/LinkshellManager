@@ -229,9 +229,14 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        // Only events that are actually RUNNING. Every Events row used to be listed, so a camp
+        // that had just ended (its board parked for the next pop) still showed as live, and loot
+        // filed there sat uncharged until the next camp. A parked camp is under "past" now, as
+        // the archive End Camp wrote for it.
         var live = await _dbContext.Events
             .AsNoTracking()
             .Where(evt => evt.LinkshellId == linkshellId)
+            .Where(EventRunState.Running)
             .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
             .Select(evt => new ActivityLootEventOptionDto(evt.Id, evt.EventName ?? "Event", evt.EventType))
             .ToListAsync(cancellationToken);

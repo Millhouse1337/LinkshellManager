@@ -1143,12 +1143,12 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
-        // A camp that has already ended is a PastEvent target, not a live one -- ManualLootService
-        // files against a different column for each, and handing it a LiveEvent id whose row is
-        // closed would attach loot to a camp the review page no longer shows.
-        var target = eventEntity.EndTime is null
-            ? new ManualLootTarget(ManualLootTargetKind.LiveEvent, eventEntity.Id, null)
-            : ManualLootTarget.None;
+        // Always addressed as the event; ManualLootService decides where it really goes. A running
+        // camp holds it until End Camp; a camp that has already ended (the board parked for the
+        // next pop) files it under that camp's Past Event and charges it now; no camp to file it
+        // under is a plain refusal. This used to test EndTime, which End Camp never sets on a
+        // board, so loot posted right after End Camp waited, uncharged, for the NEXT camp.
+        var target = new ManualLootTarget(ManualLootTargetKind.LiveEvent, eventEntity.Id, null);
 
         return await AddAddonLootAsync(
             token, eventEntity.Linkshell, request, target, manualLoot, cancellationToken);
@@ -1199,28 +1199,46 @@ public sealed partial class AddonApiController
         //
         // EventName is kept as a second chance rather than replaced: a camp created before the
         // monster was assignable, or one an officer left unassigned, still resolves the old way.
-        var liveEventId = await _dbContext.Events
-            .AsNoTracking()
-            .Where(evt => evt.LinkshellId == token.LinkshellId
-                          && evt.AssignedMonsterName != null
-                          && monsterMatches.Contains(evt.AssignedMonsterName.ToLower()))
-            .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
-            .Select(evt => (int?)evt.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+        async Task<int?> FindMonsterEventAsync(bool runningOnly)
+        {
+            var events = _dbContext.Events
+                .AsNoTracking()
+                .Where(evt => evt.LinkshellId == token.LinkshellId);
+            if (runningOnly)
+            {
+                events = events.Where(EventRunState.Running);
+            }
 
-        liveEventId ??= await _dbContext.Events
-            .AsNoTracking()
-            .Where(evt => evt.LinkshellId == token.LinkshellId
-                          && evt.EventName != null
-                          && monsterMatches.Contains(evt.EventName.ToLower()))
-            .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
-            .Select(evt => (int?)evt.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+            var id = await events
+                .Where(evt => evt.AssignedMonsterName != null
+                              && monsterMatches.Contains(evt.AssignedMonsterName.ToLower()))
+                .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
+                .Select(evt => (int?)evt.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            id ??= await events
+                .Where(evt => evt.EventName != null
+                              && monsterMatches.Contains(evt.EventName.ToLower()))
+                .OrderByDescending(evt => evt.CommencementStartTime ?? evt.StartTime)
+                .Select(evt => (int?)evt.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            return id;
+        }
 
-        // No live camp: the kill may already have been closed out, so fall back to the most recent
-        // matching past event before giving up and filing it with no event at all.
+        // A RUNNING camp first (EventRunState). Any matching board used to count as live, so the
+        // board End Camp had just parked caught the drop and held it, uncharged, for the next camp.
+        var liveEventId = await FindMonsterEventAsync(runningOnly: true);
+
+        // No running camp: the kill's camp has most likely just ended. Its board's newest archive
+        // is that camp's own Past Event, so the drop goes there and is charged now.
         int? pastEventId = null;
-        if (liveEventId is null)
+        if (liveEventId is null && await FindMonsterEventAsync(runningOnly: false) is int boardId)
+        {
+            pastEventId = await EventRunState.NewestCampArchiveIdAsync(_dbContext, boardId, cancellationToken);
+        }
+
+        // Still nothing: fall back to the most recent past event by name before giving up and
+        // filing it with no event at all.
+        if (liveEventId is null && pastEventId is null)
         {
             // EventHistory carries no AssignedMonsterName -- it stores the camp's NAME at close --
             // so this stays a name match. A camp named for something other than its monster is

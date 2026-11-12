@@ -79,9 +79,13 @@ public static class AuctionDkpService
         }
 
         var pendingLoot = await db.EventLootDetails
+            // ANY uncharged row still on an event counts, running or not. This used to require
+            // CommencementStartTime, so loot left on a board that End Camp had already parked
+            // (CommencementStartTime cleared) stopped counting -- and the winner could spend that
+            // DKP before the next End Camp charged it. Rows filed on a parked board before loot
+            // was redirected to the camp's archive (EventRunState) are exactly that case.
             .Where(l => l.Event != null
                 && l.Event.LinkshellId == linkshellId
-                && l.Event.CommencementStartTime != null   // live: commenced, not yet ended
                 // Not charged yet. A row already charged (DkpDebitedAt) is off the balance
                 // already, and counting it here too took it off the member's spendable DKP twice.
                 && l.DkpDebitedAt == null

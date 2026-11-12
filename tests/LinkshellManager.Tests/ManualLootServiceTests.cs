@@ -43,7 +43,12 @@ public class ManualLootServiceTests
         {
             Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Alice", LinkshellDkp = 100,
         });
-        db.Events.Add(new Event { Id = LiveEventId, LinkshellId = Ls, EventName = "Fafnir", EventType = "HNM" });
+        // Started: only a RUNNING event holds loot for its close (EventRunState).
+        db.Events.Add(new Event
+        {
+            Id = LiveEventId, LinkshellId = Ls, EventName = "Fafnir", EventType = "HNM",
+            CommencementStartTime = DateTime.UtcNow.AddHours(-1),
+        });
         await db.SaveChangesAsync();
         return db;
     }
