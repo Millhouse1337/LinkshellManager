@@ -244,14 +244,12 @@ builder.Services.AddSingleton<TodImageUploadQuota>();
 builder.Services.AddScoped<SubmissionApprovalService>();
 // The one way a Time of Death is saved: the app, the addon, approval and End Camp all call it.
 builder.Services.AddScoped<TodRecorder>();
-// Data Protection guards the encrypted Google refresh tokens, auth cookies and
-// antiforgery tokens. By default the key ring lands under the app's content
-// root, which the deploy script replaces wholesale on every release -- new keys
-// each deploy meant every linkshell's stored Google Sheet token became
-// undecryptable (then got wiped) and everyone was logged out. Persist the keys
-// to a stable directory OUTSIDE the deploy artifact dir (set
-// DataProtection:KeyRingPath in production, e.g. /var/lib/lsmanager/keys) so a
-// connection survives redeploys. Locally the key absent -> default behavior
+// Data Protection guards auth cookies, antiforgery tokens and one-time download
+// links. By default the key ring lands under the app's content root, which the
+// deploy script replaces wholesale on every release -- new keys each deploy
+// meant everyone was logged out. Persist the keys to a stable directory OUTSIDE the deploy artifact dir
+// (set DataProtection:KeyRingPath in production, e.g. /var/lib/lsmanager/keys)
+// so sign-ins survive redeploys. Locally the key absent -> default behavior
 // (a stable per-user store), which already persists across runs.
 var dataProtection = builder.Services
     .AddDataProtection()

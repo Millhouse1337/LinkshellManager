@@ -157,6 +157,8 @@ public class DataAdminEditorTests
         Assert.Equal(DateTimeKind.Utc, created.Kind);
         Assert.Equal(new DateTime(2026, 9, 18, 10, 30, 0, DateTimeKind.Utc), created);
 
+        // PHASE4B-DROP: LastSeenAtUtc is a dead column 4B drops; point this half of the test at
+        // another DateTimeOffset column (or delete it) when it goes.
         var discord = await editor.UpdateAsync(Table(catalog, typeof(DiscordActivityUser)), DiscordUserKey, Values(("LastSeenAtUtc", "2026-09-18T10:30")), Actor, CancellationToken.None);
         Assert.True(discord.Succeeded, string.Join("; ", discord.Errors.Select(e => e.Message)));
         var seen = (await db.DiscordActivityUsers.AsNoTracking().SingleAsync()).LastSeenAtUtc;

@@ -29,7 +29,7 @@ The top strip shows the active linkshell name and member count, a clock, a refre
   - **Pending** — **Events Pending DKP Post**: ended events whose DKP hasn't been posted yet. The button shows how many are waiting.
   - **Past** — settled events, with comments and (officers) edits.
 
-- **ToDs** — Add a ToD manually (mob, time, day, cooldown) from the full monster list. Grouped history per monster — expand for loot per kill. When a monster has an assigned **Party Setup**, an inline sign-up panel lets you claim a slot right there. For those who can approve them, **ToD Submissions Needing Approval** sits at the top: ToDs posted by members who can't add them directly, to fix up and Approve or Reject.
+- **ToDs** — Add a ToD manually (mob, time, day, cooldown) from the full monster list. Grouped history per monster. When a monster has an assigned **Party Setup**, an inline sign-up panel lets you claim a slot right there. For those who can approve them, **ToD Submissions Needing Approval** sits at the top: ToDs posted by members who can't add them directly, to fix up and Approve or Reject.
 
 - **Party Setup** — Browse alliance → party → slot raid templates and claim an open slot (one per setup). Officers get the full tree editor: create / edit / delete a setup and assign it to a monster.
 
@@ -37,7 +37,7 @@ The top strip shows the active linkshell name and member count, a clock, a refre
 
 - **DKP** *(DKP linkshells)* — The DKP ledger and manual adjustments/audit (**Adjust**, **Add to a previous entry**, **Misc**), **plus** the **DKP Sheet**: every member's current, total and spent DKP, searchable.
 
-- **Loot** — Loot history across events and ToDs (works for Loot Council linkshells too). With the "Add event loot entries" permission, **Edit** fixes a record, and **Delete record** in the same dialog removes one and refunds the winner's DKP.
+- **Loot** — Loot history across events (works for Loot Council linkshells too). A ToD carries no loot: loot from a camp is filed under its event. With the "Add event loot entries" permission, **Edit** fixes a record, and **Delete record** in the same dialog removes one and refunds the winner's DKP.
 
 - **Management** — The linkshell's people, in two views at the top right. **Roster** (the default): characters, ranks, status, DKP per linkshell, with an inline search, plus officer tools for kicking and role changes. **Invites**: invites you've received, inviting players, and the invites you've sent.
 - **Treasury** — Everything the linkshell owns, in three views picked at the top right. **Balance Sheet** — what came in and went out, and a simple balance sheet (what we have, what we owe — expandable to who — and what we're worth). **Items** — the stash, and marking things sold. **Transactions** — the searchable list of every entry, where Fix and Reverse live. Record Transaction is on both gil views. Reading is open to every member; recording gil needs "Record treasury entries" and changing the stash needs "Manage inventory". Selling an item records the gil in the same action, which is why the two live together. See [How the Treasury works](LSManager-WebApp-Guide.md#how-the-treasury-works-and-what-it-does-not-do) for what Fix and Reverse do, and why nothing is ever deleted.

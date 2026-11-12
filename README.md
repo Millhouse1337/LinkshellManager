@@ -115,7 +115,7 @@ Provisioning behavior:
 - First Discord launch creates or updates the `DiscordActivityUsers` row.
 - If no linked `AppUser` exists yet, the backend creates one and stores its id in `IdentityUserId`.
 - `GET /api/me` returns both the Discord-linked local user record and the linked `AppUser` summary (Discord only; the website uses `GET /api/web/session`).
-- Linkshells, memberships, live events, completed event history, and notifications are all keyed from the `AppUser` layer.
+- Linkshells, memberships, live events and completed event history are all keyed from the `AppUser` layer.
 
 Important: for the embedded Activity flow, the backend does not send `redirect_uri` during token exchange. Discord's current Activity tutorial shows the embedded flow without `redirect_uri`; the Redirect URI still needs to exist in the Developer Portal, but it is a portal requirement rather than a request parameter used by this app flow.
 

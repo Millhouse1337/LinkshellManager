@@ -147,7 +147,6 @@ public class ChartItemKindTests
         item.Credits.Add(new ChartPopItemCredit
         {
             ChartPopItemId = id,
-            LinkshellId = 1,
             CharacterName = creditedTo,
         });
         return item;

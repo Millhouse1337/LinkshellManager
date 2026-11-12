@@ -214,7 +214,8 @@ The local `lsmanager` database still exists but has **zero tables** — it is an
 unused leftover from an earlier setup. The command this table used to recommend
 (`sudo -u postgres pg_dump lsmanager`) therefore dumped an EMPTY database and
 produced a ~700-byte file that looks like a valid dump. A real dump is ~13 MB
-across ~74 tables. Do not trust a backup you have not size-checked.
+across ~70 tables (~63 once Phase 4B drops seven unused ones). Do not trust a
+backup you have not size-checked.
 
 Two more traps:
 
@@ -260,7 +261,8 @@ What it does:
 - Writes `/var/backups/lsmanager/lsmanager-prod-YYYYMMDD-HHMMSS.sql` (UTC time, root only).
 - **Fails the deploy** if the dump is under 1 MB or has fewer than 40 `CREATE TABLE`
   lines — the "empty database looks like a valid dump" trap above. (The real database
-  has ~70 tables; the bar is low so dropping unused tables later does not trip it.) The
+  has ~70 tables, ~63 after Phase 4B; the bar is low so dropping unused tables does not
+  trip it.) The
   bad file is kept as `...sql.suspect` for a look.
 - Keeps the newest 7 good dumps and deletes older ones (only after a good dump).
 
@@ -335,13 +337,11 @@ The next normal deploy overwrites `lsmanager.old` again, so roll back before dep
 
 ## One-time migration: persistent Data Protection keys
 
-The app encrypts Google Sheet refresh tokens (and signs auth cookies / antiforgery
-tokens) with the ASP.NET Core Data Protection key ring. That key ring must live
-**outside** `/var/www/lsmanager`, because `deploy.ps1` replaces that directory on
-every release. Fresh bootstraps (`setup-droplet.sh`) now provision this
-automatically; **existing droplets created before this change need a one-time
-fixup** or they'll keep losing their Google Sheet connection (and logging
-everyone out) on every deploy:
+The app signs auth cookies and antiforgery tokens with the ASP.NET Core Data
+Protection key ring. That key ring must live **outside** `/var/www/lsmanager`,
+because `deploy.ps1` replaces that directory on every release. Fresh bootstraps
+(`setup-droplet.sh`) now provision this automatically; **existing droplets created
+before this change need a one-time fixup** or every deploy logs everyone out:
 
 ```bash
 ssh root@<IP>
@@ -359,12 +359,8 @@ sudo systemctl daemon-reload
 sudo systemctl restart lsmanager
 ```
 
-After this, each linkshell reconnects its Google Sheet **one final time**; the
-key ring then persists across all future deploys, so the connection sticks.
-
-> If Google still drops the connection after ~7 days, the OAuth consent screen in
-> Google Cloud Console is in **Testing** mode (refresh tokens expire in 7 days).
-> Publish it to **Production** to stop that — that's a Google-side limit, not app code.
+After this, the key ring persists across all future deploys, so people stay signed
+in. (Google Sheets was removed, so there is no Google connection to keep any more.)
 
 ## Board images removed (October 2026)
 

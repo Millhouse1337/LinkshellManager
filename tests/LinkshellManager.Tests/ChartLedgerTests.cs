@@ -35,7 +35,6 @@ public class ChartLedgerTests
             item.Credits.Add(new ChartPopItemCredit
             {
                 ChartPopItemId = item.Id,
-                LinkshellId = 1,
                 CharacterName = farmer,
             });
         }

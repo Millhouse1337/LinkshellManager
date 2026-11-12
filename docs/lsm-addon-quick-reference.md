@@ -92,9 +92,9 @@ whitespace-insensitive.
 └──────────────────────────────────────────────────────────────┘
 ```
 
-> 📌 **Why this matters.** Entry Type is what the Google Sheet's AttInput
-> formula pivots on. Typing `/lsm now Fafnir` lands as a **Kings Camp** row
-> on the sheet automatically — no officer hand-edit needed.
+> 📌 **Why this matters.** The Entry Type is picked from the monster name, so
+> typing `/lsm now Fafnir` is tagged **Kings Camp** automatically — no officer
+> hand-edit needed. (It used to feed the Google Sheet, which has been removed.)
 
 > ⚠️ **Note.** Jormungand is intentionally only in the **Wyrms** set even
 > though FFXI lore puts it on both lists. Wyrms wins per the linkshell
@@ -103,7 +103,7 @@ whitespace-insensitive.
 > ⚠️ **Note.** The ToAU three — Cerberus, Hydra, Khimaira — run the wyrms'
 > 60 min × 25 window band but are neither wyrms nor kings, so they fall to
 > **Misc Camp**. Move them into `WyrmsMonsters` in `WindowEventEntryTypes`
-> if the sheet should pay them on the wyrm line.
+> if they should be tagged as wyrms.
 
 > 🚫 **What it does NOT auto-detect.**
 > - Does **not** auto-switch to HNM-style multi-window mode (`/lsm now` is
@@ -224,6 +224,5 @@ chaining into one that grows all camp long.
   Commands ............ lsm/commands.lua
   Snapshot endpoint ... Controllers/AddonApiController.AttendanceSnapshots.cs
   Monster mapping ..... Models/WindowEvent.cs · WindowEventEntryTypes
-  Sheet integration ... Services/AttInputAppendService.cs
 ══════════════════════════════════════════════════════════════════════
 ```

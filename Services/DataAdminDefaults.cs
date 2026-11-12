@@ -30,6 +30,7 @@ public static class DataAdminDefaults
     // visible string column with one of these names becomes the row label; none -> the key.
     // Entity-specific names come first: many tables also carry a denormalised LinkshellName copy
     // (Rule, Item, Announcement...), which must never beat the row's own title.
+    // PHASE4B-DROP: take "NotificationType" out when the Notifications table is dropped.
     public static readonly IReadOnlyList<string> LabelGuessOrder = new[]
     {
         "RuleTitle", "AnnouncementTitle", "ItemName", "EventName", "MonsterName", "AuctionTitle",

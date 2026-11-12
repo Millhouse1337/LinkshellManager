@@ -129,7 +129,7 @@ The Event Presets list is built for repeatable window posting. In the screenshot
 
 HNM-style events use the `HNM - DKP / Window` default from Settings. Each posted
 window records its own attendance batch, and the web app rolls those batches
-into the event history and sheet sync.
+into the event history.
 
 ---
 
@@ -332,6 +332,5 @@ After camp:
 | Repop Timer window | `lsm/ui/tod_tracker_window.lua` |
 | Snapshot endpoint | `Controllers/AddonApiController.AttendanceSnapshots.cs` |
 | Monster entry-type mapping | `Models/WindowEvent.cs` |
-| Sheet integration | `Services/AttInputAppendService.cs` |
 
 For a shorter daily-use card, see `docs/lsm-addon-quick-reference.md`.

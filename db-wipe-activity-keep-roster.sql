@@ -13,24 +13,35 @@
 --  KEEPS:   Linkshells, LinkshellRoles, LinkshellDiscordChannels/Webhooks,
 --           LinkshellChannelRoutes, AddonApiTokens, AddonPairingCodes,
 --           AppSettings, DiscordActivityUsers, AspNet* (users/identity),
---           PartySetups (+Alliances/Parties/Slots), Announcements, Rules,
---           Invites, Notifications, and the AppUserLinkshells ROSTER rows
+--           PartySetups templates (+Alliances/Parties/Slots), Announcements,
+--           Rules, Invites, Notifications, and the AppUserLinkshells ROSTER rows
 --           (incl. JobLevels / StrongJobs = profile jobs).
+--           (PHASE4B-DROP: LinkshellDiscordChannels/Webhooks and Notifications
+--           leave this list when 4B drops those tables.)
 --
---  WIPES:   Events, ToDs, Loot, Auctions, DKP ledger, Attendance, Gil/treasury
---           (RevenueEntries) and Inventory (Items) — and zeroes the cached DKP
+--  WIPES:   Events (+ comments, roster snapshots and each event's own party
+--           board copy), ToDs, Loot, Auctions, DKP ledger, Attendance,
+--           Gil/treasury and Inventory (Items) — and zeroes the cached DKP
 --           balance columns on the roster rows.
 -- ============================================================================
 
 BEGIN;
 
--- All operational tables truncated together so their inter-FKs are satisfied
--- in one shot. No CASCADE: if any KEPT table referenced one of these it would
--- error here (safe) rather than silently wiping something you wanted to keep.
+-- All operational tables except Events and Tods truncated together so their
+-- inter-FKs are satisfied in one shot. No CASCADE: if any KEPT table referenced
+-- one of these it would error here (safe) rather than silently wiping something
+-- you wanted to keep.
+--
+-- Events and Tods are emptied with DELETE further down instead. A kept table
+-- points at Events (PartySetups.OwnerEventId: an event's own copy of its party
+-- board), and Events points at Tods. Postgres refuses to TRUNCATE a table that a
+-- table outside the list points at, even when no row does, so putting them here
+-- made the whole script fail.
 TRUNCATE TABLE
-    -- Events
-    "Events",
+    -- Events (the Events rows themselves are deleted below)
     "EventHistories",
+    "EventComments",
+    "EventWindowRosterSnapshots",
     "AppUserEvents",
     "AppUserEventHistories",
     "AppUserEventWindows",
@@ -38,9 +49,8 @@ TRUNCATE TABLE
     "EventAttendanceWindows",
     "EventLootDetails",
     "EventPartySlotSignups",
-    -- ToDs / window events / claim shields (PHASE4B-DROP: remove the TodLootDetails line once that
-    -- table is dropped; no code uses it)
-    "Tods",
+    -- ToDs (the Tods rows themselves are deleted below) / window events / claim shields
+    -- (PHASE4B-DROP: remove the TodLootDetails line once that table is dropped; no code uses it)
     "TodLootDetails",
     "WindowEvents",
     "WindowEventMemberDkps",
@@ -69,6 +79,14 @@ TRUNCATE TABLE
     "LedgerPeriods",
     "Items"
 RESTART IDENTITY;
+
+-- Now nothing that was wiped points at an event or a ToD any more. Deleting the
+-- events also deletes each event's own party board copy (the reusable templates
+-- stay); then the ToDs go. Ids start again from 1, like the TRUNCATE above.
+DELETE FROM "Events";
+DELETE FROM "Tods";
+ALTER TABLE "Events" ALTER COLUMN "Id" RESTART WITH 1;
+ALTER TABLE "Tods" ALTER COLUMN "Id" RESTART WITH 1;
 
 -- The roster rows stay, but their cached DKP balance / seed watermarks are
 -- reset to 0. JobLevels + StrongJobs (profile jobs) are intentionally left

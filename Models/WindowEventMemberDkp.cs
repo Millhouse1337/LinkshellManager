@@ -4,8 +4,8 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace LinkshellManagerDiscordApp.Models;
 
 // Per-character DKP override for a Window Event. When a row exists for a
-// character on a given Window Event, the AttInput append and ledger services
-// use this amount in place of WindowEvent.DkpAmount for that character only.
+// character on a given Window Event, the ledger service
+// uses this amount in place of WindowEvent.DkpAmount for that character only.
 // Characters without an override fall through to the event's default.
 public class WindowEventMemberDkp
 {

@@ -348,6 +348,8 @@ public class DataAdminSchemaGraphTests
 
         // By a shared primary key, by a plain unique index, and by a unique index that only skips
         // the rows with no value.
+        // PHASE4B-DROP: the two LedgerPeriod lines name a table 4B drops; swap in another
+        // plain-unique-index table (or delete them) when it goes.
         Assert.True(Relationship(graph, "LinkshellBanner.LinkshellId").Unique);
         Assert.True(Relationship(graph, "LedgerPeriod.LinkshellId").Unique);
         Assert.True(Relationship(graph, "PartySetup.OwnerEventId").Unique);

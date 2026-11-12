@@ -95,9 +95,9 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
 
             // Chart ticks on the placeholder's MEMBERSHIP (by id), one the real member also has.
             db.ChartMemberKeyItems.AddRange(
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = realMembershipId, CharacterName = "Bob" },
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = phMembershipId, CharacterName = "Bobalt", SetByAppUserId = Ph },
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "B", MembershipId = phMembershipId, CharacterName = "Bobalt" });
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = realMembershipId },
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = phMembershipId, SetByAppUserId = Ph },
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "B", MembershipId = phMembershipId });
 
             // Ratings, a Claim Shield capture, loot won, a notification.
             db.JobRatings.Add(new JobRating { LinkshellId = linkshellId, TargetAppUserId = Ph, RaterAppUserId = Real, JobIndex = 1, UpdatedAt = When });

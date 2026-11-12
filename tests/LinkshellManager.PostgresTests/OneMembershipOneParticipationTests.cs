@@ -101,6 +101,10 @@ public class OneMembershipOneParticipationTests : IAsyncLifetime
                 bobOnly = bob.Id;
 
                 // Chart rows that point at the membership by Id (no foreign key).
+                // PHASE4B-DROP: this test runs the OLD migration's SQL against today's schema, and that
+                // SQL still moves ChartPopItems.HeldByMembershipId, ChartPopItemCredits.MembershipId and
+                // ChartWishlistRequests.RequestedByMembershipId. When 4B drops those columns, drop the
+                // seeds and asserts for them here and stop running that SQL on the current schema.
                 db.ChartMemberKeyItems.AddRange(
                     // Ticked on the kept row AND a duplicate: one tick survives, on the kept row.
                     new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "Ra", MembershipId = aliceKeep, CharacterName = "Alice" },

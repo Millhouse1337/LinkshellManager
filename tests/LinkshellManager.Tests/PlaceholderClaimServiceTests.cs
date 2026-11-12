@@ -202,9 +202,9 @@ public class PlaceholderClaimServiceTests
         Member(db, 10, Real, "Bob", 0);
         Member(db, 11, Ph, "Bobalt", 0);
         db.ChartMemberKeyItems.AddRange(
-            new ChartMemberKeyItem { Id = 1, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 10, CharacterName = "Bob" },
-            new ChartMemberKeyItem { Id = 2, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11, CharacterName = "Bobalt" },
-            new ChartMemberKeyItem { Id = 3, LinkshellId = Ls, Board = "Sky", KeyItemName = "B", MembershipId = 11, CharacterName = "Bobalt" });
+            new ChartMemberKeyItem { Id = 1, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 10 },
+            new ChartMemberKeyItem { Id = 2, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11 },
+            new ChartMemberKeyItem { Id = 3, LinkshellId = Ls, Board = "Sky", KeyItemName = "B", MembershipId = 11 });
         db.ChartWishlistRequests.Add(new ChartWishlistRequest { Id = 1, LinkshellId = Ls, RequestedByAppUserId = Ph });
         db.SaveChanges();
 

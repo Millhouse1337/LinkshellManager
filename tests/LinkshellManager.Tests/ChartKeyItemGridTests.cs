@@ -25,13 +25,13 @@ public class ChartKeyItemGridTests
     private static ChartRosterEntry Member(int id, string name) =>
         new(id, $"user-{id}", name, "Member", Array.Empty<string>());
 
-    private static ChartMemberKeyItem Has(int membershipId, string name, string keyItem) => new()
+    // No name: the grid takes names off the roster, never off the tick row.
+    private static ChartMemberKeyItem Has(int membershipId, string keyItem) => new()
     {
         LinkshellId = 1,
         Board = ChartBoardCatalog.Dynamis,
         KeyItemName = keyItem,
         MembershipId = membershipId,
-        CharacterName = name,
     };
 
     /// <summary>
@@ -61,7 +61,7 @@ public class ChartKeyItemGridTests
     [Fact]
     public void BuildGrid_ListsWhoIsStillMissingEachKeyItem()
     {
-        var rows = new[] { Has(1, "Aeris", "Hydra Corps Lantern") };
+        var rows = new[] { Has(1, "Hydra Corps Lantern") };
         var grid = ChartKeyItemService.BuildGrid(
             Dynamis, rows, new[] { Member(1, "Aeris"), Member(2, "Bob"), Member(3, "Carol") });
 
@@ -76,7 +76,7 @@ public class ChartKeyItemGridTests
     [Fact]
     public void BuildGrid_MatchesAStoredNameCaseInsensitively()
     {
-        var rows = new[] { Has(1, "Aeris", "  hydra corps lantern ") };
+        var rows = new[] { Has(1, "  hydra corps lantern ") };
         var grid = ChartKeyItemService.BuildGrid(Dynamis, rows, new[] { Member(1, "Aeris") });
 
         Assert.Equal(1, grid.Columns.Single(column => column.Name == "Hydra Corps Lantern").HaveCount);
@@ -87,7 +87,7 @@ public class ChartKeyItemGridTests
     [Fact]
     public void BuildGrid_IgnoresAStoredNameTheCatalogDoesNotHave()
     {
-        var rows = new[] { Has(1, "Aeris", "Hydra Corps Monocle") };
+        var rows = new[] { Has(1, "Hydra Corps Monocle") };
         var grid = ChartKeyItemService.BuildGrid(Dynamis, rows, new[] { Member(1, "Aeris") });
 
         Assert.All(grid.Columns, column => Assert.Equal(0, column.HaveCount));
@@ -99,8 +99,8 @@ public class ChartKeyItemGridTests
     {
         var rows = new[]
         {
-            Has(1, "Aeris", "Vial of Shrouded Sand"),
-            Has(1, "Aeris", "Hydra Corps Eyeglass"),
+            Has(1, "Vial of Shrouded Sand"),
+            Has(1, "Hydra Corps Eyeglass"),
         };
         var grid = ChartKeyItemService.BuildGrid(Dynamis, rows, new[] { Member(1, "Aeris"), Member(2, "Bob") });
 
@@ -129,8 +129,8 @@ public class ChartKeyItemGridTests
     {
         var rows = new[]
         {
-            Has(1, "Aeris", "Hydra Corps Lantern"),
-            Has(404, "Departed", "Hydra Corps Lantern"),
+            Has(1, "Hydra Corps Lantern"),
+            Has(404, "Hydra Corps Lantern"),
         };
         var grid = ChartKeyItemService.BuildGrid(Dynamis, rows, new[] { Member(1, "Aeris") });
 
@@ -157,7 +157,7 @@ public class ChartKeyItemGridTests
     [Fact]
     public void BuildGrid_RoundsThePercentageTheWayTheLedgerDoes()
     {
-        var rows = Dynamis.KeyItems.Take(3).Select(item => Has(1, "Aeris", item.Name)).ToArray();
+        var rows = Dynamis.KeyItems.Take(3).Select(item => Has(1, item.Name)).ToArray();
         var grid = ChartKeyItemService.BuildGrid(Dynamis, rows, new[] { Member(1, "Aeris") });
 
         // 3 of 11.
