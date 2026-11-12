@@ -17,7 +17,9 @@ namespace LinkshellManagerDiscordApp.Models;
 //     recycled under a snapshot taken hours earlier.
 // So the display strings and sort orders are copied in, and this table holds no FK to the party
 // setup tree at all. The one FK is to the Event, which cascades — when the camp is deleted its
-// window history goes with it, which is correct.
+// window history goes with it, which is correct. A recurring board REUSES its Event row for every
+// pop, so HnmEventSeeder.ReviveForNewPopAsync deletes these when the board comes back for the next
+// pop; otherwise one camp's windows would show up in the next camp's "View Previous Window".
 public class EventWindowRosterSnapshot
 {
     [Key]

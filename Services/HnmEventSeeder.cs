@@ -74,6 +74,11 @@ public static class HnmEventSeeder
     //   * AttendanceMode — re-derived because between camps is the one safe moment to pick up a
     //     linkshell mode flip that happened while the board was parked. Follows nextMonster, since
     //     that is what this cycle actually camps.
+    //   * EventWindowRosterSnapshots — "View Previous Window" reads every capture filed under this
+    //     Event id, and the new camp files its own under the same id and the same window numbers.
+    //     Left behind, window 5 of the second pop showed pop 1's window-5 roster mixed in with its
+    //     own, and the table grew by a whole camp every pop. Nothing else reads them: the camp
+    //     that just ended was archived (review card, Past Event) from its own attendance rows.
     //
     // Stages the changes only; the caller saves. The DbContext save-hook re-posts to Discord by
     // EDITING the existing message, because the event keeps its message id — which is the whole
@@ -99,6 +104,13 @@ public static class HnmEventSeeder
         ev.WindowAnchorAt = null;
         ev.NextWindowAt = null;
         HnmEventSeeder.ClearWdCampState(ev);
+
+        // The previous camp's window rosters (see the list above). Removed in the caller's save, so
+        // a revive that fails to save leaves the old camp's history where it was.
+        var previousCampRosters = await db.EventWindowRosterSnapshots
+            .Where(s => s.EventId == ev.Id)
+            .ToListAsync(ct);
+        db.EventWindowRosterSnapshots.RemoveRange(previousCampRosters);
 
         // Stamping the source ToD is what makes the two revive callers coexist: the recurring
         // board's idempotency check matches on SourceTodId, so once this row is linked to the ToD

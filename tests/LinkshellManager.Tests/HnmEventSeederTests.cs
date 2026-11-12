@@ -278,6 +278,31 @@ public class ReviveForNewPopTests
         Assert.Null(ev.WindowAnchorAt);
         Assert.Null(ev.NextWindowAt);
     }
+
+    // "View Previous Window" reads every capture under the board's Event id, so the last camp's
+    // rosters have to go when the board comes back, or they mix into the new camp's windows.
+    // Another board's captures are not this revive's business.
+    [Fact]
+    public async Task ThePreviousCampsWindowRosters_AreRemoved_AndOnlyThisBoards()
+    {
+        using var db = NewInMemoryContext();
+        var ev = LastCyclesTiamat();
+        var otherBoard = LastCyclesTiamat();
+        db.Events.AddRange(ev, otherBoard);
+        await db.SaveChangesAsync();
+        db.EventWindowRosterSnapshots.AddRange(
+            new EventWindowRosterSnapshot { EventId = ev.Id, WindowNumber = 1, CharacterName = "Millhouse" },
+            new EventWindowRosterSnapshot { EventId = ev.Id, WindowNumber = 5, CharacterName = "Millhouse" },
+            new EventWindowRosterSnapshot { EventId = otherBoard.Id, WindowNumber = 5, CharacterName = "Elsewhere" });
+        await db.SaveChangesAsync();
+
+        await HnmEventSeeder.ReviveForNewPopAsync(db, ev, Repop, nextDay: 2, nextMonster: "Tiamat", sourceTodId: null);
+        await db.SaveChangesAsync();
+
+        var left = await db.EventWindowRosterSnapshots.AsNoTracking().ToListAsync();
+        var kept = Assert.Single(left);
+        Assert.Equal(otherBoard.Id, kept.EventId);
+    }
 }
 
 // The Window Method is stamped beside the spawn grid, from the linkshell's monster setup, so a camp

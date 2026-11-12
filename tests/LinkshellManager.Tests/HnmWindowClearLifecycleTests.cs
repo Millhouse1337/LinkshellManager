@@ -191,6 +191,45 @@ public class HnmWindowClearLifecycleTests
         }
     }
 
+    // A recurring board reuses its Event row for every pop. Pop it twice and "View Previous Window"
+    // must only have the SECOND camp's rosters to show: the first camp's window 1 used to sit under
+    // the same Event id and window number and appear beside the new one.
+    [Theory]
+    [MemberData(nameof(WipingMonsters))]
+    public async Task ABoardPoppedTwice_KeepsOnlyTheSecondCampsRosters(string monster, int cadenceMinutes)
+    {
+        using var db = PostedBoard(monster, TimeSpan.FromSeconds(-5));
+        await SeatAsync(db, "FirstCamp");
+        await GoLiveAsync(db);
+        await TickAsync(db);
+        await SeatAsync(db, "FirstCampWindow2");
+        await ElapseOneWindowAsync(db, cadenceMinutes);
+        await TickAsync(db);
+        Assert.Equal(2, await db.EventWindowRosterSnapshots.CountAsync());
+
+        // End Camp parks the board (HnmCampPopService: defeated, un-commenced, roster torn down)…
+        var ev = await db.Events.FirstAsync();
+        ev.HnmDefeatedAt = DateTime.UtcNow;
+        ev.CommencementStartTime = null;
+        db.EventPartySlotSignups.RemoveRange(await db.EventPartySlotSignups.ToListAsync());
+        await db.SaveChangesAsync();
+
+        // …and the recurring board brings it back for the next pop, which is already due.
+        await HnmEventSeeder.ReviveForNewPopAsync(
+            db, ev, DateTime.UtcNow.AddSeconds(-5), nextDay: 2, nextMonster: monster, sourceTodId: null);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        await SeatAsync(db, "SecondCamp");
+        await GoLiveAsync(db);
+        await TickAsync(db);
+
+        var captured = await db.EventWindowRosterSnapshots.AsNoTracking().ToListAsync();
+        var row = Assert.Single(captured);
+        Assert.Equal(1, row.WindowNumber);
+        Assert.Equal("SecondCamp", row.CharacterName);
+    }
+
     // A second tick inside the same window must not wipe the roster people have just re-signed
     // with — that is what HnmClearedWindow is for, and it now sits on the printed scale.
     [Theory]
