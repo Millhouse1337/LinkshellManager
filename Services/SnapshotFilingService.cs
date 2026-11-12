@@ -42,6 +42,12 @@ public sealed class SnapshotFilingService
         public static Result NotFound(string error) => new(StatusCodes.Status404NotFound, error);
     }
 
+    // What every edit that would put people on a POSTED card answers (here, and the Activity's
+    // add-a-name / confirm / back-to-Active on a capture). See RefuseOnPostedCardAsync there.
+    public const string PostedCardRefusal =
+        "This event is already posted, so nobody can be added to it. "
+        + "Pay someone it missed from the DKP audit instead.";
+
     public async Task<Result> FileAsync(AttendanceSnapshot snapshot, Request request, CancellationToken cancellationToken)
     {
         // A LIVE CAMP as the target: file the capture on the camp itself and mint nothing.
@@ -122,6 +128,10 @@ public sealed class SnapshotFilingService
         }
 
         if (windowEvent is null) return Result.NotFound("Window Event not found.");
+        // A posted card was paid for who was on it then. A capture filed onto it now would be paid
+        // by the card's "Pay newly registered" button, without the review the card went through.
+        // (The find-by-name path above never picks a posted card; this catches a picked one.)
+        if (windowEvent.PostedToSheetAt.HasValue) return Result.Refused(PostedCardRefusal);
 
         // Camp association, when the officer picked one. Verified against the snapshot's own
         // linkshell because it arrives from the client; an id that doesn't belong is dropped

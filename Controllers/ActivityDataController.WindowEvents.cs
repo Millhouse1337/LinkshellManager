@@ -740,6 +740,7 @@ public sealed partial class ActivityDataController
 
         var manageResult = await RequireWindowEventManagerAsync(snapshot.LinkshellId, cancellationToken);
         if (manageResult is not null) return manageResult;
+        if (await RefuseOnPostedCardAsync(snapshot.WindowEventId, cancellationToken) is { } posted) return posted;
 
         var name = TrimToNull(request.CharacterName, 256);
         if (name is null) return BadRequest(new { error = "Character name is required to add a person." });
@@ -1021,6 +1022,13 @@ public sealed partial class ActivityDataController
 
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null) return Unauthorized(new { error = "Sign in to review snapshots." });
+        // Confirming puts the capture's people on the card. Rejecting takes them off, which pays
+        // nobody, so it stays allowed.
+        if (request.Verified
+            && await RefuseOnPostedCardAsync(snapshot.WindowEventId, cancellationToken) is { } posted)
+        {
+            return posted;
+        }
 
         snapshot.SnapshotStatus = request.Verified
             ? AttendanceSnapshotStatuses.Active
@@ -1055,6 +1063,12 @@ public sealed partial class ActivityDataController
             _ => null
         };
         if (status is null) return BadRequest(new { error = "Unsupported snapshot status." });
+        // Only Active puts the capture's people on the card; Ignored and Pending take them off.
+        if (status == AttendanceSnapshotStatuses.Active
+            && await RefuseOnPostedCardAsync(snapshot.WindowEventId, cancellationToken) is { } posted)
+        {
+            return posted;
+        }
 
         snapshot.SnapshotStatus = status;
         if (status is AttendanceSnapshotStatuses.Active or AttendanceSnapshotStatuses.Ignored)
@@ -1062,6 +1076,25 @@ public sealed partial class ActivityDataController
         }
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
+    }
+
+    // Refuses an edit that would put people on a POSTED card: adding a name, confirming a capture,
+    // or setting one back to Active (filing one onto a posted card is refused in
+    // SnapshotFilingService). Post paid who was on the card then, and "Pay newly registered" pays
+    // anyone on it who has no row from it yet, so a name slipped onto a posted card would be paid
+    // by the next press of that button without the review the card went through. Edits that only
+    // take people off stay allowed.
+    private async Task<IActionResult?> RefuseOnPostedCardAsync(int? windowEventId, CancellationToken cancellationToken)
+    {
+        if (windowEventId is not int cardId) return null;
+        var postedAt = await _dbContext.WindowEvents
+            .AsNoTracking()
+            .Where(w => w.Id == cardId)
+            .Select(w => w.PostedToSheetAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        return postedAt.HasValue
+            ? BadRequest(new { error = SnapshotFilingService.PostedCardRefusal })
+            : null;
     }
 
     private async Task<(WindowEvent? Value, IActionResult? Result)> LoadManageableWindowEventAsync(

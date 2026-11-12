@@ -69,6 +69,10 @@ public sealed class WindowEventLinkService
                 .Where(item =>
                     item.LinkshellId == linkshellId &&
                     item.Status == WindowEventStatuses.Open &&
+                    // A camp's review card stays Open after it is posted. Folding a new capture
+                    // into it would put people on a card that is already paid (see
+                    // SnapshotFilingService.PostedCardRefusal), so a new card is made instead.
+                    item.PostedToSheetAt == null &&
                     item.NormalizedName == normalized &&
                     item.LastCapturedAtUtc >= staleCutoff)
                 .OrderByDescending(item => item.LastCapturedAtUtc)
