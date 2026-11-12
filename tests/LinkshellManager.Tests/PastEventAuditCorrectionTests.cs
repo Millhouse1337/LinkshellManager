@@ -111,6 +111,25 @@ public class PastEventAuditCorrectionTests
         Assert.Equal(8, db.AppUserEventHistories.Single().EventDkp);
     }
 
+    // The seed is an OLD audit: the Past Event still shows 10 while Bob really has 8. Doubling the
+    // rate must scale what he has (8 -> 16), not the stale 10 -> 20, which wiped the -2 correction.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ChangingTheRate_ScalesWhatTheMemberReallyHas_KeepingTheCorrection(bool auditCarriesEvent)
+    {
+        await using var db = NewDb();
+        var (_, audit) = await SeedAsync(db, auditCarriesEvent);
+
+        var outcome = await NewServices(db).Edits.EditEventAsync(HistoryId,
+            new EventHistoryEditInput("Sky", "Sky", null, null, null, 20), CancellationToken.None);
+
+        Assert.Equal(EventHistoryEditOutcome.Done, outcome);
+        Assert.Equal(16, BobDkp(db));
+        Assert.Equal(-2, db.DkpLedgerEntries.Single(e => e.Id == audit.Id).Amount);
+        Assert.Equal(16, db.AppUserEventHistories.Single().EventDkp);
+    }
+
     [Fact]
     public async Task AnAudit_MovesTheAttendeesPastEventFigure_EvenThroughACorrectionOfACorrection()
     {

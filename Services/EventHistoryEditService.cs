@@ -110,7 +110,11 @@ public sealed class EventHistoryEditService
 
             foreach (var p in history.AppUserEventHistories)
             {
-                var oldEarned = p.EventDkp ?? 0;
+                // Scaled from what the member really has from this event (earned row + its audit
+                // corrections), not from the shown figure: an audit written before audits moved
+                // that figure left it at 10 while the member had 8, and scaling the 10 then set
+                // the total to 20 -- quietly erasing the officer's -2 correction.
+                var oldEarned = LedgerTotal(p, earnedEntries, audits) ?? p.EventDkp ?? 0;
                 var newEarned = oldRate > 0
                     ? DkpRounding.Round(oldEarned * newRate / oldRate, step)
                     : DkpRounding.Round((p.Duration ?? 0) * newRate, step);
@@ -477,6 +481,19 @@ public sealed class EventHistoryEditService
         var audited = auditsByRow.TryGetValue(entry.Id, out var audits) ? audits.Sum(a => a.Amount) : 0d;
         memberships.TryGetValue(participant.AppUserId, out var membership);
         _dkpLedger.Amend(entry, newEarned - audited, ledgerDetails, membership);
+    }
+
+    // What the member actually got from this event in the ledger: their earned row plus every audit
+    // correction of it. Null when they have no earned row (then the shown figure is all there is).
+    private static double? LedgerTotal(
+        AppUserEventHistory participant,
+        IReadOnlyDictionary<string, DkpLedgerEntry> earnedEntries,
+        IReadOnlyDictionary<int, List<DkpLedgerEntry>> auditsByRow)
+    {
+        if (string.IsNullOrWhiteSpace(participant.AppUserId)) return null;
+        if (!earnedEntries.TryGetValue(participant.AppUserId, out var entry)) return null;
+        var audited = auditsByRow.TryGetValue(entry.Id, out var audits) ? audits.Sum(a => a.Amount) : 0d;
+        return entry.Amount + audited;
     }
 
     // Every DKP audit correction of each given row, keyed by that row's id. The audit screen lets
