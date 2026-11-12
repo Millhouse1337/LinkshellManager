@@ -46,11 +46,13 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Only HNM camps that pay per window have a closing window bonus." });
         }
 
-        // Same guard the window re-price carries: once the camp is closed the roster has been
-        // handed to review, where the amounts are edited per member instead.
-        if (eventEntity.EndTime is not null)
+        // Only while the camp is running. End Camp prices the roster into its review card and parks
+        // the board for the next pop (EventRunState); it never sets EndTime, which an HNM board
+        // keeps null, so the old EndTime test could never fire. After End Camp the amounts are
+        // edited on the review card, and the board's default for later camps on the event form.
+        if (!EventRunState.IsRunning(eventEntity))
         {
-            return BadRequest(new { error = "Cannot change the close bonus on a closed event." });
+            return BadRequest(new { error = "The close bonus can only be changed while the camp is running. After End Camp, edit its review card instead." });
         }
 
         var linkshell = await _dbContext.Linkshells

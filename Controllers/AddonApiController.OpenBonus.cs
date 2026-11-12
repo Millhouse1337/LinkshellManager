@@ -46,11 +46,10 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Only HNM camps that pay per window have an open bonus." });
         }
 
-        // Same guard as the close bonus: once the camp is closed the roster has been handed to
-        // review, where the amounts are edited per member instead.
-        if (eventEntity.EndTime is not null)
+        // Same guard as the close bonus: only while the camp is running (see CloseBonus).
+        if (!EventRunState.IsRunning(eventEntity))
         {
-            return BadRequest(new { error = "Cannot change the open bonus on a closed event." });
+            return BadRequest(new { error = "The open bonus can only be changed while the camp is running. After End Camp, edit its review card instead." });
         }
 
         var linkshell = await _dbContext.Linkshells
