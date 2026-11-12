@@ -152,6 +152,7 @@ public sealed class LootEditService
             poolRef: DkpPoolRef.Pinned(detail.DkpPoolId ?? await DefaultPoolIdAsync(linkshellId, cancellationToken)),
             sourceTodLootDetailId: detail.Id,
             sourceEventLootDetailId: null,
+            eventHistoryId: null,
             eventName: monsterName,
             eventType: null,
             eventLocation: null,
@@ -332,6 +333,8 @@ public sealed class LootEditService
                 : DkpPoolRef.Derived(eventType),
             sourceTodLootDetailId: null,
             sourceEventLootDetailId: detail.Id,
+            // Filed under the past event too, so deleting that event reverses this edit with it.
+            eventHistoryId: detail.EventHistoryId,
             eventName: eventName,
             eventType: eventType,
             eventLocation: eventLocation,
@@ -409,6 +412,7 @@ public sealed class LootEditService
                 poolRef: DkpPoolRef.Pinned(detail.DkpPoolId ?? await DefaultPoolIdAsync(linkshellId, cancellationToken)),
                 sourceTodLootDetailId: detail.Id,
                 sourceEventLootDetailId: null,
+                eventHistoryId: null,
                 eventName: monsterName,
                 eventType: null,
                 eventLocation: null,
@@ -529,6 +533,9 @@ public sealed class LootEditService
                     : DkpPoolRef.Derived(eventType),
                 sourceTodLootDetailId: null,
                 sourceEventLootDetailId: detail.Id,
+                // Filed under the past event too, so deleting that event takes this refund back with
+                // the charge it undoes -- otherwise the winner kept the refund for an event that is gone.
+                eventHistoryId: detail.EventHistoryId,
                 eventName: eventName,
                 eventType: eventType,
                 eventLocation: eventLocation,
@@ -581,6 +588,7 @@ public sealed class LootEditService
         DkpPoolRef poolRef,
         int? sourceTodLootDetailId,
         int? sourceEventLootDetailId,
+        int? eventHistoryId,
         string? eventName,
         string? eventType,
         string? eventLocation,
@@ -653,7 +661,8 @@ public sealed class LootEditService
                 Details: $"Loot deleted: record removed and DKP refunded. Reason: {Truncate(reason, 800)}",
                 EditReason: Truncate(reason, 512),
                 SourceTodLootDetailId: sourceTodLootDetailId,
-                SourceEventLootDetailId: sourceEventLootDetailId),
+                SourceEventLootDetailId: sourceEventLootDetailId,
+                EventHistoryId: eventHistoryId),
             cancellationToken);
     }
 
@@ -735,6 +744,7 @@ public sealed class LootEditService
         DkpPoolRef poolRef,
         int? sourceTodLootDetailId,
         int? sourceEventLootDetailId,
+        int? eventHistoryId,
         string? eventName,
         string? eventType,
         string? eventLocation,
@@ -779,7 +789,8 @@ public sealed class LootEditService
             ItemName: itemName,
             EditReason: Truncate(reason, 512),
             SourceTodLootDetailId: sourceTodLootDetailId,
-            SourceEventLootDetailId: sourceEventLootDetailId);
+            SourceEventLootDetailId: sourceEventLootDetailId,
+            EventHistoryId: eventHistoryId);
 
         // ----- Refund the OLD debit -----
         if (oldMembership is not null && oldDkpRaw > 0)
