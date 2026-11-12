@@ -18,8 +18,15 @@ namespace LinkshellManagerDiscordApp.Migrations
         // Money is kept, not removed: the oldest row gets the SUM of the rows' LinkshellDkp and seeded
         // lifetime totals. The ledger is keyed on the account (AppUserId), not on the membership row,
         // so it needs no change and still adds up to the merged balance. The two ledger watermarks
-        // take the LATER of the rows' values, so no ledger row that either row had already folded into
-        // its seed or left out of its pools is counted again. The kept row also takes the highest rank
+        // are taken differently, because they mean different things:
+        //   * DkpSeedLedgerId takes the LATER value: a DKP import folded every ledger row up to it into
+        //     the seed, so counting those rows again would double the member's lifetime totals.
+        //   * DkpPoolLedgerFromId takes the EARLIER value. It is stamped when a membership is created,
+        //     so the older row's value is when this member joined. Every ledger row after it belongs
+        //     to this membership's time in the linkshell, and the merged balance holds all of them. The
+        //     later value would push the typed-pool DKP (HNM, say) earned between the two joins into
+        //     the default pool. Either way each ledger row counts once and the total is exact.
+        // The kept row also takes the highest rank
         // (a Leader stays a Leader even if their leader row was the newer one), the earliest join date,
         // and any name / Discord id / job data it was missing. Everything else stays as the oldest row
         // had it.
@@ -51,7 +58,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                        SUM("SeededDkpEarned") AS seeded_earned,
                        SUM("SeededDkpSpent") AS seeded_spent,
                        MAX("DkpSeedLedgerId") AS seed_from,
-                       MAX("DkpPoolLedgerFromId") AS pool_from,
+                       MIN("DkpPoolLedgerFromId") AS pool_from,
                        MIN("DateJoined") AS joined,
                        (array_agg("Rank" ORDER BY
                             CASE lower(COALESCE("Rank", ''))

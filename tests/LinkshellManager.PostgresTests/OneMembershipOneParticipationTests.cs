@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
@@ -126,10 +127,11 @@ public class OneMembershipOneParticipationTests : IAsyncLifetime
                 });
                 await db.SaveChangesAsync();
 
-                // Ledger watermarks: the seeded row's import watermark is the newest.
+                // Ledger watermarks: the seeded row's import watermark is the newest. The pool epochs
+                // are stamped when each row was created, so the oldest row has the earliest.
                 await db.Database.ExecuteSqlRawAsync(
                     "UPDATE \"AppUserLinkshells\" SET \"DkpSeedLedgerId\" = CASE \"Id\" WHEN {0} THEN 90 ELSE 0 END, " +
-                    "\"DkpPoolLedgerFromId\" = CASE \"Id\" WHEN {0} THEN 4 WHEN {1} THEN 6 ELSE 0 END " +
+                    "\"DkpPoolLedgerFromId\" = CASE \"Id\" WHEN {0} THEN 4 WHEN {1} THEN 6 ELSE 2 END " +
                     "WHERE \"AppUserId\" = 'alice';",
                     aliceDup1, aliceDup2);
             }
@@ -149,8 +151,23 @@ public class OneMembershipOneParticipationTests : IAsyncLifetime
                 Assert.Equal(40d, alice.LinkshellDkp);
                 Assert.Equal(400d, alice.SeededDkpEarned);
                 Assert.Equal(150d, alice.SeededDkpSpent);
+                // Seed watermark: the latest (the import folded everything up to it into the seed).
+                // Pool epoch: the earliest, when Alice first joined.
                 Assert.Equal(90, alice.DkpSeedLedgerId);
-                Assert.Equal(6, alice.DkpPoolLedgerFromId);
+                Assert.Equal(2, alice.DkpPoolLedgerFromId);
+
+                // So the 15 HNM-pool DKP she earned (ledger row 3) after her first join but before
+                // the duplicate rows were made stays in the HNM pool, and the default pool holds
+                // the rest of her 40. The latest epoch (6) would have moved it to the default pool.
+                const int defaultPool = 1, hnmPool = 2;
+                var pools = DkpPoolBalanceService.Project(
+                    alice.LinkshellDkp ?? 0d,
+                    new[] { new LedgerPoolRow(3, hnmPool, 15d), new LedgerPoolRow(5, null, 25d) },
+                    alice.DkpPoolLedgerFromId,
+                    defaultPool,
+                    new[] { defaultPool, hnmPool });
+                Assert.Equal(15d, pools[hnmPool]);
+                Assert.Equal(25d, pools[defaultPool]);
                 // Highest rank wins; missing name / Discord id filled from the duplicates.
                 Assert.Equal("Officer", alice.Rank);
                 Assert.Equal("Alice", alice.CharacterName);
