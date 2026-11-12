@@ -22,7 +22,7 @@ public readonly record struct AuctionChannelJob(AuctionChannelJobKind Kind, int 
 
 // Fire-and-forget queue of per-auction Discord channel jobs. Enqueued from
 // ApplicationDbContext on a successful commit (a new Auction → Create, a new
-// AuctionHistory carrying a channel id → Close) so every create/close path
+// AuctionHistory → Close) so every create/close path
 // triggers it without per-controller wiring. Drained by
 // DiscordAuctionChannelBackgroundService. Singleton, single-reader, mirrors
 // DiscordTodBoardQueue / DiscordDkpSpendQueue.
