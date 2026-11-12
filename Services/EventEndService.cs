@@ -27,15 +27,78 @@ public static class EventEndService
         IReadOnlyList<EndEventParticipantSummary> Participants,
         int WindowCount,
         int EventHistoryId,
-        bool HasLootDeductions);
-
-    // Caller is responsible for loading the Event with its AppUserEvents and EventLootDetails
-    // included, and for verifying auth (linkshell membership / management permission) before
-    // calling. Writes the EventHistory + DkpLedgerEntry rows, removes the related AppUserEvents /
-    // EventLootDetails / Event, and saves.
-    internal static async Task<EndEventResult> EndEventCoreAsync(
-        ApplicationDbContext dbContext, DkpLedgerWriter dkpLedger, DkpPoolResolver dkpPools, Event eventEntity)
+        bool HasLootDeductions)
     {
+        // Above 0 when RequireNoPendingAttendees refused the close: nothing was written or saved,
+        // and this many members are still waiting to be confirmed present or removed.
+        public int PendingAttendeeCount { get; init; }
+        public bool Refused => PendingAttendeeCount > 0;
+    }
+
+    // The rules the two End Event buttons (the app's and the addon's) have always disagreed on.
+    // They were two hand-written copies of this method until P3.5; now both call this one and say
+    // which way each rule goes, so a difference can only exist on purpose and in one place.
+    internal sealed record EndEventOptions
+    {
+        // Refuse the close (and save nothing) while a member with an account is still pending
+        // (IsVerified == null): an officer must confirm them present or remove them first.
+        // Checked before late board sign-ups are brought in, so those never block the close.
+        // Outside (account-less) sign-ups can't be confirmed, so they never block it either.
+        public bool RequireNoPendingAttendees { get; init; }
+
+        // A Loot Council linkshell doesn't spend DKP on loot, so the close pays nobody: every
+        // history row says 0 DKP and no EventEarned ledger row is written. Loot is never charged
+        // on Loot Council either way.
+        public bool LootCouncilPaysNoDkp { get; init; }
+
+        // Outside (account-less) sign-ups are board-only: they get no history row and are simply
+        // cleared with the event. Without this they are archived (with no ledger row, as there
+        // is no balance to pay into).
+        public bool SkipAccountlessParticipants { get; init; }
+
+        // The addon's End Event: the rules this method has always run with.
+        public static EndEventOptions Addon { get; } = new();
+
+        // The app's End Event: the rules the Activity's own copy of the close always applied.
+        public static EndEventOptions Activity { get; } = new()
+        {
+            RequireNoPendingAttendees = true,
+            LootCouncilPaysNoDkp = true,
+            SkipAccountlessParticipants = true,
+        };
+    }
+
+    // Members (with an account) still pending confirmation -- what RequireNoPendingAttendees
+    // refuses on.
+    internal static int CountPendingAttendees(Event eventEntity) =>
+        eventEntity.AppUserEvents.Count(p => p.IsVerified == null && p.AppUserId != null);
+
+    // Caller is responsible for loading the Event with its AppUserEvents, EventLootDetails and
+    // Linkshell included, and for verifying auth (linkshell membership / management permission)
+    // before calling. Writes the EventHistory + DkpLedgerEntry rows, removes the related
+    // AppUserEvents / EventLootDetails / Event, and saves. `options` defaults to the addon's rules.
+    internal static async Task<EndEventResult> EndEventCoreAsync(
+        ApplicationDbContext dbContext,
+        DkpLedgerWriter dkpLedger,
+        DkpPoolResolver dkpPools,
+        Event eventEntity,
+        EndEventOptions? options = null)
+    {
+        options ??= EndEventOptions.Addon;
+
+        // Before anything is read or written, so a refused close leaves the event untouched.
+        if (options.RequireNoPendingAttendees)
+        {
+            var pendingCount = CountPendingAttendees(eventEntity);
+            if (pendingCount > 0)
+            {
+                return new EndEventResult(default, Array.Empty<EndEventParticipantSummary>(), 0, 0, false)
+                {
+                    PendingAttendeeCount = pendingCount
+                };
+            }
+        }
+
         var endTimeUtc = DateTime.UtcNow;
         var participantSummaries = new List<EndEventParticipantSummary>();
 
@@ -120,8 +183,25 @@ public static class EventEndService
         // from this dedup.
         var creditedAppUserIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Read up front (it used to be read after the payout loop) because Loot Council also
+        // decides what the loop pays when LootCouncilPaysNoDkp is on. Loot Council charges no loot,
+        // Hybrid charges a percentage of the winner's pool balance, everything else the stated DKP.
+        var lootStructure = ActivityDataController.NormalizeLootStructure(
+            eventEntity.Linkshell?.LootStructure
+            ?? await dbContext.Linkshells
+                .Where(l => l.Id == eventEntity.LinkshellId)
+                .Select(l => l.LootStructure)
+                .FirstOrDefaultAsync()
+            ?? "Dkp");
+        var isLootCouncil = lootStructure == "LootCouncil";
+        var paysNoDkp = isLootCouncil && options.LootCouncilPaysNoDkp;
+
         foreach (var participation in eventEntity.AppUserEvents)
         {
+            if (string.IsNullOrWhiteSpace(participation.AppUserId) && options.SkipAccountlessParticipants)
+            {
+                continue;
+            }
             if (!string.IsNullOrWhiteSpace(participation.AppUserId) && !creditedAppUserIds.Add(participation.AppUserId))
             {
                 continue;
@@ -142,7 +222,7 @@ public static class EventEndService
                 durationHours,
                 eventEntity.DkpPerHour ?? 0,
                 DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement));
-            var eventDkp = credit.Dkp;
+            var eventDkp = paysNoDkp ? 0 : credit.Dkp;
 
             participation.Duration = durationHours;
             participation.EventDkp = eventDkp;
@@ -174,7 +254,8 @@ public static class EventEndService
                 WindowsAttended = windowsAttended
             });
 
-            if (!string.IsNullOrWhiteSpace(participation.AppUserId) &&
+            if (!paysNoDkp &&
+                !string.IsNullOrWhiteSpace(participation.AppUserId) &&
                 membershipsByAppUserId.TryGetValue(participation.AppUserId, out var linkshellMembership))
             {
                 await dkpLedger.AppendAsync(
@@ -198,18 +279,9 @@ public static class EventEndService
 
         dbContext.EventHistories.Add(history);
         var hasLootDeductions = false;
-        // Same loot rules as ActivityDataController.EndEventAsync: Loot Council charges nothing,
-        // Hybrid charges a percentage of the winner's pool balance, everything else the stated DKP.
-        var lootStructure = ActivityDataController.NormalizeLootStructure(
-            eventEntity.Linkshell?.LootStructure
-            ?? await dbContext.Linkshells
-                .Where(l => l.Id == eventEntity.LinkshellId)
-                .Select(l => l.LootStructure)
-                .FirstOrDefaultAsync()
-            ?? "Dkp");
         foreach (var lootDetail in eventEntity.EventLootDetails.OrderBy(detail => detail.Id))
         {
-            if (lootStructure == "LootCouncil" || lootDetail.WinningDkpSpent.GetValueOrDefault() <= 0)
+            if (isLootCouncil || lootDetail.WinningDkpSpent.GetValueOrDefault() <= 0)
             {
                 continue;
             }
