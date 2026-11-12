@@ -79,7 +79,10 @@ public sealed class EventHistoryEditService
         if (!string.IsNullOrWhiteSpace(input.EventName)) history.EventName = input.EventName.Trim();
         history.EventType = Clean(input.EventType);
         history.EventLocation = Clean(input.EventLocation);
-        history.Details = Clean(input.Details);
+        // The Past Events form has no Details box and sends null, so null means "not sent" and the
+        // stored text stays. Writing null here wiped every event's Details on any Save (a rename,
+        // a retype). An empty string still clears it.
+        if (input.Details is not null) history.Details = Clean(input.Details);
         if (input.Duration.HasValue) history.Duration = input.Duration.Value;
 
         // Retyping a closed event (Sky -> Sea) moves its DKP to the other event type's pool. The
