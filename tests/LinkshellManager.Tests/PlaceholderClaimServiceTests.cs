@@ -80,6 +80,30 @@ public class PlaceholderClaimServiceTests
     }
 
     [Fact]
+    public async Task NotYetAMember_RowsLeftFromAnEarlierStay_DoNotCountTowardAPool()
+    {
+        // Bob was on this roster after the import, earned 50 HNM-pool DKP (row 5), then his own
+        // entry was removed. That 50 is in no balance. Taking over the imported spot must not make
+        // it spendable HNM DKP again (the pool check would let him spend 50 he does not have).
+        using var db = NewDb();
+        Member(db, 11, Ph, "Bobalt", 100);
+        Ledger(db, 1, Ph, "SheetImport", 100);
+        db.DkpLedgerEntries.Add(new DkpLedgerEntry { Id = 5, LinkshellId = Ls, AppUserId = Real, EntryType = "SnapshotEarned", Amount = 50, DkpPoolId = 7, OccurredAt = When });
+        db.SaveChanges();
+
+        var result = await NewService(db).ClaimPlaceholderAsync(Ph, Real, Ls, CancellationToken.None);
+
+        Assert.True(result.Success, result.Error);
+        var member = Assert.Single(db.AppUserLinkshells);
+        Assert.Equal(100d, member.LinkshellDkp);
+        Assert.Equal(5, member.DkpPoolLedgerFromId);
+        var rows = db.DkpLedgerEntries.Select(e => new LedgerPoolRow(e.Id, e.DkpPoolId, e.Amount)).ToList();
+        var pools = DkpPoolBalanceService.Project(member.LinkshellDkp ?? 0, rows, member.DkpPoolLedgerFromId, 1, new[] { 1, 7 });
+        Assert.Equal(0d, pools[7]);
+        Assert.Equal(100d, pools[1]);
+    }
+
+    [Fact]
     public async Task AlreadyAMember_AddsBothBalances_AndBothLifetimeTotals()
     {
         // Bob earned 30 on his own account; the import gave Bobalt 100. Claiming must leave 130,

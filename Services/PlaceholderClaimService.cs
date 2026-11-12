@@ -108,6 +108,7 @@ public sealed class PlaceholderClaimService
             if (existing is null)
             {
                 // The placeholder's roster spot becomes the real account's (DKP/seeds intact).
+                await KeepLeftoverRowsOutOfPoolsAsync(ph, realAppUserId, cancellationToken);
                 ph.AppUserId = realAppUserId;
                 ph.DiscordUserId = null; // the real account now owns identity
                 ph.DiscordIdConfirmed = false;
@@ -205,6 +206,27 @@ public sealed class PlaceholderClaimService
         // UserMergeService's later saves, so the check cannot see them. Marking the pool epoch as
         // written is how a deliberate balance restatement tells that check so.
         _db.Entry(existing).Property(m => m.DkpPoolLedgerFromId).IsModified = true;
+    }
+
+    // The real account is NOT a member of this linkshell, yet it can still have DKP rows here: a
+    // member's rows survive being removed from the roster (say an officer removed Bob's own entry as
+    // a duplicate of the imported "Bob" and told him to claim that one). Those rows are not part of
+    // any balance. Once the placeholder's roster spot becomes Bob's, rows after the spot's pool start
+    // would count toward a pool again: Bob's old HNM-pool earnings would be spendable HNM DKP on top
+    // of a balance that never included them, and the default pool would go negative to match. So
+    // the pool start moves past them, the same thing a normal rejoin does (ApplicationDbContext
+    // stamps the newest row id). The TOTAL is untouched; only the placeholder's own typed-pool rows
+    // older than Bob's last row then count as default-pool DKP.
+    private async Task KeepLeftoverRowsOutOfPoolsAsync(
+        AppUserLinkshell ph, string realAppUserId, CancellationToken cancellationToken)
+    {
+        var lastLeftover = await _db.DkpLedgerEntries
+            .Where(e => e.AppUserId == realAppUserId && e.LinkshellId == ph.LinkshellId)
+            .MaxAsync(e => (int?)e.Id, cancellationToken);
+        if (lastLeftover is int last && last > ph.DkpPoolLedgerFromId)
+        {
+            ph.DkpPoolLedgerFromId = last;
+        }
     }
 
     private Task<List<LedgerRow>> LedgerRowsAsync(string appUserId, int linkshellId, CancellationToken cancellationToken) =>

@@ -94,6 +94,38 @@ public class PlaceholderClaimRequestTests : IAsyncLifetime
         Assert.Single(await check.PlaceholderClaimRequests.AsNoTracking().ToListAsync());
     }
 
+    // The officers' list joins requests to roster rows; the in-memory tests cannot show that the
+    // query translates to SQL, and a query that does not would make the roster card fail for everyone.
+    [Fact]
+    public async Task TheOfficersList_RunsOnPostgres_AndHidesClaimedPlaceholders()
+    {
+        var linkshellId = await SeedAsync();
+        await using (var db = _pg.CreateContext())
+        {
+            db.PlaceholderClaimRequests.AddRange(Open(linkshellId, "real", null), Open(linkshellId, null, "555"));
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _pg.CreateContext())
+        {
+            var service = new PlaceholderClaimRequestService(db, new PlaceholderClaimService(db, new UserMergeService(db)));
+            var pending = await service.ListPendingAsync(linkshellId, CancellationToken.None);
+            Assert.Equal(new[] { "account", "discord" }, pending.Select(p => p.RequesterKind).OrderBy(k => k));
+            Assert.All(pending, p => Assert.Equal("Bobalt", p.PlaceholderName));
+
+            var accountRequest = pending.Single(p => p.RequesterKind == "account");
+            Assert.True((await service.ApproveAsync(linkshellId, accountRequest.Id, "officer", CancellationToken.None)).Success);
+        }
+
+        await using (var db = _pg.CreateContext())
+        {
+            var service = new PlaceholderClaimRequestService(db, new PlaceholderClaimService(db, new UserMergeService(db)));
+            Assert.Empty(await service.ListPendingAsync(linkshellId, CancellationToken.None));
+            // The Discord request for the same placeholder was closed by the approval.
+            Assert.All(await db.PlaceholderClaimRequests.AsNoTracking().ToListAsync(), r => Assert.NotNull(r.ResolvedAtUtc));
+        }
+    }
+
     private sealed class BeforeFirstSave : SaveChangesInterceptor
     {
         private readonly Func<Task> _then;
