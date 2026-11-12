@@ -240,9 +240,17 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "That break return is no longer pending." });
         }
 
-        entry.DeniedAt = DateTime.UtcNow;
-        entry.DeniedBy = await ResolveTokenIssuerNameAsync(token, cancellationToken);
-        entry.RequiresVerification = false;
+        // Deny takes the time back, not just the request -- see BreakReturnDenial.
+        var participation = await _dbContext.AppUserEvents
+            .FirstOrDefaultAsync(item => item.Id == entry.AppUserEventId, cancellationToken);
+        if (participation is null) return NotFound(new { error = "Participant not found." });
+
+        var participantLedger = await _dbContext.AppUserEventStatusLedgers
+            .Where(item => item.AppUserEventId == participation.Id)
+            .ToListAsync(cancellationToken);
+        BreakReturnDenial.Apply(
+            eventEntity, participation, entry, participantLedger,
+            DateTime.UtcNow, await ResolveTokenIssuerNameAsync(token, cancellationToken));
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }

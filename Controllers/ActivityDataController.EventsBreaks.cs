@@ -375,9 +375,20 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "That break return has already been resolved." });
         }
 
-        ledgerEntry.DeniedAt = DateTime.UtcNow;
-        ledgerEntry.DeniedBy = appUser.CharacterName ?? appUser.UserName;
-        ledgerEntry.RequiresVerification = false;
+        // Deny takes the time back, not just the request -- see BreakReturnDenial.
+        var participation = await _dbContext.AppUserEvents
+            .FirstOrDefaultAsync(item => item.Id == ledgerEntry.AppUserEventId, cancellationToken);
+        if (participation is null)
+        {
+            return NotFound(new { error = "The selected participant was not found." });
+        }
+
+        var participantLedger = await _dbContext.AppUserEventStatusLedgers
+            .Where(item => item.AppUserEventId == participation.Id)
+            .ToListAsync(cancellationToken);
+        BreakReturnDenial.Apply(
+            eventEntity, participation, ledgerEntry, participantLedger,
+            DateTime.UtcNow, appUser.CharacterName ?? appUser.UserName);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });

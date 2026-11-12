@@ -1,0 +1,67 @@
+using LinkshellManagerDiscordApp.Models;
+
+namespace LinkshellManagerDiscordApp.Services;
+
+// What "Deny" on a member's own "I'm back" does. Shared by the Activity and addon deny endpoints.
+//
+// A self-return restarts the member's clock straight away and only ASKS an officer to confirm it.
+// Deny used to just stamp the request as denied, so the clock kept running and the member was paid
+// for the time anyway unless the officer also pressed Send to Break Room. Deny now takes that time
+// back: the member counts as never having come back.
+//
+//   - Still in the segment the return started (no break since): back on break as of the return
+//     time. Duration already holds everything banked before the break, so it stays as it is.
+//   - Took another break since: the time between the return and that break was banked into
+//     Duration when the break started, so it comes back out. Their current state is left alone.
+//   - Windowed (HNM) events have no clock to undo, and re-parking a member there hides them from
+//     the addon roster with no way back (see EventBreakPolicy), so Deny only marks the request.
+public static class BreakReturnDenial
+{
+    // `participantLedger` is every status ledger row of this participation (any order).
+    // The caller has already checked the request is still pending, and saves afterwards.
+    public static void Apply(
+        Event eventEntity,
+        AppUserEvent participation,
+        AppUserEventStatusLedger deniedReturn,
+        IEnumerable<AppUserEventStatusLedger> participantLedger,
+        DateTime nowUtc,
+        string? deniedBy)
+    {
+        deniedReturn.DeniedAt = nowUtc;
+        deniedReturn.DeniedBy = deniedBy;
+        deniedReturn.RequiresVerification = false;
+
+        if (EventBreakPolicy.IsWindowedAttendance(eventEntity))
+        {
+            return;
+        }
+
+        var returnedAt = deniedReturn.OccurredAt;
+        var nextBreak = participantLedger
+            .Where(entry =>
+                entry.Id != deniedReturn.Id &&
+                entry.ActionType == "BreakStart" &&
+                entry.OccurredAt >= returnedAt)
+            .OrderBy(entry => entry.OccurredAt)
+            .ThenBy(entry => entry.Id)
+            .FirstOrDefault();
+
+        if (nextBreak is not null)
+        {
+            var bankedHours = (nextBreak.OccurredAt - returnedAt).TotalHours;
+            participation.Duration = Math.Max(0, (participation.Duration ?? 0) - bankedHours);
+            return;
+        }
+
+        // On break with no BreakStart row after the return: an old or hand-edited state we can't
+        // read the time from, so don't guess — the request is still marked denied.
+        if (participation.IsOnBreak == true)
+        {
+            return;
+        }
+
+        participation.IsOnBreak = true;
+        participation.PauseTime = returnedAt;
+        participation.ResumeTime = null;
+    }
+}
