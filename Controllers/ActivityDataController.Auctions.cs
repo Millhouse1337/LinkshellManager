@@ -220,22 +220,11 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = validationError });
         }
 
-        // Gil items sell treasury gil for DKP — block if the linkshell has no gil,
-        // or if the total gil being auctioned exceeds the treasury balance.
-        var requestedGil = normalizedItems
-            .Where(item => item.GilAmount is > 0)
-            .Sum(item => item.GilAmount!.Value);
-        if (requestedGil > 0)
+        var stockError = await ValidateAuctionGilAsync(request.LinkshellId, normalizedItems, cancellationToken)
+            ?? await ValidateAuctionSourceItemsAsync(_dbContext, request.LinkshellId, normalizedItems, cancellationToken);
+        if (stockError is not null)
         {
-            var availableGil = await _treasury.GetCashOnHandAsync(request.LinkshellId, cancellationToken);
-            if (availableGil <= 0)
-            {
-                return BadRequest(new { error = "This linkshell has no gil in its treasury to auction." });
-            }
-            if (requestedGil > availableGil)
-            {
-                return BadRequest(new { error = $"Not enough gil in the treasury: {availableGil:N0} available, but {requestedGil:N0} is being auctioned." });
-            }
+            return BadRequest(new { error = stockError });
         }
 
         var createPoolMap = await _dkpPools.GetMapAsync(request.LinkshellId, cancellationToken);
@@ -325,6 +314,14 @@ public sealed partial class ActivityDataController
         if (validationError is not null)
         {
             return BadRequest(new { error = validationError });
+        }
+
+        // Same gil and inventory checks as Create, against the auction's own linkshell.
+        var stockError = await ValidateAuctionGilAsync(auction.LinkshellId, normalizedItems, cancellationToken)
+            ?? await ValidateAuctionSourceItemsAsync(_dbContext, auction.LinkshellId, normalizedItems, cancellationToken);
+        if (stockError is not null)
+        {
+            return BadRequest(new { error = stockError });
         }
 
         var editPoolMap = await _dkpPools.GetMapAsync(request.LinkshellId, cancellationToken);

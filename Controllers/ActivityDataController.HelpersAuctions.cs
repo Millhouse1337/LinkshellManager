@@ -86,6 +86,75 @@ public sealed partial class ActivityDataController
         return null;
     }
 
+    // Gil items sell treasury gil for DKP, and Close pays that gil out. Block an auction that sells
+    // more gil than the treasury holds. Create and Edit both run this: an Edit could otherwise
+    // raise a gil item past the balance after Create had checked a smaller amount.
+    private async Task<string?> ValidateAuctionGilAsync(
+        int linkshellId,
+        IReadOnlyList<ActivityAuctionItemInput> items,
+        CancellationToken cancellationToken)
+    {
+        var requestedGil = SumAuctionGil(items);
+        if (requestedGil <= 0)
+        {
+            return null;
+        }
+
+        var availableGil = await _treasury.GetCashOnHandAsync(linkshellId, cancellationToken);
+        return DescribeAuctionGilShortfall(requestedGil, availableGil);
+    }
+
+    internal static long SumAuctionGil(IReadOnlyList<ActivityAuctionItemInput> items)
+    {
+        return items
+            .Where(item => item.GilAmount is > 0)
+            .Sum(item => item.GilAmount!.Value);
+    }
+
+    // Null when the treasury covers the gil being auctioned, otherwise the error to show.
+    internal static string? DescribeAuctionGilShortfall(long requestedGil, long availableGil)
+    {
+        if (requestedGil <= 0)
+        {
+            return null;
+        }
+        if (availableGil <= 0)
+        {
+            return "This linkshell has no gil in its treasury to auction.";
+        }
+        if (requestedGil > availableGil)
+        {
+            return $"Not enough gil in the treasury: {availableGil:N0} available, but {requestedGil:N0} is being auctioned.";
+        }
+        return null;
+    }
+
+    // A treasury item an auction sells must belong to the auction's OWN linkshell. Close draws the
+    // linked item's stock down, so an id from another linkshell would point a sale at someone
+    // else's inventory (and an unknown id is just a broken link). Gil items never carry one.
+    internal static async Task<string?> ValidateAuctionSourceItemsAsync(
+        ApplicationDbContext db,
+        int linkshellId,
+        IReadOnlyList<ActivityAuctionItemInput> items,
+        CancellationToken cancellationToken)
+    {
+        var requestedIds = items
+            .Where(item => !item.GilAmount.HasValue && item.SourceItemId.HasValue)
+            .Select(item => item.SourceItemId!.Value)
+            .Distinct()
+            .ToList();
+        if (requestedIds.Count == 0)
+        {
+            return null;
+        }
+
+        var ownCount = await db.Items
+            .CountAsync(item => requestedIds.Contains(item.Id) && item.LinkshellId == linkshellId, cancellationToken);
+        return ownCount == requestedIds.Count
+            ? null
+            : "One of the treasury items isn't in this linkshell's inventory. Refresh and pick it again.";
+    }
+
     // Who may run an EXISTING auction (edit, start, end, close, delete): anyone whose role has Manage
     // auctions in the auction's OWN linkshell (the Leader and the admin override always pass).
     // Being the creator is deliberately NOT enough: Edit can add treasury gil or inventory items and
