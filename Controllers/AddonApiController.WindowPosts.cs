@@ -206,7 +206,7 @@ public sealed partial class AddonApiController
 
         var actorMembership = await _dbContext.AppUserLinkshells
             .FirstOrDefaultAsync(m => m.AppUserId == appUser.Id && m.LinkshellId == camp.LinkshellId, cancellationToken);
-        if (!CanManageLinkshell(actorMembership)) return (null, Forbid());
+        if (!await CanEditLiveCampAsync(actorMembership, cancellationToken)) return (null, Forbid());
 
         // Window and Misc posts PAY only on a Standard HNM camp; a Manual Check In camp credits its
         // check-in range instead.

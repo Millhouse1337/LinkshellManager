@@ -223,7 +223,7 @@ public sealed partial class ActivityDataController
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
         if (membership is null) return Forbid();
-        var canManage = await CanAsync(membership, r => r.CanModerateLiveEvent || r.CanManageEvents, cancellationToken);
+        var canManage = await CanAsync(membership, LinkshellPermissions.EditsLiveCamp, cancellationToken);
 
         // Live only -- an ended camp is Status=Open but belongs in the pending queue below.
         // Shares AttendanceQueryFilters' predicate with the addon's Misc Posts panel so the two agree.
@@ -1096,7 +1096,7 @@ public sealed partial class ActivityDataController
         if (appUser is null) return Unauthorized(new { error = "Sign in to manage Window Events." });
 
         var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanModerateLiveEvent || r.CanManageEvents, cancellationToken))
+        if (!await CanAsync(membership, LinkshellPermissions.EditsLiveCamp, cancellationToken))
         {
             return Forbid();
         }

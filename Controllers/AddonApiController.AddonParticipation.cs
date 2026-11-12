@@ -1282,15 +1282,7 @@ public sealed partial class AddonApiController
         // Add loot asks for (CanAddLoot), or the addon's officer right. It used to need only a
         // paired token, so any member (even a Trial, or someone since removed) could name anyone
         // as the winner and take their DKP from the addon's Loot Pool panel.
-        var issuerMembership = string.IsNullOrEmpty(token.IssuedToAppUserId)
-            ? null
-            : await _dbContext.AppUserLinkshells
-                .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    m => m.LinkshellId == token.LinkshellId && m.AppUserId == token.IssuedToAppUserId,
-                    cancellationToken);
-        var issuerRole = await GetTokenIssuerRoleAsync(token, token.LinkshellId, cancellationToken);
-        if (!CanPostAddonLoot(issuerMembership, issuerRole))
+        if (!await TokenIssuerCanAsync(token, token.LinkshellId, PostsAddonLoot, cancellationToken))
         {
             return new ObjectResult(new
             {
@@ -1383,19 +1375,6 @@ public sealed partial class AddonApiController
         });
     }
 
-    // May this token's owner post loot from the addon?
-    //
-    // Still a member, and either the Leader (never locked out by a stale role row, as in
-    // ActivityDataController.CanAsync) or a role with Add loot or the addon's officer right
-    // (Manage attendance with the addon -- the same people who run the camp in game).
-    internal static bool CanPostAddonLoot(AppUserLinkshell? issuerMembership, LinkshellRole? issuerRole)
-    {
-        if (issuerMembership is null) return false;
-        if (LinkshellRanks.IsLeader(issuerMembership.Rank)) return true;
-        return issuerRole is not null
-            && (issuerRole.CanAddLoot || issuerRole.CanManageAttendanceWithAddon);
-    }
-
     // Addon-side ToD posting. Mirrors the Discord Activity create-tod path in
     // ActivityDataController but with addon-token auth (linkshell-scoped) and
     // a slimmer payload â€” the addon only knows the monster name and the
@@ -1452,10 +1431,11 @@ public sealed partial class AddonApiController
         // heuristics produced too many false negatives on real linkshells.
         var claimed = request.Claim;
 
-        var role = await GetTokenIssuerRoleAsync(token, token.LinkshellId, cancellationToken);
-        var canManage = role?.CanManageTods == true;
-        var canSubmit = role?.CanSubmitTodForApproval == true;
-        if (!canManage && !canSubmit)
+        // Manage ToDs saves it straight to the list; Submit ToD for approval queues it for an
+        // officer instead (below). Neither -> refused.
+        var canManage = await TokenIssuerCanAsync(token, token.LinkshellId, r => r.CanManageTods, cancellationToken);
+        if (!canManage
+            && !await TokenIssuerCanAsync(token, token.LinkshellId, r => r.CanSubmitTodForApproval, cancellationToken))
         {
             return Forbid();
         }
@@ -1583,8 +1563,7 @@ public sealed partial class AddonApiController
         // Changing a saved ToD's claim is editing that ToD, so it needs Manage ToDs - the same
         // check as posting one straight to the saved list above. A member whose post only matched
         // an officer's ToD gets that row's id back, but must not be able to rewrite it.
-        var role = await GetTokenIssuerRoleAsync(token, tod.LinkshellId, cancellationToken);
-        if (role?.CanManageTods != true)
+        if (!await TokenIssuerCanAsync(token, tod.LinkshellId, r => r.CanManageTods, cancellationToken))
         {
             return Forbid();
         }

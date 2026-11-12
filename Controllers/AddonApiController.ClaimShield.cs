@@ -123,10 +123,9 @@ public sealed partial class AddonApiController
             ? request.CapturedAtUtc.Value
             : nowUtc;
 
-        var role = await GetTokenIssuerRoleAsync(token, token.LinkshellId, cancellationToken);
-        var canManage = role?.CanManageTods == true;
-        var canSubmit = role?.CanSubmitTodForApproval == true;
-        if (!canManage && !canSubmit)
+        // Same bar as posting a ToD from the addon: Manage ToDs, or Submit ToD for approval.
+        if (!await TokenIssuerCanAsync(
+                token, token.LinkshellId, r => r.CanManageTods || r.CanSubmitTodForApproval, cancellationToken))
         {
             return Forbid();
         }

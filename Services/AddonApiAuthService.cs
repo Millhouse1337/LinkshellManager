@@ -37,13 +37,18 @@ public sealed class AddonApiAuthService
     private readonly ApplicationDbContext _dbContext;
     private readonly GlobalSettingsService _globalSettings;
     private readonly IMemoryCache _cache;
+    private readonly LinkshellPermissions _permissions;
 
     public AddonApiAuthService(
-        ApplicationDbContext dbContext, GlobalSettingsService globalSettings, IMemoryCache cache)
+        ApplicationDbContext dbContext,
+        GlobalSettingsService globalSettings,
+        IMemoryCache cache,
+        LinkshellPermissions permissions)
     {
         _dbContext = dbContext;
         _globalSettings = globalSettings;
         _cache = cache;
+        _permissions = permissions;
     }
 
     public async Task<string> CreatePairingCodeAsync(
@@ -307,21 +312,17 @@ public sealed class AddonApiAuthService
     // "Customize linkshell settings", so handing someone the addon handed them the linkshell's
     // configuration with it.
     //
-    // The leader is never locked out by a stale role row, matching ActivityDataController.CanAsync.
-    // A linkshell whose default roles were never seeded has no row to read, and falls back to the
-    // old rank test -- so this can only widen access, never take it from an officer who had it.
+    // Decided by LinkshellPermissions, the same rule as every other permission in the app: no
+    // membership -> no; super-admin override -> yes; Leader -> yes (never locked out by a stale
+    // role row); otherwise the role's flag, an unknown rank falling back to the Member role.
+    // A linkshell whose default roles were never seeded gets them seeded first, exactly as the
+    // app does the moment anyone opens it.
     //
     // Lives here (not in the controller) so the Pair button, the pairing fan-out and every
     // token check read the one rule.
-    public async Task<bool> MemberCanUseAddonAsync(
+    public Task<bool> MemberCanUseAddonAsync(
         AppUserLinkshell? membership, CancellationToken cancellationToken = default)
-    {
-        if (membership is null) return false;
-        if (LinkshellRanks.IsLeader(membership.Rank)) return true;
-
-        var role = await FindEffectiveRoleAsync(membership, cancellationToken);
-        return role?.CanUseAddon ?? LinkshellRanks.IsLeaderOrOfficer(membership.Rank);
-    }
+        => _permissions.CanAsync(membership, r => r.CanUseAddon, cancellationToken);
 
     // May this member disconnect SOMEONE ELSE'S addon pairing on their linkshell?
     //
@@ -329,41 +330,11 @@ public sealed class AddonApiAuthService
     // It used to be "Use the addon", which every default role has -- so any member could loop the
     // revoke endpoint over token ids and knock every officer's addon offline mid-camp.
     //
-    // Same order as ActivityDataController.CanAsync: membership first, so the admin override can
-    // only lift a caller inside a linkshell they actually joined; then the Leader, who is never
-    // locked out by a stale role row. No role row at all fails closed -- unlike CanUseAddon there
-    // is no older rank rule to fall back to.
-    public async Task<bool> MemberCanManageMembersAsync(
-        AppUserLinkshell? membership,
-        bool callerHasAdminOverride,
-        CancellationToken cancellationToken = default)
-    {
-        if (membership is null) return false;
-        if (callerHasAdminOverride) return true;
-        if (LinkshellRanks.IsLeader(membership.Rank)) return true;
-
-        var role = await FindEffectiveRoleAsync(membership, cancellationToken);
-        return role?.CanManageMembers == true;
-    }
-
-    // The role row for a member's rank, falling back to the linkshell's Member role when the rank
-    // has no row of its own (a renamed or deleted custom rank). Null when neither exists.
-    private async Task<LinkshellRole?> FindEffectiveRoleAsync(
-        AppUserLinkshell membership, CancellationToken cancellationToken)
-    {
-        var rank = string.IsNullOrWhiteSpace(membership.Rank)
-            ? LinkshellRanks.Member
-            : membership.Rank.Trim();
-        return await _dbContext.LinkshellRoles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                r => r.LinkshellId == membership.LinkshellId && r.Name == rank, cancellationToken)
-            ?? await _dbContext.LinkshellRoles
-                .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    r => r.LinkshellId == membership.LinkshellId && r.Name == LinkshellRanks.Member,
-                    cancellationToken);
-    }
+    // Same LinkshellPermissions rule: membership first, so the admin override can only lift a
+    // caller inside a linkshell they actually joined; then the Leader; then the role's flag.
+    private Task<bool> MemberCanManageMembersAsync(
+        AppUserLinkshell? membership, CancellationToken cancellationToken)
+        => _permissions.CanAsync(membership, r => r.CanManageMembers, cancellationToken);
 
     // Revokes every addon token one member holds for ONE linkshell, and drops their unused
     // pairing codes there. Called when the member is removed or leaves, so their game client
@@ -434,7 +405,6 @@ public sealed class AddonApiAuthService
     public async Task<RevokeResult> RevokeAsync(
         int tokenId,
         string callerAppUserId,
-        bool callerHasAdminOverride,
         CancellationToken cancellationToken = default)
     {
         var record = await _dbContext.AddonApiTokens
@@ -453,7 +423,7 @@ public sealed class AddonApiAuthService
                     .FirstOrDefaultAsync(
                         m => m.AppUserId == callerAppUserId && m.LinkshellId == token.LinkshellId,
                         cancellationToken);
-                allowed = await MemberCanManageMembersAsync(membership, callerHasAdminOverride, cancellationToken);
+                allowed = await MemberCanManageMembersAsync(membership, cancellationToken);
                 mayRevokeIn[token.LinkshellId] = allowed;
             }
             return allowed;

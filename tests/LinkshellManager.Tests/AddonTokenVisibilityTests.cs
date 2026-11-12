@@ -34,7 +34,7 @@ public class AddonTokenVisibilityTests
     private static AddonApiAuthService NewService(ApplicationDbContext db)
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
-        return new(db, new GlobalSettingsService(db, cache), cache);
+        return new(db, new GlobalSettingsService(db, cache), cache, TestPermissions.For(db));
     }
 
     private static AddonApiToken Token(

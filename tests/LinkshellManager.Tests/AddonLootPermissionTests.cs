@@ -29,51 +29,68 @@ public class AddonLootPermissionTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static AppUserLinkshell Member(string rank) =>
-        new() { LinkshellId = Ls, AppUserId = "poster", CharacterName = "Poster", Rank = rank };
+    // The poster's account in the linkshell, with a role of that name (none for "no row").
+    private static async Task<ApplicationDbContext> SeededAsync(string rank, LinkshellRole? role = null)
+    {
+        var db = NewDb();
+        db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", LootStructure = "Dkp" });
+        db.LinkshellRoles.AddRange(LinkshellRoleDefaults.BuildDefaultRoles(Ls).Where(r => r.Name != role?.Name));
+        if (role is not null)
+        {
+            db.LinkshellRoles.Add(role);
+        }
+        db.AppUserLinkshells.Add(new AppUserLinkshell { LinkshellId = Ls, AppUserId = "poster", CharacterName = "Poster", Rank = rank });
+        await db.SaveChangesAsync();
+        return db;
+    }
 
-    // ---- The rule itself.
+    private static Task<bool> MayPostAsync(ApplicationDbContext db, string appUserId = "poster") =>
+        TestPermissions.For(db).CanAsync(appUserId, Ls, AddonApiController.PostsAddonLoot, CancellationToken.None);
+
+    // ---- The rule itself (LinkshellPermissions + PostsAddonLoot).
 
     [Theory]
     [InlineData(LinkshellRanks.Leader, true)]
     [InlineData(LinkshellRanks.Officer, true)]
     [InlineData(LinkshellRanks.Member, false)]
     [InlineData(LinkshellRanks.Trial, false)]
-    public void DefaultRoles_PostAddonLoot(string rank, bool expected)
+    public async Task DefaultRoles_PostAddonLoot(string rank, bool expected)
     {
-        var role = LinkshellRoleDefaults.BuildDefaultRoles(linkshellId: Ls).Single(r => r.Name == rank);
+        await using var db = await SeededAsync(rank);
 
-        Assert.Equal(expected, AddonApiController.CanPostAddonLoot(Member(rank), role));
+        Assert.Equal(expected, await MayPostAsync(db));
     }
 
     [Fact]
-    public void NotAMemberAnyMore_IsRefused_EvenWithALootRole()
+    public async Task NotAMemberAnyMore_IsRefused()
     {
-        var role = new LinkshellRole { LinkshellId = Ls, Name = "Officer", CanAddLoot = true };
+        await using var db = await SeededAsync(LinkshellRanks.Officer);
 
-        Assert.False(AddonApiController.CanPostAddonLoot(null, role));
+        Assert.False(await MayPostAsync(db, "someone-who-left"));
     }
 
     [Fact]
-    public void Leader_PassesEvenWithAStaleRoleRow()
+    public async Task Leader_PassesEvenWithAStaleRoleRow()
     {
-        var staleRole = new LinkshellRole { LinkshellId = Ls, Name = LinkshellRanks.Leader };
+        await using var db = await SeededAsync(
+            LinkshellRanks.Leader, new LinkshellRole { LinkshellId = Ls, Name = LinkshellRanks.Leader });
 
-        Assert.True(AddonApiController.CanPostAddonLoot(Member(LinkshellRanks.Leader), staleRole));
-        Assert.True(AddonApiController.CanPostAddonLoot(Member(LinkshellRanks.Leader), null));
+        Assert.True(await MayPostAsync(db));
     }
 
-    [Fact]
-    public void EitherLootRight_IsEnough()
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(false, false, false)]
+    public async Task CustomRole_EitherLootRight_IsEnough(bool canAddLoot, bool addonOfficer, bool expected)
     {
-        var addLootOnly = new LinkshellRole { LinkshellId = Ls, Name = "Looter", CanAddLoot = true };
-        var addonOfficerOnly = new LinkshellRole { LinkshellId = Ls, Name = "Camp", CanManageAttendanceWithAddon = true };
-        var neither = new LinkshellRole { LinkshellId = Ls, Name = "Plain", CanUseAddon = true };
+        await using var db = await SeededAsync("Camp", new LinkshellRole
+        {
+            LinkshellId = Ls, Name = "Camp", CanUseAddon = true,
+            CanAddLoot = canAddLoot, CanManageAttendanceWithAddon = addonOfficer,
+        });
 
-        Assert.True(AddonApiController.CanPostAddonLoot(Member("Looter"), addLootOnly));
-        Assert.True(AddonApiController.CanPostAddonLoot(Member("Camp"), addonOfficerOnly));
-        Assert.False(AddonApiController.CanPostAddonLoot(Member("Plain"), neither));
-        Assert.False(AddonApiController.CanPostAddonLoot(Member("Plain"), null));
+        Assert.Equal(expected, await MayPostAsync(db));
     }
 
     // ---- Wiring. Reflection can't prove a call site, so pin the shape (precedent:
@@ -85,11 +102,10 @@ public class AddonLootPermissionTests
     {
         var body = AddAddonLootBody();
 
-        var gate = body.IndexOf("CanPostAddonLoot(issuerMembership, issuerRole)", StringComparison.Ordinal);
+        var gate = body.IndexOf("TokenIssuerCanAsync(token, token.LinkshellId, PostsAddonLoot", StringComparison.Ordinal);
         var write = body.IndexOf("manualLoot.AddAsync(", StringComparison.Ordinal);
-        Assert.True(gate >= 0, "AddAddonLootAsync no longer checks CanPostAddonLoot.");
+        Assert.True(gate >= 0, "AddAddonLootAsync no longer checks PostsAddonLoot.");
         Assert.True(write > gate, "The permission check must run before the loot is written.");
-        Assert.Contains("GetTokenIssuerRoleAsync(token, token.LinkshellId", body);
         Assert.Contains("Status403Forbidden", body);
         Assert.Contains("recordedByAppUserId: token.IssuedToAppUserId", body);
     }
@@ -135,7 +151,7 @@ public class AddonLootPermissionTests
     {
         var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "AddonApiController.AddonParticipation.cs"));
         var from = text.IndexOf("private async Task<IActionResult> AddAddonLootAsync(", StringComparison.Ordinal);
-        var to = text.IndexOf("internal static bool CanPostAddonLoot(", from + 1, StringComparison.Ordinal);
+        var to = text.IndexOf("public async Task<IActionResult> PostTodAsync(", from + 1, StringComparison.Ordinal);
         Assert.True(from >= 0 && to > from, "AddAddonLootAsync not found.");
         return text[from..to];
     }

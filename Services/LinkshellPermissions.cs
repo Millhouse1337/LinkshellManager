@@ -34,6 +34,14 @@ public sealed class LinkshellPermissions
         _adminOverride = adminOverride;
     }
 
+    // Editing a live camp's attendance and pay: posting or deleting a window, setting a window's
+    // DKP, the open / close / kill bonus, the closing tick, a Misc post's DKP, filing captures.
+    // Moderate live events OR Manage events, so whoever may run a camp may also fix its numbers.
+    // The app's Window Events routes and the addon controller's management routes both use this,
+    // so one camp card never mixes two rules.
+    public static bool EditsLiveCamp(LinkshellRole role)
+        => role.CanModerateLiveEvent || role.CanManageEvents;
+
     // The member's row in this linkshell, with the Linkshell loaded (callers read its
     // lock/guild settings). Tracked on purpose: several callers edit the membership after.
     public Task<AppUserLinkshell?> GetMembershipAsync(string appUserId, int linkshellId, CancellationToken ct)

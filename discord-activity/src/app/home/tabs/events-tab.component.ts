@@ -38,6 +38,7 @@ import {
 } from '../event-job-options';
 import {
   breakSessionInfo,
+  canEditLiveCampIn,
   canManageEventsIn,
   canManageLinkshellIn,
   formatBreakDuration,
@@ -262,6 +263,12 @@ export class EventsTabComponent {
   // from canManageLinkshell so the two never quietly drift back together.
   protected canEndCamp(linkshellId: number): boolean {
     return canManageEventsIn(this.activity.overview(), linkshellId);
+  }
+
+  // A live camp's pay and attendance edits (window DKP, bonuses, closing tick, posts, deleting a
+  // window, a capture or an attendee). Same rule the server checks — see canEditLiveCampIn().
+  protected canEditLiveCamp(linkshellId: number): boolean {
+    return canEditLiveCampIn(this.activity.overview(), linkshellId);
   }
 
   // ----- Event lists -----

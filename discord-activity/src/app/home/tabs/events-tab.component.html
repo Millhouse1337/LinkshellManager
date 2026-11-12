@@ -90,6 +90,7 @@
                  the camp has recorded (windows, Claim Shield, snapshots, kill), ONE detail panel for
                  the picked step, and a payout + loot column. Timed events keep the card below. -->
             @let manage = canManageLinkshell(event.linkshellId);
+            @let editCamp = canEditLiveCamp(event.linkshellId);
             @let busy = activity.busyEventId() === event.id;
             @let wd = isWdCamp(event);
             @let killWindow = campKillWindow(event);
@@ -178,14 +179,17 @@
                     </button>
                     <!-- A live Standard camp is paid from its posts, so it gets Add New Post; a Manual
                          Check In camp keeps Add a Member. Both panels live in the opened card, so on
-                         a collapsed card these open it as well. -->
+                         a collapsed card these open it as well. A new post is a live-camp pay edit, so
+                         it asks the same editCamp rule as the server's post route. -->
                     @if (offersNewPost(event)) {
-                      <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
-                        [disabled]="busy || addMemberLoading(event.id)"
-                        (click)="toggleCampPanel(event, 'post')">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                        {{ !collapsed && newPostEventId() === event.id ? 'Hide New Post' : 'Add New Post' }}
-                      </button>
+                      @if (editCamp) {
+                        <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
+                          [disabled]="busy || addMemberLoading(event.id)"
+                          (click)="toggleCampPanel(event, 'post')">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                          {{ !collapsed && newPostEventId() === event.id ? 'Hide New Post' : 'Add New Post' }}
+                        </button>
+                      }
                     } @else {
                       <button type="button" class="evt-btn evt-btn--secondary evt-btn--small event-card__edit"
                         [disabled]="busy || addMemberLoading(event.id)"
@@ -212,7 +216,7 @@
               </button>
 
               @if (!collapsed) {
-                @if (manage && newPostEventId() === event.id) {
+                @if (editCamp && newPostEventId() === event.id) {
                   <!-- Misc posts only: window posts come from the lsm addon. -->
                   @let postRate = newPostRate(event);
                   @let postPer = newPostPerMember(event);
@@ -601,7 +605,7 @@
                               <!-- Unlink sends it back to Unlinked Snapshots, paying nobody here. Delete
                                    removes it for good. Both take two clicks, because both change what
                                    the camp pays. -->
-                              @if (manage) {
+                              @if (editCamp) {
                                 <div class="hnm-detail__actions">
                                   @if (pendingUnlinkSnapshotId() === snapshot.id) {
                                     <span class="hnm-muted">Send back to Unlinked Snapshots?</span>
@@ -686,7 +690,7 @@
                                       <td class="num">
                                         @if (snapshot.dkpPerMember == null || entry.isRegistered === false) {
                                           <span class="roster-muted">-</span>
-                                        } @else if (snapshot.isMisc && manage) {
+                                        } @else if (snapshot.isMisc && editCamp) {
                                           <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
                                                  [attr.aria-label]="'DKP for ' + entry.characterName"
                                                  [disabled]="windowDkpSaving()"
@@ -740,7 +744,7 @@
                               <div class="hnm-detail__actions">
                               <!-- Which window closes the camp out. On a numbered camp ticking it is the ONLY
                                    thing that pays the close bonus. Ticking one unticks the others server-side. -->
-                              @if (manage && canMarkClosingWindow(event, win)) {
+                              @if (editCamp && canMarkClosingWindow(event, win)) {
                                 <label class="hnm-switch" [class.is-on]="win.isClosingWindow">
                                   <input type="checkbox" role="switch"
                                     [checked]="win.isClosingWindow"
@@ -755,7 +759,7 @@
                               }
                               <!-- Delete the whole window (its roster goes with it). Two clicks: the x asks
                                    "Are you sure?" inline, because window.confirm() is blocked in Discord. -->
-                              @if (manage) {
+                              @if (editCamp) {
                                 @if (pendingDeleteWindowId() === win.id) {
                                   <span class="hnm-detail__confirm">
                                     Are you sure?
@@ -785,7 +789,7 @@
                                    table's Regular / Open / Close cells below, so the two always agree. -->
                               <div class="hnm-formula">
                                 @if (isKill) {
-                                  @if (manage) {
+                                  @if (editCamp) {
                                     <label class="hnm-formula__chip hnm-formula__chip--edit">
                                       <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
                                              aria-label="Kill bonus"
@@ -800,7 +804,7 @@
                                     <span class="hnm-formula__chip"><b>{{ windowPerAttendee(event, win) | number:'1.0-2' }}</b> Kill bonus</span>
                                   }
                                 } @else {
-                                  @if (manage) {
+                                  @if (editCamp) {
                                     <label class="hnm-formula__chip hnm-formula__chip--edit">
                                       <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
                                              aria-label="DKP for this window"
@@ -814,7 +818,7 @@
                                   } @else {
                                     <span class="hnm-formula__chip"><b>{{ windowBaseValue(event, win) | number:'1.0-2' }}</b> {{ win.dkpAmount != null ? 'Set for this window' : 'Regular' }}</span>
                                   }
-                                  @if (isOpenWindow(win) && manage) {
+                                  @if (isOpenWindow(win) && editCamp) {
                                     <span class="hnm-formula__op">+</span>
                                     <label class="hnm-formula__chip hnm-formula__chip--edit">
                                       <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
@@ -830,7 +834,7 @@
                                     <span class="hnm-formula__op">+</span>
                                     <span class="hnm-formula__chip"><b>{{ openWindowValue(event, win) | number:'1.0-2' }}</b> Open bonus</span>
                                   }
-                                  @if (isCloseWindow(event, win) && manage) {
+                                  @if (isCloseWindow(event, win) && editCamp) {
                                     <span class="hnm-formula__op">+</span>
                                     <label class="hnm-formula__chip hnm-formula__chip--edit">
                                       <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
@@ -883,7 +887,7 @@
                                         <th class="num" title="What this window pays this member.">Subtotal</th>
                                         <th class="num" title="What this member would be paid for the whole camp if it ended now: every window, the kill, and the one-time Misc and Tag awards.">Event total</th>
                                       }
-                                      @if (manage) {
+                                      @if (editCamp) {
                                         <th class="num"><span class="hnm-sr-only">Remove</span></th>
                                       }
                                     </tr>
@@ -924,7 +928,7 @@
                                                price for the window, so every row edits the same number. Commits
                                                on change (blur / Enter), not per keystroke. -->
                                           <td class="num">
-                                            @if (manage) {
+                                            @if (editCamp) {
                                               <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
                                                      [attr.aria-label]="(isKill ? 'Kill bonus for ' : 'DKP for ') + (attendee.characterName || 'attendee')"
                                                      [disabled]="windowDkpSaving()"
@@ -939,7 +943,7 @@
                                           @if (!isKill) {
                                             <!-- The camp's open bonus: editable on window 1, 0 elsewhere. -->
                                             <td class="num">
-                                              @if (isOpenWindow(win) && manage) {
+                                              @if (isOpenWindow(win) && editCamp) {
                                                 <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
                                                        [attr.aria-label]="'Open bonus for ' + (attendee.characterName || 'attendee')"
                                                        [disabled]="windowDkpSaving()"
@@ -955,7 +959,7 @@
                                             </td>
                                             <!-- The camp's close bonus: editable on the close, 0 elsewhere. -->
                                             <td class="num">
-                                              @if (isCloseWindow(event, win) && manage) {
+                                              @if (isCloseWindow(event, win) && editCamp) {
                                                 <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
                                                        [attr.aria-label]="'Close bonus for ' + (attendee.characterName || 'attendee')"
                                                        [disabled]="windowDkpSaving()"
@@ -980,7 +984,7 @@
                                             }
                                           </td>
                                         }
-                                        @if (manage) {
+                                        @if (editCamp) {
                                           <td class="num hnm-roster__remove">
                                             @if (pendingRemoveAttendeeId() === attendee.id) {
                                               <span class="hnm-roster__confirm">
@@ -1016,7 +1020,7 @@
                                 }
                                 Event total adds the kill bonus and the one-time Misc and Tag awards — each paid once,
                                 when the camp ends.
-                                @if (manage) {
+                                @if (editCamp) {
                                   Edit a value to change it for everyone on this window.
                                 }
                               }
@@ -1536,7 +1540,7 @@
                                  the ONLY thing that pays the close bonus, which adds to whatever the
                                  window already pays. Round-trips because ticking one window unticks
                                  the others server-side. -->
-                            @if (canManageLinkshell(event.linkshellId) && canMarkClosingWindow(event, activeWindow)) {
+                            @if (canEditLiveCamp(event.linkshellId) && canMarkClosingWindow(event, activeWindow)) {
                               <span class="window-close-mark">
                                 <label>
                                   <input type="checkbox"
@@ -1638,7 +1642,7 @@
                                          scanned player who never checked in on a Manual Check In camp
                                          is paid nothing for standing there. -->
                                     <td class="num">
-                                      @if (canManageLinkshell(event.linkshellId) && !isWdCamp(event)) {
+                                      @if (canEditLiveCamp(event.linkshellId) && !isWdCamp(event)) {
                                         <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
                                                [attr.aria-label]="'DKP for ' + (attendee.characterName || 'attendee')"
                                                [disabled]="windowDkpSaving()"
@@ -1661,7 +1665,7 @@
                                       <td class="num">
                                         @if (activeWindow.isKillWindow) {
                                           <span class="roster-muted">—</span>
-                                        } @else if (isOpenWindow(activeWindow) && canManageLinkshell(event.linkshellId)) {
+                                        } @else if (isOpenWindow(activeWindow) && canEditLiveCamp(event.linkshellId)) {
                                           <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
                                                  [attr.aria-label]="'Open bonus for ' + (attendee.characterName || 'attendee')"
                                                  [disabled]="windowDkpSaving()"
@@ -1678,7 +1682,7 @@
                                       <td class="num">
                                         @if (activeWindow.isKillWindow) {
                                           <span class="roster-muted">—</span>
-                                        } @else if (isCloseWindow(event, activeWindow) && canManageLinkshell(event.linkshellId)) {
+                                        } @else if (isCloseWindow(event, activeWindow) && canEditLiveCamp(event.linkshellId)) {
                                           <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
                                                  [attr.aria-label]="'Close bonus for ' + (attendee.characterName || 'attendee')"
                                                  [disabled]="windowDkpSaving()"
@@ -1712,7 +1716,7 @@
                                       </td>
                                     }
                                     <td class="num">
-                                      @if (canManageLinkshell(event.linkshellId)) {
+                                      @if (canEditLiveCamp(event.linkshellId)) {
                                         @if (pendingRemoveAttendeeId() === attendee.id) {
                                           <button type="button" class="btn danger-fill sm"
                                             (click)="confirmRemoveAttendee(attendee.id)">
@@ -1840,7 +1844,7 @@
                             }
                             <!-- Undo the link: back to Unlinked Snapshots, unfiled, paying nobody here.
                                  Inline confirm because it changes what the camp pays. -->
-                            @if (canManageLinkshell(event.linkshellId)) {
+                            @if (canEditLiveCamp(event.linkshellId)) {
                               <span class="linked-snapshots__unlink">
                                 @if (pendingUnlinkSnapshotId() === snapshot.id) {
                                   <span class="roster-muted">Send back to Unlinked Snapshots?</span>
@@ -1909,7 +1913,7 @@
                                     <td class="num">
                                       @if (snapshot.dkpPerMember == null || entry.isRegistered === false) {
                                         <span class="roster-muted">-</span>
-                                      } @else if (snapshot.isMisc && canManageLinkshell(event.linkshellId)) {
+                                      } @else if (snapshot.isMisc && canEditLiveCamp(event.linkshellId)) {
                                         <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
                                                [attr.aria-label]="'DKP for ' + entry.characterName"
                                                [disabled]="windowDkpSaving()"

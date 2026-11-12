@@ -32,7 +32,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(
                 m => m.AppUserId == appUser.Id && m.LinkshellId == linkshellId.Value,
                 cancellationToken);
-        if (!CanManageLinkshell(membership)) return Forbid();
+        if (!await CanEditLiveCampAsync(membership, cancellationToken)) return Forbid();
 
         await RemoveWindowAttendeeRowAsync(attendee, cancellationToken);
         return Ok(new { removedId = attendee.Id });
@@ -59,7 +59,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(
                 m => m.AppUserId == appUser.Id && m.LinkshellId == attendanceWindow.Event.LinkshellId,
                 cancellationToken);
-        if (!CanManageLinkshell(membership)) return Forbid();
+        if (!await CanEditLiveCampAsync(membership, cancellationToken)) return Forbid();
 
         return await DeleteAttendanceWindowAsync(attendanceWindow, cancellationToken);
     }
@@ -225,23 +225,18 @@ public sealed partial class AddonApiController
     //
     // Your own pairing is always yours to disconnect. Anyone else's needs "Manage
     // members" on that token's linkshell -- the rule (and which batch siblings go
-    // with it) lives in AddonApiAuthService.RevokeAsync so it can be unit tested.
-    // AdminOverrideService comes in per action so the controller's constructor
-    // (built by hand in several tests) does not change.
+    // with it) lives in AddonApiAuthService.RevokeAsync so it can be unit tested. The
+    // super-admin override is part of that rule (LinkshellPermissions), and only ever
+    // lifts the caller inside a linkshell they have joined.
     [HttpPost("management/tokens/{tokenId:int}/revoke")]
     public async Task<IActionResult> RevokeTokenAsync(
         int tokenId,
-        [FromServices] AdminOverrideService adminOverride,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveManagementUserAsync(cancellationToken);
         if (appUser is null) return Unauthorized(new { error = "Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord." });
 
-        // Only ever elevates inside a linkshell the caller has joined: RevokeAsync checks
-        // membership before it looks at this flag.
-        var hasAdminOverride = await adminOverride.IsActiveForAsync(appUser.Id, cancellationToken);
-
-        var result = await _auth.RevokeAsync(tokenId, appUser.Id, hasAdminOverride, cancellationToken);
+        var result = await _auth.RevokeAsync(tokenId, appUser.Id, cancellationToken);
         return result switch
         {
             AddonApiAuthService.RevokeResult.NotFound => NotFound(new { error = "Token not found." }),

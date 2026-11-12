@@ -84,8 +84,7 @@ public class TodEditPermissionTests
         Assert.True(from >= 0 && to > from, "UpdateTodClaimAsync not found.");
 
         var body = text[from..to];
-        Assert.Contains("GetTokenIssuerRoleAsync(token, tod.LinkshellId", body);
-        Assert.Contains("role?.CanManageTods != true", body);
+        Assert.Contains("!await TokenIssuerCanAsync(token, tod.LinkshellId, r => r.CanManageTods,", body);
     }
 
     // ---- Image on update.

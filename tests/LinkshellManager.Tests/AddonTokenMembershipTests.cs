@@ -37,7 +37,7 @@ public class AddonTokenMembershipTests
     private static AddonApiAuthService NewService(ApplicationDbContext db, IMemoryCache? cache = null)
     {
         cache ??= new MemoryCache(new MemoryCacheOptions());
-        return new AddonApiAuthService(db, new GlobalSettingsService(db, cache), cache);
+        return new AddonApiAuthService(db, new GlobalSettingsService(db, cache), cache, TestPermissions.For(db));
     }
 
     // Same hashing the service stores, so a test can hand ValidateTokenAsync a raw token.
@@ -146,8 +146,12 @@ public class AddonTokenMembershipTests
         Assert.Null(await NewService(db).ValidateTokenAsync(raw));
     }
 
+    // A linkshell with no role rows at all gets the default roles seeded first (LinkshellPermissions,
+    // exactly as the app does when anyone opens it), and every default role may use the addon.
+    // This used to fall back to the old Leader/Officer rank test instead, so a Member was refused
+    // here until the next time someone opened the app and the seeding made them welcome.
     [Fact]
-    public async Task NoRolesSeeded_OfficerPasses_MemberDoesNot()
+    public async Task NoRolesSeeded_TheDefaultRolesDecide()
     {
         await using var officerDb = await SeededAsync(rank: LinkshellRanks.Officer, seedRoles: false);
         var officerRaw = await AddTokenAsync(officerDb, 1);
@@ -155,7 +159,42 @@ public class AddonTokenMembershipTests
 
         await using var memberDb = await SeededAsync(rank: LinkshellRanks.Member, seedRoles: false);
         var memberRaw = await AddTokenAsync(memberDb, 1);
-        Assert.Null(await NewService(memberDb).ValidateTokenAsync(memberRaw));
+        Assert.NotNull(await NewService(memberDb).ValidateTokenAsync(memberRaw));
+        Assert.True(await memberDb.LinkshellRoles.AnyAsync(r => r.LinkshellId == LinkshellId && r.Name == LinkshellRanks.Member));
+    }
+
+    [Fact]
+    public async Task CustomRole_ItsOwnUseTheAddonFlagDecides()
+    {
+        await using var db = await SeededAsync(rank: "Scout", memberRoleCanUseAddon: false);
+        db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = LinkshellId, Name = "Scout", CanUseAddon = true });
+        db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = LinkshellId, Name = "Mule", CanUseAddon = false });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { AppUserId = SomeoneElse, LinkshellId = LinkshellId, Rank = "Mule" });
+        await db.SaveChangesAsync();
+        var scoutRaw = await AddTokenAsync(db, 1);
+        var muleRaw = await AddTokenAsync(db, 2, issuedTo: SomeoneElse);
+
+        var service = NewService(db);
+        Assert.NotNull(await service.ValidateTokenAsync(scoutRaw));
+        Assert.Null(await service.ValidateTokenAsync(muleRaw));
+    }
+
+    // New with LinkshellPermissions: the super-admin override counts here too, but only inside a
+    // linkshell the super admin has joined.
+    [Fact]
+    public async Task AdminOverride_LetsAMemberSuperAdminUseTheAddon()
+    {
+        await using var db = await SeededAsync(memberRoleCanUseAddon: false);
+        db.Users.Add(new AppUser { Id = Me, UserName = Me, IsSuperAdmin = true });
+        await db.SaveChangesAsync();
+        await new GlobalSettingsService(db, new MemoryCache(new MemoryCacheOptions()))
+            .SetAdminOverrideEnabledAsync(true);
+        var raw = await AddTokenAsync(db, 1);
+        var notJoinedRaw = await AddTokenAsync(db, 2, linkshellId: OtherLinkshellId);
+
+        var service = NewService(db);
+        Assert.NotNull(await service.ValidateTokenAsync(raw));
+        Assert.Null(await service.ValidateTokenAsync(notJoinedRaw));
     }
 
     [Fact]

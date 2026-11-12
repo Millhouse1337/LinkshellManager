@@ -33,7 +33,7 @@ public class AddonTokenRevokeTests
     private static AddonApiAuthService NewService(ApplicationDbContext db)
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
-        return new AddonApiAuthService(db, new GlobalSettingsService(db, cache), cache);
+        return new AddonApiAuthService(db, new GlobalSettingsService(db, cache), cache, TestPermissions.For(db));
     }
 
     // Both linkshells get the default Leader / Officer / Member roles: only the Leader role has
@@ -88,7 +88,7 @@ public class AddonTokenRevokeTests
         await AddTokenAsync(db, 1, Me, HomeLinkshellId, batch);
         await AddTokenAsync(db, 2, Me, OtherLinkshellId, batch);
 
-        var result = await NewService(db).RevokeAsync(1, Me, callerHasAdminOverride: false);
+        var result = await NewService(db).RevokeAsync(1, Me);
 
         Assert.Equal(RevokeResult.Revoked, result);
         Assert.Equal(new[] { 1, 2 }, await RevokedIdsAsync(db));
@@ -102,7 +102,7 @@ public class AddonTokenRevokeTests
         await JoinAsync(db, Them, HomeLinkshellId, LinkshellRanks.Officer);
         await AddTokenAsync(db, 1, Them, HomeLinkshellId);
 
-        var result = await NewService(db).RevokeAsync(1, Me, callerHasAdminOverride: false);
+        var result = await NewService(db).RevokeAsync(1, Me);
 
         Assert.Equal(RevokeResult.Forbidden, result);
         Assert.Empty(await RevokedIdsAsync(db));
@@ -116,7 +116,7 @@ public class AddonTokenRevokeTests
         await JoinAsync(db, Them, HomeLinkshellId, LinkshellRanks.Member);
         await AddTokenAsync(db, 1, Them, HomeLinkshellId);
 
-        var result = await NewService(db).RevokeAsync(1, Me, callerHasAdminOverride: false);
+        var result = await NewService(db).RevokeAsync(1, Me);
 
         Assert.Equal(RevokeResult.Forbidden, result);
         Assert.Empty(await RevokedIdsAsync(db));
@@ -134,7 +134,7 @@ public class AddonTokenRevokeTests
         await JoinAsync(db, Them, HomeLinkshellId, LinkshellRanks.Member);
         await AddTokenAsync(db, 1, Them, HomeLinkshellId);
 
-        var result = await NewService(db).RevokeAsync(1, Me, callerHasAdminOverride: false);
+        var result = await NewService(db).RevokeAsync(1, Me);
 
         Assert.Equal(RevokeResult.Revoked, result);
         Assert.Equal(new[] { 1 }, await RevokedIdsAsync(db));
@@ -151,7 +151,7 @@ public class AddonTokenRevokeTests
         await AddTokenAsync(db, 1, Them, HomeLinkshellId, batch);
         await AddTokenAsync(db, 2, Them, OtherLinkshellId, batch);
 
-        var result = await NewService(db).RevokeAsync(1, Me, callerHasAdminOverride: false);
+        var result = await NewService(db).RevokeAsync(1, Me);
 
         // Token 2 belongs to a linkshell the leader is not even in, so it keeps working.
         Assert.Equal(RevokeResult.Revoked, result);
@@ -168,7 +168,7 @@ public class AddonTokenRevokeTests
         await AddTokenAsync(db, 1, Them, HomeLinkshellId, batch);
         await AddTokenAsync(db, 2, Them, OtherLinkshellId, batch);
 
-        var result = await NewService(db).RevokeAsync(1, Me, callerHasAdminOverride: false);
+        var result = await NewService(db).RevokeAsync(1, Me);
 
         Assert.Equal(RevokeResult.Revoked, result);
         Assert.Equal(new[] { 1, 2 }, await RevokedIdsAsync(db));
@@ -181,11 +181,16 @@ public class AddonTokenRevokeTests
         await JoinAsync(db, Me, HomeLinkshellId, LinkshellRanks.Member);
         await AddTokenAsync(db, 1, Them, HomeLinkshellId);
         await AddTokenAsync(db, 2, Them, OtherLinkshellId);
+        // The override is LinkshellPermissions' own now: a super admin, with the switch on.
+        db.Users.Add(new AppUser { Id = Me, UserName = Me, IsSuperAdmin = true });
+        await db.SaveChangesAsync();
+        var cache = new MemoryCache(new MemoryCacheOptions());
+        await new GlobalSettingsService(db, cache).SetAdminOverrideEnabledAsync(true);
         var service = NewService(db);
 
-        Assert.Equal(RevokeResult.Revoked, await service.RevokeAsync(1, Me, callerHasAdminOverride: true));
+        Assert.Equal(RevokeResult.Revoked, await service.RevokeAsync(1, Me));
         // Not a member of the Other linkshell: the override never reaches past membership.
-        Assert.Equal(RevokeResult.Forbidden, await service.RevokeAsync(2, Me, callerHasAdminOverride: true));
+        Assert.Equal(RevokeResult.Forbidden, await service.RevokeAsync(2, Me));
         Assert.Equal(new[] { 1 }, await RevokedIdsAsync(db));
     }
 
@@ -195,6 +200,6 @@ public class AddonTokenRevokeTests
         await using var db = await SeededAsync();
         await JoinAsync(db, Me, HomeLinkshellId, LinkshellRanks.Leader);
 
-        Assert.Equal(RevokeResult.NotFound, await NewService(db).RevokeAsync(99, Me, callerHasAdminOverride: false));
+        Assert.Equal(RevokeResult.NotFound, await NewService(db).RevokeAsync(99, Me));
     }
 }

@@ -89,7 +89,7 @@ public class ClaimShieldOneCapturePerCampTests
 
         var controller = new AddonApiController(
             db, null!, null!, null!, null!, null!, null!, null!, null!, null!,
-            null!, null!, NullLogger<AddonApiController>.Instance)
+            null!, null!, TestPermissions.For(db), NullLogger<AddonApiController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };

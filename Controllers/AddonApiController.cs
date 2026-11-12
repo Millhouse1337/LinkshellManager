@@ -28,6 +28,7 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly DkpPoolBalanceService _dkpPoolBalances;
     private readonly MonsterTimingResolver _monsterTimings;
     private readonly WindowEventLinkService _windowEventLinks;
+    private readonly LinkshellPermissions _permissions;
     private readonly ILogger<AddonApiController> _logger;
 
     public AddonApiController(
@@ -43,6 +44,7 @@ public sealed partial class AddonApiController : ControllerBase
         DkpPoolBalanceService dkpPoolBalances,
         MonsterTimingResolver monsterTimings,
         WindowEventLinkService windowEventLinks,
+        LinkshellPermissions permissions,
         ILogger<AddonApiController> logger)
     {
         _dbContext = dbContext;
@@ -57,6 +59,7 @@ public sealed partial class AddonApiController : ControllerBase
         _dkpPoolBalances = dkpPoolBalances;
         _monsterTimings = monsterTimings;
         _windowEventLinks = windowEventLinks;
+        _permissions = permissions;
         _logger = logger;
     }
 
@@ -161,37 +164,32 @@ public sealed partial class AddonApiController : ControllerBase
         return ctx;
     }
 
+    // ---------------------------------------------------------------------
+    // Who may do what. Every check below goes through LinkshellPermissions, the rule the app
+    // uses: no membership -> no; super-admin override -> yes; Leader -> yes; otherwise the role's
+    // flag (an unknown rank falls back to the Member role). These used to be hand-written copies
+    // that skipped the Leader and the override, so a Leader whose role row lacked a flag was
+    // locked out of the addon while the app let them in.
+    // ---------------------------------------------------------------------
+
+    // May the person this addon token was issued to do X in this linkshell? A token with no
+    // issuer cannot prove whose membership it rides on, so it gets nothing.
+    internal Task<bool> TokenIssuerCanAsync(
+        AddonApiToken token, int linkshellId, Func<LinkshellRole, bool> selector, CancellationToken cancellationToken)
+        => _permissions.CanAsync(token.IssuedToAppUserId, linkshellId, selector, cancellationToken);
+
     // "Moderate" here means acting for the linkshell from the addon (camps, window rosters, DKP),
     // which is LinkshellRole.CanManageAttendanceWithAddon -- not the app's CanModerateLiveEvent.
     // The two are separate so a linkshell can hand a member the addon's attendance tools without
     // making them an officer in the app.
-    private async Task<bool> TokenIssuerCanModerateAsync(
+    internal Task<bool> TokenIssuerCanModerateAsync(
         AddonApiToken token, int linkshellId, CancellationToken cancellationToken)
-    {
-        var role = await GetTokenIssuerRoleAsync(token, linkshellId, cancellationToken);
-        return role?.CanManageAttendanceWithAddon == true;
-    }
+        => TokenIssuerCanAsync(token, linkshellId, r => r.CanManageAttendanceWithAddon, cancellationToken);
 
-    // Returns the LinkshellRole record for the AppUser that issued the token,
-    // or null if the AppUser is no longer a member of the linkshell. Callers
-    // inspect the returned role to evaluate Can* permissions.
-    private async Task<LinkshellRole?> GetTokenIssuerRoleAsync(
-        AddonApiToken token, int linkshellId, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrEmpty(token.IssuedToAppUserId)) return null;
-        var membership = await _dbContext.AppUserLinkshells
-            .FirstOrDefaultAsync(m => m.LinkshellId == linkshellId && m.AppUserId == token.IssuedToAppUserId, cancellationToken);
-        if (membership is null) return null;
-        var rank = string.IsNullOrWhiteSpace(membership.Rank) ? LinkshellRanks.Member : membership.Rank.Trim();
-        var role = await _dbContext.LinkshellRoles
-            .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rank, cancellationToken);
-        if (role is null)
-        {
-            role = await _dbContext.LinkshellRoles
-                .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == LinkshellRanks.Member, cancellationToken);
-        }
-        return role;
-    }
+    // Posting loot from the addon takes DKP off the winner, so it needs a loot right: the app's
+    // Add loot (CanAddLoot), or the addon's officer right -- the people running the camp in game.
+    internal static bool PostsAddonLoot(LinkshellRole role)
+        => role.CanAddLoot || role.CanManageAttendanceWithAddon;
 
     private async Task<string?> ResolveTokenIssuerNameAsync(
         AddonApiToken token, CancellationToken cancellationToken)
@@ -221,10 +219,15 @@ public sealed partial class AddonApiController : ControllerBase
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private static bool CanManageLinkshell(AppUserLinkshell? membership)
-    {
-        return LinkshellRanks.IsLeaderOrOfficer(membership?.Rank);
-    }
+    // The live-camp editors the app calls on the management routes here (window DKP, open / close
+    // / kill bonus, the closing tick, a Misc post's DKP and new posts, deleting a window or one
+    // attendee). They used to need the Leader or Officer RANK, while the app's own routes on the
+    // same camp card (unlink / delete a capture, file and post captures) asked for a permission,
+    // so a custom role could do half a card. One rule now: LinkshellPermissions.EditsLiveCamp.
+    // No Discord guild lock here, as before: these routes never had one.
+    internal Task<bool> CanEditLiveCampAsync(
+        AppUserLinkshell? membership, CancellationToken cancellationToken)
+        => _permissions.CanAsync(membership, LinkshellPermissions.EditsLiveCamp, cancellationToken);
 
     // Can this member pair and use the game addon? The rule lives in AddonApiAuthService so the
     // Pair button, the pairing fan-out and every addon token check read the same one.

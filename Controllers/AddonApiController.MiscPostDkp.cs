@@ -61,7 +61,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(
                 m => m.AppUserId == appUser.Id && m.LinkshellId == snapshot.LinkshellId,
                 cancellationToken);
-        if (!CanManageLinkshell(membership)) return Forbid();
+        if (!await CanEditLiveCampAsync(membership, cancellationToken)) return Forbid();
 
         return await SetMiscPostDkpAsync(snapshot, request.DkpAmount, cancellationToken);
     }

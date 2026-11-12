@@ -37,7 +37,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(
                 m => m.AppUserId == appUser.Id && m.LinkshellId == eventEntity.LinkshellId,
                 cancellationToken);
-        if (!CanManageLinkshell(membership)) return Forbid();
+        if (!await CanEditLiveCampAsync(membership, cancellationToken)) return Forbid();
 
         // Only the camps whose close is paid per window. A Manual Check In camp pays its close off
         // the check-in range, and its own settings card is where that amount lives.

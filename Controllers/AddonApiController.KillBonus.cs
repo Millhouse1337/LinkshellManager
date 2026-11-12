@@ -70,7 +70,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(
                 m => m.AppUserId == appUser.Id && m.LinkshellId == eventEntity.LinkshellId,
                 cancellationToken);
-        if (!CanManageLinkshell(membership)) return Forbid();
+        if (!await CanEditLiveCampAsync(membership, cancellationToken)) return Forbid();
 
         return await SetCampKillBonusAsync(eventEntity, request.KillBonus, cancellationToken);
     }

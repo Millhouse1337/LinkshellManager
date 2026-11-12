@@ -226,7 +226,7 @@ public class LootAfterEndCampTests
         return new AddonApiController(
             db, null!, null!, null!, null!, null!, null!,
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance),
-            pools, new DkpPoolBalanceService(db, pools), null!, null!,
+            pools, new DkpPoolBalanceService(db, pools), null!, null!, TestPermissions.For(db),
             NullLogger<AddonApiController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = http },

@@ -363,6 +363,26 @@ export function canManageEventsIn(
   return membership.permissions?.canManageEvents === true;
 }
 
+// Editing a live camp's pay and attendance: window DKP, the open / close / kill bonus, the
+// closing tick, Misc posts and their DKP, deleting a window, a capture or an attendee.
+// Mirrors the server's LinkshellPermissions.EditsLiveCamp — Moderate live events OR Manage
+// events, and the Leader always — which every one of those routes checks. These buttons used
+// to follow the Leader/Officer rank instead, so a custom role saw none of them while the
+// server would have let it, and an Officer whose role lost both flags saw buttons that 403.
+//
+// Same membership-first rule as above; the override arrives as all-true `permissions`.
+export function canEditLiveCampIn(
+  overview: ActivityOverview | null | undefined,
+  linkshellId: number | null | undefined
+): boolean {
+  if (linkshellId == null) return false;
+  const membership = (overview?.linkshells ?? []).find(link => link.id === linkshellId);
+  if (!membership) return false;
+  if (isLeaderRankName(membership.rank)) return true;
+  const permissions = membership.permissions;
+  return permissions?.canModerateLiveEvent === true || permissions?.canManageEvents === true;
+}
+
 // True for the Leader rank name. Same test the server uses (LinkshellRanks.IsLeader:
 // "Leader", any letter case), so a custom role spelled "leader" counts too.
 export function isLeaderRankName(rank: string | null | undefined): boolean {

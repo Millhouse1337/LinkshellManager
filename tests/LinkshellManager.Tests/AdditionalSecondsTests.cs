@@ -89,7 +89,7 @@ public class AdditionalSecondsTests
 
         return new AddonApiController(
             db, null!, null!, null!, null!, null!, null!, null!, null!, null!,
-            new MonsterTimingResolver(db), null!, NullLogger<AddonApiController>.Instance)
+            new MonsterTimingResolver(db), null!, TestPermissions.For(db), NullLogger<AddonApiController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };
