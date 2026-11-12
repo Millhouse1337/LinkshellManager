@@ -106,6 +106,7 @@ public sealed class EventHistoryEditService
             var step = await StepForAsync(history.LinkshellId, cancellationToken);
             var memberships = await MembershipsAsync(history.LinkshellId, cancellationToken);
             var earnedEntries = await EarnedEntriesAsync(history.Id, cancellationToken);
+            var audits = await AuditsByCorrectedRowAsync(earnedEntries.Values, cancellationToken);
 
             foreach (var p in history.AppUserEventHistories)
             {
@@ -113,7 +114,7 @@ public sealed class EventHistoryEditService
                 var newEarned = oldRate > 0
                     ? DkpRounding.Round(oldEarned * newRate / oldRate, step)
                     : DkpRounding.Round((p.Duration ?? 0) * newRate, step);
-                ApplyEarnedChange(p, newEarned, memberships, earnedEntries,
+                ApplyEarnedChange(p, newEarned, memberships, earnedEntries, audits,
                     $"DKP earned from completed event (edited: rate {oldRate} -> {newRate}).");
             }
             history.DkpPerHour = newRate;
@@ -145,9 +146,10 @@ public sealed class EventHistoryEditService
         var step = await StepForAsync(history.LinkshellId, cancellationToken);
         var memberships = await MembershipsAsync(history.LinkshellId, cancellationToken);
         var earnedEntries = await EarnedEntriesAsync(history.Id, cancellationToken);
+        var audits = await AuditsByCorrectedRowAsync(earnedEntries.Values, cancellationToken);
 
         ApplyEarnedChange(participant, DkpRounding.Round(amount, step),
-            memberships, earnedEntries, "DKP earned from completed event (edited).");
+            memberships, earnedEntries, audits, "DKP earned from completed event (edited).");
 
         history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
         await _db.SaveChangesAsync(cancellationToken);
@@ -346,6 +348,15 @@ public sealed class EventHistoryEditService
                 // left pointing at the discrepancy.
                 memberships.TryGetValue(participant.AppUserId, out var membership);
                 _dkpLedger.Remove(entry, membership);
+
+                // And every DKP audit correction of that row: it only existed to adjust what this
+                // member earned here. Left behind, a -2 audit kept them 2 short for an event they
+                // are no longer on.
+                var audits = await AuditsByCorrectedRowAsync(new[] { entry }, cancellationToken);
+                foreach (var audit in audits[entry.Id])
+                {
+                    _dkpLedger.Remove(audit, membership);
+                }
             }
         }
 
@@ -382,6 +393,12 @@ public sealed class EventHistoryEditService
         var ledgerEntries = await _db.DkpLedgerEntries
             .Where(e => e.EventHistoryId == historyId)
             .ToListAsync(cancellationToken);
+        // DKP audit corrections of those rows go with them. New ones carry this event's id and are
+        // already in the list; ones written before audits copied it are found through the row they
+        // correct. Without this a deleted event's -2 audit left the member 2 short.
+        var auditsByRow = await AuditsByCorrectedRowAsync(ledgerEntries, cancellationToken);
+        var listed = ledgerEntries.Select(e => e.Id).ToHashSet();
+        ledgerEntries.AddRange(auditsByRow.Values.SelectMany(rows => rows).Where(audit => listed.Add(audit.Id)));
         foreach (var entry in ledgerEntries)
         {
             AppUserLinkshell? membership = null;
@@ -441,19 +458,89 @@ public sealed class EventHistoryEditService
     // The ledger row is the source of truth for the delta, not the participant's EventDkp: those
     // two can disagree (an officer can audit the ledger row directly), and taking the delta from
     // the display field would then leave the balance permanently off by the difference.
+    //
+    // `newEarned` is what the member should end up with from this event IN TOTAL. A DKP audit may
+    // already have corrected the row (10 earned, audited -2 = 8); those corrections stay, so the
+    // row is set to the rest. Setting the row itself to 8 made the member 6.
     private void ApplyEarnedChange(
         AppUserEventHistory participant,
         double newEarned,
         IReadOnlyDictionary<string, AppUserLinkshell> memberships,
         IReadOnlyDictionary<string, DkpLedgerEntry> earnedEntries,
+        IReadOnlyDictionary<int, List<DkpLedgerEntry>> auditsByRow,
         string ledgerDetails)
     {
         participant.EventDkp = newEarned;
         if (string.IsNullOrWhiteSpace(participant.AppUserId)) return;
         if (!earnedEntries.TryGetValue(participant.AppUserId, out var entry)) return;
 
+        var audited = auditsByRow.TryGetValue(entry.Id, out var audits) ? audits.Sum(a => a.Amount) : 0d;
         memberships.TryGetValue(participant.AppUserId, out var membership);
-        _dkpLedger.Amend(entry, newEarned, ledgerDetails, membership);
+        _dkpLedger.Amend(entry, newEarned - audited, ledgerDetails, membership);
+    }
+
+    // Every DKP audit correction of each given row, keyed by that row's id. The audit screen lets
+    // an officer correct a correction, and that row points at the first audit rather than the
+    // original, so the chain is followed down. (Depth is capped only as a guard against a loop.)
+    private async Task<Dictionary<int, List<DkpLedgerEntry>>> AuditsByCorrectedRowAsync(
+        IEnumerable<DkpLedgerEntry> rows, CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<int, List<DkpLedgerEntry>>();
+        var rootOf = new Dictionary<int, int>();
+        foreach (var row in rows)
+        {
+            result[row.Id] = new List<DkpLedgerEntry>();
+            rootOf[row.Id] = row.Id;
+        }
+
+        var frontier = rootOf.Keys.ToList();
+        for (var depth = 0; frontier.Count > 0 && depth < 50; depth++)
+        {
+            var parentIds = frontier;
+            var children = await _db.DkpLedgerEntries
+                .Where(e => e.AuditRelatedLedgerEntryId != null && parentIds.Contains(e.AuditRelatedLedgerEntryId.Value))
+                .ToListAsync(cancellationToken);
+            frontier = new List<int>();
+            foreach (var child in children.OrderBy(c => c.Id))
+            {
+                if (rootOf.ContainsKey(child.Id)) continue;
+                var root = rootOf[child.AuditRelatedLedgerEntryId!.Value];
+                rootOf[child.Id] = root;
+                result[root].Add(child);
+                frontier.Add(child.Id);
+            }
+        }
+        return result;
+    }
+
+    // A DKP audit just corrected `corrected` (a member's earned row for a past event, or an earlier
+    // correction of it) by `delta`. Moves that attendee's Past Event figure by the same amount, so
+    // the event shows what the member really got from it and a later "set to 8" starts from there.
+    // Camp archives are left alone: their figures follow the review card. Does not save.
+    public async Task FollowDkpAuditAsync(
+        DkpLedgerEntry corrected, string appUserId, double delta, CancellationToken cancellationToken)
+    {
+        var root = corrected;
+        for (var hops = 0; root.AuditRelatedLedgerEntryId is int parentId && hops < 50; hops++)
+        {
+            var parent = await _db.DkpLedgerEntries.FirstOrDefaultAsync(e => e.Id == parentId, cancellationToken);
+            if (parent is null) break;
+            root = parent;
+        }
+
+        if (root.EntryType != EventEarnedEntryType || root.EventHistoryId is not int historyId) return;
+
+        var history = await _db.EventHistories
+            .Include(h => h.AppUserEventHistories)
+            .FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
+        var attendee = history?.AppUserEventHistories
+            .Where(p => p.AppUserId == appUserId)
+            .OrderBy(p => p.Id)
+            .FirstOrDefault();
+        if (history is null || attendee is null) return;
+
+        attendee.EventDkp = (attendee.EventDkp ?? 0) + delta;
+        history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
     }
 
     private async Task<double> StepForAsync(int linkshellId, CancellationToken cancellationToken)

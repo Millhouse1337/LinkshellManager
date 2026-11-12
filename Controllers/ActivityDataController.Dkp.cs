@@ -235,6 +235,7 @@ public sealed partial class ActivityDataController
         DateTime occurredAtUtc;
         DkpPoolRef poolRef;
         DkpEntryContext entryContext;
+        DkpLedgerEntry? adjustedEntry = null;
 
         if (string.Equals(mode, "Adjust", StringComparison.OrdinalIgnoreCase))
         {
@@ -252,6 +253,7 @@ public sealed partial class ActivityDataController
             {
                 return NotFound(new { error = "The selected original ledger entry was not found for this member." });
             }
+            adjustedEntry = original;
 
             var priorAuditDelta = await _dbContext.DkpLedgerEntries
                 .Where(entry =>
@@ -279,6 +281,9 @@ public sealed partial class ActivityDataController
                 EventEndTime: original.EventEndTime,
                 ItemName: original.ItemName,
                 Details: $"Audit adjustment by {officerName}: {reason} (entry #{original.Id} was {currentAuditedAmount:+0.##;-0.##;0}, corrected to {request.Amount:+0.##;-0.##;0}).",
+                // Filed under the same past event as the row it corrects, so deleting that event
+                // reverses the correction too instead of leaving the member short (or long) by it.
+                EventHistoryId: original.EventHistoryId,
                 SourceWindowEventId: original.SourceWindowEventId,
                 AuditRelatedLedgerEntryId: original.Id,
                 AttInputRowNumber: original.AttInputRowNumber);
@@ -348,6 +353,9 @@ public sealed partial class ActivityDataController
                 EventStartTime: windowEvent.FirstCapturedAtUtc,
                 EventEndTime: windowEvent.LastCapturedAtUtc,
                 Details: $"Added to snapshot entry by {officerName}: {reason}",
+                // The camp's Past Event, like the payout rows Post wrote, so deleting that Past
+                // Event takes this credit back with the rest of the camp.
+                EventHistoryId: windowEvent.CampEventHistoryId,
                 SourceWindowEventId: windowEvent.Id);
         }
         else
@@ -370,6 +378,14 @@ public sealed partial class ActivityDataController
         await _dkpLedger.AppendAsync(
             targetMembership, entryType, deltaAmount, occurredAtUtc, poolRef, entryContext, cancellationToken,
             DkpOverdraft.Allow);
+
+        // Correcting an event's earned row moves that attendee's Past Event figure too, so the
+        // event and the balance agree and a later Past Event edit starts from the real number.
+        if (adjustedEntry is not null)
+        {
+            await EventHistoryEdits().FollowDkpAuditAsync(
+                adjustedEntry, request.TargetAppUserId, deltaAmount, cancellationToken);
+        }
 
         try
         {
