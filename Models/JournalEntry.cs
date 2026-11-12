@@ -38,9 +38,9 @@ public class JournalEntry
     [MaxLength(24)]
     public string EntryNumber { get; set; } = string.Empty;
 
-    // When the gil actually moved (UTC). Drives the period a transaction falls in and whether a
-    // lock applies. This is what RevenueEntry.OccurredAt meant — and, unlike today, an officer
-    // inside Discord can finally set it.
+    // When the gil actually moved (UTC). Drives the period a transaction falls in. This is what
+    // the old RevenueEntry.OccurredAt meant — and, unlike back then, an officer inside Discord
+    // can set it.
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
 
     // JournalEntryStatuses: Draft | Confirmed

@@ -401,7 +401,7 @@ public sealed partial class ActivityDataController
     }
 
     // Mark an item sold for a price → record the income in the treasury (a matching
-    // RevenueEntry). The item stays flagged Sold; "unsell" reverses both.
+    // treasury entry). The item stays flagged Sold; "unsell" reverses both.
     [HttpPost("items/{itemId:int}/mark-sold")]
     public async Task<IActionResult> MarkItemSoldAsync(
         int itemId,
