@@ -131,6 +131,10 @@
         </div>
       </div>
 
+      @if (canApproveClaimRequests(selectedLinkshell.id)) {
+        <app-claim-requests-card [linkshellId]="selectedLinkshell.id" />
+      }
+
       <div class="invite-section">
         <div class="panel__header">
           <h3>Members</h3>

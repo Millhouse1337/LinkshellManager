@@ -2486,6 +2486,22 @@ export interface ActivityClaimCandidate {
   currentDkp: number;
   totalDkp: number;
   totalSpent: number;
+  // Already asked: waiting for an officer to approve (a name match alone hands nothing over).
+  requested?: boolean;
+}
+
+// An open "that's me" request for an imported member, shown to officers who can manage members
+// (GET /api/activity/linkshells/{id}/claim-requests). requesterKind: 'account' = a signed-in LSM
+// account (approving moves the DKP to it); 'discord' = the Discord sign-up form, no account yet
+// (approving links the member to that Discord user).
+export interface ActivityPlaceholderClaimRequest {
+  id: number;
+  membershipId: number;
+  placeholderName: string;
+  placeholderDkp: number;
+  requesterName: string;
+  requesterKind: 'account' | 'discord';
+  createdAtUtc: string;
 }
 
 // ---- Charts (Sky, Sea, …) ----------------------------------------------------------------------

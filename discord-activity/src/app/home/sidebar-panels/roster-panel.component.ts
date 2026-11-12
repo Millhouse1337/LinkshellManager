@@ -16,10 +16,11 @@ import {
   memberStatusClass,
   rankIcon
 } from '../activity-home.helpers';
+import { ClaimRequestsCardComponent } from './claim-requests-card.component';
 
 @Component({
   selector: 'app-roster-panel',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ClaimRequestsCardComponent],
   templateUrl: './roster-panel.component.html',
   styleUrl: './roster-panel.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -134,6 +135,13 @@ export class RosterPanelComponent {
     }
 
     return isLeaderTierIn(this.activity.overview(), selectedId, this.linkshellMemberships());
+  }
+
+  // The "Manage members" PERMISSION the claim-request endpoints check (or the Leader, whom the
+  // server always lets through), not the rank: a custom role with Manage members must see the card.
+  protected canApproveClaimRequests(linkshellId: number): boolean {
+    const permissions = this.linkshellMemberships().find(link => link.id === linkshellId)?.permissions;
+    return permissions?.canManageMembers === true || isLeaderTierIn(this.activity.overview(), linkshellId);
   }
 
   protected canRequestLinkshellAccess(): boolean {

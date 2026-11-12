@@ -85,8 +85,8 @@
   </div>
 
   <!-- ===== Claim-your-DKP banner ===== -->
-  <!-- Imported placeholders matching this user's character name — they confirm
-       "that's me" to inherit the seeded DKP a leader imported before they joined. -->
+  <!-- Imported placeholders matching this user's character name — they ask "that's me"
+       to inherit the seeded DKP a leader imported before they joined; an officer approves. -->
   @if (claimCandidates().length > 0) {
     <section class="claim-banner" role="region" aria-label="Claim your DKP">
       <div class="claim-banner__head">
@@ -100,9 +100,13 @@
               <strong>{{ candidate.characterName }}</strong> in <strong>{{ candidate.linkshellName }}</strong>
               · {{ candidate.currentDkp }} DKP
             </span>
-            <button type="button" class="action-button" [disabled]="claim.busy()" (click)="onClaim(candidate)">
-              {{ claim.busy() ? 'Claiming…' : 'Claim' }}
-            </button>
+            @if (candidate.requested) {
+              <span class="muted" title="An officer of this linkshell will confirm it's you">Waiting for an officer</span>
+            } @else {
+              <button type="button" class="action-button" [disabled]="claim.busy()" (click)="onClaim(candidate)">
+                {{ claim.busy() ? 'Asking…' : 'Claim' }}
+              </button>
+            }
           </li>
         }
       </ul>
