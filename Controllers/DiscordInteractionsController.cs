@@ -238,9 +238,9 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
     }
 
-    // "/lsm": post a public "Join" launch card into the channel — but only for a leader
-    // or officer of a linkshell linked to THIS Discord server (the card's Join button is
-    // then clickable by anyone). Non-officers get a private nudge instead.
+    // "/lsm": post a public "Join" launch card into the channel — but only for someone with
+    // Manage events in a linkshell linked to THIS Discord server (see CanPostLaunchCardAsync;
+    // the card's Join button is then clickable by anyone). Everyone else gets a private nudge.
     private async Task<IActionResult> HandleLaunchCardCommandAsync(JsonElement root, CancellationToken cancellationToken)
     {
         var guildId = root.TryGetProperty("guild_id", out var guildEl) ? guildEl.GetString() : null;
