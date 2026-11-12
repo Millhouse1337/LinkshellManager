@@ -20,15 +20,21 @@ public class PendingTodSubmission
 
     public DateTime SubmittedAtUtc { get; set; }
 
-    [MaxLength(512)]
-    public string? ReviewNotes { get; set; }
-
     [MaxLength(64)]
     public string? MonsterName { get; set; }
 
     public int? DayNumber { get; set; }
 
     public bool? Claim { get; set; }
+
+    // Which half of a merge pair died (Nidhogg, Aspidochelone, King Behemoth): the same field as
+    // Tod.Hq. Without it an approved HQ kill was saved as the NQ, so the next board's day cycle
+    // never went back to Day 1.
+    public bool Hq { get; set; }
+
+    // The monster's Additional Seconds when the ToD was submitted: the same field as
+    // Tod.AdditionalSeconds. Without it the approved ToD said its repop had none.
+    public int AdditionalSeconds { get; set; }
 
     public DateTime? Time { get; set; }
 

@@ -51,6 +51,8 @@ public sealed class SubmissionApprovalService
             MonsterName = input.MonsterName?.Trim(),
             DayNumber = input.DayNumber,
             Claim = input.Claim,
+            Hq = input.Hq,
+            AdditionalSeconds = Math.Max(0, input.AdditionalSeconds),
             Time = input.Time,
             Cooldown = string.IsNullOrWhiteSpace(input.Cooldown) ? null : input.Cooldown.Trim(),
             Interval = string.IsNullOrWhiteSpace(input.Interval) ? null : input.Interval.Trim(),
@@ -92,10 +94,15 @@ public sealed class SubmissionApprovalService
             MonsterName = pending.MonsterName,
             DayNumber = pending.DayNumber,
             Claim = pending.Claim,
+            // Carried from the submission. Approving used to drop both, so an HQ kill was saved as
+            // the NQ and the day cycle never went back to Day 1.
+            Hq = pending.Hq,
+            AdditionalSeconds = pending.AdditionalSeconds,
             Time = todTimeUtc,
             Cooldown = pending.Cooldown,
             Interval = pending.Interval,
-            RepopTime = pending.RepopTime ?? (todTimeUtc?.AddHours(ResolveCooldownHours(pending.Cooldown))),
+            RepopTime = pending.RepopTime
+                ?? todTimeUtc?.AddHours(ResolveCooldownHours(pending.Cooldown)).AddSeconds(pending.AdditionalSeconds),
             LinkshellId = pending.LinkshellId,
             TimeStamp = occurredAt,
             TotalTods = 1,
@@ -180,9 +187,11 @@ public sealed record TodSubmissionInput(
     string? Interval,
     DateTime? RepopTime,
     string? ImagePath,
-    // Which spawn window it popped on. Optional so the surfaces that have no such field (the
-    // Activity ToD form posts it directly) keep their existing call shape.
-    int? PopWindow = null);
+    // Which spawn window it popped on. 0 / negative = not recorded.
+    int? PopWindow = null,
+    // Which half of a merge pair died, and the monster's Additional Seconds (already in RepopTime).
+    bool Hq = false,
+    int AdditionalSeconds = 0);
 
 // A reviewer's corrections to a pending ToD (ApproveTodWithEditsAsync). A blank monster, cooldown
 // or interval keeps what was submitted.

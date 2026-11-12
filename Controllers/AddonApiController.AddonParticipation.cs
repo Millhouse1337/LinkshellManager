@@ -1465,7 +1465,10 @@ public sealed partial class AddonApiController
                 null,
                 // Carried into the queue, not dropped: the tracker stamped this when the mob
                 // popped, and it is no less true for the submitter lacking ToD-manage rights.
-                popWindow);
+                popWindow,
+                // The addon posts the half that died ("Nidhogg"), so the name says whether it was HQ.
+                HnmConfig.ResolveClaimHalf(monsterName, false).IsHq,
+                additionalSeconds);
             var submissionId = await approvalSvc.QueueTodAsync(token.LinkshellId, token.IssuedToAppUserId!, input, cancellationToken);
             return Ok(new { pending = true, submissionId, monsterName });
         }

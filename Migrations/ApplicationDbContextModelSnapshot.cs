@@ -3549,6 +3549,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("AdditionalSeconds")
+                        .HasColumnType("integer");
+
                     b.Property<bool?>("Claim")
                         .HasColumnType("boolean");
 
@@ -3558,6 +3561,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int?>("DayNumber")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("Hq")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("ImagePath")
                         .HasMaxLength(256)
@@ -3579,10 +3585,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<DateTime?>("RepopTime")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ReviewNotes")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
 
                     b.Property<DateTime>("SubmittedAtUtc")
                         .HasColumnType("timestamp with time zone");

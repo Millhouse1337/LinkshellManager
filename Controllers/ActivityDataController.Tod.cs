@@ -107,7 +107,11 @@ public sealed partial class ActivityDataController
                 cooldown,
                 interval,
                 todTimeUtc.Value.AddHours(ResolveTodCooldownHours(cooldown)).AddSeconds(Math.Max(0, requestedAdditionalSeconds)),
-                SanitizeUploadedImagePath(request.ImagePath));
+                SanitizeUploadedImagePath(request.ImagePath),
+                // Queued with the rest, so approving gives the same ToD an officer would have saved.
+                NormalizePopWindow(request.PopWindow),
+                normalizedHq,
+                Math.Max(0, requestedAdditionalSeconds));
             var submissionId = await approvalSvc.QueueTodAsync(request.LinkshellId, appUser.Id, input, cancellationToken);
             return Ok(new { pending = true, submissionId });
         }
