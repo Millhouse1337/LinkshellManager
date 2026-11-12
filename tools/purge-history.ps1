@@ -18,11 +18,11 @@
 
     DEFAULTS TO A DRY RUN (prints counts, changes nothing). Pass -Execute to apply.
 
-    Connection string defaults to the web app's user-secrets
-    (ConnectionStrings:DefaultConnection), which must point at a LOCAL database
-    (CONTRIBUTING.md: the dev machine never points at production). Check the
-    "Target DB" line it prints before passing -Execute. Pass -ConnectionString
-    only when you mean to target another database.
+    There is NO default database. Pass -ConnectionString, or set the
+    LSM_PURGE_CONNECTION environment variable. It used to fall back to the web
+    app's user-secrets, but those can point at PRODUCTION, so one forgotten
+    argument could wipe the live ledger. Check the "Target DB" line it prints
+    before passing -Execute.
 
     Windows PowerShell 5.1 can't load the net8 Npgsql.dll, so this generates a
     tiny throwaway net8 console tool and runs it via `dotnet run` (Npgsql 8.0.6
@@ -30,16 +30,17 @@
 
 .EXAMPLE
     # See what WOULD be deleted, across all linkshells (safe, read-only):
-    powershell -ExecutionPolicy Bypass -File tools\purge-history.ps1
+    powershell -ExecutionPolicy Bypass -File tools\purge-history.ps1 -ConnectionString "Host=localhost;Port=55432;Database=lsm_test;Username=postgres;Password=..."
 
 .EXAMPLE
     # Actually delete, scoped to one linkshell, and reset its members' DKP to 0:
+    $env:LSM_PURGE_CONNECTION = "Host=localhost;Port=55432;Database=lsm_test;Username=postgres;Password=..."
     powershell -ExecutionPolicy Bypass -File tools\purge-history.ps1 -LinkshellName "AltanasFeet" -ResetBalances -Execute
 #>
 [CmdletBinding()]
 param(
-    # Postgres connection string. Defaults to the app's user-secrets value
-    # (a local database; see CONTRIBUTING.md).
+    # Postgres connection string. Required, or set LSM_PURGE_CONNECTION; there is
+    # deliberately no default.
     [string]$ConnectionString,
 
     # Limit the purge to a single linkshell (by exact name). Omit = all linkshells.
@@ -58,18 +59,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# --- 1. Resolve the connection string (default: app user-secrets) -------------
+# --- 1. Resolve the connection string (explicit only) -------------------------
+# Never read the app's user-secrets here: on this machine they can point at the
+# PRODUCTION database, and a tool that deletes the ledger must not pick its
+# target on its own.
 if (-not $ConnectionString) {
-    $secrets = Join-Path $env:APPDATA `
-        'Microsoft\UserSecrets\aspnet-LinkshellManagerDiscordApp-097d4206-0f91-471a-b0bb-fb7302e26d5f\secrets.json'
-    if (-not (Test-Path $secrets)) {
-        throw "User secrets not found at '$secrets'. Pass -ConnectionString explicitly."
-    }
-    $json = Get-Content $secrets -Raw | ConvertFrom-Json
-    $ConnectionString = $json.'ConnectionStrings:DefaultConnection'
-    if (-not $ConnectionString) {
-        throw "ConnectionStrings:DefaultConnection missing from user secrets."
-    }
+    $ConnectionString = $env:LSM_PURGE_CONNECTION
+}
+if (-not $ConnectionString) {
+    throw "No database given. Pass -ConnectionString '<connection string>' or set LSM_PURGE_CONNECTION. There is no default."
 }
 
 function Get-CsField([string]$cs, [string]$name) {
