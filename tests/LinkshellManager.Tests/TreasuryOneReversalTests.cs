@@ -159,4 +159,80 @@ public class TreasuryOneReversalTests
         Assert.Equal(0, await writer.GetCashOnHandAsync(Ls, CancellationToken.None));
         Assert.Equal(1, await db.JournalEntries.CountAsync(e => e.Kind == JournalEntryKinds.Reversal));
     }
+
+    // A second "undo sale" (a double click, a stale page) on an item that is already unsold. The
+    // item no longer links its entry, and the fallback lookup used to pick the sale's own REVERSAL
+    // (same source item, confirmed, never reversed itself) and reverse that, putting the gil back.
+    [Fact]
+    public async Task UnsellTwice_TakesTheGilOffOnce()
+    {
+        await using var db = await SeededAsync();
+        var item = new Item { LinkshellId = Ls, ItemName = "Ridill" };
+        db.Items.Add(item);
+        await db.SaveChangesAsync();
+        var writer = NewWriter(db);
+        var sales = new ItemSaleRecorder(db, writer);
+        await sales.RecordSaleAsync(item, 1_000, Officer, null, CancellationToken.None);
+
+        await sales.ReverseSaleAsync(item, Officer, CancellationToken.None);
+        await sales.ReverseSaleAsync(item, Officer, CancellationToken.None);
+
+        Assert.False(item.IsSold);
+        Assert.Equal(0, await writer.GetCashOnHandAsync(Ls, CancellationToken.None));
+        Assert.Equal(1, await db.JournalEntries.CountAsync(e => e.Kind == JournalEntryKinds.Reversal));
+    }
+
+    // An item sold before Items.JournalEntryId existed is found by the fallback lookup. A second
+    // undo must not pick the first undo's reversal (it names the same item as its source).
+    [Fact]
+    public async Task UnsellTwice_WithoutAStoredLink_TakesTheGilOffOnce()
+    {
+        await using var db = await SeededAsync();
+        var item = new Item { LinkshellId = Ls, ItemName = "Ridill" };
+        db.Items.Add(item);
+        await db.SaveChangesAsync();
+        var writer = NewWriter(db);
+        var sales = new ItemSaleRecorder(db, writer);
+        await sales.RecordSaleAsync(item, 1_000, Officer, null, CancellationToken.None);
+        item.JournalEntryId = null;
+        await db.SaveChangesAsync();
+
+        await sales.ReverseSaleAsync(item, Officer, CancellationToken.None);
+        // A stale page still showing it sold.
+        item.IsSold = true;
+        await sales.ReverseSaleAsync(item, Officer, CancellationToken.None);
+
+        Assert.Equal(0, await writer.GetCashOnHandAsync(Ls, CancellationToken.None));
+        Assert.Equal(1, await db.JournalEntries.CountAsync(e => e.Kind == JournalEntryKinds.Reversal));
+    }
+
+    // The sale price was fixed from the treasury list (a Reversal of the original plus a Correction
+    // with the right amount), then the sale is undone. The gil still on the books is the
+    // Correction's, so that is what the undo reverses. Skipping it left the corrected amount on the
+    // books for an item that is no longer sold.
+    [Fact]
+    public async Task UnsellAfterAFix_ReversesTheCorrectedEntry()
+    {
+        await using var db = await SeededAsync();
+        var item = new Item { LinkshellId = Ls, ItemName = "Ridill" };
+        db.Items.Add(item);
+        await db.SaveChangesAsync();
+        var writer = NewWriter(db);
+        var sales = new ItemSaleRecorder(db, writer);
+        await sales.RecordSaleAsync(item, 1_000, Officer, null, CancellationToken.None);
+
+        var saleEntry = await db.JournalEntries.Include(e => e.Lines).SingleAsync(e => e.Id == item.JournalEntryId);
+        var fixedPrice = new TreasuryEntryRequest(
+            TreasuryTransactionKinds.SoldAnItem, 900, saleEntry.TransactionDate,
+            Source: saleEntry.Source, SourceItemId: saleEntry.SourceItemId);
+        await writer.CorrectAsync(saleEntry, fixedPrice, "Wrong price.", Officer, CancellationToken.None);
+        await db.SaveChangesAsync();
+        Assert.Equal(900, await writer.GetCashOnHandAsync(Ls, CancellationToken.None));
+
+        await sales.ReverseSaleAsync(item, Officer, CancellationToken.None);
+
+        Assert.False(item.IsSold);
+        Assert.Equal(0, await writer.GetCashOnHandAsync(Ls, CancellationToken.None));
+        Assert.Equal(2, await db.JournalEntries.CountAsync(e => e.Kind == JournalEntryKinds.Reversal));
+    }
 }

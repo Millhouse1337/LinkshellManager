@@ -230,29 +230,18 @@ public sealed partial class AddonApiController
         if (eventEntity.LinkshellId != token.LinkshellId) return Forbid();
         if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken)) return Forbid();
 
-        var entry = await _dbContext.AppUserEventStatusLedgers
-            .FirstOrDefaultAsync(item => item.Id == request.LedgerEntryId
-                && item.EventId == eventId
-                && item.ActionType == "BreakReturn", cancellationToken);
-        if (entry is null) return NotFound(new { error = "Ledger entry not found." });
-        if (!entry.RequiresVerification || entry.VerifiedAt.HasValue || entry.DeniedAt.HasValue)
-        {
-            return BadRequest(new { error = "That break return is no longer pending." });
-        }
-
         // Deny takes the time back, not just the request -- see BreakReturnDenial.
-        var participation = await _dbContext.AppUserEvents
-            .FirstOrDefaultAsync(item => item.Id == entry.AppUserEventId, cancellationToken);
-        if (participation is null) return NotFound(new { error = "Participant not found." });
-
-        var participantLedger = await _dbContext.AppUserEventStatusLedgers
-            .Where(item => item.AppUserEventId == participation.Id)
-            .ToListAsync(cancellationToken);
-        BreakReturnDenial.Apply(
-            eventEntity, participation, entry, participantLedger,
-            DateTime.UtcNow, await ResolveTokenIssuerNameAsync(token, cancellationToken));
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
+        var outcome = await BreakReturnDenial.DenyAsync(
+            _dbContext, eventEntity, request.LedgerEntryId,
+            await ResolveTokenIssuerNameAsync(token, cancellationToken), cancellationToken);
+        return outcome switch
+        {
+            BreakReturnDenial.Outcome.ReturnNotFound => NotFound(new { error = "Ledger entry not found." }),
+            BreakReturnDenial.Outcome.AlreadyResolved =>
+                BadRequest(new { error = "That break return is no longer pending." }),
+            BreakReturnDenial.Outcome.ParticipantNotFound => NotFound(new { error = "Participant not found." }),
+            _ => Ok(new { success = true }),
+        };
     }
 
     [HttpPost("events/{eventId:int}/attendance")]

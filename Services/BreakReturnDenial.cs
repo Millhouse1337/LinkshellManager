@@ -1,4 +1,6 @@
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
@@ -17,6 +19,68 @@ namespace LinkshellManagerDiscordApp.Services;
 //     the addon roster with no way back (see EventBreakPolicy), so Deny only marks the request.
 public static class BreakReturnDenial
 {
+    public enum Outcome { Denied, ReturnNotFound, AlreadyResolved, ParticipantNotFound }
+
+    // The whole Deny, for both endpoints (the caller has checked permissions): find the request,
+    // check it is still pending, take the time back, save.
+    //
+    // The request's row is locked first. Two Denies of one return (a double click, or one officer in
+    // the app and one in the addon) used to both pass the "still pending" check; when the member had
+    // taken another break since, each took the time off Duration, so it came off twice. With the
+    // lock the second waits for the first to commit, then reads the request as already resolved.
+    public static async Task<Outcome> DenyAsync(
+        ApplicationDbContext db,
+        Event eventEntity,
+        int ledgerEntryId,
+        string? deniedBy,
+        CancellationToken cancellationToken)
+    {
+        // The in-memory test provider has no transactions or row locks.
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (transaction is not null)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""SELECT 1 FROM "AppUserEventStatusLedgers" WHERE "Id" = {ledgerEntryId} FOR UPDATE""",
+                cancellationToken);
+        }
+
+        var deniedReturn = await db.AppUserEventStatusLedgers
+            .FirstOrDefaultAsync(
+                item => item.Id == ledgerEntryId &&
+                        item.EventId == eventEntity.Id &&
+                        item.ActionType == "BreakReturn",
+                cancellationToken);
+        if (deniedReturn is null)
+        {
+            return Outcome.ReturnNotFound;
+        }
+        if (!deniedReturn.RequiresVerification || deniedReturn.VerifiedAt.HasValue || deniedReturn.DeniedAt.HasValue)
+        {
+            return Outcome.AlreadyResolved;
+        }
+
+        var participation = await db.AppUserEvents
+            .FirstOrDefaultAsync(item => item.Id == deniedReturn.AppUserEventId, cancellationToken);
+        if (participation is null)
+        {
+            return Outcome.ParticipantNotFound;
+        }
+
+        var participantLedger = await db.AppUserEventStatusLedgers
+            .Where(item => item.AppUserEventId == participation.Id)
+            .ToListAsync(cancellationToken);
+        Apply(eventEntity, participation, deniedReturn, participantLedger, DateTime.UtcNow, deniedBy);
+
+        await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+        return Outcome.Denied;
+    }
+
     // `participantLedger` is every status ledger row of this participation (any order).
     // The caller has already checked the request is still pending, and saves afterwards.
     public static void Apply(

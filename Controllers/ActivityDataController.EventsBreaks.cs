@@ -358,40 +358,20 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        var ledgerEntry = await _dbContext.AppUserEventStatusLedgers
-            .FirstOrDefaultAsync(
-                item => item.Id == request.LedgerEntryId &&
-                        item.EventId == eventId &&
-                        item.ActionType == "BreakReturn",
-                cancellationToken);
-
-        if (ledgerEntry is null)
-        {
-            return NotFound(new { error = "The selected ledger entry was not found." });
-        }
-
-        if (!ledgerEntry.RequiresVerification || ledgerEntry.VerifiedAt.HasValue || ledgerEntry.DeniedAt.HasValue)
-        {
-            return BadRequest(new { error = "That break return has already been resolved." });
-        }
-
         // Deny takes the time back, not just the request -- see BreakReturnDenial.
-        var participation = await _dbContext.AppUserEvents
-            .FirstOrDefaultAsync(item => item.Id == ledgerEntry.AppUserEventId, cancellationToken);
-        if (participation is null)
+        var outcome = await BreakReturnDenial.DenyAsync(
+            _dbContext, eventEntity, request.LedgerEntryId,
+            appUser.CharacterName ?? appUser.UserName, cancellationToken);
+        return outcome switch
         {
-            return NotFound(new { error = "The selected participant was not found." });
-        }
-
-        var participantLedger = await _dbContext.AppUserEventStatusLedgers
-            .Where(item => item.AppUserEventId == participation.Id)
-            .ToListAsync(cancellationToken);
-        BreakReturnDenial.Apply(
-            eventEntity, participation, ledgerEntry, participantLedger,
-            DateTime.UtcNow, appUser.CharacterName ?? appUser.UserName);
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
+            BreakReturnDenial.Outcome.ReturnNotFound =>
+                NotFound(new { error = "The selected ledger entry was not found." }),
+            BreakReturnDenial.Outcome.AlreadyResolved =>
+                BadRequest(new { error = "That break return has already been resolved." }),
+            BreakReturnDenial.Outcome.ParticipantNotFound =>
+                NotFound(new { error = "The selected participant was not found." }),
+            _ => Ok(new { success = true }),
+        };
     }
 
     // Parks a live participant in the Break Room: banks their accrued time and pauses
@@ -405,8 +385,8 @@ public sealed partial class ActivityDataController
     // points -- TakeBreakAsync/ForceBreakAsync above, and UnsignAsync in
     // ActivityDataController.EventsParticipation.cs. BOTH must reject
     // EventBreakPolicy.IsWindowedAttendance before calling, and any new caller must carry the
-    // same guard. A windowed camp credits per posted window, so there is no clock to pause --
-    // and a parked member vanishes from the addon roster with no surface able to bring them back.
+    // same guard. BreakReturnDenial also re-parks a member (on Deny) and carries the guard inside.
+    // A windowed camp credits per posted window, so there is no clock to pause -- and a parked member vanishes from the addon roster with no surface able to bring them back.
     private void PutParticipationOnBreak(
         AppUserEvent participation, int eventId, DateTime nowUtc, DateTime? commencementStart)
     {
