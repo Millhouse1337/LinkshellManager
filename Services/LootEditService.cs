@@ -55,33 +55,14 @@ public sealed class LootEditService
         _logger = logger;
     }
 
-    // Resolve a loot winner's membership by MAIN OR ALT character name.
-    //
-    // Event close (EventEndService.ResolveLootWinnerMembership) and the affordability guard
-    // (LootDkpGuard) both resolve alts. This service used to match on CharacterName alone, so an
-    // item won on an alt was debited at close but its edit/delete refund silently found nobody and
-    // logged a warning — the member was permanently short the DKP.
-    private async Task<AppUserLinkshell?> ResolveWinnerAsync(
+    // Resolve a loot winner's membership by any of their names -- the same rule the close, End
+    // Camp and the affordability guard charge by (LootDkpGuard.ResolveWinnerAsync, which uses the
+    // shared CharacterResolver). This service once matched the roster name alone, so an item won
+    // on an alt was debited at close but its edit/delete refund found nobody: the member was
+    // permanently short the DKP. One resolver means a refund always finds whoever was charged.
+    private Task<AppUserLinkshell?> ResolveWinnerAsync(
         int linkshellId, string? winnerName, CancellationToken cancellationToken)
-    {
-        var name = winnerName?.Trim();
-        if (string.IsNullOrEmpty(name))
-        {
-            return null;
-        }
-
-        // Compared in memory so the match isn't at the mercy of the DB collation.
-        var members = await _db.AppUserLinkshells
-            .Include(link => link.AppUser)
-            .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
-            .ToListAsync(cancellationToken);
-
-        return members.FirstOrDefault(link =>
-            string.Equals(link.CharacterName, name, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(link.AppUser?.CharacterName, name, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(link.AppUser?.AltCharacterName1, name, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(link.AppUser?.AltCharacterName2, name, StringComparison.OrdinalIgnoreCase));
-    }
+        => LootDkpGuard.ResolveWinnerAsync(_db, linkshellId, winnerName, cancellationToken);
 
     // A loot row's winner: by the recorded account (EventLootDetail.ItemWinnerAppUserId) when there
     // is one, so a refund reaches the member who actually paid even after a rename; by name only

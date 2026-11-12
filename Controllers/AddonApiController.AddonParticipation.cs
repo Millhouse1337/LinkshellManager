@@ -440,11 +440,11 @@ public sealed partial class AddonApiController
                   (m, u) => new { Membership = m, User = u })
             .ToListAsync(cancellationToken);
 
-        // Build the lookup by trying every candidate name. First-write-wins, so
-        // the membership's own CharacterName takes precedence over alts when both
-        // resolve to different members (rare but possible if two players share an
-        // alt name).
-        var membershipByName = new Dictionary<string, AppUserLinkshell>(StringComparer.OrdinalIgnoreCase);
+        // Every candidate name, by the shared CharacterResolver rule: a name that is one member's
+        // roster name and another's alt belongs to the roster name (rare but possible if two
+        // players share an alt name), and the Claim Shield and the window payout agree.
+        var membershipByName = CharacterResolver.ForMemberships(
+            membershipsWithUser.Select(pair => (pair.Membership, pair.User)));
         // Each member's MAIN, so a scan that matched through one of the alt names above can say so
         // ("Athmilk (alt of Edicius)") instead of silently renaming the alt to the main on the way
         // into the window row. Same precedence the name lookup uses: the membership's own character
@@ -453,22 +453,6 @@ public sealed partial class AddonApiController
         var mainNameByAppUserId = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var pair in membershipsWithUser)
         {
-            foreach (var candidate in new[]
-                     {
-                         pair.Membership.CharacterName,
-                         pair.User.CharacterName,
-                         pair.User.AltCharacterName1,
-                         pair.User.AltCharacterName2,
-                     })
-            {
-                if (string.IsNullOrWhiteSpace(candidate)) continue;
-                var key = candidate.Trim();
-                if (!membershipByName.ContainsKey(key))
-                {
-                    membershipByName[key] = pair.Membership;
-                }
-            }
-
             var mainName = pair.Membership.CharacterName ?? pair.User.CharacterName;
             if (!string.IsNullOrWhiteSpace(mainName) && pair.Membership.AppUserId is { } mainAppUserId)
             {
@@ -512,10 +496,7 @@ public sealed partial class AddonApiController
                 // though membershipsWithUser was loaded AsNoTracking — point
                 // the dictionary at the (now-tracked) issuer membership so
                 // downstream entry resolution finds it.
-                if (!membershipByName.ContainsKey(selfName))
-                {
-                    membershipByName[selfName] = issuerMembership;
-                }
+                membershipByName.AddIfMissing(selfName, issuerMembership, CharacterNameSlot.Membership);
 
                 // ...and treat it as their main for the alt readout, unless they already had one.
                 // This is the name the roster has nothing else to offer for them, so calling any
@@ -535,7 +516,8 @@ public sealed partial class AddonApiController
             if (string.IsNullOrWhiteSpace(entry.CharacterName)) continue;
 
             var name = entry.CharacterName.Trim();
-            if (!membershipByName.TryGetValue(name, out var membership))
+            var membership = membershipByName.Resolve(name);
+            if (membership is null)
             {
                 unmatched.Add(name);
                 continue;

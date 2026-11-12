@@ -670,6 +670,7 @@ public sealed class HnmCampReviewHandoffService
             var membershipsByAppUserId = memberships
                 .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+            var rosterByName = CharacterResolver.ForMemberships(memberships);
             var participantsByCharacterName = (await _db.AppUserEvents
                     .Where(participation => participation.EventId == ev.Id && participation.CharacterName != null)
                     .ToListAsync(cancellationToken))
@@ -680,7 +681,7 @@ public sealed class HnmCampReviewHandoffService
             foreach (var detail in owed)
             {
                 var winner = EventEndService.ResolveLootWinnerMembership(
-                    detail, membershipsByAppUserId, participantsByCharacterName, memberships);
+                    detail, membershipsByAppUserId, participantsByCharacterName, rosterByName);
                 if (winner?.AppUserId is null)
                 {
                     _logger.LogWarning(

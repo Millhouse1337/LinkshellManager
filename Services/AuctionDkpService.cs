@@ -102,29 +102,15 @@ public static class AuctionDkpService
             .Include(m => m.AppUser)
             .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
             .ToListAsync(cancellationToken);
-        var appUserIdByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var m in memberships)
-        {
-            void Map(string? name)
-            {
-                var key = name?.Trim();
-                if (!string.IsNullOrEmpty(key) && !appUserIdByName.ContainsKey(key))
-                {
-                    appUserIdByName[key] = m.AppUserId!;
-                }
-            }
-            Map(m.CharacterName);
-            Map(m.AppUser?.CharacterName);
-            Map(m.AppUser?.AltCharacterName1);
-            Map(m.AppUser?.AltCharacterName2);
-        }
+        // Who each winner name is: the shared CharacterResolver rule, the one the close charges by.
+        var rosterByName = CharacterResolver.ForMemberships(memberships);
 
         var result = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var loot in pendingLoot)
         {
             // The recorded winner account when the row has one (EventLootDetail.ItemWinnerAppUserId), else the name.
             var appUserId = loot.ItemWinnerAppUserId
-                ?? (appUserIdByName.TryGetValue(loot.ItemWinner!.Trim(), out var byName) ? byName : null);
+                ?? rosterByName.Resolve(loot.ItemWinner)?.AppUserId;
             if (appUserId is not null)
             {
                 result[appUserId] = result.GetValueOrDefault(appUserId) + loot.Dkp;
@@ -331,22 +317,8 @@ public static class AuctionDkpService
             .Include(m => m.AppUser)
             .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
             .ToListAsync(cancellationToken);
-        var appUserIdByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var m in memberships)
-        {
-            void Map(string? name)
-            {
-                var key = name?.Trim();
-                if (!string.IsNullOrEmpty(key) && !appUserIdByName.ContainsKey(key))
-                {
-                    appUserIdByName[key] = m.AppUserId!;
-                }
-            }
-            Map(m.CharacterName);
-            Map(m.AppUser?.CharacterName);
-            Map(m.AppUser?.AltCharacterName1);
-            Map(m.AppUser?.AltCharacterName2);
-        }
+        // Who each winner name is: the shared CharacterResolver rule, the one the close charges by.
+        var rosterByName = CharacterResolver.ForMemberships(memberships);
 
         var result = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var loot in pendingLoot)
@@ -357,7 +329,7 @@ public static class AuctionDkpService
             }
             // The recorded winner account when the row has one (EventLootDetail.ItemWinnerAppUserId), else the name.
             var appUserId = loot.ItemWinnerAppUserId
-                ?? (appUserIdByName.TryGetValue(loot.ItemWinner!.Trim(), out var byName) ? byName : null);
+                ?? rosterByName.Resolve(loot.ItemWinner)?.AppUserId;
             if (appUserId is not null)
             {
                 result[appUserId] = result.GetValueOrDefault(appUserId) + loot.Dkp;

@@ -122,18 +122,9 @@ public sealed class ManualLootService
             return new ManualLootResult(false, resolved.Error, null);
         }
 
-        var members = await _db.AppUserLinkshells
-            .Include(link => link.AppUser)
-            .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
-            .ToListAsync(cancellationToken);
-
-        // Main OR either alt, matched in memory so the comparison doesn't depend on DB collation.
-        // Mirrors SubmitLootDetails: the typed name is stored as-is so the log shows who actually
-        // won, while the DKP comes off the owning account.
-        var winner = members.FirstOrDefault(link =>
-            string.Equals(link.CharacterName, itemWinner, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(link.AppUser?.AltCharacterName1, itemWinner, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(link.AppUser?.AltCharacterName2, itemWinner, StringComparison.OrdinalIgnoreCase));
+        // Any of the member's names, by the shared CharacterResolver rule -- the same one the close
+        // and the affordability guard use, so a name this accepts is a name they charge.
+        var winner = await LootDkpGuard.ResolveWinnerAsync(_db, linkshellId, itemWinner, cancellationToken);
         if (winner?.AppUserId is null)
         {
             return new ManualLootResult(false, "Winner must be a current linkshell member.", null);

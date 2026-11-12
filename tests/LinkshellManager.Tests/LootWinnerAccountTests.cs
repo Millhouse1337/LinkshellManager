@@ -81,7 +81,7 @@ public class LootWinnerAccountTests
             loot,
             new Dictionary<string, AppUserLinkshell> { ["u2"] = namesake },
             new Dictionary<string, AppUserEvent>(),
-            new[] { namesake });
+            CharacterResolver.ForMemberships(new[] { namesake }));
 
         Assert.Null(winner);
     }
@@ -95,7 +95,7 @@ public class LootWinnerAccountTests
             new EventLootDetail { ItemWinner = "oldname" },
             new Dictionary<string, AppUserLinkshell> { ["u2"] = member },
             new Dictionary<string, AppUserEvent>(),
-            new[] { member });
+            CharacterResolver.ForMemberships(new[] { member }));
 
         Assert.Same(member, winner);
     }

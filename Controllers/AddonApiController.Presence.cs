@@ -1,5 +1,6 @@
 using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -83,29 +84,27 @@ public sealed partial class AddonApiController
         var roster = await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(link => link.LinkshellId == token.LinkshellId && link.AppUserId != null)
+            // Only the four names, not the whole AppUser: this runs on every heartbeat.
             .Join(_dbContext.Users, link => link.AppUserId, user => user.Id, (link, user) => new
             {
+                link.Id,
                 link.AppUserId,
                 link.CharacterName,
+                AccountCharacterName = user.CharacterName,
                 user.AltCharacterName1,
                 user.AltCharacterName2,
             })
             .ToListAsync(cancellationToken);
 
-        var knownByName = new Dictionary<string, (string AppUserId, string? Main)>(StringComparer.OrdinalIgnoreCase);
-        foreach (var member in roster)
-        {
-            if (string.IsNullOrWhiteSpace(member.AppUserId)) continue;
-            if (!string.IsNullOrWhiteSpace(member.CharacterName))
-            {
-                knownByName.TryAdd(member.CharacterName.Trim(), (member.AppUserId!, null));
-            }
-            foreach (var alt in new[] { member.AltCharacterName1, member.AltCharacterName2 })
-            {
-                if (string.IsNullOrWhiteSpace(alt)) continue;
-                knownByName.TryAdd(alt.Trim(), (member.AppUserId!, member.CharacterName));
-            }
-        }
+        // Who each name is, by the shared CharacterResolver rule -- the same one the window payout
+        // and the Claim Shield credit by, so the Lobby never calls someone registered whom a post
+        // would not pay, or the reverse.
+        var knownByName = CharacterResolver.Build(roster
+            .Where(member => !string.IsNullOrWhiteSpace(member.AppUserId))
+            .OrderBy(member => member.Id)
+            .Select(member => (member, new CharacterNames(
+                member.CharacterName, member.AccountCharacterName,
+                member.AltCharacterName1, member.AltCharacterName2))));
 
         var selfName = TruncateString(request.SelfCharacterName, 256);
         // The game reports exactly one alliance leader. Two means a client bug, so the first wins
@@ -124,7 +123,7 @@ public sealed partial class AddonApiController
         foreach (var member in reported)
         {
             var name = TruncateString(member.CharacterName!.Trim(), 256)!;
-            var isKnown = knownByName.TryGetValue(name, out var known);
+            var isKnown = knownByName.TryResolve(name, out var known);
             if (!isKnown) unregistered++;
 
             var isLeader = member.IsAllianceLeader && !leaderTaken;
@@ -137,8 +136,11 @@ public sealed partial class AddonApiController
                 existingByName[name] = row;
             }
 
-            row.AppUserId = isKnown ? known.AppUserId : null;
-            row.MainCharacterName = isKnown ? known.Main : null;
+            row.AppUserId = isKnown ? known.Member.AppUserId : null;
+            // The roster name, shown as "alt of ..." -- only when this name was NOT the roster name.
+            row.MainCharacterName = isKnown && known.Slot != CharacterNameSlot.Membership
+                ? known.Member.CharacterName
+                : null;
             row.ZoneId = member.ZoneId;
             row.AllianceNumber = allianceNumber;
             row.AllianceKey = allianceKey;

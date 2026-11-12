@@ -1,6 +1,7 @@
 using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -132,10 +133,10 @@ public sealed partial class AddonApiController
 
         var totalPlayers = request.TotalPlayers is > 0 ? request.TotalPlayers.Value : 0;
 
-        // Authoritative member resolution — identical index construction to
-        // PostAttendanceAsync (membership CharacterName + AppUser
-        // CharacterName / AltCharacterName1 / AltCharacterName2,
-        // first-write-wins, case-insensitive).
+        // Authoritative member resolution: the shared CharacterResolver rule (membership
+        // CharacterName, then the account's CharacterName, then its alts), the same one
+        // PostAttendanceAsync and the window payout use, so a tag and a window credit agree on who
+        // a name is.
         var membershipsWithUser = await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(m => m.LinkshellId == token.LinkshellId && m.AppUserId != null)
@@ -145,25 +146,8 @@ public sealed partial class AddonApiController
                   (m, u) => new { Membership = m, User = u })
             .ToListAsync(cancellationToken);
 
-        var membershipByName = new Dictionary<string, AppUserLinkshell>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pair in membershipsWithUser)
-        {
-            foreach (var candidate in new[]
-                     {
-                         pair.Membership.CharacterName,
-                         pair.User.CharacterName,
-                         pair.User.AltCharacterName1,
-                         pair.User.AltCharacterName2,
-                     })
-            {
-                if (string.IsNullOrWhiteSpace(candidate)) continue;
-                var key = candidate.Trim();
-                if (!membershipByName.ContainsKey(key))
-                {
-                    membershipByName[key] = pair.Membership;
-                }
-            }
-        }
+        var membershipByName = CharacterResolver.ForMemberships(
+            membershipsWithUser.Select(pair => (pair.Membership, pair.User)));
 
         var eventId = await ResolveClaimShieldEventAsync(
             request.EventId, token.LinkshellId, monster, capturedAt, cancellationToken);
@@ -246,7 +230,7 @@ public sealed partial class AddonApiController
             var name = entry.Name.Trim();
             if (!seenRawNames.Add(name)) continue;
 
-            membershipByName.TryGetValue(name, out var membership);
+            var membership = membershipByName.Resolve(name);
             if (membership?.AppUserId is { } appUserId && !seenAppUserIds.Add(appUserId))
             {
                 continue;

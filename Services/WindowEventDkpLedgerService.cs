@@ -701,7 +701,7 @@ public sealed class WindowEventDkpLedgerService
     private sealed class CardPayout
     {
         public required List<(AttendanceSnapshot Snapshot, AttendanceSnapshotEntry Entry)> Combined { get; init; }
-        public required Dictionary<string, AppUserLinkshell> MembershipsByCharacterName { get; init; }
+        public required CharacterResolver<AppUserLinkshell> MembershipsByCharacterName { get; init; }
         public required Dictionary<string, AppUserLinkshell> MembershipByAppUserId { get; init; }
         // Every name each account could have been captured under (membership name, account name, alts).
         public required Dictionary<string, List<string>> NamesByAppUserId { get; init; }
@@ -727,7 +727,7 @@ public sealed class WindowEventDkpLedgerService
     // payout asks and the two can never disagree.
     private sealed class PayoutRoster
     {
-        public required Dictionary<string, AppUserLinkshell> MembershipsByCharacterName { get; init; }
+        public required CharacterResolver<AppUserLinkshell> MembershipsByCharacterName { get; init; }
         public required Dictionary<string, AppUserLinkshell> MembershipByAppUserId { get; init; }
         // Every name each account could have been captured under (membership name, account name, alts).
         public required Dictionary<string, List<string>> NamesByAppUserId { get; init; }
@@ -744,13 +744,13 @@ public sealed class WindowEventDkpLedgerService
         // to nothing by name and simply never be credited — no error, no log.
         public static AppUserLinkshell? Resolve(
             Dictionary<string, AppUserLinkshell> byAppUserId,
-            Dictionary<string, AppUserLinkshell> byCharacterName,
+            CharacterResolver<AppUserLinkshell> byCharacterName,
             AttendanceSnapshotEntry entry)
         {
             var membership = (!string.IsNullOrWhiteSpace(entry.AppUserId)
                     ? byAppUserId.GetValueOrDefault(entry.AppUserId!)
                     : null)
-                ?? byCharacterName.GetValueOrDefault(entry.CharacterName.Trim());
+                ?? byCharacterName.Resolve(entry.CharacterName);
             return membership is not null && !string.IsNullOrWhiteSpace(membership.AppUserId) ? membership : null;
         }
     }
@@ -839,15 +839,13 @@ public sealed class WindowEventDkpLedgerService
                   (link, user) => new { Membership = link, User = user })
             .ToListAsync(cancellationToken);
 
-        // Index every name a member might have been captured under: the
-        // membership's own CharacterName plus the account's CharacterName and
-        // alt names. This lets a snapshot credit a member who showed up on an
-        // alt — the addon captures whatever character is standing in the
-        // alliance, which is often not the one on the roster.
-        // First-write-wins, so a membership's own
-        // CharacterName takes precedence over an alt that resolves to a
-        // different member (same rule PostAttendanceAsync uses).
-        var membershipsByCharacterName = new Dictionary<string, AppUserLinkshell>(StringComparer.OrdinalIgnoreCase);
+        // Every name a member might have been captured under -- the membership's own CharacterName,
+        // the account's CharacterName and both alts -- resolved by the one shared rule
+        // (CharacterResolver). This lets a snapshot credit a member who showed up on an alt: the
+        // addon captures whatever character is standing in the alliance, which is often not the
+        // one on the roster.
+        var membershipsByCharacterName = CharacterResolver.ForMemberships(
+            membershipsWithUser.Select(pair => (pair.Membership, pair.User)));
         var namesByAppUserId = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var pair in membershipsWithUser)
         {
@@ -868,10 +866,6 @@ public sealed class WindowEventDkpLedgerService
             {
                 if (string.IsNullOrWhiteSpace(candidate)) continue;
                 var key = candidate.Trim();
-                if (!membershipsByCharacterName.ContainsKey(key))
-                {
-                    membershipsByCharacterName[key] = pair.Membership;
-                }
                 if (!names.Contains(key, StringComparer.OrdinalIgnoreCase))
                 {
                     names.Add(key);

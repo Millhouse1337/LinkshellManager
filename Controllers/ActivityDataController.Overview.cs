@@ -418,23 +418,9 @@ public sealed partial class ActivityDataController
 
         // Addon "/lsm now" captures (misc posts) store character names only, no account. End Camp
         // credits those by name (WindowEventDkpLedgerService), so the Event Total has to as well or
-        // a misc post never shows in it. Same four names: the membership's character, the account's
-        // character and its two alts. Membership names are indexed first so they win over an alt
-        // that happens to share the name.
-        var appUserIdByCharacterName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var member in primaryLinkshellMembers.Where(member => !string.IsNullOrWhiteSpace(member.AppUserId)))
-        {
-            if (!string.IsNullOrWhiteSpace(member.CharacterName))
-                appUserIdByCharacterName.TryAdd(member.CharacterName.Trim(), member.AppUserId!);
-        }
-        foreach (var member in primaryLinkshellMembers.Where(member => !string.IsNullOrWhiteSpace(member.AppUserId)))
-        {
-            foreach (var name in new[] { member.AppUser?.CharacterName, member.AppUser?.AltCharacterName1, member.AppUser?.AltCharacterName2 })
-            {
-                if (!string.IsNullOrWhiteSpace(name))
-                    appUserIdByCharacterName.TryAdd(name.Trim(), member.AppUserId!);
-            }
-        }
+        // a misc post never shows in it -- by the same shared rule the payout uses (CharacterResolver),
+        // so the projection and the payout agree on who a shared name belongs to.
+        var rosterByName = CharacterResolver.ForMemberships(primaryLinkshellMembers);
 
         // Each Standard HNM camp's "Event Total" per account: what End Camp would pay if the camp
         // ended right now. Priced by HnmStandardCampFinalizer.PriceMembers, the code End Camp pays
@@ -492,7 +478,7 @@ public sealed partial class ActivityDataController
                     var onCapture = snapshot.Entries
                         .Select(entry => !string.IsNullOrWhiteSpace(entry.AppUserId)
                             ? entry.AppUserId
-                            : appUserIdByCharacterName.GetValueOrDefault(entry.CharacterName.Trim()))
+                            : rosterByName.Resolve(entry.CharacterName)?.AppUserId)
                         .Where(appUserId => !string.IsNullOrWhiteSpace(appUserId))
                         .Select(appUserId => appUserId!)
                         .Distinct(StringComparer.OrdinalIgnoreCase);

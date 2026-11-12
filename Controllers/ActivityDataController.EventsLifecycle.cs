@@ -604,6 +604,8 @@ public sealed partial class ActivityDataController
             .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
             .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        // Every name a member could have won loot under, resolved by the one shared rule.
+        var rosterByName = CharacterResolver.ForMemberships(linkshellMemberships);
         var participantsByCharacterName = eventEntity.AppUserEvents
             .Where(participation => !string.IsNullOrWhiteSpace(participation.CharacterName))
             .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
@@ -746,7 +748,7 @@ public sealed partial class ActivityDataController
                     lootDetail,
                     membershipsByAppUserId,
                     participantsByCharacterName,
-                    linkshellMemberships);
+                    rosterByName);
                 if (winnerMembership is null || string.IsNullOrWhiteSpace(winnerMembership.AppUserId))
                 {
                     continue;

@@ -107,6 +107,8 @@ public static class EventEndService
             .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
             .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        // Every name a member could have won loot under, resolved by the one shared rule.
+        var rosterByName = CharacterResolver.ForMemberships(linkshellMemberships);
         var participantsByCharacterName = eventEntity.AppUserEvents
             .Where(participation => !string.IsNullOrWhiteSpace(participation.CharacterName))
             .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
@@ -224,7 +226,7 @@ public static class EventEndService
                 lootDetail,
                 membershipsByAppUserId,
                 participantsByCharacterName,
-                linkshellMemberships);
+                rosterByName);
             if (winnerMembership is null || string.IsNullOrWhiteSpace(winnerMembership.AppUserId))
             {
                 continue;
@@ -375,11 +377,13 @@ public static class EventEndService
     }
 
     // The winner's membership: by the row's ItemWinnerAppUserId when it has one, else by name.
+    // `rosterByName` is CharacterResolver.ForMemberships over the linkshell's memberships, built
+    // once per close rather than once per loot row.
     internal static AppUserLinkshell? ResolveLootWinnerMembership(
         EventLootDetail loot,
         IReadOnlyDictionary<string, AppUserLinkshell> membershipsByAppUserId,
         IReadOnlyDictionary<string, AppUserEvent> participantsByCharacterName,
-        IEnumerable<AppUserLinkshell> linkshellMemberships)
+        CharacterResolver<AppUserLinkshell> rosterByName)
     {
         // A recorded account is the answer, even if a different member now has that name. If that
         // account has left the linkshell there is nobody to charge -- never fall back to a name.
@@ -389,14 +393,14 @@ public static class EventEndService
         }
 
         return ResolveLootWinnerMembership(
-            loot.ItemWinner, membershipsByAppUserId, participantsByCharacterName, linkshellMemberships);
+            loot.ItemWinner, membershipsByAppUserId, participantsByCharacterName, rosterByName);
     }
 
     internal static AppUserLinkshell? ResolveLootWinnerMembership(
         string? itemWinner,
         IReadOnlyDictionary<string, AppUserLinkshell> membershipsByAppUserId,
         IReadOnlyDictionary<string, AppUserEvent> participantsByCharacterName,
-        IEnumerable<AppUserLinkshell> linkshellMemberships)
+        CharacterResolver<AppUserLinkshell> rosterByName)
     {
         var normalizedWinner = NormalizeLookupKey(itemWinner);
         if (normalizedWinner is null)
@@ -411,13 +415,11 @@ public static class EventEndService
             return participantMembership;
         }
 
-        // Match the winner by the membership's MAIN character OR either ALT (alts
-        // share the main's account, so loot won on an alt deducts from the one
-        // account balance). Requires the memberships to be loaded WITH AppUser.
-        return linkshellMemberships.FirstOrDefault(link =>
-            string.Equals(NormalizeLookupKey(link.CharacterName), normalizedWinner, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(NormalizeLookupKey(link.AppUser?.AltCharacterName1), normalizedWinner, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(NormalizeLookupKey(link.AppUser?.AltCharacterName2), normalizedWinner, StringComparison.OrdinalIgnoreCase));
+        // Otherwise any of the member's names (alts share the main's account, so loot won on an
+        // alt deducts from the one account balance). The shared rule -- see CharacterResolver.
+        // This used to skip the account's own CharacterName, so loot won under it was never
+        // charged here while LootEditService still refunded it on an edit.
+        return rosterByName.Resolve(normalizedWinner);
     }
 
     internal static string? NormalizeLookupKey(string? value)

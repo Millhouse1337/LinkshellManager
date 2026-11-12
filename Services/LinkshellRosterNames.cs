@@ -15,9 +15,10 @@ namespace LinkshellManagerDiscordApp.Services;
 //
 // The set indexes every name that player might be standing in the world as — the membership's own
 // CharacterName, the account's CharacterName, and both alts — because the addon captures whatever
-// character is in the alliance, which is often not the one on the roster. This is the same
-// four-name index PostAttendanceAsync and WindowEventDkpLedgerService already build to decide who
-// gets paid; sharing it is what keeps "shown as credited" and "actually credited" from disagreeing.
+// character is in the alliance, which is often not the one on the roster. These are the same four
+// names CharacterResolver uses to decide WHICH member a name is (and so who gets paid); this set
+// only answers "is it anyone?". Sharing the names is what keeps "shown as credited" and "actually
+// credited" from disagreeing.
 public sealed class RosterNameSet
 {
     private readonly HashSet<string>? _names;
