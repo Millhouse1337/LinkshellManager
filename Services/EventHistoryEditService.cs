@@ -111,9 +111,9 @@ public sealed class EventHistoryEditService
             foreach (var p in history.AppUserEventHistories)
             {
                 // Scaled from what the member really has from this event (earned row + its audit
-                // corrections), not from the shown figure: an audit written before audits moved
-                // that figure left it at 10 while the member had 8, and scaling the 10 then set
-                // the total to 20 -- quietly erasing the officer's -2 correction.
+                // corrections), not from the stored EventDkp: a DKP audit does not patch that copy
+                // (Past Events reads the ledger, PastEventDkp), so it can say 10 while the member
+                // has 8, and scaling the 10 set the total to 20 -- erasing the officer's -2.
                 var oldEarned = LedgerTotal(p, earnedEntries, audits) ?? p.EventDkp ?? 0;
                 var newEarned = oldRate > 0
                     ? DkpRounding.Round(oldEarned * newRate / oldRate, step)
@@ -496,69 +496,11 @@ public sealed class EventHistoryEditService
         return entry.Amount + audited;
     }
 
-    // Every DKP audit correction of each given row, keyed by that row's id. The audit screen lets
-    // an officer correct a correction, and that row points at the first audit rather than the
-    // original, so the chain is followed down. (Depth is capped only as a guard against a loop.)
-    private async Task<Dictionary<int, List<DkpLedgerEntry>>> AuditsByCorrectedRowAsync(
-        IEnumerable<DkpLedgerEntry> rows, CancellationToken cancellationToken)
-    {
-        var result = new Dictionary<int, List<DkpLedgerEntry>>();
-        var rootOf = new Dictionary<int, int>();
-        foreach (var row in rows)
-        {
-            result[row.Id] = new List<DkpLedgerEntry>();
-            rootOf[row.Id] = row.Id;
-        }
-
-        var frontier = rootOf.Keys.ToList();
-        for (var depth = 0; frontier.Count > 0 && depth < 50; depth++)
-        {
-            var parentIds = frontier;
-            var children = await _db.DkpLedgerEntries
-                .Where(e => e.AuditRelatedLedgerEntryId != null && parentIds.Contains(e.AuditRelatedLedgerEntryId.Value))
-                .ToListAsync(cancellationToken);
-            frontier = new List<int>();
-            foreach (var child in children.OrderBy(c => c.Id))
-            {
-                if (rootOf.ContainsKey(child.Id)) continue;
-                var root = rootOf[child.AuditRelatedLedgerEntryId!.Value];
-                rootOf[child.Id] = root;
-                result[root].Add(child);
-                frontier.Add(child.Id);
-            }
-        }
-        return result;
-    }
-
-    // A DKP audit just corrected `corrected` (a member's earned row for a past event, or an earlier
-    // correction of it) by `delta`. Moves that attendee's Past Event figure by the same amount, so
-    // the event shows what the member really got from it and a later "set to 8" starts from there.
-    // Camp archives are left alone: their figures follow the review card. Does not save.
-    public async Task FollowDkpAuditAsync(
-        DkpLedgerEntry corrected, string appUserId, double delta, CancellationToken cancellationToken)
-    {
-        var root = corrected;
-        for (var hops = 0; root.AuditRelatedLedgerEntryId is int parentId && hops < 50; hops++)
-        {
-            var parent = await _db.DkpLedgerEntries.FirstOrDefaultAsync(e => e.Id == parentId, cancellationToken);
-            if (parent is null) break;
-            root = parent;
-        }
-
-        if (root.EntryType != EventEarnedEntryType || root.EventHistoryId is not int historyId) return;
-
-        var history = await _db.EventHistories
-            .Include(h => h.AppUserEventHistories)
-            .FirstOrDefaultAsync(h => h.Id == historyId, cancellationToken);
-        var attendee = history?.AppUserEventHistories
-            .Where(p => p.AppUserId == appUserId)
-            .OrderBy(p => p.Id)
-            .FirstOrDefault();
-        if (history is null || attendee is null) return;
-
-        attendee.EventDkp = (attendee.EventDkp ?? 0) + delta;
-        history.EventDkp = history.AppUserEventHistories.Sum(p => p.EventDkp ?? 0);
-    }
+    // Every DKP audit correction of each given row, keyed by that row's id (DkpAuditChain). Tracked,
+    // because Remove and Delete reverse these rows.
+    private Task<Dictionary<int, List<DkpLedgerEntry>>> AuditsByCorrectedRowAsync(
+        IEnumerable<DkpLedgerEntry> rows, CancellationToken cancellationToken) =>
+        DkpAuditChain.ByCorrectedRowAsync(_db.DkpLedgerEntries, rows, cancellationToken);
 
     private async Task<double> StepForAsync(int linkshellId, CancellationToken cancellationToken)
     {

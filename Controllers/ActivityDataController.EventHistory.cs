@@ -100,6 +100,11 @@ public sealed partial class ActivityDataController
             .GroupBy(x => x.HistoryId)
             .ToDictionary(g => g.Key, g => g.Min(x => x.Id));
 
+        // Each attendee's DKP is what the ledger says they got from the event (earned row + any
+        // DKP audit of it), not the copy stored at close, which an audit or a card edit can leave
+        // behind. See PastEventDkp.
+        var dkp = await PastEventDkp.LoadAsync(_dbContext, historyIds, cancellationToken);
+
         var result = histories.Select(h =>
         {
             var attendeeIds = h.AppUserEventHistories
@@ -116,7 +121,7 @@ public sealed partial class ActivityDataController
                 endTime = h.EndTime,
                 duration = h.Duration,
                 dkpPerHour = h.DkpPerHour,
-                eventDkp = h.EventDkp,
+                eventDkp = dkp.TotalFor(h.AppUserEventHistories),
                 // > 0 marks this as a windowed (HNM-style) camp with a surviving window record,
                 // which is what the card branches on to offer its Attendance Windows section.
                 // Always 0 for events closed before the archive existed.
@@ -141,7 +146,7 @@ public sealed partial class ActivityDataController
                         jobName = p.JobName,
                         subJobName = p.SubJobName,
                         duration = p.Duration,
-                        eventDkp = p.EventDkp,
+                        eventDkp = dkp.For(p),
                         activeCredit = p.ActiveCredit,
                         // Null on a timed event; the window tally on a windowed one, which is what
                         // that member's DKP was actually computed from.

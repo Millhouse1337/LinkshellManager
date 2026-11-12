@@ -235,7 +235,6 @@ public sealed partial class ActivityDataController
         DateTime occurredAtUtc;
         DkpPoolRef poolRef;
         DkpEntryContext entryContext;
-        DkpLedgerEntry? adjustedEntry = null;
 
         if (string.Equals(mode, "Adjust", StringComparison.OrdinalIgnoreCase))
         {
@@ -253,7 +252,6 @@ public sealed partial class ActivityDataController
             {
                 return NotFound(new { error = "The selected original ledger entry was not found for this member." });
             }
-            adjustedEntry = original;
 
             var priorAuditDelta = await _dbContext.DkpLedgerEntries
                 .Where(entry =>
@@ -379,13 +377,8 @@ public sealed partial class ActivityDataController
             targetMembership, entryType, deltaAmount, occurredAtUtc, poolRef, entryContext, cancellationToken,
             DkpOverdraft.Allow);
 
-        // Correcting an event's earned row moves that attendee's Past Event figure too, so the
-        // event and the balance agree and a later Past Event edit starts from the real number.
-        if (adjustedEntry is not null)
-        {
-            await EventHistoryEdits().FollowDkpAuditAsync(
-                adjustedEntry, request.TargetAppUserId, deltaAmount, cancellationToken);
-        }
+        // Nothing else to patch: Past Events read each attendee's figure from the ledger
+        // (PastEventDkp), and the row just appended is part of that sum.
 
         try
         {

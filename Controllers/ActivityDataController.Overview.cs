@@ -1291,6 +1291,9 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        // Each attendee's DKP from the ledger, the same figure the Past Events list shows.
+        var dkp = await PastEventDkp.LoadAsync(_dbContext, new[] { history.Id }, cancellationToken);
+
         return Ok(new ActivityHistoryDetailDto(
             history.Id,
             history.LinkshellId,
@@ -1312,7 +1315,7 @@ public sealed partial class ActivityDataController
                     item.SubJobName,
                     item.JobType,
                     item.Duration,
-                    item.EventDkp,
+                    dkp.For(item),
                     item.IsVerified))
                 .ToList()));
     }

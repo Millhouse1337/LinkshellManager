@@ -130,21 +130,31 @@ public class PastEventAuditCorrectionTests
         Assert.Equal(16, db.AppUserEventHistories.Single().EventDkp);
     }
 
-    [Fact]
-    public async Task AnAudit_MovesTheAttendeesPastEventFigure_EvenThroughACorrectionOfACorrection()
+    // P3.7: the Past Event figure is read from the ledger (PastEventDkp), so an audit shows there
+    // without anything patching the stored EventDkp -- old audits filed under no event included.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AnAudit_MovesTheAttendeesPastEventFigure_EvenThroughACorrectionOfACorrection(bool auditCarriesEvent)
     {
         await using var db = NewDb();
-        var (earned, audit) = await SeedAsync(db, auditCarriesEvent: true);
-        var edits = NewServices(db).Edits;
+        var (_, audit) = await SeedAsync(db, auditCarriesEvent);
 
-        await edits.FollowDkpAuditAsync(earned, "u2", -2, CancellationToken.None);
-        await db.SaveChangesAsync();
-        Assert.Equal(8, db.AppUserEventHistories.AsNoTracking().Single().EventDkp);
-        Assert.Equal(8, db.EventHistories.AsNoTracking().Single().EventDkp);
+        async Task<double?> ShownAsync()
+        {
+            var totals = await PastEventDkp.LoadAsync(db, new[] { HistoryId }, CancellationToken.None);
+            return totals.For(db.AppUserEventHistories.AsNoTracking().Single());
+        }
+
+        // The stored figure still says 10; the page shows what Bob really has.
+        Assert.Equal(10, db.AppUserEventHistories.AsNoTracking().Single().EventDkp);
+        Assert.Equal(8, await ShownAsync());
 
         // A second officer corrects the -2 row to -3.
-        await edits.FollowDkpAuditAsync(audit, "u2", -1, CancellationToken.None);
+        var bob = db.AppUserLinkshells.Single(m => m.AppUserId == "u2");
+        await NewServices(db).Writer.AppendAsync(bob, "AuditAdjustment", -1, DateTime.UtcNow, DkpPoolRef.Derived("Sky"),
+            new DkpEntryContext(CharacterName: "Bob", AuditRelatedLedgerEntryId: audit.Id), CancellationToken.None);
         await db.SaveChangesAsync();
-        Assert.Equal(7, db.AppUserEventHistories.AsNoTracking().Single().EventDkp);
+        Assert.Equal(7, await ShownAsync());
     }
 }

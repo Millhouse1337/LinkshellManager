@@ -957,7 +957,10 @@ public sealed class DiscordInteractionsController : ControllerBase
                     .ToList()))
             .ToListAsync(cancellationToken);
 
-        return Ephemeral(RenderPastEventDetails(history, loot.Count, loot.Select(
+        // Each person's DKP from the ledger, the same figure Past Events shows in the app.
+        var dkp = await PastEventDkp.LoadAsync(_db, new[] { history.Id }, cancellationToken);
+
+        return Ephemeral(RenderPastEventDetails(history, dkp, loot.Count, loot.Select(
             l => (l.ItemName, l.ItemWinner, l.WinningDkpSpent)).ToList(), captures));
     }
 
@@ -965,6 +968,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // and a roster of eighteen with amounts is already most of an embed's field budget.
     private static string RenderPastEventDetails(
         EventHistory history,
+        PastEventDkpTotals dkpTotals,
         int lootCount,
         IReadOnlyList<(string? ItemName, string? ItemWinner, int? WinningDkpSpent)> loot,
         IReadOnlyList<ClaimShieldBoardCapture> captures)
@@ -996,7 +1000,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         // rather than by reading all eighteen.
         var roster = history.AppUserEventHistories
             .Where(p => !string.IsNullOrWhiteSpace(p.CharacterName))
-            .OrderByDescending(p => p.EventDkp ?? 0)
+            .OrderByDescending(p => dkpTotals.For(p) ?? 0)
             .ThenBy(p => p.CharacterName, StringComparer.OrdinalIgnoreCase)
             .ToList();
         lines.Add(string.Empty);
@@ -1006,11 +1010,11 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
         else
         {
-            var total = roster.Sum(p => p.EventDkp ?? 0);
+            var total = dkpTotals.TotalFor(roster);
             lines.Add($"**Roster ({roster.Count})** — {total:0.##} DKP in total");
             foreach (var member in roster.Take(PastEventRosterLimit))
             {
-                var dkp = member.EventDkp is { } amount and > 0 ? $" — **{amount:0.##}**" : string.Empty;
+                var dkp = dkpTotals.For(member) is { } amount and > 0 ? $" — **{amount:0.##}**" : string.Empty;
                 var job = string.IsNullOrWhiteSpace(member.JobName)
                     ? string.Empty
                     : $" ({member.JobName}{(string.IsNullOrWhiteSpace(member.SubJobName) ? "" : "/" + member.SubJobName)})";
