@@ -38,7 +38,6 @@ public sealed record ChartWishlistRow(
     string? Notes,
     string Status,
     int Priority,
-    int? RequestedByMembershipId,
     string RequestedByCharacterName,
     bool CanWithdraw,
     DateTime RequestedAt,
@@ -172,7 +171,6 @@ public sealed class ChartWishlistService
                 row.Notes,
                 row.Status,
                 row.Priority,
-                row.RequestedByMembershipId,
                 row.RequestedByCharacterName,
                 CanEditRequest(row, viewerAppUserId, canManage),
                 row.RequestedAt,
@@ -280,17 +278,9 @@ public sealed class ChartWishlistService
         }
 
         var byId = rows.ToDictionary(row => row.Id);
-        var now = DateTime.UtcNow;
         for (var position = 0; position < wanted.Count; position++)
         {
-            var row = byId[wanted[position]];
-            if (row.Priority == position)
-            {
-                continue;
-            }
-
-            row.Priority = position;
-            row.UpdatedAt = now;
+            byId[wanted[position]].Priority = position;
         }
 
         return null;

@@ -43,7 +43,7 @@ public class ChartCreditResolutionTests
         var service = new ChartBoardService(db);
         var (error, credits) = await service.ResolveCreditsAsync(
             linkshellId: 10,
-            new[] { new ChartCreditDraft(1, null, null), new ChartCreditDraft(2, null, null) },
+            new[] { new ChartCreditDraft(1, null), new ChartCreditDraft(2, null) },
             CancellationToken.None);
 
         Assert.NotNull(error);
@@ -63,12 +63,11 @@ public class ChartCreditResolutionTests
         var service = new ChartBoardService(db);
         var (error, credits) = await service.ResolveCreditsAsync(
             linkshellId: 10,
-            new[] { new ChartCreditDraft(1, "Somebody Else", "farmed 3") },
+            new[] { new ChartCreditDraft(1, "Somebody Else") },
             CancellationToken.None);
 
         Assert.Null(error);
         Assert.Equal("Aeris", credits.Single().CharacterName);
-        Assert.Equal("farmed 3", credits.Single().Detail);
     }
 
     // An unsynced character is a real member of the linkshell who really farmed; they just have no
@@ -81,11 +80,10 @@ public class ChartCreditResolutionTests
 
         var (error, credits) = await service.ResolveCreditsAsync(
             linkshellId: 10,
-            new[] { new ChartCreditDraft(null, "  Mulepal  ", null) },
+            new[] { new ChartCreditDraft(null, "  Mulepal  ") },
             CancellationToken.None);
 
         Assert.Null(error);
-        Assert.Null(credits.Single().MembershipId);
         Assert.Equal("Mulepal", credits.Single().CharacterName);
     }
 
@@ -99,7 +97,7 @@ public class ChartCreditResolutionTests
         var service = new ChartBoardService(db);
         var (error, credits) = await service.ResolveCreditsAsync(
             linkshellId: 10,
-            new[] { new ChartCreditDraft(1, null, null), new ChartCreditDraft(null, "aeris", null) },
+            new[] { new ChartCreditDraft(1, null), new ChartCreditDraft(null, "aeris") },
             CancellationToken.None);
 
         Assert.Null(error);
@@ -129,7 +127,7 @@ public class ChartCreditResolutionTests
 
         var (error, _) = await service.ResolveCreditsAsync(
             linkshellId: 10,
-            new[] { new ChartCreditDraft(null, "   ", null) },
+            new[] { new ChartCreditDraft(null, "   ") },
             CancellationToken.None);
 
         Assert.NotNull(error);
@@ -149,22 +147,20 @@ public class ChartCreditResolutionTests
         db.ChartPopItems.Add(item);
         db.ChartPopItemCredits.Add(new ChartPopItemCredit
         {
-            Id = 1, ChartPopItemId = 5, LinkshellId = 10, CharacterName = "OldFarmer",
+            Id = 1, ChartPopItemId = 5, CharacterName = "OldFarmer",
         });
         await db.SaveChangesAsync();
 
         var service = new ChartBoardService(db);
         await service.ReplaceCreditsAsync(
             item,
-            new[] { new ChartResolvedCredit(null, "NewFarmer", null) },
+            new[] { new ChartResolvedCredit("NewFarmer") },
             new ChartBoardActor("user-1", "Officer"),
             CancellationToken.None);
         await db.SaveChangesAsync();
 
         var remaining = db.ChartPopItemCredits.Where(credit => credit.ChartPopItemId == 5).ToList();
         Assert.Equal("NewFarmer", remaining.Single().CharacterName);
-        // The credit carries the item's linkshell, so the ledger can read it without joining back.
-        Assert.Equal(10, remaining.Single().LinkshellId);
     }
 
     /// <summary>
@@ -188,8 +184,8 @@ public class ChartCreditResolutionTests
             item,
             new[]
             {
-                new ChartResolvedCredit(1, "Aeris", null),
-                new ChartResolvedCredit(null, "Unsynced", null),
+                new ChartResolvedCredit("Aeris"),
+                new ChartResolvedCredit("Unsynced"),
             },
             new ChartBoardActor("user-1", "Officer"));
 
@@ -200,8 +196,6 @@ public class ChartCreditResolutionTests
         Assert.Equal(2, saved.Count);
         // The FK is filled in by the insert, so the item really got an id and the credits point at it.
         Assert.NotEqual(0, item.Id);
-        // Each credit carries the item's linkshell, so the ledger reads it without joining back.
-        Assert.All(saved, credit => Assert.Equal(10, credit.LinkshellId));
         Assert.All(saved, credit => Assert.Equal("Officer", credit.CreditedByCharacterName));
         Assert.Equal(new[] { "Aeris", "Unsynced" }, saved.Select(credit => credit.CharacterName).ToArray());
     }
@@ -212,20 +206,20 @@ public class ChartCreditResolutionTests
     public void NormalizeDraft_RejectsABossFromAnotherBoard()
     {
         Assert.Null(ChartBoardService.NormalizeDraft(
-            ChartBoardCatalog.Sea, "Byakko", "Diorite", null, null, 1, null));
+            ChartBoardCatalog.Sea, "Byakko", "Diorite", null, 1, null));
 
         Assert.NotNull(ChartBoardService.NormalizeDraft(
-            ChartBoardCatalog.Sea, "jailer of love", "Love Torque", null, null, 1, null));
+            ChartBoardCatalog.Sea, "jailer of love", "Love Torque", null, 1, null));
     }
 
     [Fact]
     public void NormalizeDraft_RequiresAnItemName_AndClampsQuantity()
     {
         Assert.Null(ChartBoardService.NormalizeDraft(
-            ChartBoardCatalog.Sea, "Jailer of Hope", "   ", null, null, 1, null));
+            ChartBoardCatalog.Sea, "Jailer of Hope", "   ", null, 1, null));
 
         var draft = ChartBoardService.NormalizeDraft(
-            ChartBoardCatalog.Sea, "Jailer of Hope", "  Hope Staff  ", "  Miyu  ", null, -4, "  note  ");
+            ChartBoardCatalog.Sea, "Jailer of Hope", "  Hope Staff  ", "  Miyu  ", -4, "  note  ");
 
         Assert.Equal("Hope Staff", draft!.ItemName);
         Assert.Equal("Miyu", draft.HeldByCharacterName);

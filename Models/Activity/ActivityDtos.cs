@@ -1207,8 +1207,6 @@ public sealed record ActivityAuctionItemDto(
     int? CurrentHighestBid,
     string? CurrentHighestBidder,
     string? CurrentHighestBidderAppUserId,
-    DateTime? StartTime,
-    DateTime? EndTime,
     string? Status,
     string? Notes,
     int BidCount,
@@ -1858,7 +1856,6 @@ public sealed record ActivityChartPopItemDto(
     string Boss,
     string ItemName,
     string? HeldByCharacterName,
-    int? HeldByMembershipId,
     int Quantity,
     string? Notes,
     int SortOrder,
@@ -1870,7 +1867,8 @@ public sealed record ActivityChartPopItemDto(
     /// edit form offers; nothing else about the row differs.</summary>
     string Kind);
 
-public sealed record ActivityChartCreditDto(int? MembershipId, string CharacterName, string? Detail);
+// Only the name: the ledger and the edit form match farmers by name.
+public sealed record ActivityChartCreditDto(string CharacterName);
 
 /// <summary><c>Bosses</c> is the column order, decided here so no client re-derives it.</summary>
 public sealed record ActivityChartLedgerDto(
@@ -1911,13 +1909,14 @@ public sealed record ActivityChartPopItemRequest(
     string? Board,
     string? Boss,
     string? ItemName,
+    // The holder is a NAME (a character, or an alt off the roster). An older client may still send
+    // heldByMembershipId; it is ignored.
     string? HeldByCharacterName,
-    int? HeldByMembershipId,
     int Quantity,
     string? Notes,
     /// <summary>
-    /// Who farmed it, named while the row is being written rather than in a second trip through the
-    /// credits endpoint. Set-wise like that endpoint, so a list REPLACES what the row has.
+    /// Who farmed it, named while the row is being written. Set-wise, so a list REPLACES what the
+    /// row has.
     ///
     /// NULL is not an empty list: it means "leave the credits alone", which is what a caller that
     /// does not know about them sends. An empty list clears them.
@@ -1932,10 +1931,9 @@ public sealed record ActivityChartPopItemRequest(
     /// </summary>
     string? Kind = null);
 
-public sealed record ActivityChartCreditInput(int? MembershipId, string? CharacterName, string? Detail);
-
-/// <summary>The COMPLETE farmer list for one row. Credits are written set-wise, so an omitted name is a removal.</summary>
-public sealed record ActivitySetChartCreditsRequest(IReadOnlyList<ActivityChartCreditInput>? Credits);
+// MembershipId picks a roster member (checked against the linkshell, then stored by NAME); a bare
+// CharacterName is an unsynced farmer. The client may still send "detail": it is ignored.
+public sealed record ActivityChartCreditInput(int? MembershipId, string? CharacterName);
 
 // ---- Charts: the wishlist ---------------------------------------------------------
 //
@@ -1960,7 +1958,6 @@ public sealed record ActivityChartWishlistRequestDto(
     /// deletes the row.</summary>
     string Status,
     int Priority,
-    int? RequestedByMembershipId,
     string RequestedByCharacterName,
     /// <summary>Whether THIS viewer may withdraw it: their own, or anybody's if they can manage.</summary>
     bool CanWithdraw,

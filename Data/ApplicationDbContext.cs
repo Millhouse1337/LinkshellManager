@@ -981,7 +981,7 @@ namespace LinkshellManagerDiscordApp.Data
 
         // Saves inside this scope are not counted in CommittedSaveCount, because running them again
         // gives the same result. Why it exists: every Discord Activity request signs the caller in
-        // first (DiscordIdentityService stamps LastSeenAtUtc and saves), INSIDE the action that
+        // first (DiscordIdentityService refreshes the caller's Discord row and can save), INSIDE the action that
         // ConcurrencyRetry wraps. Counting that save turned the re-run off for every Post, End Event,
         // auction close and DKP audit sent from the Activity, so a lost race always became a 409.
         //
@@ -1173,6 +1173,7 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasKey(user => user.Id);
                 entity.Property(user => user.DiscordUserId).HasMaxLength(32).IsRequired();
                 entity.Property(user => user.Username).HasMaxLength(32).IsRequired();
+                // PHASE4B-DROP: DiscordActivityUsers.Discriminator - no longer written or read.
                 entity.Property(user => user.Discriminator).HasMaxLength(10).IsRequired();
                 entity.Property(user => user.GlobalName).HasMaxLength(64);
                 entity.Property(user => user.Avatar).HasMaxLength(128);
@@ -1328,6 +1329,7 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
+                // PHASE4B-DROP: AuctionHistories.DkpPoolId and this FK - no longer written or read.
                 entity.HasOne(item => item.DkpPool)
                     .WithMany()
                     .HasForeignKey(item => item.DkpPoolId)
@@ -1972,6 +1974,7 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 entity.ToTable("ChartPopItemCredits");
                 entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
+                // PHASE4B-DROP: ChartPopItemCredits.Detail - never written or read.
                 entity.Property(item => item.Detail).HasMaxLength(256);
                 entity.Property(item => item.CreditedByAppUserId).HasMaxLength(450);
                 entity.Property(item => item.CreditedByCharacterName).HasMaxLength(256);
@@ -1983,6 +1986,7 @@ namespace LinkshellManagerDiscordApp.Data
                 // cascade path from Linkshells into this table is something Postgres will refuse.
                 // Same reason as JournalEntryLine. Rows still die with the linkshell, via
                 // ChartPopItems.
+                // PHASE4B-DROP: this index with LinkshellId and MembershipId - both no longer written or read.
                 entity.HasIndex(item => new { item.LinkshellId, item.MembershipId });
                 entity.HasIndex(item => item.ChartPopItemId);
                 // Deliberately NO unique index on (item, person): credits are written set-wise — the
@@ -2064,6 +2068,7 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.ToTable("ChartMemberKeyItems");
                 entity.Property(item => item.Board).HasMaxLength(16).IsRequired();
                 entity.Property(item => item.KeyItemName).HasMaxLength(128).IsRequired();
+                // PHASE4B-DROP: ChartMemberKeyItems.CharacterName - no longer written or read.
                 entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
                 entity.Property(item => item.SetByAppUserId).HasMaxLength(450);
                 entity.Property(item => item.SetByCharacterName).HasMaxLength(256);
@@ -2241,11 +2246,13 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 entity.ToTable("LinkshellPresences");
                 entity.Property(item => item.CharacterName).HasMaxLength(256).IsRequired();
+                // PHASE4B-DROP: LinkshellPresences.AppUserId - no longer written or read.
                 entity.Property(item => item.AppUserId).HasMaxLength(450);
                 entity.Property(item => item.MainCharacterName).HasMaxLength(256);
                 entity.Property(item => item.AllianceKey).HasMaxLength(256);
                 entity.Property(item => item.MainJob).HasMaxLength(8);
                 entity.Property(item => item.SubJob).HasMaxLength(8);
+                // PHASE4B-DROP: LinkshellPresences.ReportedByCharacterName - no longer written or read.
                 entity.Property(item => item.ReportedByCharacterName).HasMaxLength(256);
                 // THE upsert key. A character is in exactly one place at a time no matter which of
                 // their alliance-mates reported them, so a second reporter must overwrite the row

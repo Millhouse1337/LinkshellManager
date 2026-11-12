@@ -66,7 +66,6 @@ public sealed partial class ActivityDataController
         });
 
         appUser.PrimaryLinkshellId ??= linkshell.Id;
-        appUser.PrimaryLinkshellName ??= linkshell.LinkshellName;
 
         // UserManager.UpdateAsync uses the same DbContext (Identity is wired to ApplicationDbContext)
         // and calls SaveChangesAsync internally, which flushes the AppUserLinkshell add too.
@@ -186,7 +185,6 @@ public sealed partial class ActivityDataController
         }
 
         appUser.PrimaryLinkshellId = membership.LinkshellId;
-        appUser.PrimaryLinkshellName = membership.Linkshell.LinkshellName;
 
         await _userManager.UpdateAsync(appUser);
 
@@ -369,26 +367,8 @@ public sealed partial class ActivityDataController
         if (request.HnmStandardWindowBonus.HasValue) linkshell.HnmStandardWindowBonus = Math.Max(0d, request.HnmStandardWindowBonus.Value);
         if (request.HnmStandardMiscBonus.HasValue) linkshell.HnmStandardMiscBonus = Math.Max(0d, request.HnmStandardMiscBonus.Value);
 
-        var memberships = await _dbContext.AppUserLinkshells
-            .Where(link => link.LinkshellId == linkshellId)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var memberIds = memberships
-            .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
-            .Select(link => link.AppUserId!)
-            .Distinct()
-            .ToList();
-
-        if (memberIds.Count > 0)
-        {
-            var users = await _dbContext.Users.Where(user => memberIds.Contains(user.Id)).ToListAsync(cancellationToken);
-            foreach (var user in users.Where(user => user.PrimaryLinkshellId == linkshellId))
-            {
-                user.PrimaryLinkshellName = trimmedName;
-            }
-        }
-
+        // No copy of the new name to update on members' accounts: the primary linkshell's name is
+        // read from this row wherever it is shown.
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Enabling tracking or changing thresholds can change who's Inactive →
@@ -917,7 +897,6 @@ public sealed partial class ActivityDataController
                     .FirstOrDefaultAsync(cancellationToken);
 
                 user.PrimaryLinkshellId = fallback?.LinkshellId;
-                user.PrimaryLinkshellName = fallback?.Linkshell?.LinkshellName;
             }
         }
 
@@ -992,7 +971,6 @@ public sealed partial class ActivityDataController
                 .FirstOrDefaultAsync(cancellationToken);
 
             appUser.PrimaryLinkshellId = fallback?.LinkshellId;
-            appUser.PrimaryLinkshellName = fallback?.Linkshell?.LinkshellName;
         }
 
         var eventParticipations = await _dbContext.AppUserEvents

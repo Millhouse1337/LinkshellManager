@@ -192,7 +192,7 @@ public static class AuctionBoardMessageBuilder
     {
         var name = $"• **{Escape(ItemName(item))}**";
         return IsSold(item)
-            ? $"{name} — won by {Escape(item.CurrentHighestBidder!.Trim())} for **{item.EndingBidDkp} DKP**"
+            ? $"{name} — won by {Escape(item.CurrentHighestBidder!.Trim())} for **{item.CurrentHighestBid} DKP**"
             : $"{name} — _no bids_";
     }
 
@@ -215,8 +215,10 @@ public static class AuctionBoardMessageBuilder
         return bits.Count == 0 ? null : string.Join(" · ", bits);
     }
 
+    // A closed item keeps its winning bid in CurrentHighestBid (Close used to copy it into a second
+    // column, EndingBidDkp, that said the same thing).
     private static bool IsSold(AuctionItem item)
-        => !string.IsNullOrWhiteSpace(item.CurrentHighestBidder) && item.EndingBidDkp.HasValue;
+        => !string.IsNullOrWhiteSpace(item.CurrentHighestBidder) && item.CurrentHighestBid.HasValue;
 
     private static string ItemName(AuctionItem item)
         => string.IsNullOrWhiteSpace(item.ItemName) ? "(item)" : item.ItemName!.Trim();

@@ -54,16 +54,12 @@ public class ChartPopItem
     [MaxLength(128)]
     public string ItemName { get; set; } = string.Empty;
 
-    // Who is physically holding it. The NAME is the record and the membership id is a convenience
-    // that survives a character rename — an unsynced character is a real member of the linkshell,
-    // they just have no account behind the name. Same split as EventLootDetail.ItemWinner.
-    //
-    // HeldByMembershipId is deliberately a plain nullable int with no relationship: Linkshells
-    // already cascades into AppUserLinkshells, so an FK from here would be a second cascade path
-    // into this table. Resolved at read time instead.
+    // Who is physically holding it. The NAME is the record: an unsynced character is a real member
+    // of the linkshell, they just have no account behind the name.
     [MaxLength(256)]
     public string? HeldByCharacterName { get; set; }
 
+    // PHASE4B-DROP: ChartPopItems.HeldByMembershipId - the app never sent one, so it was never set; no longer read or written.
     public int? HeldByMembershipId { get; set; }
 
     public int Quantity { get; set; } = 1;

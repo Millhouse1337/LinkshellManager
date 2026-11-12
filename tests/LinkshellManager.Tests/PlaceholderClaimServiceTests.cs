@@ -205,7 +205,7 @@ public class PlaceholderClaimServiceTests
             new ChartMemberKeyItem { Id = 1, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 10, CharacterName = "Bob" },
             new ChartMemberKeyItem { Id = 2, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11, CharacterName = "Bobalt" },
             new ChartMemberKeyItem { Id = 3, LinkshellId = Ls, Board = "Sky", KeyItemName = "B", MembershipId = 11, CharacterName = "Bobalt" });
-        db.ChartWishlistRequests.Add(new ChartWishlistRequest { Id = 1, LinkshellId = Ls, RequestedByMembershipId = 11, RequestedByAppUserId = Ph });
+        db.ChartWishlistRequests.Add(new ChartWishlistRequest { Id = 1, LinkshellId = Ls, RequestedByAppUserId = Ph });
         db.SaveChanges();
 
         var result = await NewService(db).ClaimPlaceholderAsync(Ph, Real, Ls, CancellationToken.None);
@@ -213,8 +213,8 @@ public class PlaceholderClaimServiceTests
         Assert.True(result.Success, result.Error);
         Assert.Equal(new[] { 1, 3 }, db.ChartMemberKeyItems.OrderBy(k => k.Id).Select(k => k.Id));
         Assert.All(db.ChartMemberKeyItems, k => Assert.Equal(10, k.MembershipId));
+        // A request is owned by its account id (its membership id is no longer used).
         var request = Assert.Single(db.ChartWishlistRequests);
-        Assert.Equal(10, request.RequestedByMembershipId);
         Assert.Equal(Real, request.RequestedByAppUserId);
     }
 

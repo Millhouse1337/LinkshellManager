@@ -304,7 +304,8 @@ public class CharacterResolverCharacterizationTests
         Assert.Equal(expected, db.DkpLedgerEntries.SingleOrDefault(e => e.EntryType == "SnapshotEarned")?.AppUserId);
     }
 
-    // Presence names the account, and the roster main only when the name was one of their alts.
+    // Presence knows a name when it resolves to an account (expected = which one), and names the
+    // roster main only when the name was one of their alts.
     [Theory]
     [InlineData("Rostername", "u1", null)]
     [InlineData("rostername", "u1", null)]
@@ -325,9 +326,12 @@ public class CharacterResolverCharacterizationTests
                 [new AddonApiController.AddonPresenceMemberDto(typed, 1, null, null, null, null)]),
             CancellationToken.None);
 
-        Assert.IsType<OkObjectResult>(result);
+        // The row no longer stores the account (nothing read it); what a resolved name still decides
+        // is whether it counts as unregistered, and the "alt of" hint.
+        var ok = Assert.IsType<OkObjectResult>(result);
+        var unregistered = (int)ok.Value!.GetType().GetProperty("unregistered")!.GetValue(ok.Value)!;
+        Assert.Equal(expected is null ? 1 : 0, unregistered);
         var row = db.LinkshellPresences.Single();
-        Assert.Equal(expected, row.AppUserId);
         Assert.Equal(main, row.MainCharacterName);
     }
 }

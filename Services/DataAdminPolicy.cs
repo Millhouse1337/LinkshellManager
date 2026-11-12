@@ -128,7 +128,8 @@ public sealed class DataAdminPolicy
                 EditableAllowList = new[]
                 {
                     nameof(AppUser.CharacterName), nameof(AppUser.AltCharacterName1), nameof(AppUser.AltCharacterName2),
-                    nameof(AppUser.TimeZone), nameof(AppUser.PrimaryLinkshellId), nameof(AppUser.PrimaryLinkshellName),
+                    // Not PrimaryLinkshellName: nothing reads it any more (the name comes from the linkshell row).
+                    nameof(AppUser.TimeZone), nameof(AppUser.PrimaryLinkshellId),
                     nameof(AppUser.IsPlaceholder),
                 },
             },

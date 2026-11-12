@@ -202,12 +202,9 @@ public class AuctionBidRaceTests : IAsyncLifetime
         Assert.False(bid.IsCompleted, "Alice's bid should wait on the item until the End commits.");
 
         var endedAt = DateTime.UtcNow;
-        var auction = await officer.Auctions.Include(a => a.AuctionItems).SingleAsync();
+        // What End does: only the auction's own EndTime moves.
+        var auction = await officer.Auctions.SingleAsync();
         auction.EndTime = endedAt;
-        foreach (var item in auction.AuctionItems)
-        {
-            item.EndTime = endedAt;
-        }
         await officer.SaveChangesAsync();
         await end.CommitAsync();
 

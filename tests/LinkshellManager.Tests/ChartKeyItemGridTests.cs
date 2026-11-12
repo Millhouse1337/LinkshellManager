@@ -218,8 +218,7 @@ public class ChartKeyItemGridTests
         // Canonicalised on the way in, so it can never land in a column the grid does not draw.
         Assert.Equal("Hydra Corps Lantern", row.KeyItemName);
         Assert.Equal("Dynamis", row.Board);
-        // The name comes off the ROSTER, never off the request.
-        Assert.Equal("Aeris", row.CharacterName);
+        Assert.Equal(1, row.MembershipId);
         Assert.Equal("user-1", row.SetByAppUserId);
     }
 

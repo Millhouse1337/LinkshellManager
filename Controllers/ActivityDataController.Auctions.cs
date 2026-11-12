@@ -250,9 +250,6 @@ public sealed partial class ActivityDataController
                 CurrentHighestBid = null,
                 CurrentHighestBidder = null,
                 CurrentHighestBidderAppUserId = null,
-                EndingBidDkp = null,
-                StartTime = startTimeUtc,
-                EndTime = endTimeUtc,
                 Status = "Pending",
                 Notes = item.Notes?.Trim(),
                 SourceItemId = item.GilAmount.HasValue ? null : item.SourceItemId,
@@ -351,8 +348,6 @@ public sealed partial class ActivityDataController
                 existingItem.ItemName = ResolveAuctionItemName(itemRequest);
                 existingItem.ItemType = itemRequest.GilAmount.HasValue ? "Gil" : itemRequest.ItemType?.Trim();
                 existingItem.StartingBidDkp = itemRequest.StartingBidDkp;
-                existingItem.StartTime = startTimeUtc;
-                existingItem.EndTime = endTimeUtc;
                 existingItem.Notes = itemRequest.Notes?.Trim();
                 existingItem.SourceItemId = itemRequest.GilAmount.HasValue ? null : itemRequest.SourceItemId;
                 existingItem.GilAmount = itemRequest.GilAmount;
@@ -368,9 +363,6 @@ public sealed partial class ActivityDataController
                 CurrentHighestBid = null,
                 CurrentHighestBidder = null,
                 CurrentHighestBidderAppUserId = null,
-                EndingBidDkp = null,
-                StartTime = startTimeUtc,
-                EndTime = endTimeUtc,
                 Status = "Pending",
                 Notes = itemRequest.Notes?.Trim(),
                 SourceItemId = itemRequest.GilAmount.HasValue ? null : itemRequest.SourceItemId,
@@ -422,8 +414,6 @@ public sealed partial class ActivityDataController
         auction.EndTime = startedAt.Add(plannedDuration);
         foreach (var item in auction.AuctionItems)
         {
-            item.StartTime = startedAt;
-            item.EndTime = auction.EndTime;
             item.Status = "Live";
         }
 
@@ -535,11 +525,8 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Only a live auction can be ended early." });
         }
 
+        // The auction's own EndTime is the one every check reads; its items keep no copy.
         auction.EndTime = nowUtc;
-        foreach (var item in auction.AuctionItems)
-        {
-            item.EndTime = nowUtc;
-        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
@@ -754,9 +741,6 @@ public sealed partial class ActivityDataController
                         CurrentHighestBid = item.CurrentHighestBid,
                         CurrentHighestBidder = item.CurrentHighestBidder,
                         CurrentHighestBidderAppUserId = item.CurrentHighestBidderAppUserId,
-                        EndingBidDkp = item.CurrentHighestBid,
-                        StartTime = item.StartTime,
-                        EndTime = item.EndTime,
                         Status = !hasWinner ? "NoBids" : autoReceived ? "Received" : "Closed",
                         Notes = item.Notes,
                         SourceItemId = item.SourceItemId,
@@ -768,12 +752,11 @@ public sealed partial class ActivityDataController
 
         _dbContext.AuctionHistories.Add(history);
 
-        // The pool the bidders were validated against. PINNED — a later remap must never relocate
-        // a historical auction purchase. Copied onto the history row because `auction` is deleted
-        // below, taking its DkpPoolId with it.
+        // The pool the bidders were validated against. PINNED on each winner's ledger row — a later
+        // remap must never relocate a historical auction purchase. (The history row no longer keeps
+        // its own copy: nothing read it, and the ledger rows already say which pool paid.)
         var auctionPoolId = auction.DkpPoolId
             ?? (await _dkpPools.GetMapAsync(auction.LinkshellId, cancellationToken)).DefaultPoolId;
-        history.DkpPoolId = auctionPoolId;
 
         foreach (var item in auction.AuctionItems.Where(item =>
                      !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId) &&

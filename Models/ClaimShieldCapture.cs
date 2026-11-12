@@ -63,10 +63,10 @@ public class ClaimShieldCapture
     [MaxLength(512)]
     public string? CapturedMessage { get; set; }
 
-    // Total member rows stored (matched + unmatched).
+    // PHASE4B-DROP: ClaimShieldCaptures.MemberCount - no longer written or read; the post's reply counts Members instead. NOT NULL: new rows insert 0.
     public int MemberCount { get; set; }
 
-    // Subset of MemberCount that resolved to a current linkshell member.
+    // PHASE4B-DROP: ClaimShieldCaptures.MatchedCount - no longer written or read; counted from Members' Matched flag. NOT NULL: new rows insert 0.
     public int MatchedCount { get; set; }
 
     public DateTime CreatedAtUtc { get; set; }

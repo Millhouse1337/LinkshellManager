@@ -556,7 +556,7 @@ export class ChartBoardSectionComponent {
   private formCreditInputs(): ActivityChartCreditInput[] {
     return this.roster()
       .filter(member => this.isFormCredited(member.characterName))
-      .map(member => ({ membershipId: member.membershipId, characterName: null, detail: null }));
+      .map(member => ({ membershipId: member.membershipId, characterName: null }));
   }
 
   /**
@@ -657,7 +657,6 @@ export class ChartBoardSectionComponent {
       // The holder is a plain name: an unsynced character is a real member of the linkshell who can
       // really be holding a pop item, they just have no account behind the name.
       heldByCharacterName: this.formHolder().trim() || null,
-      heldByMembershipId: null,
       quantity: Number.isFinite(this.formQuantity) ? Math.max(0, this.formQuantity) : 0,
       notes: this.formNotes.trim() || null,
       // Membership ids rather than names, like the row editor: the server re-reads the name off the

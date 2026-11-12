@@ -112,7 +112,11 @@ public sealed class InviteCandidateService
                 user.Id,
                 DisplayName = user.CharacterName ?? user.UserName ?? "Unknown member",
                 user.UserName,
-                user.PrimaryLinkshellName
+                // Read from the linkshell row, so a rename shows straight away.
+                PrimaryLinkshellName = _dbContext.Linkshells
+                    .Where(linkshell => linkshell.Id == user.PrimaryLinkshellId)
+                    .Select(linkshell => linkshell.LinkshellName)
+                    .FirstOrDefault()
             })
             .ToListAsync(cancellationToken);
 
@@ -275,7 +279,6 @@ public sealed class InviteCandidateService
         }
 
         var displayName = string.IsNullOrWhiteSpace(target.GlobalName) ? target.Username : target.GlobalName!;
-        var linkshell = await _dbContext.Linkshells.FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
 
         var existingDiscordUser = await _dbContext.DiscordActivityUsers
             .FirstOrDefaultAsync(
@@ -318,7 +321,6 @@ public sealed class InviteCandidateService
             if (targetUser is not null)
             {
                 targetUser.PrimaryLinkshellId ??= linkshellId;
-                targetUser.PrimaryLinkshellName ??= linkshell?.LinkshellName;
             }
         }
         else

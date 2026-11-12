@@ -32,9 +32,8 @@ public class LinkshellPresence
     [MaxLength(256)]
     public string CharacterName { get; set; } = string.Empty;
 
-    // The account behind that character, when the name resolves to one on the roster. Null for a
-    // name the linkshell does not know: somebody in a member's alliance who never registered.
-    // Stored rather than dropped so the addon's Lobby can show them tagged "[not in LSM]".
+    // PHASE4B-DROP: LinkshellPresences.AppUserId - no longer written, and the "isRegistered" flag
+    // that read it is gone: the addon's Lobby tags "[not in LSM]" by its own roster check.
     [MaxLength(450)]
     public string? AppUserId { get; set; }
 
@@ -73,9 +72,7 @@ public class LinkshellPresence
 
     public int? SubJobLevel { get; set; }
 
-    // Whose addon reported this row. Not the same as CharacterName: one poster reports their whole
-    // alliance, so seventeen of these rows name somebody else. Kept for the "who is feeding this"
-    // question when a roster looks wrong.
+    // PHASE4B-DROP: LinkshellPresences.ReportedByCharacterName - no longer written; nothing ever read it.
     [MaxLength(256)]
     public string? ReportedByCharacterName { get; set; }
 

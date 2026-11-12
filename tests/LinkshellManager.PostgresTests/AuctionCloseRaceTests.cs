@@ -176,7 +176,7 @@ public class AuctionCloseRaceTests : IAsyncLifetime
         var archived = await check.AuctionHistories.AsNoTracking().Include(h => h.AuctionItems).SingleAsync();
         var sold = Assert.Single(archived.AuctionItems);
         Assert.Equal("bob", sold.CurrentHighestBidderAppUserId);
-        Assert.Equal(55, sold.EndingBidDkp);
+        Assert.Equal(55, sold.CurrentHighestBid);
         Assert.Empty(await check.Auctions.AsNoTracking().ToListAsync());
     }
 

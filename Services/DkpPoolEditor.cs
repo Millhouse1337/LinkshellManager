@@ -334,6 +334,9 @@ public sealed class DkpPoolEditor
                     && entry.DkpPoolId != null
                     && droppedIds.Contains(entry.DkpPoolId!.Value))
                 .ExecuteUpdateAsync(setter => setter.SetProperty(entry => entry.DkpPoolId, defaultPool.Id), cancellationToken);
+            // PHASE4B-DROP: nothing reads AuctionHistories.DkpPoolId any more, but its foreign key
+            // (NO ACTION) still refuses to delete a pool an old closed auction points at. Keep this
+            // repoint until 4B drops the column with its FK.
             await _db.AuctionHistories
                 .Where(item => item.LinkshellId == linkshellId
                     && item.DkpPoolId != null

@@ -48,7 +48,7 @@ public class ChartMemberKeyItem
     // same person restores what they had, which is the friendlier of the two failures.
     public int MembershipId { get; set; }
 
-    /// <summary>Denormalised so the grid and the "still needed by" list need no join back.</summary>
+    // PHASE4B-DROP: ChartMemberKeyItems.CharacterName - no longer written or read; the grid takes names off the roster. NOT NULL: new rows insert "".
     [MaxLength(256)]
     public string CharacterName { get; set; } = string.Empty;
 

@@ -96,9 +96,7 @@ Current `AppUser` fields include:
 - `AltCharacterName1`
 - `AltCharacterName2`
 - `TimeZone`
-- `PrimaryLinkshellId`
-- `PrimaryLinkshellName`
-- `ProfileImage`
+- `PrimaryLinkshellId` (its name is read from the `Linkshells` row)
 
 `AltCharacterName1` and `AltCharacterName2` capture the user's alternate in-game character names. They are optional, capped at 64 characters, and validated alongside the primary character name during profile updates.
 
@@ -107,12 +105,10 @@ Current `DiscordActivityUsers` fields:
 - `Id`
 - `DiscordUserId`
 - `Username`
-- `Discriminator`
 - `GlobalName`
 - `Avatar`
 - `IdentityUserId`
 - `CreatedAtUtc`
-- `LastSeenAtUtc`
 
 Provisioning behavior:
 

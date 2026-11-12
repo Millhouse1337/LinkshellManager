@@ -153,9 +153,9 @@ public sealed partial class AddonApiController
             request.EventId, token.LinkshellId, monster, capturedAt, cancellationToken);
 
         // Posts joining the same capture TAKE TURNS. Without this, two officers joining at once each
-        // count the members they can see, and the later save's MemberCount overwrites the earlier
-        // one's (found against a real Postgres: six people on the capture, a count of four). The
-        // row lock is held until this post commits; the next joiner then reads the capture fresh.
+        // decide who is missing from the members they can see, so both add the same person (or one
+        // hits the one-row-per-person index). The row lock is held until this post commits; the
+        // next joiner then reads the capture, and its members, fresh.
         // In-memory tests have neither transactions nor row locks, and run one post at a time.
         var relational = _dbContext.Database.IsRelational();
         await using var transaction = relational
@@ -248,9 +248,6 @@ public sealed partial class AddonApiController
             });
         }
 
-        capture.MemberCount = capture.Members.Count;
-        capture.MatchedCount = capture.Members.Count(m => m.Matched);
-
         await _dbContext.SaveChangesAsync(cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
@@ -261,8 +258,9 @@ public sealed partial class AddonApiController
             won = capture.Won,
             totalPlayers = capture.TotalPlayers,
             // The whole capture's counts, joined or not -- what the addon prints as "N matched".
-            memberCount = capture.MemberCount,
-            matchedCount = capture.MatchedCount,
+            // Counted off the member rows rather than stored, so a count can never disagree with them.
+            memberCount = capture.Members.Count,
+            matchedCount = capture.Members.Count(m => m.Matched),
             // True when another officer's post had already made this camp's capture, and how many
             // of this post's people it was missing.
             joined,

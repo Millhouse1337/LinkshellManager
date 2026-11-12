@@ -75,7 +75,6 @@ public sealed class DiscordAccountController : Controller
                 new DiscordIdentityProfile(
                     discordUserId,
                     username,
-                    principal.FindFirstValue("urn:discord:discriminator") ?? "0",
                     principal.FindFirstValue("urn:discord:global_name"),
                     principal.FindFirstValue("urn:discord:avatar")),
                 currentUser,

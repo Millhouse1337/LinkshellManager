@@ -99,8 +99,8 @@ public sealed class DiscordIdentityService
 
         var discordUser = await GetCurrentDiscordUserAsync(accessToken, cancellationToken);
 
-        // The upsert saves on every request (LastSeenAtUtc at least), and running it again lands on
-        // the same rows. Marked repeat-safe so that save does not stop ConcurrencyRetry from
+        // The upsert can save (a new username or avatar, an auto-joined invite), and running it again
+        // lands on the same rows. Marked repeat-safe so that save does not stop ConcurrencyRetry from
         // re-running the money action this sign-in starts (see ApplicationDbContext.RepeatSafeSaves).
         using (_dbContext.RepeatSafeSaves())
         {
@@ -229,7 +229,7 @@ public sealed class DiscordIdentityService
         // check) keyed by a hash of the token, so repeated authenticated calls
         // reuse it instead of hitting discord.com every time — which under
         // raid-time polling risks rate-limiting the whole linkshell. Local data
-        // and LastSeenAtUtc still refresh every request via the upsert below;
+        // still refreshes every request via the upsert below;
         // only successful validations are cached, so a bad token always re-checks.
         if (!LooksLikeDiscordToken(accessToken))
         {
@@ -294,7 +294,6 @@ public sealed class DiscordIdentityService
         var profile = new DiscordIdentityProfile(
             user.Id,
             user.Username,
-            user.Discriminator ?? "0",
             user.GlobalName,
             user.Avatar);
 
@@ -659,7 +658,6 @@ public sealed class DiscordIdentityService
             }
 
             appUser.PrimaryLinkshellId ??= invite.LinkshellId;
-            appUser.PrimaryLinkshellName ??= invite.Linkshell?.LinkshellName;
 
             _dbContext.Invites.Remove(invite);
             changed = true;
@@ -703,16 +701,22 @@ public sealed class DiscordIdentityService
         // memberships now that we know who they are.
         await AutoJoinPendingDiscordInvitesAsync(appUser, discordUser.Id, cancellationToken);
 
+        // The primary linkshell's name, read from the linkshell row so a rename shows straight away.
+        var primaryLinkshellName = appUser.PrimaryLinkshellId is int primaryId
+            ? await _dbContext.Linkshells
+                .Where(linkshell => linkshell.Id == primaryId)
+                .Select(linkshell => linkshell.LinkshellName)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         return new DiscordActivityUserDto(
             localDiscordUser.Id,
             localDiscordUser.DiscordUserId,
             localDiscordUser.Username,
-            localDiscordUser.Discriminator,
             localDiscordUser.GlobalName,
             localDiscordUser.Avatar,
             localDiscordUser.IdentityUserId,
             localDiscordUser.CreatedAtUtc,
-            localDiscordUser.LastSeenAtUtc,
             resolution.IsNewDiscordUser,
             new LinkedAppUserDto(
                 appUser.Id,
@@ -720,7 +724,7 @@ public sealed class DiscordIdentityService
                 appUser.CharacterName,
                 appUser.TimeZone,
                 appUser.PrimaryLinkshellId,
-                appUser.PrimaryLinkshellName,
+                primaryLinkshellName,
                 resolution.IsNewAppUser));
     }
 
@@ -855,18 +859,8 @@ public sealed class DiscordIdentityService
                     shouldUpdateAppUser = true;
                 }
 
-                var avatarChanged = !string.Equals(localDiscordUser.Avatar, discordUser.Avatar, StringComparison.Ordinal);
-                if (appUser.ProfileImage is null || avatarChanged)
-                {
-                    var syncedAvatar = await TryDownloadDiscordAvatarAsync(discordUser, cancellationToken);
-                    if (syncedAvatar is not null &&
-                        (appUser.ProfileImage is null || !syncedAvatar.AsSpan().SequenceEqual(appUser.ProfileImage)))
-                    {
-                        appUser.ProfileImage = syncedAvatar;
-                        shouldUpdateAppUser = true;
-                    }
-                }
-
+                // No avatar image is downloaded: DiscordActivityUsers.Avatar (the hash, below) is all a
+                // Discord CDN avatar URL needs, and nothing ever read the stored copy.
                 if (shouldUpdateAppUser)
                 {
                     var updateResult = await _userManager.UpdateAsync(appUser);
@@ -885,12 +879,12 @@ public sealed class DiscordIdentityService
                     }
                 }
 
+                // Only real changes are saved, so a sign-in with nothing new writes nothing. (A "last
+                // seen" stamp used to be written here on every request; nothing read it.)
                 localDiscordUser.Username = discordUser.Username;
-                localDiscordUser.Discriminator = discordUser.Discriminator;
                 localDiscordUser.GlobalName = discordUser.GlobalName;
                 localDiscordUser.Avatar = discordUser.Avatar;
                 localDiscordUser.IdentityUserId = appUser.Id;
-                localDiscordUser.LastSeenAtUtc = utcNow;
 
                 if (isNewDiscordUser)
                 {
@@ -918,51 +912,6 @@ public sealed class DiscordIdentityService
         }
 
         throw new InvalidOperationException("Unable to resolve the Discord-linked app user after multiple retries.");
-    }
-
-    private async Task<byte[]?> TryDownloadDiscordAvatarAsync(
-        DiscordIdentityProfile discordUser,
-        CancellationToken cancellationToken)
-    {
-        var avatarUri = BuildDiscordAvatarUri(discordUser);
-        if (avatarUri is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            var client = _httpClientFactory.CreateClient();
-            return await client.GetByteArrayAsync(avatarUri, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to sync Discord avatar for Discord user {DiscordUserId}.", discordUser.Id);
-            return null;
-        }
-    }
-
-    private static Uri? BuildDiscordAvatarUri(DiscordIdentityProfile discordUser)
-    {
-        if (!string.IsNullOrWhiteSpace(discordUser.Avatar))
-        {
-            return new Uri(DiscordCdnBaseUri, $"avatars/{discordUser.Id}/{discordUser.Avatar}.png?size=256");
-        }
-
-        var defaultAvatarIndex = ResolveDefaultAvatarIndex(discordUser);
-        return new Uri(DiscordCdnBaseUri, $"embed/avatars/{defaultAvatarIndex}.png");
-    }
-
-    private static int ResolveDefaultAvatarIndex(DiscordIdentityProfile discordUser)
-    {
-        if (discordUser.Discriminator != "0" && int.TryParse(discordUser.Discriminator, out var discriminator))
-        {
-            return Math.Abs(discriminator % 5);
-        }
-
-        return ulong.TryParse(discordUser.Id, out var userId)
-            ? (int)((userId >> 22) % 6)
-            : 0;
     }
 
     private void ResetTrackedState()
@@ -996,7 +945,6 @@ public sealed class DiscordIdentityService
     private sealed record DiscordIdentityProfilePayload(
         [property: JsonPropertyName("id")] string Id,
         [property: JsonPropertyName("username")] string Username,
-        [property: JsonPropertyName("discriminator")] string? Discriminator,
         [property: JsonPropertyName("global_name")] string? GlobalName,
         [property: JsonPropertyName("avatar")] string? Avatar);
 
@@ -1027,7 +975,6 @@ public sealed class DiscordIdentityService
 public sealed record DiscordIdentityProfile(
     string Id,
     string Username,
-    string Discriminator,
     string? GlobalName,
     string? Avatar);
 
@@ -1064,12 +1011,10 @@ public sealed record DiscordActivityUserDto(
     Guid Id,
     string DiscordUserId,
     string Username,
-    string Discriminator,
     string? GlobalName,
     string? Avatar,
     string? IdentityUserId,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset LastSeenAtUtc,
     bool IsNewUser,
     LinkedAppUserDto? AppUser);
 

@@ -67,7 +67,7 @@ public sealed partial class ActivityDataController
         // URL did not name.
         var draft = ChartBoardService.NormalizeDraft(
             board, request.Boss, request.ItemName, request.HeldByCharacterName,
-            request.HeldByMembershipId, request.Quantity, request.Notes, request.Kind);
+            request.Quantity, request.Notes, request.Kind);
         if (draft is null)
         {
             return BadRequest(new { error = "Pick a boss on this board and give the item a name." });
@@ -87,12 +87,6 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = $"{draft.Boss} does not take {kindName} items." });
         }
 
-        var holder = await ResolveChartHolderAsync(linkshellId, draft, cancellationToken);
-        if (holder.Failure is not null)
-        {
-            return holder.Failure;
-        }
-
         // Resolved BEFORE the row is built: naming a farmer from another linkshell fails the whole
         // request rather than leaving a pop item behind with no credit on it.
         var credits = await ResolveChartCreditsAsync(linkshellId, request.Credits, cancellationToken);
@@ -108,8 +102,7 @@ public sealed partial class ActivityDataController
             Board = draft.Board,
             Boss = draft.Boss,
             ItemName = draft.ItemName,
-            HeldByCharacterName = holder.CharacterName,
-            HeldByMembershipId = holder.MembershipId,
+            HeldByCharacterName = draft.HeldByCharacterName,
             Quantity = draft.Quantity,
             Notes = draft.Notes,
             Kind = draft.Kind,
@@ -148,16 +141,10 @@ public sealed partial class ActivityDataController
         // be on this path at all.
         var draft = ChartBoardService.NormalizeDraft(
             item.Board, request.Boss, request.ItemName, request.HeldByCharacterName,
-            request.HeldByMembershipId, request.Quantity, request.Notes, item.Kind);
+            request.Quantity, request.Notes, item.Kind);
         if (draft is null)
         {
             return BadRequest(new { error = "Pick a boss on this board and give the item a name." });
-        }
-
-        var holder = await ResolveChartHolderAsync(item.LinkshellId, draft, cancellationToken);
-        if (holder.Failure is not null)
-        {
-            return holder.Failure;
         }
 
         // Moving a row to another boss sends it to the bottom of the new card rather than keeping a
@@ -170,8 +157,7 @@ public sealed partial class ActivityDataController
 
         item.Boss = draft.Boss;
         item.ItemName = draft.ItemName;
-        item.HeldByCharacterName = holder.CharacterName;
-        item.HeldByMembershipId = holder.MembershipId;
+        item.HeldByCharacterName = draft.HeldByCharacterName;
         item.Quantity = draft.Quantity;
         item.Notes = draft.Notes;
         item.UpdatedAt = DateTime.UtcNow;
@@ -206,32 +192,6 @@ public sealed partial class ActivityDataController
         }
 
         _dbContext.ChartPopItems.Remove(found.Item!);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
-    }
-
-    // Set-based: the request carries the COMPLETE farmer list for the row, so a name left out is a
-    // removal. Duplicates cannot survive, which is why the table has no unique index.
-    [HttpPost("charts/items/{itemId:int}/credits")]
-    public async Task<IActionResult> SetChartPopItemCreditsAsync(
-        int itemId,
-        [FromBody] ActivitySetChartCreditsRequest request,
-        CancellationToken cancellationToken)
-    {
-        var found = await LoadChartPopItemForWriteAsync(itemId, cancellationToken);
-        if (found.Failure is not null)
-        {
-            return found.Failure;
-        }
-
-        var item = found.Item!;
-        var credits = await ResolveChartCreditsAsync(item.LinkshellId, request.Credits, cancellationToken);
-        if (credits.Failure is not null)
-        {
-            return credits.Failure;
-        }
-
-        await _chartBoards.ReplaceCreditsAsync(item, credits.Resolved, found.Actor, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }
@@ -360,7 +320,6 @@ public sealed partial class ActivityDataController
                         request.Notes,
                         request.Status,
                         request.Priority,
-                        request.RequestedByMembershipId,
                         request.RequestedByCharacterName,
                         request.CanWithdraw,
                         request.RequestedAt,
@@ -397,14 +356,12 @@ public sealed partial class ActivityDataController
             item.Boss,
             item.ItemName,
             item.HeldByCharacterName,
-            item.HeldByMembershipId,
             item.Quantity,
             item.Notes,
             item.SortOrder,
             item.Credits
                 .OrderBy(credit => credit.CharacterName, StringComparer.OrdinalIgnoreCase)
-                .Select(credit => new ActivityChartCreditDto(
-                    credit.MembershipId, credit.CharacterName, credit.Detail))
+                .Select(credit => new ActivityChartCreditDto(credit.CharacterName))
                 .ToList(),
             item.Credits.Count,
             item.UpdatedAt,
@@ -412,7 +369,7 @@ public sealed partial class ActivityDataController
 
     /// <summary>
     /// Turns a request's credit list into trusted rows, or into the 400 that refuses the whole
-    /// request. One helper for all three write paths — add, update and the credits endpoint — so
+    /// request. One helper for both write paths — add and update — so
     /// naming a farmer from another linkshell is refused identically whichever one is called.
     /// A null or empty list resolves to no credits without an error.
     /// </summary>
@@ -423,38 +380,11 @@ public sealed partial class ActivityDataController
             CancellationToken cancellationToken)
     {
         var drafts = (requested ?? Array.Empty<ActivityChartCreditInput>())
-            .Select(credit => new ChartCreditDraft(credit.MembershipId, credit.CharacterName, credit.Detail))
+            .Select(credit => new ChartCreditDraft(credit.MembershipId, credit.CharacterName))
             .ToList();
 
         var (error, resolved) = await _chartBoards.ResolveCreditsAsync(linkshellId, drafts, cancellationToken);
         return error is not null ? (BadRequest(new { error }), resolved) : (null, resolved);
-    }
-
-    /// <summary>
-    /// Resolves who is holding an item. Same boundary as the credits: a membership id is checked
-    /// against THIS linkshell, so a request cannot park a pop item on a member of another one.
-    /// A name with no id is fine — an unsynced character is a real member.
-    /// </summary>
-    private async Task<(IActionResult? Failure, string? CharacterName, int? MembershipId)>
-        ResolveChartHolderAsync(int linkshellId, ChartPopItemDraft draft, CancellationToken cancellationToken)
-    {
-        if (draft.HeldByMembershipId is not { } membershipId)
-        {
-            return (null, draft.HeldByCharacterName, null);
-        }
-
-        var name = await _dbContext.AppUserLinkshells
-            .AsNoTracking()
-            .Where(member => member.LinkshellId == linkshellId && member.Id == membershipId)
-            .Select(member => member.CharacterName)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return (BadRequest(new { error = "That member is not in this linkshell." }), null, null);
-        }
-
-        return (null, name, membershipId);
     }
 
     /// <summary>

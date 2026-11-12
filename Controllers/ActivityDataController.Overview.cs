@@ -790,6 +790,14 @@ public sealed partial class ActivityDataController
         // defaults, so the client always receives a complete catalog.
         var monsterTimingMaps = await _monsterTimings.GetMapsAsync(linkshellIds, cancellationToken);
 
+        // The primary linkshell's name, read from the linkshell row so a rename shows straight away.
+        var primaryLinkshellName = appUser.PrimaryLinkshellId is int primaryId
+            ? await _dbContext.Linkshells
+                .Where(linkshell => linkshell.Id == primaryId)
+                .Select(linkshell => linkshell.LinkshellName)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         return Ok(new ActivityOverviewDto(
             new ActivityAppUserDto(
                 appUser.Id,
@@ -799,7 +807,7 @@ public sealed partial class ActivityDataController
                 appUser.AltCharacterName2,
                 appUser.TimeZone,
                 appUser.PrimaryLinkshellId,
-                appUser.PrimaryLinkshellName,
+                primaryLinkshellName,
                 profileJobLevels,
                 alt1JobLevels,
                 alt2JobLevels,

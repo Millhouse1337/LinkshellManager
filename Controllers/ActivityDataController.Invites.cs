@@ -85,7 +85,11 @@ public sealed partial class ActivityDataController
                 user.Id,
                 user.CharacterName ?? user.UserName ?? "Unknown member",
                 user.UserName,
-                user.PrimaryLinkshellName,
+                // Read from the linkshell row, so a rename shows straight away.
+                _dbContext.Linkshells
+                    .Where(linkshell => linkshell.Id == user.PrimaryLinkshellId)
+                    .Select(linkshell => linkshell.LinkshellName)
+                    .FirstOrDefault(),
                 null))
             .ToListAsync(cancellationToken);
 
@@ -213,7 +217,6 @@ public sealed partial class ActivityDataController
             Status = "Active"
         });
         targetUser.PrimaryLinkshellId ??= linkshellId;
-        targetUser.PrimaryLinkshellName ??= membership?.Linkshell?.LinkshellName;
 
         try
         {
@@ -470,7 +473,6 @@ public sealed partial class ActivityDataController
         }
 
         appUser.PrimaryLinkshellId ??= invite.LinkshellId;
-        appUser.PrimaryLinkshellName ??= invite.Linkshell?.LinkshellName;
 
         _dbContext.Invites.Remove(invite);
         try
@@ -563,7 +565,6 @@ public sealed partial class ActivityDataController
             if (invite.AppUser is not null)
             {
                 invite.AppUser.PrimaryLinkshellId ??= invite.LinkshellId;
-                invite.AppUser.PrimaryLinkshellName ??= invite.Linkshell?.LinkshellName;
                 // Saves everything staged so far, the new membership included.
                 await _userManager.UpdateAsync(invite.AppUser);
             }

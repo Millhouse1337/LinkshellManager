@@ -31,7 +31,7 @@ public class ChartItemKindTests
     public void NormalizeDraft_CanonicalisesAPopNameAgainstThePopList()
     {
         var draft = ChartBoardService.NormalizeDraft(
-            "sky", "Brigandish Blade", "  curtana ", null, null, 1, null, ChartItemKinds.Pop);
+            "sky", "Brigandish Blade", "  curtana ", null, 1, null, ChartItemKinds.Pop);
 
         Assert.NotNull(draft);
         Assert.Equal("Curtana", draft!.ItemName);
@@ -43,7 +43,7 @@ public class ChartItemKindTests
     public void NormalizeDraft_CanonicalisesADropNameAgainstTheDropList()
     {
         var draft = ChartBoardService.NormalizeDraft(
-            "sky", "Olla Grande", "  winterstone ", null, null, 1, null, ChartItemKinds.Drop);
+            "sky", "Olla Grande", "  winterstone ", null, 1, null, ChartItemKinds.Drop);
 
         Assert.NotNull(draft);
         Assert.Equal("Winterstone", draft!.ItemName);
@@ -56,7 +56,7 @@ public class ChartItemKindTests
     public void NormalizeDraft_PassesAnUnlistedDropNameThroughAsTyped()
     {
         var draft = ChartBoardService.NormalizeDraft(
-            "sky", "Byakko", "  Byakko's Haidate ", null, null, 1, null, ChartItemKinds.Drop);
+            "sky", "Byakko", "  Byakko's Haidate ", null, 1, null, ChartItemKinds.Drop);
 
         Assert.NotNull(draft);
         Assert.Equal("Byakko's Haidate", draft!.ItemName);
@@ -69,7 +69,7 @@ public class ChartItemKindTests
     public void NormalizeDraft_DoesNotCanonicaliseADropNameAgainstThePopList()
     {
         var draft = ChartBoardService.NormalizeDraft(
-            "sky", "Brigandish Blade", "curtana", null, null, 1, null, ChartItemKinds.Drop);
+            "sky", "Brigandish Blade", "curtana", null, 1, null, ChartItemKinds.Drop);
 
         Assert.NotNull(draft);
         Assert.Equal("curtana", draft!.ItemName);
@@ -80,7 +80,7 @@ public class ChartItemKindTests
     public void NormalizeDraft_DefaultsToPopWhenNoKindIsGiven()
     {
         var draft = ChartBoardService.NormalizeDraft(
-            "sea", "Jailer of Love", "Anything", null, null, 1, null);
+            "sea", "Jailer of Love", "Anything", null, 1, null);
 
         Assert.NotNull(draft);
         Assert.Equal(ChartItemKinds.Pop, draft!.Kind);
@@ -101,7 +101,7 @@ public class ChartItemKindTests
         Assert.False(ChartBoardCatalog.Find(ChartBoardCatalog.Dynamis)!.AllowsPopItems);
 
         var draft = ChartBoardService.NormalizeDraft(
-            "Dynamis", "Xarcabard", "Montiont Silverpiece", "Millhouse", null, 3, "in the vault");
+            "Dynamis", "Xarcabard", "Montiont Silverpiece", "Millhouse", 3, "in the vault");
 
         Assert.NotNull(draft);
         Assert.Equal("Dynamis", draft!.Board);

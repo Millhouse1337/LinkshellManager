@@ -212,7 +212,7 @@ public class AuctionBoardMessageTests
             CreatedBy = "Millh",
             AuctionItems = new List<AuctionItem>
             {
-                new() { Id = 1, ItemName = "Ridill", ItemType = "Weapon", CurrentHighestBidder = "Alpha", EndingBidDkp = 120 },
+                new() { Id = 1, ItemName = "Ridill", ItemType = "Weapon", CurrentHighestBidder = "Alpha", CurrentHighestBid = 120 },
                 new() { Id = 2, ItemName = "Haubergeon" },
             },
         };

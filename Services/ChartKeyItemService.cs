@@ -195,6 +195,7 @@ public sealed class ChartKeyItemService
             return "That is not a key item on this board.";
         }
 
+        // The membership check only: the grid reads names off the roster, so the row stores none.
         var characterName = await _db.AppUserLinkshells
             .AsNoTracking()
             .Where(member => member.LinkshellId == linkshellId && member.Id == membershipId)
@@ -228,7 +229,6 @@ public sealed class ChartKeyItemService
         {
             // Already held. Re-stamp the audit rather than insert: whoever ticked it most recently
             // is the useful answer, and a second row would violate the unique index anyway.
-            existing.CharacterName = characterName;
             existing.SetByAppUserId = actor.AppUserId;
             existing.SetByCharacterName = actor.CharacterName;
             existing.SetAt = DateTime.UtcNow;
@@ -241,7 +241,6 @@ public sealed class ChartKeyItemService
             Board = catalog.Key,
             KeyItemName = canonicalName,
             MembershipId = membershipId,
-            CharacterName = characterName,
             SetByAppUserId = actor.AppUserId,
             SetByCharacterName = actor.CharacterName,
             SetAt = DateTime.UtcNow,

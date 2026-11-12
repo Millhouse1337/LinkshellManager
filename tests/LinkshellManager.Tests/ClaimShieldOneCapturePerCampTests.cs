@@ -120,8 +120,7 @@ public class ClaimShieldOneCapturePerCampTests
         Assert.Equal(
             ["Alpha", "Bravo", "Charlie", "Delta"],
             capture.Members.Select(m => m.CharacterName).OrderBy(n => n));
-        Assert.Equal(4, capture.MemberCount);
-        Assert.Equal(4, capture.MatchedCount);
+        Assert.Equal(4, capture.Members.Count(m => m.Matched));
 
         Assert.False(first.GetProperty("joined").GetBoolean());
         Assert.True(second.GetProperty("joined").GetBoolean());
@@ -151,8 +150,8 @@ public class ClaimShieldOneCapturePerCampTests
         await PostAsync(name, OfficerB, ["stranger", "Alpha"]);
 
         var capture = await TheOnlyCaptureAsync(name);
-        Assert.Equal(2, capture.MemberCount);
-        Assert.Equal(1, capture.MatchedCount);
+        Assert.Equal(2, capture.Members.Count);
+        Assert.Equal(1, capture.Members.Count(m => m.Matched));
     }
 
     [Fact]

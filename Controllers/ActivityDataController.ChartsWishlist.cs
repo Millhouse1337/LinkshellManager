@@ -46,7 +46,6 @@ public sealed partial class ActivityDataController
             return BadRequest(new { error = "Give the item a name, and pick zones on this board or leave it as anywhere." });
         }
 
-        var now = DateTime.UtcNow;
         _dbContext.ChartWishlistRequests.Add(new ChartWishlistRequest
         {
             LinkshellId = linkshellId,
@@ -61,10 +60,8 @@ public sealed partial class ActivityDataController
             // officer entering somebody else's want would own it, and the ownership rule keys on
             // this column.
             RequestedByAppUserId = gate.Actor.AppUserId,
-            RequestedByMembershipId = gate.MembershipId,
             RequestedByCharacterName = gate.Actor.CharacterName ?? string.Empty,
-            RequestedAt = now,
-            UpdatedAt = now,
+            RequestedAt = DateTime.UtcNow,
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -120,7 +117,6 @@ public sealed partial class ActivityDataController
 
         var row = found.Row!;
         row.Status = status;
-        row.UpdatedAt = DateTime.UtcNow;
 
         // The stamp follows the status in both directions, so a request put back to pending does not
         // keep claiming somebody settled it.

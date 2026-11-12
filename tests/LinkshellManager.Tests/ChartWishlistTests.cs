@@ -41,7 +41,6 @@ public class ChartWishlistTests
         Quantity = 1,
         Status = status,
         RequestedByAppUserId = appUserId,
-        RequestedByMembershipId = 1,
         RequestedByCharacterName = "Millhouse",
     };
 

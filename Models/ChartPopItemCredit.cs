@@ -27,16 +27,17 @@ public class ChartPopItemCredit
     // ChartPopItems, which cascades into here; configuring a second Linkshell relationship would be
     // a second cascade path from Linkshells into this table, which Postgres refuses. Same reason and
     // same shape as JournalEntryLine.LinkshellId. These rows still die with the linkshell, via
-    // ChartPopItems. It is carried so the ledger can be built without joining back through the item.
+    // ChartPopItems.
+    // PHASE4B-DROP: ChartPopItemCredits.LinkshellId - no longer written or read (the ledger reads credits through their item). NOT NULL: new rows insert 0, and there is no FK.
     public int LinkshellId { get; set; }
 
-    /// <summary>AppUserLinkshells.Id when the farmer is on the roster; null for an unsynced name.</summary>
+    // PHASE4B-DROP: ChartPopItemCredits.MembershipId - no longer written or read; farmers are matched by NAME.
     public int? MembershipId { get; set; }
 
     [MaxLength(256)]
     public string CharacterName { get; set; } = string.Empty;
 
-    /// <summary>Optional free note on this one credit ("farmed 3", "traded for it").</summary>
+    // PHASE4B-DROP: ChartPopItemCredits.Detail - never written by any client, and no longer sent.
     [MaxLength(256)]
     public string? Detail { get; set; }
 

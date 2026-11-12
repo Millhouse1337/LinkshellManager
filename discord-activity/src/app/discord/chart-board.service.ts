@@ -5,7 +5,6 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityChartBoard,
-  ActivityChartCreditInput,
   ActivityChartHolding,
   ActivityChartKeyItemInput,
   ActivityChartPopItemInput,
@@ -122,19 +121,6 @@ export class ChartBoardService {
       () => this.http.postActivityAction(`/api/activity/charts/items/${itemId}/delete`),
       'Pop item removed.',
       'Removing the pop item failed.',
-      itemId
-    );
-  }
-
-  /**
-   * Replaces the COMPLETE farmer list for one item — a name left out is a removal. Sending the whole
-   * set rather than add/remove deltas is what makes duplicates impossible.
-   */
-  async setCredits(itemId: number, credits: ActivityChartCreditInput[]): Promise<void> {
-    await this.write(
-      () => this.http.postActivityAction(`/api/activity/charts/items/${itemId}/credits`, { credits }),
-      'Farming credit saved.',
-      'Saving the farming credit failed.',
       itemId
     );
   }

@@ -146,12 +146,10 @@ export interface LocalActivityUser {
   id: string;
   discordUserId: string;
   username: string;
-  discriminator: string;
   globalName?: string | null;
   avatar?: string | null;
   identityUserId?: string | null;
   createdAtUtc: string;
-  lastSeenAtUtc: string;
   isNewUser: boolean;
   appUser?: ActivityAppUser | null;
 }
@@ -1664,8 +1662,6 @@ export interface ActivityAuctionItem {
   currentHighestBid?: number | null;
   currentHighestBidder?: string | null;
   currentHighestBidderAppUserId?: string | null;
-  startTime?: string | null;
-  endTime?: string | null;
   status?: string | null;
   notes?: string | null;
   bidCount: number;
@@ -2488,9 +2484,7 @@ export type ChartWishlistStatus = 'Pending' | 'Fulfilled';
 export type ChartCreditStatus = 'Credited' | 'Partial' | 'None' | 'NotTracked';
 
 export interface ActivityChartCredit {
-  membershipId: number | null;
   characterName: string;
-  detail?: string | null;
 }
 
 export interface ActivityChartPopItem {
@@ -2499,7 +2493,6 @@ export interface ActivityChartPopItem {
   boss: string;
   itemName: string;
   heldByCharacterName?: string | null;
-  heldByMembershipId: number | null;
   quantity: number;
   notes?: string | null;
   sortOrder: number;
@@ -2694,7 +2687,6 @@ export interface ActivityChartWishlistRequest {
   notes?: string | null;
   status: ChartWishlistStatus;
   priority: number;
-  requestedByMembershipId: number | null;
   requestedByCharacterName: string;
   /**
    * Whether THIS viewer may withdraw it. Decided SERVER-side per viewer - never re-derive it from
@@ -2758,13 +2750,12 @@ export interface ActivityChartPopItemInput {
   boss: string;
   itemName: string;
   heldByCharacterName?: string | null;
-  heldByMembershipId?: number | null;
   quantity: number;
   notes?: string | null;
   /**
-   * Who farmed it, named while the row is written instead of in a second trip through the credits
-   * endpoint. Set-wise: a list REPLACES what the row has, and an empty list clears it. Omitting the
-   * field leaves the row's credits alone — it is not the same as sending [].
+   * Who farmed it, named while the row is written. Set-wise: a list REPLACES what the row has, and
+   * an empty list clears it. Omitting the field leaves the row's credits alone — it is not the same
+   * as sending [].
    */
   credits?: ActivityChartCreditInput[];
   /**
@@ -2777,5 +2768,4 @@ export interface ActivityChartPopItemInput {
 export interface ActivityChartCreditInput {
   membershipId?: number | null;
   characterName?: string | null;
-  detail?: string | null;
 }

@@ -64,7 +64,7 @@ public sealed record ChartLedger(IReadOnlyList<string> Bosses, IReadOnlyList<Cha
 
 /// <summary>What an officer typed, before it is trusted.</summary>
 public sealed record ChartPopItemDraft(
-    string Board, string Boss, string ItemName, string? HeldByCharacterName, int? HeldByMembershipId,
+    string Board, string Boss, string ItemName, string? HeldByCharacterName,
     int Quantity, string? Notes)
 {
     /// <summary>
@@ -79,10 +79,14 @@ public sealed record ChartPopItemDraft(
 }
 
 /// <summary>One credit as requested. Either a roster membership id, or just a name for an unsynced farmer.</summary>
-public sealed record ChartCreditDraft(int? MembershipId, string? CharacterName, string? Detail);
+public sealed record ChartCreditDraft(int? MembershipId, string? CharacterName);
 
-/// <summary>A resolved, trusted credit — the membership id has been checked against the linkshell.</summary>
-public sealed record ChartResolvedCredit(int? MembershipId, string CharacterName, string? Detail);
+/// <summary>
+/// A resolved, trusted credit: a membership id has been checked against the linkshell and turned into
+/// that member's name. Only the NAME is stored - the ledger matches farmers by name, so a member who
+/// re-syncs keeps their history.
+/// </summary>
+public sealed record ChartResolvedCredit(string CharacterName);
 
 /// <summary>Who is performing a write, for the audit columns.</summary>
 public readonly record struct ChartBoardActor(string? AppUserId, string? CharacterName);
@@ -379,7 +383,7 @@ public sealed class ChartBoardService
     /// LAST and defaulted so every caller written before drop items existed compiles unchanged.</param>
     public static ChartPopItemDraft? NormalizeDraft(
         string? board, string? boss, string? itemName, string? heldByCharacterName,
-        int? heldByMembershipId, int quantity, string? notes, string? kind = null)
+        int quantity, string? notes, string? kind = null)
     {
         // Deliberately NO check of board.AllowsPopItems / AllowsDropItems here.
         //
@@ -416,7 +420,6 @@ public sealed class ChartBoardService
             canonicalBoss,
             Truncate(name, 128)!,
             Truncate(NullIfBlank(heldByCharacterName), 256),
-            heldByMembershipId,
             // Clamped rather than rejected: 0 is a real state ("we used it, none left") and the check
             // constraint refuses negatives anyway.
             Math.Max(0, quantity),
@@ -485,8 +488,7 @@ public sealed class ChartBoardService
                 continue;
             }
 
-            resolved.Add(new ChartResolvedCredit(
-                draft.MembershipId, Truncate(name, 256)!, Truncate(NullIfBlank(draft.Detail), 256)));
+            resolved.Add(new ChartResolvedCredit(Truncate(name, 256)!));
         }
 
         if (resolved.Count == 0)
@@ -516,10 +518,7 @@ public sealed class ChartBoardService
             // it inserts the parent.
             item.Credits.Add(new ChartPopItemCredit
             {
-                LinkshellId = item.LinkshellId,
-                MembershipId = credit.MembershipId,
                 CharacterName = credit.CharacterName,
-                Detail = credit.Detail,
                 CreditedByAppUserId = actor.AppUserId,
                 CreditedByCharacterName = actor.CharacterName,
                 CreditedAt = now,
@@ -548,10 +547,7 @@ public sealed class ChartBoardService
             _db.ChartPopItemCredits.Add(new ChartPopItemCredit
             {
                 ChartPopItemId = item.Id,
-                LinkshellId = item.LinkshellId,
-                MembershipId = credit.MembershipId,
                 CharacterName = credit.CharacterName,
-                Detail = credit.Detail,
                 CreditedByAppUserId = actor.AppUserId,
                 CreditedByCharacterName = actor.CharacterName,
                 CreditedAt = now,

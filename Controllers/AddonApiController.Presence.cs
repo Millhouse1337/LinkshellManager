@@ -76,11 +76,12 @@ public sealed partial class AddonApiController
             256);
         var allianceNumber = AttendanceSnapshotAlliances.Resolve(request.AllianceNumber);
 
-        // The roster decides which rows get an account behind them. Names it does not know are
-        // stored too, with AppUserId null: the Lobby shows an alliance-mate who never registered
-        // as a tagged row rather than silently dropping them, because "who here is not in LSM" is
-        // a question officers actually ask. The table stays bounded regardless -- at most 18 rows
-        // per reporter, aged out like every other row.
+        // The roster says which names it knows (for the alt-of hint and the unregistered count).
+        // Names it does not know are stored too: the Lobby shows an alliance-mate who never
+        // registered as a tagged row rather than silently dropping them, because "who here is not in
+        // LSM" is a question officers actually ask. (The Lobby tags them by its own roster check.)
+        // The table stays bounded regardless -- at most 18 rows per reporter, aged out like every
+        // other row.
         var roster = await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(link => link.LinkshellId == token.LinkshellId && link.AppUserId != null)
@@ -97,8 +98,8 @@ public sealed partial class AddonApiController
             .ToListAsync(cancellationToken);
 
         // Who each name is, by the shared CharacterResolver rule -- the same one the window payout
-        // and the Claim Shield credit by, so the Lobby never calls someone registered whom a post
-        // would not pay, or the reverse.
+        // and the Claim Shield credit by, so the "not registered" count and the alt-of hint never
+        // disagree with who a post would pay.
         var knownByName = CharacterResolver.Build(roster
             .Where(member => !string.IsNullOrWhiteSpace(member.AppUserId))
             .OrderBy(member => member.Id)
@@ -106,7 +107,6 @@ public sealed partial class AddonApiController
                 member.CharacterName, member.AccountCharacterName,
                 member.AltCharacterName1, member.AltCharacterName2))));
 
-        var selfName = TruncateString(request.SelfCharacterName, 256);
         // The game reports exactly one alliance leader. Two means a client bug, so the first wins
         // rather than letting one roster carry two crowns.
         var leaderTaken = false;
@@ -136,7 +136,6 @@ public sealed partial class AddonApiController
                 existingByName[name] = row;
             }
 
-            row.AppUserId = isKnown ? known.Member.AppUserId : null;
             // The roster name, shown as "alt of ..." -- only when this name was NOT the roster name.
             row.MainCharacterName = isKnown && known.Slot != CharacterNameSlot.Membership
                 ? known.Member.CharacterName
@@ -149,7 +148,6 @@ public sealed partial class AddonApiController
             row.MainJobLevel = member.MainJobLevel;
             row.SubJob = TruncateString(member.SubJob, 8);
             row.SubJobLevel = member.SubJobLevel;
-            row.ReportedByCharacterName = selfName;
             row.LastSeenUtc = nowUtc;
             accepted++;
         }
@@ -217,8 +215,6 @@ public sealed partial class AddonApiController
         {
             characterName = item.CharacterName,
             mainCharacterName = item.MainCharacterName,
-            // False for a name the roster does not know -- listed so the Lobby can tag them.
-            isRegistered = item.AppUserId != null,
             zoneId = item.ZoneId,
             allianceNumber = item.AllianceNumber,
             allianceKey = item.AllianceKey,

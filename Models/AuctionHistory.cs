@@ -33,17 +33,15 @@ public class AuctionHistory
 
     public DateTime ClosedAt { get; set; } = DateTime.UtcNow;
 
-    // Copied from Auction.DkpPoolId at close (the Auction row is deleted there), so the
-    // closed-auction card can still say which DKP pool the winners paid from.
-    // Null = the linkshell's default pool.
+    // PHASE4B-DROP: AuctionHistories.DkpPoolId (+ its FK to DkpPools) - no longer written at close and
+    // never read; each winner's ledger row is pinned to the pool that paid. Old rows still hold
+    // values, so DkpPoolEditor keeps repointing them until 4B drops the column.
     public int? DkpPoolId { get; set; }
 
     [ForeignKey(nameof(DkpPoolId))]
     public DkpPool? DkpPool { get; set; }
 
-    // Copied from Auction.DiscordChannelId at close time so the auction's
-    // Discord channel can have its results posted and then be deleted. Null
-    // when no per-auction channel was created.
+    // PHASE4B-DROP: AuctionHistories.DiscordChannelId - never written or read (batch C1).
     [MaxLength(32)]
     public string? DiscordChannelId { get; set; }
 

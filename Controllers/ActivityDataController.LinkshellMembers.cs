@@ -93,7 +93,6 @@ public sealed partial class ActivityDataController
                     .FirstOrDefaultAsync(cancellationToken);
 
                 targetUser.PrimaryLinkshellId = fallbackMembership?.LinkshellId;
-                targetUser.PrimaryLinkshellName = fallbackMembership?.Linkshell?.LinkshellName;
             }
 
             var pendingInvites = await _dbContext.Invites

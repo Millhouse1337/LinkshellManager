@@ -140,6 +140,9 @@ public sealed class UserMergeService
         // PHASE4B-DROP: nothing writes or reads this column any more; keeps old rows tidy until 4B drops it.
         yield return Column(_db.EventWindowRosterSnapshots, x => x.AppUserId);
         yield return Column(_db.ClaimShieldCaptureMembers, x => x.AppUserId);
+        // PHASE4B-DROP: nothing writes or reads this column any more, but a presence row still being
+        // reported keeps its old value; moving it keeps "a merge leaves no old id behind" true until
+        // 4B drops it.
         yield return Column(_db.LinkshellPresences, x => x.AppUserId);
         yield return Column(_db.EventComments, x => x.AppUserId);
         yield return Column(_db.EventPartySlotSignups, x => x.AppUserId);
@@ -389,18 +392,9 @@ public sealed class UserMergeService
                 }
             }
 
-            foreach (var credit in await _db.ChartPopItemCredits.Where(c => c.MembershipId == oldId).ToListAsync(cancellationToken))
-            {
-                credit.MembershipId = keptId;
-            }
-            foreach (var item in await _db.ChartPopItems.Where(p => p.HeldByMembershipId == oldId).ToListAsync(cancellationToken))
-            {
-                item.HeldByMembershipId = keptId;
-            }
-            foreach (var request in await _db.ChartWishlistRequests.Where(r => r.RequestedByMembershipId == oldId).ToListAsync(cancellationToken))
-            {
-                request.RequestedByMembershipId = keptId;
-            }
+            // Not ChartPopItemCredits.MembershipId, ChartPopItems.HeldByMembershipId or
+            // ChartWishlistRequests.RequestedByMembershipId: nothing reads them any more (credits and
+            // holders are matched by name, requests by account id), and 4B drops them.
         }
     }
 
