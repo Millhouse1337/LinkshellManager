@@ -11,8 +11,31 @@ public sealed class AddonApiAuthAttribute : Attribute, IAsyncAuthorizationFilter
     public const string TokenContextKey = "AddonToken";
     public const string LinkshellIdContextKey = "AddonLinkshellId";
 
+    // Sent with the 503 below so the addon can tell "paused by an admin" apart from "your
+    // token is no good". Part of the addon contract: do not rename.
+    public const string AddonDisabledCode = "addon_disabled";
+
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
+        // Global kill switch first, before the token is even looked at. The switch is a PAUSE,
+        // not a revoke. The addon deletes its saved pairings when it gets a 401, so answering
+        // the pause with 401 made every member pair again once the switch went back off. A 503
+        // tells the addon to wait and keep its pairings. 401 below is only for bad or revoked
+        // tokens.
+        var globalSettings = context.HttpContext.RequestServices.GetRequiredService<GlobalSettingsService>();
+        if (await globalSettings.IsAddonGloballyDisabledAsync(context.HttpContext.RequestAborted))
+        {
+            context.Result = new ObjectResult(new
+            {
+                error = "The addon is paused by the server administrator. Your pairing is kept; try again later.",
+                code = AddonDisabledCode
+            })
+            {
+                StatusCode = StatusCodes.Status503ServiceUnavailable
+            };
+            return;
+        }
+
         var headers = context.HttpContext.Request.Headers.Authorization;
         if (!AuthenticationHeaderValue.TryParse(headers, out var headerValue)
             || !"Bearer".Equals(headerValue.Scheme, StringComparison.OrdinalIgnoreCase)

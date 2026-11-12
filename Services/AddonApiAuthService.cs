@@ -35,18 +35,15 @@ public sealed class AddonApiAuthService
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
     private readonly ApplicationDbContext _dbContext;
-    private readonly GlobalSettingsService _globalSettings;
     private readonly IMemoryCache _cache;
     private readonly LinkshellPermissions _permissions;
 
     public AddonApiAuthService(
         ApplicationDbContext dbContext,
-        GlobalSettingsService globalSettings,
         IMemoryCache cache,
         LinkshellPermissions permissions)
     {
         _dbContext = dbContext;
-        _globalSettings = globalSettings;
         _cache = cache;
         _permissions = permissions;
     }
@@ -239,10 +236,9 @@ public sealed class AddonApiAuthService
         if (record is null) return null;
         if (record.RevokedAt is not null) return null;
 
-        // Global kill-switch: a super admin can disable the addon for everyone.
-        // Checked here (the single per-request choke point shared by every
-        // [AddonApiAuth] endpoint) so one flag blocks all in-game addon traffic.
-        if (await _globalSettings.IsAddonGloballyDisabledAsync(cancellationToken)) return null;
+        // The global kill switch is NOT checked here. AddonApiAuthAttribute checks it before
+        // calling this and answers 503: a null from here becomes a 401, and the addon treats a
+        // 401 as "token revoked" and deletes its pairings.
 
         var now = DateTime.UtcNow;
 

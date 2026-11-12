@@ -33,7 +33,7 @@ public class AddonTokenRevokeTests
     private static AddonApiAuthService NewService(ApplicationDbContext db)
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
-        return new AddonApiAuthService(db, new GlobalSettingsService(db, cache), cache, TestPermissions.For(db));
+        return new AddonApiAuthService(db, cache, TestPermissions.For(db));
     }
 
     // Both linkshells get the default Leader / Officer / Member roles: only the Leader role has

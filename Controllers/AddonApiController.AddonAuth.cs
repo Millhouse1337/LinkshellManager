@@ -28,7 +28,7 @@ public sealed partial class AddonApiController
 
         // Global kill-switch: block redeeming new codes while the addon is
         // disabled, so a leader can't bring a fresh token online during a
-        // shutdown. Existing tokens are already blocked in ValidateTokenAsync.
+        // shutdown. Existing tokens are already paused (503) in AddonApiAuthAttribute.
         if (await _globalSettings.IsAddonGloballyDisabledAsync(cancellationToken))
         {
             return BadRequest(new { error = "The addon is currently disabled by the server administrator." });

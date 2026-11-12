@@ -37,7 +37,7 @@ public class AddonTokenMembershipTests
     private static AddonApiAuthService NewService(ApplicationDbContext db, IMemoryCache? cache = null)
     {
         cache ??= new MemoryCache(new MemoryCacheOptions());
-        return new AddonApiAuthService(db, new GlobalSettingsService(db, cache), cache, TestPermissions.For(db));
+        return new AddonApiAuthService(db, cache, TestPermissions.For(db));
     }
 
     // Same hashing the service stores, so a test can hand ValidateTokenAsync a raw token.
