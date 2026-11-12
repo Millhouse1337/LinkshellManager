@@ -215,7 +215,16 @@ public sealed partial class ActivityDataController
         targetUser.PrimaryLinkshellId ??= linkshellId;
         targetUser.PrimaryLinkshellName ??= membership?.Linkshell?.LinkshellName;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateMembership(ex))
+        {
+            // They joined between our check above and this save (another officer, or a Discord
+            // sign-up); the one-membership-per-linkshell index said no.
+            return BadRequest(new { error = "That player is already a member of the selected linkshell." });
+        }
         return Ok(new { success = true });
     }
 
@@ -464,7 +473,16 @@ public sealed partial class ActivityDataController
         appUser.PrimaryLinkshellName ??= invite.Linkshell?.LinkshellName;
 
         _dbContext.Invites.Remove(invite);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateMembership(ex))
+        {
+            // A second Accept (a double click) joined them a moment earlier and took the invite
+            // with it. They are a member, which is what they asked for.
+            return Ok(new { success = true });
+        }
         await _userManager.UpdateAsync(appUser);
 
         return Ok(new { success = true });
@@ -540,15 +558,24 @@ public sealed partial class ActivityDataController
             });
         }
 
-        if (invite.AppUser is not null)
+        try
         {
-            invite.AppUser.PrimaryLinkshellId ??= invite.LinkshellId;
-            invite.AppUser.PrimaryLinkshellName ??= invite.Linkshell?.LinkshellName;
-            await _userManager.UpdateAsync(invite.AppUser);
-        }
+            if (invite.AppUser is not null)
+            {
+                invite.AppUser.PrimaryLinkshellId ??= invite.LinkshellId;
+                invite.AppUser.PrimaryLinkshellName ??= invite.Linkshell?.LinkshellName;
+                // Saves everything staged so far, the new membership included.
+                await _userManager.UpdateAsync(invite.AppUser);
+            }
 
-        _dbContext.Invites.Remove(invite);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            _dbContext.Invites.Remove(invite);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateMembership(ex))
+        {
+            // Another officer approved the same request a moment earlier: the player is in.
+            return Ok(new { success = true });
+        }
         return Ok(new { success = true });
     }
 

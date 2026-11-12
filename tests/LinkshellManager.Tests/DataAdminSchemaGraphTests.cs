@@ -389,8 +389,10 @@ public class DataAdminSchemaGraphTests
 
     // ---- junctions, hubs, parents ----
 
-    // AppUserLinkshell has two foreign keys but no key over the pair, so the database does not
-    // make it a many-to-many; the four below do (a primary key or a unique index over both).
+    // AppUserEventStatusLedger has several foreign keys but no key over any pair, so the database
+    // does not make it a many-to-many; the ones below do (a primary key or a unique index over both).
+    // AppUserLinkshell and AppUserEvent joined them with OneMembershipPerLinkshell and
+    // OneParticipationPerEvent (P2.8).
     [Fact]
     public void Junctions_AreTheManyToManysTheDatabaseEnforces()
     {
@@ -401,7 +403,17 @@ public class DataAdminSchemaGraphTests
         Assert.Contains("EventPartySlotSignup", via);
         Assert.Contains("AppUserEventHistory", via);
         Assert.Contains("IdentityUserRole", via);
-        Assert.DoesNotContain("AppUserLinkshell", via);
+        Assert.Contains("AppUserLinkshell", via);
+        Assert.Contains("AppUserEvent", via);
+        Assert.DoesNotContain("AppUserEventStatusLedger", via);
+
+        // By a unique index filtered on its own column: (LinkshellId, AppUserId) WHERE AppUserId
+        // IS NOT NULL. The sides are in table order.
+        var membership = Assert.Single(graph.Junctions, junction => junction.Via == "AppUserLinkshell");
+        Assert.Equal("AppUser", membership.Left);
+        Assert.Equal("Linkshell", membership.Right);
+        Assert.Equal("AppUserLinkshell.AppUserId", membership.LeftRelationship);
+        Assert.Equal("AppUserLinkshell.LinkshellId", membership.RightRelationship);
 
         // By composite primary key.
         var userRole = Assert.Single(graph.Junctions, junction => junction.Via == "IdentityUserRole");

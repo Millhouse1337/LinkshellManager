@@ -1148,6 +1148,27 @@ namespace LinkshellManagerDiscordApp.Data
                 // Same xmin check for memberships: a balance (LinkshellDkp) is read, changed and
                 // written back, so without it two overlapping DKP moves lose one of them.
                 entity.Property(item => item.Version).IsRowVersion();
+
+                // One membership per account per linkshell. Every join path checks first, but a
+                // double-clicked Discord Sign Up (or two join paths at once) both pass that check,
+                // and two rows split the member's DKP between them and show them twice on the
+                // roster. The database is the one that says no; the join paths turn that into
+                // "already a member". Filtered: a row without an account is not a person to dedupe.
+                // Existing duplicates were merged by the OneMembershipPerLinkshell migration.
+                entity.HasIndex(item => new { item.LinkshellId, item.AppUserId })
+                    .IsUnique()
+                    .HasFilter("\"AppUserId\" IS NOT NULL");
+            });
+
+            builder.Entity<AppUserEvent>(entity =>
+            {
+                // One participation per account per event, for the same reason: two rows made the
+                // board show the member twice, and close paid only one of them. Outside sign-ups
+                // (Discord id, no account) are not covered. Existing duplicates were merged by the
+                // OneParticipationPerEvent migration.
+                entity.HasIndex(item => new { item.EventId, item.AppUserId })
+                    .IsUnique()
+                    .HasFilter("\"AppUserId\" IS NOT NULL");
             });
 
             builder.Entity<HnmRecurringBoard>(entity =>

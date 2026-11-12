@@ -389,7 +389,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("AppUserId");
 
-                    b.HasIndex("EventId");
+                    b.HasIndex("EventId", "AppUserId")
+                        .IsUnique()
+                        .HasFilter("\"AppUserId\" IS NOT NULL");
 
                     b.ToTable("AppUserEvents");
                 });
@@ -645,7 +647,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("AppUserId");
 
-                    b.HasIndex("LinkshellId");
+                    b.HasIndex("LinkshellId", "AppUserId")
+                        .IsUnique()
+                        .HasFilter("\"AppUserId\" IS NOT NULL");
 
                     b.ToTable("AppUserLinkshells");
                 });

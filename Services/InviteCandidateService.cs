@@ -345,7 +345,16 @@ public sealed class InviteCandidateService
             });
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateMembership(ex))
+        {
+            // They joined between the check above and this save; the one-membership-per-linkshell
+            // index said no.
+            return new AddDiscordMemberResult(false, "That player is already a member of this linkshell.");
+        }
         return new AddDiscordMemberResult(true, null);
     }
 }

@@ -48,32 +48,40 @@ public sealed partial class ActivityDataController
         var displayName = SignupCharacters.Resolve(appUser, membership, request.CharacterName);
 
         static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+        var appUserId = appUser.Id;
 
-        var existing = await _dbContext.AppUserEvents
-            .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
-
-        if (existing is not null)
+        // Re-run if a second sign-up for this member (a double click) inserted their row first: the
+        // one-participation-per-event index turns ours away, and the re-run finds that row and
+        // switches its job in place.
+        await UniqueRaceRetry.RunAsync(_dbContext, async () =>
         {
-            // Switching jobs updates in place so accrued time (StartTime / Duration /
-            // break state) is preserved instead of restarting the clock.
-            existing.CharacterName = displayName;
-            existing.JobName = Clean(request.JobName);
-            existing.SubJobName = Clean(request.SubJobName);
-            existing.JobType = Clean(request.JobType);
-        }
-        else
-        {
-            _dbContext.AppUserEvents.Add(NewSignupRow(
-                appUser.Id,
-                eventEntity,
-                displayName,
-                Clean(request.JobName),
-                Clean(request.SubJobName),
-                Clean(request.JobType),
-                DateTime.UtcNow));
-        }
+            var existing = await _dbContext.AppUserEvents
+                .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUserId, cancellationToken);
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            if (existing is not null)
+            {
+                // Switching jobs updates in place so accrued time (StartTime / Duration /
+                // break state) is preserved instead of restarting the clock.
+                existing.CharacterName = displayName;
+                existing.JobName = Clean(request.JobName);
+                existing.SubJobName = Clean(request.SubJobName);
+                existing.JobType = Clean(request.JobType);
+            }
+            else
+            {
+                _dbContext.AppUserEvents.Add(NewSignupRow(
+                    appUserId,
+                    eventEntity,
+                    displayName,
+                    Clean(request.JobName),
+                    Clean(request.SubJobName),
+                    Clean(request.JobType),
+                    DateTime.UtcNow));
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }, UniqueRaceRetry.Participations);
         EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
     }
@@ -145,35 +153,43 @@ public sealed partial class ActivityDataController
         }
 
         var character = SignupCharacters.Resolve(appUser, membership, request.CharacterName);
-        var existingSignup = await _dbContext.AppUserEvents
-            .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUser.Id, cancellationToken);
+        var appUserId = appUser.Id;
 
-        if (existingSignup is not null)
+        // Same double-click re-run as SignUpAsync: a lost race finds the other request's row and
+        // updates it in place.
+        await UniqueRaceRetry.RunAsync(_dbContext, async () =>
         {
-            // Already attending → switching jobs updates in place, keeping their
-            // accrued time (StartTime / Duration / break state) intact.
-            existingSignup.CharacterName = character;
-            existingSignup.JobName = request.JobName.Trim();
-            existingSignup.SubJobName = request.SubJobName.Trim();
-            existingSignup.JobType = request.JobType.Trim();
-        }
-        else
-        {
-            _dbContext.AppUserEvents.Add(new AppUserEvent
+            var existingSignup = await _dbContext.AppUserEvents
+                .FirstOrDefaultAsync(item => item.EventId == eventId && item.AppUserId == appUserId, cancellationToken);
+
+            if (existingSignup is not null)
             {
-                AppUserId = appUser.Id,
-                EventId = eventId,
-                CharacterName = character,
-                JobName = request.JobName.Trim(),
-                SubJobName = request.SubJobName.Trim(),
-                JobType = request.JobType.Trim(),
-                StartTime = DateTime.UtcNow,
-                EventDkp = 0,
-                IsQuickJoin = true
-            });
-        }
+                // Already attending → switching jobs updates in place, keeping their
+                // accrued time (StartTime / Duration / break state) intact.
+                existingSignup.CharacterName = character;
+                existingSignup.JobName = request.JobName.Trim();
+                existingSignup.SubJobName = request.SubJobName.Trim();
+                existingSignup.JobType = request.JobType.Trim();
+            }
+            else
+            {
+                _dbContext.AppUserEvents.Add(new AppUserEvent
+                {
+                    AppUserId = appUserId,
+                    EventId = eventId,
+                    CharacterName = character,
+                    JobName = request.JobName.Trim(),
+                    SubJobName = request.SubJobName.Trim(),
+                    JobType = request.JobType.Trim(),
+                    StartTime = DateTime.UtcNow,
+                    EventDkp = 0,
+                    IsQuickJoin = true
+                });
+            }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }, UniqueRaceRetry.Participations);
         EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
     }
@@ -313,7 +329,15 @@ public sealed partial class ActivityDataController
             IsVerified = null
         });
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateParticipation(ex))
+        {
+            // They joined (or another officer added them) between the check above and this save.
+            return BadRequest(new { error = "That member is already attached to this live event." });
+        }
         EnqueueEventBoardRefresh(eventId);
         return Ok(new { success = true });
     }

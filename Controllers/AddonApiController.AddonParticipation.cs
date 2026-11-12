@@ -981,7 +981,16 @@ public sealed partial class AddonApiController
             Source = AddonSource
         });
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateParticipation(ex))
+        {
+            // A second join (a double press, or an officer's post naming them) saved their row
+            // between the check above and this save.
+            return BadRequest(new { error = "You are already attached to this event." });
+        }
         return Ok(new
         {
             success = true,

@@ -632,14 +632,19 @@ public sealed class DiscordIdentityService
         }
 
         var changed = false;
+        // Two pending invites to the same linkshell must still make ONE membership: the database
+        // check below cannot see the row the first one only staged.
+        var joinedLinkshellIds = new HashSet<int>();
+        var added = new List<AppUserLinkshell>();
         foreach (var invite in pending)
         {
-            var alreadyMember = await _dbContext.AppUserLinkshells
-                .AnyAsync(link => link.LinkshellId == invite.LinkshellId && link.AppUserId == appUser.Id, cancellationToken);
+            var alreadyMember = !joinedLinkshellIds.Add(invite.LinkshellId)
+                || await _dbContext.AppUserLinkshells
+                    .AnyAsync(link => link.LinkshellId == invite.LinkshellId && link.AppUserId == appUser.Id, cancellationToken);
 
             if (!alreadyMember)
             {
-                _dbContext.AppUserLinkshells.Add(new AppUserLinkshell
+                var joined = new AppUserLinkshell
                 {
                     AppUserId = appUser.Id,
                     LinkshellId = invite.LinkshellId,
@@ -648,7 +653,9 @@ public sealed class DiscordIdentityService
                     CharacterName = appUser.CharacterName ?? appUser.UserName,
                     Rank = LinkshellRanks.Member,
                     Status = "Active"
-                });
+                };
+                _dbContext.AppUserLinkshells.Add(joined);
+                added.Add(joined);
             }
 
             appUser.PrimaryLinkshellId ??= invite.LinkshellId;
@@ -660,7 +667,25 @@ public sealed class DiscordIdentityService
 
         if (changed)
         {
-            await _dbContext.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateMembership(ex))
+            {
+                // A second sign-in of the same account (two tabs, or the Activity and the website at
+                // once) turned these invites into memberships a moment earlier, and the
+                // one-membership-per-linkshell index said no to ours. Stop tracking what we staged so
+                // no later save on this request tries it again; the account is already in.
+                foreach (var membership in added)
+                {
+                    _dbContext.Entry(membership).State = EntityState.Detached;
+                }
+                foreach (var invite in pending)
+                {
+                    _dbContext.Entry(invite).State = EntityState.Detached;
+                }
+            }
             await _userManager.UpdateAsync(appUser);
         }
     }

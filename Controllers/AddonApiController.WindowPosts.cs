@@ -177,9 +177,12 @@ public sealed partial class AddonApiController
     // not in this window yet" before either has saved, and the unique indexes on AppUserEventWindows
     // reject the second insert. Everything a window post saves before its credits (the window row,
     // its price, the close tick) is safe to repeat.
+    //
+    // The same goes for a member's participation, which a post creates when Bob has none yet: both
+    // posts create one, and the one-participation-per-event index rejects the later.
     internal static Task<T> RetryIfWindowCreditRaceAsync<T>(
         ApplicationDbContext dbContext, Func<Task<T>> post) =>
-        UniqueRaceRetry.RunAsync(dbContext, post, "AppUserEventWindows");
+        UniqueRaceRetry.RunAsync(dbContext, post, "AppUserEventWindows", UniqueRaceRetry.Participations);
 
     // windowSequence: which of the camp's windows; a new one is created, an existing one is added to.
     public sealed record AddonAddWindowPostRequest(int WindowSequence, IReadOnlyList<string>? AppUserIds);

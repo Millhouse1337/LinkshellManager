@@ -43,4 +43,16 @@ internal static class UniqueRaceRetry
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } rejection
         && rejection.TableName is { } table
         && tables.Contains(table);
+
+    // One membership per account per linkshell, and one participation per account per event: the
+    // only unique indexes on these two tables. A join that loses the race to another join for the
+    // same person is told "already a member" / "already signed up" (or re-runs and finds the row).
+    internal const string Memberships = "AppUserLinkshells";
+    internal const string Participations = "AppUserEvents";
+
+    internal static bool IsDuplicateMembership(DbUpdateException ex) =>
+        IsUniqueRejectionOn(ex, new[] { Memberships });
+
+    internal static bool IsDuplicateParticipation(DbUpdateException ex) =>
+        IsUniqueRejectionOn(ex, new[] { Participations });
 }

@@ -69,18 +69,12 @@ public static class EventEndService
         var windowCount = eventEntity.WindowCountOverride
             ?? HnmConfig.GetWindowCount(eventEntity.EventName);
         var isWindowed = windowCount > 1;
-        // AppUserEventId is nullable since snapshots outlive a cleared roster (see
-        // AppUserEventWindow). Orphaned rows can't be credited through a participation, so they're
-        // filtered out here — this path is the Claim/Kill-style windowed events, which never clear
-        // their roster. The HNM camps that do go through HnmStandardCampFinalizer, which folds on
-        // the denormalized AppUserId instead.
-        Dictionary<int, int> windowsAttendedByParticipationId = isWindowed
-            ? await dbContext.AppUserEventWindows
-                .Where(w => w.EventAttendanceWindow!.EventId == eventEntity.Id && w.AppUserEventId != null)
-                .GroupBy(w => w.AppUserEventId!.Value)
-                .Select(g => new { ParticipationId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.ParticipationId, x => x.Count)
-            : new Dictionary<int, int>();
+        // Counted per account, not per participation row (see WindowsAttendedTally). This path is
+        // the Claim/Kill-style windowed events, which never clear their roster. The HNM camps that
+        // do go through HnmStandardCampFinalizer, which folds on the denormalized AppUserId instead.
+        var windowsAttendedTally = isWindowed
+            ? await WindowsAttendedTally.LoadAsync(dbContext, eventEntity.Id, CancellationToken.None)
+            : WindowsAttendedTally.Empty;
         var history = new EventHistory
         {
             LinkshellId = eventEntity.LinkshellId,
@@ -117,11 +111,11 @@ public static class EventEndService
             .Where(participation => !string.IsNullOrWhiteSpace(participation.CharacterName))
             .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        // One history/ledger row per account. There is no DB uniqueness on AppUserEvent, so an
-        // account can hold two participations for an event (e.g. a website join + an addon post
-        // under an alt); a second history row would violate the unique (EventHistoryId,
-        // AppUserId) index and throw at save. Account-less rows (null AppUserId) are outside
-        // that filtered index, so they're exempt from this dedup.
+        // One history/ledger row per account. The database now holds one participation per
+        // account per event (OneParticipationPerEvent), so this is only a guard: a second history
+        // row would violate the unique (EventHistoryId, AppUserId) index and throw at save.
+        // Account-less rows (null AppUserId) are outside that filtered index, so they're exempt
+        // from this dedup.
         var creditedAppUserIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var participation in eventEntity.AppUserEvents)
@@ -132,7 +126,7 @@ public static class EventEndService
             }
             var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
             int? windowsAttended = isWindowed
-                ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
+                ? windowsAttendedTally.For(participation)
                 : (int?)null;
             // Windowed pays per window attended; timed pays for the ACTUAL time present; a member
             // an officer marked Absent gets 0 and no Active credit. Shared with

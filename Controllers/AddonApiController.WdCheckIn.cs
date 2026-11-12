@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Authorization;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -118,11 +119,24 @@ public sealed partial class AddonApiController
     // finalizer credits arrival..last window inclusive, so one check-in covers every later
     // window; checking in again on a later window overwrites the arrival (the late-arrival
     // correction) and clears any prior check-out.
+    //
+    // Re-run when a second check-in for the same member (a double press, or the Discord button at
+    // the same moment) inserted their row first: the one-participation-per-event index turns ours
+    // away, and the re-run finds that row and updates it.
     [HttpPost("events/{eventId:int}/checkin")]
     [AddonApiAuth]
-    public async Task<IActionResult> WdCheckInAsync(
+    public Task<IActionResult> WdCheckInAsync(
         int eventId,
         [FromBody] AddonWdCheckInRequest? request,
+        CancellationToken cancellationToken) =>
+        UniqueRaceRetry.RunAsync(
+            _dbContext,
+            () => WdCheckInOnceAsync(eventId, request, cancellationToken),
+            UniqueRaceRetry.Participations);
+
+    private async Task<IActionResult> WdCheckInOnceAsync(
+        int eventId,
+        AddonWdCheckInRequest? request,
         CancellationToken cancellationToken)
     {
         var ctx = await ResolveWdCheckInContextAsync(eventId, request?.CharacterName, cancellationToken);

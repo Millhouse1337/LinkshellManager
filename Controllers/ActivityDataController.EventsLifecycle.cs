@@ -626,21 +626,15 @@ public sealed partial class ActivityDataController
         var windowCount = eventEntity.WindowCountOverride
             ?? LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(eventEntity.EventName);
         var isWindowed = windowCount > 1;
-        // AppUserEventId is nullable since snapshots outlive a cleared roster (see
-        // AppUserEventWindow); orphans can't be credited through a participation. Same filter as
-        // EventEndService.EndEventCoreAsync — keep the two identical.
-        Dictionary<int, int> windowsAttendedByParticipationId = isWindowed
-            ? await _dbContext.AppUserEventWindows
-                .Where(w => w.EventAttendanceWindow!.EventId == eventEntity.Id && w.AppUserEventId != null)
-                .GroupBy(w => w.AppUserEventId!.Value)
-                .Select(g => new { ParticipationId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.ParticipationId, x => x.Count, cancellationToken)
-            : new Dictionary<int, int>();
-        // One account = one history/ledger row. There is no DB uniqueness on AppUserEvent, so
-        // an account can hold two participations for an event (e.g. a website join under the
-        // main name + an addon post under an alt). Emitting a history row per participation
-        // would violate the unique (EventHistoryId, AppUserId) index and throw at SaveChanges
-        // — which the Activity surfaces as the misleading "your session may have expired".
+        // Counted per account, not per participation row (see WindowsAttendedTally) -- the same
+        // helper EventEndService.EndEventCoreAsync uses, so the two paths cannot count differently.
+        var windowsAttendedTally = isWindowed
+            ? await LinkshellManagerDiscordApp.Services.WindowsAttendedTally.LoadAsync(_dbContext, eventEntity.Id, cancellationToken)
+            : LinkshellManagerDiscordApp.Services.WindowsAttendedTally.Empty;
+        // One account = one history/ledger row. The database now holds one participation per
+        // account per event (OneParticipationPerEvent), so this is only a guard: a history row per
+        // participation would violate the unique (EventHistoryId, AppUserId) index and throw at
+        // SaveChanges -- which the Activity surfaces as the misleading "your session may have expired".
         var creditedAppUserIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var participation in eventEntity.AppUserEvents)
@@ -671,7 +665,7 @@ public sealed partial class ActivityDataController
             // null on a timed event (where it would read as a misleading 0), the window tally on
             // a windowed one. Mirrors EventEndService.EndEventCoreAsync.
             int? windowsAttended = isWindowed
-                ? windowsAttendedByParticipationId.GetValueOrDefault(participation.Id, 0)
+                ? windowsAttendedTally.For(participation)
                 : (int?)null;
             // A member an officer marked Absent gets 0 and no Active credit — the same rule
             // EventEndService.EndEventCoreAsync applies, via the same helper.

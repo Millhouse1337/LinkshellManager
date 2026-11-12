@@ -1263,8 +1263,9 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             await _db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateMembership(ex))
         {
+            // The one-membership-per-linkshell index turned us away: a second click got there first.
             _db.Entry(membership).State = EntityState.Detached;
             return await _db.AppUserLinkshells
                 .Include(link => link.AppUser)
@@ -1936,7 +1937,20 @@ public sealed class DiscordInteractionsController : ControllerBase
         return false;
     }
 
-    private async Task<IActionResult> HandleJobSignupAsync(
+    // Sign Up, Check In and the "Sign Up (No Slot)" wizard each find the clicker's participation
+    // and add one when there is none. A double click runs two of them at once; both find none and
+    // the one-participation-per-event index turns the later insert away. Re-running that click
+    // finds the row the first one saved and updates it, exactly as if it had arrived a moment
+    // later. Nothing these handlers save before that insert minds being done twice (a join as an
+    // outside member finds its own membership on the re-run).
+    private Task<IActionResult> RetryIfParticipationRaceAsync(Func<Task<IActionResult>> click) =>
+        UniqueRaceRetry.RunAsync(_db, click, UniqueRaceRetry.Participations);
+
+    private Task<IActionResult> HandleJobSignupAsync(
+        int eventId, string? appUserId, string? job, CancellationToken cancellationToken) =>
+        RetryIfParticipationRaceAsync(() => HandleJobSignupOnceAsync(eventId, appUserId, job, cancellationToken));
+
+    private async Task<IActionResult> HandleJobSignupOnceAsync(
         int eventId, string? appUserId, string? job, CancellationToken cancellationToken)
     {
         if (eventId <= 0 || string.IsNullOrWhiteSpace(job))
@@ -2002,7 +2016,10 @@ public sealed class DiscordInteractionsController : ControllerBase
     // re-clicking a later window just overwrites the arrival (the Manual Check In "x2 -> x3" correction).
     // Identity resolution (member / placeholder / outside onboard / character picker) is fully
     // delegated to ResolveSignupContextAsync — the same path Sign Up uses.
-    private async Task<IActionResult> HandleXinAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    private Task<IActionResult> HandleXinAsync(int eventId, string? appUserId, CancellationToken cancellationToken) =>
+        RetryIfParticipationRaceAsync(() => HandleXinOnceAsync(eventId, appUserId, cancellationToken));
+
+    private async Task<IActionResult> HandleXinOnceAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -4183,7 +4200,13 @@ public sealed class DiscordInteractionsController : ControllerBase
     // picks become a general-attendance AppUserEvent so the attendee always says
     // what job they're coming as (no more blank "Role Unassigned / Job/Sub" rows).
     // Re-running replaces the member's existing attendance for this event.
-    private async Task<IActionResult> AdvanceGeneralJoinWizardAsync(
+    private Task<IActionResult> AdvanceGeneralJoinWizardAsync(
+        int eventId, string? role, string? main, string? sub, bool subPicked,
+        string? appUserId, CancellationToken cancellationToken) =>
+        RetryIfParticipationRaceAsync(() => AdvanceGeneralJoinWizardOnceAsync(
+            eventId, role, main, sub, subPicked, appUserId, cancellationToken));
+
+    private async Task<IActionResult> AdvanceGeneralJoinWizardOnceAsync(
         int eventId, string? role, string? main, string? sub, bool subPicked,
         string? appUserId, CancellationToken cancellationToken)
     {
