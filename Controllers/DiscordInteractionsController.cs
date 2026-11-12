@@ -136,7 +136,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         DkpPoolResolver dkpPools,
         DkpPoolBalanceService dkpPoolBalances,
         TimeZoneConversionService timeZones,
-        AdminOverrideService adminOverride)
+        LinkshellPermissions permissions)
     {
         _verifier = verifier;
         _db = db;
@@ -150,12 +150,12 @@ public sealed class DiscordInteractionsController : ControllerBase
         _dkpPools = dkpPools;
         _dkpPoolBalances = dkpPoolBalances;
         _timeZones = timeZones;
-        _adminOverride = adminOverride;
+        _permissions = permissions;
     }
 
     private readonly DkpPoolResolver _dkpPools;
     private readonly DkpPoolBalanceService _dkpPoolBalances;
-    private readonly AdminOverrideService _adminOverride;
+    private readonly LinkshellPermissions _permissions;
 
     [HttpPost("interactions")]
     public async Task<IActionResult> HandleAsync(CancellationToken cancellationToken)
@@ -258,24 +258,9 @@ public sealed class DiscordInteractionsController : ControllerBase
             .Where(link => link.DiscordUserId == discordUserId && link.IdentityUserId != null)
             .Select(link => link.IdentityUserId!)
             .FirstOrDefaultAsync(cancellationToken);
-        // Every rank this user holds in a linkshell linked to THIS server. Ranks first, then
-        // the app-wide admin override — which can only elevate when that list is non-empty, so
-        // it never reaches a server whose linkshell the admin has not joined. See
-        // AdminOverrideService.
-        var guildRanks = string.IsNullOrEmpty(appUserId)
-            ? new List<string?>()
-            : await (
-                from membership in _db.AppUserLinkshells
-                join linkshell in _db.Linkshells on membership.LinkshellId equals linkshell.Id
-                where membership.AppUserId == appUserId
-                      && linkshell.DiscordGuildId == guildId
-                select membership.Rank).ToListAsync(cancellationToken);
-        var isOfficer = guildRanks.Any(LinkshellRanks.IsLeaderOrOfficer)
-                        || (guildRanks.Count > 0
-                            && await _adminOverride.IsActiveForAsync(appUserId, cancellationToken));
-        if (!isOfficer)
+        if (!await CanPostLaunchCardAsync(appUserId, guildId, cancellationToken))
         {
-            return Ephemeral("Only a linkshell leader or officer can post the launch card here.");
+            return Ephemeral("You need the **Manage events** permission in a linkshell linked to this server to post the launch card here.");
         }
 
         // Public channel message (no ephemeral flag) — a launch card with a Join button.
@@ -1539,11 +1524,7 @@ public sealed class DiscordInteractionsController : ControllerBase
                 .Where(link => link.DiscordUserId == discordUserId && link.IdentityUserId != null)
                 .Select(link => link.IdentityUserId!)
                 .FirstOrDefaultAsync(cancellationToken);
-            var officer = string.IsNullOrEmpty(officerAppUserId)
-                ? null
-                : await _db.AppUserLinkshells.FirstOrDefaultAsync(
-                    m => m.AppUserId == officerAppUserId && m.LinkshellId == ev.LinkshellId, cancellationToken);
-            if (!await CanManageEventsAsync(officer, cancellationToken))
+            if (!await CanEndCampAsync(officerAppUserId, ev.LinkshellId, cancellationToken))
             {
                 return Ephemeral("You need the **Manage events** permission to end the camp.");
             }
@@ -1769,9 +1750,9 @@ public sealed class DiscordInteractionsController : ControllerBase
                 .Where(link => link.DiscordUserId == discordUserId && link.IdentityUserId != null)
                 .Select(link => link.IdentityUserId!)
                 .FirstOrDefaultAsync(cancellationToken);
-            if (!await IsEventOfficerAsync(ev, officerAppUserId, cancellationToken))
+            if (!await CanEditPartyBoardAsync(ev, officerAppUserId, cancellationToken))
             {
-                return Ephemeral("Only officers can add members to the board.");
+                return Ephemeral("You need the **Manage parties** permission to add members to the board.");
             }
 
             var typed = ExtractModalValue(data, DiscordEventMessageBuilder.OfficerAddFindNameFieldId)?.Trim();
@@ -2158,11 +2139,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("This board doesn't use windows.");
         }
-        var membership = string.IsNullOrEmpty(appUserId)
-            ? null
-            : await _db.AppUserLinkshells.FirstOrDefaultAsync(
-                m => m.AppUserId == appUserId && m.LinkshellId == ev.LinkshellId, cancellationToken);
-        if (!await CanManageEventsAsync(membership, cancellationToken))
+        if (!await CanEndCampAsync(appUserId, ev.LinkshellId, cancellationToken))
         {
             return Ephemeral("You need the **Manage events** permission to end the camp.");
         }
@@ -2599,75 +2576,44 @@ public sealed class DiscordInteractionsController : ControllerBase
 
     // ─── Officer "Add Member" ───────────────────────────────────────────────────────────
 
-    // True when `appUserId` is a Leader/Officer of the event's linkshell — or a super admin
-    // while the app-wide override is on. Every officer-only board control routes through this
-    // (Add Member, Move, Set Leader, Lock, Remove, and the officer-add follow-up steps), so
-    // one gate covers them all. See CanManageLinkshellAsync for the membership-first rule.
-    private async Task<bool> IsEventOfficerAsync(Event ev, string? appUserId, CancellationToken cancellationToken)
+    // The Discord bot's permission gates. Each one asks LinkshellPermissions, the same rule the
+    // app and the addon use (no membership -> no; admin override -> yes; Leader -> yes; then the
+    // role's flag, with an unknown rank falling back to the Member role). They used to test the
+    // Leader/Officer RANK, so a custom role with the right permission was refused here while the
+    // app let it through, and an Officer whose role had the permission switched off could still
+    // use the Discord buttons. Internal so tests can call the real gates.
+
+    // The board's officer controls: Add Member (and its follow-up steps), Move, Set Leader, Lock
+    // and Remove. They all change who sits where on the party board, so they need Manage parties,
+    // the permission the app's party board checks for the same edits.
+    internal Task<bool> CanEditPartyBoardAsync(Event ev, string? appUserId, CancellationToken cancellationToken)
+        => _permissions.CanAsync(appUserId, ev.LinkshellId, role => role.CanManageParties, cancellationToken);
+
+    // "🏁 End Camp / Enter ToD" and its modal need Manage events, like the app's live camp card,
+    // so a role cannot end a camp on one surface and not the other.
+    internal Task<bool> CanEndCampAsync(string? appUserId, int linkshellId, CancellationToken cancellationToken)
+        => _permissions.CanAsync(appUserId, linkshellId, role => role.CanManageEvents, cancellationToken);
+
+    // "/lsm" launch card: allowed when ANY linkshell linked to this Discord server gives the user
+    // Manage events. Only linkshells they have joined are checked, so the admin override can
+    // never reach a server whose linkshell the admin is not in.
+    internal async Task<bool> CanPostLaunchCardAsync(string? appUserId, string guildId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(appUserId))
         {
             return false;
         }
-        // A row wrapper, not the bare Rank: a null Rank and "no membership at all" are
-        // different answers here, and only the second one must skip the override.
-        var membership = await _db.AppUserLinkshells
-            .AsNoTracking()
-            .Where(m => m.AppUserId == appUserId && m.LinkshellId == ev.LinkshellId)
-            .Select(m => new { m.Rank })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (membership is null)
+        var memberships = await _db.AppUserLinkshells
+            .Where(m => m.AppUserId == appUserId && m.Linkshell != null && m.Linkshell.DiscordGuildId == guildId)
+            .ToListAsync(cancellationToken);
+        foreach (var membership in memberships)
         {
-            return false;
+            if (await _permissions.CanAsync(membership, role => role.CanManageEvents, cancellationToken))
+            {
+                return true;
+            }
         }
-        return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
-               || await _adminOverride.IsActiveForAsync(appUserId, cancellationToken);
-    }
-
-    // Leader/Officer by rank, OR the app-wide admin override. A null membership is rejected
-    // first, so the override can only elevate inside a linkshell the clicker has actually
-    // joined — the same order the Activity gates use. See AdminOverrideService.
-    private async Task<bool> CanManageLinkshellAsync(
-        AppUserLinkshell? membership, CancellationToken cancellationToken)
-    {
-        if (membership is null)
-        {
-            return false;
-        }
-        return LinkshellRanks.IsLeaderOrOfficer(membership.Rank)
-               || await _adminOverride.IsActiveForAsync(membership.AppUserId, cancellationToken);
-    }
-
-    // The "manage events" PERMISSION rather than the rank above, for the buttons whose Activity
-    // twin already checks it (ActivityDataController: CanManageEvents). Mirrors that method's
-    // order exactly — membership, then override, then Leader-always-wins, then the role row —
-    // so a linkshell cannot end up with a role that may end a camp on one surface and not the
-    // other. Leader short-circuits because a role row seeded before a permission existed must
-    // never lock the owner out of their own linkshell.
-    private async Task<bool> CanManageEventsAsync(
-        AppUserLinkshell? membership, CancellationToken cancellationToken)
-    {
-        if (membership is null)
-        {
-            return false;
-        }
-        if (await _adminOverride.IsActiveForAsync(membership.AppUserId, cancellationToken))
-        {
-            return true;
-        }
-        if (LinkshellRanks.IsLeader(membership.Rank))
-        {
-            return true;
-        }
-
-        var rankName = string.IsNullOrWhiteSpace(membership.Rank)
-            ? LinkshellRanks.Member
-            : membership.Rank.Trim();
-        var role = await _db.LinkshellRoles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                r => r.LinkshellId == membership.LinkshellId && r.Name == rankName, cancellationToken);
-        return role?.CanManageEvents == true;
+        return false;
     }
 
     // "➕ Add Member (officers)" → officers only: an ephemeral select of roster members who
@@ -2686,9 +2632,9 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("That event is no longer open.");
         }
-        if (!await IsEventOfficerAsync(ev, appUserId, cancellationToken))
+        if (!await CanEditPartyBoardAsync(ev, appUserId, cancellationToken))
         {
-            return Ephemeral("Only officers can add members to the board.");
+            return Ephemeral("You need the **Manage parties** permission to add members to the board.");
         }
 
         // Exclude anyone already on the board (a slot signup or a no-slot attendance) so the
@@ -2742,9 +2688,9 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return Ephemeral("That event is no longer open.");
         }
-        if (!await IsEventOfficerAsync(ev, appUserId, cancellationToken))
+        if (!await CanEditPartyBoardAsync(ev, appUserId, cancellationToken))
         {
-            return Ephemeral("Only officers can add members to the board.");
+            return Ephemeral("You need the **Manage parties** permission to add members to the board.");
         }
         if (string.IsNullOrEmpty(_discordUserId))
         {
@@ -2952,7 +2898,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         return null;
     }
 
-    // Loads the event (with party setup) and verifies the clicker is an officer.
+    // Loads the event (with party setup) and verifies the clicker may edit the party board.
     // Returns the event on success, or an ephemeral error result in `error`.
     private async Task<Event?> LoadOfficerEventAsync(
         int eventId, string? appUserId, string deniedMessage, CancellationToken cancellationToken,
@@ -2961,7 +2907,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         if (eventId <= 0) { setError(ephemeral("That event isn't recognized.")); return null; }
         var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
         if (ev is null || ev.PartySetup is null) { setError(ephemeral("That event is no longer open.")); return null; }
-        if (!await IsEventOfficerAsync(ev, appUserId, cancellationToken)) { setError(ephemeral(deniedMessage)); return null; }
+        if (!await CanEditPartyBoardAsync(ev, appUserId, cancellationToken)) { setError(ephemeral(deniedMessage)); return null; }
         return ev;
     }
 
@@ -2969,7 +2915,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private async Task<IActionResult> HandleMoveStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can move members on the board.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to move members on the board.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
 
@@ -2985,7 +2931,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private async Task<IActionResult> HandleMoveSourcePickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can move members on the board.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to move members on the board.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
         if (!IsValidSourceToken(src)) { return Ephemeral("That selection isn't recognized."); }
@@ -3024,7 +2970,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     {
         var (eventId, src) = ParseEventAndSource(customId, DiscordEventMessageBuilder.MoveDestClaimPrefix);
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can move members on the board.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to move members on the board.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
         if (slotId <= 0 || !IsValidSourceToken(src)) { return Ephemeral("That selection isn't recognized."); }
@@ -3041,7 +2987,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     {
         var (eventId, src) = ParseEventAndSource(customId, DiscordEventMessageBuilder.MoveBenchPrefix);
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can move members on the board.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to move members on the board.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
         if (src is null || !src.StartsWith("s:", StringComparison.Ordinal)) { return Ephemeral("Only a seated member can be benched."); }
@@ -3058,7 +3004,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private async Task<IActionResult> HandleSetLeaderStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can set the party leader.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to set the party leader.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
 
@@ -3073,7 +3019,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private async Task<IActionResult> HandleSetLeaderPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can set the party leader.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to set the party leader.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
         if (src is null || !src.StartsWith("s:", StringComparison.Ordinal)
@@ -3095,7 +3041,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private async Task<IActionResult> HandleOfficerLockStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can lock members.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to lock members.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
 
@@ -3110,7 +3056,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private async Task<IActionResult> HandleOfficerLockPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can lock members.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to lock members.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
         if (src is null || !src.StartsWith("s:", StringComparison.Ordinal)
@@ -3140,7 +3086,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private async Task<IActionResult> HandleWithdrawStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can remove members from the board.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to remove members from the board.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
 
@@ -3156,7 +3102,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     private async Task<IActionResult> HandleWithdrawPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can remove members from the board.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to remove members from the board.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
         if (!IsValidSourceToken(src)) { return Ephemeral("That selection isn't recognized."); }
@@ -3188,7 +3134,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     {
         var (eventId, src) = ParseEventAndSource(customId, DiscordEventMessageBuilder.WithdrawMemberConfirmPrefix);
         IActionResult? err = null;
-        var ev = await LoadOfficerEventAsync(eventId, appUserId, "Only officers can remove members from the board.",
+        var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to remove members from the board.",
             cancellationToken, Ephemeral, e => err = e);
         if (ev is null) { return err!; }
         if (!IsValidSourceToken(src)) { return Ephemeral("That selection isn't recognized."); }
@@ -3214,9 +3160,9 @@ public sealed class DiscordInteractionsController : ControllerBase
         {
             return await ResolveSignupContextAsync(ev, clickerAppUserId, promptTail, cancellationToken);
         }
-        if (!await IsEventOfficerAsync(ev, clickerAppUserId, cancellationToken))
+        if (!await CanEditPartyBoardAsync(ev, clickerAppUserId, cancellationToken))
         {
-            return SignupContext.Stop(Ephemeral("Only officers can add members to the board."));
+            return SignupContext.Stop(Ephemeral("You need the **Manage parties** permission to add members to the board."));
         }
         if (string.IsNullOrEmpty(_discordUserId))
         {

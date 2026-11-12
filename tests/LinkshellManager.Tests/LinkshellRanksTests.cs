@@ -3,8 +3,8 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// Pins the rank predicates that gate "can manage this linkshell" across the
-// controllers. A regression here silently grants or denies access.
+// Pins the Leader rank predicate (the owner always passes permission checks).
+// A regression here silently grants or denies access.
 public class LinkshellRanksTests
 {
     [Theory]
@@ -16,15 +16,4 @@ public class LinkshellRanksTests
     [InlineData("", false)]
     public void IsLeader(string? rank, bool expected)
         => Assert.Equal(expected, LinkshellRanks.IsLeader(rank));
-
-    [Theory]
-    [InlineData("Leader", true)]
-    [InlineData("Officer", true)]
-    [InlineData("officer", true)]  // case-insensitive
-    [InlineData("Member", false)]
-    [InlineData(null, false)]
-    [InlineData("   ", false)]
-    [InlineData("Leadership", false)]  // not a prefix match
-    public void IsLeaderOrOfficer(string? rank, bool expected)
-        => Assert.Equal(expected, LinkshellRanks.IsLeaderOrOfficer(rank));
 }

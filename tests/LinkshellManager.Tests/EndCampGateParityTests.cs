@@ -2,7 +2,15 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Controllers;
+using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Options;
+using LinkshellManagerDiscordApp.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -31,25 +39,60 @@ public class EndCampGateParityTests
     };
 
     /// <summary>
-    /// The rank-gated Discord surface grew its own CanManageEventsAsync, mirroring the order
-    /// ActivityDataController.CanAsync already used: membership, override, Leader-always-wins,
-    /// then the role row.
+    /// The Discord surface's End Camp gate. It asks LinkshellPermissions, the same service the
+    /// Activity's CanAsync uses, so the two cannot drift apart again.
     /// </summary>
     [Fact]
     public void TheDiscordControllerExposesAnEventPermissionGate()
     {
-        Assert.NotNull(Method(typeof(DiscordInteractionsController), "CanManageEventsAsync"));
+        Assert.NotNull(Method(typeof(DiscordInteractionsController), "CanEndCampAsync"));
     }
 
     /// <summary>
-    /// The Discord controller's coarse rank check is still kept as a separate method: the
-    /// permission gate must not quietly become the rank gate under a new name, which is exactly
-    /// how the two would drift back together.
+    /// The Discord controller keeps no permission rule of its own any more: no rank test, no
+    /// role-row lookup, no direct override check. Its old rank gates (IsEventOfficerAsync,
+    /// CanManageLinkshellAsync) and its own copy of the role rule (CanManageEventsAsync) are gone;
+    /// a copy that came back is how the surfaces drifted apart in the first place.
     /// </summary>
     [Fact]
-    public void TheCoarseRankGateSurvivesAsItsOwnMethod()
+    public void TheDiscordControllerHasNoPermissionRuleOfItsOwn()
     {
-        Assert.NotNull(Method(typeof(DiscordInteractionsController), "CanManageLinkshellAsync"));
+        var text = ControllerSource("DiscordInteractionsController.cs");
+        Assert.DoesNotContain("IsLeaderOrOfficer", text);
+        Assert.DoesNotContain("LinkshellRanks.IsLeader", text);
+        Assert.DoesNotContain("IsEventOfficerAsync", text);
+        Assert.DoesNotContain("CanManageLinkshellAsync", text);
+        Assert.DoesNotContain("CanManageEventsAsync", text);
+        Assert.DoesNotContain("AdminOverrideService", text);
+        Assert.False(text.Contains("LinkshellRoles", StringComparison.Ordinal),
+            "DiscordInteractionsController reads LinkshellRoles itself; ask LinkshellPermissions instead.");
+    }
+
+    /// <summary>
+    /// The custom role this file was written about: a role with "Manage events" on may end a camp
+    /// from the Discord board, and the same role with it off may not, exactly as in the Activity.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DiscordEndCamp_CustomRole_ManageEventsDecides(bool flag)
+    {
+        await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options);
+        db.Linkshells.Add(new Linkshell { Id = 1, LinkshellName = "LS1", LootStructure = "Dkp" });
+        db.LinkshellRoles.AddRange(LinkshellRoleDefaults.BuildDefaultRoles(1));
+        db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = 1, Name = "Camp Lead", CanManageEvents = flag });
+        db.Users.Add(new AppUser { Id = "u1", UserName = "u1" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { AppUserId = "u1", LinkshellId = 1, Rank = "Camp Lead" });
+        await db.SaveChangesAsync();
+
+        var controller = new DiscordInteractionsController(
+            null!, db, null!, NullLogger<DiscordInteractionsController>.Instance, null!,
+            Microsoft.Extensions.Options.Options.Create(new DiscordOAuthOptions()),
+            null!, null!, null!, null!, null!, null!, TestPermissions.For(db));
+
+        Assert.Equal(flag, await controller.CanEndCampAsync("u1", 1, CancellationToken.None));
     }
 
     /// <summary>
@@ -69,12 +112,8 @@ public class EndCampGateParityTests
     }
 
     /// <summary>
-    /// The End Camp handlers themselves must not call the rank gate.
-    ///
-    /// DiscordInteractionsController.cs is excluded from the "no rank gate anywhere" form of this
-    /// check because it legitimately rank-gates its OTHER officer buttons (Add / Remove / Move
-    /// Member, Set Leader). So this asserts the narrower, checkable thing: neither camp-ending
-    /// path still answers "only officers can end the camp", the message the rank gate returned.
+    /// The End Camp handlers themselves must not call the rank gate: no camp-ending path still
+    /// answers "only officers can end the camp", the message the rank gate returned.
     /// </summary>
     [Fact]
     public void NoEndCampPathStillRefusesOnRank()

@@ -22,12 +22,8 @@ public static class LinkshellRanks
     public static bool IsLeader(string? rank)
         => string.Equals(rank, Leader, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// True if the rank is Leader or Officer (case-insensitive) — the "can manage
-    /// the linkshell" bar shared by most management endpoints. Use this for
-    /// in-memory checks; EF queries must compare against the constants directly
-    /// (e.g. <c>r.Rank == LinkshellRanks.Leader</c>) so they translate to SQL.
-    /// </summary>
-    public static bool IsLeaderOrOfficer(string? rank)
-        => IsLeader(rank) || string.Equals(rank, Officer, StringComparison.OrdinalIgnoreCase);
+    // There is deliberately no "IsLeaderOrOfficer": "may this member do X" is a role
+    // permission, answered by LinkshellPermissions.CanAsync, never by the rank's name.
+    // A rank test let a custom role with the permission be refused, and an Officer whose
+    // role had it switched off still be let through.
 }
