@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
@@ -66,7 +67,13 @@ public sealed class PostgresFixture : IAsyncLifetime
     //
     // interceptors: hooks into this context's saves, for a test that needs something to happen at an
     // exact moment (another request committing between this one's read and its save).
-    public ApplicationDbContext CreateContext(params IInterceptor[] interceptors)
+    public ApplicationDbContext CreateContext(params IInterceptor[] interceptors) =>
+        CreateContextWithAuctionQueue(null, interceptors);
+
+    // The same, but the context also feeds an auction card queue, for a test that checks when a
+    // save asks for the Discord auction card to be edited.
+    public ApplicationDbContext CreateContextWithAuctionQueue(
+        DiscordAuctionChannelQueue? auctionChannelQueue, params IInterceptor[] interceptors)
     {
         if (_dataSource == null)
         {
@@ -77,7 +84,7 @@ public sealed class PostgresFixture : IAsyncLifetime
             .UseNpgsql(_dataSource)
             .AddInterceptors(interceptors)
             .Options;
-        return new ApplicationDbContext(options);
+        return new ApplicationDbContext(options, auctionChannelQueue: auctionChannelQueue);
     }
 
     // Empties every app table (ids start again from 1) so each test begins from a blank database.

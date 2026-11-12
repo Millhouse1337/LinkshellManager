@@ -150,7 +150,12 @@ public static class AuctionBidService
         {
             return Fail("That auction item was not found.");
         }
-        if (item.Auction.EndTime.HasValue && nowUtc >= item.Auction.EndTime.Value)
+        // Read the clock again: nowUtc was taken before this bid waited for its locks. Ending an
+        // auction early also writes its items, so a bid queued behind that End wakes up to an
+        // EndTime later than nowUtc, and the old clock would let it in after the auction ended.
+        var utcNow = DateTime.UtcNow;
+        var checkedAt = utcNow > nowUtc ? utcNow : nowUtc;
+        if (item.Auction.EndTime.HasValue && checkedAt >= item.Auction.EndTime.Value)
         {
             return Fail("This auction has already ended.");
         }
@@ -197,10 +202,24 @@ public static class AuctionBidService
         item.CurrentHighestBidderAppUserId = appUserId;
         item.Status = "BidPlaced";
 
-        await db.SaveChangesAsync(cancellationToken);
-        if (transaction is not null)
+        if (transaction is null)
         {
+            await db.SaveChangesAsync(cancellationToken);
+            return new AuctionBidResult(true, null, item.ItemName, bidAmount, bid);
+        }
+
+        // The Discord card edit and live refresh for this bid wait for the COMMIT, so nothing reads
+        // the item before the new high bid is visible (ApplicationDbContext.HoldBidAnnouncements).
+        db.HoldBidAnnouncements();
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            await db.ReleaseHeldBidAnnouncementsAsync();
+        }
+        finally
+        {
+            db.DropHeldBidAnnouncements();
         }
         return new AuctionBidResult(true, null, item.ItemName, bidAmount, bid);
     }

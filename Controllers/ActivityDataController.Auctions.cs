@@ -446,9 +446,10 @@ public sealed partial class ActivityDataController
             return Unauthorized(new { error = "Sign in to bid on auctions." });
         }
 
+        // Read-only: CommitBidAsync reads the item again under its lock.
         var auctionItem = await _dbContext.AuctionItems
+            .AsNoTracking()
             .Include(item => item.Auction)
-            .Include(item => item.Bids)
             .FirstOrDefaultAsync(item => item.Id == itemId, cancellationToken);
 
         if (auctionItem is null || auctionItem.Auction is null)

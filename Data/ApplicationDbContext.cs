@@ -481,6 +481,34 @@ namespace LinkshellManagerDiscordApp.Data
             return itemIds;
         }
 
+        // Auction item ids of bids saved but not committed yet; null when nothing is being held.
+        private HashSet<int>? _bidAnnouncementsHeld;
+
+        // AuctionBidService saves a bid inside its own transaction (it holds row locks until COMMIT).
+        // A save normally edits the Discord auction card and pushes the live refresh right after it
+        // runs, which here is BEFORE the commit: the in-process Discord worker could read the item
+        // first and post the old high bid, and the card would stay wrong until the next bid. While
+        // held, those two are kept back; ReleaseHeldBidAnnouncementsAsync sends them after COMMIT,
+        // and DropHeldBidAnnouncements forgets them when the bid did not commit.
+        internal void HoldBidAnnouncements() => _bidAnnouncementsHeld ??= new HashSet<int>();
+
+        internal async Task ReleaseHeldBidAnnouncementsAsync()
+        {
+            var held = _bidAnnouncementsHeld;
+            _bidAnnouncementsHeld = null;
+            if (held is null || held.Count == 0)
+            {
+                return;
+            }
+
+            await EnqueueAuctionBidUpdatesAsync(held);
+            var work = new LiveChangeWork();
+            work.BidAuctionItemIds.UnionWith(held);
+            await NotifyLiveChangesAsync(work);
+        }
+
+        internal void DropHeldBidAnnouncements() => _bidAnnouncementsHeld = null;
+
         private async Task EnqueueAuctionBidUpdatesAsync(HashSet<int> bidItemIds)
         {
             if (_auctionChannelQueue is null || bidItemIds.Count == 0)
@@ -982,6 +1010,14 @@ namespace LinkshellManagerDiscordApp.Data
             var dkpChangedLinkshells = CollectDkpChangedLinkshellIds();
             var liveChanges = CollectLiveChanges();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            if (_bidAnnouncementsHeld is not null)
+            {
+                // Not committed yet (see HoldBidAnnouncements): sent by ReleaseHeldBidAnnouncementsAsync.
+                _bidAnnouncementsHeld.UnionWith(bidItemIds);
+                _bidAnnouncementsHeld.UnionWith(liveChanges.BidAuctionItemIds);
+                bidItemIds.Clear();
+                liveChanges.BidAuctionItemIds.Clear();
+            }
             CountCommittedSave();
             EnqueueTodBoardRefreshes(affected);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);

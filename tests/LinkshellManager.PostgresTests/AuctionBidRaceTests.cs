@@ -1,4 +1,5 @@
 using System;
+using System.Data.Common;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -181,6 +182,85 @@ public class AuctionBidRaceTests : IAsyncLifetime
             .Where(i => i.CurrentHighestBidderAppUserId == "alice")
             .SumAsync(i => i.CurrentHighestBid ?? 0);
         Assert.Equal(70, committed);
+    }
+
+    // An officer ends the auction early while a bid waits behind the End's save (which writes the
+    // items, so it holds them). The bid took its clock before it waited; when it wakes, the
+    // auction's new EndTime is later than that clock. It must still be turned away.
+    [Fact]
+    public async Task BidQueuedBehindAnEarlyEnd_IsTurnedAway()
+    {
+        var itemId = (await SeedAsync(items: 1, balance: 100)).Single();
+
+        await using var officer = _pg.CreateContext();
+        await using var end = await officer.Database.BeginTransactionAsync();
+        await officer.Database.ExecuteSqlInterpolatedAsync(
+            $"""SELECT 1 FROM "AuctionItems" WHERE "Id" = {itemId} FOR UPDATE""");
+
+        var bid = BidAsync("alice", itemId, 60);
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+        Assert.False(bid.IsCompleted, "Alice's bid should wait on the item until the End commits.");
+
+        var endedAt = DateTime.UtcNow;
+        var auction = await officer.Auctions.Include(a => a.AuctionItems).SingleAsync();
+        auction.EndTime = endedAt;
+        foreach (var item in auction.AuctionItems)
+        {
+            item.EndTime = endedAt;
+        }
+        await officer.SaveChangesAsync();
+        await end.CommitAsync();
+
+        var result = await bid;
+        Assert.False(result.Success);
+        Assert.Equal("This auction has already ended.", result.Error);
+        await using var check = _pg.CreateContext();
+        Assert.Equal(50, (await check.AuctionItems.AsNoTracking().SingleAsync()).CurrentHighestBid);
+        Assert.Empty(await check.Bids.AsNoTracking().ToListAsync());
+    }
+
+    // The Discord card edit for a bid is queued only after the bid commits. Queued before (inside
+    // the bid's transaction), the in-process Discord worker could read the item first and post the
+    // old high bid.
+    [Fact]
+    public async Task DiscordCardEdit_IsQueuedOnlyAfterTheBidCommits()
+    {
+        var itemId = (await SeedAsync(items: 1, balance: 100)).Single();
+        int auctionId;
+        await using (var read = _pg.CreateContext())
+        {
+            auctionId = await read.Auctions.Select(a => a.Id).SingleAsync();
+        }
+
+        var queue = new DiscordAuctionChannelQueue();
+        bool? queuedBeforeCommit = null;
+        var watchCommit = new BeforeCommit(() => queuedBeforeCommit ??= queue.Reader.TryPeek(out _));
+        await using var db = _pg.CreateContextWithAuctionQueue(queue, watchCommit);
+        var pools = new DkpPoolResolver(db, new DkpPoolProvisioner(db));
+        var result = await AuctionBidService.PlaceBidAsync(
+            db, pools, new DkpPoolBalanceService(db, pools), "alice", "alice", itemId, 60, CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.False(queuedBeforeCommit, "The card edit must not be queued before the bid commits.");
+        Assert.True(queue.Reader.TryRead(out var job));
+        Assert.Equal(new AuctionChannelJob(AuctionChannelJobKind.Update, auctionId), job);
+        Assert.False(queue.Reader.TryRead(out _));
+    }
+
+    // Runs `then` just before this context commits a transaction.
+    private sealed class BeforeCommit : DbTransactionInterceptor
+    {
+        private readonly Action _then;
+
+        public BeforeCommit(Action then) => _then = then;
+
+        public override ValueTask<InterceptionResult> TransactionCommittingAsync(
+            DbTransaction transaction, TransactionEventData eventData, InterceptionResult result,
+            CancellationToken cancellationToken = default)
+        {
+            _then();
+            return ValueTask.FromResult(result);
+        }
     }
 
     // Runs `then` once, just before this context's first save -- after the bid has taken its locks
