@@ -795,9 +795,9 @@ namespace LinkshellManagerDiscordApp.Data
                 {
                     continue;
                 }
-                // An off-ledger balance overwrite is legal iff it also advances the pool epoch —
-                // the placeholder-claim merge and the DKP import are the only such paths, and
-                // both deliberately restate the balance rather than append to it.
+                // An off-ledger balance change is legal iff it also writes the pool epoch — the
+                // placeholder-claim merge (its matching ledger rows change OWNER in a later save of
+                // the claim, which this check cannot see) and the DKP import are the only such paths.
                 if (member.Property(nameof(AppUserLinkshell.DkpPoolLedgerFromId)).IsModified)
                 {
                     continue;

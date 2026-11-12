@@ -294,6 +294,7 @@ builder.Services.AddScoped<MonsterTimingEditor>();
 // first-launch "claim your DKP" merge that links an imported placeholder to a
 // real account.
 builder.Services.AddScoped<DkpImportService>();
+builder.Services.AddScoped<UserMergeService>();
 builder.Services.AddScoped<PlaceholderClaimService>();
 // Live DKP sheet → Discord channel (full table + .xlsx, edit-in-place): a
 // SaveChanges hook enqueues linkshells whose DKP changed; the hosted service

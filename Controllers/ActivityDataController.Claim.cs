@@ -106,12 +106,26 @@ public sealed partial class ActivityDataController
 
         var placeholderMembership = await _dbContext.AppUserLinkshells
             .Include(m => m.AppUser)
+            .Include(m => m.Linkshell)
             .FirstOrDefaultAsync(
                 m => m.AppUserId == request.PlaceholderAppUserId && m.LinkshellId == request.LinkshellId,
                 cancellationToken);
         if (placeholderMembership?.AppUser is null || !placeholderMembership.AppUser.IsPlaceholder)
         {
             return BadRequest(new { error = "That member is not an unclaimed placeholder." });
+        }
+
+        // The same guild lock the candidate list applies. Claiming JOINS the linkshell, so the
+        // website gets no pass: without this, anyone who learned a placeholder's id could join a
+        // locked linkshell from outside its Discord server.
+        var lockGuildId = placeholderMembership.Linkshell?.LockToDiscordGuild == true
+            ? placeholderMembership.Linkshell.DiscordGuildId
+            : null;
+        var accessible = await FilterAccessibleLinkshellIdsAsync(
+            new[] { (request.LinkshellId, lockGuildId) }, cancellationToken, lockAppliesOnWebsite: true);
+        if (!accessible.Contains(request.LinkshellId))
+        {
+            return Forbid();
         }
 
         // Security gate: a user may only claim a placeholder that goes by one of

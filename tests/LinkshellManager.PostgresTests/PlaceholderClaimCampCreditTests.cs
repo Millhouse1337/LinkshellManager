@@ -47,8 +47,8 @@ public class PlaceholderClaimCampCreditTests : IAsyncLifetime
             db.Linkshells.Add(linkshell);
             db.Users.Add(new AppUser { Id = "real", UserName = "real", CharacterName = "Bob" });
             db.Users.Add(new AppUser { Id = "ph", UserName = "ph", CharacterName = "Bobalt", IsPlaceholder = true });
-            // Same balance on both memberships: the claim's merge overwrites the real balance with
-            // the placeholder's (P2.12 changes that), and this test is only about the ledger rows.
+            // The balances are not what this test is about (PlaceholderClaimMergeTests covers them);
+            // it is only about the ledger rows.
             db.AppUserLinkshells.Add(new AppUserLinkshell { Linkshell = linkshell, AppUserId = "real", CharacterName = "Bob", LinkshellDkp = 10 });
             db.AppUserLinkshells.Add(new AppUserLinkshell { Linkshell = linkshell, AppUserId = "ph", CharacterName = "Bobalt", LinkshellDkp = 10 });
             await db.SaveChangesAsync();
@@ -78,7 +78,7 @@ public class PlaceholderClaimCampCreditTests : IAsyncLifetime
 
         await using (var db = _pg.CreateContext())
         {
-            var result = await new PlaceholderClaimService(db, null!)
+            var result = await new PlaceholderClaimService(db, new UserMergeService(db))
                 .ClaimPlaceholderAsync("ph", "real", linkshellId, CancellationToken.None);
             Assert.True(result.Success, result.Error);
         }
