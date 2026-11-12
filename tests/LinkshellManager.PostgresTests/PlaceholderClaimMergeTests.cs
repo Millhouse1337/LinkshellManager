@@ -108,6 +108,7 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
                 new ClaimShieldCaptureMember { CaptureId = capture.Id, CharacterName = "Bob", AppUserId = Real },
                 new ClaimShieldCaptureMember { CaptureId = capture.Id, CharacterName = "Bobalt", AppUserId = Ph });
             db.EventLootDetails.Add(new EventLootDetail { LinkshellId = linkshellId, EventHistoryId = history.Id, ItemWinnerAppUserId = Ph });
+            // PHASE4B-DROP: remove with the Notifications table.
             db.Notifications.Add(new Notification { AppUserId = Ph, NotificationType = "Info", CreatedAt = When });
             await db.SaveChangesAsync();
         }

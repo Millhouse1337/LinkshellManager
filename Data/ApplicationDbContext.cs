@@ -1156,6 +1156,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<PartySetupAlliance> PartySetupAlliances => Set<PartySetupAlliance>();
         public DbSet<PartySetupParty> PartySetupParties => Set<PartySetupParty>();
         public DbSet<PartySetupSlot> PartySetupSlots => Set<PartySetupSlot>();
+        // PHASE4B-DROP: Notifications table - no feature reads or writes it any more.
         public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<Rule> Rules => Set<Rule>();
         public DbSet<Announcement> Announcements => Set<Announcement>();
@@ -1182,13 +1183,16 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<PendingTodSubmission> PendingTodSubmissions => Set<PendingTodSubmission>();
         public DbSet<ClaimShieldCapture> ClaimShieldCaptures => Set<ClaimShieldCapture>();
         public DbSet<ClaimShieldCaptureMember> ClaimShieldCaptureMembers => Set<ClaimShieldCaptureMember>();
+        // PHASE4B-DROP: LinkshellDiscordWebhooks table - replaced by LinkshellChannelRoutes, nothing posts to these.
         public DbSet<LinkshellDiscordWebhook> LinkshellDiscordWebhooks => Set<LinkshellDiscordWebhook>();
+        // PHASE4B-DROP: LinkshellDiscordChannels table - replaced by LinkshellChannelRoutes, the one-time backfill is gone.
         public DbSet<LinkshellDiscordChannel> LinkshellDiscordChannels => Set<LinkshellDiscordChannel>();
         public DbSet<LinkshellChannelRoute> LinkshellChannelRoutes => Set<LinkshellChannelRoute>();
         public DbSet<HnmRecurringBoard> HnmRecurringBoards => Set<HnmRecurringBoard>();
         public DbSet<LinkshellMonsterTiming> LinkshellMonsterTimings => Set<LinkshellMonsterTiming>();
         public DbSet<ChartPopItem> ChartPopItems => Set<ChartPopItem>();
         public DbSet<ChartPopItemCredit> ChartPopItemCredits => Set<ChartPopItemCredit>();
+        // PHASE4B-DROP: ChartBossProgresses table - the boss progress note was never built into any screen.
         public DbSet<ChartBossProgress> ChartBossProgresses => Set<ChartBossProgress>();
         public DbSet<ChartWishlistRequest> ChartWishlistRequests => Set<ChartWishlistRequest>();
         public DbSet<ChartWishlistRequestZone> ChartWishlistRequestZones => Set<ChartWishlistRequestZone>();
@@ -2014,6 +2018,7 @@ namespace LinkshellManagerDiscordApp.Data
                 // to maintain.
             });
 
+            // PHASE4B-DROP: ChartBossProgresses table - unused, config kept only so the model matches the database.
             builder.Entity<ChartBossProgress>(entity =>
             {
                 entity.ToTable("ChartBossProgresses");
@@ -2372,6 +2377,7 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.CaptureId, item.CharacterName }).IsUnique();
             });
 
+            // PHASE4B-DROP: LinkshellDiscordWebhooks table - unused, config kept only so the model matches the database.
             builder.Entity<LinkshellDiscordWebhook>(entity =>
             {
                 entity.ToTable("LinkshellDiscordWebhooks");

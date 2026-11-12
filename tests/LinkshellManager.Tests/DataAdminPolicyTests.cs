@@ -105,6 +105,7 @@ public class DataAdminPolicyTests
         Assert.Equal(AttendanceSnapshotSlotKinds.All, Options(catalog, typeof(AttendanceSnapshot), nameof(AttendanceSnapshot.SlotKind)));
         Assert.Contains(AttendanceSnapshotStatuses.Active, Options(catalog, typeof(AttendanceSnapshot), nameof(AttendanceSnapshot.SnapshotStatus)));
         Assert.Contains(AttendanceSnapshotStatuses.Ignored, Options(catalog, typeof(AttendanceSnapshot), nameof(AttendanceSnapshot.SnapshotStatus)));
+        // PHASE4B-DROP: remove with the LinkshellDiscordChannels table.
         Assert.Equal(DiscordChannelPurposes.All, Options(catalog, typeof(LinkshellDiscordChannel), nameof(LinkshellDiscordChannel.Purpose)));
         Assert.Equal(DataAdminOptions.FromConsts(typeof(JournalEntryStatuses)), Options(catalog, typeof(JournalEntry), nameof(JournalEntry.Status)));
         Assert.Contains(JournalEntryStatuses.Confirmed, Options(catalog, typeof(JournalEntry), nameof(JournalEntry.Status)));

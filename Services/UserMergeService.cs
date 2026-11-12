@@ -123,6 +123,8 @@ public sealed class UserMergeService
         yield return Column(_db.Bids, x => x.AppUserId);
         yield return Column(_db.Invites, x => x.AppUserId);
         yield return Column(_db.Linkshells, x => x.AppUserId);
+        // PHASE4B-DROP: stays while the Notifications table exists - old rows still hold a foreign
+        // key to the account, so Postgres would refuse to delete a placeholder that has one.
         yield return Column(_db.Notifications, x => x.AppUserId);
         yield return Column(_db.AddonApiTokens, x => x.IssuedToAppUserId);
         yield return Column(_db.AddonPairingCodes, x => x.IssuedToAppUserId);
@@ -163,6 +165,7 @@ public sealed class UserMergeService
         yield return Column(_db.Rules, x => x.CreatedByAppUserId);
         yield return Column(_db.LedgerPeriods, x => x.LockedByAppUserId);
         yield return Column(_db.LedgerPeriods, x => x.UnlockedByAppUserId);
+        // PHASE4B-DROP: stays while the ChartBossProgresses table exists, so a merge leaves no old id behind.
         yield return Column(_db.ChartBossProgresses, x => x.UpdatedByAppUserId);
         yield return Column(_db.ChartMemberKeyItems, x => x.SetByAppUserId);
         yield return Column(_db.ChartPopItems, x => x.CreatedByAppUserId);

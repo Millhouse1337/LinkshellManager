@@ -79,7 +79,7 @@ public class DataAdminCatalogTests
         {
             (typeof(AddonApiToken), nameof(AddonApiToken.TokenHash)),
             (typeof(AddonPairingCode), nameof(AddonPairingCode.Code)),
-            (typeof(LinkshellDiscordWebhook), nameof(LinkshellDiscordWebhook.Url)),
+            (typeof(LinkshellDiscordWebhook), nameof(LinkshellDiscordWebhook.Url)), // PHASE4B-DROP: remove with the table.
             (typeof(Linkshell), nameof(Linkshell.GoogleOAuthRefreshTokenEnc)),
         };
 

@@ -15,6 +15,7 @@ namespace LinkshellManagerDiscordApp.Models;
 /// A missing row means no note, which is the normal state — rows are created on first edit rather
 /// than seeded, so an untouched board carries no storage.
 /// </summary>
+// PHASE4B-DROP: ChartBossProgresses table - the progress note was never built into any screen.
 public class ChartBossProgress
 {
     [Key]

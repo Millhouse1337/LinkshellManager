@@ -193,6 +193,7 @@ public sealed class DataAdminPolicy
                 Flags = DataAdminPolicyFlags.NoCreate,
                 ProtectedColumns = Names(nameof(AddonPairingCode.Code)),
             },
+            // PHASE4B-DROP: keeps the old webhook URLs hidden until the table is dropped.
             [typeof(LinkshellDiscordWebhook)] = new()
             {
                 Flags = DataAdminPolicyFlags.NoCreate,
@@ -222,6 +223,7 @@ public sealed class DataAdminPolicy
             {
                 Options = Opts((nameof(LinkshellMonsterTiming.WindowMethod), MonsterWindowMethods.All)),
             },
+            // PHASE4B-DROP: remove with the LinkshellDiscordChannels table.
             [typeof(LinkshellDiscordChannel)] = new()
             {
                 Options = Opts((nameof(LinkshellDiscordChannel.Purpose), DiscordChannelPurposes.All)),
@@ -240,6 +242,7 @@ public sealed class DataAdminPolicy
             {
                 LabelColumns = new[] { nameof(Invite.DiscordDisplayName), nameof(Invite.Status) },
             },
+            // PHASE4B-DROP: remove with the Notifications table.
             [typeof(Notification)] = new()
             {
                 LabelColumns = new[] { nameof(Notification.NotificationType) },

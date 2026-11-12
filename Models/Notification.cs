@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LinkshellManagerDiscordApp.Models;
 
+// PHASE4B-DROP: Notifications table - no feature reads or writes it any more.
 public class Notification
 {
     [Key]

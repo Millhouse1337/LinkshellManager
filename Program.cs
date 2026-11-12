@@ -352,9 +352,6 @@ builder.Services.AddScoped<HnmBoardNoticeService>();
 builder.Services.AddScoped<ChannelRouteResolver>();
 // Shared save logic for the channel-routes config (Activity + web).
 builder.Services.AddScoped<ChannelRouteEditor>();
-// One-time idempotent backfill of legacy LinkshellDiscordChannel rows into the
-// new routes table. Safe to keep until the legacy table is dropped.
-builder.Services.AddHostedService<ChannelRouteBackfillService>();
 builder.Services.AddScoped<DiscordEventChannelPublisher>();
 builder.Services.AddHostedService<DiscordEventChannelBackgroundService>();
 // Posts an "event ended" summary (duration + per-attendee DKP) to the event's

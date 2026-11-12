@@ -127,11 +127,11 @@ var tables = new[]
     "AppUserLinkshells",
     "Invites",
     "Auctions", "AuctionItems", "Bids", "AuctionHistories",
-    "Events", "Jobs", "AppUserEvents", "AppUserEventStatusLedgers", "DkpLedgerEntries",
+    "Events", "AppUserEvents", "AppUserEventStatusLedgers", "DkpLedgerEntries",
     "EventHistories", "AppUserEventHistories",
     "EventLootDetails",
     "Tods", "TodLootDetails",
-    "Notifications",
+    "Notifications", // PHASE4B-DROP: remove once the table is dropped (TRUNCATE fails on a missing table).
     "Rules",
     "Announcements",
     "Items",
@@ -223,7 +223,6 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("AppUserEventStatusLedgers", "DELETE FROM \"AppUserEventStatusLedgers\" WHERE \"EventId\" IN (SELECT \"Id\" FROM \"Events\" WHERE \"LinkshellId\" = @ls)"),
         ("EventAttendanceWindows", "DELETE FROM \"EventAttendanceWindows\" WHERE \"EventId\" IN (SELECT \"Id\" FROM \"Events\" WHERE \"LinkshellId\" = @ls) OR \"EventHistoryId\" IN (SELECT \"Id\" FROM \"EventHistories\" WHERE \"LinkshellId\" = @ls)"),
         ("AppUserEvents", "DELETE FROM \"AppUserEvents\" WHERE \"EventId\" IN (SELECT \"Id\" FROM \"Events\" WHERE \"LinkshellId\" = @ls)"),
-        ("Jobs", "DELETE FROM \"Jobs\" WHERE \"EventId\" IN (SELECT \"Id\" FROM \"Events\" WHERE \"LinkshellId\" = @ls)"),
 
         // --- Loot details (link via Event OR EventHistory of this linkshell) ---
         ("EventLootDetails", "DELETE FROM \"EventLootDetails\" WHERE \"EventId\" IN (SELECT \"Id\" FROM \"Events\" WHERE \"LinkshellId\" = @ls) OR \"EventHistoryId\" IN (SELECT \"Id\" FROM \"EventHistories\" WHERE \"LinkshellId\" = @ls)"),

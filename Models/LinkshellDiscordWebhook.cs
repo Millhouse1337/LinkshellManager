@@ -7,6 +7,7 @@ namespace LinkshellManagerDiscordApp.Models;
 // attendance snapshot is posted to every webhook configured here. Replaces
 // the old single Linkshell.DiscordWebhookUrl column so a linkshell can post
 // to multiple channels, each with a human label.
+// PHASE4B-DROP: LinkshellDiscordWebhooks table - replaced by LinkshellChannelRoutes; nothing posts to these.
 public class LinkshellDiscordWebhook
 {
     [Key]

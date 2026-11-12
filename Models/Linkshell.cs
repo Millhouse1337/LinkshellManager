@@ -261,6 +261,7 @@ public class Linkshell
     // Named Discord channel webhooks. Every `/lsm now` attendance snapshot is
     // posted to each of these as a party-grouped embed. Empty = Discord
     // posting disabled. (Replaces the former single DiscordWebhookUrl column.)
+    // PHASE4B-DROP: navigation to LinkshellDiscordWebhooks - nothing reads it; goes with the table.
     public ICollection<LinkshellDiscordWebhook> DiscordWebhooks { get; set; } = new List<LinkshellDiscordWebhook>();
 
     // User-defined Discord channel routes: which channels the bot posts each kind
