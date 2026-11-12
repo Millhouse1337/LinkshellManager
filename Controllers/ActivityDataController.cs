@@ -36,6 +36,7 @@ public sealed partial class ActivityDataController : ControllerBase
     private readonly ILogger<ActivityDataController> _logger;
     private readonly GlobalSettingsService _globalSettings;
     private readonly AdminOverrideService _adminOverride;
+    private readonly LinkshellPermissions _permissions;
     private readonly MemberActivityService _memberActivity;
     private readonly ChannelRouteEditor _channelRoutes;
     private readonly DkpLedgerWriter _dkpLedger;
@@ -90,7 +91,8 @@ public sealed partial class ActivityDataController : ControllerBase
         ChartKeyItemService chartKeyItems,
         MonsterTimingResolver monsterTimings,
         MonsterTimingEditor monsterTimingEditor,
-        LinkshellMonsterTimingProvisioner monsterTimingProvisioner)
+        LinkshellMonsterTimingProvisioner monsterTimingProvisioner,
+        LinkshellPermissions permissions)
     {
         _dbContext = dbContext;
         _discordIdentityService = discordIdentityService;
@@ -126,6 +128,7 @@ public sealed partial class ActivityDataController : ControllerBase
         _monsterTimings = monsterTimings;
         _monsterTimingEditor = monsterTimingEditor;
         _monsterTimingProvisioner = monsterTimingProvisioner;
+        _permissions = permissions;
     }
 
     [HttpGet("antiforgery")]

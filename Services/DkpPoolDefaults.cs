@@ -13,7 +13,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // required Name with a unique (LinkshellId, Name) index. An unnamed default group would therefore
 // be undeletable-by-accident only until the next save.
 //
-// Mirrors LinkshellRoleDefaults + ActivityDataController.EnsureDefaultRolesAsync.
+// Mirrors LinkshellRoleDefaults + LinkshellPermissions.EnsureDefaultRolesAsync.
 public static class DkpPoolDefaults
 {
     public const string DefaultPoolName = "Default";

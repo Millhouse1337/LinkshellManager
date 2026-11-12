@@ -209,6 +209,8 @@ builder.Services.AddScoped<AppUserProfileService>();
 builder.Services.AddScoped<AddonApiAuthService>();
 builder.Services.AddScoped<GlobalSettingsService>();
 builder.Services.AddScoped<AdminOverrideService>();
+// "May this member do X here?" — the one shared permission rule (override, Leader, role).
+builder.Services.AddScoped<LinkshellPermissions>();
 
 // Data Admin: the super-admin table browser. The catalog is built ONCE from the EF model (itself a
 // process singleton) plus the code-side DataAdminPolicy, then only read. Every table in it is

@@ -113,9 +113,7 @@ public sealed partial class ActivityDataController
 
     private async Task<AppUserLinkshell?> GetMembershipAsync(string appUserId, int linkshellId, CancellationToken cancellationToken)
     {
-        var membership = await _dbContext.AppUserLinkshells
-            .Include(link => link.Linkshell)
-            .FirstOrDefaultAsync(link => link.AppUserId == appUserId && link.LinkshellId == linkshellId, cancellationToken);
+        var membership = await _permissions.GetMembershipAsync(appUserId, linkshellId, cancellationToken);
 
         if (membership is null)
         {
@@ -196,124 +194,28 @@ public sealed partial class ActivityDataController
         return allowed;
     }
 
-    private async Task<bool> CanAsync(
+    // The permission rule itself lives in LinkshellPermissions (one copy, so the addon and
+    // Discord paths can share it). These wrappers keep the controller's call sites as they
+    // were. The guild lock is NOT in the service: GetMembershipAsync above applies it first.
+    private Task<bool> CanAsync(
         AppUserLinkshell? membership,
         Func<LinkshellRole, bool> selector,
         CancellationToken cancellationToken)
-    {
-        if (membership is null)
-        {
-            return false;
-        }
+        => _permissions.CanAsync(membership, selector, cancellationToken);
 
-        // Super-admin override, when switched on globally. Deliberately placed AFTER the
-        // membership null-check so it can only ever elevate inside a linkshell the user
-        // has actually joined. See AdminOverrideService.
-        if (await _adminOverride.IsActiveForAsync(membership.AppUserId, cancellationToken))
-        {
-            return true;
-        }
-
-        // The Leader (linkshell owner) always has every permission — a stale role row
-        // (e.g. one seeded before a permission existed) or a mis-edited role must never
-        // lock the leader out of their own linkshell. This is why a Leader could hit a
-        // 403 on Browse players / Discord roster despite owning the linkshell.
-        if (LinkshellRanks.IsLeader(membership.Rank))
-        {
-            return true;
-        }
-
-        var role = await GetEffectiveRoleAsync(membership.Rank, membership.LinkshellId, cancellationToken);
-        return role is not null && selector(role);
-    }
-
-    private async Task<LinkshellRole?> GetEffectiveRoleAsync(
+    private Task<LinkshellRole?> GetEffectiveRoleAsync(
         string? rank,
         int linkshellId,
         CancellationToken cancellationToken)
-    {
-        await EnsureDefaultRolesAsync(linkshellId, cancellationToken);
-        var rankName = string.IsNullOrWhiteSpace(rank) ? LinkshellRanks.Member : rank.Trim();
-        var role = await _dbContext.LinkshellRoles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == rankName, cancellationToken);
-        if (role is null)
-        {
-            role = await _dbContext.LinkshellRoles
-                .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.LinkshellId == linkshellId && r.Name == LinkshellRanks.Member, cancellationToken);
-        }
-        return role;
-    }
+        => _permissions.GetEffectiveRoleAsync(rank, linkshellId, cancellationToken);
 
-    private async Task<List<LinkshellRole>> EnsureDefaultRolesAsync(int linkshellId, CancellationToken cancellationToken)
-    {
-        var seeded = await EnsureDefaultRolesForLinkshellsAsync(new[] { linkshellId }, cancellationToken);
-        return seeded.TryGetValue(linkshellId, out var roles) ? roles : new List<LinkshellRole>();
-    }
+    private Task<List<LinkshellRole>> EnsureDefaultRolesAsync(int linkshellId, CancellationToken cancellationToken)
+        => _permissions.EnsureDefaultRolesAsync(linkshellId, cancellationToken);
 
-    // Batch variant: seeds missing default roles for every supplied linkshell in two
-    // round-trips total (one SELECT, one INSERT) instead of N pairs from a foreach.
-    private async Task<Dictionary<int, List<LinkshellRole>>> EnsureDefaultRolesForLinkshellsAsync(
+    private Task<Dictionary<int, List<LinkshellRole>>> EnsureDefaultRolesForLinkshellsAsync(
         IReadOnlyCollection<int> linkshellIds,
         CancellationToken cancellationToken)
-    {
-        var result = new Dictionary<int, List<LinkshellRole>>();
-        if (linkshellIds.Count == 0)
-        {
-            return result;
-        }
-
-        var existing = await _dbContext.LinkshellRoles
-            .Where(r => linkshellIds.Contains(r.LinkshellId))
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var existingByLinkshell = existing
-            .GroupBy(r => r.LinkshellId)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var toAdd = new List<LinkshellRole>();
-        foreach (var linkshellId in linkshellIds)
-        {
-            existingByLinkshell.TryGetValue(linkshellId, out var rolesForLinkshell);
-            rolesForLinkshell ??= new List<LinkshellRole>();
-
-            var existingNames = new HashSet<string>(rolesForLinkshell.Select(r => r.Name), StringComparer.OrdinalIgnoreCase);
-            foreach (var defaultRole in LinkshellRoleDefaults.BuildDefaultRoles(linkshellId))
-            {
-                if (!existingNames.Contains(defaultRole.Name))
-                {
-                    toAdd.Add(defaultRole);
-                }
-            }
-
-            result[linkshellId] = rolesForLinkshell;
-        }
-
-        if (toAdd.Count > 0)
-        {
-            await _dbContext.LinkshellRoles.AddRangeAsync(toAdd, cancellationToken);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            foreach (var added in toAdd)
-            {
-                if (!result.TryGetValue(added.LinkshellId, out var bucket))
-                {
-                    bucket = new List<LinkshellRole>();
-                    result[added.LinkshellId] = bucket;
-                }
-                bucket.Add(added);
-            }
-        }
-
-        foreach (var key in result.Keys.ToList())
-        {
-            result[key] = result[key].OrderBy(r => r.SortOrder).ThenBy(r => r.Name).ToList();
-        }
-
-        return result;
-    }
+        => _permissions.EnsureDefaultRolesForLinkshellsAsync(linkshellIds, cancellationToken);
 
     private static void ApplyPermissions(LinkshellRole role, ActivityLinkshellRolePermissions permissions)
     {
