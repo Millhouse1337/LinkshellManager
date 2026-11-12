@@ -984,7 +984,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("SourceItemId");
 
-                    b.ToTable("AuctionItems");
+                    b.ToTable("AuctionItems", t =>
+                        {
+                            t.HasCheckConstraint("CK_AuctionItems_OneParent", "num_nonnulls(\"AuctionId\", \"AuctionHistoryId\") = 1");
+                        });
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Bid", b =>
@@ -1905,7 +1908,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("EventId", "SequenceNumber")
                         .IsUnique();
 
-                    b.ToTable("EventAttendanceWindows", (string)null);
+                    b.ToTable("EventAttendanceWindows", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_EventAttendanceWindows_OneParent", "num_nonnulls(\"EventId\", \"EventHistoryId\") = 1");
+                        });
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.EventComment", b =>

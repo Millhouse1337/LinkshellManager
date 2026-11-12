@@ -1326,6 +1326,15 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.SourceItemId)
                     .OnDelete(DeleteBehavior.SetNull);
+                // Exactly one parent: a live auction OR its closed history, never both and never
+                // neither. An item with neither shows on no auction and no history page, so it
+                // would sit in the table unseen. Close copies the items onto the new history and
+                // deletes the live ones, so every correct write sets just one of the two.
+                // The migration adds it NOT VALID, so old rows are not re-checked at startup; see
+                // AddOneParentCheckConstraints.
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_AuctionItems_OneParent",
+                    "num_nonnulls(\"AuctionId\", \"AuctionHistoryId\") = 1"));
             });
 
             builder.Entity<Bid>(entity =>
@@ -2108,6 +2117,15 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.EventId, item.SequenceNumber }).IsUnique();
                 // The only archive read path: "the windows for closed event H", in sequence.
                 entity.HasIndex(item => new { item.EventHistoryId, item.SequenceNumber });
+                // Exactly one parent: the live camp OR its archive, never both and never neither.
+                // A window with neither is invisible on every page. Both close paths
+                // (EventEndService.EndEventCoreAsync and the HNM review handoff) set the history
+                // and clear the event in the same save, so a correct write never trips this.
+                // The migration adds it NOT VALID, so old rows are not re-checked at startup; see
+                // AddOneParentCheckConstraints.
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_EventAttendanceWindows_OneParent",
+                    "num_nonnulls(\"EventId\", \"EventHistoryId\") = 1"));
             });
 
             builder.Entity<AppUserEventWindow>(entity =>

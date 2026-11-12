@@ -28,7 +28,11 @@ public class ConstraintTests : IAsyncLifetime
         int windowId;
         await using (var db = _pg.CreateContext())
         {
-            var window = new EventAttendanceWindow { SequenceNumber = 1, PostedAt = DateTime.UtcNow };
+            // A window needs exactly one parent (CK_EventAttendanceWindows_OneParent).
+            var linkshell = new Linkshell { LinkshellName = "LS" };
+            var ev = new Event { Linkshell = linkshell, EventName = "Fafnir", EventType = "HNM" };
+            db.Events.Add(ev);
+            var window = new EventAttendanceWindow { Event = ev, SequenceNumber = 1, PostedAt = DateTime.UtcNow };
             db.EventAttendanceWindows.Add(window);
             db.AppUserEventWindows.Add(new AppUserEventWindow
             {
@@ -82,7 +86,11 @@ public class ConstraintTests : IAsyncLifetime
             db.Linkshells.Add(linkshell);
             var item = new Item { Linkshell = linkshell, ItemName = "Ridill", Quantity = 1 };
             db.Items.Add(item);
-            var auctionItem = new AuctionItem { ItemName = "Ridill", SourceItem = item };
+            // An older closed auction's item, as the comment above describes (and an item needs
+            // exactly one parent: CK_AuctionItems_OneParent).
+            var history = new AuctionHistory { Linkshell = linkshell, AuctionTitle = "Old auction" };
+            db.AuctionHistories.Add(history);
+            var auctionItem = new AuctionItem { AuctionHistory = history, ItemName = "Ridill", SourceItem = item };
             db.AuctionItems.Add(auctionItem);
             await db.SaveChangesAsync();
             auctionItemId = auctionItem.Id;
