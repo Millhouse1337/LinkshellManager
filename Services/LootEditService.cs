@@ -28,8 +28,10 @@ public sealed record LootEditResult(
 // The DKP math mirrors how each kind of loot was charged when it was created:
 //   - ToD: DKP / Hybrid / LootCouncil structures via the linkshell's LootStructure. (ToD loot can no
 //     longer be created -- a ToD carries no loot -- but older rows can still be edited here.)
-//   - Event: EventEndService.EndEventCoreAsync (flat DKP only;
-//     event loot has no Hybrid variant by design).
+//   - Event: EventEndService.EndEventCoreAsync, End Camp and ManualLootService, which charge a
+//     Hybrid linkshell a percentage of the winner's pool balance and everyone else the flat DKP.
+//     An edit has to use the same rule, or fixing a Hybrid item's name refunds the real cost and
+//     re-charges the percent number as flat DKP.
 //
 // LootCouncil linkshells skip all DKP work — only the loot row's metadata
 // changes. The edit reason is still required so a rename is auditable.
@@ -307,8 +309,9 @@ public sealed class LootEditService
         var oldWinnerName = (detail.ItemWinner ?? string.Empty).Trim();
         var oldDkpValue = detail.WinningDkpSpent.GetValueOrDefault();
         var oldActual = detail.ActualDeductedDkp;
-        // Event loot has always been flat DKP; Hybrid is a ToD-only concept.
-        const bool isHybrid = false;
+        // Event loot is charged like ToD loot: a percentage of the pool balance under Hybrid
+        // (EventEndService, End Camp, ManualLootService), flat DKP otherwise.
+        var isHybrid = structure == "Hybrid";
 
         var newActualDeducted = await ReconcileLootDkpAsync(
             linkshellId: linkshellId,
@@ -427,8 +430,8 @@ public sealed class LootEditService
 
     // Event counterpart of DeleteTodLootAsync. Resolves the parent context
     // (closed EventHistory, active Event, or a "No event" row's own linkshell)
-    // the same way EditEventLootAsync does. Event loot is always flat DKP
-    // (Hybrid is ToD-only).
+    // the same way EditEventLootAsync does. Under Hybrid the refund is the stored
+    // ActualDeductedDkp; only a legacy row without it falls back to the percent inverse.
     // Re-run on a lost balance race, like DeleteTodLootAsync.
     public Task<LootEditResult> DeleteEventLootAsync(
         int lootDetailId,
@@ -518,7 +521,7 @@ public sealed class LootEditService
                 winnerName: winnerName,
                 dkpRaw: dkpRaw,
                 actualDeducted: detail.ActualDeductedDkp,
-                isHybrid: false,
+                isHybrid: structure == "Hybrid",
                 // Same rule as EditEventLootAsync: hand-entered loot pinned the pool it was paid
                 // from, so the refund goes back there; event loot follows its event type.
                 poolRef: detail.DkpPoolId is int pinnedPool

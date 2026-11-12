@@ -74,6 +74,21 @@ public static class LootDkpGuard
         var available = await AuctionDkpService.ComputePoolAvailableDkpAsync(
             db, dkpPoolBalances, member.AppUserId, linkshellId, poolId, cancellationToken);
 
+        // Under Hybrid the number typed is a PERCENT of the winner's pool balance, not DKP, so it is
+        // turned into the DKP the close will actually charge before comparing -- the same sum
+        // ManualLootService does. Comparing the raw percent refused 50% for a member with 40 DKP.
+        if (string.Equals(lootStructure, "Hybrid", StringComparison.OrdinalIgnoreCase))
+        {
+            var pct = Math.Clamp(cost, 0, 100);
+            var increment = await db.Linkshells
+                .Where(l => l.Id == linkshellId)
+                .Select(l => l.DkpRoundingIncrement)
+                .FirstOrDefaultAsync(cancellationToken);
+            var balance = Math.Max(0, await dkpPoolBalances.GetCommittedAsync(
+                linkshellId, member.AppUserId, poolId, cancellationToken));
+            cost = LootDkpCalculator.ComputeHybridDebit(balance, pct, DkpRounding.StepFor(increment));
+        }
+
         if (cost > available + 0.0001)
         {
             // Name the pool only when the linkshell actually has more than one — otherwise the
