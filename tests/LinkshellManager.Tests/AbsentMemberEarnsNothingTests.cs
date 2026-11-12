@@ -104,16 +104,16 @@ public class AbsentMemberEarnsNothingTests
 
     // ------------------------------------------ Activity "End event" close path ---
 
-    // ActivityDataController.EndEventAsync needs a signed-in HTTP context to run, so it is pinned
-    // by source instead: both close loops must ask ForParticipant, and neither may call Compute
-    // directly (which would skip the Absent rule) or stamp ActiveCredit from the event alone.
+    // Pinned by source: the close loop must ask ForParticipant, and must not call Compute directly
+    // (which would skip the Absent rule) or stamp ActiveCredit from the event alone. The app's End
+    // Event action has no loop of its own any more -- it runs this one (EndEventOnePathTests runs
+    // it end to end and pins that).
     [Fact]
-    public void BothCloseLoops_UseTheSharedAbsentRule()
+    public void TheCloseLoop_UsesTheSharedAbsentRule()
     {
         var repoRoot = FindRepoRoot();
         var closePaths = new[]
         {
-            "Controllers/ActivityDataController.EventsLifecycle.cs",
             "Services/EventEndService.cs",
         };
 

@@ -542,321 +542,20 @@ public sealed partial class ActivityDataController
             return Ok(new { success = true, finalized });
         }
 
-        // Can't end while attendees are still pending confirmation (IsVerified == null).
-        // Every pending member must be confirmed present or removed first. Outside
-        // (account-less) signups can't be verified/credited, so they never block close.
-        var pendingCount = eventEntity.AppUserEvents.Count(p => p.IsVerified == null && p.AppUserId != null);
-        if (pendingCount > 0)
-        {
-            return BadRequest(new
-            {
-                error = $"Confirm or remove the {pendingCount} member(s) still pending in attendance before ending the event."
-            });
-        }
-
-        var lootStructure = NormalizeLootStructure(eventEntity.Linkshell?.LootStructure ?? "Dkp");
-        var isLootCouncil = lootStructure == "LootCouncil";
-        var isHybrid = lootStructure == "Hybrid";
-        var roundingStep = DkpRounding.StepFor(eventEntity.Linkshell?.DkpRoundingIncrement);
-
-        // Wrap the ENTIRE close (materialize → save) so ANY exception — not just a
-        // DbUpdateException at the save — returns actionable JSON instead of an HTML 500 that
-        // the Activity mislabels as "your session may have expired". See the catch below.
+        // The close itself is EventEndService's, the one the addon's End Event runs too. The app's
+        // own rules are EndEventOptions.Activity: refuse while a member is still pending
+        // confirmation, pay nothing on a Loot Council linkshell, and give outside (account-less)
+        // sign-ups no history row. It was a hand-kept copy of the same close until P3.5, and the
+        // two drifted (alt-won loot went uncharged here); EndEventOnePathTests compares the two.
+        //
+        // Wrapped so ANY exception -- not just a DbUpdateException at the save -- returns
+        // actionable JSON instead of an HTML 500 that the Activity mislabels as "your session may
+        // have expired". See the catch below.
+        EventEndService.EndEventResult result;
         try
         {
-        // The live event card can show party-board signups before they exist as
-        // persisted participants. Materialize any missing rows before writing
-        // EventHistory so channel signups are not dropped on close.
-        await EventPartySignupService.MaterializeSignupsAsParticipantsAsync(_dbContext, eventEntity, cancellationToken);
-
-        var endTimeUtc = DateTime.UtcNow;
-        var history = new EventHistory
-        {
-            LinkshellId = eventEntity.LinkshellId,
-            EventName = eventEntity.EventName,
-            EventType = eventEntity.EventType,
-            EventLocation = eventEntity.EventLocation,
-            // Resolved to a TEMPLATE before the Event row (and any per-event snapshot hanging off
-            // it) is deleted below. This is the only record of the camp's board that outlives it,
-            // and it is what lets the next pop come back with the same setup attached.
-            PartySetupId = await PartySetupInheritance.ResolveTemplateIdAsync(
-                _dbContext, eventEntity, cancellationToken),
-            StartDate = eventEntity.StartTime?.Date,
-            StartTime = eventEntity.StartTime,
-            EndTime = endTimeUtc,
-            CommencementStartTime = eventEntity.CommencementStartTime,
-            Duration = eventEntity.CommencementStartTime.HasValue
-                ? (endTimeUtc - eventEntity.CommencementStartTime.Value).TotalHours
-                : eventEntity.Duration,
-            DkpPerHour = eventEntity.DkpPerHour,
-            EventDkp = eventEntity.EventDkp,
-            Details = eventEntity.Details,
-            CountsTowardActive = eventEntity.CountsTowardActive,
-            TimeStamp = DateTime.UtcNow,
-            AppUserEventHistories = new List<AppUserEventHistory>()
-        };
-
-        var linkshellMemberships = await _dbContext.AppUserLinkshells
-            .Include(link => link.AppUser) // alt names, for resolving alt-won loot to the account
-            .Where(link => link.LinkshellId == eventEntity.LinkshellId && link.AppUserId != null)
-            .ToListAsync(cancellationToken);
-        var membershipsByAppUserId = linkshellMemberships
-            .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
-            .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        // Every name a member could have won loot under, resolved by the one shared rule.
-        var rosterByName = CharacterResolver.ForMemberships(linkshellMemberships);
-        var participantsByCharacterName = eventEntity.AppUserEvents
-            .Where(participation => !string.IsNullOrWhiteSpace(participation.CharacterName))
-            .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        // The event's type decides which DKP pool it pays INTO and which pool its loot is paid
-        // OUT of — resolved once, not per participant. Mirrors EventEndService.EndEventCoreAsync.
-        var eventPool = DkpPoolRef.Derived(eventEntity.EventType);
-        // Windowed events (HNM Style / Claim/Kill) award DKP per WINDOW ATTENDED, not per hour of
-        // presence: DkpPerHour is reused as DkpPerWindow when WindowCount > 1. Counted once up
-        // front so the loop below can read from a dictionary.
-        //
-        // This block is a deliberate mirror of EventEndService.EndEventCoreAsync — including its
-        // window-count expression, which is the CREDIT chain (WindowCountOverride ?? EventName).
-        // Do not swap it for the display chain or for EventBreakPolicy.GatingWindowCount: the two
-        // end-event paths must agree exactly, and a third variant is how they drifted apart in the
-        // first place. This endpoint had no windowed branch at all, so a windowed camp closed from
-        // the Activity's "End event" button was paid durationHours × DkpPerWindow — a figure with
-        // no relation to windows attended, and the one place in the app where break state still
-        // moved windowed DKP.
-        var windowCount = eventEntity.WindowCountOverride
-            ?? LinkshellManagerDiscordApp.Services.HnmConfig.GetWindowCount(eventEntity.EventName);
-        var isWindowed = windowCount > 1;
-        // Counted per account, not per participation row (see WindowsAttendedTally) -- the same
-        // helper EventEndService.EndEventCoreAsync uses, so the two paths cannot count differently.
-        var windowsAttendedTally = isWindowed
-            ? await LinkshellManagerDiscordApp.Services.WindowsAttendedTally.LoadAsync(_dbContext, eventEntity.Id, cancellationToken)
-            : LinkshellManagerDiscordApp.Services.WindowsAttendedTally.Empty;
-        // One account = one history/ledger row. The database now holds one participation per
-        // account per event (OneParticipationPerEvent), so this is only a guard: a history row per
-        // participation would violate the unique (EventHistoryId, AppUserId) index and throw at
-        // SaveChanges -- which the Activity surfaces as the misleading "your session may have expired".
-        var creditedAppUserIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var participation in eventEntity.AppUserEvents)
-        {
-            // Outside (account-less) signups accrue NO DKP and write NO history —
-            // they're board-only and cleared with the event below.
-            if (string.IsNullOrWhiteSpace(participation.AppUserId))
-            {
-                continue;
-            }
-            // Collapse duplicate participations for the same account (first wins) so a second
-            // row can't trip the unique history index at save.
-            if (!creditedAppUserIds.Add(participation.AppUserId))
-            {
-                continue;
-            }
-
-            var durationHours = CalculateAccumulatedDurationHours(participation, endTimeUtc, eventEntity.CommencementStartTime);
-            // Timed events pay for the ACTUAL time present, snapping the DKP value (not the
-            // duration) to the linkshell's increment. Rounding the duration first floored
-            // sub-quarter-hour events to 0h and paid present members 0 DKP.
-            //
-            // Windowed events pay per window attended instead — durationHours is still stamped
-            // onto the history row below for display, but it must not reach the payout, or break
-            // state (which CalculateAccumulatedDurationHours honours) would move windowed DKP.
-            // Matches EventEndService.EndEventCoreAsync exactly.
-            // Hoisted out of the Compute call below so it can also be stamped on the history row:
-            // null on a timed event (where it would read as a misleading 0), the window tally on
-            // a windowed one. Mirrors EventEndService.EndEventCoreAsync.
-            int? windowsAttended = isWindowed
-                ? windowsAttendedTally.For(participation)
-                : (int?)null;
-            // A member an officer marked Absent gets 0 and no Active credit — the same rule
-            // EventEndService.EndEventCoreAsync applies, via the same helper.
-            var credit = EventAttendanceDkpCalculator.ForParticipant(
-                participation.IsVerified,
-                eventEntity.CountsTowardActive,
-                isWindowed,
-                windowsAttended ?? 0,
-                durationHours,
-                eventEntity.DkpPerHour ?? 0,
-                roundingStep);
-            var eventDkp = isLootCouncil ? 0 : credit.Dkp;
-
-            participation.Duration = durationHours;
-            participation.EventDkp = eventDkp;
-
-            history.AppUserEventHistories.Add(new AppUserEventHistory
-            {
-                AppUserId = participation.AppUserId,
-                CharacterName = participation.CharacterName,
-                JobName = participation.JobName,
-                SubJobName = participation.SubJobName,
-                JobType = participation.JobType,
-                StartTime = participation.StartTime,
-                Duration = durationHours,
-                EventDkp = eventDkp,
-                IsQuickJoin = participation.IsQuickJoin,
-                IsVerified = participation.IsVerified,
-                Proctor = participation.Proctor,
-                ActiveCredit = credit.ActiveCredit,
-                WindowsAttended = windowsAttended
-            });
-
-            if (!isLootCouncil
-                && membershipsByAppUserId.TryGetValue(participation.AppUserId, out var linkshellMembership))
-            {
-                await _dkpLedger.AppendAsync(
-                    linkshellMembership,
-                    "EventEarned",
-                    eventDkp,
-                    endTimeUtc,
-                    eventPool,
-                    new DkpEntryContext(
-                        CharacterName: participation.CharacterName,
-                        EventName: eventEntity.EventName,
-                        EventType: eventEntity.EventType,
-                        EventLocation: eventEntity.EventLocation,
-                        EventStartTime: eventEntity.StartTime,
-                        EventEndTime: endTimeUtc,
-                        Details: credit.LedgerDetails,
-                        EventHistory: history),
-                    cancellationToken);
-            }
-        }
-
-        _dbContext.EventHistories.Add(history);
-        if (!isLootCouncil)
-        {
-            foreach (var lootDetail in eventEntity.EventLootDetails.OrderBy(detail => detail.Id))
-            {
-                var rawValue = lootDetail.WinningDkpSpent.GetValueOrDefault();
-                if (rawValue <= 0)
-                {
-                    continue;
-                }
-
-                // Already charged -- loot added to a past event, or before loot on a live event
-                // waited for the close (ManualLootService) -- so without this the close would take
-                // the same DKP off the same winner twice. Null on everything still owed here.
-                if (lootDetail.DkpDebitedAt is not null)
-                {
-                    continue;
-                }
-
-                // The shared resolver: the recorded winner account first, then the name (main or
-                // alt). This path used to keep its own copy that ignored alts.
-                var winnerMembership = EventEndService.ResolveLootWinnerMembership(
-                    lootDetail,
-                    membershipsByAppUserId,
-                    participantsByCharacterName,
-                    rosterByName);
-                if (winnerMembership is null || string.IsNullOrWhiteSpace(winnerMembership.AppUserId))
-                {
-                    continue;
-                }
-
-                double amount;
-                string lootDetailsText;
-                if (isHybrid)
-                {
-                    var pct = Math.Clamp(rawValue, 0, 100);
-                    // Hybrid takes a PERCENTAGE of the winner's balance — and a pool is a wallet,
-                    // so it's a percentage of the POOL this event pays from, not of their grand
-                    // total. With one pool that's LinkshellDkp, exactly as before. The writer's
-                    // in-request view means the second item in an event sees the first item's
-                    // debit, which is what the old read of the mutated LinkshellDkp did.
-                    var poolId = lootDetail.DkpPoolId
-                        ?? await _dkpPools.ResolveAsync(eventEntity.LinkshellId, eventEntity.EventType, cancellationToken);
-                    var currentBalance = Math.Max(0, await _dkpLedger.GetPoolBalanceAsync(winnerMembership, poolId, cancellationToken));
-                    amount = -LootDkpCalculator.ComputeHybridDebit(currentBalance, pct, roundingStep);
-                    lootDetailsText = $"Hybrid DKP spent ({pct}%) on loot: {lootDetail.ItemName ?? "Unknown item"}.";
-                }
-                else
-                {
-                    amount = -rawValue;
-                    lootDetailsText = $"DKP spent on loot: {lootDetail.ItemName ?? "Unknown item"}.";
-                }
-
-                // Stamp the actual deducted amount so Loot History edits can refund precisely.
-                lootDetail.ActualDeductedDkp = Math.Abs(amount);
-                lootDetail.DkpDebitedAt = endTimeUtc;
-
-                await _dkpLedger.AppendAsync(
-                    winnerMembership,
-                    "LootSpent",
-                    amount,
-                    endTimeUtc,
-                    // The pool the row was entered against (hand-entered loot pins one), else the
-                    // pool the event earned into.
-                    lootDetail.DkpPoolId is int pinnedPool ? DkpPoolRef.Pinned(pinnedPool) : eventPool,
-                    new DkpEntryContext(
-                        CharacterName: winnerMembership.CharacterName,
-                        EventName: eventEntity.EventName,
-                        EventType: eventEntity.EventType,
-                        EventLocation: eventEntity.EventLocation,
-                        EventStartTime: eventEntity.StartTime,
-                        EventEndTime: endTimeUtc,
-                        ItemName: lootDetail.ItemName,
-                        Details: lootDetailsText,
-                        EventHistory: history,
-                        // EventEndService's close has always stamped this; this one never did,
-                        // which left Loot History unable to find the ledger row it had to reverse.
-                        SourceEventLootDetailId: lootDetail.Id),
-                    cancellationToken,
-                    // Affordability was enforced when the loot was AWARDED (LootDkpGuard). Event
-                    // close settles the whole roster in one batch — blocking here would leave the
-                    // event un-closable over a single member.
-                    DkpOverdraft.Allow);
-            }
-        }
-        // Preserve the loot rows post-close: re-parent each to the new EventHistory (and
-        // detach the EventId before the Event is deleted) so they show in Loot History
-        // instead of vanishing. EventLootDetail.EventId is SetNull, so the Event delete
-        // below won't cascade-remove them. Mirrors EventEndService.EndEventCoreAsync — the Activity
-        // path was deleting them, which is why live-event loot disappeared after ending.
-        foreach (var lootDetail in eventEntity.EventLootDetails)
-        {
-            lootDetail.EventHistory = history;
-            lootDetail.Event = null;
-            lootDetail.EventId = null;
-        }
-        // And the camp's posted attendance windows, which the Event delete below would otherwise
-        // cascade away along with every AppUserEventWindow roster row hanging off them. Clearing
-        // EventId unhooks them from the doomed Event before it goes. Byte-identical to
-        // EventEndService.EndEventCoreAsync — the two close paths must not drift here either.
-        var archivedWindows = await _dbContext.EventAttendanceWindows
-            .Where(window => window.EventId == eventEntity.Id)
-            .ToListAsync(cancellationToken);
-        foreach (var window in archivedWindows)
-        {
-            window.EventHistory = history;
-            window.Event = null;
-            window.EventId = null;
-        }
-        // Participations materialized earlier in THIS close (late board signups) are still in
-        // the Added state with TEMPORARY keys — EF can't transition those to Deleted
-        // (InvalidOperationException: "AppUserEvent.Id has a temporary value"). Detach them
-        // (they were never persisted; their history + DKP were already recorded above) and
-        // delete only the rows that actually exist in the database.
-        foreach (var participation in eventEntity.AppUserEvents.ToList())
-        {
-            var entry = _dbContext.Entry(participation);
-            if (entry.State == EntityState.Added)
-            {
-                // Detach AND drop from the navigation so EF's change detector can't re-track it
-                // (and re-attempt the temp-key delete) when the event is removed below.
-                entry.State = EntityState.Detached;
-                eventEntity.AppUserEvents.Remove(participation);
-            }
-            else
-            {
-                _dbContext.AppUserEvents.Remove(participation);
-            }
-        }
-        _dbContext.Events.Remove(eventEntity);
-
-            // A financial close must not be half-committed: use None so a flaky Discord-iframe
-            // request abort (the client cancellation token) can't cancel the save mid-write.
-            await _dbContext.SaveChangesAsync(CancellationToken.None);
+            result = await EventEndService.EndEventCoreAsync(
+                _dbContext, _dkpLedger, _dkpPools, eventEntity, EventEndService.EndEventOptions.Activity);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not DbUpdateConcurrencyException)
         {
@@ -880,19 +579,17 @@ public sealed partial class ActivityDataController
             });
         }
 
-        // A counting event just closed → recompute each member's Active/Inactive status
-        // from attendance (no-op when tracking is disabled for the linkshell). This runs
-        // AFTER the close is committed, so a failure here must NOT fail the request — the
-        // event is already ended; just log it and return success.
-        try
+        // Nothing was saved: every pending member must be confirmed present or removed first.
+        if (result.Refused)
         {
-            await _memberActivity.ApplyComputedStatusAsync(eventEntity.LinkshellId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Event {EventId} ended, but recomputing member activity status for linkshell {LinkshellId} failed.", eventId, eventEntity.LinkshellId);
+            return BadRequest(new
+            {
+                error = $"Confirm or remove the {result.PendingAttendeeCount} member(s) still pending in attendance before ending the event."
+            });
         }
 
+        // The core also recomputes Active/Inactive status after the close, logging (not failing)
+        // if that recompute breaks, since the event is already ended by then.
         return Ok(new { success = true });
     }
 

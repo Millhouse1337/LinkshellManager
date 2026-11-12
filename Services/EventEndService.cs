@@ -8,7 +8,9 @@ using Microsoft.Extensions.Logging;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// The addon's generic end-event path (AddonApiController.AddonEvents): credits DKP, writes the
+// The one generic end-event close, run by both End Event buttons (the app's,
+// ActivityDataController.EventsLifecycle, and the addon's, AddonApiController.AddonEvents), each
+// with its own EndEventOptions: credits DKP, writes the
 // EventHistory + DkpLedgerEntry rows and deletes the live event. Moved out of the old website's
 // EventController so it outlives that controller. HNM camps never come here — they end through
 // HnmCampReviewHandoffService (see HnmCampReviewHandoffService.EndsThroughCampPath).
@@ -127,8 +129,8 @@ public static class EventEndService
         // so it is deliberately NOT done here; the divergence is usually invisible because all
         // three creation paths stamp WindowCountOverride, which short-circuits both chains
         // identically. Services/EventBreakPolicy takes the MAX of the two so its gate can never be
-        // looser than whichever chain a credit path consults. Keep this expression byte-identical
-        // to ActivityDataController.EndEventAsync's — a third variant is how they drifted apart.
+        // looser than whichever chain a credit path consults. Both End Event buttons run this one
+        // close now, so do not copy this expression elsewhere -- copies are how they drifted apart.
         var windowCount = eventEntity.WindowCountOverride
             ?? HnmConfig.GetWindowCount(eventEntity.EventName);
         var isWindowed = windowCount > 1;
@@ -211,9 +213,9 @@ public static class EventEndService
                 ? windowsAttendedTally.For(participation)
                 : (int?)null;
             // Windowed pays per window attended; timed pays for the ACTUAL time present; a member
-            // an officer marked Absent gets 0 and no Active credit. Shared with
-            // ActivityDataController.EndEventAsync so the two end-event paths can't drift —
-            // see EventAttendanceDkpCalculator.ForParticipant.
+            // an officer marked Absent gets 0 and no Active credit -- see
+            // EventAttendanceDkpCalculator.ForParticipant.
+            // (LootCouncilPaysNoDkp then zeroes it on the app's close.)
             var credit = EventAttendanceDkpCalculator.ForParticipant(
                 participation.IsVerified,
                 eventEntity.CountsTowardActive,
@@ -388,7 +390,7 @@ public static class EventEndService
         // Participations materialized earlier in THIS close (late board signups) are still in
         // the Added state with TEMPORARY keys — EF can't transition those to Deleted. Detach
         // them (never persisted; history + DKP already recorded) and delete only the rows that
-        // actually exist. Mirrors the Activity EndEventAsync guard.
+        // actually exist.
         foreach (var participation in eventEntity.AppUserEvents.ToList())
         {
             var entry = dbContext.Entry(participation);
@@ -410,7 +412,7 @@ public static class EventEndService
         // A counting event just closed → recompute each member's Active/Inactive
         // status from attendance (no-op when the linkshell hasn't enabled tracking).
         // Best-effort: the close is already committed above, so a recompute failure must NOT
-        // fail the request (mirrors the Activity EndEventAsync guard). Status re-derives on the
+        // fail the request. Status re-derives on the
         // next close / roster load.
         try
         {
@@ -420,7 +422,7 @@ public static class EventEndService
         {
             // Swallow — the event is ended; activity status will recompute next time. But LOG
             // it (resolving the app logger from the DbContext, since this is a static helper)
-            // so a persistently-failing recompute isn't invisible. Mirrors the Activity twin.
+            // so a persistently-failing recompute isn't invisible.
             dbContext.GetService<ILoggerFactory>()?
                 .CreateLogger(typeof(EventEndService).FullName!)
                 .LogError(ex, "Active/Inactive recompute failed after ending event for linkshell {LinkshellId}.",

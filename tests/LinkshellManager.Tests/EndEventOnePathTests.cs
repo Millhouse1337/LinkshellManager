@@ -22,8 +22,9 @@ namespace LinkshellManager.Tests;
 //
 // These close the SAME seeded event twice -- once through the app's End Event action, once through
 // the core with EndEventOptions.Activity -- and compare every ledger row, balance, history row,
-// loot row and archived window. Written before the action was switched over, so they proved the
-// core reproduces the old web close exactly; the pinned figures keep proving it now that it does.
+// loot row and archived window. Written while the action still had its own copy of the close, so
+// they proved the core reproduces it exactly before the copy was deleted; the pinned figures keep
+// the app's End Event paying exactly that from now on.
 public class EndEventOnePathTests
 {
     private const int Ls = 7;
@@ -338,6 +339,31 @@ public class EndEventOnePathTests
         var pending = await EndThroughTheCore(new Seed(AlicePending: true), EventEndService.EndEventOptions.Addon);
         Assert.False(pending.Core!.Refused);
         Assert.Contains("events=0 participations=0 windowRows=0", Snapshot(pending.DbName));
+    }
+
+    // The app's End Event runs the shared close with its own options, and keeps no copy of the
+    // close beside it: a second copy is exactly what drifted before.
+    [Fact]
+    public void TheAppsEndEvent_HasNoCloseLoopOfItsOwn()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "Controllers", "ActivityDataController.EventsLifecycle.cs"));
+
+        Assert.Contains("EventEndService.EndEventCoreAsync(", source, StringComparison.Ordinal);
+        Assert.Contains("EventEndService.EndEventOptions.Activity", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"EventEarned\"", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"LootSpent\"", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new AppUserEventHistory", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("new EventHistory", source, StringComparison.Ordinal);
+    }
+
+    private static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "LinkshellManagerDiscordApp.csproj")))
+        {
+            dir = dir.Parent;
+        }
+        return dir?.FullName ?? throw new InvalidOperationException("Repo root not found.");
     }
 
     // Leaving options out means the addon's rules, so existing callers keep their behaviour.

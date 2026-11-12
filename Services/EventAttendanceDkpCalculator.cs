@@ -20,7 +20,8 @@ namespace LinkshellManagerDiscordApp.Services;
 /// EventEndService.EndEventCoreAsync (web + addon) branched correctly, while
 /// ActivityDataController.EndEventAsync (the Activity's "End event" button, reachable for
 /// windowed camps) had no windowed branch at all and paid every event by duration. That was
-/// the one place left in the app where break state still moved windowed DKP. Both now call
+/// the one place left in the app where break state still moved windowed DKP. Since P3.5 both
+/// buttons run EventEndService.EndEventCoreAsync, which calls
 /// this, so a third variant can't quietly appear.
 ///
 /// Rounding is applied to the DKP value, not the duration: rounding the duration first

@@ -5,8 +5,8 @@ using Microsoft.EntityFrameworkCore;
 namespace LinkshellManagerDiscordApp.Services;
 
 // How many windows each attendee of a windowed (Claim/Kill-style) event was credited for, for the
-// two end-event paths (EventEndService.EndEventCoreAsync and ActivityDataController.EndEventAsync)
-// so they cannot count differently.
+// end-event close (EventEndService.EndEventCoreAsync, run by both the app's and the addon's End Event)
+// and the copies that drifted before it.
 //
 // Counted per ACCOUNT, not per participation row. Both paths pay one row per account and skip the
 // rest, so counting per row underpaid a member whose windows were credited on their OTHER row (a

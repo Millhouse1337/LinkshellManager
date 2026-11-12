@@ -157,24 +157,6 @@ public sealed partial class ActivityDataController : ControllerBase
         return "Dkp";
     }
 
-    private static double CalculateAccumulatedDurationHours(AppUserEvent participation, DateTime referenceUtc, DateTime? eventStartUtc)
-    {
-        var accumulatedHours = Math.Max(0, participation.Duration ?? 0);
-        if (participation.IsOnBreak == true)
-        {
-            return accumulatedHours;
-        }
-
-        var segmentStart = participation.ResumeTime ?? participation.StartTime ?? eventStartUtc;
-        if (!segmentStart.HasValue)
-        {
-            return accumulatedHours;
-        }
-
-        var segmentHours = Math.Max(0, (referenceUtc - segmentStart.Value).TotalHours);
-        return accumulatedHours + segmentHours;
-    }
-
     private static bool IsLeader(AppUserLinkshell? membership)
     {
         return membership?.Rank?.Equals(LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase) == true;

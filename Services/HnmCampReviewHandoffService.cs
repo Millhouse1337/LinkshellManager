@@ -605,8 +605,8 @@ public sealed class HnmCampReviewHandoffService
         // windows under Past Events. Clearing EventId also frees the unique
         // (EventId, SequenceNumber) index the recycled board needs for the next camp's window-1
         // scan, which is what those deletes were really for -- so archiving replaces them rather
-        // than being additive. Matches both close paths (EventEndService.EndEventCoreAsync and
-        // ActivityDataController EndEventAsync), which archive exactly this way.
+        // than being additive. Matches the generic close (EventEndService.EndEventCoreAsync, which
+        // both End Event buttons run), which archives exactly this way.
         // Reuses campWindows from above rather than re-querying: same rows, same tracked
         // instances, one round trip.
         foreach (var window in campWindows)
@@ -640,7 +640,7 @@ public sealed class HnmCampReviewHandoffService
     // section and be charged by the next End Camp. With no archive (nobody on the roster) the rows
     // are detached instead; they keep their LinkshellId, so Loot History still lists them.
     //
-    // Same rules as the close paths (ActivityDataController.EndEventAsync / EventEndService): Loot
+    // Same rules as the generic close (EventEndService.EndEventCoreAsync): Loot
     // Council charges nothing, Hybrid a percentage of the winner's pool balance, everything else the
     // stated DKP -- from the pool the row was entered against, else the camp's -- and the overdraft is
     // allowed, because affordability was checked when the loot was awarded and the pending spend

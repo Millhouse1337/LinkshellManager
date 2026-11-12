@@ -55,7 +55,7 @@ public sealed partial class ActivityDataController
         }
 
         var nowUtc = DateTime.UtcNow;
-        participation.Duration = CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
+        participation.Duration = EventEndService.CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
         participation.IsOnBreak = true;
         participation.PauseTime = nowUtc;
         participation.ResumeTime = null;
@@ -179,7 +179,7 @@ public sealed partial class ActivityDataController
         }
 
         var nowUtc = DateTime.UtcNow;
-        participation.Duration = CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
+        participation.Duration = EventEndService.CalculateAccumulatedDurationHours(participation, nowUtc, eventEntity.CommencementStartTime);
         participation.IsOnBreak = true;
         participation.PauseTime = nowUtc;
         participation.ResumeTime = null;
@@ -399,7 +399,7 @@ public sealed partial class ActivityDataController
     private void PutParticipationOnBreak(
         AppUserEvent participation, int eventId, DateTime nowUtc, DateTime? commencementStart)
     {
-        participation.Duration = CalculateAccumulatedDurationHours(participation, nowUtc, commencementStart);
+        participation.Duration = EventEndService.CalculateAccumulatedDurationHours(participation, nowUtc, commencementStart);
         participation.IsOnBreak = true;
         participation.PauseTime = nowUtc;
         participation.ResumeTime = null;

@@ -126,15 +126,14 @@ public class WindowsAttendedPerAccountTests
         Assert.Equal(10, carol.EventDkp);
     }
 
-    // ActivityDataController.EndEventAsync needs a signed-in HTTP context, so it is pinned by
-    // source: both close paths must count through the shared tally, not per participation row.
+    // Pinned by source: the close must count through the shared tally, not per participation row.
+    // Both End Event buttons run this one close (the app's since P3.5; see EndEventOnePathTests).
     [Fact]
-    public void BothClosePaths_CountWindowsPerAccount()
+    public void TheClose_CountsWindowsPerAccount()
     {
         var repoRoot = FindRepoRoot();
         foreach (var relative in new[]
                  {
-                     "Controllers/ActivityDataController.EventsLifecycle.cs",
                      "Services/EventEndService.cs",
                  })
         {
