@@ -21,6 +21,14 @@ public class AppUserLinkshell
     [MaxLength(32)]
     public string? DiscordUserId { get; set; }
 
+    // True when the Discord id above can be trusted to mean "this person": an officer set it (the
+    // roster's Link action, or approving a claim request), or the sign-up form CREATED this
+    // placeholder for that Discord user. Only then does the person's first LSM launch take the
+    // placeholder over in place (DiscordIdentityService). The sign-up form used to attach a typed
+    // name's Discord id to an existing imported member, which handed that member's DKP to anyone
+    // who knew the name; that now asks an officer instead (PlaceholderClaimRequest).
+    public bool DiscordIdConfirmed { get; set; }
+
     public int LinkshellId { get; set; }
 
     [ForeignKey(nameof(LinkshellId))]

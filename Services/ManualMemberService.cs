@@ -18,22 +18,31 @@ public sealed class ManualMemberService
 
     private readonly ApplicationDbContext _context;
     private readonly UserManager<AppUser> _userManager;
+    private readonly PlaceholderClaimRequestService _claimRequests;
 
-    public ManualMemberService(ApplicationDbContext context, UserManager<AppUser> userManager)
+    public ManualMemberService(
+        ApplicationDbContext context, UserManager<AppUser> userManager, PlaceholderClaimRequestService claimRequests)
     {
         _context = context;
         _userManager = userManager;
+        _claimRequests = claimRequests;
     }
 
     public sealed record CreateResult(bool Success, string? Error, string? AppUserId);
 
     // Self-service path from the Discord board: a player who isn't synced registers
     // themselves (main + optional alts), keyed to their Discord id so later signups
-    // auto-recognize them. Find-or-create by MAIN name: adopt+link an existing unsynced
-    // member of that name (e.g. one a leader pre-created), refusing to hijack a real
-    // synced member or a placeholder already linked to a different Discord user.
+    // auto-recognize them. Find-or-create by MAIN name. A name already on the roster is
+    // never handed over here: the form is open to everyone in the Discord server and
+    // names are public, so an unlinked placeholder of that name becomes a claim request an
+    // officer approves (PlaceholderClaimRequest), and a synced member or a placeholder
+    // linked to another Discord user is refused. Re-sending the form for the placeholder
+    // it already made for this Discord user just reuses it.
+    //
+    // discordDisplayName: shown to officers on the claim request so they know who asked.
     public async Task<CreateResult> FindOrCreateForOutsideAsync(
-        int linkshellId, string? mainName, string? alt1, string? alt2, string discordUserId, CancellationToken cancellationToken)
+        int linkshellId, string? mainName, string? alt1, string? alt2, string discordUserId, CancellationToken cancellationToken,
+        string? discordDisplayName = null)
     {
         var main = (mainName ?? string.Empty).Trim();
         if (main.Length == 0)
@@ -62,7 +71,17 @@ public sealed class ManualMemberService
             {
                 return new CreateResult(false, $"\"{main}\" is already linked to another Discord user.", null);
             }
-            match.DiscordUserId = discordUserId;
+            if (string.IsNullOrEmpty(match.DiscordUserId))
+            {
+                // Someone else's roster spot until an officer says otherwise (an imported member,
+                // with their DKP). The player is told to sign up again once it is approved.
+                await _claimRequests.RequestForDiscordAsync(
+                    linkshellId, match.AppUserId!, discordUserId, discordDisplayName ?? main, cancellationToken);
+                return new CreateResult(false,
+                    $"\"{main}\" is already on this linkshell's roster. An officer has been asked to confirm that's you - "
+                    + "once they approve it, press Sign Up again.",
+                    null);
+            }
             if (match.AppUser is not null)
             {
                 if (!string.IsNullOrEmpty(a1)) { match.AppUser.AltCharacterName1 = a1; }
@@ -91,6 +110,9 @@ public sealed class ManualMemberService
             AppUserId = placeholder.Id,
             LinkshellId = linkshellId,
             DiscordUserId = discordUserId,
+            // Made just now FOR this Discord user, so nobody else's DKP is in it: their first LSM
+            // launch may take it over (DiscordIdentityService).
+            DiscordIdConfirmed = true,
             LinkshellDkp = 0,
             DateJoined = DateTime.UtcNow,
             CharacterName = main,

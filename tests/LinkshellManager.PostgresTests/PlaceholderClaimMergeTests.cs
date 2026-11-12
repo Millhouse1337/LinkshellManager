@@ -112,15 +112,22 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             await db.SaveChangesAsync();
         }
 
+        // Bob asked ("that's me"), and an officer approves: the approval runs the claim.
         await using (var db = _pg.CreateContext())
         {
-            var result = await new PlaceholderClaimService(db, new UserMergeService(db))
-                .ClaimPlaceholderAsync(Ph, Real, linkshellId, CancellationToken.None);
+            var requests = new PlaceholderClaimRequestService(db, new PlaceholderClaimService(db, new UserMergeService(db)));
+            Assert.True(await requests.RequestForAccountAsync(linkshellId, Ph, Real, "Bob", CancellationToken.None));
+            var requestId = (await db.PlaceholderClaimRequests.AsNoTracking().SingleAsync()).Id;
+
+            var result = await requests.ApproveAsync(linkshellId, requestId, "officer", CancellationToken.None);
             Assert.True(result.Success, result.Error);
         }
 
-        // Nothing anywhere still says the placeholder's id.
-        Assert.Empty(await FindTextColumnsHoldingAsync(Ph));
+        // Nothing anywhere still says the placeholder's id, except the request itself: that row is
+        // the record of which placeholder Bob asked for, and is kept on purpose.
+        Assert.Equal(
+            new[] { "PlaceholderClaimRequests.PlaceholderAppUserId" },
+            await FindTextColumnsHoldingAsync(Ph));
 
         await using (var db = _pg.CreateContext())
         {

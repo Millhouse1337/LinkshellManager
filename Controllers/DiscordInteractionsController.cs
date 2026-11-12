@@ -1737,7 +1737,7 @@ public sealed class DiscordInteractionsController : ControllerBase
             }
 
             var result = await _manualMembers.FindOrCreateForOutsideAsync(
-                ev.LinkshellId, main, alt1, alt2, discordUserId, cancellationToken);
+                ev.LinkshellId, main, alt1, alt2, discordUserId, cancellationToken, _discordDisplayName);
             if (!result.Success)
             {
                 return Ephemeral(result.Error ?? "Couldn't register you for this event.");

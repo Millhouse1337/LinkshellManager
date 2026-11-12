@@ -783,17 +783,21 @@ public sealed class DiscordIdentityService
                 }
 
                 // First launch with no linked website account: adopt an imported /
-                // onboarded PLACEHOLDER keyed to this Discord id (set by the DKP
-                // import's optional Discord mapping, or by the board's self-service
-                // onboarding) so the person inherits their seeded DKP in place
-                // instead of getting a brand-new empty account. Promoting the
-                // placeholder (AppUserId never changes) means no ledger/membership
-                // repointing is needed.
+                // onboarded PLACEHOLDER keyed to this Discord id so the person inherits
+                // their seeded DKP in place instead of getting a brand-new empty account.
+                // Promoting the placeholder (AppUserId never changes) means no
+                // ledger/membership repointing is needed.
+                //
+                // Only a CONFIRMED Discord id counts (AppUserLinkshell.DiscordIdConfirmed):
+                // an officer set it, or the sign-up form made this placeholder for this
+                // Discord user. Taking over whatever a Discord id was attached to would
+                // hand an imported member's DKP to anyone who got their id onto it.
                 if (appUser is null && preferredAppUser is null)
                 {
                     var placeholderMemberships = await _dbContext.AppUserLinkshells
                         .Include(membership => membership.AppUser)
                         .Where(membership => membership.DiscordUserId == discordUser.Id
+                                             && membership.DiscordIdConfirmed
                                              && membership.AppUser != null
                                              && membership.AppUser.IsPlaceholder)
                         .ToListAsync(cancellationToken);
@@ -814,6 +818,7 @@ public sealed class DiscordIdentityService
                         foreach (var membership in placeholderMemberships.Where(m => m.AppUserId == placeholderUser.Id))
                         {
                             membership.DiscordUserId = null;
+                            membership.DiscordIdConfirmed = false;
                         }
                         var promoteResult = await _userManager.UpdateAsync(appUser);
                         if (!promoteResult.Succeeded)

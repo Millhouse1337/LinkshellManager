@@ -1128,6 +1128,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<ChartWishlistRequestZone> ChartWishlistRequestZones => Set<ChartWishlistRequestZone>();
         public DbSet<ChartMemberKeyItem> ChartMemberKeyItems => Set<ChartMemberKeyItem>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+        public DbSet<PlaceholderClaimRequest> PlaceholderClaimRequests => Set<PlaceholderClaimRequest>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -2021,6 +2022,29 @@ namespace LinkshellManagerDiscordApp.Data
                     item.KeyItemName,
                     item.MembershipId,
                 }).IsUnique();
+            });
+
+            // A by-name claim of an imported member, waiting for an officer. See PlaceholderClaimRequest.
+            builder.Entity<PlaceholderClaimRequest>(entity =>
+            {
+                entity.ToTable("PlaceholderClaimRequests");
+                entity.Property(item => item.PlaceholderAppUserId).IsRequired();
+                entity.HasOne(item => item.Linkshell)
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // The officers' list: this linkshell's open requests.
+                entity.HasIndex(item => new { item.LinkshellId, item.ResolvedAtUtc });
+                // One OPEN request per person per placeholder. A double-clicked Claim (or the sign-up
+                // form sent twice) would otherwise put the same request in front of officers twice;
+                // the service turns the rejection into "already asked". Once resolved, the person
+                // may ask again.
+                entity.HasIndex(item => new { item.PlaceholderAppUserId, item.RequesterAppUserId })
+                    .IsUnique()
+                    .HasFilter("\"ResolvedAtUtc\" IS NULL AND \"RequesterAppUserId\" IS NOT NULL");
+                entity.HasIndex(item => new { item.PlaceholderAppUserId, item.RequesterDiscordUserId })
+                    .IsUnique()
+                    .HasFilter("\"ResolvedAtUtc\" IS NULL AND \"RequesterDiscordUserId\" IS NOT NULL");
             });
 
             builder.Entity<AddonApiToken>(entity =>

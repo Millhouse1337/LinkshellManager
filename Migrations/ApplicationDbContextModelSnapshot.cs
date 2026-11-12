@@ -591,6 +591,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("DateJoined")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("DiscordIdConfirmed")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("DiscordUserId")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
@@ -3599,6 +3602,62 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.ToTable("PendingTodSubmissions");
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PlaceholderClaimRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool?>("Approved")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LinkshellId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlaceholderAppUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("RequesterAppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("RequesterDiscordUserId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("RequesterName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolvedByAppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkshellId", "ResolvedAtUtc");
+
+                    b.HasIndex("PlaceholderAppUserId", "RequesterAppUserId")
+                        .IsUnique()
+                        .HasFilter("\"ResolvedAtUtc\" IS NULL AND \"RequesterAppUserId\" IS NOT NULL");
+
+                    b.HasIndex("PlaceholderAppUserId", "RequesterDiscordUserId")
+                        .IsUnique()
+                        .HasFilter("\"ResolvedAtUtc\" IS NULL AND \"RequesterDiscordUserId\" IS NOT NULL");
+
+                    b.ToTable("PlaceholderClaimRequests", (string)null);
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.RevenueEntry", b =>
                 {
                     b.Property<int>("Id")
@@ -4927,6 +4986,17 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("Linkshell");
 
                     b.Navigation("SubmittedBy");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PlaceholderClaimRequest", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
+                        .WithMany()
+                        .HasForeignKey("LinkshellId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Linkshell");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.RevenueEntry", b =>

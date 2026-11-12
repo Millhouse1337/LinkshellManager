@@ -44,7 +44,8 @@ public class OutsideOnboardingRosterTests
             new UpperInvariantLookupNormalizer(),
             new IdentityErrorDescriber(),
             null!,
-            NullLogger<UserManager<AppUser>>.Instance));
+            NullLogger<UserManager<AppUser>>.Instance),
+            new PlaceholderClaimRequestService(db, new PlaceholderClaimService(db, new UserMergeService(db))));
 
     private static void AddMember(ApplicationDbContext db, string appUserId, string name, bool placeholder, string? discordUserId = null)
     {
@@ -77,6 +78,8 @@ public class OutsideOnboardingRosterTests
         Assert.Equal(0, member.LinkshellDkp);
         // The Discord id on the roster row is what the next Sign Up looks them up by.
         Assert.Equal(Discord, member.DiscordUserId);
+        // Made for this Discord user, so their first LSM launch may take it over.
+        Assert.True(member.DiscordIdConfirmed);
         // A placeholder can't sign in; opening LSM with this Discord later promotes it in place.
         Assert.True(member.AppUser!.IsPlaceholder);
         Assert.Equal("Millhouse", member.AppUser.CharacterName);
@@ -118,21 +121,44 @@ public class OutsideOnboardingRosterTests
     // ---- someone of that name is already on the roster -----------------------------
 
     [Fact]
-    public async Task AnUnlinkedPlaceholder_OfThatName_IsAdopted_NotDuplicated()
+    public async Task AnUnlinkedPlaceholder_OfThatName_IsNotHandedOver_AnOfficerIsAsked()
     {
-        // A leader added Millhouse by hand (or a DKP import did) before they ever clicked Sign Up.
-        // Their first Sign Up should claim that row, DKP and all, not start a second one at zero.
+        // A DKP import added Millhouse (with their DKP) before they ever clicked Sign Up. Anyone in
+        // the Discord can type "Millhouse", so the form must not attach their Discord id to that
+        // row: it files a claim request for an officer, and creates no second Millhouse either.
         using var db = NewDb();
         AddMember(db, "ph1", "Millhouse", placeholder: true);
 
         var result = await NewService(db).FindOrCreateForOutsideAsync(
-            Ls, "Millhouse", "Milltwo", null, Discord, CancellationToken.None);
+            Ls, "Millhouse", "Milltwo", null, Discord, CancellationToken.None, discordDisplayName: "Mill");
 
-        Assert.True(result.Success);
-        Assert.Equal("ph1", result.AppUserId);
+        Assert.False(result.Success);
+        Assert.Contains("officer", result.Error);
         var member = Assert.Single(db.AppUserLinkshells.Include(m => m.AppUser));
-        Assert.Equal(Discord, member.DiscordUserId);
-        Assert.Equal("Milltwo", member.AppUser!.AltCharacterName1);
+        Assert.Null(member.DiscordUserId);
+        Assert.False(member.DiscordIdConfirmed);
+        Assert.Null(member.AppUser!.AltCharacterName1);
+        Assert.Single(db.Users);
+
+        var request = Assert.Single(db.PlaceholderClaimRequests);
+        Assert.Equal("ph1", request.PlaceholderAppUserId);
+        Assert.Equal(Discord, request.RequesterDiscordUserId);
+        Assert.Equal("Mill", request.RequesterName);
+        Assert.Null(request.ResolvedAtUtc);
+    }
+
+    [Fact]
+    public async Task SendingTheFormAgainWhileWaiting_DoesNotAskTwice()
+    {
+        using var db = NewDb();
+        AddMember(db, "ph1", "Millhouse", placeholder: true);
+        var service = NewService(db);
+
+        await service.FindOrCreateForOutsideAsync(Ls, "Millhouse", null, null, Discord, CancellationToken.None);
+        var again = await service.FindOrCreateForOutsideAsync(Ls, "Millhouse", null, null, Discord, CancellationToken.None);
+
+        Assert.False(again.Success);
+        Assert.Single(db.PlaceholderClaimRequests);
     }
 
     [Fact]

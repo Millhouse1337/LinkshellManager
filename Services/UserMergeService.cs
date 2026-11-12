@@ -169,6 +169,10 @@ public sealed class UserMergeService
         yield return Column(_db.ChartPopItemCredits, x => x.CreditedByAppUserId);
         yield return Column(_db.ChartWishlistRequests, x => x.RequestedByAppUserId);
         yield return Column(_db.ChartWishlistRequests, x => x.FulfilledByAppUserId);
+        yield return Column(_db.PlaceholderClaimRequests, x => x.RequesterAppUserId);
+        yield return Column(_db.PlaceholderClaimRequests, x => x.ResolvedByAppUserId);
+        // Not PlaceholderClaimRequests.PlaceholderAppUserId: that row is the record of which
+        // placeholder someone asked for, and it is kept after the placeholder is gone.
     }
 
     // ---- step 1: rows that may exist only once per account ---------------------------------

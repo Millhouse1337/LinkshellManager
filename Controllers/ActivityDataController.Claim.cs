@@ -9,14 +9,17 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // PLACEHOLDER (carrying a seeded balance) appears in the app, these endpoints let
 // them associate that imported data to their real account. The Discord-id case is
 // handled silently on first launch (DiscordIdentityService promotes the
-// placeholder in place); these cover the name-matched, user-confirmed case and
-// the officer "link this placeholder to an account / Discord id" fallback.
+// placeholder in place, when an officer confirmed that Discord id); these cover
+// the name-matched case (a request an officer approves) and the officer "link
+// this placeholder to an account / Discord id" fallback.
 public sealed partial class ActivityDataController
 {
     // Placeholders whose character name (main/alt) matches the signed-in user's
     // names — i.e. likely "them", imported before they joined.
     [HttpGet("claim/candidates")]
-    public async Task<IActionResult> GetClaimCandidatesAsync(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetClaimCandidatesAsync(
+        [FromServices] PlaceholderClaimRequestService claimRequests,
+        CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -61,6 +64,7 @@ public sealed partial class ActivityDataController
             .Distinct()
             .ToList();
         var accessible = await FilterAccessibleLinkshellIdsAsync(lockPairs, cancellationToken, lockAppliesOnWebsite: true);
+        var requested = await claimRequests.PendingForAccountAsync(appUser.Id, cancellationToken);
 
         var candidates = placeholderMemberships
             .Where(m => accessible.Contains(m.LinkshellId))
@@ -76,6 +80,8 @@ public sealed partial class ActivityDataController
                     currentDkp = DkpRounding.Round(m.LinkshellDkp ?? 0, step),
                     totalDkp = DkpRounding.Round(m.SeededDkpEarned, step),
                     totalSpent = DkpRounding.Round(m.SeededDkpSpent, step),
+                    // Already asked: waiting for an officer to approve.
+                    requested = requested.Contains((m.AppUserId!, m.LinkshellId)),
                 };
             })
             .ToList();
@@ -83,11 +89,14 @@ public sealed partial class ActivityDataController
         return Ok(new { candidates });
     }
 
-    // The signed-in user confirms "that's me" for a name-matched placeholder.
+    // The signed-in user says "that's me" for a name-matched placeholder. That only ASKS: an
+    // officer who can manage members approves it (claim-requests below), because character names
+    // are public and a matching name proves nothing. An outsider could otherwise set their profile
+    // name to an imported member's and walk off with that member's DKP and roster spot.
     [HttpPost("claim")]
     public async Task<IActionResult> ClaimAsync(
         [FromBody] ActivityClaimRequest request,
-        [FromServices] PlaceholderClaimService claimService,
+        [FromServices] PlaceholderClaimRequestService claimRequests,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
@@ -128,8 +137,8 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        // Security gate: a user may only claim a placeholder that goes by one of
-        // their own character names. Never trust the client's chosen id blindly.
+        // A user may only ask for a placeholder that goes by one of their own character names.
+        // Never trust the client's chosen id blindly.
         var myNames = NameKeys(appUser);
         var phNames = NameKeys(placeholderMembership.AppUser, placeholderMembership.CharacterName);
         if (!phNames.Overlaps(myNames))
@@ -137,13 +146,87 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        var result = await claimService.ClaimPlaceholderAsync(
-            placeholderMembership.AppUserId!, appUser.Id, request.LinkshellId, cancellationToken);
-        if (!result.Success)
+        await claimRequests.RequestForAccountAsync(
+            request.LinkshellId, placeholderMembership.AppUserId!, appUser.Id,
+            appUser.CharacterName ?? appUser.UserName, cancellationToken);
+        return Ok(new { success = true, pending = true });
+    }
+
+    // Officers: the open "that's me" requests for this linkshell's imported members.
+    [HttpGet("linkshells/{linkshellId:int}/claim-requests")]
+    public async Task<IActionResult> GetClaimRequestsAsync(
+        int linkshellId,
+        [FromServices] PlaceholderClaimRequestService claimRequests,
+        CancellationToken cancellationToken)
+    {
+        var officer = await ResolveClaimRequestOfficerAsync(linkshellId, cancellationToken);
+        if (officer.Error is not null)
         {
-            return BadRequest(new { error = result.Error });
+            return officer.Error;
         }
-        return Ok(new { success = true, claimedLinkshellIds = result.ClaimedLinkshellIds });
+        var requests = await claimRequests.ListPendingAsync(linkshellId, cancellationToken);
+        return Ok(new
+        {
+            requests = requests.Select(r => new
+            {
+                id = r.Id,
+                membershipId = r.MembershipId,
+                placeholderName = r.PlaceholderName,
+                placeholderDkp = r.PlaceholderDkp,
+                requesterName = r.RequesterName,
+                requesterKind = r.RequesterKind,
+                createdAtUtc = r.CreatedAtUtc,
+            }),
+        });
+    }
+
+    [HttpPost("linkshells/{linkshellId:int}/claim-requests/{requestId:int}/approve")]
+    public async Task<IActionResult> ApproveClaimRequestAsync(
+        int linkshellId,
+        int requestId,
+        [FromServices] PlaceholderClaimRequestService claimRequests,
+        CancellationToken cancellationToken)
+    {
+        var officer = await ResolveClaimRequestOfficerAsync(linkshellId, cancellationToken);
+        if (officer.Error is not null)
+        {
+            return officer.Error;
+        }
+        var result = await claimRequests.ApproveAsync(linkshellId, requestId, officer.AppUserId!, cancellationToken);
+        return result.Success ? Ok(new { success = true }) : BadRequest(new { error = result.Error });
+    }
+
+    [HttpPost("linkshells/{linkshellId:int}/claim-requests/{requestId:int}/deny")]
+    public async Task<IActionResult> DenyClaimRequestAsync(
+        int linkshellId,
+        int requestId,
+        [FromServices] PlaceholderClaimRequestService claimRequests,
+        CancellationToken cancellationToken)
+    {
+        var officer = await ResolveClaimRequestOfficerAsync(linkshellId, cancellationToken);
+        if (officer.Error is not null)
+        {
+            return officer.Error;
+        }
+        var result = await claimRequests.DenyAsync(linkshellId, requestId, officer.AppUserId!, cancellationToken);
+        return result.Success ? Ok(new { success = true }) : BadRequest(new { error = result.Error });
+    }
+
+    // Claim requests hand over a member's DKP, so they are for officers who can manage members.
+    private async Task<(string? AppUserId, IActionResult? Error)> ResolveClaimRequestOfficerAsync(
+        int linkshellId, CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return (null, Unauthorized(new { error = "Sign in to manage members." }));
+        }
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
+        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
+        {
+            return (null, Forbid());
+        }
+        return (appUser.Id, null);
     }
 
     // Officer fallback: link an unclaimed placeholder either to a Discord id (so
@@ -178,6 +261,8 @@ public sealed partial class ActivityDataController
         if (request is not null && !string.IsNullOrWhiteSpace(request.DiscordUserId))
         {
             target.DiscordUserId = request.DiscordUserId.Trim();
+            // An officer set it, so that Discord user's first LSM launch may take the placeholder over.
+            target.DiscordIdConfirmed = true;
             await _dbContext.SaveChangesAsync(cancellationToken);
             return Ok(new { success = true, linked = "discord" });
         }

@@ -296,6 +296,7 @@ builder.Services.AddScoped<MonsterTimingEditor>();
 builder.Services.AddScoped<DkpImportService>();
 builder.Services.AddScoped<UserMergeService>();
 builder.Services.AddScoped<PlaceholderClaimService>();
+builder.Services.AddScoped<PlaceholderClaimRequestService>();
 // Live DKP sheet → Discord channel (full table + .xlsx, edit-in-place): a
 // SaveChanges hook enqueues linkshells whose DKP changed; the hosted service
 // debounces + refreshes the channel post. No-ops when no DKP channel is set.

@@ -110,6 +110,7 @@ public sealed class PlaceholderClaimService
                 // The placeholder's roster spot becomes the real account's (DKP/seeds intact).
                 ph.AppUserId = realAppUserId;
                 ph.DiscordUserId = null; // the real account now owns identity
+                ph.DiscordIdConfirmed = false;
                 AddMergeRow(realAppUserId, ph.LinkshellId, ph.CharacterName, now,
                     $"Claimed imported member {phName}: their roster spot, {phDkp:0.##} DKP and DKP history moved to this account.");
             }
