@@ -535,7 +535,8 @@ public sealed class WindowEventDkpLedgerService
 
     // Linkshell-wide sweep over every posted camp. Nothing calls it on a page load any more (the
     // DKP pages used to, which let a reload race an officer's Post and pay a camp twice). Kept for
-    // a deliberate, one-off backfill; the per-card method above is what Post uses.
+    // a deliberate, one-off backfill. Post (PostAndPayAsync) and Pay newly registered
+    // (PayNewlyRegisteredAsync) pay one card at a time through EnsurePostedWindowEventLedgerEntriesAsync.
     public async Task<int> EnsurePostedWindowEventLedgerEntriesForLinkshellAsync(int linkshellId, CancellationToken cancellationToken)
     {
         var windowEventIds = await _db.WindowEvents
