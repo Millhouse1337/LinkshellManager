@@ -53,19 +53,11 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
         {
             try
             {
-                // The tick saves every live camp at once. An officer's edit or End Camp on one of them
-                // between our read and our save trips the event's xmin check (Event.Version): nothing
-                // is saved -- so an ended camp is never marched on -- and the tick runs again with
-                // fresh reads.
-                await ConcurrencyRetry.RunFreshTickAsync(() => AdvanceLiveCampsAsync(stoppingToken));
+                await AdvanceLiveCampsAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
-            }
-            catch (DbUpdateConcurrencyException ex)
-            {
-                _logger.LogInformation(ex, "Window advance kept losing to concurrent camp edits; retrying next tick.");
             }
             catch (Exception ex)
             {
@@ -89,136 +81,150 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
     // internal, not private: HnmWindowClearLifecycleTests drives this directly, which is the only
     // way to assert that the window number the board prints and the roster underneath it move on
     // the same tick.
+    //
+    // Each live camp is advanced and saved on its own (BackgroundItemLoop). The tick used to march
+    // every camp on one context and save once, so one camp that threw -- or kept losing a race to an
+    // officer's edit -- froze every other linkshell's boards on their old window. A camp an officer
+    // edits or ends between our read and our save trips its xmin check (Event.Version): nothing of it
+    // is saved, so an ended camp is never marched on, and that camp alone is re-read and tried again.
     internal async Task AdvanceLiveCampsAsync(CancellationToken cancellationToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
         var now = DateTime.UtcNow;
-        // Live, un-popped HNM boards. The Manual Check In-only sentinels (WdAwaitingProcessingSince /
-        // WdFinalizedAt) are always null on a Standard board, so filtering on them is a no-op
-        // there and correctly excludes a Manual Check In camp that already popped.
-        var live = await db.Events
-            .Where(e => e.EventType == "HNM"
-                        && e.EndTime == null
-                        && e.CommencementStartTime != null   // don't march a queued board
-                        && e.HnmDefeatedAt == null
-                        && e.WdAwaitingProcessingSince == null
-                        && e.WdFinalizedAt == null
-                        && e.StartTime != null)
-            .ToListAsync(cancellationToken);
-        if (live.Count == 0)
-        {
-            return;
-        }
+        var liveIds = await BackgroundItemLoop.ReadIdsAsync(_scopeFactory, db => Live(db.Events.AsNoTracking())
+            .OrderBy(e => e.Id)
+            .Select(e => e.Id)
+            .ToListAsync(cancellationToken));
 
+        await BackgroundItemLoop.RunEachAsync(_scopeFactory, liveIds, async (db, eventId) =>
+        {
+            // Read again on this camp's own context, through the same filter: it may have popped or
+            // ended since the list was read.
+            var ev = await Live(db.Events).FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
+            if (ev is not null && await AdvanceCampAsync(db, ev, now, cancellationToken))
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+        }, _logger, "HNM camp window advance for event", cancellationToken);
+    }
+
+    // Live, un-popped HNM boards. The Manual Check In-only sentinels (WdAwaitingProcessingSince /
+    // WdFinalizedAt) are always null on a Standard board, so filtering on them is a no-op
+    // there and correctly excludes a Manual Check In camp that already popped.
+    private static IQueryable<Event> Live(IQueryable<Event> events) =>
+        events.Where(e => e.EventType == "HNM"
+                          && e.EndTime == null
+                          && e.CommencementStartTime != null   // don't march a queued board
+                          && e.HnmDefeatedAt == null
+                          && e.WdAwaitingProcessingSince == null
+                          && e.WdFinalizedAt == null
+                          && e.StartTime != null);
+
+    // Stages one camp's window step, countdown and roster clear. True when anything changed; the
+    // caller saves.
+    private async Task<bool> AdvanceCampAsync(
+        ApplicationDbContext db, Event ev, DateTime now, CancellationToken cancellationToken)
+    {
         var changed = false;
-        foreach (var ev in live)
+        // Only advance a counter the board actually renders + an officer can correct.
+        if (!DiscordEventMessageBuilder.UsesWindows(ev))
         {
-            // Only advance a counter the board actually renders + an officer can correct.
-            if (!DiscordEventMessageBuilder.UsesWindows(ev))
-            {
-                continue;
-            }
-            var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
-            if (effectiveCount <= 1)
-            {
-                continue;
-            }
+            return false;
+        }
+        var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        if (effectiveCount <= 1)
+        {
+            return false;
+        }
 
-            // Window 1 opened at the anchor (re-stamped to "now" on a manual step so an officer's
-            // Prev/Next isn't reverted here); fall back to StartTime for boards created before the
-            // anchor existed. Window N opens at anchor + (N-1) × minutes.
-            var anchor = ev.WindowAnchorAt ?? ev.StartTime!.Value;
-            if (now < anchor)
-            {
-                continue; // window 1 hasn't opened yet
-            }
-            var minutes = DiscordEventMessageBuilder.EffectiveWindowMinutes(ev);
-            if (minutes <= 0)
-            {
-                continue; // this monster has no built-in cadence — it advances manually
-            }
+        // Window 1 opened at the anchor (re-stamped to "now" on a manual step so an officer's
+        // Prev/Next isn't reverted here); fall back to StartTime for boards created before the
+        // anchor existed. Window N opens at anchor + (N-1) × minutes.
+        var anchor = ev.WindowAnchorAt ?? ev.StartTime!.Value;
+        if (now < anchor)
+        {
+            return false; // window 1 hasn't opened yet
+        }
+        var minutes = DiscordEventMessageBuilder.EffectiveWindowMinutes(ev);
+        if (minutes <= 0)
+        {
+            return false; // this monster has no built-in cadence — it advances manually
+        }
 
-            var expected = ScheduledWindow(anchor, now, minutes, effectiveCount);
-            if (expected > ev.HnmWindowNumber)
-            {
-                ev.HnmWindowNumber = expected;
-                changed = true;
-                _logger.LogInformation(
-                    "HNM camp auto-advanced: event {EventId} → window {Window} of {Count}.",
-                    ev.Id, expected, effectiveCount);
-            }
+        var expected = ScheduledWindow(anchor, now, minutes, effectiveCount);
+        if (expected > ev.HnmWindowNumber)
+        {
+            ev.HnmWindowNumber = expected;
+            changed = true;
+            _logger.LogInformation(
+                "HNM camp auto-advanced: event {EventId} → window {Window} of {Count}.",
+                ev.Id, expected, effectiveCount);
+        }
 
-            // Keep the next-window countdown fresh: window N+1 opens at anchor + N×minutes (null on
-            // the final window). Recomputed each tick so a re-anchor after a manual step is picked up.
-            DateTime? nextAt = ev.HnmWindowNumber >= effectiveCount
-                ? null
-                : anchor.AddMinutes(ev.HnmWindowNumber * (double)minutes);
-            if (ev.NextWindowAt != nextAt)
-            {
-                ev.NextWindowAt = nextAt;
-                changed = true;
-            }
+        // Keep the next-window countdown fresh: window N+1 opens at anchor + N×minutes (null on
+        // the final window). Recomputed each tick so a re-anchor after a manual step is picked up.
+        DateTime? nextAt = ev.HnmWindowNumber >= effectiveCount
+            ? null
+            : anchor.AddMinutes(ev.HnmWindowNumber * (double)minutes);
+        if (ev.NextWindowAt != nextAt)
+        {
+            ev.NextWindowAt = nextAt;
+            changed = true;
+        }
 
-            // Roster clear, wyrm boards only (either attendance mode). WindowClearGrace is zero, so this runs on the SAME tick
-            // that moved the counter above: the window number and the empty roster reach the board
-            // together, in one edit, and nobody sees a new window still wearing the old signups.
-            //
-            // Gated on the number the board actually PRINTS (FocusWindow — the window being
-            // awaited), not on the raw counter. They step together at every boundary but not at the
-            // camp's own start: FocusWindow is counter + 1 only once a next window exists, and
-            // that becomes true the moment CommencementStartTime/NextWindowAt are stamped. So a
-            // board going live flips "Window 1 of 25" → "Window 2 of 25" on its own, and gating the
-            // clear on the counter left that ONE change unpaired — the board named window 2 over
-            // window 1's signups for a full cadence, which is exactly the "it advanced but never
-            // cleared" report. Window 1 is a knife edge like every other: its pop chance is spent
-            // the instant the camp goes live, so its roster is settled there too.
-            //
-            // `HnmClearedWindow` is therefore on the SAME scale — the highest printed window whose
-            // predecessor's roster has been settled. Null reads as 1: a board that has not gone
-            // live yet is still collecting window 1's signups and must never be wiped.
-            var focusWindow = DiscordEventMessageBuilder.FocusWindow(ev);
-            if (focusWindow > 1
-                && (ev.HnmClearedWindow ?? 1) < focusWindow
-                && DiscordEventMessageBuilder.ClearsRosterOnWindowAdvance(ev))
+        // Roster clear, wyrm boards only (either attendance mode). WindowClearGrace is zero, so this runs on the SAME tick
+        // that moved the counter above: the window number and the empty roster reach the board
+        // together, in one edit, and nobody sees a new window still wearing the old signups.
+        //
+        // Gated on the number the board actually PRINTS (FocusWindow — the window being
+        // awaited), not on the raw counter. They step together at every boundary but not at the
+        // camp's own start: FocusWindow is counter + 1 only once a next window exists, and
+        // that becomes true the moment CommencementStartTime/NextWindowAt are stamped. So a
+        // board going live flips "Window 1 of 25" → "Window 2 of 25" on its own, and gating the
+        // clear on the counter left that ONE change unpaired — the board named window 2 over
+        // window 1's signups for a full cadence, which is exactly the "it advanced but never
+        // cleared" report. Window 1 is a knife edge like every other: its pop chance is spent
+        // the instant the camp goes live, so its roster is settled there too.
+        //
+        // `HnmClearedWindow` is therefore on the SAME scale — the highest printed window whose
+        // predecessor's roster has been settled. Null reads as 1: a board that has not gone
+        // live yet is still collecting window 1's signups and must never be wiped.
+        var focusWindow = DiscordEventMessageBuilder.FocusWindow(ev);
+        if (focusWindow > 1
+            && (ev.HnmClearedWindow ?? 1) < focusWindow
+            && DiscordEventMessageBuilder.ClearsRosterOnWindowAdvance(ev))
+        {
+            var windowOpenedAt = anchor.AddMinutes((ev.HnmWindowNumber - 1) * (double)minutes);
+            if (now >= windowOpenedAt + HnmConfig.WindowClearGrace)
             {
-                var windowOpenedAt = anchor.AddMinutes((ev.HnmWindowNumber - 1) * (double)minutes);
-                if (now >= windowOpenedAt + HnmConfig.WindowClearGrace)
+                // Only clear while we're still INSIDE the window the clear belongs to. A board
+                // that sat un-advanced — this service was off, or the app was down — jumps
+                // several windows on its next tick, and clearing then would wipe a live roster
+                // over a boundary nobody was watching. Stamp it settled either way so a stale
+                // boundary can't fire the clear later.
+                if (now <= windowOpenedAt.AddMinutes(minutes))
                 {
-                    // Only clear while we're still INSIDE the window the clear belongs to. A board
-                    // that sat un-advanced — this service was off, or the app was down — jumps
-                    // several windows on its next tick, and clearing then would wipe a live roster
-                    // over a boundary nobody was watching. Stamp it settled either way so a stale
-                    // boundary can't fire the clear later.
-                    if (now <= windowOpenedAt.AddMinutes(minutes))
-                    {
-                        // The roster on the board belongs to the window the board was NAMING until
-                        // this tick — one below the number it prints from here on, and the number
-                        // "View Previous Window" will ask for. Zero grace is what makes this exact:
-                        // the clear rides the same tick as the advance, so nobody can have signed
-                        // up under the new window yet.
-                        await EventPartySignupService.ClearWindowRosterAsync(
-                            db, ev.Id, focusWindow - 1, cancellationToken);
-                        _logger.LogInformation(
-                            "HNM camp roster auto-cleared: event {EventId} window {Window} ({Grace} after the window opened).",
-                            ev.Id, focusWindow, HnmConfig.WindowClearGrace);
-                    }
-                    else
-                    {
-                        _logger.LogInformation(
-                            "HNM camp window {Window} on event {EventId} settled without clearing — its boundary is already {Age:0} min past.",
-                            focusWindow, ev.Id, (now - windowOpenedAt).TotalMinutes);
-                    }
-                    ev.HnmClearedWindow = focusWindow;
-                    changed = true;
+                    // The roster on the board belongs to the window the board was NAMING until
+                    // this tick — one below the number it prints from here on, and the number
+                    // "View Previous Window" will ask for. Zero grace is what makes this exact:
+                    // the clear rides the same tick as the advance, so nobody can have signed
+                    // up under the new window yet.
+                    await EventPartySignupService.ClearWindowRosterAsync(
+                        db, ev.Id, focusWindow - 1, cancellationToken);
+                    _logger.LogInformation(
+                        "HNM camp roster auto-cleared: event {EventId} window {Window} ({Grace} after the window opened).",
+                        ev.Id, focusWindow, HnmConfig.WindowClearGrace);
                 }
+                else
+                {
+                    _logger.LogInformation(
+                        "HNM camp window {Window} on event {EventId} settled without clearing — its boundary is already {Age:0} min past.",
+                        focusWindow, ev.Id, (now - windowOpenedAt).TotalMinutes);
+                }
+                ev.HnmClearedWindow = focusWindow;
+                changed = true;
             }
         }
-        if (changed)
-        {
-            await db.SaveChangesAsync(cancellationToken);
-        }
+        return changed;
     }
 
     // The window a camp should be on at `now`. Delegates to HnmConfig.WindowNumberAt, which is the

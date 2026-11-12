@@ -48,7 +48,7 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         {
             try
             {
-                await ProcessDueBoardsAsync(stoppingToken);
+                await ProcessDueBoardsAsync(DateTime.UtcNow, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -73,43 +73,32 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         }
     }
 
-    private async Task ProcessDueBoardsAsync(CancellationToken cancellationToken)
+    // internal so BackgroundJobIsolationTests can run a whole pass against a fixed clock.
+    //
+    // Each board gets its own scope and its own save (BackgroundItemLoop). They used to share one
+    // context: a board that failed left its half-made event and stamp in the tracker for the next
+    // board's save to write, and a lost race on one board ended the tick for every other linkshell's
+    // boards. Every path through ProcessBoardAsync saves at most once, so re-running a board that
+    // lost a race repeats nothing.
+    internal async Task ProcessDueBoardsAsync(DateTime nowUtc, CancellationToken cancellationToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-        var boards = await db.HnmRecurringBoards
+        var boardIds = await BackgroundItemLoop.ReadIdsAsync(_scopeFactory, db => db.HnmRecurringBoards
+            .AsNoTracking()
             .Where(board => board.Enabled)
-            .ToListAsync(cancellationToken);
-        if (boards.Count == 0)
-        {
-            return;
-        }
+            .OrderBy(board => board.Id)
+            .Select(board => board.Id)
+            .ToListAsync(cancellationToken));
 
-        var nowUtc = DateTime.UtcNow;
-        foreach (var board in boards)
+        await BackgroundItemLoop.RunEachAsync(_scopeFactory, boardIds, async (db, boardId) =>
         {
-            try
+            // Read again on this board's own context: it may have been switched off since the list.
+            var board = await db.HnmRecurringBoards
+                .FirstOrDefaultAsync(b => b.Id == boardId && b.Enabled, cancellationToken);
+            if (board is not null)
             {
                 await ProcessBoardAsync(db, board, nowUtc, cancellationToken);
             }
-            catch (DbUpdateConcurrencyException ex)
-            {
-                // An officer saved this board's event between our read and our save, so the event's
-                // xmin check (Event.Version) turned the save away and nothing was saved. Stop this
-                // tick here: the failed changes are still in this scope's tracker and would ride
-                // along with the next board's save. The next tick reads everything afresh.
-                _logger.LogInformation(ex,
-                    "HNM recurring board {BoardId} (monster '{Monster}') lost to a concurrent event edit; retrying next tick.",
-                    board.Id, board.MonsterName);
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing HNM recurring board {BoardId} (monster '{Monster}').",
-                    board.Id, board.MonsterName);
-            }
-        }
+        }, _logger, "HNM recurring board", cancellationToken);
     }
 
     // internal so HnmRecurringBoardDuplicateTests can drive one board against a fixed clock.

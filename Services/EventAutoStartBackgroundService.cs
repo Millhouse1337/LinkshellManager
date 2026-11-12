@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Data;
+using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
@@ -35,18 +36,11 @@ public sealed class EventAutoStartBackgroundService : BackgroundService
         {
             try
             {
-                // The tick saves all due events at once. If an officer saved one of them between our
-                // read and our save, the event's xmin check (Event.Version) turns the whole save away
-                // and nothing is started; the tick simply runs again with fresh reads.
-                await ConcurrencyRetry.RunFreshTickAsync(() => StartDueEventsAsync(stoppingToken));
+                await StartDueEventsAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
-            }
-            catch (DbUpdateConcurrencyException ex)
-            {
-                _logger.LogInformation(ex, "Auto-start kept losing to concurrent event edits; retrying next tick.");
             }
             catch (Exception ex)
             {
@@ -69,72 +63,86 @@ public sealed class EventAutoStartBackgroundService : BackgroundService
 
     // internal so HnmWindowClearLifecycleTests can walk a camp through the same go-live transition
     // production takes, rather than hand-stamping the fields this sets.
+    //
+    // Each due event is started and saved on its own (BackgroundItemLoop). The tick used to start them
+    // all on one context and save once, so one event that threw -- or kept losing a race to an
+    // officer's edit -- kept every other due event in every linkshell from going live.
     internal async Task StartDueEventsAsync(CancellationToken cancellationToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
         var nowUtc = DateTime.UtcNow;
-        var dueEvents = await db.Events
-            .Include(evt => evt.AppUserEvents)
-            .Where(evt => evt.CommencementStartTime == null
-                && evt.StartTime != null
-                && evt.StartTime <= nowUtc
-                && evt.EndTime == null
-                && (
-                    // Opt-in auto-start for ordinary events (unchanged): the AutoStart flag, never HNM.
-                    (evt.AutoStart && (evt.EventType == null || evt.EventType.ToLower() != "hnm"))
-                    // HNM camps always auto-start at their scheduled window-1 time — no opt-in flag —
-                    // so the board goes live and the window advancer takes over. Skip once popped.
-                    || (evt.EventType != null && evt.EventType.ToLower() == "hnm" && evt.HnmDefeatedAt == null)
-                ))
-            .ToListAsync(cancellationToken);
+        var dueIds = await BackgroundItemLoop.ReadIdsAsync(_scopeFactory, db => Due(db.Events.AsNoTracking(), nowUtc)
+            .OrderBy(evt => evt.Id)
+            .Select(evt => evt.Id)
+            .ToListAsync(cancellationToken));
 
-        if (dueEvents.Count == 0)
+        await BackgroundItemLoop.RunEachAsync(_scopeFactory, dueIds, async (db, eventId) =>
         {
-            return;
-        }
-
-        foreach (var evt in dueEvents)
-        {
-            var isHnm = string.Equals((evt.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
-            // An HNM camp "started" at its scheduled Window-1 time (StartTime) — so the board's Started
-            // timestamp matches what was entered in the app, even for a back-dated camp ("started 4h
-            // ago"), instead of reading the poll moment we happened to notice it. Ordinary auto-start
-            // events commence at the poll moment (nowUtc) so their DKP duration reflects real elapsed
-            // time. StartTime is guaranteed non-null here by the query's StartTime filter.
-            evt.CommencementStartTime = isHnm ? evt.StartTime : nowUtc;
-            // Anchor the HNM window cadence to the scheduled window-1 pop (StartTime), not the poll
-            // time, so a late tick doesn't shift the whole window schedule. Harmless on non-HNM.
-            evt.WindowAnchorAt ??= evt.StartTime;
-            // Window advance is MANUAL now (officers press "Next Window"), so seed the FIRST countdown
-            // here — otherwise the freshly-live board would show no "Next window N in …" line until
-            // the first click. The next window opens one cadence after Started; officers step it from
-            // there. Null when the monster has no timed cadence or it's already the only window.
-            if (isHnm && evt.StartTime is { } startUtc)
+            // Read again on this event's own context, through the same filter: an officer may have
+            // started or ended it since the list was read, and then there is nothing left to do.
+            var evt = await Due(db.Events.Include(e => e.AppUserEvents), nowUtc)
+                .FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
+            if (evt is null)
             {
-                var minutes = DiscordEventMessageBuilder.EffectiveWindowMinutes(evt);
-                var count = DiscordEventMessageBuilder.EffectiveWindowCount(evt);
-                evt.NextWindowAt = minutes > 0 && evt.HnmWindowNumber < count
-                    ? startUtc.AddMinutes(minutes)
-                    : null;
-            }
-            // Bring party-slot signups (Discord post / Activity) into the live event as
-            // pending attendees — exactly what the manual "Start" does. Without this the
-            // signups never become real AppUserEvents, so the client falls back to
-            // synthesizing them as verified phantoms that land in the Active Room instead
-            // of the Lobby (and can't be moderated — they have no participation row).
-            await EventPartySignupService.MaterializeSignupsAsParticipantsAsync(db, evt, cancellationToken);
-            foreach (var participation in evt.AppUserEvents)
-            {
-                participation.StartTime ??= nowUtc;
+                return;
             }
 
+            await StartAsync(db, evt, nowUtc, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
             _logger.LogInformation(
                 "Auto-started event {EventId} (\"{EventName}\") for linkshell {LinkshellId} at its scheduled time.",
                 evt.Id, evt.EventName, evt.LinkshellId);
-        }
+        }, _logger, "Auto-starting event", cancellationToken);
+    }
 
-        await db.SaveChangesAsync(cancellationToken);
+    // The events due to go live now.
+    private static IQueryable<Event> Due(IQueryable<Event> events, DateTime nowUtc) =>
+        events.Where(evt => evt.CommencementStartTime == null
+            && evt.StartTime != null
+            && evt.StartTime <= nowUtc
+            && evt.EndTime == null
+            && (
+                // Opt-in auto-start for ordinary events (unchanged): the AutoStart flag, never HNM.
+                (evt.AutoStart && (evt.EventType == null || evt.EventType.ToLower() != "hnm"))
+                // HNM camps always auto-start at their scheduled window-1 time — no opt-in flag —
+                // so the board goes live and the window advancer takes over. Skip once popped.
+                || (evt.EventType != null && evt.EventType.ToLower() == "hnm" && evt.HnmDefeatedAt == null)
+            ));
+
+    // Stages one event's go-live; the caller saves.
+    private static async Task StartAsync(
+        ApplicationDbContext db, Event evt, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        var isHnm = string.Equals((evt.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        // An HNM camp "started" at its scheduled Window-1 time (StartTime) — so the board's Started
+        // timestamp matches what was entered in the app, even for a back-dated camp ("started 4h
+        // ago"), instead of reading the poll moment we happened to notice it. Ordinary auto-start
+        // events commence at the poll moment (nowUtc) so their DKP duration reflects real elapsed
+        // time. StartTime is guaranteed non-null here by the query's StartTime filter.
+        evt.CommencementStartTime = isHnm ? evt.StartTime : nowUtc;
+        // Anchor the HNM window cadence to the scheduled window-1 pop (StartTime), not the poll
+        // time, so a late tick doesn't shift the whole window schedule. Harmless on non-HNM.
+        evt.WindowAnchorAt ??= evt.StartTime;
+        // Window advance is MANUAL now (officers press "Next Window"), so seed the FIRST countdown
+        // here — otherwise the freshly-live board would show no "Next window N in …" line until
+        // the first click. The next window opens one cadence after Started; officers step it from
+        // there. Null when the monster has no timed cadence or it's already the only window.
+        if (isHnm && evt.StartTime is { } startUtc)
+        {
+            var minutes = DiscordEventMessageBuilder.EffectiveWindowMinutes(evt);
+            var count = DiscordEventMessageBuilder.EffectiveWindowCount(evt);
+            evt.NextWindowAt = minutes > 0 && evt.HnmWindowNumber < count
+                ? startUtc.AddMinutes(minutes)
+                : null;
+        }
+        // Bring party-slot signups (Discord post / Activity) into the live event as
+        // pending attendees — exactly what the manual "Start" does. Without this the
+        // signups never become real AppUserEvents, so the client falls back to
+        // synthesizing them as verified phantoms that land in the Active Room instead
+        // of the Lobby (and can't be moderated — they have no participation row).
+        await EventPartySignupService.MaterializeSignupsAsParticipantsAsync(db, evt, cancellationToken);
+        foreach (var participation in evt.AppUserEvents)
+        {
+            participation.StartTime ??= nowUtc;
+        }
     }
 }
