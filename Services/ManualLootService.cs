@@ -88,7 +88,49 @@ public sealed class ManualLootService
         CancellationToken cancellationToken) =>
         ConcurrencyRetry.RunAsync(_db, () => AddOnceAsync(linkshellId, target, itemName, itemWinner, dkpSpent, dkpPoolId, recordedByAppUserId, cancellationToken));
 
+    // Loot addressed to an event holds the event row until the loot is saved, so an End Camp at the
+    // same moment either finishes first (the loot then goes to its camp's archive, charged) or has
+    // to see this loot. See EventRunState.HoldForLootAsync. Not when a caller's transaction is
+    // already open: committing is theirs, and the hold would last until they do.
     private async Task<ManualLootResult> AddOnceAsync(
+        int linkshellId,
+        ManualLootTarget target,
+        string? itemName,
+        string? itemWinner,
+        int dkpSpent,
+        int? dkpPoolId,
+        string? recordedByAppUserId,
+        CancellationToken cancellationToken)
+    {
+        if (target.Kind != ManualLootTargetKind.LiveEvent
+            || !_db.Database.IsRelational()
+            || _db.Database.CurrentTransaction is not null)
+        {
+            return await AddRowAsync(linkshellId, target, itemName, itemWinner, dkpSpent, dkpPoolId, recordedByAppUserId, cancellationToken);
+        }
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        await EventRunState.HoldForLootAsync(_db, linkshellId, target.EventId!.Value, cancellationToken);
+        // The Discord loot post waits for the COMMIT (ApplicationDbContext.HoldEventLootPosts).
+        _db.HoldEventLootPosts();
+        try
+        {
+            var result = await AddRowAsync(linkshellId, target, itemName, itemWinner, dkpSpent, dkpPoolId, recordedByAppUserId, cancellationToken);
+            if (result.Success)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                _db.ReleaseHeldEventLootPosts();
+            }
+            // Otherwise disposing the transaction rolls it back; nothing was saved.
+            return result;
+        }
+        finally
+        {
+            _db.DropHeldEventLootPosts();
+        }
+    }
+
+    private async Task<ManualLootResult> AddRowAsync(
         int linkshellId,
         ManualLootTarget target,
         string? itemName,

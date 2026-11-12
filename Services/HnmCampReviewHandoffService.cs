@@ -647,6 +647,13 @@ public sealed class HnmCampReviewHandoffService
     // counted against the winner until now.
     //
     // STAGES ONLY, like the rest of this class: the caller's save commits the debits and the moves.
+    //
+    // Loot posted while this runs: the list below is read once, so a row saved after it would be
+    // left on the board the caller then parks. Every loot post on an event changes the event row
+    // while it saves (EventRunState.HoldForLootAsync), and the caller's save of this same row
+    // checks its row version, so that save fails, nothing is committed, and End Camp is retried
+    // and reads the new loot. A row lock here would not help: End Camp runs no transaction (see
+    // HnmCampPopService.PopAsync), so it would be released as soon as it was taken.
     private async Task SettleCampLootAsync(
         Event ev, Linkshell linkshell, EventHistory? archive, DateTime nowUtc, CancellationToken cancellationToken)
     {

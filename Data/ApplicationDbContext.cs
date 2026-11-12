@@ -426,10 +426,43 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 if (detail.Id > 0)
                 {
+                    if (_eventLootPostsHeld is not null)
+                    {
+                        // Not committed yet (see HoldEventLootPosts).
+                        _eventLootPostsHeld.Add(detail.Id);
+                        continue;
+                    }
                     _lootChannelQueue.Enqueue(new DiscordLootJob(LootJobSource.Event, detail.Id));
                 }
             }
         }
+
+        // Event loot rows saved but not committed yet; null when nothing is being held.
+        private List<int>? _eventLootPostsHeld;
+
+        // A loot post on an event saves inside its own transaction (it holds the event row until
+        // COMMIT -- EventRunState.HoldForLootAsync). The Discord loot post reads the new row back by
+        // id, and queued right after the save -- before the commit -- the in-process worker could
+        // look for it first, find nothing, and skip the post for good. While held, those posts wait
+        // for ReleaseHeldEventLootPosts after COMMIT; DropHeldEventLootPosts forgets them when the
+        // loot did not commit.
+        internal void HoldEventLootPosts() => _eventLootPostsHeld ??= new List<int>();
+
+        internal void ReleaseHeldEventLootPosts()
+        {
+            var held = _eventLootPostsHeld;
+            _eventLootPostsHeld = null;
+            if (held is null || _lootChannelQueue is null)
+            {
+                return;
+            }
+            foreach (var lootId in held)
+            {
+                _lootChannelQueue.Enqueue(new DiscordLootJob(LootJobSource.Event, lootId));
+            }
+        }
+
+        internal void DropHeldEventLootPosts() => _eventLootPostsHeld = null;
 
         private void EnqueueAuctionChannelWork(
             IReadOnlyList<Auction> created, IReadOnlyList<AuctionHistory> closed, IReadOnlyList<int> retimed)

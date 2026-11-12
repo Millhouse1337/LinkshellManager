@@ -28,6 +28,36 @@ public static class EventRunState
 
     public static bool IsRunning(Event ev) => RunningCompiled(ev);
 
+    // Call inside the loot post's transaction, BEFORE reading whether the event is running, and
+    // keep the transaction open until the loot is saved.
+    //
+    // Loot on a running event is saved uncharged; the event's own end charges it (End Camp's
+    // SettleCampLootAsync, or the close). The two could cross: End Camp read the board's loot, a
+    // loot post read "running" and saved, then End Camp parked the board -- leaving the new row on
+    // the parked board, uncharged, for the NEXT camp (or for ever).
+    //
+    // A no-op UPDATE of the event row rather than a SELECT ... FOR UPDATE, because End Camp holds
+    // no transaction (HnmCampPopService.PopAsync explains why), so it would never wait on a lock.
+    // What it does have is the Event's xmin check on its save (Event.Version). The UPDATE takes the
+    // same row lock FOR UPDATE would AND gives the row a new xmin, so:
+    //   * End Camp saves first: this waits for it, then reads the board as ended and the loot goes
+    //     to the camp's archive, charged (ManualLootService).
+    //   * this commits first: End Camp's save (or the close's delete) finds the row changed since
+    //     it read it, saves nothing, and is retried -- reading the new loot this time.
+    // In-memory tests have no transactions or row versions and run one request at a time.
+    // Scoped to the caller's linkshell: the id arrives from a client, and another shell's row is
+    // left alone.
+    public static Task HoldForLootAsync(
+        ApplicationDbContext db, int linkshellId, int eventId, CancellationToken cancellationToken)
+        => db.Database.IsRelational()
+            ? db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                 UPDATE "Events" SET "LinkshellId" = "LinkshellId"
+                 WHERE "Id" = {eventId} AND "LinkshellId" = {linkshellId}
+                 """,
+                cancellationToken)
+            : Task.CompletedTask;
+
     // The Past Event the board's most recent camp was archived as, or null when it has none (it
     // never ran, or every camp ended with nobody on it).
     //

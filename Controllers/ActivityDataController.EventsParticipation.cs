@@ -552,6 +552,26 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        // Hold the event row until this loot is saved, so an End Camp at the same moment either
+        // finishes first (and the check below refuses) or has to see this loot. See
+        // EventRunState.HoldForLootAsync. In-memory tests have no transactions.
+        await using var transaction =
+            _dbContext.Database.IsRelational() && _dbContext.Database.CurrentTransaction is null
+                ? await _dbContext.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+        if (transaction is not null)
+        {
+            await EventRunState.HoldForLootAsync(_dbContext, eventEntity.LinkshellId, eventId, cancellationToken);
+            // Read again under the hold: End Camp may have parked the board since the read above.
+            eventEntity = await _dbContext.Events
+                .AsNoTracking()
+                .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
+            if (eventEntity is null)
+            {
+                return NotFound(new { error = "The selected event was not found." });
+            }
+        }
+
         // Only a RUNNING event's card can hold loot for its close (EventRunState). The card is only
         // drawn for running events, but a card left open while another officer pressed End Camp
         // would otherwise drop the row on the parked board, uncharged until the NEXT camp (or
@@ -605,7 +625,24 @@ public sealed partial class ActivityDataController
             RecordedByAppUserId = appUser.Id
         });
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is null)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Ok(new { success = true });
+        }
+
+        // The Discord loot post waits for the COMMIT (ApplicationDbContext.HoldEventLootPosts).
+        _dbContext.HoldEventLootPosts();
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            _dbContext.ReleaseHeldEventLootPosts();
+        }
+        finally
+        {
+            _dbContext.DropHeldEventLootPosts();
+        }
         return Ok(new { success = true });
     }
 }
