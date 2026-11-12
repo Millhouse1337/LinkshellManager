@@ -552,6 +552,20 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
+        // Only a RUNNING event's card can hold loot for its close (EventRunState). The card is only
+        // drawn for running events, but a card left open while another officer pressed End Camp
+        // would otherwise drop the row on the parked board, uncharged until the NEXT camp (or
+        // never, if the board is cancelled). Loot History's Add loot files it under the camp that
+        // just ended and charges it.
+        if (!EventRunState.IsRunning(eventEntity))
+        {
+            return BadRequest(new
+            {
+                error = $"{eventEntity.EventName ?? "This event"} isn't running any more. "
+                    + "Add the loot from Loot History instead."
+            });
+        }
+
         // The winner has to be a member, as on Loot History's Add loot (ManualLootService): a name
         // nobody has was saved with a price and then silently never charged at close. A blank
         // winner is still fine for an item that costs nothing (Loot Council, a free drop).

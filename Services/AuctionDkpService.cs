@@ -297,7 +297,8 @@ public static class AuctionDkpService
         var pendingLoot = await db.EventLootDetails
             .Where(l => l.Event != null
                 && l.Event.LinkshellId == linkshellId
-                && l.Event.CommencementStartTime != null   // live: commenced, not yet ended
+                // Running or not, like the linkshell-wide twin: uncharged loot left on a parked
+                // board still belongs to the winner's spend until a close charges it.
                 && l.DkpDebitedAt == null                  // not charged yet -- see the linkshell-wide twin
                 && l.WinningDkpSpent != null && l.WinningDkpSpent > 0
                 && (l.ItemWinner != null || l.ItemWinnerAppUserId != null))

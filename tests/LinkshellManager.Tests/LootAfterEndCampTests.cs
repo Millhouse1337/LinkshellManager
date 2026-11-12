@@ -318,6 +318,44 @@ public class LootAfterEndCampTests
         Assert.Equal(40, pending["u1"]);
     }
 
+    // The per-POOL twin has to agree, or a linkshell with several pools checks the pool balance
+    // without the parked board's pending loot and lets the winner overspend that pool.
+    [Fact]
+    public async Task UnchargedLootLeftOnAParkedBoard_StillCountsAgainstTheWinnersPool()
+    {
+        await using var db = await SeededAsync(Parked);
+        db.DkpPools.Add(new DkpPool { Id = 5, LinkshellId = Ls, Name = "Main", IsDefault = true });
+        db.EventLootDetails.Add(new EventLootDetail
+        {
+            LinkshellId = Ls, EventId = BoardId, ItemName = "Ridill", ItemWinner = "Alice",
+            ItemWinnerAppUserId = "u1", WinningDkpSpent = 40,
+        });
+        await db.SaveChangesAsync();
+
+        var method = typeof(AuctionDkpService).GetMethod(
+            "ComputePoolPendingLiveLootSpendByUserAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var pending = await (Task<Dictionary<string, double>>)method.Invoke(
+            null, [db, Ls, 5, CancellationToken.None])!;
+
+        Assert.Equal(40, pending["u1"]);
+    }
+
+    // The live card's own Add loot (POST api/activity/events/{id}/loot) needs a signed-in HTTP
+    // context, so its guard is pinned by source like the other ActivityDataController routes. A
+    // stale card open across End Camp must not drop uncharged loot on the parked board.
+    [Fact]
+    public void LiveCardAddLoot_RefusesAnEventThatIsNotRunning()
+    {
+        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "ActivityDataController.EventsParticipation.cs"));
+        var from = text.IndexOf("public async Task<IActionResult> AddLootAsync(", StringComparison.Ordinal);
+        var add = text.IndexOf("_dbContext.EventLootDetails.Add(", from, StringComparison.Ordinal);
+        Assert.True(from >= 0 && add > from, "AddLootAsync not found.");
+
+        var guard = text.IndexOf("if (!EventRunState.IsRunning(eventEntity))", from, StringComparison.Ordinal);
+        Assert.True(guard > from && guard < add, "AddLootAsync must refuse a non-running event before saving loot.");
+    }
+
     [Fact]
     public void LootPicker_ListsOnlyRunningEventsAsLive()
     {
