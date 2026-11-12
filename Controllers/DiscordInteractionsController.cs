@@ -2379,21 +2379,27 @@ public sealed class DiscordInteractionsController : ControllerBase
     //                die, so no time and no repop get recorded.
     //   date only  → an error. A date is not a Time of Death, and choosing a time on the officer's
     //                behalf would invent the number the whole repop clock is counted from.
-    //   time only  → today in the officer's zone, rolled back a day when that is still in the
-    //                future. Kept from the single-box version because it is right for the 2am kill
-    //                being logged at 9am, which is the commonest entry there is.
+    //   time only  → today in the officer's zone. When that is still AHEAD of their LSM clock:
+    //                  - by more than LastNightThreshold (3 hours): last night, so rolled back a
+    //                    day. That is the 11:50pm kill logged at 12:20am;
+    //                  - by up to 3 hours: REFUSED, showing both clocks. A kill typed in soon after
+    //                    it happened only looks an hour or two "in the future" when the officer's
+    //                    Profile zone is behind the clock they read the time from, and rolling that
+    //                    back used to save it 23 hours early (logic-09).
+    //   any typed time needs a time zone on the officer's LSM Profile. With none it used to be
+    //                read as UTC, hours off for everyone outside it. `now` needs none.
     //
     // Returns false with a user-facing message on unparseable input — a ToD is never silently
     // guessed.
     //
     // Static, and internal so the accepted spellings can be pinned directly in tests. The zone
-    // service is passed in rather than read off the controller for the same reason: every branch
-    // here turns on the officer's LOCAL clock, so a test that cannot choose the zone cannot
-    // actually test the rolling-back rules.
+    // service and `nowUtc` are passed in rather than read off the controller and the system clock
+    // for the same reason: every branch here turns on the officer's LOCAL clock, so a test that
+    // cannot choose the zone and the moment cannot actually test the rolling-back rules.
     internal static bool TryParseCampTod(
         TimeZoneConversionService timeZones,
         string? rawDate, string? rawTime, string? timeZoneId,
-        out DateTime? todUtc, out string? error)
+        out DateTime? todUtc, out string? error, DateTime? nowUtc = null)
     {
         todUtc = null;
         error = null;
@@ -2405,7 +2411,8 @@ public sealed class DiscordInteractionsController : ControllerBase
             return true; // null → "Not entered"; the pop service leaves Time + RepopTime unset
         }
 
-        var localNow = timeZones.ToUserTime(DateTime.UtcNow, timeZoneId) ?? DateTime.UtcNow;
+        var utcNow = nowUtc ?? DateTime.UtcNow;
+        var localNow = timeZones.ToUserTime(utcNow, timeZoneId) ?? utcNow;
 
         // "now" carries its own date, so a Date beside it is a contradiction rather than extra
         // information — better to say so than to silently pick one of the two.
@@ -2416,7 +2423,7 @@ public sealed class DiscordInteractionsController : ControllerBase
                 error = "Leave **Date** blank when the time is `now` — `now` already carries its own date.";
                 return false;
             }
-            todUtc = DateTime.UtcNow;
+            todUtc = utcNow;
             return true;
         }
 
@@ -2441,6 +2448,15 @@ public sealed class DiscordInteractionsController : ControllerBase
             return false;
         }
 
+        // A typed time is read in the Profile's zone, so without one there is nothing to read it in.
+        if (!timeZones.IsKnownZone(timeZoneId))
+        {
+            error = "Your LSM Profile has no time zone, so a typed **Time of Death** can't be read. "
+                  + "Set your time zone on your LSM Profile, then hit **End Camp** again "
+                  + "(or type `now` if it just died). Nothing was saved.";
+            return false;
+        }
+
         if (!TryResolveCampTodDate(datePart, localNow, out var localDate, out var dateError))
         {
             error = dateError;
@@ -2448,16 +2464,52 @@ public sealed class DiscordInteractionsController : ControllerBase
         }
 
         var localDt = localDate.ToDateTime(timeOnly, DateTimeKind.Unspecified);
-        // Only when NO date was typed. An explicit date is an instruction; second-guessing it would
-        // move an officer's deliberate answer by a day.
-        if (datePart.Length == 0 && localDt > localNow)
+        if (timeZones.ToUtc(localDt, timeZoneId) is not { } candidateUtc)
         {
-            localDt = localDt.AddDays(-1); // a ToD later than "now" today must mean last night
+            return false;
         }
 
-        todUtc = timeZones.ToUtc(localDt, timeZoneId);
-        return todUtc.HasValue;
+        // Only when NO date was typed. An explicit date is an instruction; second-guessing it would
+        // move an officer's deliberate answer by a day. Compared in UTC rather than on the wall
+        // clock, so a daylight-saving change between the two moments can't make "how far ahead" an
+        // hour wrong.
+        if (datePart.Length == 0 && candidateUtc > utcNow)
+        {
+            if (candidateUtc - utcNow <= LastNightThreshold)
+            {
+                error = CampTodNotYetMessage(timeZoneId, localDt, localNow);
+                return false;
+            }
+            localDt = localDt.AddDays(-1); // well ahead of "now" today: last night
+            if (timeZones.ToUtc(localDt, timeZoneId) is not { } lastNightUtc)
+            {
+                return false;
+            }
+            candidateUtc = lastNightUtc;
+        }
+
+        todUtc = candidateUtc;
+        return true;
     }
+
+    // How far ahead of the LSM clock a time with no date must be before it reads as last night.
+    // Up to this it is refused instead: being an hour or two "in the future" is what a Profile zone
+    // behind the officer's own clock looks like.
+    private static readonly TimeSpan LastNightThreshold = TimeSpan.FromHours(3);
+
+    // Why a ToD was refused for being ahead of the LSM clock, with both clocks spelled out so the
+    // officer can see which one is wrong.
+    private static string CampTodNotYetMessage(string? timeZoneId, DateTime typedLocal, DateTime localNow) =>
+        $"**{FormatLsmClock(typedLocal, withSeconds: typedLocal.Second != 0)}** hasn't happened yet by your "
+        + $"LSM clock: it's **{FormatLsmClock(localNow)}** ({timeZoneId}). Nothing was saved.\n"
+        + "• If your clock shows a different time, fix the time zone on your LSM Profile, then hit "
+        + "**End Camp** again.\n"
+        + "• If it died yesterday, type `yesterday` in **Date**.";
+
+    // "Nov 8, 8:10 AM", or with seconds "Nov 8, 9:07:16 AM".
+    private static string FormatLsmClock(DateTime local, bool withSeconds = false) =>
+        local.ToString(withSeconds ? "MMM d, h:mm:ss tt" : "MMM d, h:mm tt",
+            System.Globalization.CultureInfo.InvariantCulture);
 
     // The Date box → a local calendar day. Blank is today.
     //
