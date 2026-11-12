@@ -145,7 +145,7 @@
                     </div>
                   } @else {
                   <div class="ac-roster-rank">
-                    @if (editingRankMemberId() === member.id && canEditRosterRank(member.appUserId)) {
+                    @if (editingRankMemberId() === member.id && canEditRosterRank(member.appUserId, member.rank)) {
                       <select
                         [(ngModel)]="editingRankValue"
                         [name]="'rankEdit_' + member.id"

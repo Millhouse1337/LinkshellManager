@@ -363,6 +363,12 @@ export function canManageEventsIn(
   return membership.permissions?.canManageEvents === true;
 }
 
+// True for the Leader rank name. Same test the server uses (LinkshellRanks.IsLeader:
+// "Leader", any letter case), so a custom role spelled "leader" counts too.
+export function isLeaderRankName(rank: string | null | undefined): boolean {
+  return (rank ?? '').toLowerCase() === 'leader';
+}
+
 // Leader-tier gates (rank editing, removing members, transferring ownership).
 // Same membership-first rule as above.
 export function isLeaderTierIn(

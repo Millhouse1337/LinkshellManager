@@ -14,6 +14,7 @@ import {
   ADMIN_BADGE,
   canManageLinkshellIn,
   formatAlts,
+  isLeaderRankName,
   isLeaderTierIn,
   memberAvatarClass,
   memberInitials,
@@ -435,13 +436,18 @@ export class LinkshellTabComponent {
   // Returns the rank options for the dropdown as { id, name } pairs. While the
   // server is loading we surface the system defaults so the inline edit is
   // never empty.
+  //
+  // Only the Leader (or the admin override) may hand out the Leader rank, so the
+  // server answers 403 when an officer picks it. Leave it out of their list
+  // rather than offer a choice that can only fail.
   protected rankOptions(): { id: number; name: string }[] {
     const id = this.selectedDashboardLinkshellId();
     const loaded = this.rolesByLinkshell()[id];
-    if (loaded && loaded.length > 0) {
-      return loaded.map(role => ({ id: role.id, name: role.name }));
-    }
-    return this.fallbackRoleNames.map((name, index) => ({ id: -(index + 1), name }));
+    const options = loaded && loaded.length > 0
+      ? loaded.map(role => ({ id: role.id, name: role.name }))
+      : this.fallbackRoleNames.map((name, index) => ({ id: -(index + 1), name }));
+    if (isLeaderTierIn(this.activity.overview(), id)) return options;
+    return options.filter(option => !isLeaderRankName(option.name));
   }
 
   protected async beginEditRank(memberId: number, currentRank: string | null | undefined): Promise<void> {
@@ -502,9 +508,18 @@ export class LinkshellTabComponent {
     this.editingStatusValue = '';
   }
 
-  protected canEditRosterRank(memberAppUserId: string | null | undefined): boolean {
+  // A Leader's own rank is Leader-only too (the server refuses anyone else), so an
+  // officer sees it as a plain tag instead of a dropdown that can only fail.
+  protected canEditRosterRank(
+    memberAppUserId: string | null | undefined,
+    memberRank?: string | null
+  ): boolean {
     if (!this.canManageSelectedDashboard()) return false;
     if (!memberAppUserId) return false;
+    if (isLeaderRankName(memberRank) &&
+        !isLeaderTierIn(this.activity.overview(), this.selectedDashboardLinkshellId())) {
+      return false;
+    }
     return memberAppUserId !== this.activity.overview()?.appUser?.id;
   }
 
