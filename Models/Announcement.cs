@@ -12,8 +12,6 @@ namespace LinkshellManagerDiscordApp.Models
 
         [ForeignKey("LinkshellId")]
         public Linkshell? Linkshell { get; set; }
-        // PHASE4B-DROP: Announcements.LinkshellName - a copy of the linkshell's name that nothing reads; LinkshellId is the link.
-        public string? LinkshellName { get; set; }
 
         [Required]
         public required string AnnouncementTitle { get; set; }

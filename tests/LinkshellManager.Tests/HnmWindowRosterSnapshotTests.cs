@@ -42,7 +42,6 @@ public class HnmWindowRosterSnapshotTests
                 Id = signup.PartySetupSlotId,
                 PartySetupPartyId = PartyId,
                 SortOrder = signup.PartySetupSlotId,
-                Label = "(GHORN)",
             });
             db.EventPartySlotSignups.Add(signup);
         }
@@ -116,7 +115,6 @@ public class HnmWindowRosterSnapshotTests
         var row = await db.EventWindowRosterSnapshots.SingleAsync();
         Assert.Equal("Alliance A", row.AllianceName);
         Assert.Equal("Party 1", row.PartyName);
-        Assert.Equal("(GHORN)", row.SlotLabel);
         Assert.Equal("PLD", row.MainJob);
         Assert.Equal("WAR", row.SubJob);
         Assert.True(row.IsPartyLeader);

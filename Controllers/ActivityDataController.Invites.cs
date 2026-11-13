@@ -330,7 +330,6 @@ public sealed partial class ActivityDataController
 
         var results = await _dbContext.Linkshells
             .Where(linkshell =>
-                linkshell.Status == "Active" &&
                 !existingMembershipIds.Contains(linkshell.Id) &&
                 !pendingRequestIds.Contains(linkshell.Id) &&
                 linkshell.LinkshellName != null &&
@@ -345,8 +344,7 @@ public sealed partial class ActivityDataController
             linkshell.Id,
             linkshell.LinkshellName ?? "Unknown linkshell",
             linkshell.Details,
-            memberCounts.GetValueOrDefault(linkshell.Id, 0),
-            linkshell.Status)).ToList());
+            memberCounts.GetValueOrDefault(linkshell.Id, 0))).ToList());
     }
 
     [HttpPost("linkshells/{linkshellId:int}/join-request")]
@@ -363,7 +361,7 @@ public sealed partial class ActivityDataController
 
         var linkshell = await _dbContext.Linkshells
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Id == linkshellId && item.Status == "Active", cancellationToken);
+            .FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
 
         if (linkshell is null)
         {

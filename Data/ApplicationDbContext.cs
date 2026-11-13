@@ -1417,11 +1417,6 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.EventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
-                // PHASE4B-DROP: this FK goes with DkpLedgerEntries.SourceAuctionHistoryId (no longer written).
-                entity.HasOne(item => item.SourceAuctionHistory)
-                    .WithMany()
-                    .HasForeignKey(item => item.SourceAuctionHistoryId)
-                    .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.LinkshellId, item.AppUserId, item.OccurredAt, item.Sequence });
                 // Index the loot-source FKs so the Loot History view can
                 // quickly find the edit-pair ledger entries for a given
@@ -1436,10 +1431,6 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.SourceWindowEventId, item.AppUserId })
                     .IsUnique()
                     .HasFilter("\"EntryType\" = 'SnapshotEarned' AND \"AppUserId\" IS NOT NULL AND \"SourceWindowEventId\" IS NOT NULL");
-                // PHASE4B-DROP: this index goes with DkpLedgerEntries.SourceAuctionHistoryId.
-                entity.HasIndex(item => item.SourceAuctionHistoryId);
-                // PHASE4B-DROP: this index goes with DkpLedgerEntries.AttInputRowNumber (Google Sheets leftover).
-                entity.HasIndex(item => item.AttInputRowNumber);
                 entity.HasIndex(item => item.AuditRelatedLedgerEntryId);
                 // DkpPoolId is deliberately NOT a foreign key — see DkpLedgerEntry.DkpPoolId.
                 // The index carries the pool-balance derivation and the remap re-stamp.
@@ -1576,7 +1567,6 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.Role).HasMaxLength(16);
                 entity.Property(item => item.MainJob).HasMaxLength(8);
                 entity.Property(item => item.SubJob).HasMaxLength(8);
-                entity.Property(item => item.Label).HasMaxLength(64);
                 entity.HasIndex(item => new { item.PartySetupPartyId, item.SortOrder });
             });
 
@@ -1684,8 +1674,6 @@ namespace LinkshellManagerDiscordApp.Data
             builder.Entity<Rule>(entity =>
             {
                 entity.ToTable("Rules");
-                // PHASE4B-DROP: Rules.LinkshellName - no longer written or read.
-                entity.Property(item => item.LinkshellName).HasMaxLength(256);
                 entity.Property(item => item.RuleTitle).HasMaxLength(256).IsRequired();
                 entity.Property(item => item.RuleDetails).HasMaxLength(4000).IsRequired();
                 entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
@@ -1700,8 +1688,6 @@ namespace LinkshellManagerDiscordApp.Data
             builder.Entity<Announcement>(entity =>
             {
                 entity.ToTable("Announcements");
-                // PHASE4B-DROP: Announcements.LinkshellName - no longer written or read.
-                entity.Property(item => item.LinkshellName).HasMaxLength(256);
                 entity.Property(item => item.AnnouncementTitle).HasMaxLength(256).IsRequired();
                 entity.Property(item => item.AnnouncementDetails).HasMaxLength(4000).IsRequired();
                 entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
@@ -1716,8 +1702,6 @@ namespace LinkshellManagerDiscordApp.Data
             builder.Entity<Item>(entity =>
             {
                 entity.ToTable("Items");
-                // PHASE4B-DROP: Items.LinkshellName - no longer written or read.
-                entity.Property(item => item.LinkshellName).HasMaxLength(256);
                 entity.Property(item => item.ItemName).HasMaxLength(256).IsRequired();
                 entity.Property(item => item.ItemType).HasMaxLength(128);
                 entity.Property(item => item.Notes).HasMaxLength(1024);
@@ -1737,15 +1721,11 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 entity.ToTable("LedgerAccounts");
                 entity.Property(item => item.Name).HasMaxLength(96).IsRequired();
-                // PHASE4B-DROP: LedgerAccounts.Description - no longer written or read.
-                entity.Property(item => item.Description).HasMaxLength(512);
                 entity.HasOne(item => item.Linkshell)
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => new { item.LinkshellId, item.AccountNumber }).IsUnique();
-                // PHASE4B-DROP: this index goes with LedgerAccounts.SortOrder.
-                entity.HasIndex(item => new { item.LinkshellId, item.SortOrder });
                 // Exactly one gil-on-hand category per linkshell — the same partial-unique trick
                 // as IX_DkpPools_LinkshellId_Default. Its balance IS the treasury balance, so two
                 // of them would make "how much gil do we have" ambiguous again.
@@ -1803,8 +1783,6 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 entity.ToTable("JournalEntryLines");
                 entity.Property(item => item.AccountName).HasMaxLength(96).IsRequired();
-                // PHASE4B-DROP: JournalEntryLines.LineMemo - never written (always null) or read.
-                entity.Property(item => item.LineMemo).HasMaxLength(256);
                 entity.Property(item => item.CounterpartyAppUserId).HasMaxLength(450);
                 entity.Property(item => item.CounterpartyCharacterName).HasMaxLength(256);
                 entity.Property(item => item.HolderAppUserId).HasMaxLength(450);
@@ -1997,8 +1975,6 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.ToTable("AddonApiTokens");
                 entity.Property(item => item.TokenHash).HasMaxLength(128).IsRequired();
                 entity.Property(item => item.TokenPrefix).HasMaxLength(16).IsRequired();
-                // PHASE4B-DROP: AddonApiTokens.Label - nothing ever sent a label; no longer written or read.
-                entity.Property(item => item.Label).HasMaxLength(128);
                 entity.Property(item => item.IssuedToAppUserId).HasMaxLength(450);
                 entity.HasOne(item => item.Linkshell)
                     .WithMany()
@@ -2016,8 +1992,6 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 entity.ToTable("AddonPairingCodes");
                 entity.Property(item => item.Code).HasMaxLength(16).IsRequired();
-                // PHASE4B-DROP: AddonPairingCodes.Label - nothing ever sent a label; no longer written or read.
-                entity.Property(item => item.Label).HasMaxLength(128);
                 entity.Property(item => item.IssuedToAppUserId).HasMaxLength(450);
                 entity.HasOne(item => item.Linkshell)
                     .WithMany()

@@ -50,8 +50,9 @@ public class EventWindowRosterSnapshot
 
     public int SlotSortOrder { get; set; }
 
-    // The slot's free-text annotation ("(GHORN)", "Melee DD") — part of how the row read on the
-    // board, so it belongs in the snapshot rather than being re-derived.
+    // The slot's free-text annotation ("(GHORN)", "Melee DD") as it read on the board. Nothing
+    // writes it any more: the slot's own Label column was never set by any screen and was dropped
+    // in Phase 4B. The Discord roster line still shows it if an old row has one.
     [MaxLength(64)]
     public string? SlotLabel { get; set; }
 

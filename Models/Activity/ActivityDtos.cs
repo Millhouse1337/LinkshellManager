@@ -87,17 +87,6 @@ public sealed record ActivityLinkshellDto(
     bool AuctionsLocked = false,
     string? BannerUrl = null);
 
-// LEGACY. The per-linkshell ToD cooldown blob (Linkshell.TodMonsterTimings) this described was
-// replaced by the LinkshellMonsterTimings table. Nothing writes it any more; it survives only so
-// LinkshellMonsterTimingProvisioner can import a linkshell's old values on first seed, and goes
-// with the column in a later deploy.
-public sealed record ActivityTodMonsterTimingDto(
-    string MonsterName,
-    double CooldownHours,
-    int IntervalHours,
-    int IntervalMinutes,
-    string? Category = null);
-
 // One monster's setup in the Monster Setups editor.
 //
 // Durations travel as the value + unit the officer typed ("22" + "hours") rather than as raw
@@ -629,7 +618,6 @@ public sealed record ActivityLinkshellDetailDto(
     string Name,
     int MemberCount,
     string? Details,
-    string? Status,
     IReadOnlyList<ActivityMemberDto> Members);
 
 public sealed record ActivityMemberDto(
@@ -1249,8 +1237,7 @@ public sealed record ActivityLinkshellSearchResultDto(
     int Id,
     string Name,
     string? Details,
-    int MemberCount,
-    string? Status);
+    int MemberCount);
 
 public sealed record ActivityLootDto(
     int Id,

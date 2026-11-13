@@ -30,7 +30,7 @@ public class DataAdminEditorTests
         var db = NewInMemoryContext();
         db.Linkshells.Add(new Linkshell { Id = 1, LinkshellName = "Kraken LS", LootStructure = "Dkp" });
         db.Linkshells.Add(new Linkshell { Id = 2, LinkshellName = "Titans", LootStructure = "Dkp" });
-        db.Rules.Add(new Rule { Id = 1, LinkshellId = 1, LinkshellName = "Kraken LS", RuleTitle = "Loot rules", RuleDetails = "No ninja looting" });
+        db.Rules.Add(new Rule { Id = 1, LinkshellId = 1, RuleTitle = "Loot rules", RuleDetails = "No ninja looting" });
         db.Users.Add(new AppUser { Id = "u1", UserName = "someone", CharacterName = "Millhouse", IsSuperAdmin = false });
         db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, AppUserId = "u1", LinkshellId = 1, CharacterName = "Millhouse", Rank = LinkshellRanks.Member });
         db.DkpPools.Add(new DkpPool { Id = 1, LinkshellId = 1, Name = "Main", IsDefault = true });
@@ -54,21 +54,20 @@ public class DataAdminEditorTests
         pairs.ToDictionary(pair => pair.Name, pair => pair.Value, StringComparer.Ordinal);
 
     [Fact]
-    public async Task Create_BindsOnlyCreateColumns_AndKeepsTheLinkshellNameCopyInStep()
+    public async Task Create_BindsOnlyCreateColumns()
     {
         using var db = await SeededAsync();
         var (catalog, editor, _) = Harness(db);
 
         var result = await editor.CreateAsync(
             Table(catalog, typeof(Rule)),
-            Values(("LinkshellId", "2"), ("RuleTitle", " Be kind "), ("RuleDetails", "Always"), ("Category", ""), ("Id", "77"), ("LinkshellName", "typed by hand")),
+            Values(("LinkshellId", "2"), ("RuleTitle", " Be kind "), ("RuleDetails", "Always"), ("Category", ""), ("Id", "77")),
             Actor,
             CancellationToken.None);
 
         Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(e => e.Message)));
         var saved = Assert.Single(await db.Rules.AsNoTracking().Where(r => r.RuleTitle == "Be kind").ToListAsync());
         Assert.Equal(2, saved.LinkshellId);
-        Assert.Equal("Titans", saved.LinkshellName);   // synced from the foreign key, not from the form
         Assert.Null(saved.Category);                    // blank nullable -> null
         Assert.NotEqual(77, saved.Id);                  // the generated key is never taken from the form
     }
@@ -99,7 +98,7 @@ public class DataAdminEditorTests
         var rule = await db.Rules.AsNoTracking().SingleAsync(r => r.Id == 1);
         Assert.Equal("Renamed", rule.RuleTitle);
         Assert.Equal("No ninja looting", rule.RuleDetails); // absent on edit = unchanged
-        Assert.Equal("Titans", rule.LinkshellName);        // re-synced after the foreign key moved
+        Assert.Equal(2, rule.LinkshellId);                  // a foreign key is an ordinary editable column
         Assert.False(await db.Rules.AnyAsync(r => r.Id == 999));
     }
 

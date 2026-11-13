@@ -51,8 +51,6 @@ public class Linkshell
     [NotMapped]
     public int? Revenue { get; set; }
 
-    public string? Status { get; set; }
-
     public string? Details { get; set; }
 
     // Optional dashboard banner image. Stored in a separate LinkshellBanner table
@@ -186,10 +184,6 @@ public class Linkshell
     // grows a mob name with a comma in it. Edited from the Customize panel.
     public string HiddenTodMonsters { get; set; } = string.Empty;
 
-    // JSON array of per-monster ToD cooldown and interval overrides. Empty means
-    // use the built-in defaults. The Activity configuration editor owns this.
-    public string TodMonsterTimings { get; set; } = string.Empty;
-
     // The Discord guild (server) this linkshell is tied to. NULL/empty = not
     // tied to any server. When set it is the single source of truth for every
     // server-scoped behavior:
@@ -218,48 +212,6 @@ public class Linkshell
     // only open it when launched from DiscordGuildId, and overview membership is
     // verified). Setting a server never implies locking.
     public bool LockToDiscordGuild { get; set; } = false;
-
-    // The Google Sheets integration was removed 2026-06-24 (replaced by the app-native DKP sheet;
-    // see DkpSheetService). Nothing reads or writes these seven columns; Data Admin only hides
-    // the old refresh token. All seven go in Phase 4B.
-    // PHASE4B-DROP: Linkshells.GoogleSpreadsheetId - Google Sheets leftover.
-    [MaxLength(128)]
-    public string? GoogleSpreadsheetId { get; set; }
-
-    // PHASE4B-DROP: Linkshells.GoogleSheetAppCreated - Google Sheets leftover.
-    public bool GoogleSheetAppCreated { get; set; }
-
-    // PHASE4B-DROP: Linkshells.DkpTemplateTabName - Google Sheets leftover.
-    [MaxLength(64)]
-    public string? DkpTemplateTabName { get; set; }
-
-    // PHASE4B-DROP: Linkshells.SheetTemplateSyncEnabled - Google Sheets leftover.
-    public bool SheetTemplateSyncEnabled { get; set; } = false;
-
-    // PHASE4B-DROP: Linkshells.GoogleOAuthRefreshTokenEnc - Google Sheets leftover (null it in prod first).
-    public string? GoogleOAuthRefreshTokenEnc { get; set; }
-
-    // PHASE4B-DROP: Linkshells.GoogleOAuthUserEmail - Google Sheets leftover (null it in prod first).
-    [MaxLength(256)]
-    public string? GoogleOAuthUserEmail { get; set; }
-
-    // PHASE4B-DROP: Linkshells.GoogleOAuthConnectedAt - Google Sheets leftover.
-    public DateTime? GoogleOAuthConnectedAt { get; set; }
-
-    // The old single DKP-sheet channel. Replaced by a channel route with PostDkpSheet ticked
-    // (LinkshellChannelRoute.DkpSheetMessageId holds the live post now); nothing reads or writes
-    // these three any more.
-    // PHASE4B-DROP: Linkshells.DkpExportDiscordChannelId - replaced by channel routes.
-    [MaxLength(20)]
-    public string? DkpExportDiscordChannelId { get; set; }
-
-    // PHASE4B-DROP: Linkshells.DkpExportDiscordChannelName - replaced by channel routes.
-    [MaxLength(128)]
-    public string? DkpExportDiscordChannelName { get; set; }
-
-    // PHASE4B-DROP: Linkshells.DkpSheetDiscordMessageId - replaced by LinkshellChannelRoute.DkpSheetMessageId.
-    [MaxLength(32)]
-    public string? DkpSheetDiscordMessageId { get; set; }
 
     // User-defined Discord channel routes: which channels the bot posts each kind
     // of content to (events/loot/auctions/attendance/ToD). Replaced the old fixed-purpose

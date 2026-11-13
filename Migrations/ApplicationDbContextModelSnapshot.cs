@@ -37,10 +37,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
-                    b.Property<string>("Label")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
                     b.Property<DateTime?>("LastUsedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -91,9 +87,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("ConsumedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int?>("ConsumedTokenId")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -103,10 +96,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("IssuedToAppUserId")
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
-
-                    b.Property<string>("Label")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
 
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
@@ -160,10 +149,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
-
-                    b.Property<string>("LinkshellName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
 
                     b.HasKey("Id");
 
@@ -1339,9 +1324,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("AppUserId")
                         .HasColumnType("text");
 
-                    b.Property<int?>("AttInputRowNumber")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("AuditRelatedLedgerEntryId")
                         .HasColumnType("integer");
 
@@ -1368,9 +1350,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<DateTime?>("EventEndTime")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int?>("EventHistoryId")
                         .HasColumnType("integer");
 
@@ -1381,9 +1360,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("EventName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime?>("EventStartTime")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("EventType")
                         .HasMaxLength(256)
@@ -1402,12 +1378,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("Sequence")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("SheetAppendedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("SourceAuctionHistoryId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("SourceEventLootDetailId")
                         .HasColumnType("integer");
 
@@ -1418,13 +1388,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("AppUserId");
 
-                    b.HasIndex("AttInputRowNumber");
-
                     b.HasIndex("AuditRelatedLedgerEntryId");
 
                     b.HasIndex("EventHistoryId");
-
-                    b.HasIndex("SourceAuctionHistoryId");
 
                     b.HasIndex("SourceEventLootDetailId");
 
@@ -2180,10 +2146,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("LinkshellName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
                     b.Property<string>("Notes")
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
@@ -2340,12 +2302,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-                    b.Property<int?>("SourceAuctionHistoryId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("SourceAuctionItemId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("SourceItemId")
                         .HasColumnType("integer");
 
@@ -2424,10 +2380,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("LedgerAccountId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("LineMemo")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
                     b.Property<int>("LineNumber")
                         .HasColumnType("integer");
 
@@ -2467,20 +2419,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Description")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("IsCash")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsPostable")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsSystem")
                         .HasColumnType("boolean");
 
                     b.Property<int>("LinkshellId")
@@ -2491,9 +2433,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(96)
                         .HasColumnType("character varying(96)");
 
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
                     b.HasIndex("LinkshellId")
@@ -2503,8 +2442,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("LinkshellId", "AccountNumber")
                         .IsUnique();
-
-                    b.HasIndex("LinkshellId", "SortOrder");
 
                     b.ToTable("LedgerAccounts", null, t =>
                         {
@@ -2544,26 +2481,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<string>("DkpExportDiscordChannelId")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("DkpExportDiscordChannelName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
                     b.Property<string>("DkpRoundingIncrement")
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
-
-                    b.Property<string>("DkpSheetDiscordMessageId")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("DkpTemplateTabName")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
 
                     b.Property<bool>("EnableActivityTracking")
                         .HasColumnType("boolean");
@@ -2588,23 +2509,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<bool>("EnableTreasury")
                         .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("GoogleOAuthConnectedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("GoogleOAuthRefreshTokenEnc")
-                        .HasColumnType("text");
-
-                    b.Property<string>("GoogleOAuthUserEmail")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<bool>("GoogleSheetAppCreated")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("GoogleSpreadsheetId")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
 
                     b.Property<string>("HiddenTodMonsters")
                         .IsRequired()
@@ -2649,16 +2553,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<bool>("OutsidePartySignupEnabled")
                         .HasColumnType("boolean");
-
-                    b.Property<bool>("SheetTemplateSyncEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Status")
-                        .HasColumnType("text");
-
-                    b.Property<string>("TodMonsterTimings")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<double>("WdClaimBonus")
                         .HasColumnType("double precision");
@@ -3115,10 +3009,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("IsPartyLeader")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Label")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
                     b.Property<string>("MainJob")
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
@@ -3317,10 +3207,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("LinkshellName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
                     b.Property<string>("RuleDetails")
                         .IsRequired()
                         .HasMaxLength(4000)
@@ -3391,12 +3277,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<DateTime?>("TimeStamp")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("TotalClaims")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("TotalTods")
-                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -4028,18 +3908,11 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("LinkshellManagerDiscordApp.Models.AuctionHistory", "SourceAuctionHistory")
-                        .WithMany()
-                        .HasForeignKey("SourceAuctionHistoryId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("AppUser");
 
                     b.Navigation("EventHistory");
 
                     b.Navigation("Linkshell");
-
-                    b.Navigation("SourceAuctionHistory");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.DkpPool", b =>

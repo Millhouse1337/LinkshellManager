@@ -97,11 +97,6 @@ public class JournalEntry
     // Traceability back to whatever caused a machine-recorded entry. Un-FK'd for the same reason
     // as ReversesJournalEntryId.
     public int? SourceItemId { get; set; }
-    // PHASE4B-DROP: JournalEntries.SourceAuctionItemId - written by gil auction close but never read;
-    // the entry's Memo already names the item and the winner.
-    public int? SourceAuctionItemId { get; set; }
-    // PHASE4B-DROP: JournalEntries.SourceAuctionHistoryId - never written or read.
-    public int? SourceAuctionHistoryId { get; set; }
 
     // --- conversion bridge: permanent, never written by new code ---
     // Exactly what strings the old RevenueEntries row carried before it was converted. A

@@ -73,7 +73,7 @@ public class HnmWindowClearLifecycleTests
         });
         db.PartySetupAlliances.Add(new PartySetupAlliance { Id = 10, PartySetupId = 1, Name = "Alliance A", SortOrder = 0 });
         db.PartySetupParties.Add(new PartySetupParty { Id = 100, PartySetupAllianceId = 10, Name = "Party 1", SortOrder = 0 });
-        db.PartySetupSlots.Add(new PartySetupSlot { Id = 1000, PartySetupPartyId = 100, SortOrder = 0, Label = "(GHORN)" });
+        db.PartySetupSlots.Add(new PartySetupSlot { Id = 1000, PartySetupPartyId = 100, SortOrder = 0 });
         db.SaveChanges();
         return db;
     }

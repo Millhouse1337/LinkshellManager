@@ -10,8 +10,6 @@ namespace LinkshellManagerDiscordApp.Models;
 //   "Any"  -> open; Role/MainJob/SubJob are null.
 //   "Role" -> generic role required; Role is set (Tank/Heal/Support/DPS).
 //   "Job"  -> specific job required; MainJob set, SubJob optional (e.g. RDM/NIN).
-// Label is an optional free-text annotation ("(GHORN)", "Melee DD"),
-// independent of RequirementType.
 public class PartySetupSlot
 {
     [Key]
@@ -35,9 +33,6 @@ public class PartySetupSlot
 
     [MaxLength(8)]
     public string? SubJob { get; set; }
-
-    [MaxLength(64)]
-    public string? Label { get; set; }
 
     // At most one slot per party is the designated party leader. Surfaced
     // with a crown in the editor + details views.

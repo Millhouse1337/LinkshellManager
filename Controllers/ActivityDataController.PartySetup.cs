@@ -49,7 +49,6 @@ public sealed partial class ActivityDataController
         string? Role,
         string? MainJob,
         string? SubJob,
-        string? Label,
         bool IsPartyLeader,
         string? SignedUpAppUserId,
         string? SignedUpCharacterName,
@@ -172,7 +171,6 @@ public sealed partial class ActivityDataController
                                 s.Role,
                                 s.MainJob,
                                 s.SubJob,
-                                s.Label,
                                 s.IsPartyLeader,
                                 s.SignedUpAppUserId,
                                 s.SignedUpCharacterName,
@@ -600,7 +598,6 @@ public sealed partial class ActivityDataController
         var slot = new PartySetupSlot
         {
             SortOrder = sortOrder,
-            Label = null,
             IsPartyLeader = input.IsPartyLeader
         };
 

@@ -36,7 +36,7 @@ public class CustomMonsterCatalogTests
     {
         var db = NewInMemoryContext();
         db.LinkshellMonsterTimings.AddRange(
-            LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, null, Now));
+            LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, Now));
         foreach (var name in customNames)
         {
             db.LinkshellMonsterTimings.Add(new LinkshellMonsterTiming
@@ -86,7 +86,7 @@ public class CustomMonsterCatalogTests
     public void FreshSeed_ForAnyLinkshell_ExcludesRetiredNms(int linkshellId)
     {
         var seeded = LinkshellMonsterTimingProvisioner
-            .BuildSeed(linkshellId, null, Now)
+            .BuildSeed(linkshellId, Now)
             .Select(row => row.MonsterName)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -106,7 +106,7 @@ public class CustomMonsterCatalogTests
     [Fact]
     public void FreshSeed_HasNoOtherNms()
     {
-        var seeded = LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, null, Now);
+        var seeded = LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, Now);
 
         Assert.NotEmpty(seeded);
         Assert.All(seeded, row => Assert.Equal(MonsterTimingDefaults.HnmCategory, row.Category));
@@ -222,7 +222,7 @@ public class CustomMonsterCatalogTests
     {
         await using var db = await SeededAsync("Ouryu");
         db.LinkshellMonsterTimings.AddRange(
-            LinkshellMonsterTimingProvisioner.BuildSeed(OtherLinkshellId, null, Now));
+            LinkshellMonsterTimingProvisioner.BuildSeed(OtherLinkshellId, Now));
         await db.SaveChangesAsync();
 
         var other = await new MonsterTimingResolver(db).GetMapAsync(OtherLinkshellId, CancellationToken.None);

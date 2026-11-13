@@ -62,13 +62,6 @@ public class DkpLedgerEntry
     [MaxLength(256)]
     public string? EventLocation { get; set; }
 
-    // PHASE4B-DROP: DkpLedgerEntries.EventStartTime - no longer written or read; OccurredAt dates
-    // the row and EventHistoryId links to the event.
-    public DateTime? EventStartTime { get; set; }
-
-    // PHASE4B-DROP: DkpLedgerEntries.EventEndTime - no longer written or read (see EventStartTime).
-    public DateTime? EventEndTime { get; set; }
-
     [MaxLength(256)]
     public string? ItemName { get; set; }
 
@@ -88,14 +81,6 @@ public class DkpLedgerEntry
     // be deleted later, and we want the ledger to remain immutable regardless.
     public int? SourceEventLootDetailId { get; set; }
 
-    // PHASE4B-DROP: DkpLedgerEntries.SourceAuctionHistoryId (+ its FK and index) - it only fed the
-    // removed Google Sheets ManualPoints batching; no longer written or read.
-    public int? SourceAuctionHistoryId { get; set; }
-
-    // PHASE4B-DROP: navigation for SourceAuctionHistoryId - goes with the column.
-    [ForeignKey(nameof(SourceAuctionHistoryId))]
-    public AuctionHistory? SourceAuctionHistory { get; set; }
-
     // Populated when a Window Event built from attendance snapshots is posted
     // (paid). This lets DKP history/audits show the snapshot-derived DKP
     // rows and prevents backfills from creating duplicates.
@@ -105,12 +90,4 @@ public class DkpLedgerEntry
     // lets subsequent corrections calculate the delta from the current audited
     // value instead of repeatedly comparing against the original amount.
     public int? AuditRelatedLedgerEntryId { get; set; }
-
-    // PHASE4B-DROP: DkpLedgerEntries.AttInputRowNumber (+ its index) - a row number in the removed
-    // Google Sheets AttInput tab; no longer written or read.
-    public int? AttInputRowNumber { get; set; }
-
-    // PHASE4B-DROP: DkpLedgerEntries.SheetAppendedAt - stamp for the removed Google Sheets
-    // ManualPoints append; never written or read.
-    public DateTime? SheetAppendedAt { get; set; }
 }

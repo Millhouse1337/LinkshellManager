@@ -114,7 +114,6 @@ public static class EventPartyBoardEditService
                         Role = slotT.Role,
                         MainJob = slotT.MainJob,
                         SubJob = slotT.SubJob,
-                        Label = slotT.Label,
                         IsPartyLeader = slotT.IsPartyLeader,
                         // Template SignedUp* fields are intentionally NOT copied — the
                         // event roster lives in EventPartySlotSignup, not on the slot.

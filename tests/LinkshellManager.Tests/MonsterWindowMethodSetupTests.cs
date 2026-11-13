@@ -34,7 +34,7 @@ public class MonsterWindowMethodSetupTests
     {
         var db = NewInMemoryContext();
         db.LinkshellMonsterTimings.AddRange(
-            LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, null, Now));
+            LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, Now));
         await db.SaveChangesAsync();
         return db;
     }

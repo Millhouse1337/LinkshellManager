@@ -1806,7 +1806,6 @@ public static class DiscordEventMessageBuilder
     // we can't widen them).
     public static string SlotRequirement(PartySetupSlot slot)
     {
-        var label = string.IsNullOrWhiteSpace(slot.Label) ? string.Empty : $" ({slot.Label})";
         string core;
         if (string.Equals(slot.RequirementType, PartySetupSlotRequirementTypes.Role, StringComparison.OrdinalIgnoreCase))
         {
@@ -1822,7 +1821,7 @@ public static class DiscordEventMessageBuilder
         {
             core = "Any Role";
         }
-        return core + label;
+        return core;
     }
 
     // Just MAIN/SUB (no role) for the board embed: the slot's colored role dot

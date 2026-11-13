@@ -387,8 +387,6 @@ public abstract class DataAdminModel
         Check(policy.ProtectedColumns, "ProtectedColumns");
         Check(policy.ReadOnlyColumns, "ReadOnlyColumns");
         Check(policy.Options.Keys, "Options");
-        Check(policy.SyncedCopies.Select(copy => copy.TargetColumn), "SyncedCopies.TargetColumn");
-        Check(policy.SyncedCopies.Select(copy => copy.ViaForeignKey), "SyncedCopies.ViaForeignKey");
     }
 
     // A row version (Event.Version, AppUserLinkshell.Version) is Postgres's xmin: bookkeeping the

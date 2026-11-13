@@ -25,11 +25,6 @@ public class AddonApiToken
     [MaxLength(16)]
     public string TokenPrefix { get; set; } = string.Empty;
 
-    // PHASE4B-DROP: AddonApiTokens.Label - the app never sent a device name, so it was always null;
-    // no longer written or read (the token list names the pairing by its linkshells and prefix).
-    [MaxLength(128)]
-    public string? Label { get; set; }
-
     // Groups every token minted from a single pairing code. One code now pairs
     // all of a user's linkshells, so revoking has to unhook the whole set --
     // otherwise "Revoke" on the one row the page shows would leave the addon

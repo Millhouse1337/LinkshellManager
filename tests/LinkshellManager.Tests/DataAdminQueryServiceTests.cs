@@ -25,7 +25,6 @@ public class DataAdminQueryServiceTests
     {
         Id = id,
         LinkshellId = linkshellId,
-        LinkshellName = linkshellId == 1 ? "Kraken LS" : "Titans",
         RuleTitle = title,
         RuleDetails = details,
         Category = category,

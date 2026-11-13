@@ -28,8 +28,8 @@ public static class DataAdminDefaults
 
     // Column names tried, in order, when a table has no label override in the policy. The first
     // visible string column with one of these names becomes the row label; none -> the key.
-    // Entity-specific names come first: many tables also carry a denormalised LinkshellName copy
-    // (Rule, Item, Announcement...), which must never beat the row's own title.
+    // Entity-specific names come first: a table that also carries a denormalised LinkshellName
+    // copy must never have it beat the row's own title.
     public static readonly IReadOnlyList<string> LabelGuessOrder = new[]
     {
         "RuleTitle", "AnnouncementTitle", "ItemName", "EventName", "MonsterName", "AuctionTitle",

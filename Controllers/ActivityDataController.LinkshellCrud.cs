@@ -47,8 +47,7 @@ public sealed partial class ActivityDataController
         {
             AppUserId = appUser.Id,
             LinkshellName = trimmedName,
-            Details = request.Details?.Trim(),
-            Status = "Active"
+            Details = request.Details?.Trim()
         };
 
         _dbContext.Linkshells.Add(linkshell);
@@ -141,7 +140,6 @@ public sealed partial class ActivityDataController
             linkshell.LinkshellName ?? "Unknown linkshell",
             linkshell.AppUserLinkshells.Count,
             linkshell.Details,
-            linkshell.Status,
             linkshell.AppUserLinkshells
                 .OrderBy(link => link.CharacterName)
                 .Select(link => new ActivityMemberDto(

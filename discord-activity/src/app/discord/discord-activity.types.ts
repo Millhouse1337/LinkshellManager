@@ -874,7 +874,6 @@ export interface ActivityLinkshellDetail {
   name: string;
   memberCount: number;
   details?: string | null;
-  status?: string | null;
   members: ActivityMember[];
 }
 
@@ -1734,7 +1733,6 @@ export interface ActivityLinkshellSearchResult {
   name: string;
   details?: string | null;
   memberCount: number;
-  status?: string | null;
 }
 
 // One row of the HNM claim-rate chart: `claimed` of `attempts` (every ToD marked Claimed or
@@ -2243,7 +2241,6 @@ export interface ActivityPartySetupSlot {
   role?: string | null;
   mainJob?: string | null;
   subJob?: string | null;
-  label?: string | null;
   isPartyLeader: boolean;
   // Member sign-up snapshot (all null when the slot is open).
   signedUpAppUserId?: string | null;

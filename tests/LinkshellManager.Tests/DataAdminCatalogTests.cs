@@ -79,7 +79,6 @@ public class DataAdminCatalogTests
         {
             (typeof(AddonApiToken), nameof(AddonApiToken.TokenHash)),
             (typeof(AddonPairingCode), nameof(AddonPairingCode.Code)),
-            (typeof(Linkshell), nameof(Linkshell.GoogleOAuthRefreshTokenEnc)),
         };
 
         foreach (var table in catalog.Models)

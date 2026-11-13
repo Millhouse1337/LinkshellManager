@@ -31,9 +31,9 @@ public class DataAdminRelationsTests
         var db = NewInMemoryContext();
         db.Linkshells.Add(new Linkshell { Id = 1, LinkshellName = "Kraken LS", LootStructure = "Dkp" });
         db.Linkshells.Add(new Linkshell { Id = 2, LinkshellName = "Titans", LootStructure = "Dkp" });
-        db.Rules.Add(new Rule { Id = 1, LinkshellId = 1, LinkshellName = "Kraken LS", RuleTitle = "Loot rules", RuleDetails = "Line one\nLine two" });
-        db.Rules.Add(new Rule { Id = 2, LinkshellId = 1, LinkshellName = "Kraken LS", RuleTitle = "Attendance", RuleDetails = "Be on time" });
-        db.Rules.Add(new Rule { Id = 3, LinkshellId = 2, LinkshellName = "Titans", RuleTitle = "Bidding", RuleDetails = "..." });
+        db.Rules.Add(new Rule { Id = 1, LinkshellId = 1, RuleTitle = "Loot rules", RuleDetails = "Line one\nLine two" });
+        db.Rules.Add(new Rule { Id = 2, LinkshellId = 1, RuleTitle = "Attendance", RuleDetails = "Be on time" });
+        db.Rules.Add(new Rule { Id = 3, LinkshellId = 2, RuleTitle = "Bidding", RuleDetails = "..." });
         db.LinkshellRoles.Add(new LinkshellRole { Id = 1, LinkshellId = 1, Name = "Leader", IsSystem = true });
         db.Users.Add(new AppUser { Id = "u1", UserName = "millhouse", CharacterName = "Millhouse", PrimaryLinkshellId = 1, PasswordHash = "hash-that-must-never-show" });
         await db.SaveChangesAsync();

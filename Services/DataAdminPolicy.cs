@@ -18,11 +18,6 @@ public enum DataAdminPolicyFlags
     ReadOnly = NoCreate | NoEdit | NoDelete,
 }
 
-// A denormalised copy kept in step on save: TargetColumn on this entity is overwritten with
-// SourceColumn of the row that ViaForeignKey points at (Rule.LinkshellName <- Linkshell.LinkshellName),
-// exactly as the hand-written controllers do (ActivityDataController.Content.cs).
-public sealed record DataAdminSyncedCopy(string TargetColumn, string ViaForeignKey, string SourceColumn);
-
 // What EF metadata cannot tell us about one table. Everything here narrows what the generic
 // engine would otherwise allow, and nothing at runtime can widen it: this is the only protection.
 public sealed record DataAdminEntityPolicy
@@ -40,8 +35,9 @@ public sealed record DataAdminEntityPolicy
     public IReadOnlySet<string> ReadOnlyColumns { get; init; } = new HashSet<string>(StringComparer.Ordinal);
     // Banner text for the edit/delete pages when SaveChanges will post to Discord.
     public string? DiscordSideEffect { get; init; }
-    public IReadOnlyList<DataAdminSyncedCopy> SyncedCopies { get; init; } = Array.Empty<DataAdminSyncedCopy>();
-    // Runs after binding and synced copies, before SaveChanges (create and edit).
+    // Runs after binding, before SaveChanges (create and edit).
+    // (A "synced copies" option used to keep Rules/Announcements/Items.LinkshellName in step with
+    // the linkshell's name. Those copies were dropped in Phase 4B, and nothing else used it.)
     public Func<ApplicationDbContext, object, CancellationToken, Task>? BeforeSave { get; init; }
 
     public static readonly DataAdminEntityPolicy FullCrud = new();
@@ -77,7 +73,6 @@ public sealed class DataAdminPolicy
     private static Dictionary<Type, DataAdminEntityPolicy> DefaultEntries()
     {
         var readOnly = new DataAdminEntityPolicy { Flags = DataAdminPolicyFlags.ReadOnly };
-        var linkshellNameCopy = new[] { new DataAdminSyncedCopy("LinkshellName", "LinkshellId", nameof(Linkshell.LinkshellName)) };
 
         return new Dictionary<Type, DataAdminEntityPolicy>
         {
@@ -113,8 +108,6 @@ public sealed class DataAdminPolicy
                 Flags = DataAdminPolicyFlags.NoDelete,
                 Options = Opts(
                     (nameof(Linkshell.HnmAttendanceMode), HnmAttendanceModes.All)),
-                // PHASE4B-DROP: goes with Linkshells.GoogleOAuthRefreshTokenEnc; hides the old token until then.
-                ProtectedColumns = Names(nameof(Linkshell.GoogleOAuthRefreshTokenEnc)),
             },
             [typeof(AppUser)] = new()
             {
@@ -184,9 +177,8 @@ public sealed class DataAdminPolicy
             {
                 Flags = DataAdminPolicyFlags.NoCreate,
                 ProtectedColumns = Names(nameof(AddonApiToken.TokenHash)),
-                // PHASE4B-DROP: take AddonApiTokens.Label out of both lists when the column is dropped.
-                EditableAllowList = new[] { nameof(AddonApiToken.Label), nameof(AddonApiToken.RevokedAt) },
-                LabelColumns = new[] { nameof(AddonApiToken.Label), nameof(AddonApiToken.TokenPrefix) },
+                EditableAllowList = new[] { nameof(AddonApiToken.RevokedAt) },
+                LabelColumns = new[] { nameof(AddonApiToken.TokenPrefix) },
             },
             [typeof(AddonPairingCode)] = new()
             {
@@ -231,14 +223,6 @@ public sealed class DataAdminPolicy
             {
                 LabelColumns = new[] { nameof(Invite.DiscordDisplayName), nameof(Invite.Status) },
             },
-
-            // ---- denormalised LinkshellName copies ------------------------------------------------
-            // PHASE4B-DROP: these three go with Rules/Announcements/Items.LinkshellName. The app no
-            // longer writes or reads those copies; Data Admin keeps them in step only until the drop
-            // (DataAdminEditorTests use Rule to test SyncedCopies and need a new home then).
-            [typeof(Rule)] = new() { SyncedCopies = linkshellNameCopy },
-            [typeof(Announcement)] = new() { SyncedCopies = linkshellNameCopy },
-            [typeof(Item)] = new() { SyncedCopies = linkshellNameCopy },
         };
     }
 

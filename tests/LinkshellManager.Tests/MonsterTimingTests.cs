@@ -28,11 +28,11 @@ public class MonsterTimingTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    private static async Task<ApplicationDbContext> SeededAsync(string? legacyBlob = null)
+    private static async Task<ApplicationDbContext> SeededAsync()
     {
         var db = NewInMemoryContext();
         db.LinkshellMonsterTimings.AddRange(
-            LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, legacyBlob, Now));
+            LinkshellMonsterTimingProvisioner.BuildSeed(LinkshellId, Now));
         await db.SaveChangesAsync();
         return db;
     }
@@ -305,67 +305,6 @@ public class MonsterTimingTests
         Assert.Null(serket.WindowCadenceMinutes);
         Assert.False(serket.HasSpawnGrid);
         Assert.Equal(10, serket.TodIntervalMinutes);
-    }
-
-    // ---- Legacy blob import ----
-
-    // A timing saved under ONE HALF of a merged pair has to fold onto the combined row. Two rows for
-    // one spawn would make every lookup depend on which the alias index saw first, and the unique
-    // index cannot catch it — "Nidhogg" and "Fafnir/Nidhogg" are different strings.
-    [Fact]
-    public async Task LegacyBlob_PerHalfTiming_FoldsOntoTheMergedRow()
-    {
-        const string blob = """
-            [{"MonsterName":"Nidhogg","CooldownHours":30,"IntervalHours":0,"IntervalMinutes":15}]
-            """;
-        await using var db = await SeededAsync(blob);
-        var rows = await db.LinkshellMonsterTimings.ToListAsync();
-
-        Assert.Single(rows, row => HnmConfig.MonsterMatchNames(row.MonsterName).Contains("Nidhogg"));
-        var merged = rows.Single(row => row.MonsterName == "Fafnir/Nidhogg");
-        Assert.Equal(30 * 60, merged.CooldownMinutes);
-        Assert.Equal(15, merged.WindowCadenceMinutes);
-    }
-
-    // Both halves configured: the BASE half wins, deterministically, rather than whichever the JSON
-    // happened to list last.
-    [Fact]
-    public async Task LegacyBlob_BothHalvesConfigured_BaseHalfWins()
-    {
-        const string blob = """
-            [{"MonsterName":"Nidhogg","CooldownHours":30,"IntervalHours":0,"IntervalMinutes":15},
-             {"MonsterName":"Fafnir","CooldownHours":25,"IntervalHours":0,"IntervalMinutes":5}]
-            """;
-        await using var db = await SeededAsync(blob);
-
-        var merged = await db.LinkshellMonsterTimings.SingleAsync(row => row.MonsterName == "Fafnir/Nidhogg");
-        Assert.Equal(25 * 60, merged.CooldownMinutes);
-        Assert.Equal(5, merged.WindowCadenceMinutes);
-    }
-
-    // A monster the linkshell added itself survives the migration, and stays deletable.
-    [Fact]
-    public async Task LegacyBlob_CustomMonster_BecomesACustomRow()
-    {
-        const string blob = """
-            [{"MonsterName":"Homebrew NM","CooldownHours":6,"IntervalHours":0,"IntervalMinutes":20,"Category":"Other NMs"}]
-            """;
-        await using var db = await SeededAsync(blob);
-
-        var custom = await db.LinkshellMonsterTimings.SingleAsync(row => row.MonsterName == "Homebrew NM");
-        Assert.True(custom.IsCustom);
-        Assert.Equal(6 * 60, custom.CooldownMinutes);
-        Assert.Equal(20, custom.WindowCadenceMinutes);
-    }
-
-    [Fact]
-    public async Task LegacyBlob_Garbage_LeavesTheDefaultsIntact()
-    {
-        await using var db = await SeededAsync("not json at all");
-        var rows = await db.LinkshellMonsterTimings.ToListAsync();
-
-        Assert.Equal(MonsterTimingDefaults.BuildAll().Count, rows.Count);
-        Assert.All(rows, row => Assert.False(row.IsCustom));
     }
 
     // ---- Editor ----

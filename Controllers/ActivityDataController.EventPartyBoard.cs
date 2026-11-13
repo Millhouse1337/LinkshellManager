@@ -80,7 +80,6 @@ public sealed partial class ActivityDataController
                                         s.Role,
                                         s.MainJob,
                                         s.SubJob,
-                                        s.Label,
                                         s.IsPartyLeader,
                                         su?.AppUserId,
                                         su?.CharacterName,

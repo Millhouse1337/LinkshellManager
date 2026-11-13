@@ -469,7 +469,6 @@ public static class EventPartySignupService
                 PartyName = s.PartySetupSlot?.Party?.Name,
                 PartySortOrder = s.PartySetupSlot?.Party?.SortOrder ?? 0,
                 SlotSortOrder = s.PartySetupSlot?.SortOrder ?? 0,
-                SlotLabel = s.PartySetupSlot?.Label,
                 CharacterName = s.CharacterName,
                 Role = s.Role,
                 MainJob = s.MainJob,

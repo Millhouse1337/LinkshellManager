@@ -27,7 +27,7 @@ public class DataAdminCascadePreviewTests
     {
         var db = NewInMemoryContext();
         db.Linkshells.Add(new Linkshell { Id = 1, LinkshellName = "Kraken LS", LootStructure = "Dkp" });
-        db.Rules.Add(new Rule { Id = 1, LinkshellId = 1, LinkshellName = "Kraken LS", RuleTitle = "Loot rules", RuleDetails = "..." });
+        db.Rules.Add(new Rule { Id = 1, LinkshellId = 1, RuleTitle = "Loot rules", RuleDetails = "..." });
         db.Tods.Add(new Tod { Id = 1, LinkshellId = 1 });
         db.Events.Add(new Event { Id = 1, LinkshellId = 1, EventName = "Fafnir camp", SourceTodId = 1 });
         db.Events.Add(new Event { Id = 2, LinkshellId = 1, EventName = "Sky run" });

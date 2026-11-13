@@ -152,7 +152,6 @@ export class PartySetupPanelComponent {
   }
 
   protected slotRequirement(slot: ActivityPartySetupSlot): string {
-    const label = slot.label ? ` (${slot.label})` : '';
     let core: string;
     switch (slot.requirementType) {
       case 'Role':
@@ -168,7 +167,7 @@ export class PartySetupPanelComponent {
       default:
         core = 'Any Role';
     }
-    return core + label;
+    return core;
   }
 
   // Mirrors PartySetupSlotView.SignedUpJobsDisplay.

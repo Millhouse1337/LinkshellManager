@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Net.Http.Headers;
-using System.Text.Json;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -74,32 +73,6 @@ public sealed partial class ActivityDataController
             if (trimmed.Length > 0) list.Add(trimmed);
         }
         return list;
-    }
-
-    // Pop-only mobs (Sky Gods, Sea NMs, HENMs) are no longer part of the ToD monster catalog,
-    // so any timing a linkshell saved for one while it still was is dropped here rather than
-    // handed to a client — otherwise the picker would show it back as a "custom" monster.
-    // Filtering on the read path also means the stored value self-cleans on the next save.
-    internal static IReadOnlyList<ActivityTodMonsterTimingDto> ParseTodMonsterTimings(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<ActivityTodMonsterTimingDto>();
-
-        try
-        {
-            return JsonSerializer.Deserialize<List<ActivityTodMonsterTimingDto>>(raw)
-                ?.Where(timing => !string.IsNullOrWhiteSpace(timing.MonsterName)
-                    && !HnmConfig.PopOnlyNms.Contains(timing.MonsterName.Trim())
-                    && timing.CooldownHours > 0
-                    && timing.IntervalHours >= 0
-                    && timing.IntervalMinutes >= 0
-                    && timing.IntervalMinutes < 60)
-                .ToArray()
-                ?? Array.Empty<ActivityTodMonsterTimingDto>();
-        }
-        catch (JsonException)
-        {
-            return Array.Empty<ActivityTodMonsterTimingDto>();
-        }
     }
 
     // Joins the wire form back into the pipe-separated storage form.

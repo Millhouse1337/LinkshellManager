@@ -50,7 +50,6 @@ public sealed class DataAdminEditor
             return result;
         }
 
-        await SyncCopiesAsync(table, entity, ct);
         if (table.Policy.BeforeSave is { } hook)
         {
             await hook(_db, entity, ct);
@@ -78,7 +77,6 @@ public sealed class DataAdminEditor
             return result;
         }
 
-        await SyncCopiesAsync(table, entity, ct);
         if (table.Policy.BeforeSave is { } hook)
         {
             await hook(_db, entity, ct);
@@ -240,26 +238,6 @@ public sealed class DataAdminEditor
                 continue;
             }
             column.Property.SetValue(entity, value);
-        }
-    }
-
-    // Denormalised copies (Rule.LinkshellName <- Linkshell.LinkshellName) follow the foreign key.
-    private async Task SyncCopiesAsync(DataAdminModel table, object entity, CancellationToken ct)
-    {
-        foreach (var copy in table.Policy.SyncedCopies)
-        {
-            var via = table.FindColumn(copy.ViaForeignKey);
-            var target = table.FindColumn(copy.TargetColumn);
-            var principal = via?.ForeignKeyTo;
-            var sourceColumn = principal?.FindColumn(copy.SourceColumn);
-            if (via is null || target is null || principal is null || sourceColumn is null)
-            {
-                continue;
-            }
-            var key = via.Property.GetValue(entity);
-            var source = key is null ? null : await principal.FindAsync(_db, key, track: false, ct);
-            var copied = source is null ? null : sourceColumn.Property.GetValue(source);
-            target.Property.SetValue(entity, copied ?? (target.IsNullable ? null : string.Empty));
         }
     }
 
