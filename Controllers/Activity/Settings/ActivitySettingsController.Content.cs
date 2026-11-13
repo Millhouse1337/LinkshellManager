@@ -11,7 +11,7 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivitySettingsController
 {
     [HttpPost("linkshells/{linkshellId:int}/rules")]
     public async Task<IActionResult> CreateRuleAsync(

@@ -124,7 +124,7 @@ public class BotChannelsStayInOwnServerTests
     [InlineData("", "", null)]
     public void Set_guild_picks_the_dropdown_then_the_launch_server(string? picked, string? header, string? expected)
     {
-        Assert.Equal(expected, ActivityDataController.PickGuildToSet(picked, header));
+        Assert.Equal(expected, ActivitySettingsController.PickGuildToSet(picked, header));
     }
 
     // /update: only a NEW server id needs the membership check; echoing the stored id back or
@@ -141,6 +141,6 @@ public class BotChannelsStayInOwnServerTests
     public void Update_only_verifies_a_new_server(
         string? requested, string? current, string expected)
     {
-        Assert.Equal(expected, ActivityDataController.ClassifyGuildIdUpdate(requested, current).ToString());
+        Assert.Equal(expected, ActivitySettingsController.ClassifyGuildIdUpdate(requested, current).ToString());
     }
 }

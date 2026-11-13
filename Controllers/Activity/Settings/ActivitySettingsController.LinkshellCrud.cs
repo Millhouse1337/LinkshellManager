@@ -12,7 +12,7 @@ using static LinkshellManagerDiscordApp.Controllers.ActivityMappers;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivitySettingsController
 {
     [HttpPost("linkshells")]
     public async Task<IActionResult> CreateLinkshellAsync(

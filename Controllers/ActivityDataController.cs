@@ -19,33 +19,14 @@ public sealed partial class ActivityDataController : ActivityControllerBase
     private static readonly HashSet<string> SupportedTodCooldowns = new(TodCatalog.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> SupportedTodIntervals = new(TodCatalog.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
 
-    private readonly DiscordBotClient _discordBot;
-    private readonly AdminOverrideService _adminOverride;
-    private readonly MemberActivityService _memberActivity;
-    private readonly ChannelRouteEditor _channelRoutes;
-    private readonly ItemSaleRecorder _itemSales;
-    private readonly MonsterTimingResolver _monsterTimings;
-
     public ActivityDataController(
         ApplicationDbContext dbContext,
         DiscordIdentityService discordIdentityService,
-        DiscordBotClient discordBot,
         UserManager<AppUser> userManager,
         ILogger<ActivityDataController> logger,
-        AdminOverrideService adminOverride,
-        MemberActivityService memberActivity,
-        ChannelRouteEditor channelRoutes,
-        ItemSaleRecorder itemSales,
-        MonsterTimingResolver monsterTimings,
         LinkshellPermissions permissions)
         : base(dbContext, discordIdentityService, userManager, logger, permissions)
     {
-        _discordBot = discordBot;
-        _adminOverride = adminOverride;
-        _memberActivity = memberActivity;
-        _channelRoutes = channelRoutes;
-        _itemSales = itemSales;
-        _monsterTimings = monsterTimings;
     }
 
     [HttpGet("antiforgery")]
@@ -58,13 +39,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
             headerName = tokens.HeaderName,
             requestToken = tokens.RequestToken
         });
-    }
-
-    private static bool IsValidLootStructure(string? structure)
-    {
-        return string.Equals(structure, "Dkp", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(structure, "LootCouncil", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? NormalizeMemberRole(string? role)
