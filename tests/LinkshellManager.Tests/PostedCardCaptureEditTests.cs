@@ -23,11 +23,11 @@ namespace LinkshellManager.Tests;
 // take people off a posted card are still allowed.
 public class PostedCardCaptureEditTests
 {
-    private const int Ls = 7;
-    private const int CardId = 300;
-    private const int OnCardId = 1;    // a capture already on the card
+    internal const int Ls = 7;
+    internal const int CardId = 300;
+    internal const int OnCardId = 1;    // a capture already on the card
     private const int UnlinkedId = 2;  // an unlinked capture waiting to be filed
-    private const string Officer = "officer";
+    internal const string Officer = "officer";
     private static readonly DateTime CapturedAt = new(2026, 11, 10, 21, 0, 0, DateTimeKind.Utc);
 
     private static ApplicationDbContext NewDb() =>
@@ -37,7 +37,7 @@ public class PostedCardCaptureEditTests
             .Options);
 
     // The app's controller with only what these routes touch, and a signed-in Leader.
-    private static ActivityDataController NewController(ApplicationDbContext db)
+    internal static ActivityDataController NewController(ApplicationDbContext db)
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -71,7 +71,7 @@ public class PostedCardCaptureEditTests
 
     // The card "Sky" (posted or not) with one capture on it (Alice, in `onCardStatus`), and one
     // unlinked capture (Carol) also named "Sky".
-    private static async Task<ApplicationDbContext> SeededAsync(bool posted, string onCardStatus)
+    internal static async Task<ApplicationDbContext> SeededAsync(bool posted, string onCardStatus)
     {
         var db = NewDb();
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS" });

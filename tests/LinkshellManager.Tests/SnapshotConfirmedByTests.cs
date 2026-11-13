@@ -1,6 +1,7 @@
 using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -62,4 +63,71 @@ public class SnapshotConfirmedByTests
         Assert.Null(ActivityDataController.MapActivityWindowSnapshot(
             Capture("member-1", "officer-1")).ConfirmedByName);
     }
+
+    // One officer rejects a capture, another puts it back with "Use". The card must not then say
+    // "Confirmed by" the officer who rejected it: "Use" restamps with whoever pressed it.
+    [Fact]
+    public async Task UseOnARejectedCapture_RestampsWithWhoeverPressedIt()
+    {
+        await using var db = await PostedCardCaptureEditTests.SeededAsync(
+            posted: false, AttendanceSnapshotStatuses.Ignored);
+        await StampAsync(db, "rejector");
+
+        var result = await PostedCardCaptureEditTests.NewController(db).SetWindowSnapshotStatusAsync(
+            PostedCardCaptureEditTests.OnCardId,
+            new ActivityDataController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Active),
+            CancellationToken.None);
+
+        Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result);
+        var saved = await LoadAsync(db);
+        Assert.Equal(PostedCardCaptureEditTests.Officer, saved.VerifiedByAppUserId);
+        Assert.NotNull(saved.VerifiedAtUtc);
+    }
+
+    // Sent back for review: nobody has vouched for it any more.
+    [Fact]
+    public async Task SendingBackToPending_ClearsTheStamp()
+    {
+        await using var db = await PostedCardCaptureEditTests.SeededAsync(
+            posted: false, AttendanceSnapshotStatuses.Active);
+        await StampAsync(db, "confirmer");
+
+        await PostedCardCaptureEditTests.NewController(db).SetWindowSnapshotStatusAsync(
+            PostedCardCaptureEditTests.OnCardId,
+            new ActivityDataController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Pending),
+            CancellationToken.None);
+
+        var saved = await LoadAsync(db);
+        Assert.Null(saved.VerifiedByAppUserId);
+        Assert.Null(saved.VerifiedAtUtc);
+    }
+
+    // Ignore keeps the stamp: it is not shown while ignored, and "Use" restamps it anyway.
+    [Fact]
+    public async Task Ignore_LeavesTheStampAlone()
+    {
+        await using var db = await PostedCardCaptureEditTests.SeededAsync(
+            posted: false, AttendanceSnapshotStatuses.Active);
+        await StampAsync(db, "confirmer");
+
+        await PostedCardCaptureEditTests.NewController(db).SetWindowSnapshotStatusAsync(
+            PostedCardCaptureEditTests.OnCardId,
+            new ActivityDataController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Ignored),
+            CancellationToken.None);
+
+        Assert.Equal("confirmer", (await LoadAsync(db)).VerifiedByAppUserId);
+    }
+
+    private static async Task StampAsync(LinkshellManagerDiscordApp.Data.ApplicationDbContext db, string verifiedBy)
+    {
+        var snapshot = await db.AttendanceSnapshots.SingleAsync(s => s.Id == PostedCardCaptureEditTests.OnCardId);
+        snapshot.PostedByAppUserId = "member-1";
+        snapshot.VerifiedByAppUserId = verifiedBy;
+        snapshot.VerifiedAtUtc = new DateTime(2026, 11, 10, 22, 0, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+    }
+
+    private static Task<AttendanceSnapshot> LoadAsync(LinkshellManagerDiscordApp.Data.ApplicationDbContext db) =>
+        db.AttendanceSnapshots.AsNoTracking().SingleAsync(s => s.Id == PostedCardCaptureEditTests.OnCardId);
 }

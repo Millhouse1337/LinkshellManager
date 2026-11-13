@@ -1077,8 +1077,7 @@ public sealed partial class ActivityDataController
             AttendanceSnapshotStatuses.Active => AttendanceSnapshotStatuses.Active,
             AttendanceSnapshotStatuses.Ignored => AttendanceSnapshotStatuses.Ignored,
             // Accepted so an officer can send a capture BACK for review after promoting it by
-            // mistake. Confirming still goes through the verify endpoint, the only path that
-            // records who vouched for it.
+            // mistake.
             AttendanceSnapshotStatuses.Pending => AttendanceSnapshotStatuses.Pending,
             _ => null
         };
@@ -1090,10 +1089,22 @@ public sealed partial class ActivityDataController
             return posted;
         }
 
-        snapshot.SnapshotStatus = status;
-        if (status is AttendanceSnapshotStatuses.Active or AttendanceSnapshotStatuses.Ignored)
+        // Keep the confirm stamp honest, because the card shows it as "Confirmed by". "Use" puts a
+        // capture back on the card, so whoever pressed it is the one vouching now. Without this, a
+        // capture one officer REJECTED and another put back with "Use" would read "Confirmed by"
+        // the officer who rejected it. Sending it back to Pending means nobody has vouched for it.
+        if (status == AttendanceSnapshotStatuses.Active
+            && snapshot.SnapshotStatus != AttendanceSnapshotStatuses.Active)
         {
+            snapshot.VerifiedAtUtc = DateTime.UtcNow;
+            snapshot.VerifiedByAppUserId = (await ResolveAppUserAsync(cancellationToken))?.Id;
         }
+        else if (status == AttendanceSnapshotStatuses.Pending)
+        {
+            snapshot.VerifiedAtUtc = null;
+            snapshot.VerifiedByAppUserId = null;
+        }
+        snapshot.SnapshotStatus = status;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(new { success = true });
     }

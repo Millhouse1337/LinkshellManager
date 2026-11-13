@@ -126,7 +126,9 @@ public class AttendanceSnapshot
     public string? PostedByAppUserId { get; set; }
 
     // When an officer confirmed the capture. Stamped immediately for a moderator's own post
-    // (they are the reviewer), and on the Confirm action for anyone else's.
+    // (they are the reviewer), and on the Confirm action for anyone else's. "Use" (status back to
+    // Active) restamps it with whoever pressed it; sending it back to Pending clears it. Shown on
+    // the card as "Confirmed by".
     public DateTime? VerifiedAtUtc { get; set; }
 
     [MaxLength(450)]
