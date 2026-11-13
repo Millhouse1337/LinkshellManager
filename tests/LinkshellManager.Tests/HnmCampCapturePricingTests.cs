@@ -427,7 +427,7 @@ public class HnmCampCapturePricingTests
             .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
             .Include(w => w.MemberDkpOverrides)
             .FirstAsync(w => w.Id == windowEvent!.Id);
-        var row = ActivityDataController
+        var row = ActivityWindowEventsController
             .MapActivityWindowEvent(loaded)
             .CombinedMembers
             .Single(m => m.CharacterName == "Alpha");
@@ -601,7 +601,7 @@ public class HnmCampCapturePricingTests
             .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
             .Include(w => w.MemberDkpOverrides)
             .FirstAsync(w => w.Id == windowEvent!.Id);
-        var beta = ActivityDataController
+        var beta = ActivityWindowEventsController
             .MapActivityWindowEvent(loaded)
             .CombinedMembers
             .Single(m => m.CharacterName == "Beta");
@@ -623,7 +623,7 @@ public class HnmCampCapturePricingTests
             .Include(w => w.Snapshots).ThenInclude(s => s.Entries)
             .Include(w => w.MemberDkpOverrides)
             .FirstAsync(w => w.Id == windowEvent!.Id);
-        var gamma = ActivityDataController
+        var gamma = ActivityWindowEventsController
             .MapActivityWindowEvent(loaded)
             .CombinedMembers
             .Single(m => m.CharacterName == "Gamma");

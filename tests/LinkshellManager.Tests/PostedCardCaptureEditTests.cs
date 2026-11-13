@@ -38,7 +38,7 @@ public class PostedCardCaptureEditTests
             .Options);
 
     // The app's controller with only what these routes touch, and a signed-in Leader.
-    internal static ActivityDataController NewController(ApplicationDbContext db)
+    internal static ActivityWindowEventsController NewController(ApplicationDbContext db)
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -56,7 +56,7 @@ public class PostedCardCaptureEditTests
             User = new ClaimsPrincipal(new ClaimsIdentity(
                 new[] { new Claim(ClaimTypes.NameIdentifier, Officer) }, authenticationType: "Test")),
         };
-        return ActivityControllerFactory.Create<ActivityDataController>(
+        return ActivityControllerFactory.Create<ActivityWindowEventsController>(
             http, db, userManager, new MemberActivityService(db),
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
             TestPermissions.For(db));
@@ -117,7 +117,7 @@ public class PostedCardCaptureEditTests
     private static Task<string> StatusOfAsync(ApplicationDbContext db, int snapshotId) =>
         db.AttendanceSnapshots.AsNoTracking().Where(s => s.Id == snapshotId).Select(s => s.SnapshotStatus).SingleAsync();
 
-    private static ActivityDataController.ActivityAddSnapshotEntryRequest AddBob() =>
+    private static ActivityWindowEventsController.ActivityAddSnapshotEntryRequest AddBob() =>
         new("Bob", null, null, null, null, null);
 
     [Fact]
@@ -148,7 +148,7 @@ public class PostedCardCaptureEditTests
         await using var db = await SeededAsync(posted: true, AttendanceSnapshotStatuses.Pending);
 
         var result = await NewController(db).VerifyWindowSnapshotAsync(
-            OnCardId, new ActivityDataController.ActivityWindowSnapshotVerifyRequest(true), CancellationToken.None);
+            OnCardId, new ActivityWindowEventsController.ActivityWindowSnapshotVerifyRequest(true), CancellationToken.None);
 
         Assert.Equal(SnapshotFilingService.PostedCardRefusal, ErrorOf(result));
         Assert.Equal(AttendanceSnapshotStatuses.Pending, await StatusOfAsync(db, OnCardId));
@@ -160,7 +160,7 @@ public class PostedCardCaptureEditTests
         await using var db = await SeededAsync(posted: true, AttendanceSnapshotStatuses.Pending);
 
         var result = await NewController(db).VerifyWindowSnapshotAsync(
-            OnCardId, new ActivityDataController.ActivityWindowSnapshotVerifyRequest(false), CancellationToken.None);
+            OnCardId, new ActivityWindowEventsController.ActivityWindowSnapshotVerifyRequest(false), CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
         Assert.Equal(AttendanceSnapshotStatuses.Ignored, await StatusOfAsync(db, OnCardId));
@@ -172,7 +172,7 @@ public class PostedCardCaptureEditTests
         await using var db = await SeededAsync(posted: true, AttendanceSnapshotStatuses.Ignored);
 
         var result = await NewController(db).SetWindowSnapshotStatusAsync(
-            OnCardId, new ActivityDataController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Active),
+            OnCardId, new ActivityWindowEventsController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Active),
             CancellationToken.None);
 
         Assert.Equal(SnapshotFilingService.PostedCardRefusal, ErrorOf(result));
@@ -185,7 +185,7 @@ public class PostedCardCaptureEditTests
         await using var db = await SeededAsync(posted: true, AttendanceSnapshotStatuses.Active);
 
         var result = await NewController(db).SetWindowSnapshotStatusAsync(
-            OnCardId, new ActivityDataController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Ignored),
+            OnCardId, new ActivityWindowEventsController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Ignored),
             CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
@@ -198,7 +198,7 @@ public class PostedCardCaptureEditTests
         await using var db = await SeededAsync(posted: true, AttendanceSnapshotStatuses.Active);
 
         var result = await NewController(db).AttachWindowSnapshotAsync(
-            UnlinkedId, new ActivityDataController.ActivityAttachWindowSnapshotRequest(CardId, null),
+            UnlinkedId, new ActivityWindowEventsController.ActivityAttachWindowSnapshotRequest(CardId, null),
             NewFiling(db), CancellationToken.None);
 
         var refused = Assert.IsType<ObjectResult>(result);
@@ -215,7 +215,7 @@ public class PostedCardCaptureEditTests
         await using var db = await SeededAsync(posted: true, AttendanceSnapshotStatuses.Active);
 
         var result = await NewController(db).AttachWindowSnapshotAsync(
-            UnlinkedId, new ActivityDataController.ActivityAttachWindowSnapshotRequest(null, "Sky"),
+            UnlinkedId, new ActivityWindowEventsController.ActivityAttachWindowSnapshotRequest(null, "Sky"),
             NewFiling(db), CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
@@ -232,7 +232,7 @@ public class PostedCardCaptureEditTests
         await using var db = await SeededAsync(posted: false, AttendanceSnapshotStatuses.Active);
 
         var result = await NewController(db).AttachWindowSnapshotAsync(
-            UnlinkedId, new ActivityDataController.ActivityAttachWindowSnapshotRequest(null, "Sky"),
+            UnlinkedId, new ActivityWindowEventsController.ActivityAttachWindowSnapshotRequest(null, "Sky"),
             NewFiling(db), CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);

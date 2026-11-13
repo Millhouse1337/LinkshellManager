@@ -7,7 +7,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // The dashboard's HNM claim-rate chart over a range its 7d / 30d / All buttons don't cover: the
 // "..." → last N days. The three fixed ranges ride the overview; this is the same aggregation
 // (HnmClaimStatsService) for one more, fetched only when someone asks for it. Member-gated.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     [HttpGet("hnm-claims")]
     public async Task<IActionResult> GetHnmClaimsAsync(

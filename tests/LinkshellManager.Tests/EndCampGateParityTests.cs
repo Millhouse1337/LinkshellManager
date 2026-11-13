@@ -35,7 +35,7 @@ public class EndCampGateParityTests
     private static readonly string[] EndCampGateFiles =
     {
         "DiscordInteractionsController.cs",
-        "ActivityDataController.HnmBoard.cs",
+        Path.Combine("Activity", "WindowEvents", "ActivityWindowEventsController.HnmBoard.cs"),
     };
 
     /// <summary>

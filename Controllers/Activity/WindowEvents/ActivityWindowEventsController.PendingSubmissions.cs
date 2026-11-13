@@ -11,7 +11,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 //
 // Reviewing needs CanManageTods. Through CanAsync the Leader always passes. The review itself runs
 // in SubmissionApprovalService, scoped to the linkshell in the URL.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     [HttpGet("linkshells/{linkshellId:int}/pending-submissions")]
     public async Task<IActionResult> GetPendingSubmissionsAsync(int linkshellId, CancellationToken cancellationToken)

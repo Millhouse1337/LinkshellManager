@@ -33,7 +33,7 @@ public class SnapshotConfirmedByTests
     [Fact]
     public void MembersCapture_ConfirmedByAnOfficer_NamesTheOfficer()
     {
-        var dto = ActivityDataController.MapActivityWindowSnapshot(
+        var dto = ActivityWindowEventsController.MapActivityWindowSnapshot(
             Capture("member-1", "officer-1"), accountNames: Names);
 
         Assert.Equal("Reviewer", dto.ConfirmedByName);
@@ -42,25 +42,25 @@ public class SnapshotConfirmedByTests
     [Fact]
     public void OfficersOwnPost_SaysNothing()
     {
-        Assert.Null(ActivityDataController.ConfirmerIdToShow(Capture("officer-1", "officer-1")));
-        Assert.Null(ActivityDataController.MapActivityWindowSnapshot(
+        Assert.Null(ActivityWindowEventsController.ConfirmerIdToShow(Capture("officer-1", "officer-1")));
+        Assert.Null(ActivityWindowEventsController.MapActivityWindowSnapshot(
             Capture("officer-1", "officer-1"), accountNames: Names).ConfirmedByName);
     }
 
     [Fact]
     public void Pending_OrRejected_SaysNothing()
     {
-        Assert.Null(ActivityDataController.ConfirmerIdToShow(
+        Assert.Null(ActivityWindowEventsController.ConfirmerIdToShow(
             Capture("member-1", null, AttendanceSnapshotStatuses.Pending)));
         // A Reject stamps the same two fields; "Confirmed by" would be the wrong word for it.
-        Assert.Null(ActivityDataController.ConfirmerIdToShow(
+        Assert.Null(ActivityWindowEventsController.ConfirmerIdToShow(
             Capture("member-1", "officer-1", AttendanceSnapshotStatuses.Ignored)));
     }
 
     [Fact]
     public void NoNameLookup_LeavesTheLineOff()
     {
-        Assert.Null(ActivityDataController.MapActivityWindowSnapshot(
+        Assert.Null(ActivityWindowEventsController.MapActivityWindowSnapshot(
             Capture("member-1", "officer-1")).ConfirmedByName);
     }
 
@@ -75,7 +75,7 @@ public class SnapshotConfirmedByTests
 
         var result = await PostedCardCaptureEditTests.NewController(db).SetWindowSnapshotStatusAsync(
             PostedCardCaptureEditTests.OnCardId,
-            new ActivityDataController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Active),
+            new ActivityWindowEventsController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Active),
             CancellationToken.None);
 
         Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result);
@@ -94,7 +94,7 @@ public class SnapshotConfirmedByTests
 
         await PostedCardCaptureEditTests.NewController(db).SetWindowSnapshotStatusAsync(
             PostedCardCaptureEditTests.OnCardId,
-            new ActivityDataController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Pending),
+            new ActivityWindowEventsController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Pending),
             CancellationToken.None);
 
         var saved = await LoadAsync(db);
@@ -112,7 +112,7 @@ public class SnapshotConfirmedByTests
 
         await PostedCardCaptureEditTests.NewController(db).SetWindowSnapshotStatusAsync(
             PostedCardCaptureEditTests.OnCardId,
-            new ActivityDataController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Ignored),
+            new ActivityWindowEventsController.ActivityWindowSnapshotStatusRequest(AttendanceSnapshotStatuses.Ignored),
             CancellationToken.None);
 
         Assert.Equal("confirmer", (await LoadAsync(db)).VerifiedByAppUserId);

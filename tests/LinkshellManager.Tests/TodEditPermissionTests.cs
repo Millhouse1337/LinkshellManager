@@ -39,7 +39,7 @@ public class TodEditPermissionTests
     };
 
     private static Task<(bool Allowed, string? ImagePath)> ResolveAsync(ApplicationDbContext db, Tod tod, string? requested)
-        => ActivityDataController.ResolveTodImageForUpdateAsync(db, tod, requested, CancellationToken.None);
+        => ActivityWindowEventsController.ResolveTodImageForUpdateAsync(db, tod, requested, CancellationToken.None);
 
     // ---- Permission: pin what the gate means for the built-in ranks, and that both endpoints use it.
 
@@ -61,7 +61,7 @@ public class TodEditPermissionTests
     [InlineData("UpdateTodAsync(", "SaveChangesAsync(")]
     public void TodEndpoint_RequiresManageTods(string start, string end)
     {
-        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "ActivityDataController.Tod.cs"));
+        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "Activity", "WindowEvents", "ActivityWindowEventsController.Tod.cs"));
 
         var from = text.IndexOf(start, StringComparison.Ordinal);
         var to = text.IndexOf(end, from + start.Length, StringComparison.Ordinal);
@@ -193,10 +193,10 @@ public class TodEditPermissionTests
         db.Tods.Add(NewTod(3, "/uploads/tods/alone.png"));
         await db.SaveChangesAsync();
 
-        Assert.True(await ActivityDataController.IsTodImageUsedElsewhereAsync(db, "shared.png", 1, CancellationToken.None));
-        Assert.False(await ActivityDataController.IsTodImageUsedElsewhereAsync(db, "alone.png", 3, CancellationToken.None));
+        Assert.True(await ActivityWindowEventsController.IsTodImageUsedElsewhereAsync(db, "shared.png", 1, CancellationToken.None));
+        Assert.False(await ActivityWindowEventsController.IsTodImageUsedElsewhereAsync(db, "alone.png", 3, CancellationToken.None));
         // A different file that merely ends the same way is not a match.
-        Assert.False(await ActivityDataController.IsTodImageUsedElsewhereAsync(db, "lone.png", 99, CancellationToken.None));
+        Assert.False(await ActivityWindowEventsController.IsTodImageUsedElsewhereAsync(db, "lone.png", 99, CancellationToken.None));
     }
 
     /// <summary>Walks up from the test binary to the repo root, which holds the app's Controllers.</summary>

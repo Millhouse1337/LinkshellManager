@@ -185,7 +185,7 @@ public class MonsterWindowMethodSetupTests
             WindowMethod = MonsterWindowMethods.WindowN,
         };
 
-        var dto = ActivityDataController.ToMonsterTimingDto(row);
+        var dto = ActivityWindowEventsController.ToMonsterTimingDto(row);
 
         Assert.Equal(MonsterWindowMethods.WindowN, dto.WindowMethod);
         Assert.Equal(MonsterWindowMethods.OpenClose, dto.DefaultWindowMethod);

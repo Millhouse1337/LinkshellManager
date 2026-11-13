@@ -12,7 +12,7 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     // Tod.Cooldown is stored as a human label ("22 Hour", "45 Min") because a dozen surfaces print
     // it verbatim. This turns it back into the number RepopTime is computed from.

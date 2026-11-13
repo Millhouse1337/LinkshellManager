@@ -9,7 +9,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // for members a camp's posts missed. Same shape as a live camp's Add New Post
 // (AddonApiController.AddMiscPostManagementAsync): one named Misc post, the members an officer
 // picked, and what it pays each of them.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     public sealed record ActivityAddWindowEventPostRequest(
         string? Name, IReadOnlyList<string>? AppUserIds, double? DkpAmount = null);

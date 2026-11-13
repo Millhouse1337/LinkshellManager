@@ -1381,9 +1381,9 @@ public sealed partial class AddonApiController
 
         // The LINKSHELL'S configured values, not the global defaults. An addon-posted ToD used to
         // ignore the configuration entirely, because it only ever reached the Activity's client.
-        var cooldown = await ActivityDataController.GetDefaultTodCooldownAsync(
+        var cooldown = await ActivityWindowEventsController.GetDefaultTodCooldownAsync(
             _monsterTimings, token.LinkshellId, monsterName, cancellationToken);
-        var interval = await ActivityDataController.GetDefaultTodIntervalAsync(
+        var interval = await ActivityWindowEventsController.GetDefaultTodIntervalAsync(
             _monsterTimings, token.LinkshellId, monsterName, cancellationToken);
         // The monster's Additional Seconds too, the same as the Activity's Log ToD and both End Camp
         // paths. Leaving them off made a ToD posted in game start its reposted board early, by

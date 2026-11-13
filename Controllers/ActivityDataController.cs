@@ -22,8 +22,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
     private readonly InviteCandidateService _inviteCandidates;
     private readonly DiscordBotClient _discordBot;
     private readonly TimeZoneConversionService _timeZones;
-    private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
-    private readonly WindowEventLinkService _windowEventLinks;
     private readonly DkpSheetService _dkpSheet;
     private readonly AdminOverrideService _adminOverride;
     private readonly MemberActivityService _memberActivity;
@@ -42,8 +40,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
     private readonly ChartWishlistService _chartWishlist;
     private readonly ChartKeyItemService _chartKeyItems;
     private readonly MonsterTimingResolver _monsterTimings;
-    private readonly MonsterTimingEditor _monsterTimingEditor;
-    private readonly LinkshellMonsterTimingProvisioner _monsterTimingProvisioner;
 
     public ActivityDataController(
         ApplicationDbContext dbContext,
@@ -52,8 +48,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         DiscordBotClient discordBot,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        WindowEventDkpLedgerService windowEventDkpLedger,
-        WindowEventLinkService windowEventLinks,
         DkpSheetService dkpSheet,
         ILogger<ActivityDataController> logger,
         AdminOverrideService adminOverride,
@@ -73,16 +67,12 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         ChartWishlistService chartWishlist,
         ChartKeyItemService chartKeyItems,
         MonsterTimingResolver monsterTimings,
-        MonsterTimingEditor monsterTimingEditor,
-        LinkshellMonsterTimingProvisioner monsterTimingProvisioner,
         LinkshellPermissions permissions)
         : base(dbContext, discordIdentityService, userManager, logger, permissions)
     {
         _inviteCandidates = inviteCandidates;
         _discordBot = discordBot;
         _timeZones = timeZones;
-        _windowEventDkpLedger = windowEventDkpLedger;
-        _windowEventLinks = windowEventLinks;
         _dkpSheet = dkpSheet;
         _adminOverride = adminOverride;
         _memberActivity = memberActivity;
@@ -101,8 +91,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         _chartWishlist = chartWishlist;
         _chartKeyItems = chartKeyItems;
         _monsterTimings = monsterTimings;
-        _monsterTimingEditor = monsterTimingEditor;
-        _monsterTimingProvisioner = monsterTimingProvisioner;
     }
 
     [HttpGet("antiforgery")]

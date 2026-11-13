@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     // ClosedEvents is ONE PAGE of the Attendance Archive, not the whole history — the four Closed*
     // fields describe which page, so the Activity can render the tally and pager.

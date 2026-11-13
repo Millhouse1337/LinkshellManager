@@ -113,7 +113,7 @@ public sealed class HnmCampPopService
             ? TodDurationFormat.Format(timing.CooldownMinutes)
             : request.Cooldown.Trim();
         var repopUtc = todTimeUtc
-            ?.AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown))
+            ?.AddHours(ActivityWindowEventsController.ResolveTodCooldownHours(cooldown))
             .AddSeconds(additionalSeconds);
 
         var claimed = request.Claimed ?? false;
@@ -174,7 +174,7 @@ public sealed class HnmCampPopService
         {
             todTimeUtc = postedTimeUtc;
             repopUtc = postedTimeUtc
-                .AddHours(ActivityDataController.ResolveTodCooldownHours(cooldown))
+                .AddHours(ActivityWindowEventsController.ResolveTodCooldownHours(cooldown))
                 .AddSeconds(additionalSeconds);
         }
 

@@ -13,7 +13,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // wipe the monster setups.
 //
 // The save itself lives in MonsterTimingEditor.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     [HttpGet("linkshells/{linkshellId:int}/monster-timings")]
     public async Task<IActionResult> GetMonsterTimingsAsync(int linkshellId, CancellationToken cancellationToken)

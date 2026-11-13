@@ -5,7 +5,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 // Each monster's newest ToD, for the "Last ToD" readout beside Starts on the create/edit event
 // form. Read only while that form is open, like upcoming-repops. See LatestTodLookup.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     [HttpGet("linkshells/{linkshellId:int}/latest-tods")]
     public async Task<IActionResult> GetLatestTodsAsync(int linkshellId, CancellationToken cancellationToken)

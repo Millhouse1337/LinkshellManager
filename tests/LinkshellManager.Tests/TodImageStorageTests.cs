@@ -74,11 +74,11 @@ public class TodImageStorageTests
     [Fact]
     public void Upload_NeedsARoleThatCanPutAToDSomewhere()
     {
-        Assert.False(ActivityDataController.RoleMayUploadTodImage(new LinkshellRole()));
-        Assert.True(ActivityDataController.RoleMayUploadTodImage(new LinkshellRole { CanManageTods = true }));
-        Assert.True(ActivityDataController.RoleMayUploadTodImage(new LinkshellRole { CanSubmitTodForApproval = true }));
+        Assert.False(ActivityWindowEventsController.RoleMayUploadTodImage(new LinkshellRole()));
+        Assert.True(ActivityWindowEventsController.RoleMayUploadTodImage(new LinkshellRole { CanManageTods = true }));
+        Assert.True(ActivityWindowEventsController.RoleMayUploadTodImage(new LinkshellRole { CanSubmitTodForApproval = true }));
         // HNM board "Post ToD" needs Manage events, and its form can attach a screenshot.
-        Assert.True(ActivityDataController.RoleMayUploadTodImage(new LinkshellRole { CanManageEvents = true }));
+        Assert.True(ActivityWindowEventsController.RoleMayUploadTodImage(new LinkshellRole { CanManageEvents = true }));
     }
 
     [Fact]

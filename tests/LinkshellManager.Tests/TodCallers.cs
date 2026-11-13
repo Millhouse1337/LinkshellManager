@@ -77,7 +77,7 @@ internal static class TodCallers
 
     // ---- the app's Log ToD (POST /api/activity/tods) ----
 
-    internal static ActivityDataController App(ApplicationDbContext db) => App<ActivityDataController>(db);
+    internal static ActivityWindowEventsController App(ApplicationDbContext db) => App<ActivityWindowEventsController>(db);
 
     // The same signed-in member and services, on whichever Activity controller a test calls.
     internal static T App<T>(ApplicationDbContext db) where T : ControllerBase

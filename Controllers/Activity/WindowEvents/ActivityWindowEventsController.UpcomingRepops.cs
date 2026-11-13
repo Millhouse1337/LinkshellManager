@@ -9,7 +9,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 //
 // Its own endpoint rather than a field on the overview: the overview is polled, and this answer is
 // only wanted while a create/edit form is open. See UpcomingRepopLookup for the lookup itself.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     [HttpGet("linkshells/{linkshellId:int}/upcoming-repops")]
     public async Task<IActionResult> GetUpcomingRepopsAsync(int linkshellId, CancellationToken cancellationToken)

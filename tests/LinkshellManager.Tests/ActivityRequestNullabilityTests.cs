@@ -9,7 +9,7 @@ namespace LinkshellManager.Tests;
 /// <summary>
 /// Guards a footgun that silently broke every ToD save from the Discord Activity.
 ///
-/// ActivityDataController is an [ApiController] and the project compiles with
+/// The Activity controllers are [ApiController]s and the project compiles with
 /// &lt;Nullable&gt;enable&lt;/Nullable&gt;, so MVC gives every NON-nullable reference property on a
 /// [FromBody] DTO an IMPLICIT [Required] (MvcOptions.SuppressImplicitRequiredAttributeFor-
 /// NonNullableReferenceTypes is left at its default of false). A request that sends null for

@@ -14,7 +14,7 @@ using static LinkshellManagerDiscordApp.Controllers.ActivityMappers;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     [HttpPost("tods")]
     public async Task<IActionResult> CreateTodAsync(

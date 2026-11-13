@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityWindowEventsController
 {
     // Logs (or edits) the monster's Time of Death from an HNM signup board's "Post ToD" /
     // "Edit ToD" button. It records the ToD (which drives the recurring-board re-post),

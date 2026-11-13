@@ -34,7 +34,7 @@ public class SnapshotEntryOrderingTests
             Entry(2, "Aaron", manual: true),
             Entry(3, "Miex"));
 
-        var rows = ActivityDataController.MapActivityWindowSnapshot(snapshot).Entries;
+        var rows = ActivityWindowEventsController.MapActivityWindowSnapshot(snapshot).Entries;
 
         Assert.Equal(new[] { "Miex", "Zed", "Aaron" }, rows.Select(r => r.CharacterName));
     }
@@ -50,7 +50,7 @@ public class SnapshotEntryOrderingTests
             Entry(3, "Alpha", manual: true),
             Entry(4, "Mid", manual: true));
 
-        var rows = ActivityDataController.MapActivityWindowSnapshot(snapshot).Entries;
+        var rows = ActivityWindowEventsController.MapActivityWindowSnapshot(snapshot).Entries;
 
         Assert.Equal(new[] { "Solomag", "Zeta", "Alpha", "Mid" }, rows.Select(r => r.CharacterName));
     }
@@ -64,7 +64,7 @@ public class SnapshotEntryOrderingTests
             Entry(2, "Agile"),
             Entry(3, "Millhouse"));
 
-        var rows = ActivityDataController.MapActivityWindowSnapshot(snapshot).Entries;
+        var rows = ActivityWindowEventsController.MapActivityWindowSnapshot(snapshot).Entries;
 
         Assert.Equal(new[] { "Agile", "Millhouse", "wrexsi" }, rows.Select(r => r.CharacterName));
     }
@@ -75,7 +75,7 @@ public class SnapshotEntryOrderingTests
     {
         var snapshot = SnapshotWith(Entry(1, "Agile"), Entry(2, "Walkin", manual: true));
 
-        var rows = ActivityDataController.MapActivityWindowSnapshot(snapshot).Entries;
+        var rows = ActivityWindowEventsController.MapActivityWindowSnapshot(snapshot).Entries;
 
         Assert.False(rows.Single(r => r.CharacterName == "Agile").AddedManually);
         Assert.True(rows.Single(r => r.CharacterName == "Walkin").AddedManually);
@@ -88,7 +88,7 @@ public class SnapshotEntryOrderingTests
     {
         var snapshot = SnapshotWith(Entry(1, "Rhyen"), Entry(2, "Bohemond"));
 
-        var rows = ActivityDataController.MapActivityWindowSnapshot(snapshot).Entries;
+        var rows = ActivityWindowEventsController.MapActivityWindowSnapshot(snapshot).Entries;
 
         Assert.All(rows, r => Assert.False(r.AddedManually));
         Assert.Equal(new[] { "Bohemond", "Rhyen" }, rows.Select(r => r.CharacterName));
