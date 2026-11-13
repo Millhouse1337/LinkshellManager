@@ -241,7 +241,7 @@ public class LootAfterEndCampTests
         await using var db = await SeededAsync(Parked);
 
         var result = await NewAddonController(db).PostEventLootAsync(
-            BoardId, Ridill, NewService(db), CancellationToken.None);
+            BoardId, Ridill, NewService(db), new AddonLootReplayGuard(), CancellationToken.None);
 
         var body = JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(result).Value);
         Assert.True(body.GetProperty("eventLinked").GetBoolean());
@@ -257,7 +257,7 @@ public class LootAfterEndCampTests
         await using var db = await SeededAsync(Parked, withArchives: false);
 
         var result = await NewAddonController(db).PostEventLootAsync(
-            BoardId, Ridill, NewService(db), CancellationToken.None);
+            BoardId, Ridill, NewService(db), new AddonLootReplayGuard(), CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result);
         Assert.Empty(await db.EventLootDetails.ToListAsync());
@@ -270,7 +270,7 @@ public class LootAfterEndCampTests
         db.Tods.Add(new Tod { Id = 7, LinkshellId = Ls, MonsterName = "Fafnir", Time = Now.AddMinutes(-15) });
         await db.SaveChangesAsync();
 
-        var result = await NewAddonController(db).PostTodLootAsync(7, Ridill, NewService(db), CancellationToken.None);
+        var result = await NewAddonController(db).PostTodLootAsync(7, Ridill, NewService(db), new AddonLootReplayGuard(), CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
         var loot = await db.EventLootDetails.SingleAsync();
@@ -291,7 +291,7 @@ public class LootAfterEndCampTests
         db.Tods.Add(new Tod { Id = 7, LinkshellId = Ls, MonsterName = "Fafnir", Time = Now.AddMinutes(-15) });
         await db.SaveChangesAsync();
 
-        var result = await NewAddonController(db).PostTodLootAsync(7, Ridill, NewService(db), CancellationToken.None);
+        var result = await NewAddonController(db).PostTodLootAsync(7, Ridill, NewService(db), new AddonLootReplayGuard(), CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);
         var loot = await db.EventLootDetails.SingleAsync();

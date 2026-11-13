@@ -232,6 +232,9 @@ builder.Services.AddScoped<LootEditService>();
 // Hand-entered loot from the Loot System. Separate from the event-close debit path because it
 // charges the winner immediately -- see ManualLootService for why that needs its own stamp.
 builder.Services.AddScoped<ManualLootService>();
+// Remembers which addon loot posts already went through, so a retry does not charge twice.
+// A singleton: the memory has to outlive the request that wrote it.
+builder.Services.AddSingleton<AddonLootReplayGuard>();
 // Turns the addon-reported alliance leader into the alliance NUMBERS the rest of the app speaks.
 // See AllianceIdentityService for why the number stopped being typed by hand.
 builder.Services.AddScoped<AllianceIdentityService>();

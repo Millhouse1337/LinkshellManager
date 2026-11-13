@@ -1051,6 +1051,7 @@ public sealed partial class AddonApiController
         int eventId,
         [FromBody] AddonPostLootRequest request,
         [FromServices] ManualLootService manualLoot,
+        [FromServices] AddonLootReplayGuard lootReplay,
         CancellationToken cancellationToken)
     {
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
@@ -1075,7 +1076,7 @@ public sealed partial class AddonApiController
         var target = new ManualLootTarget(ManualLootTargetKind.LiveEvent, eventEntity.Id, null);
 
         return await AddAddonLootAsync(
-            token, eventEntity.Linkshell, request, target, manualLoot, cancellationToken);
+            token, eventEntity.Linkshell, request, target, manualLoot, lootReplay, cancellationToken);
     }
 
     // Posts one loot row addressed by ToD id. Kept for compatibility -- the addon posts by event
@@ -1087,6 +1088,7 @@ public sealed partial class AddonApiController
         int todId,
         [FromBody] AddonPostLootRequest request,
         [FromServices] ManualLootService manualLoot,
+        [FromServices] AddonLootReplayGuard lootReplay,
         CancellationToken cancellationToken)
     {
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
@@ -1184,7 +1186,7 @@ public sealed partial class AddonApiController
                 : ManualLootTarget.None;
 
         return await AddAddonLootAsync(
-            token, tod.Linkshell, request, target, manualLoot, cancellationToken);
+            token, tod.Linkshell, request, target, manualLoot, lootReplay, cancellationToken);
     }
 
     // The shared half of both addon loot routes: validate the request, check the winner can
@@ -1199,6 +1201,7 @@ public sealed partial class AddonApiController
         AddonPostLootRequest request,
         ManualLootTarget target,
         ManualLootService manualLoot,
+        AddonLootReplayGuard lootReplay,
         CancellationToken cancellationToken)
     {
         // Posting loot takes DKP off the winner, so it needs a loot right -- the same one the app's
@@ -1214,6 +1217,36 @@ public sealed partial class AddonApiController
             { StatusCode = StatusCodes.Status403Forbidden };
         }
 
+        // A retry of a drop whose first post already went through (the addon gave up waiting for
+        // the answer) gets that first answer back, and nobody is charged twice. Checked AFTER the
+        // permission gate, so a token that has lost the loot right gets no replay either.
+        var outcome = await lootReplay.RunOnceAsync(
+            token.Id,
+            request.ClientRequestId,
+            async () =>
+            {
+                var written = await WriteAddonLootAsync(
+                    token, linkshell, request, target, manualLoot, cancellationToken);
+                return (written, written is OkObjectResult);
+            },
+            cancellationToken);
+
+        // A replay answers with a fresh result around the first post's body.
+        return outcome.Replayed && outcome.Response is OkObjectResult first
+            ? Ok(first.Value)
+            : outcome.Response;
+    }
+
+    // Validates and writes one addon loot row. Only AddAddonLootAsync calls it, after the
+    // permission gate and inside the replay guard.
+    private async Task<IActionResult> WriteAddonLootAsync(
+        AddonApiToken token,
+        Linkshell? linkshell,
+        AddonPostLootRequest request,
+        ManualLootTarget target,
+        ManualLootService manualLoot,
+        CancellationToken cancellationToken)
+    {
         var itemName   = request.ItemName?.Trim();
         var itemWinner = request.ItemWinner?.Trim();
         if (string.IsNullOrWhiteSpace(itemName))

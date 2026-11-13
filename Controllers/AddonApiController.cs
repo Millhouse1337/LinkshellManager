@@ -313,7 +313,11 @@ public sealed partial class AddonApiController : ControllerBase
     public sealed record AddonPostLootRequest(
         string ItemName,
         string ItemWinner,
-        int? WinningDkpSpent);
+        int? WinningDkpSpent,
+        // One id per drop, the same on every retry of it. A post whose id already succeeded gets
+        // that first answer back and charges nobody again (AddonLootReplayGuard). Optional: an
+        // older addon sends none and is handled exactly as before.
+        string? ClientRequestId = null);
 
     // Per-character job-level array published by the LSM addon so other
     // installations can see who can equip a given drop. Index = FFXI job id
