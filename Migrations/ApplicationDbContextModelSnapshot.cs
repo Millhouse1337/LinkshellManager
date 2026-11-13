@@ -17,7 +17,7 @@ namespace LinkshellManagerDiscordApp.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.11")
+                .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -180,28 +180,28 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("integer");
 
-                    b.Property<int[]>("Alt1CraftLevels")
+                    b.PrimitiveCollection<string>("Alt1CraftLevels")
                         .HasColumnType("jsonb");
 
-                    b.Property<int[]>("Alt1JobLevels")
+                    b.PrimitiveCollection<string>("Alt1JobLevels")
                         .HasColumnType("jsonb");
 
-                    b.Property<string[]>("Alt1MeritJobs")
+                    b.PrimitiveCollection<string>("Alt1MeritJobs")
                         .HasColumnType("jsonb");
 
-                    b.Property<int[]>("Alt1StrongJobs")
+                    b.PrimitiveCollection<string>("Alt1StrongJobs")
                         .HasColumnType("jsonb");
 
-                    b.Property<int[]>("Alt2CraftLevels")
+                    b.PrimitiveCollection<string>("Alt2CraftLevels")
                         .HasColumnType("jsonb");
 
-                    b.Property<int[]>("Alt2JobLevels")
+                    b.PrimitiveCollection<string>("Alt2JobLevels")
                         .HasColumnType("jsonb");
 
-                    b.Property<string[]>("Alt2MeritJobs")
+                    b.PrimitiveCollection<string>("Alt2MeritJobs")
                         .HasColumnType("jsonb");
 
-                    b.Property<int[]>("Alt2StrongJobs")
+                    b.PrimitiveCollection<string>("Alt2StrongJobs")
                         .HasColumnType("jsonb");
 
                     b.Property<string>("AltCharacterName1")
@@ -219,7 +219,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("text");
 
-                    b.Property<int[]>("CraftLevels")
+                    b.PrimitiveCollection<string>("CraftLevels")
                         .HasColumnType("jsonb");
 
                     b.Property<string>("Email")
@@ -537,7 +537,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("DkpSeedLedgerId")
                         .HasColumnType("integer");
 
-                    b.Property<int[]>("JobLevels")
+                    b.PrimitiveCollection<string>("JobLevels")
                         .HasColumnType("jsonb");
 
                     b.Property<double?>("LinkshellDkp")
@@ -555,7 +555,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("ManualStreakSetAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string[]>("MeritJobs")
+                    b.PrimitiveCollection<string>("MeritJobs")
                         .HasColumnType("jsonb");
 
                     b.Property<string>("Rank")
@@ -570,7 +570,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("Status")
                         .HasColumnType("text");
 
-                    b.Property<int[]>("StrongJobs")
+                    b.PrimitiveCollection<string>("StrongJobs")
                         .HasColumnType("jsonb");
 
                     b.Property<uint>("Version")
@@ -2204,7 +2204,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
-                    b.Property<string[]>("RelicNames")
+                    b.PrimitiveCollection<string>("RelicNames")
                         .HasColumnType("jsonb");
 
                     b.Property<int>("Skill")

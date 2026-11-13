@@ -4,7 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -33,6 +35,14 @@ public sealed class PostgresFixture : IAsyncLifetime
     private string _truncateSql = string.Empty;
 
     public string ConnectionString => _container.GetConnectionString();
+
+    // The one app setting the model needs: the Identity key length the app sets in Program.cs.
+    // Without it the test model differs from the migrations, and EF Core 10's Migrate() refuses to
+    // run (PendingModelChangesWarning) -- the same check production runs at startup, so keeping
+    // it on here is what proves a deploy will boot.
+    public static IServiceProvider IdentityServices { get; } = new ServiceCollection()
+        .Configure<IdentityOptions>(o => o.Stores.MaxLengthForKeys = ApplicationDbContext.IdentityKeyMaxLength)
+        .BuildServiceProvider();
 
     public async Task InitializeAsync()
     {
@@ -82,6 +92,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseNpgsql(_dataSource)
+            .UseApplicationServiceProvider(IdentityServices)
             .AddInterceptors(interceptors)
             .Options;
         return new ApplicationDbContext(options, auctionChannelQueue: auctionChannelQueue);

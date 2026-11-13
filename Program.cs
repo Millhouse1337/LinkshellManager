@@ -32,6 +32,9 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 // jsonb columns (notably AppUserLinkshell.JobLevels = int[]) only serialize when
 // this is on; Npgsql 8 disables it by default, so without it any write to
 // JobLevels throws "Writing values of 'System.Int32[]' ... is not supported".
+// Since EF Core 10 those array columns are turned into JSON text by EF itself
+// (a "primitive collection"), so this is now a safety net, kept so nothing
+// else mapped to jsonb can hit that error.
 var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
 dataSourceBuilder.EnableDynamicJson();
 var npgsqlDataSource = dataSourceBuilder.Build();
@@ -45,6 +48,10 @@ builder.Services
     .AddDefaultIdentity<AppUser>(options =>
     {
         options.SignIn.RequireConfirmedAccount = false;
+
+        // AddDefaultIdentity already uses 128; spelled out so the model never drifts from the
+        // migrations (see ApplicationDbContext.IdentityKeyMaxLength for why that stops startup).
+        options.Stores.MaxLengthForKeys = ApplicationDbContext.IdentityKeyMaxLength;
 
         // Make the password/lockout policy explicit rather than relying on
         // framework defaults (6 chars, no lockout). Discord OAuth is the primary
@@ -170,7 +177,7 @@ builder.Services.AddAntiforgery(options =>
         : CookieSecurePolicy.Always;
 });
 
-var mvcBuilder = builder.Services.AddControllersWithViews(options =>
+builder.Services.AddControllersWithViews(options =>
 {
     // Cookie-authenticated POST/PUT/DELETE requests must carry an antiforgery
     // token. Bearer-authenticated requests (Discord Activity SPA, addon) bypass
@@ -187,13 +194,9 @@ var mvcBuilder = builder.Services.AddControllersWithViews(options =>
     options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
     options.JsonSerializerOptions.Converters.Add(new UtcNullableDateTimeJsonConverter());
 });
-var razorPagesBuilder = builder.Services.AddRazorPages();
-
-if (builder.Environment.IsDevelopment())
-{
-    mvcBuilder.AddRazorRuntimeCompilation();
-    razorPagesBuilder.AddRazorRuntimeCompilation();
-}
+// No Razor runtime compilation any more: it only reloaded .cshtml edits in Development, it is
+// deprecated in .NET 10, and `dotnet watch` hot reload already does that job.
+builder.Services.AddRazorPages();
 
 builder.Services.AddOptions<DiscordOAuthOptions>()
     .Bind(builder.Configuration.GetSection("Discord"))
@@ -398,7 +401,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>
     {
         // Dev tunnels (pinggy/ngrok/cloudflared) and localhost reverse proxies are not on
         // the default loopback allowlist, so we accept forwarded headers from any source.
-        options.KnownNetworks.Clear();
+        options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
     }
     else
@@ -417,12 +420,9 @@ builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>
         var trustedNetworks = builder.Configuration.GetSection("ForwardedHeaders:KnownNetworks").Get<string[]>() ?? Array.Empty<string>();
         foreach (var network in trustedNetworks)
         {
-            var parts = network.Split('/', 2);
-            if (parts.Length == 2 &&
-                System.Net.IPAddress.TryParse(parts[0], out var prefix) &&
-                int.TryParse(parts[1], out var prefixLength))
+            if (TrustedNetworkParser.TryParse(network, out var parsed))
             {
-                options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefix, prefixLength));
+                options.KnownIPNetworks.Add(parsed);
             }
         }
     }

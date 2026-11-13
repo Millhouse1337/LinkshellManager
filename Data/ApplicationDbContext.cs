@@ -7,6 +7,13 @@ namespace LinkshellManagerDiscordApp.Data
 {
     public class ApplicationDbContext : IdentityDbContext<AppUser>
     {
+        // Length of the Identity login/token key columns (AspNetUserLogins, AspNetUserTokens).
+        // Identity reads it from IdentityOptions.Stores while building the model, and every
+        // migration so far created those columns as varchar(128). Since EF Core 9, Migrate() refuses
+        // to start when the model and the last migration disagree, so any context built without
+        // this setting (a test, or a future AddIdentityCore without it) would stop the app booting.
+        public const int IdentityKeyMaxLength = 128;
+
         // Singleton queues; nullable + defaulted so design-time / reflection
         // construction of the context never fails when they aren't supplied.
         private readonly DiscordTodBoardQueue? _todBoardQueue;

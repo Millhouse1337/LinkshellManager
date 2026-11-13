@@ -285,6 +285,7 @@ public class Phase4BMigrationRoundTripTests
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseNpgsql(connectionString)
+            .UseApplicationServiceProvider(PostgresFixture.IdentityServices)
             .Options;
         await using var db = new ApplicationDbContext(options);
         await db.GetService<IMigrator>().MigrateAsync(targetMigration);
