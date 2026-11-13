@@ -24,8 +24,8 @@
     argument could wipe the live ledger. Check the "Target DB" line it prints
     before passing -Execute.
 
-    Windows PowerShell 5.1 can't load the net8 Npgsql.dll, so this generates a
-    tiny throwaway net8 console tool and runs it via `dotnet run` (Npgsql 8.0.6
+    Windows PowerShell 5.1 can't load the .NET Npgsql.dll, so this generates a
+    tiny throwaway .NET 10 console tool and runs it via `dotnet run` (Npgsql 8.0.6
     restores offline from the existing NuGet cache).
 
 .EXAMPLE
@@ -98,7 +98,7 @@ if ($Execute -and -not $Force) {
     }
 }
 
-# --- 3. Generate + run a throwaway net8 tool that does the work ---------------
+# --- 3. Generate + run a throwaway .NET 10 tool that does the work ---------------
 $work = Join-Path $env:TEMP ("lsm-purge-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
 try {
@@ -106,7 +106,7 @@ try {
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>

@@ -20,16 +20,23 @@ echo "==> Updating apt"
 apt-get update -y
 apt-get upgrade -y
 
-echo "==> Installing .NET 8 runtime, Postgres, nginx, ufw"
+echo "==> Installing .NET 10 runtime, Postgres, nginx, ufw"
 apt-get install -y wget gnupg ca-certificates openssl ufw nginx postgresql postgresql-contrib
 
-# Microsoft package feed for .NET 8
-if ! dotnet --list-runtimes 2>/dev/null | grep -q '^Microsoft.AspNetCore.App 8\.'; then
-  wget -q https://packages.microsoft.com/config/ubuntu/$(. /etc/os-release && echo "$VERSION_ID")/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb
-  dpkg -i /tmp/packages-microsoft-prod.deb
-  rm /tmp/packages-microsoft-prod.deb
-  apt-get update -y
-  apt-get install -y aspnetcore-runtime-8.0
+# .NET 10 comes from Ubuntu's own packages, which is what Microsoft's install guide says to use:
+# Microsoft's package feed no longer carries .NET for Ubuntu 24.04, and mixing the two feeds
+# breaks installs. Ubuntu 24.04 has aspnetcore-runtime-10.0 in its normal archive, so it gets
+# security fixes through ordinary apt upgrades. Ubuntu 22.04 only has it in Canonical's
+# .NET backports PPA, so add that there.
+# This never removes an older runtime: on an existing droplet keep 8.0 installed, because the
+# previous build in /var/www/lsmanager.old is what a rollback starts (deploy/RUNBOOK.md).
+if ! dotnet --list-runtimes 2>/dev/null | grep -q '^Microsoft.AspNetCore.App 10\.'; then
+  if [[ "$(. /etc/os-release && echo "$VERSION_ID")" == "22.04" ]]; then
+    apt-get install -y software-properties-common
+    add-apt-repository -y ppa:dotnet/backports
+    apt-get update -y
+  fi
+  apt-get install -y aspnetcore-runtime-10.0
 fi
 
 echo "==> Creating app user and directories"

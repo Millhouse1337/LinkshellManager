@@ -9,7 +9,7 @@
 #   -SkipBackup   skip the pre-deploy database dump (e.g. the dump itself is broken)
 #   -SkipFrontend skip the Angular build
 #
-# Requires: dotnet 8 SDK, git, ssh + scp on PATH (Windows 10+ has these built in),
+# Requires: dotnet 10 SDK, git, ssh + scp on PATH (Windows 10+ has these built in),
 #           Angular CLI deps already installed in discord-activity\.
 #           Docker Desktop running (the Postgres tests need it; not needed with -SkipTests).
 
@@ -68,6 +68,22 @@ if ($gitChanges) {
     $version = "$version-dirty"
 }
 Write-Host "    version: $version"
+
+# This build needs the ASP.NET Core 10 runtime on the droplet (it is published framework-
+# dependent, so it brings no runtime of its own). Without it the service cannot start and the
+# site stays down, so check before anything is built, uploaded or stopped. /usr/bin/dotnet is
+# the same dotnet that deploy/lsmanager.service starts the app with.
+Write-Host "==> Checking the droplet has the ASP.NET Core 10 runtime" -ForegroundColor Cyan
+$remoteRuntimes = (& ssh @sshArgs $DropletHost '/usr/bin/dotnet --list-runtimes' | Out-String)
+$runtimeCheckExit = $LASTEXITCODE
+if ($runtimeCheckExit -eq 255) {
+    throw "Could not connect to $DropletHost over ssh, so nothing was deployed. Check the address and your ssh key, then try again."
+}
+if ($runtimeCheckExit -ne 0 -or $remoteRuntimes -notmatch '(?m)^Microsoft\.AspNetCore\.App 10\.') {
+    if ($remoteRuntimes.Trim()) { Write-Host $remoteRuntimes.Trim() }
+    throw "The droplet does not have the ASP.NET Core 10 runtime (installed runtimes are listed above, if any). This build would not start there, so nothing was deployed and the site is untouched. Install it first: see deploy/RUNBOOK.md, '.NET 10 runtime (November 2026)'. Keep the 8.0 runtime installed for rollback."
+}
+Write-Host "    found Microsoft.AspNetCore.App 10.x"
 
 # A broken test or a forgotten migration should stop here, not in production.
 if (-not $SkipTests) {

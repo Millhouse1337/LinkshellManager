@@ -5,7 +5,7 @@ the architecture overview and the Discord Activity / auth flow.
 
 ## Prerequisites
 
-- .NET 8 SDK
+- .NET 10 SDK
 - Node.js + npm (for the Angular Discord Activity SPA)
 - PostgreSQL 15+
 - An HTTPS tunnel (e.g. `cloudflared` or `ngrok`) only when testing the embedded Discord flow

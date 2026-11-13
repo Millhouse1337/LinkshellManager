@@ -22,7 +22,7 @@ Nothing on the droplet is exposed except SSH (22), HTTP (80, redirect), and HTTP
 - Postgres installed on the droplet (you have this - Option A).
 - A domain in Cloudflare DNS already pointing at your old tunnel.
 - Discord application client ID + client secret.
-- Local: .NET 8 SDK, Node 20+, OpenSSH (Windows 10+ has it).
+- Local: .NET 10 SDK, Node 20+, OpenSSH (Windows 10+ has it).
 
 ## Step 1 - Bootstrap the droplet
 
@@ -35,7 +35,7 @@ ssh root@<DROPLET_IP> 'bash /tmp/setup-droplet.sh'
 ```
 
 The script:
-- installs .NET 8 ASP.NET Core runtime, nginx, ufw
+- installs the .NET 10 ASP.NET Core runtime (from Ubuntu's own package archive), nginx, ufw
 - creates a `lsmanager` system user
 - enables ufw with 22/80/443 only
 - creates the `lsmanager` Postgres database + user with a random password
@@ -334,6 +334,39 @@ sudo rm -rf /var/www/lsmanager.bad                                    # once you
 ```
 
 The next normal deploy overwrites `lsmanager.old` again, so roll back before deploying anything else.
+
+A rollback starts the old build with whatever .NET runtime it was built for. After the move to
+.NET 10, `lsmanager.old` is a .NET 8 build until the second .NET 10 deploy, so it only starts
+while the 8.0 runtime is still installed (see **.NET 10 runtime (November 2026)**).
+
+## .NET 10 runtime (November 2026)
+
+From commit "Move every project to .NET 10 and EF Core 10" on, the app needs the **ASP.NET Core
+10 runtime** on the droplet. `deploy.ps1` checks for it first and stops, changing nothing, if
+it is missing. Install it once, **before** that deploy:
+
+```bash
+ssh root@<IP>
+sudo apt-get update
+sudo apt-get install -y aspnetcore-runtime-10.0
+dotnet --list-runtimes     # expect BOTH Microsoft.AspNetCore.App 8.0.x and 10.0.x
+```
+
+Where it comes from: Ubuntu 24.04's own package archive, the same place the droplet's current
+8.0 runtime came from (`/usr/lib/dotnet`). Microsoft's install guide says this is the way on
+24.04: Microsoft's own package feed no longer carries .NET for Ubuntu 24.04, and the
+`ppa:dotnet/backports` PPA is only needed on 22.04 (or for .NET 9 and older versions on 24.04).
+A bonus: fixes for the runtime now arrive with ordinary `apt upgrade` runs. If
+`apt-cache policy aspnetcore-runtime-10.0` ever shows `packages.microsoft.com`, the two feeds
+are mixed; search "package mix ups on Linux" in Microsoft's docs before going further.
+
+**Keep the 8.0 runtime installed.** The first .NET 10 deploy leaves the last .NET 8 build in
+`/var/www/lsmanager.old`, and **Rollback** above needs 8.0 to start it. Only after a second .NET
+10 deploy (so `lsmanager.old` is .NET 10 too) is it safe to `apt-get remove aspnetcore-runtime-8.0`.
+
+That deploy adds one migration, `EfCore10ModelSnapshot`, which changes nothing in the database
+(it only refreshes EF's own record of the model). Swapping back to the .NET 8 build is therefore
+safe: the old build ignores the extra row in `__EFMigrationsHistory`.
 
 ## One-time migration: persistent Data Protection keys
 

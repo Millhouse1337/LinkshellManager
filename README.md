@@ -128,7 +128,7 @@ Official references used:
 
 ### Prerequisites
 
-- .NET 8 SDK
+- .NET 10 SDK
 - Node.js and npm
 - PostgreSQL 15+ instance
 - A public HTTPS tunnel for Discord testing, such as `cloudflared` or `ngrok`
