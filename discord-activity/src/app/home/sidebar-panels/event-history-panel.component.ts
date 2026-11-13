@@ -904,8 +904,13 @@ export class EventHistoryPanelComponent {
     const id = value ?? 0;
     if (id === this._linkshellId) return;
     this._linkshellId = id;
-    // Hidden: drop the old linkshell's list now and load when the panel is opened.
-    if (!this._active) this.histories.set([]);
+    // Hidden: drop the old linkshell's list now and load when the panel is opened. Also drop any
+    // reply for the old linkshell still on the wire: no new request starts here to replace it, so
+    // without this it would land and put the old linkshell's events back.
+    if (!this._active) {
+      this.historyOrder.invalidate();
+      this.histories.set([]);
+    }
     // Wait a microtask so `active` (bound in the same template) is set first, whatever order
     // Angular applies the two inputs in; a hidden panel then skips this load.
     queueMicrotask(() => {
