@@ -12,7 +12,7 @@ using static LinkshellManagerDiscordApp.Controllers.ActivityMappers;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityRosterController
 {
     [HttpGet("linkshells/{linkshellId:int}/roles")]
     public async Task<IActionResult> GetLinkshellRolesAsync(int linkshellId, CancellationToken cancellationToken)

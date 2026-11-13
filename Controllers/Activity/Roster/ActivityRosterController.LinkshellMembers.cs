@@ -11,7 +11,7 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityRosterController
 {
     [HttpPost("linkshells/{linkshellId:int}/members/{memberId:int}/remove")]
     public async Task<IActionResult> RemoveMemberAsync(

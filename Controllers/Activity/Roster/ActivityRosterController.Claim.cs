@@ -12,7 +12,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // placeholder in place, when an officer confirmed that Discord id); these cover
 // the name-matched case (a request an officer approves) and the officer "link
 // this placeholder to an account / Discord id" fallback.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityRosterController
 {
     // Placeholders whose character name (main/alt) matches the signed-in user's
     // names — i.e. likely "them", imported before they joined.

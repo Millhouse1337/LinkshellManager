@@ -37,10 +37,10 @@ public class RoleSubmitTodPermissionTests
     {
         var role = new LinkshellRole { Name = "Member" };
 
-        ActivityDataController.ApplyPermissions(role, Request(true));
+        ActivityRosterController.ApplyPermissions(role, Request(true));
         Assert.True(role.CanSubmitTodForApproval);
 
-        ActivityDataController.ApplyPermissions(role, Request(false));
+        ActivityRosterController.ApplyPermissions(role, Request(false));
         Assert.False(role.CanSubmitTodForApproval);
     }
 
@@ -49,7 +49,7 @@ public class RoleSubmitTodPermissionTests
     {
         var role = new LinkshellRole { Name = "Officer", CanSubmitTodForApproval = true };
 
-        ActivityDataController.ApplyPermissions(role, Request(null));
+        ActivityRosterController.ApplyPermissions(role, Request(null));
 
         Assert.True(role.CanSubmitTodForApproval);
     }

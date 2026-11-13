@@ -19,7 +19,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
     private static readonly HashSet<string> SupportedTodCooldowns = new(TodCatalog.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> SupportedTodIntervals = new(TodCatalog.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
 
-    private readonly InviteCandidateService _inviteCandidates;
     private readonly DiscordBotClient _discordBot;
     private readonly AdminOverrideService _adminOverride;
     private readonly MemberActivityService _memberActivity;
@@ -30,7 +29,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
     public ActivityDataController(
         ApplicationDbContext dbContext,
         DiscordIdentityService discordIdentityService,
-        InviteCandidateService inviteCandidates,
         DiscordBotClient discordBot,
         UserManager<AppUser> userManager,
         ILogger<ActivityDataController> logger,
@@ -42,7 +40,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         LinkshellPermissions permissions)
         : base(dbContext, discordIdentityService, userManager, logger, permissions)
     {
-        _inviteCandidates = inviteCandidates;
         _discordBot = discordBot;
         _adminOverride = adminOverride;
         _memberActivity = memberActivity;

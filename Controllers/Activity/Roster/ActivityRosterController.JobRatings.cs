@@ -11,7 +11,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // where rater == target is that member's own self-assessment ("what you think");
 // other raters' rows aggregate into "what others think" (averages + an AI summary
 // of their comments). Any member of the linkshell may view + rate.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityRosterController
 {
     // Clamp a requested character slot to the valid 0 (main) … 2 (alt 2) range.
     private static int ClampSlot(int slot) => slot < 0 ? 0 : slot > 2 ? 2 : slot;

@@ -11,7 +11,7 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityRosterController
 {
     // Paginated, searchable browse of every LSM user eligible to be invited to this
     // linkshell (the invite card's "Entire LSM Server": anyone who has used the app),

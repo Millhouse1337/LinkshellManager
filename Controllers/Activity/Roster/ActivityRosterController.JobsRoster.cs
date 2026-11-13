@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityRosterController
 {
     // Read-only roster of every member's leveled jobs (the levels they entered on
     // their Profile), for the linkshell's main + alt characters. Any member of the

@@ -16,19 +16,19 @@ public class LeaderRankChangeTests
     [InlineData("Member", "Leader", "Trial")]     // a custom role with Manage roles is no different
     [InlineData(null, "member", "leader")]        // case doesn't open a gap
     public void NonLeader_CannotGrantOrChangeLeader(string? actor, string target, string newRank)
-        => Assert.False(ActivityDataController.CanChangeRankTouchingLeader(actor, false, target, newRank));
+        => Assert.False(ActivityRosterController.CanChangeRankTouchingLeader(actor, false, target, newRank));
 
     [Theory]
     [InlineData("Member", "Leader")]
     [InlineData("Leader", "Officer")]   // a co-Leader can be stepped down
     public void Leader_CanGrantOrChangeLeader(string target, string newRank)
-        => Assert.True(ActivityDataController.CanChangeRankTouchingLeader("Leader", false, target, newRank));
+        => Assert.True(ActivityRosterController.CanChangeRankTouchingLeader("Leader", false, target, newRank));
 
     [Theory]
     [InlineData("Member", "Leader")]
     [InlineData("Leader", "Officer")]
     public void AdminOverride_CountsAsLeader(string target, string newRank)
-        => Assert.True(ActivityDataController.CanChangeRankTouchingLeader("Officer", true, target, newRank));
+        => Assert.True(ActivityRosterController.CanChangeRankTouchingLeader("Officer", true, target, newRank));
 
     [Theory]
     [InlineData("Member", "Officer")]
@@ -36,7 +36,7 @@ public class LeaderRankChangeTests
     [InlineData("Trial", "Member")]
     [InlineData(null, "Officer")]
     public void OrdinaryRoleChanges_AreLeftToManageRoles(string? target, string newRank)
-        => Assert.True(ActivityDataController.CanChangeRankTouchingLeader("Officer", false, target, newRank));
+        => Assert.True(ActivityRosterController.CanChangeRankTouchingLeader("Officer", false, target, newRank));
 
     // The side door: a custom role created or renamed as "leader" moves its holders'
     // Rank to a value IsLeader accepts, without ever going through the rail above.
@@ -50,5 +50,5 @@ public class LeaderRankChangeTests
     [InlineData("Officer", false)]
     [InlineData(null, false)]
     public void CustomRoleName_CannotPoseAsLeader(string? name, bool reserved)
-        => Assert.Equal(reserved, ActivityDataController.IsLeaderRoleName(name));
+        => Assert.Equal(reserved, ActivityRosterController.IsLeaderRoleName(name));
 }
