@@ -243,6 +243,24 @@ public sealed partial class AddonApiController
         RetryIfWindowCreditRaceAsync(
             _dbContext, () => PostAttendanceCoreAsync(eventId, request, cancellationToken));
 
+    // How far the officer's PC clock may be from the server's before its "recorded at" is ignored.
+    public static readonly TimeSpan PostClockTolerance = TimeSpan.FromMinutes(5);
+
+    // The time a window post is stamped with. The addon sends its PC clock's "now", which was taken
+    // as-is: a PC a day off stamped the window (and a camp it started) a day off. A post is sent the
+    // moment it is clicked, so a time more than a few minutes from the server's own is a wrong
+    // clock, and the server's time is used instead. Same idea as the snapshot route's check.
+    internal static DateTime TrustedPostTimeUtc(DateTime? sentUtc, DateTime nowUtc)
+    {
+        if (sentUtc is { } sent
+            && sent >= nowUtc - PostClockTolerance
+            && sent <= nowUtc + PostClockTolerance)
+        {
+            return sent;
+        }
+        return nowUtc;
+    }
+
     private async Task<IActionResult> PostAttendanceCoreAsync(
         int eventId, AddonAttendanceRequest request, CancellationToken cancellationToken)
     {
@@ -252,7 +270,7 @@ public sealed partial class AddonApiController
         }
 
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
-        var nowUtc = request.RecordedAtUtc ?? DateTime.UtcNow;
+        var nowUtc = TrustedPostTimeUtc(request.RecordedAtUtc, DateTime.UtcNow);
 
         // Which alliance this roster is FOR, resolved ONLY when the addon actually sent one.
         //
