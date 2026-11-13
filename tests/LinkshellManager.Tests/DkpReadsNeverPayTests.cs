@@ -33,8 +33,8 @@ public class DkpReadsNeverPayTests
     [Fact]
     public void TheDkpPages_DoNotWriteTheLedger()
     {
-        var path = Path.Combine(FindRepoRoot(), "Controllers", "ActivityDataController.Dkp.cs");
-        Assert.True(File.Exists(path), "ActivityDataController.Dkp.cs not found -- did it move?");
+        var path = Path.Combine(FindRepoRoot(), "Controllers", "Activity", "Dkp", "ActivityDkpController.Dkp.cs");
+        Assert.True(File.Exists(path), "ActivityDkpController.Dkp.cs not found -- did it move?");
         var source = File.ReadAllText(path);
 
         // Neither the sweep nor the per-camp payout belongs in the DKP read file. (The manual audit

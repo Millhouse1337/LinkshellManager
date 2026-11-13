@@ -22,15 +22,12 @@ public sealed partial class ActivityDataController : ActivityControllerBase
     private readonly InviteCandidateService _inviteCandidates;
     private readonly DiscordBotClient _discordBot;
     private readonly TimeZoneConversionService _timeZones;
-    private readonly DkpSheetService _dkpSheet;
     private readonly AdminOverrideService _adminOverride;
     private readonly MemberActivityService _memberActivity;
     private readonly ChannelRouteEditor _channelRoutes;
     private readonly DkpLedgerWriter _dkpLedger;
     private readonly DkpPoolResolver _dkpPools;
     private readonly DkpPoolBalanceService _dkpPoolBalances;
-    private readonly DkpPoolEditor _dkpPoolEditor;
-    private readonly DkpPoolEventTypeCatalog _dkpPoolEventTypes;
     private readonly TreasuryBalanceService _treasury;
     private readonly TreasuryJournalWriter _treasuryJournal;
     private readonly TreasurySettlementService _treasurySettlements;
@@ -48,7 +45,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         DiscordBotClient discordBot,
         UserManager<AppUser> userManager,
         TimeZoneConversionService timeZones,
-        DkpSheetService dkpSheet,
         ILogger<ActivityDataController> logger,
         AdminOverrideService adminOverride,
         MemberActivityService memberActivity,
@@ -56,8 +52,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         DkpLedgerWriter dkpLedger,
         DkpPoolResolver dkpPools,
         DkpPoolBalanceService dkpPoolBalances,
-        DkpPoolEditor dkpPoolEditor,
-        DkpPoolEventTypeCatalog dkpPoolEventTypes,
         TreasuryBalanceService treasury,
         TreasuryJournalWriter treasuryJournal,
         TreasurySettlementService treasurySettlements,
@@ -73,15 +67,12 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         _inviteCandidates = inviteCandidates;
         _discordBot = discordBot;
         _timeZones = timeZones;
-        _dkpSheet = dkpSheet;
         _adminOverride = adminOverride;
         _memberActivity = memberActivity;
         _channelRoutes = channelRoutes;
         _dkpLedger = dkpLedger;
         _dkpPools = dkpPools;
         _dkpPoolBalances = dkpPoolBalances;
-        _dkpPoolEditor = dkpPoolEditor;
-        _dkpPoolEventTypes = dkpPoolEventTypes;
         _treasury = treasury;
         _treasuryJournal = treasuryJournal;
         _treasurySettlements = treasurySettlements;

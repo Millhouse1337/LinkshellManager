@@ -42,7 +42,7 @@ public class PastEventDkpFromLedgerTests
         new(db, NewPools(db), NullLogger<DkpLedgerWriter>.Instance);
 
     // The app's controller with only what these routes touch, and a signed-in Leader.
-    private static ActivityDataController NewController(ApplicationDbContext db)
+    private static ActivityDkpController NewController(ApplicationDbContext db)
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -60,7 +60,7 @@ public class PastEventDkpFromLedgerTests
             User = new ClaimsPrincipal(new ClaimsIdentity(
                 new[] { new Claim(ClaimTypes.NameIdentifier, Officer) }, authenticationType: "Test")),
         };
-        return ActivityControllerFactory.Create<ActivityDataController>(
+        return ActivityControllerFactory.Create<ActivityDkpController>(
             http, db, userManager, new MemberActivityService(db),
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
             TestPermissions.For(db));

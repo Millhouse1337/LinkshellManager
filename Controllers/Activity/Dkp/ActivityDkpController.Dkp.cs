@@ -11,7 +11,7 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityDkpController
 {
     public sealed record ActivityDkpAddCandidateDto(
         int WindowEventId,

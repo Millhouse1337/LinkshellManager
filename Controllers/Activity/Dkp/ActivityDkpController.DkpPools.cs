@@ -11,7 +11,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // nullable pool list on that request would mean a rename could silently wipe the pool config.
 //
 // The save itself, and the ledger re-stamp that goes with it, live in DkpPoolEditor.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityDkpController
 {
     [HttpGet("linkshells/{linkshellId:int}/dkp-pools")]
     public async Task<IActionResult> GetDkpPoolsAsync(int linkshellId, CancellationToken cancellationToken)

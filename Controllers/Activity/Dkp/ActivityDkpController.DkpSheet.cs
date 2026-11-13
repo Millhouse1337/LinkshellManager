@@ -8,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // No Google connection involved; always available. Member-gated. Posting
 // the sheet to a Discord channel is configured in the channel-routes editor (the "DKP
 // sheet" post type on the Configurations tab), not here.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityDkpController
 {
     // PoolCurrent is a parallel array aligned to the response's Pools, so the client walks columns
     // and cells in the same order. Empty when the linkshell has a single pool.

@@ -10,7 +10,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // Two steps: preview parses the upload and classifies every row (update / create / ambiguous)
 // without changing anything and hands the parsed rows back; commit applies those rows. Gated on
 // CanCustomizeLinkshell.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityDkpController
 {
     // A blank sample .xlsx with the exact columns the importer expects.
     [HttpGet("dkp-import/template")]

@@ -10,7 +10,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // attendee's DKP, or remove an attendee. DKP recompute is delegated to
 // EventHistoryEditService. On an HNM camp's archive the DKP edits return 400: that camp
 // was paid from its review card, which these routes can't see.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityDkpController
 {
     // Constructed per call rather than injected — it's stateless apart from the scoped services it
     // wraps, and every DKP move it makes goes through the same DkpLedgerWriter this request uses,
