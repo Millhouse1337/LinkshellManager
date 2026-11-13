@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace LinkshellManagerDiscordApp.Services;
 
 // The one generic end-event close, run by both End Event buttons (the app's,
-// ActivityDataController.EventsLifecycle, and the addon's, AddonApiController.AddonEvents), each
+// ActivityEventsController.EventsLifecycle, and the addon's, AddonApiController.AddonEvents), each
 // with its own EndEventOptions: credits DKP, writes the
 // EventHistory + DkpLedgerEntry rows and deletes the live event. Moved out of the old website's
 // EventController so it outlives that controller. HNM camps never come here — they end through

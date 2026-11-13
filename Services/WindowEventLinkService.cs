@@ -8,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Services;
 //
 // Three call sites used to own private copies of this — the addon ingest
 // (AddonApiController.AttendanceSnapshots), the web attach (WindowEventsController) and the
-// Activity attach (ActivityDataController.WindowEvents) — and they had drifted apart in ways that
+// Activity attach (ActivityWindowEventsController.WindowEvents) — and they had drifted apart in ways that
 // showed up as bugs rather than as style:
 //
 //   * only the addon copy stamped WindowAnchorAtUtc / WindowCount / WindowMinutes, so an event
@@ -213,7 +213,7 @@ public sealed class WindowEventLinkService
     //
     // Parked on the camp instead, the capture is picked up by HnmCampReviewHandoffService at End
     // Camp and lands on the camp's own review card, in the slot the officer chose here. Until
-    // then it shows on the live camp's card (ActivityDataController.Overview reads LinkedEventId).
+    // then it shows on the live camp's card (ActivityOverviewController.Overview reads LinkedEventId).
     //
     // The clamp mirrors ApplySlot, against the camp's own window count. No number means
     // "unassigned" rather than a guess: there is no anchored grid to derive one from, and a wrong

@@ -10,7 +10,7 @@ namespace LinkshellManagerDiscordApp.Services;
 //
 // It lives in one helper because three call sites derive a window number from the same grid
 // (snapshot ingestion, the window cap on an explicitly chosen window, and the display-side
-// ActivityDataController.MapActivityWindowSnapshot). If they resolved it independently, a camp's history could be
+// ActivityWindowEventsController.MapActivityWindowSnapshot). If they resolved it independently, a camp's history could be
 // numbered one way on the way in and another way on the way out.
 public static class WindowEventWindowGrid
 {

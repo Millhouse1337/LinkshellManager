@@ -8,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // list has to drop into the other everywhere or it becomes invisible.
 //
 // (This was AttendanceSectionsBuilder, which also built the old website's Event System sections.
-// Those pages are gone; the app's own mappers live in ActivityDataController.WindowEvents.)
+// Those pages are gone; the app's own mappers live in ActivityWindowEventsController.WindowEvents.)
 public static class AttendanceQueryFilters
 {
     // The split is ENDED vs STILL LIVE -- deliberately not Open vs Closed. An HNM camp handed off
@@ -56,7 +56,7 @@ public static class AttendanceQueryFilters
     // PostedToSheetAt is the gate, because it is the money: WindowEventDkpLedgerService sets it
     // when the ledger is written, and that is the moment the event stops being something an
     // officer owes work on. Until then it is deliberately kept OUT of Past Events
-    // (ActivityDataController.EventHistory), so the past-event list means "settled" rather than
+    // (ActivityDkpController.EventHistory), so the past-event list means "settled" rather than
     // "over".
     //
     // Two ways in, because there are two ways to finish: a camp End Camp stamps CampEndedAtUtc,

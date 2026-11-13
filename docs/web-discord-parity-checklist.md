@@ -21,7 +21,7 @@ What remains is a short list of **intentional** differences between the two host
 
 ## Permissions
 
-One set of rules everywhere: the role permission flags, checked by `ActivityDataController.CanAsync`
+One set of rules everywhere: the role permission flags, checked by `ActivityControllerBase.CanAsync`
 (admin override first, then the Leader always passes, then the role's flag). The old website checked
 the Leader/Officer **rank** in about a dozen places, so moving it onto the app changed three things
 for the default Officer role, which doesn't carry these flags:

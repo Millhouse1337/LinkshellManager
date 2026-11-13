@@ -398,7 +398,7 @@ public sealed partial class AddonApiController
         }
         // A LIVE HNM camp can be canceled too: the addon's Active Events row offers Cancel (with a
         // Confirm / Return step) in place of End. Same rule as the app's Delete
-        // (ActivityDataController.DeleteEventAsync) -- the camp is thrown away with no ToD, no
+        // (ActivityEventsController.DeleteEventAsync) -- the camp is thrown away with no ToD, no
         // history and no DKP. Any other live event still has to be ended, so its DKP is paid.
         if (eventToDelete.CommencementStartTime.HasValue
             && !string.Equals((eventToDelete.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
@@ -450,7 +450,7 @@ public sealed partial class AddonApiController
         }
 
         // Anchor window 1 to the SCHEDULED StartTime, mirroring the Activity's start
-        // (ActivityDataController.EventsLifecycle) — starting a camp early by hand must not shift its
+        // (ActivityEventsController.EventsLifecycle) — starting a camp early by hand must not shift its
         // cadence. The advance poller falls back to StartTime while this is null, so the counter moved
         // either way, but the anchor is also what this controller hands back to the addon
         // (windowAnchorAt) and what a manual Prev/Next re-anchors against, so an addon start has to

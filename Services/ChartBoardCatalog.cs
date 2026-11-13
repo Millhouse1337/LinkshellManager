@@ -243,7 +243,7 @@ public sealed record ChartBoard(
 
     /// <summary>
     /// Gates the "Add a pop item" FORM only. Rows already on a board that turns this off stay
-    /// listed, editable and deletable - ActivityDataController.AddChartPopItemAsync is the ONE
+    /// listed, editable and deletable - ActivityChartsController.AddChartPopItemAsync is the ONE
     /// place this is checked, and putting it anywhere ChartBoardService.NormalizeDraft can reach
     /// would strand every row Dynamis and Limbus already hold.
     /// </summary>

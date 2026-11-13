@@ -8,7 +8,7 @@ namespace LinkshellManager.Tests;
 // camps pay windowsAttended × rate and must ignore the clock entirely.
 //
 // Shared by BOTH end-event paths (EventEndService.EndEventCoreAsync and
-// ActivityDataController.EndEventAsync). The Activity path used to have no windowed branch at all,
+// ActivityEventsController.EndEventAsync). The Activity path used to have no windowed branch at all,
 // which made it the one place where break state still moved windowed DKP.
 public class EventAttendanceDkpCalculatorTests
 {

@@ -32,7 +32,7 @@ public sealed record DiscordRosterCandidate(
 
 public sealed record AddDiscordMemberResult(bool Success, string? Error);
 
-// Invite-candidate browse for the Discord Activity (ActivityDataController.Invites).
+// Invite-candidate browse for the Discord Activity (ActivityRosterController.Invites).
 // The caller is responsible for auth (resolving the user and checking the
 // manage-members permission); this service only runs the query.
 public sealed class InviteCandidateService

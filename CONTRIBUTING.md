@@ -88,6 +88,29 @@ falls back to user-secrets. Set exactly one:
 LSM_PROD_CS="<production connection string>" dotnet run --project tools/DbInspector -- history
 ```
 
+### Activity API controllers
+
+Every `api/activity/...` endpoint lives under `Controllers/Activity/`, one folder per controller.
+Each controller is a `partial` class split over a few files, and all of them inherit
+`ActivityControllerBase` (who is asking, their membership with the guild lock applied, and the
+permission check). Pure mapping functions are in `ActivityMappers`.
+
+| Controller | What it owns |
+|---|---|
+| `ActivityOverviewController` | Overview, live feed, profile, download links, banner, antiforgery token |
+| `ActivityEventsController` | Timed events: lifecycle, sign-ups, breaks, comments, party board, party setup |
+| `ActivityWindowEventsController` | HNM camps and posts, ToDs, repops, monster timings, pending submissions |
+| `ActivityDkpController` | DKP, DKP pools, DKP import, DKP sheet, past events |
+| `ActivityLootController` | Loot history and auctions |
+| `ActivityTreasuryController` | The gil ledger |
+| `ActivityChartsController` | Charts boards, wishlist, key items, chart holdings |
+| `ActivityRosterController` | Members, roles, invites, claims, job ratings, jobs roster |
+| `ActivitySettingsController` | Create/update/delete a linkshell, its Discord setup, rules, announcements, items |
+
+They all keep `[Route("api/activity")]`, so no URL changed when the old single
+`ActivityDataController` was split up. `ApiRouteSnapshotTests` pins every route; a new endpoint
+goes in the controller that owns its area.
+
 ## Code style
 
 - C# nullable reference types are enabled; keep new code warning-clean.

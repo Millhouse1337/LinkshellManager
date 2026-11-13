@@ -517,7 +517,7 @@ public static class EventPartyBoardEditService
 
     // RequirementType is derived by precedence (Job > Role > Any); "Any Role" is the
     // editor's "anything goes" sentinel and stores as an open Any slot. Mirrors
-    // ActivityDataController.MapPartySlot.
+    // ActivityEventsController.MapPartySlot.
     private static (string Type, string? Role, string? Main, string? Sub) DeriveRequirement(
         string? role, string? mainJob, string? subJob)
     {

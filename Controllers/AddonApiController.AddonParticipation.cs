@@ -827,7 +827,7 @@ public sealed partial class AddonApiController
 
     // Late-join: lets a regular member self-attach to an already-commenced
     // timed event from the addon, without needing an officer to scan and
-    // post them. Mirrors the activity's ActivityDataController.QuickJoinAsync
+    // post them. Mirrors the activity's ActivityEventsController.QuickJoinAsync
     // contract — same fields, same "already attached" guard — but uses the
     // addon token to resolve the joining user and stamps IsVerified+ledger
     // so the new participation earns DKP from the join moment forward
@@ -1350,7 +1350,7 @@ public sealed partial class AddonApiController
     }
 
     // Addon-side ToD posting. Mirrors the Discord Activity create-tod path in
-    // ActivityDataController but with addon-token auth (linkshell-scoped) and
+    // ActivityWindowEventsController but with addon-token auth (linkshell-scoped) and
     // a slimmer payload â€” the addon only knows the monster name and the
     // wall-clock kill time, so cooldown/interval defaults are filled in
     // server-side using the same helpers the Discord Activity uses.

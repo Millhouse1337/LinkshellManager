@@ -19,7 +19,7 @@ namespace LinkshellManagerDiscordApp.Services;
 //   4. the role named by the rank decides; an unknown rank falls back to the Member role
 //
 // What this does NOT do: the per-linkshell Discord guild lock. That needs the request's
-// Discord bearer token and guild header, so it stays in ActivityDataController, which
+// Discord bearer token and guild header, so it stays in ActivityControllerBase, which
 // filters the membership before asking this service.
 //
 // Scoped, so it shares the request's DbContext (and AdminOverrideService's per-request memo).

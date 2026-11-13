@@ -3836,7 +3836,7 @@ public sealed class DiscordInteractionsController : ControllerBase
         // and re-sign mid-run rather than waiting on an officer. The live Event row is
         // deleted when the event ends, so this is naturally bounded — a post-end click
         // finds no event and is rejected above. (The Activity path stays officer-gated;
-        // see ActivityDataController.WithdrawEventPartySlotAsync.)
+        // see ActivityEventsController.WithdrawEventPartySlotAsync.)
         var identity = await ResolveWithdrawIdentityAsync(ev, appUserId, cancellationToken);
         if (identity is null)
         {

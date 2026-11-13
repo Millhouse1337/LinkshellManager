@@ -18,7 +18,7 @@ namespace LinkshellManagerDiscordApp.Services;
 ///
 /// Extracted because the two end-event paths had drifted:
 /// EventEndService.EndEventCoreAsync (web + addon) branched correctly, while
-/// ActivityDataController.EndEventAsync (the Activity's "End event" button, reachable for
+/// ActivityEventsController.EndEventAsync (the Activity's "End event" button, reachable for
 /// windowed camps) had no windowed branch at all and paid every event by duration. That was
 /// the one place left in the app where break state still moved windowed DKP. Since P3.5 both
 /// buttons run EventEndService.EndEventCoreAsync, which calls

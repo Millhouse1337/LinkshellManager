@@ -69,7 +69,7 @@ public class AppUserEvent
     // parked in the Break Room — timer paused, DKP/attendance/history preserved — but they
     // signalled they don't intend to come back. Drives a "not returning" label in the Break
     // Room. Cleared if they Return from break (they came back after all). See
-    // ActivityDataController UnsignAsync / ReturnFromBreakAsync / ForceResumeAsync.
+    // ActivityEventsController UnsignAsync / ReturnFromBreakAsync / ForceResumeAsync.
     public bool WithdrewFromEvent { get; set; }
 
     public DateTime? ResumeTime { get; set; }

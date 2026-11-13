@@ -10,8 +10,9 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 // What every Activity controller shares: who is asking (ResolveAppUserAsync), their membership of a
 // linkshell with the Discord guild lock applied (GetMembershipAsync), and the permission check
-// (CanAsync). The Activity API was one controller; it is being split into smaller ones that all
-// inherit this, so these rules stay in one place.
+// (CanAsync). The Activity API was one controller (ActivityDataController); it is now split into
+// smaller ones that all inherit this, so these rules stay in one place. See "Activity API
+// controllers" in CONTRIBUTING.md for which controller owns what.
 //
 // Only what every controller needs lives here. A helper used by one controller stays in it.
 // Nothing here is public: a public method on a controller base class would become an endpoint.

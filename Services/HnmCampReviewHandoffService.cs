@@ -180,7 +180,7 @@ public sealed class HnmCampReviewHandoffService
         // and simply were not read.
         //
         // The MONEY is untouched. Amounts come from the per-character WindowEventMemberDkp rows
-        // below, and ActivityDataController.BuildActivityCombinedMembers takes
+        // below, and ActivityWindowEventsController.BuildActivityCombinedMembers takes
         // `overrideAmount ?? baseAmount` -- so folding one snapshot into several changes what the
         // card SHOWS about presence, never what it pays.
         //
@@ -746,7 +746,7 @@ public sealed class HnmCampReviewHandoffService
         }
     }
 
-    // Captures an officer filed against this camp while it was live (ActivityDataController's
+    // Captures an officer filed against this camp while it was live (ActivityWindowEventsController's
     // attach with a camp target): on the Event row, on no Window Event yet. Tracked, because the
     // caller re-parents, re-prices and unlinks these same instances.
     //

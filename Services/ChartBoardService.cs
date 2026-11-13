@@ -234,7 +234,7 @@ public sealed class ChartBoardService
         // offer an add form, but they still hold rows that officers entered before that, and those
         // rows have to stay editable and deletable. A feature check in here would refuse every one
         // of them and strand the lot. The check belongs in the Add action only - see
-        // ActivityDataController.AddChartPopItemAsync - and
+        // ActivityChartsController.AddChartPopItemAsync - and
         // ChartItemKindTests.NormalizeDraft_DoesNotRefuseARowOnABoardThatNoLongerTakesAdds pins it.
         var canonicalBoard = ChartBoardCatalog.NormalizeBoard(board);
         if (canonicalBoard is null)
