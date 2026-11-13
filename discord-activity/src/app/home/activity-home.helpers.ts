@@ -394,8 +394,6 @@ export function isLeaderRankName(rank: string | null | undefined): boolean {
   return (rank ?? '').toLowerCase() === 'leader';
 }
 
-// Leader-tier gates (rank editing, removing members, transferring ownership).
-// Same membership-first rule as above.
 // The DKP pool picker's choices for a linkshell, or [] when it should stay hidden: the linkshell
 // has a single pool, or it isn't the primary one (the overview only carries the primary's pools).
 // An empty list means the form sends no pool and the server uses its usual default, so a
@@ -415,6 +413,8 @@ export function defaultDkpPoolId(pools: readonly ActivityDkpPoolOption[]): numbe
   return (pools.find(pool => pool.isDefault) ?? pools[0])?.id ?? null;
 }
 
+// Leader-tier gates (rank editing, removing members, transferring ownership).
+// Same membership-first rule as above.
 export function isLeaderTierIn(
   overview: ActivityOverview | null | undefined,
   linkshellId: number | null | undefined,

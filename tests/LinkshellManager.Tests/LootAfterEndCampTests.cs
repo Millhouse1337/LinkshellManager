@@ -341,6 +341,33 @@ public class LootAfterEndCampTests
         Assert.Equal(40, pending["u1"]);
     }
 
+    // Loot pinned to a pool by the Add loot form's pool picker is charged from THAT pool at close
+    // (not the event type's pool), so the per-pool pending spend has to hold it there too.
+    [Fact]
+    public async Task UnchargedLootPinnedToAnotherPool_CountsAgainstThePinnedPool()
+    {
+        await using var db = await SeededAsync(Parked);
+        db.DkpPools.Add(new DkpPool { Id = 5, LinkshellId = Ls, Name = "Main", IsDefault = true });
+        db.DkpPools.Add(new DkpPool { Id = 6, LinkshellId = Ls, Name = "Sky", SortOrder = 1 });
+        db.EventLootDetails.Add(new EventLootDetail
+        {
+            LinkshellId = Ls, EventId = BoardId, ItemName = "Ridill", ItemWinner = "Alice",
+            ItemWinnerAppUserId = "u1", WinningDkpSpent = 40, DkpPoolId = 6,
+        });
+        await db.SaveChangesAsync();
+
+        var method = typeof(AuctionDkpService).GetMethod(
+            "ComputePoolPendingLiveLootSpendByUserAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var pendingInPinned = await (Task<Dictionary<string, double>>)method.Invoke(
+            null, [db, Ls, 6, CancellationToken.None])!;
+        var pendingInDefault = await (Task<Dictionary<string, double>>)method.Invoke(
+            null, [db, Ls, 5, CancellationToken.None])!;
+
+        Assert.Equal(40, pendingInPinned["u1"]);
+        Assert.False(pendingInDefault.ContainsKey("u1"));
+    }
+
     // The live card's own Add loot (POST api/activity/events/{id}/loot) needs a signed-in HTTP
     // context, so its guard is pinned by source like the other ActivityDataController routes. A
     // stale card open across End Camp must not drop uncharged loot on the parked board.

@@ -261,7 +261,7 @@ public static class AuctionDkpService
         return rows.ToDictionary(r => r.AppUserId, r => r.Locked, StringComparer.Ordinal);
     }
 
-    // Pending live-event loot spend, but only from events whose type maps to THIS pool.
+    // Pending live-event loot spend, but only from loot the close will charge to THIS pool.
     private static async Task<Dictionary<string, double>> ComputePoolPendingLiveLootSpendByUserAsync(
         ApplicationDbContext db,
         int linkshellId,
@@ -288,7 +288,7 @@ public static class AuctionDkpService
                 && l.DkpDebitedAt == null                  // not charged yet -- see the linkshell-wide twin
                 && l.WinningDkpSpent != null && l.WinningDkpSpent > 0
                 && (l.ItemWinner != null || l.ItemWinnerAppUserId != null))
-            .Select(l => new { l.ItemWinner, l.ItemWinnerAppUserId, Dkp = l.WinningDkpSpent!.Value, EventType = l.Event!.EventType })
+            .Select(l => new { l.ItemWinner, l.ItemWinnerAppUserId, Dkp = l.WinningDkpSpent!.Value, EventType = l.Event!.EventType, l.DkpPoolId })
             .ToListAsync(cancellationToken);
         if (pendingLoot.Count == 0)
         {
@@ -323,7 +323,9 @@ public static class AuctionDkpService
         var result = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var loot in pendingLoot)
         {
-            if (PoolFor(loot.EventType) != dkpPoolId)
+            // A row pinned to a pool (the Add loot form's pool picker) is charged from THAT pool at
+            // close, so it must hold DKP there too. Only unpinned rows follow the event's type.
+            if ((loot.DkpPoolId ?? PoolFor(loot.EventType)) != dkpPoolId)
             {
                 continue;
             }
