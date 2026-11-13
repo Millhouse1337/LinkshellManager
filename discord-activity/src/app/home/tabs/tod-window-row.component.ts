@@ -108,13 +108,6 @@ export class TodWindowRowComponent {
   // seconds stay, because a ToD is timed to the second.
   private formatTime(ms: number | null): string | null {
     if (ms === null) return null;
-    return new Intl.DateTimeFormat(undefined, {
-      timeZone: this.activity.viewerTimeZone(),
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit'
-    }).format(ms);
+    return this.activity.formatInViewerZone(ms, 'monthDayTimeSeconds');
   }
 }

@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, model, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, model, signal } from '@angular/core';
+import { ClockService } from '../../discord/clock.service';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAddonToken,
@@ -16,7 +17,7 @@ import type {
   ActivityMonsterTimingInput,
   ActivityMonsterTimingsResponse
 } from '../../discord/discord-activity.types';
-import { canManageLinkshellIn } from '../activity-home.helpers';
+import { canManageLinkshellIn, pairingCountdownLabel } from '../activity-home.helpers';
 
 // (PoolDraft moved to tabs/dkp-grouping-tab.component.ts with the editor it belongs to.)
 
@@ -53,7 +54,6 @@ interface RouteDraft {
 })
 export class ConfigurationsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
-  private readonly destroyRef = inject(DestroyRef);
   private activeConfigurationLinkshellId: number | null = null;
   // ---- Monster setups ----
   //
@@ -122,13 +122,6 @@ export class ConfigurationsTabComponent {
       void this.loadDiscordChannels();
       void this.loadEligibleGuilds();
       void this.loadMonsterTimings();
-    });
-
-    this.destroyRef.onDestroy(() => {
-      if (this.addonCountdownTimer) {
-        clearInterval(this.addonCountdownTimer);
-        this.addonCountdownTimer = null;
-      }
     });
   }
 
@@ -1117,13 +1110,22 @@ export class ConfigurationsTabComponent {
   }
 
   // ----- Game Addon (att) pairing -----
+  //
+  // Signals, because this view is OnPush: plain fields set after an await or from a timer were
+  // never re-read, which is why the pairing-code countdown used to freeze on its first value.
   protected readonly addonTokens = signal<ActivityAddonToken[]>([]);
-  protected addonModalOpen = false;
-  protected addonGeneratedCode: string | null = null;
-  protected addonCountdownLabel = '';
-  protected addonModalError: string | null = null;
+  protected readonly addonModalOpen = signal(false);
+  protected readonly addonGeneratedCode = signal<string | null>(null);
+  protected readonly addonModalError = signal<string | null>(null);
   protected addonModalLoadedFor: number | null = null;
-  private addonCountdownTimer: ReturnType<typeof setInterval> | null = null;
+  // When the shown code stops working (epoch ms). The label below counts down to it on the app's
+  // shared clock, so it stays right even after the page was hidden for a while.
+  private readonly addonCodeExpiresAt = signal<number | null>(null);
+  private readonly clockNow = inject(ClockService).now;
+  protected readonly addonCountdownLabel = computed(() => {
+    const expiresAt = this.addonCodeExpiresAt();
+    return expiresAt === null ? '' : pairingCountdownLabel(expiresAt, this.clockNow());
+  });
 
   protected canManageAddonTokens(): boolean {
     const id = this.customizeTargetLinkshellId();
@@ -1158,18 +1160,15 @@ export class ConfigurationsTabComponent {
   }
 
   protected openAddonPairingModal(): void {
-    this.addonGeneratedCode = null;
-    this.addonCountdownLabel = '';
-    this.addonModalError = null;
-    this.addonModalOpen = true;
+    this.addonGeneratedCode.set(null);
+    this.addonCodeExpiresAt.set(null);
+    this.addonModalError.set(null);
+    this.addonModalOpen.set(true);
   }
 
   protected closeAddonPairingModal(): void {
-    this.addonModalOpen = false;
-    if (this.addonCountdownTimer) {
-      clearInterval(this.addonCountdownTimer);
-      this.addonCountdownTimer = null;
-    }
+    this.addonModalOpen.set(false);
+    this.addonCodeExpiresAt.set(null);
     this.addonModalLoadedFor = null;
     this.loadAddonTokensForCurrent();
   }
@@ -1178,35 +1177,14 @@ export class ConfigurationsTabComponent {
     const id = this.customizeTargetLinkshellId();
     if (!id) return;
     if (!(await this.confirmChange())) return;
-    this.addonModalError = null;
+    this.addonModalError.set(null);
     const result = await this.activity.createAddonPairingCode(id);
     if (!result) {
-      this.addonModalError = this.activity.actionError() ?? 'Could not generate pairing code.';
+      this.addonModalError.set(this.activity.actionError() ?? 'Could not generate pairing code.');
       return;
     }
-    this.addonGeneratedCode = result.code;
-    this.startAddonCountdown((result.expiresInMinutes || 10) * 60);
-  }
-
-  private startAddonCountdown(totalSeconds: number): void {
-    if (this.addonCountdownTimer) clearInterval(this.addonCountdownTimer);
-    let remaining = totalSeconds;
-    const tick = () => {
-      if (remaining <= 0) {
-        this.addonCountdownLabel = 'expired';
-        if (this.addonCountdownTimer) {
-          clearInterval(this.addonCountdownTimer);
-          this.addonCountdownTimer = null;
-        }
-        return;
-      }
-      const m = Math.floor(remaining / 60);
-      const s = remaining % 60;
-      this.addonCountdownLabel = `${m}:${s.toString().padStart(2, '0')}`;
-      remaining--;
-    };
-    tick();
-    this.addonCountdownTimer = setInterval(tick, 1000);
+    this.addonGeneratedCode.set(result.code);
+    this.addonCodeExpiresAt.set(Date.now() + (result.expiresInMinutes || 10) * 60_000);
   }
 
   // Two-stage inline confirmation for revoking an addon token.
@@ -1244,8 +1222,7 @@ export class ConfigurationsTabComponent {
   }
 
   protected formatAddonTokenDate(value?: string | null): string {
-    if (!value) return '—';
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+    // On the viewer's profile clock, like every other time in the app.
+    return this.activity.formatDateTime(value) ?? '—';
   }
 }

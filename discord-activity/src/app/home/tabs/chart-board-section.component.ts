@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { ZonedTimePipe } from '../zoned-time.pipe';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -127,7 +128,8 @@ interface ChartItemSection {
     FormsModule,
     ChartHoldingsSectionComponent,
     ChartWishlistSectionComponent,
-    ChartKeyItemSectionComponent
+    ChartKeyItemSectionComponent,
+    ZonedTimePipe
   ],
   templateUrl: './chart-board-section.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush

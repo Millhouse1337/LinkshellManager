@@ -445,7 +445,7 @@
                          addon's ToD post), so the officer can see it landed. -->
                     @if (event.hnmCampTodPostedAt) {
                       <span class="hnm-badge" data-tone="success"
-                        [title]="'ToD logged ' + (event.hnmCampTodPostedAt | date:'shortTime')">New ToD Updated</span>
+                        [title]="'ToD logged ' + (event.hnmCampTodPostedAt | zonedTime:'time')">New ToD Updated</span>
                     }
                     <!-- (Adding a post or a member is the Add New Post / Add a Member button at the
                          top of the card.) -->
@@ -482,7 +482,7 @@
                                 <span class="hnm-badge" [attr.data-tone]="step.tone">{{ step.badge }}</span>
                               }
                             </span>
-                            <span class="hnm-step__time">{{ step.time ? (step.time | date:'shortTime') : (step.kind === 'upcoming' ? '' : '—') }}@if (step.source) { · {{ step.source }}}</span>
+                            <span class="hnm-step__time">{{ step.time ? (step.time | zonedTime:'time') : (step.kind === 'upcoming' ? '' : '—') }}@if (step.source) { · {{ step.source }}}</span>
                             <span class="hnm-step__sub">{{ step.sub }}</span>
                           </button>
                         </li>
@@ -521,7 +521,7 @@
                                   <span class="hnm-badge" [attr.data-tone]="capture.won ? 'success' : 'danger'">{{ capture.won ? 'WON' : 'LOST' }}</span>
                                 </div>
                                 <div class="hnm-detail__sub" [attr.title]="claimCaptureHover(capture)">
-                                  {{ capture.capturedAtUtc | date:'shortTime' }}
+                                  {{ capture.capturedAtUtc | zonedTime:'time' }}
                                   @if (capture.nearestWindowSequence !== null && capture.nearestWindowSequence !== undefined) {
                                     · {{ claimWindowLabel(event, capture) }}
                                   }
@@ -592,7 +592,7 @@
                                   }
                                 </div>
                                 <div class="hnm-detail__sub">
-                                  Linked snapshot · {{ snapshot.capturedAtUtc | date:'shortTime' }}
+                                  Linked snapshot · {{ snapshot.capturedAtUtc | zonedTime:'time' }}
                                   · posted by {{ snapshot.capturedByCharacterName || '—' }}
                                   @if (step.source) {
                                     · from {{ step.source }}
@@ -732,9 +732,9 @@
                                   }
                                 </div>
                                 <div class="hnm-detail__sub">
-                                  Posted {{ win.postedAt | date:'shortTime' }}
+                                  Posted {{ win.postedAt | zonedTime:'time' }}
                                   @if (win.attendees.length > 0) {
-                                    · verified {{ win.attendees[0].verifiedAt | date:'shortTime' }}
+                                    · verified {{ win.attendees[0].verifiedAt | zonedTime:'time' }}
                                     @if (win.attendees[0].verifiedBy) {
                                       by {{ win.attendees[0].verifiedBy }}
                                     }
@@ -1528,7 +1528,7 @@
                       <div class="attendance-window-pane">
                         <div class="attendance-window-pane__meta">
                           <span class="attendance-window-pane__posted">
-                            Posted {{ activeWindow.postedAt | date:'short' }}
+                            Posted {{ activeWindow.postedAt | zonedTime:'short' }}
                           </span>
                           <!-- The window's controls, pushed to the far right so the line reads as
                                "what this window is" on the left and "what you can change about it"
@@ -1774,7 +1774,7 @@
                             }
                           </p>
                           <div class="attendance-window-pane__meta">
-                            Verified {{ activeWindow.attendees[0].verifiedAt | date:'shortTime' }}
+                            Verified {{ activeWindow.attendees[0].verifiedAt | zonedTime:'time' }}
                             @if (activeWindow.attendees[0].verifiedBy) {
                               · by {{ activeWindow.attendees[0].verifiedBy }}
                             }
@@ -1816,7 +1816,7 @@
                             @if (snapshot.windowLabel) {
                               <span class="tag default">{{ snapshot.windowLabel }}</span>
                             }
-                            <strong>{{ snapshot.capturedAtUtc | date:'short' }}</strong>
+                            <strong>{{ snapshot.capturedAtUtc | zonedTime:'short' }}</strong>
                             <span class="roster-muted">
                               · posted by {{ snapshot.capturedByCharacterName || '-' }}
                               @if (postSourceLabel(snapshot.postSource); as source) {
@@ -1984,7 +1984,7 @@
                             </span>
                             <strong>{{ capture.monsterName }}</strong>
                             <span class="claim-shield__meta" [attr.title]="claimCaptureHover(capture)">
-                              {{ capture.capturedAtUtc | date:'short' }}
+                              {{ capture.capturedAtUtc | zonedTime:'short' }}
                               · {{ capture.members.length }} of ours
                               · {{ capture.totalPlayers }} in the lottery
                             </span>

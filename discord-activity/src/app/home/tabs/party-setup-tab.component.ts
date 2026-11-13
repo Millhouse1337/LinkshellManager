@@ -65,15 +65,9 @@ export class PartySetupTabComponent {
     this.confirmDeleteId.set(null);
   }
 
+  // On the viewer's profile clock, like every other time in the app.
   protected formatDate(value?: string | null): string {
-    if (!value) return '-';
-    return new Intl.DateTimeFormat([], {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    }).format(new Date(value));
+    return this.activity.formatDateTime(value) ?? '-';
   }
 
   protected isHnmSetup(row?: { eventType?: string | null } | null): boolean {

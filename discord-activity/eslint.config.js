@@ -33,6 +33,15 @@ module.exports = defineConfig([
       ],
       // `any` usages are tracked as a backlog rather than blocking CI.
       "@typescript-eslint/no-explicit-any": "warn",
+      // Dates and times are shown on the viewer's PROFILE clock (zoned-time.ts). These two write
+      // the computer's zone instead, so one screen could show an event at two different times.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.property.name=/^toLocale(Date|Time)String$/]",
+          message: "Use activity.formatInViewerZone / formatDate (profile time zone) instead of toLocaleDateString/toLocaleTimeString.",
+        },
+      ],
     },
   },
   {
@@ -49,6 +58,14 @@ module.exports = defineConfig([
       "@angular-eslint/template/label-has-associated-control": "warn",
       "@angular-eslint/template/click-events-have-key-events": "warn",
       "@angular-eslint/template/interactive-supports-focus": "warn",
+      // Angular's date pipe writes the computer's time zone; the app shows the PROFILE zone.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "BindingPipe[name='date']",
+          message: "Use the zonedTime pipe (profile time zone) instead of | date.",
+        },
+      ],
     },
   }
 ]);

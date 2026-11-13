@@ -1288,7 +1288,7 @@
 
     </div>
 
-@if (addonModalOpen) {
+@if (addonModalOpen()) {
   <div class="addon-modal-backdrop" (click)="closeAddonPairingModal()">
     <div class="addon-modal-dialog" (click)="$event.stopPropagation()">
       <div class="addon-modal-header">
@@ -1296,28 +1296,28 @@
         <button type="button" class="btn ghost sm" (click)="closeAddonPairingModal()">×</button>
       </div>
       <div class="addon-modal-body">
-        @if (!addonGeneratedCode) {
+        @if (!addonGeneratedCode()) {
           <p class="muted" style="font-size:13px;margin:0">
             Generate a one-time code, then in FFXI type
             <code>/lsm link &lt;code&gt;</code> to connect the addon. This pairs
             <strong>every linkshell you belong to</strong>, not just this one.
           </p>
         }
-        @if (addonGeneratedCode) {
+        @if (addonGeneratedCode()) {
           <div class="addon-modal-code">
-            <div class="addon-modal-code__value">{{ addonGeneratedCode }}</div>
+            <div class="addon-modal-code__value">{{ addonGeneratedCode() }}</div>
             <div class="muted" style="font-size:12px;margin-top:6px">
-              Expires in {{ addonCountdownLabel }}. In FFXI: <code>/lsm link &lt;code&gt;</code>
+              Expires in {{ addonCountdownLabel() }}. In FFXI: <code>/lsm link &lt;code&gt;</code>
             </div>
           </div>
         }
-        @if (addonModalError) {
-          <div class="addon-modal-error">{{ addonModalError }}</div>
+        @if (addonModalError()) {
+          <div class="addon-modal-error">{{ addonModalError() }}</div>
         }
       </div>
       <div class="addon-modal-footer">
         <button type="button" class="btn ghost" (click)="closeAddonPairingModal()">Close</button>
-        @if (!addonGeneratedCode) {
+        @if (!addonGeneratedCode()) {
           <button type="button" class="btn primary"
             [disabled]="activity.busyAddonTokens()"
             (click)="submitAddonPairingCode()">

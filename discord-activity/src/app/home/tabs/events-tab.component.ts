@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, model, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, model, signal, viewChild } from '@angular/core';
+import { ClockService } from '../../discord/clock.service';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAddEventMemberInput,
@@ -29,6 +30,7 @@ import { EventHistoryPanelComponent } from '../sidebar-panels/event-history-pane
 import { AttendanceSectionsComponent } from './attendance-sections.component';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
 import { TodFormComponent } from './tod-form.component';
+import { ZonedTimePipe } from '../zoned-time.pipe';
 import { PartySetupService } from '../../discord/party-setup.service';
 import { WindowEventService } from '../../discord/window-event.service';
 import {
@@ -92,7 +94,7 @@ interface CampPayoutPart {
 
 @Component({
   selector: 'app-events-tab',
-  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, PartySetupPanelComponent, EventHistoryPanelComponent, TodFormComponent, AttendanceSectionsComponent],
+  imports: [CommonModule, FormsModule, ActivityQueuePanelComponent, PartySetupPanelComponent, EventHistoryPanelComponent, TodFormComponent, AttendanceSectionsComponent, ZonedTimePipe],
   templateUrl: './events-tab.component.html',
   styleUrl: './events-tab.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -103,8 +105,7 @@ export class EventsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetups = inject(PartySetupService);
   protected readonly windows = inject(WindowEventService);
-  private readonly destroyRef = inject(DestroyRef);
-  private readonly now = signal(Date.now());
+  private readonly now = inject(ClockService).now;
   private readonly queuePanel = viewChild.required(ActivityQueuePanelComponent);
   private readonly todForm = viewChild(TodFormComponent);
 
@@ -169,9 +170,6 @@ export class EventsTabComponent {
   }
 
   public constructor() {
-    const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
-    this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
-
     effect(() => {
       const livePartyBoardEventIds = this.liveEvents()
         .filter(event => !!event.partySetupId)

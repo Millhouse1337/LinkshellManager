@@ -3,7 +3,6 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  DestroyRef,
   ElementRef,
   Injector,
   afterNextRender,
@@ -11,6 +10,7 @@ import {
   signal,
   viewChild
 } from '@angular/core';
+import { ClockService } from '../discord/clock.service';
 import { FormsModule } from '@angular/forms';
 import { DateTimeInputComponent } from './datetime-input.component';
 import {
@@ -75,12 +75,11 @@ interface HnmBonusField {
 })
 export class ActivityQueuePanelComponent {
   protected readonly activity = inject(DiscordActivityService);
-  private readonly destroyRef = inject(DestroyRef);
 
-  // One clock for every card on the panel, ticking once a second. A signal rather than a
-  // per-card setInterval: the cards come and go as the queue refreshes, and a timer owned by a
-  // card outlives it. Same pattern the events tab already uses for its window countdowns.
-  private readonly now = signal(Date.now());
+  // The app's shared 1-second clock (ClockService), not a per-card setInterval: the cards come
+  // and go as the queue refreshes, and a timer owned by a card outlives it. It pauses while the
+  // page is hidden.
+  private readonly now = inject(ClockService).now;
   protected readonly partySetups = inject(PartySetupService);
   private readonly tods = inject(TodService);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -1004,10 +1003,6 @@ export class ActivityQueuePanelComponent {
     }
   }
 
-  public constructor() {
-    const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
-    this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
-  }
 
   protected async submitCreateForm(): Promise<void> {
     // Clear any banner from a prior attempt before re-validating, so a corrected

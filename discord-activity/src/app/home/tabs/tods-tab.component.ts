@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, computed, effect, inject, model, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, computed, effect, inject, model, signal } from '@angular/core';
+import { ClockService } from '../../discord/clock.service';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityLinkshellSettings,
@@ -30,8 +31,7 @@ export class TodsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetup = inject(PartySetupService);
   private readonly pendingSubmissions = inject(PendingSubmissionsService);
-  private readonly destroyRef = inject(DestroyRef);
-  protected readonly now = signal(Date.now());
+  protected readonly now = inject(ClockService).now;
 
   // Two-way `view` binding: ActivityHomeComponent keeps it in the location (/tods/pending).
   readonly todsView = model<TodsView>('main', { alias: 'view' });
@@ -71,9 +71,6 @@ export class TodsTabComponent {
   }
 
   public constructor() {
-    const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
-    this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
-
     // Load party setups for the active linkshell so a ToD row whose monster has
     // an assigned setup can offer the inline (view-only) setup panel. Reads the computed id,
     // so it runs when the linkshell changes rather than on every overview refresh;

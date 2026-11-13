@@ -19,6 +19,7 @@ import {
   withTimeout
 } from './discord-activity.helpers';
 import { readJsonResponse } from './http-response';
+import { formatInZone, zonedDayKey, type ZonedTimeStyle } from './zoned-time';
 import { reloadOnceForStaleBuild } from './stale-build';
 import type {
   ActivityAddonPairingCodeResponse,
@@ -492,10 +493,14 @@ export class DiscordActivityService {
     }
   }
 
-  // Posts the browser-detected IANA zone to the server when the user's saved
-  // TimeZone is still on the server default (null/empty/UTC). Mirrors the
-  // accepted value into the local + overview signals so the rest of the app
-  // (and the header clock) picks it up without a manual refresh.
+  // Posts the browser-detected IANA zone to the server when the user has never
+  // chosen a TimeZone (null/empty). Mirrors the accepted value into the local +
+  // overview signals so the rest of the app (and the header clock) picks it up
+  // without a manual refresh.
+  //
+  // "UTC" counts as a choice: it used to be treated as "not set", so anyone who
+  // picked UTC on their profile had it replaced by the computer's zone on the
+  // next visit. The server makes the same check.
   private autoDetectAttempted = false;
   async detectAndSaveTimeZoneIfUnset(): Promise<void> {
     if (this.autoDetectAttempted) return;
@@ -504,8 +509,8 @@ export class DiscordActivityService {
 
     const appUser = this.auth.overview()?.appUser;
     const current = (appUser?.timeZone ?? '').trim();
-    const isUnset = current === '' || current.toUpperCase() === 'UTC';
-    if (!isUnset || current === detected) {
+    const isUnset = current === '';
+    if (!isUnset) {
       this.autoDetectAttempted = true;
       return;
     }
@@ -559,98 +564,37 @@ export class DiscordActivityService {
     );
   }
 
+  // Any instant as text on the viewer's profile clock, in one of the shared styles
+  // (zoned-time.ts). Templates use the `zonedTime` pipe, which calls the same helper.
+  formatInViewerZone(value: string | number | Date | null | undefined, style: ZonedTimeStyle): string | null {
+    return formatInZone(value, this.viewerTimeZone(), style);
+  }
+
   formatDateTime(value?: string | null): string | null {
-    if (!value) {
-      return null;
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    return new Intl.DateTimeFormat(undefined, {
-      timeZone: this.viewerTimeZone(),
-      dateStyle: 'medium',
-      timeStyle: 'short'
-    }).format(date);
+    return formatInZone(value, this.viewerTimeZone(), 'dateTime');
   }
 
   // Date only (no time), in the viewer's timezone. Used for date-group headers.
   formatDate(value?: string | null): string | null {
-    if (!value) {
-      return null;
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    return new Intl.DateTimeFormat(undefined, {
-      timeZone: this.viewerTimeZone(),
-      dateStyle: 'medium'
-    }).format(date);
+    return formatInZone(value, this.viewerTimeZone(), 'date');
   }
 
   // Stable viewer-local calendar-day key ("YYYY-MM-DD") for grouping entries by
-  // date. Built from formatToParts so the grouping matches what formatDate shows.
-  localDayKey(value?: string | null): string | null {
-    if (!value) {
-      return null;
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: this.viewerTimeZone(),
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).formatToParts(date);
-    const get = (type: Intl.DateTimeFormatPartTypes): string =>
-      parts.find(part => part.type === type)?.value ?? '';
-    return `${get('year')}-${get('month')}-${get('day')}`;
+  // date, so the grouping matches what formatDate shows.
+  localDayKey(value?: string | number | null): string | null {
+    return zonedDayKey(value, this.viewerTimeZone());
   }
 
   // Same as formatDateTime but renders seconds. Used for ToD displays
   // (TIME OF DEATH / REPOP STARTS) where the addon now captures down to
   // the second and the user wants the precision to round-trip.
   formatDateTimeWithSeconds(value?: string | null): string | null {
-    if (!value) {
-      return null;
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    return new Intl.DateTimeFormat(undefined, {
-      timeZone: this.viewerTimeZone(),
-      dateStyle: 'medium',
-      timeStyle: 'medium'
-    }).format(date);
+    return formatInZone(value, this.viewerTimeZone(), 'dateTimeSeconds');
   }
 
   // The clock time alone, with seconds, in the viewer's zone: "1:33:09 PM".
   formatTimeWithSeconds(value?: string | null): string | null {
-    if (!value) {
-      return null;
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    return new Intl.DateTimeFormat(undefined, {
-      timeZone: this.viewerTimeZone(),
-      timeStyle: 'medium'
-    }).format(date);
+    return formatInZone(value, this.viewerTimeZone(), 'timeSeconds');
   }
 
   // Formats an instant for a `<input type="datetime-local">` in the viewer's zone. The work is in

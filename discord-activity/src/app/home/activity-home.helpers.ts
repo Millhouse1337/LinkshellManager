@@ -164,6 +164,18 @@ export function formatElapsed(totalMilliseconds: number): string {
   return [hours, minutes, seconds].map(value => value.toString().padStart(2, '0')).join(':');
 }
 
+// The addon pairing code's "Expires in m:ss" text, worked out from when the code expires rather
+// than by counting down a number, so it is right even after the page was hidden for a while.
+export function pairingCountdownLabel(expiresAtMs: number, nowMs: number): string {
+  const remaining = Math.ceil((expiresAtMs - nowMs) / 1000);
+  if (remaining <= 0) {
+    return 'expired';
+  }
+  const minutes = Math.floor(remaining / 60);
+  const seconds = remaining % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
 // ----- ToD tracker -----
 //
 // Shown wherever a ToD has no recorded Time of Death / repop: the camp ended without anyone

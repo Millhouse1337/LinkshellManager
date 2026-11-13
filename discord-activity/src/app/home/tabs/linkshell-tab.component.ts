@@ -421,10 +421,7 @@ export class LinkshellTabComponent {
 
   // "Jun 7, 2026"-style joined date for the roster column.
   protected formatJoined(value?: string | null): string {
-    if (!value) return '—';
-    const d = new Date(value);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return this.activity.formatDate(value) ?? '—';
   }
 
   // Roles are linkshell-specific (custom roles are persisted server-side via

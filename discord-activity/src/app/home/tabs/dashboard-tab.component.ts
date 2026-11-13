@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, Input, TemplateRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, TemplateRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ClockService } from '../../discord/clock.service';
 import { FormsModule } from '@angular/forms';
 import { ActivityHttpClient } from '../../discord/activity-http.client';
 import { formatActionError } from '../../discord/discord-activity.helpers';
@@ -62,8 +63,7 @@ export class DashboardTabComponent {
   protected readonly memberAvatarClass = memberAvatarClass;
   protected readonly memberStatusClass = memberStatusClass;
   protected readonly ADMIN_BADGE = ADMIN_BADGE;
-  private readonly destroyRef = inject(DestroyRef);
-  protected readonly now = signal(Date.now());
+  protected readonly now = inject(ClockService).now;
 
   // Parent-owned modal trigger — opening the modal lives in the parent so a
   // single instance is shared between the Dashboard and ToDs tabs.
@@ -100,9 +100,6 @@ export class DashboardTabComponent {
   }
 
   public constructor() {
-    const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
-    this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
-
     // The claim rate's custom range is fetched on its own (the overview only carries 7d / 30d /
     // All). Refetched on every overview refresh too, so it stays as current as the fixed ranges,
     // and on a linkshell switch.
@@ -473,15 +470,9 @@ export class DashboardTabComponent {
   protected eventClockLabel(value?: string | null): string {
     const target = parseDate(value);
     if (!target) return '—';
-    const date = new Date(target);
-    const now = new Date(this.now());
-    const sameDay = date.toDateString() === now.toDateString();
-    if (sameDay) {
-      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-    }
-    const weekday = date.toLocaleDateString([], { weekday: 'short' });
-    const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-    return `${weekday} ${time}`;
+    // "Today?" is asked on the viewer's profile calendar, like the time itself.
+    const sameDay = this.activity.localDayKey(target) === this.activity.localDayKey(this.now());
+    return this.activity.formatInViewerZone(target, sameDay ? 'time' : 'weekdayTime') ?? '—';
   }
 
   // ----- HNM claim rate -----

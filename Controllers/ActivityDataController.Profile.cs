@@ -177,10 +177,10 @@ public sealed partial class ActivityDataController
     public sealed record DetectTimeZoneRequest(string? TimeZone);
 
     // Auto-fills the user's TimeZone from a client-detected IANA zone when the
-    // profile field is still on its server default (null/empty/UTC). This lets
-    // the header clock and event-time conversions match where the user actually
-    // is without forcing them through the Profile page. Users who explicitly
-    // picked a non-UTC zone are never overwritten.
+    // profile field was never chosen (null/empty). This lets the header clock and
+    // event-time conversions match where the user actually is without forcing them
+    // through the Profile page. A zone the user picked, UTC included, is never
+    // overwritten.
     [HttpPost("profile/detect-time-zone")]
     public async Task<IActionResult> DetectTimeZoneAsync(
         [FromBody] DetectTimeZoneRequest request,
@@ -199,10 +199,13 @@ public sealed partial class ActivityDataController
         }
 
         var current = appUser.TimeZone?.Trim();
-        var isUnset = string.IsNullOrEmpty(current)
-            || string.Equals(current, "UTC", StringComparison.OrdinalIgnoreCase);
+        // Only "never chosen" (null/empty) is filled in. "UTC" is a real choice: treating it as
+        // unset replaced it with the browser's zone on the member's next visit, so UTC could not
+        // be kept. Nothing writes "UTC" as a default any more (only the first weeks of the app
+        // did, and those rows were converted on their owners' next visit by this same endpoint).
+        var isUnset = ProfileTimeZone.IsUnset(current);
 
-        if (!isUnset || string.Equals(current, detected, StringComparison.Ordinal))
+        if (!isUnset)
         {
             return Ok(new { applied = false, timeZone = current });
         }

@@ -22,6 +22,7 @@ import {
   memberStatusClass,
   mergedMonsterName,
   monsterSetupForTod,
+  pairingCountdownLabel,
   parseDate,
   parseTodDurationMinutes,
   primaryLinkshellSettings,
@@ -329,5 +330,18 @@ describe('DKP pool picker', () => {
   it('starts on the default pool, or null when there is no picker', () => {
     expect(defaultDkpPoolId(pools)).toBe(10);
     expect(defaultDkpPoolId([])).toBeNull();
+  });
+});
+
+describe('pairingCountdownLabel', () => {
+  it('counts down minutes and seconds to the expiry', () => {
+    const expires = 1_000_000 + 10 * 60_000;
+    expect(pairingCountdownLabel(expires, 1_000_000)).toBe('10:00');
+    expect(pairingCountdownLabel(expires, 1_000_000 + 61_000)).toBe('8:59');
+  });
+
+  it('says expired once the time has passed', () => {
+    expect(pairingCountdownLabel(5_000, 5_000)).toBe('expired');
+    expect(pairingCountdownLabel(5_000, 9_000)).toBe('expired');
   });
 });

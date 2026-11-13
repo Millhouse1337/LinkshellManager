@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { ClockService } from '../../discord/clock.service';
 import { FormsModule } from '@angular/forms';
 import { DateTimeInputComponent } from '../datetime-input.component';
 import {
@@ -96,14 +97,11 @@ export class TodFormComponent {
   protected boardRepost = false;
   protected boardRepostLeadHours: number | null = null;
 
-  // Ticks once a second while the dialog is open so the repop countdown counts down. A signal,
-  // because reading it in the template is what re-renders this OnPush view on each tick.
-  private readonly now = signal(Date.now());
-  private clockTimer: ReturnType<typeof setInterval> | null = null;
-
-  constructor() {
-    inject(DestroyRef).onDestroy(() => this.stopClock());
-  }
+  // Ticks once a second while the dialog is open so the repop countdown counts down. Reads the
+  // app's shared clock (ClockService) only while open, so a closed dialog never re-renders.
+  private readonly clock = inject(ClockService).now;
+  private readonly dialogOpen = signal(false);
+  private readonly now = computed(() => (this.dialogOpen() ? this.clock() : Date.now()));
 
   // ----- Public API -----
 
@@ -342,17 +340,12 @@ export class TodFormComponent {
   }
 
   private startClock(): void {
-    this.stopClock();
-    this.now.set(Date.now());
-    this.clockTimer = setInterval(() => this.now.set(Date.now()), 1000);
+    this.dialogOpen.set(true);
   }
 
   // Bound to the dialog's (close) event, so Escape, the backdrop and every button all stop it.
   protected stopClock(): void {
-    if (this.clockTimer !== null) {
-      clearInterval(this.clockTimer);
-      this.clockTimer = null;
-    }
+    this.dialogOpen.set(false);
   }
 
   // Backdrop clicks register with target === the dialog element itself.

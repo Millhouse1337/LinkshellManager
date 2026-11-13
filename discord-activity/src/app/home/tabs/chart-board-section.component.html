@@ -68,7 +68,7 @@
        | Holdings switch is in the Charts page header above. -->
   <div class="section-head-right">
     @if (chart()?.lastUpdatedUtc) {
-      <span class="chart-updated">Updated {{ chart()!.lastUpdatedUtc | date:'short' }}</span>
+      <span class="chart-updated">Updated {{ chart()!.lastUpdatedUtc | zonedTime:'short' }}</span>
     }
   </div>
 </div>

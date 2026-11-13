@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, Input, ViewChild, inject, model, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Input, ViewChild, inject, model, signal } from '@angular/core';
+import { ClockService } from '../../discord/clock.service';
 import { FormsModule } from '@angular/forms';
 import {
   ActivityAuctionItemInput,
@@ -22,8 +23,7 @@ export type AuctionsView = 'active' | 'pending' | 'history';
 })
 export class AuctionsPanelComponent {
   protected readonly activity = inject(DiscordActivityService);
-  private readonly destroyRef = inject(DestroyRef);
-  private readonly now = signal(Date.now());
+  private readonly now = inject(ClockService).now;
   private readonly numberFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
   @Input({ required: true }) selectedLinkshellId!: number;
@@ -74,10 +74,6 @@ export class AuctionsPanelComponent {
   protected closingAuctionId: number | null = null;
   protected auctionCloseDelivered: Record<number, boolean> = {};
 
-  public constructor() {
-    const intervalId = window.setInterval(() => this.now.set(Date.now()), 1000);
-    this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
-  }
 
   protected selectedLinkshell() {
     const selectedId = this.selectedLinkshellId;

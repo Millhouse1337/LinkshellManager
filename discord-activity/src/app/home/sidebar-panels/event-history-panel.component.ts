@@ -1,6 +1,6 @@
-import { DatePipe } from '@angular/common';
 import { Component, Input, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ZonedTimePipe } from '../zoned-time.pipe';
 
 import { AutoRefreshService } from '../../discord/auto-refresh.service';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
@@ -25,7 +25,7 @@ import type {
 @Component({
   selector: 'app-event-history-panel',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, ZonedTimePipe],
   template: `
     <div class="evt-history">
       <!-- No heading or Refresh button of its own: the Event System tab's header names this view
@@ -70,7 +70,7 @@ import type {
             <span class="event-meta">
               <span class="chip">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                {{ h.endTime ? (h.endTime | date:'MMM d, y') : 'Completed' }}
+                {{ h.endTime ? (h.endTime | zonedTime:'date') : 'Completed' }}
               </span>
               <span class="chip">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1"/><circle cx="9" cy="7" r="4"/></svg>
@@ -201,7 +201,7 @@ import type {
                               <span class="tag success">{{ w.dkpAmount }} DKP</span>
                             }
                             <span class="win-meta">
-                              {{ w.attendees.length }} present · {{ w.postedAt | date:'MMM d, h:mm a' }}
+                              {{ w.attendees.length }} present · {{ w.postedAt | zonedTime:'monthDayTime' }}
                             </span>
                             <span class="win-chev" [class.is-open]="isWindowOpen(h.id, w.id)" aria-hidden="true">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -235,7 +235,7 @@ import type {
                               <span class="tag success" title="The tag bonus as it was paid to each tagger.">{{ paid }}</span>
                             }
                             <span class="win-meta">
-                              {{ tags.taggers.length }} tagged · {{ tags.postedAt | date:'MMM d, h:mm a' }}
+                              {{ tags.taggers.length }} tagged · {{ tags.postedAt | zonedTime:'monthDayTime' }}
                             </span>
                             <span class="win-chev" [class.is-open]="isWindowOpen(h.id, tagRosterRowId)" aria-hidden="true">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -262,7 +262,7 @@ import type {
                               <span class="tag success" title="What this misc post paid each person on the camp's DKP post.">{{ paid }}</span>
                             }
                             <span class="win-meta">
-                              {{ m.attendees.length }} present · {{ m.postedAt | date:'MMM d, h:mm a' }}
+                              {{ m.attendees.length }} present · {{ m.postedAt | zonedTime:'monthDayTime' }}
                             </span>
                             <span class="win-chev" [class.is-open]="isWindowOpen(h.id, 'misc' + m.id)" aria-hidden="true">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -472,7 +472,7 @@ import type {
                   <div class="disc-row">
                     <span class="disc-who">
                       <strong [class.disc-anon]="c.isAnonymous">{{ c.author }}</strong>
-                      <small>{{ c.createdAt | date:'MMM d, h:mm a' }}</small>
+                      <small>{{ c.createdAt | zonedTime:'monthDayTime' }}</small>
                     </span>
                     <span class="disc-body">{{ c.body }}</span>
                     @if (c.canDelete) {
