@@ -1,4 +1,6 @@
-/* ---------- Geist (self-hosted) ---------- */
+/* ---------- Geist (self-hosted) ----------
+   The files live in the server's wwwroot/fonts (the landing pages' site.css uses the same
+   copy), so the app keeps no second copy in public/. */
 @font-face {
   font-family: 'Geist';
   font-style: normal;

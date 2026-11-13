@@ -82,7 +82,7 @@ export function chartViewTabs(board: ActivityChartBoard | null): ChartViewTab[] 
   }
 }
 
-/** One heading and the cards under it. Local, like ChartsSectionOption in charts-tab.component.ts. */
+/** One heading and the cards under it. Local, like ChartsSectionOption in charts-sections.ts. */
 interface ChartBossGroup {
   label: string | null;
   bosses: ActivityChartBoss[];

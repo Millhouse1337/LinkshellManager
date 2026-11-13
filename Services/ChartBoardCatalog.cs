@@ -949,7 +949,7 @@ public static class ChartBoardCatalog
     // to any one card. First in its run, so the strip sits right under the tier heading. Rows are
     // filed under its name ("Tier 1"), which is a stored key like any boss name.
     //
-    // HENM.png is never drawn - a strip has no emblem - but every entry names a real file, which
+    // HENM.jpg is never drawn - a strip has no emblem - but every entry names a real file, which
     // ChartBoardCatalogTests.EveryBossEmblem_ExistsOnDisk checks. Each tier's colour matches its
     // NMs' (see _tokens.scss).
     //
@@ -958,7 +958,7 @@ public static class ChartBoardCatalog
     // whose strip keeps a free-text box.
     private static ChartBoss HenmTierItems(
         string name, string themeKey, string group, ChartPopItemOption? popItem = null) =>
-        new(name, themeKey, "HENM.png", ChartBossKinds.Tier, Group: group,
+        new(name, themeKey, "HENM.jpg", ChartBossKinds.Tier, Group: group,
             PopItems: popItem is null ? null : new[] { popItem });
 
     // An NM card. It records no items of its own - its tier's strip holds them - so it shows no

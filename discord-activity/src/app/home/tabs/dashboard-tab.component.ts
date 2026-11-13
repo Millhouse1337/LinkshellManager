@@ -398,7 +398,7 @@ export class DashboardTabComponent {
     dynamis: 'ffxi_assets/Other/Dynamis.jpg',
     limbus: 'ffxi_assets/Other/Limbus.jpg',
     // One shared image for every HENM row — unlike HNM, these aren't per-monster.
-    henm: 'ffxi_assets/HENM/HENM.png'
+    henm: 'ffxi_assets/HENM/HENM.jpg'
   };
 
   // Per-monster HNM art from public/ffxi_assets/HNM. Keyed on the monster name

@@ -281,6 +281,10 @@
     <section class="flash flash--warning"><p>{{ loadError }} What you see may be out of date. Press Refresh to try again.</p></section>
   }
 
+  <!-- Each tab's component sits in an @defer block, so the startup download holds only the shell
+       and a tab's code is fetched the first time it opens (then cached). "on immediate" starts
+       that fetch as soon as the tab is shown, instead of waiting for the browser to go idle. -->
+
   <!-- ===== DASHBOARD TAB ===== -->
   @if (activeTab() === 'dashboard') {
     <div role="tabpanel" [id]="panelId('dashboard')" [attr.aria-labelledby]="tabId('dashboard')">
@@ -298,15 +302,17 @@
               <ng-container [ngTemplateOutlet]="dashboardViewTabs" />
             }
           </div>
-          <app-activity-sidebar-panel [visibleSections]="['next-steps']" />
+          @defer (on immediate) { <app-activity-sidebar-panel [visibleSections]="['next-steps']" /> }
         </div>
       } @else {
-        <app-dashboard-tab
-          [viewTabs]="dashboardViewTabs"
-          [deleteTodFn]="deleteTodFn"
-          [setActiveTabFn]="setActiveTabFn"
-          [rosterSearchValue]="dashboardRosterSearch"
-          [rosterSearchChange]="setDashboardRosterSearch" />
+        @defer (on immediate) {
+          <app-dashboard-tab
+            [viewTabs]="dashboardViewTabs"
+            [deleteTodFn]="deleteTodFn"
+            [setActiveTabFn]="setActiveTabFn"
+            [rosterSearchValue]="dashboardRosterSearch"
+            [rosterSearchChange]="setDashboardRosterSearch" />
+        }
       }
       <!-- One copy of the Overview | Onboarding strip, drawn in whichever view's heading is showing. -->
       <ng-template #dashboardViewTabs>
@@ -348,51 +354,65 @@
         </div>
       </div>
 
-      <app-activity-sidebar-panel [visibleSections]="['profile']" [profileView]="profileView()" />
+      @defer (on immediate) {
+        <app-activity-sidebar-panel [visibleSections]="['profile']" [profileView]="profileView()" />
+      }
     </div>
   }
 
   <!-- ===== LINKSHELL TAB ===== -->
   @if (activeTab() === 'linkshell') {
     <div role="tabpanel" [id]="panelId('linkshell')" [attr.aria-labelledby]="tabId('linkshell')">
-      <app-linkshell-tab
-        [view]="managementView()" (viewChange)="setManagementView($event)"
-        [rosterSearchValue]="dashboardRosterSearch"
-        [rosterSearchChange]="setDashboardRosterSearch" />
+      @defer (on immediate) {
+        <app-linkshell-tab
+          [view]="managementView()" (viewChange)="setManagementView($event)"
+          [rosterSearchValue]="dashboardRosterSearch"
+          [rosterSearchChange]="setDashboardRosterSearch" />
+      }
     </div>
   }
   @if (activeTab() === 'treasury' && isFeatureEnabled('enableTreasury')) {
     <div role="tabpanel" [id]="panelId('treasury')" [attr.aria-labelledby]="tabId('treasury')">
-      <app-treasury-tab [view]="treasuryView()" (viewChange)="setTreasuryView($event)" />
+      @defer (on immediate) {
+        <app-treasury-tab [view]="treasuryView()" (viewChange)="setTreasuryView($event)" />
+      }
     </div>
   }
 
   <!-- ===== EVENTS TAB ===== -->
   @if (activeTab() === 'timed-events') {
     <div role="tabpanel" [id]="panelId('timed-events')" [attr.aria-labelledby]="tabId('timed-events')">
-      <app-events-tab [view]="eventsView()" (viewChange)="setEventsView($event)" />
+      @defer (on immediate) {
+        <app-events-tab [view]="eventsView()" (viewChange)="setEventsView($event)" />
+      }
     </div>
   }
 
   <!-- ===== TODS TAB ===== -->
   @if (activeTab() === 'tods') {
     <div role="tabpanel" [id]="panelId('tods')" [attr.aria-labelledby]="tabId('tods')">
-      <app-tods-tab [deleteTodFn]="deleteTodFn" [view]="todsView()" (viewChange)="setTodsView($event)" />
+      @defer (on immediate) {
+        <app-tods-tab [deleteTodFn]="deleteTodFn" [view]="todsView()" (viewChange)="setTodsView($event)" />
+      }
     </div>
   }
 
   <!-- ===== PARTY SETUP TAB ===== -->
   @if (activeTab() === 'party-setup') {
     <div role="tabpanel" [id]="panelId('party-setup')" [attr.aria-labelledby]="tabId('party-setup')">
-      <app-party-setup-tab />
+      @defer (on immediate) {
+        <app-party-setup-tab />
+      }
     </div>
   }
 
   <!-- ===== AUCTIONS TAB ===== -->
   @if (activeTab() === 'auctions') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('auctions')" [attr.aria-labelledby]="tabId('auctions')">
-      <app-activity-sidebar-panel [visibleSections]="['auctions']"
-        [auctionsView]="auctionsView()" (auctionsViewChange)="setAuctionsView($event)" />
+      @defer (on immediate) {
+        <app-activity-sidebar-panel [visibleSections]="['auctions']"
+          [auctionsView]="auctionsView()" (auctionsViewChange)="setAuctionsView($event)" />
+      }
     </div>
   }
 
@@ -420,13 +440,15 @@
       }
       @switch (dkpView()) {
         @case ('sheet') {
-          <app-dkp-sheet-tab>
-            <ng-container [ngTemplateOutlet]="dkpViewTabs" [ngTemplateOutletContext]="{ inline: true }" />
-          </app-dkp-sheet-tab>
+          @defer (on immediate) {
+            <app-dkp-sheet-tab>
+              <ng-container [ngTemplateOutlet]="dkpViewTabs" [ngTemplateOutletContext]="{ inline: true }" />
+            </app-dkp-sheet-tab>
+          }
         }
-        @case ('grouping') { <app-dkp-grouping-tab /> }
-        @case ('import') { <app-dkp-import-card [linkshellId]="dkpImportLinkshellId()" /> }
-        @default { <app-activity-sidebar-panel [visibleSections]="['dkp']" /> }
+        @case ('grouping') { @defer (on immediate) { <app-dkp-grouping-tab /> } }
+        @case ('import') { @defer (on immediate) { <app-dkp-import-card [linkshellId]="dkpImportLinkshellId()" /> } }
+        @default { @defer (on immediate) { <app-activity-sidebar-panel [visibleSections]="['dkp']" /> } }
       }
     </div>
   }
@@ -434,16 +456,20 @@
   <!-- ===== LOOT HISTORY TAB ===== -->
   @if (activeTab() === 'loot') {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('loot')" [attr.aria-labelledby]="tabId('loot')">
-      <app-loot-history-panel
-        [selectedLinkshellId]="primaryLinkshell()?.id ?? 0"
-        [rosterCharacterNames]="primaryLinkshellRosterNames()" />
+      @defer (on immediate) {
+        <app-loot-history-panel
+          [selectedLinkshellId]="primaryLinkshell()?.id ?? 0"
+          [rosterCharacterNames]="primaryLinkshellRosterNames()" />
+      }
     </div>
   }
 
   <!-- ===== ENDGAME TAB ===== -->
   @if (activeTab() === 'endgame' && isFeatureEnabled('enableEndgame')) {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('endgame')" [attr.aria-labelledby]="tabId('endgame')">
-      <app-charts-tab [view]="chartsView()" (viewChange)="setChartsView($event)" />
+      @defer (on immediate) {
+        <app-charts-tab [view]="chartsView()" (viewChange)="setChartsView($event)" />
+      }
     </div>
   }
 
@@ -453,8 +479,10 @@
        [section]), so switching between them keeps state and doesn't reload. -->
   @if (activeTab() === 'configurations' || activeTab() === 'addon') {
     <div role="tabpanel" [id]="panelId(activeTab())" [attr.aria-labelledby]="tabId(activeTab())">
-      <app-configurations-tab [view]="activeTab()"
-        [section]="settingsSection()" (sectionChange)="setSettingsSection($event)" />
+      @defer (on immediate) {
+        <app-configurations-tab [view]="activeTab()"
+          [section]="settingsSection()" (sectionChange)="setSettingsSection($event)" />
+      }
     </div>
   }
 
