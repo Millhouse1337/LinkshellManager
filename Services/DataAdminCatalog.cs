@@ -81,7 +81,7 @@ public sealed class DataAdminCatalog
     public DataAdminModel? FindByClrType(Type entityType) =>
         _byType.TryGetValue(entityType, out var model) ? model : null;
 
-    // The six Identity framework tables (roles, claims, logins, tokens) are never catalog tables;
+    // The three Identity framework tables (user claims, logins, tokens) are never catalog tables;
     // AppUser lives in LinkshellManagerDiscordApp.Models and is kept.
     private static bool IsIdentityFrameworkType(Type clrType) =>
         string.Equals(clrType.Namespace, "Microsoft.AspNetCore.Identity", StringComparison.Ordinal);

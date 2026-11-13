@@ -11,8 +11,8 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 // The schema diagram draws the WHOLE database from EF metadata, so the thing to pin is that the
-// picture tells the truth about the real model: every table and foreign key is on it (the six
-// Identity tables included, drawn but never a route to rows), credential columns are drawn and
+// picture tells the truth about the real model: every table and foreign key is on it (the three
+// Identity user tables included, drawn but never a route to rows), credential columns are drawn and
 // flagged, a "one" line end appears only where the database enforces it for every row (DkpPool's
 // "one default pool per linkshell" is a partial index and must not count), and each line carries
 // the delete rule Postgres will apply. Ids are CLR names because table names differ on the test
@@ -25,9 +25,11 @@ public class DataAdminSchemaGraphTests
 {
     private const string HostileTableName = "</script><script>alert(1)</script>";
 
+    // ApplicationDbContext is an IdentityUserContext, so there are no role tables (dropped by
+    // DropIdentityRoleTables); AppUser itself is a catalog table.
     private static readonly string[] IdentityTables =
     {
-        "IdentityRole", "IdentityRoleClaim", "IdentityUserClaim", "IdentityUserLogin", "IdentityUserRole", "IdentityUserToken",
+        "IdentityUserClaim", "IdentityUserLogin", "IdentityUserToken",
     };
 
     private static ApplicationDbContext NewInMemoryContext() =>
@@ -100,7 +102,8 @@ public class DataAdminSchemaGraphTests
             Assert.True(table.Framework, $"{id} is an Identity framework table.");
             Assert.Null(table.Slug);
         }
-        Assert.Equal("Identity User Role", Table(graph, "IdentityUserRole").Label);
+        Assert.Equal("Identity User Login", Table(graph, "IdentityUserLogin").Label);
+        Assert.DoesNotContain(graph.Tables, table => table.Id is "IdentityRole" or "IdentityUserRole" or "IdentityRoleClaim");
         Assert.Equal("app-user", Table(graph, nameof(AppUser)).Slug);
 
         // Nothing else is on the diagram: one table per entity type, each either a catalog table
@@ -203,8 +206,8 @@ public class DataAdminSchemaGraphTests
                 Table(graph, model.ClrName).Columns.Where(column => !column.Pk).Select(column => column.Name));
         }
         Assert.Equal(
-            new[] { "Id", "ConcurrencyStamp", "Name", "NormalizedName" },
-            Table(graph, "IdentityRole").Columns.Select(column => column.Name));
+            new[] { "Id", "ClaimType", "ClaimValue", "UserId" },
+            Table(graph, "IdentityUserClaim").Columns.Select(column => column.Name));
         // Key order (UserId, LoginProvider, Name), not name order.
         Assert.Equal(
             new[] { "UserId", "LoginProvider", "Name", "Value" },
@@ -247,9 +250,11 @@ public class DataAdminSchemaGraphTests
         Assert.True(banner.Pk);
         Assert.True(banner.Fk);
 
-        var userRole = Table(graph, "IdentityUserRole");
-        Assert.Equal(new[] { "UserId", "RoleId" }, userRole.Columns.Where(column => column.Pk).Select(column => column.Name));
-        Assert.All(userRole.Columns, column => Assert.True(column.Fk));
+        // A composite primary key where only one part is a foreign key.
+        var userToken = Table(graph, "IdentityUserToken");
+        Assert.Equal(new[] { "UserId", "LoginProvider", "Name" }, userToken.Columns.Where(column => column.Pk).Select(column => column.Name));
+        Assert.True(Column(graph, "IdentityUserToken", "UserId").Fk);
+        Assert.False(Column(graph, "IdentityUserToken", "LoginProvider").Fk);
 
         Assert.True(Column(graph, nameof(Event), nameof(Event.LinkshellId)).Fk);
         Assert.False(Column(graph, nameof(Event), nameof(Event.LinkshellId)).Nullable);
@@ -403,7 +408,6 @@ public class DataAdminSchemaGraphTests
         Assert.Contains("AppUserEventWindow", via);
         Assert.Contains("EventPartySlotSignup", via);
         Assert.Contains("AppUserEventHistory", via);
-        Assert.Contains("IdentityUserRole", via);
         Assert.Contains("AppUserLinkshell", via);
         Assert.Contains("AppUserEvent", via);
         Assert.DoesNotContain("AppUserEventStatusLedger", via);
@@ -416,12 +420,8 @@ public class DataAdminSchemaGraphTests
         Assert.Equal("AppUserLinkshell.AppUserId", membership.LeftRelationship);
         Assert.Equal("AppUserLinkshell.LinkshellId", membership.RightRelationship);
 
-        // By composite primary key.
-        var userRole = Assert.Single(graph.Junctions, junction => junction.Via == "IdentityUserRole");
-        Assert.Equal("AppUser", userRole.Left);
-        Assert.Equal("IdentityRole", userRole.Right);
-        Assert.Equal("IdentityUserRole.UserId", userRole.LeftRelationship);
-        Assert.Equal("IdentityUserRole.RoleId", userRole.RightRelationship);
+        // A junction by composite primary key: the real model has none since the Identity role
+        // tables went, so Synthetic_AJunctionByCompositePrimaryKey covers that shape.
 
         // By a unique index filtered on its own column; the index is (EventHistoryId, AppUserId),
         // the sides are in table order.
@@ -481,8 +481,9 @@ public class DataAdminSchemaGraphTests
         Assert.Equal("DkpPool", Table(graph, "DkpPoolEventType").Parent);
         // No cascade owner (SetNull): falls back to the one table it points at.
         Assert.Equal("AppUser", Table(graph, "DiscordActivityUser").Parent);
-        // AppUser and IdentityRole both cascade into it and tie; the name decides.
-        Assert.Equal("AppUser", Table(graph, "IdentityUserRole").Parent);
+        // An Identity table hangs off the user it belongs to (cascade). The tie between two cascade
+        // owners is in Synthetic_AJunctionByCompositePrimaryKey.
+        Assert.Equal("AppUser", Table(graph, "IdentityUserLogin").Parent);
     }
 
     [Fact]
@@ -617,10 +618,10 @@ public class DataAdminSchemaGraphTests
             new[] { "name", "type", "storeType", "pk" },
             linkshell.GetProperty("columns")[0].EnumerateObject().Select(property => property.Name));
 
-        var userRole = root.GetProperty("tables").EnumerateArray().Single(table => table.GetProperty("id").GetString() == "IdentityUserRole");
-        Assert.True(userRole.GetProperty("framework").GetBoolean());
-        Assert.False(userRole.TryGetProperty("slug", out _));
-        Assert.Equal("AppUser", userRole.GetProperty("parent").GetString());
+        var userLogin = root.GetProperty("tables").EnumerateArray().Single(table => table.GetProperty("id").GetString() == "IdentityUserLogin");
+        Assert.True(userLogin.GetProperty("framework").GetBoolean());
+        Assert.False(userLogin.TryGetProperty("slug", out _));
+        Assert.Equal("AppUser", userLogin.GetProperty("parent").GetString());
 
         var optional = root.GetProperty("relationships").EnumerateArray().Single(relationship => relationship.GetProperty("id").GetString() == "Event.SourceTodId");
         Assert.False(optional.TryGetProperty("required", out _));
@@ -667,7 +668,8 @@ public class DataAdminSchemaGraphTests
 
         Assert.Equal("Linkshells", Table(graph, "Linkshell").Name);
         Assert.Equal("AspNetUsers", Table(graph, "AppUser").Name);
-        Assert.Equal("AspNetUserRoles", Table(graph, "IdentityUserRole").Name);
+        Assert.Equal("AspNetUserLogins", Table(graph, "IdentityUserLogin").Name);
+        Assert.DoesNotContain(graph.Tables, table => table.Name is "AspNetRoles" or "AspNetUserRoles" or "AspNetRoleClaims");
         Assert.Equal("Linkshell", Table(inMemory, "Linkshell").Name);
 
         var storeTypes = graph.Tables.SelectMany(table => table.Columns).Select(column => column.StoreType).ToHashSet(StringComparer.Ordinal);
@@ -799,6 +801,32 @@ public class DataAdminSchemaGraphTests
         Assert.Equal("RegionZone.ZoneId", junction.RightRelationship);
     }
 
+    // The shape AspNetUserRoles used to give the real model: a link table whose primary key is the
+    // two foreign keys. It is a junction, both key columns are keys and links, and with two
+    // cascade owners that tie, the name picks the parent.
+    [Fact]
+    public void Synthetic_AJunctionByCompositePrimaryKey()
+    {
+        using var db = new KeyedLinkContext(new DbContextOptionsBuilder<KeyedLinkContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options);
+        // Straight to the builder: a catalog table cannot have a composite key (the Identity ones
+        // were structure only too), so every table here is drawn without a catalog model.
+        var graph = DataAdminSchemaGraph.Build(Array.Empty<DataAdminModel>(), db.Model.GetEntityTypes().ToList());
+
+        var junction = Assert.Single(graph.Junctions);
+        Assert.Equal("KeyedLink", junction.Via);
+        Assert.Equal("Region", junction.Left);
+        Assert.Equal("Zone", junction.Right);
+        Assert.Equal("KeyedLink.RegionId", junction.LeftRelationship);
+        Assert.Equal("KeyedLink.ZoneId", junction.RightRelationship);
+
+        var link = Table(graph, "KeyedLink");
+        Assert.Equal(new[] { "RegionId", "ZoneId" }, link.Columns.Where(column => column.Pk).Select(column => column.Name));
+        Assert.All(link.Columns, column => Assert.True(column.Fk));
+        Assert.Equal("Region", link.Parent);
+    }
+
     // The catalog always hands over every table, so this cannot happen through it; the builder
     // still must not draw a line to a card that is not there.
     [Fact]
@@ -912,6 +940,32 @@ public class DataAdminSchemaGraphTests
             {
                 tag.Property<int>("Id");
                 tag.Property<string>("Text");
+            });
+        }
+    }
+
+    public class KeyedLink
+    {
+        public int RegionId { get; set; }
+        public int ZoneId { get; set; }
+    }
+
+    private sealed class KeyedLinkContext : DbContext
+    {
+        public KeyedLinkContext(DbContextOptions<KeyedLinkContext> options)
+            : base(options)
+        {
+        }
+
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            builder.Entity<Region>(region => region.Ignore(row => row.Climate));
+            builder.Entity<Zone>();
+            builder.Entity<KeyedLink>(link =>
+            {
+                link.HasKey(row => new { row.RegionId, row.ZoneId });
+                link.HasOne<Region>().WithMany().HasForeignKey(row => row.RegionId).OnDelete(DeleteBehavior.Cascade);
+                link.HasOne<Zone>().WithMany().HasForeignKey(row => row.ZoneId).OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

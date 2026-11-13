@@ -5,7 +5,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Data
 {
-    public class ApplicationDbContext : IdentityDbContext<AppUser>
+    // IdentityUserContext, not IdentityDbContext: the app has no Identity roles (permissions are
+    // per-linkshell LinkshellRoles), so the model keeps only the user tables (AspNetUsers,
+    // AspNetUserClaims, AspNetUserLogins, AspNetUserTokens). The three role tables were always
+    // empty and were dropped by the DropIdentityRoleTables migration.
+    public class ApplicationDbContext : IdentityUserContext<AppUser>
     {
         // Length of the Identity login/token key columns (AspNetUserLogins, AspNetUserTokens).
         // Identity reads it from IdentityOptions.Stores while building the model, and every

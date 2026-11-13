@@ -418,7 +418,7 @@ public sealed class DataAdminSchemaGraph
         return DataAdminCascadeForest<string>.Build(ids, edges, id => id, id => id == nameof(Linkshell));
     }
 
-    // IdentityUserRole<string> is IdentityUserRole`1 to reflection; the arity means nothing on a
+    // IdentityUserLogin<string> is IdentityUserLogin`1 to reflection; the arity means nothing on a
     // card. A shared-type entity has no CLR name of its own, so the last part of its EF name stands in.
     private static string TableId(IEntityType entityType)
     {

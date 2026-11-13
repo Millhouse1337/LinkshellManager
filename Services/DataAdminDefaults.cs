@@ -48,8 +48,9 @@ public static class DataAdminDefaults
 
     // A table with at least this many foreign keys pointing at it is a "hub" (Linkshell, AppUser).
     // The schema diagram draws the lines into a hub faintly; drawn like the rest they would bury
-    // every other line.
-    public const int SchemaHubMinInbound = 15;
+    // every other line. 12 sits between AppUser (14 since the Identity role tables were dropped;
+    // it was 15) and the busiest ordinary table, Event (10).
+    public const int SchemaHubMinInbound = 12;
 
     // Literal route segments under /data-admin that a table slug must never collide with. The three
     // here guard the second segment (/data-admin/{slug}/create, .../{id}/edit, .../{id}/delete); no

@@ -214,7 +214,8 @@ The local `lsmanager` database still exists but has **zero tables** — it is an
 unused leftover from an earlier setup. The command this table used to recommend
 (`sudo -u postgres pg_dump lsmanager`) therefore dumped an EMPTY database and
 produced a ~700-byte file that looks like a valid dump. A real dump is ~13 MB
-across ~63 tables (Phase 4B dropped seven unused ones). Do not trust a
+across ~60 tables (Phase 4B dropped seven unused ones, Phase 7 the three empty
+Identity role tables). Do not trust a
 backup you have not size-checked.
 
 Two more traps:
@@ -261,7 +262,7 @@ What it does:
 - Writes `/var/backups/lsmanager/lsmanager-prod-YYYYMMDD-HHMMSS.sql` (UTC time, root only).
 - **Fails the deploy** if the dump is under 1 MB or has fewer than 40 `CREATE TABLE`
   lines — the "empty database looks like a valid dump" trap above. (The real database
-  has ~63 tables since Phase 4B dropped seven; the bar is low so dropping unused tables does not
+  has ~60 tables since Phase 4B dropped seven and Phase 7 three; the bar is low so dropping unused tables does not
   trip it.) The
   bad file is kept as `...sql.suspect` for a look.
 - Keeps the newest 7 good dumps and deletes older ones (only after a good dump).
@@ -367,6 +368,19 @@ are mixed; search "package mix ups on Linux" in Microsoft's docs before going fu
 That deploy adds one migration, `EfCore10ModelSnapshot`, which changes nothing in the database
 (it only refreshes EF's own record of the model). Swapping back to the .NET 8 build is therefore
 safe: the old build ignores the extra row in `__EFMigrationsHistory`.
+
+It also adds `DropIdentityRoleTables`, which drops `AspNetRoles`, `AspNetUserRoles` and
+`AspNetRoleClaims`. The app never used Identity roles (permissions are `LinkshellRoles`), so
+they should be empty. Check before the deploy (expect `0 | 0 | 0`; if not, stop and ask):
+
+```sql
+SELECT (SELECT count(*) FROM "AspNetRoles")      AS roles,
+       (SELECT count(*) FROM "AspNetUserRoles")  AS user_roles,
+       (SELECT count(*) FROM "AspNetRoleClaims") AS role_claims;
+```
+
+The .NET 8 build in `lsmanager.old` still starts without them: it never called `AddRoles`, so
+its user store and sign-in never read those tables, and it ignores the extra history row too.
 
 ## One-time migration: persistent Data Protection keys
 

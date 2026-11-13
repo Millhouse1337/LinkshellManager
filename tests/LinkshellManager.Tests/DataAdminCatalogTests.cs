@@ -10,7 +10,7 @@ namespace LinkshellManager.Tests;
 
 // The Data Admin catalog is the whole universe of tables /data-admin can reach, discovered from the
 // EF model at startup rather than listed by hand. That makes the SAFETY edges of the discovery the
-// thing to pin: the six Identity framework tables never appear, credential / blob / jsonb columns
+// thing to pin: the three Identity framework tables never appear, credential / blob / jsonb columns
 // never land in any visible column set, every table has one supported key and a label, and slugs
 // are unique and never collide with a literal route segment. A regression in any of these would
 // silently expose a password hash or make a table unreachable.

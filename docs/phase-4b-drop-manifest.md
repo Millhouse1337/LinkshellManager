@@ -301,7 +301,8 @@ the special cases above; the others seed old data). They will not compile, or wi
 - Kept and now used: `LinkshellChannelRoutes.ChannelName` (fallback label when Discord can't list
   the channels).
 - Template sign-up columns on `PartySetupSlots` (`SignedUpAtUtc`, `SignedUpAppUserId`, ...): now dead, see "Later drops (Phase 5)" below.
-- `AspNetRoles` / `AspNetUserRoles` / `AspNetRoleClaims`: Phase 7.
+- `AspNetRoles` / `AspNetUserRoles` / `AspNetRoleClaims`: dropped in Phase 7 by the
+  `DropIdentityRoleTables` migration (the context is now an `IdentityUserContext`).
 - Batch U (use instead of drop, Phase 5.4) and Batch K (keep: audit stamps and deliberate copies)
   in the plan.
 - The addon's `tod/{id}/loot` endpoint: it stays, and files the loot under the camp's event.

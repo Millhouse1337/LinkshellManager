@@ -4,7 +4,7 @@
 //
 //   wipe  — TRUNCATEs every domain + ASP.NET Identity table (RESTART IDENTITY
 //           CASCADE), resetting the whole database to empty.
-//           AspNetRoles / AspNetRoleClaims are preserved.
+//           (There are no Identity role tables; they were dropped in Phase 7.)
 //
 //   scrub — Single-linkshell activity reset. KEEPS the linkshell row, its
 //           members (AppUserLinkshells), roles (LinkshellRoles), and the
@@ -113,10 +113,10 @@ if (args.Length < 2 || args[0] != "wipe" || !string.Equals(args[1], c.Database, 
     return 1;
 }
 
-// Full reset: domain tables + Identity. CASCADE on AspNetUsers also drops
-// AspNetUserRoles / AspNetUserLogins / AspNetUserTokens / AspNetUserClaims
-// since they FK back to it. AspNetRoles + AspNetRoleClaims are preserved
-// (role definitions are seeded at startup; user-role grants get reset).
+// Full reset: domain tables + Identity. CASCADE on AspNetUsers also empties
+// AspNetUserLogins / AspNetUserTokens / AspNetUserClaims since they FK back to
+// it. The app has no Identity roles (the DropIdentityRoleTables migration
+// removed AspNetRoles / AspNetUserRoles / AspNetRoleClaims).
 var tables = new[]
 {
     "AspNetUsers",
