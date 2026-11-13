@@ -28,9 +28,6 @@ public class WindowEvent
 
     public DateTime LastCapturedAtUtc { get; set; }
 
-    // PHASE4B-DROP: WindowEvents.ClosedAtUtc - no longer written; Status already says the card is closed.
-    public DateTime? ClosedAtUtc { get; set; }
-
     // The moment window 1 opened. Pins the grid every snapshot's WindowNumber is measured against:
     // window N runs [anchor + (N-1)×cadence, anchor + N×cadence), at 10-minute steps on the
     // 7-window kings/dragons and hourly on the 25-window wyrms.
@@ -62,10 +59,6 @@ public class WindowEvent
 
     [MaxLength(256)]
     public string? CreatedByCharacterName { get; set; }
-
-    // PHASE4B-DROP: WindowEvents.Notes - never written or read.
-    [MaxLength(1024)]
-    public string? Notes { get; set; }
 
     // DKP per attending character once this event is posted to the linkshell's Google Sheet
     // AttInput tab — the baseline for anyone without a per-snapshot override. No longer entered
@@ -107,19 +100,6 @@ public class WindowEvent
     // post-to-sheet button on the card switches into a "Already posted"
     // state so officers don't accidentally double-append rows.
     public DateTime? PostedToSheetAt { get; set; }
-
-    // First member row written to the AttInput tab during PostToSheet
-    // (the header separator row sits at FirstAttInputRowNumber - 1). Set on
-    // the initial append so post-post edits can rewrite J/K cells in place.
-    // PHASE4B-DROP: WindowEvents.FirstAttInputRowNumber - Google Sheets leftover, never written or read.
-    public int? FirstAttInputRowNumber { get; set; }
-
-    // Number of contiguous member rows written starting at
-    // FirstAttInputRowNumber. Combined with the first row this lets the
-    // post-post edit path target every appended data row, including the
-    // non-AppUser-linked ones that have no ledger entry to consult.
-    // PHASE4B-DROP: WindowEvents.AttInputRowCount - Google Sheets leftover, never written or read.
-    public int? AttInputRowCount { get; set; }
 
     // --- Camp handoff (HnmCampReviewHandoffService) ---
     //

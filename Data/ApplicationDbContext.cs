@@ -1377,10 +1377,6 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 entity.ToTable("AppUserEventStatusLedgers");
                 entity.Property(item => item.ActionType).HasMaxLength(32).IsRequired();
-                // PHASE4B-DROP: AppUserEventStatusLedgers.VerifiedBy (and DeniedBy, which has no config) - no longer written.
-                entity.Property(item => item.VerifiedBy).HasMaxLength(256);
-                // PHASE4B-DROP: AppUserEventStatusLedgers.Source - only the removed 'Verify' rows set it.
-                entity.Property(item => item.Source).HasMaxLength(32);
                 entity.HasOne(item => item.AppUserEvent)
                     .WithMany(item => item.StatusLedgerEntries)
                     .HasForeignKey(item => item.AppUserEventId)
@@ -1389,16 +1385,6 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany(item => item.StatusLedgerEntries)
                     .HasForeignKey(item => item.EventId)
                     .OnDelete(DeleteBehavior.Cascade);
-                // PHASE4B-DROP: the AppUserId FK - nothing writes AppUserId on new rows any more.
-                entity.HasOne(item => item.AppUser)
-                    .WithMany()
-                    .HasForeignKey(item => item.AppUserId)
-                    .OnDelete(DeleteBehavior.SetNull);
-                // PHASE4B-DROP: the EventAttendanceWindowId FK - only the removed 'Verify' rows set it.
-                entity.HasOne(item => item.EventAttendanceWindow)
-                    .WithMany()
-                    .HasForeignKey(item => item.EventAttendanceWindowId)
-                    .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => new { item.AppUserEventId, item.OccurredAt });
             });
 
@@ -1687,8 +1673,6 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.AllianceName).HasMaxLength(64);
                 entity.Property(item => item.PartyName).HasMaxLength(64);
                 entity.Property(item => item.SlotLabel).HasMaxLength(64);
-                // PHASE4B-DROP: EventWindowRosterSnapshots.AppUserId - no longer written; goes with the column.
-                entity.Property(item => item.AppUserId).HasMaxLength(450);
                 entity.Property(item => item.CharacterName).HasMaxLength(256);
                 entity.Property(item => item.Role).HasMaxLength(16);
                 entity.Property(item => item.MainJob).HasMaxLength(8);
@@ -2192,8 +2176,6 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasMaxLength(32)
                     .HasDefaultValue(WindowEventStatuses.Open);
                 entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
-                // PHASE4B-DROP: WindowEvents.Notes - never written or read; goes with the column.
-                entity.Property(item => item.Notes).HasMaxLength(1024);
                 entity.Property(item => item.CampEventType).HasMaxLength(64);
                 entity.Property(item => item.CampEventLocation).HasMaxLength(256);
                 entity.HasIndex(item => new { item.LinkshellId, item.Status, item.NormalizedName });

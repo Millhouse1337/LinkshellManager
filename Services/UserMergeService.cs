@@ -118,8 +118,6 @@ public sealed class UserMergeService
         yield return Column(_db.AppUserLinkshells, x => x.AppUserId);
         yield return Column(_db.AppUserEvents, x => x.AppUserId);
         yield return Column(_db.AppUserEventHistories, x => x.AppUserId);
-        // PHASE4B-DROP: stays while the column exists - old rows still hold a foreign key to the account.
-        yield return Column(_db.AppUserEventStatusLedgers, x => x.AppUserId);
         yield return Column(_db.DkpLedgerEntries, x => x.AppUserId);
         yield return Column(_db.Bids, x => x.AppUserId);
         yield return Column(_db.Invites, x => x.AppUserId);
@@ -134,8 +132,6 @@ public sealed class UserMergeService
         yield return Column(_db.AttendanceSnapshotEntries, x => x.AppUserId);
         yield return Column(_db.AttendanceSnapshots, x => x.PostedByAppUserId);
         yield return Column(_db.AttendanceSnapshots, x => x.VerifiedByAppUserId);
-        // PHASE4B-DROP: nothing writes or reads this column any more; keeps old rows tidy until 4B drops it.
-        yield return Column(_db.EventWindowRosterSnapshots, x => x.AppUserId);
         yield return Column(_db.ClaimShieldCaptureMembers, x => x.AppUserId);
         // PHASE4B-DROP: nothing writes or reads this column any more, but a presence row still being
         // reported keeps its old value; moving it keeps "a merge leaves no old id behind" true until

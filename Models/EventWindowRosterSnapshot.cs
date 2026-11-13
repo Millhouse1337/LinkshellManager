@@ -55,12 +55,6 @@ public class EventWindowRosterSnapshot
     [MaxLength(64)]
     public string? SlotLabel { get; set; }
 
-    // WHO held the slot. AppUserId is nullable throughout because "outside" Discord-only signups
-    // never have one; CharacterName is what actually gets displayed and is always set.
-    // PHASE4B-DROP: EventWindowRosterSnapshots.AppUserId - no longer written; nothing read it (CharacterName is what shows).
-    [MaxLength(450)]
-    public string? AppUserId { get; set; }
-
     [MaxLength(256)]
     public string? CharacterName { get; set; }
 

@@ -328,14 +328,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<double?>("Duration")
                         .HasColumnType("double precision");
 
-                    b.Property<DateTime?>("EndTime")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<bool>("EnfeebReady")
                         .HasColumnType("boolean");
-
-                    b.Property<double?>("EventDkp")
-                        .HasColumnType("double precision");
 
                     b.Property<int>("EventId")
                         .HasColumnType("integer");
@@ -353,12 +347,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("JobType")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("PauseTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Proctor")
                         .HasColumnType("text");
 
                     b.Property<bool>("RelicWeapon")
@@ -422,23 +410,11 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("EventHistoryId")
                         .HasColumnType("integer");
 
-                    b.Property<bool>("IsQuickJoin")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool?>("IsVerified")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("JobName")
                         .HasColumnType("text");
 
                     b.Property<string>("JobType")
                         .HasColumnType("text");
-
-                    b.Property<string>("Proctor")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("StartTime")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("SubJobName")
                         .HasColumnType("text");
@@ -473,18 +449,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("AppUserEventId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("AppUserId")
-                        .HasColumnType("text");
-
                     b.Property<DateTime?>("DeniedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DeniedBy")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int?>("EventAttendanceWindowId")
-                        .HasColumnType("integer");
 
                     b.Property<int>("EventId")
                         .HasColumnType("integer");
@@ -495,22 +461,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("RequiresVerification")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Source")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("VerifiedBy")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
                     b.HasKey("Id");
-
-                    b.HasIndex("AppUserId");
-
-                    b.HasIndex("EventAttendanceWindowId");
 
                     b.HasIndex("EventId");
 
@@ -676,9 +630,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int?>("AllianceNumber")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("AttInputAppendedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int?>("CampWindowId")
                         .HasColumnType("integer");
 
@@ -688,9 +639,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("CapturedByCharacterName")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<double?>("DkpAmount")
                         .HasColumnType("double precision");
@@ -729,10 +677,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasDefaultValue("Active");
-
-                    b.Property<string>("UtcOffset")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
 
                     b.Property<DateTime?>("VerifiedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1649,9 +1593,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
-                    b.Property<DateTime?>("AttInputAppendedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("AttendanceMode")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
@@ -1664,10 +1605,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<bool>("CountsTowardActive")
                         .HasColumnType("boolean");
-
-                    b.Property<string>("CreationSource")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("CreatorUserId")
                         .HasColumnType("text");
@@ -1682,9 +1619,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<string>("DiscordExtraMessageIds")
-                        .HasColumnType("text");
-
                     b.Property<string>("DiscordMessageId")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -1697,9 +1631,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<DateTime?>("EndTime")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<double?>("EventDkp")
-                        .HasColumnType("double precision");
 
                     b.Property<string>("EventLocation")
                         .HasColumnType("text");
@@ -1773,9 +1704,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
-                    b.Property<DateTime?>("WdAwaitingProcessingSince")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<bool>("WdClaimed")
                         .HasColumnType("boolean");
 
@@ -1816,9 +1744,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("integer");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime?>("AttInputAppendedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<double?>("DkpAmount")
                         .HasColumnType("double precision");
@@ -1923,9 +1848,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("CountsTowardActive")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Details")
-                        .HasColumnType("text");
-
                     b.Property<int?>("DkpPerHour")
                         .HasColumnType("integer");
 
@@ -1934,9 +1856,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<DateTime?>("EndTime")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<double?>("EventDkp")
-                        .HasColumnType("double precision");
 
                     b.Property<string>("EventLocation")
                         .HasColumnType("text");
@@ -1958,9 +1877,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int?>("PopWindowCount")
                         .HasColumnType("integer");
-
-                    b.Property<DateTime?>("StartDate")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("StartTime")
                         .HasColumnType("timestamp with time zone");
@@ -2137,10 +2053,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int>("AllianceSortOrder")
                         .HasColumnType("integer");
-
-                    b.Property<string>("AppUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
 
                     b.Property<DateTime>("CapturedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -3575,9 +3487,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("AttInputRowCount")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime?>("CampEndedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -3595,9 +3504,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("CampStartedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("ClosedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -3611,9 +3517,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("EntryType")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
-
-                    b.Property<int?>("FirstAttInputRowNumber")
-                        .HasColumnType("integer");
 
                     b.Property<DateTime>("FirstCapturedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -3634,10 +3537,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("NormalizedName")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
 
                     b.Property<bool>("PerCaptureDkp")
                         .HasColumnType("boolean");
@@ -3929,29 +3828,15 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", "AppUser")
-                        .WithMany()
-                        .HasForeignKey("AppUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("LinkshellManagerDiscordApp.Models.EventAttendanceWindow", "EventAttendanceWindow")
-                        .WithMany()
-                        .HasForeignKey("EventAttendanceWindowId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("LinkshellManagerDiscordApp.Models.Event", "Event")
                         .WithMany("StatusLedgerEntries")
                         .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("AppUser");
-
                     b.Navigation("AppUserEvent");
 
                     b.Navigation("Event");
-
-                    b.Navigation("EventAttendanceWindow");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AppUserEventWindow", b =>

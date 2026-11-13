@@ -61,9 +61,6 @@ public class Event
 
     public int? DkpPerHour { get; set; }
 
-    // PHASE4B-DROP: Events.EventDkp - never written; nothing reads it any more.
-    public double? EventDkp { get; set; }
-
     // Per-camp overrides for the HNM payout amounts. Null (the default) means "use the
     // linkshell's setting", so a camp created without touching them pays exactly what it
     // always did. Set by the Activity's create / edit event form ("Change DKP") when one
@@ -89,22 +86,11 @@ public class Event
 
     public string? Details { get; set; }
 
-    // Was "Addon" on events the addon's old create endpoint made. That endpoint is gone and nothing
-    // reads the column any more.
-    // PHASE4B-DROP: Events.CreationSource - its only writer (the addon create endpoint) and all readers are gone.
-    [MaxLength(32)]
-    public string? CreationSource { get; set; }
-
     // Forces the post-by-window count for events whose name isn't in
     // HnmConfig's curated 24/2/2 lookups. The addon's "Claim/Kill" style
     // sets this to 2 so a user-named event gets the same 2-post UI as a
     // ShortWindowHnm. Null = fall back to name-based detection (default).
     public int? WindowCountOverride { get; set; }
-
-    // Idempotency stamp left over from the (removed) event-close sheet append.
-    // Retained as a harmless nullable column; no longer written.
-    // PHASE4B-DROP: Events.AttInputAppendedAt - Google Sheets leftover, never written or read.
-    public DateTime? AttInputAppendedAt { get; set; }
 
     // Set when this event was auto-created from a ToD post (HNM workflow).
     // Links back to the originating Tod row so the HNM dashboard can render
@@ -169,11 +155,6 @@ public class Event
     // Manual Check In close. WdFinalizedAt is stamped once DKP has been written (idempotency guard:
     // a second finalize is a no-op). WdClaimed/WdKilled capture whether the camp claimed/killed,
     // driving the claim/kill bonuses at finalize.
-    //
-    // WdAwaitingProcessingSince belonged to the old "Awaiting Processing" grace period, which is
-    // gone: nothing sets it, and nothing reads it any more.
-    // PHASE4B-DROP: Events.WdAwaitingProcessingSince - never written; the filters that read it are gone.
-    public DateTime? WdAwaitingProcessingSince { get; set; }
     public DateTime? WdFinalizedAt { get; set; }
     public bool WdClaimed { get; set; }
     public bool WdKilled { get; set; }
@@ -238,14 +219,6 @@ public class Event
 
     [MaxLength(20)]
     public string? DiscordMessageId { get; set; }
-
-    // The board's CONTINUATION messages, comma-separated, in display order — everything after
-    // DiscordMessageId, which stays the first.
-    //
-    // Only boards posted by the old full-width mode had these: it posted one message per
-    // ALLIANCE. Every board posted now is a single message, and nothing reads or clears this any more.
-    // PHASE4B-DROP: Events.DiscordExtraMessageIds - old full-width boards only; the clean-up code is gone.
-    public string? DiscordExtraMessageIds { get; set; }
 
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();
 

@@ -26,21 +26,9 @@ public class AppUserEventHistory
 
     public string? JobType { get; set; }
 
-    // PHASE4B-DROP: AppUserEventHistories.StartTime - write-only copy, nothing reads it (the event has its own StartTime).
-    public DateTime? StartTime { get; set; }
-
     public double? Duration { get; set; }
 
     public double? EventDkp { get; set; }
-
-    // PHASE4B-DROP: AppUserEventHistories.IsQuickJoin - write-only copy, nothing reads it.
-    public bool IsQuickJoin { get; set; }
-
-    // PHASE4B-DROP: AppUserEventHistories.IsVerified - only the removed hidden history panel read it.
-    public bool? IsVerified { get; set; }
-
-    // PHASE4B-DROP: AppUserEventHistories.Proctor - write-only copy, nothing reads it.
-    public string? Proctor { get; set; }
 
     // Per-member "active credit" for this event. Defaults to the event's
     // CountsTowardActive at close (so everyone is credited by default); leadership

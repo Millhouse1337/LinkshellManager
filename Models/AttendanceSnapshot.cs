@@ -18,14 +18,7 @@ public class AttendanceSnapshot
     [MaxLength(256)]
     public string? CapturedByCharacterName { get; set; }
 
-    // PHASE4B-DROP: AttendanceSnapshots.UtcOffset - no longer stored (the addon still sends it; the request ignores it).
-    [MaxLength(8)]
-    public string? UtcOffset { get; set; }
-
     public int EntryCount { get; set; }
-
-    // PHASE4B-DROP: AttendanceSnapshots.CreatedAtUtc - no longer written (inserts get the default); CapturedAtUtc dates the row.
-    public DateTime CreatedAtUtc { get; set; }
 
     // Optional human-friendly label for the snapshot. Set by the addon via
     // `/lsm now <name>` or edited by an officer in the app. Null when
@@ -141,11 +134,6 @@ public class AttendanceSnapshot
 
     [MaxLength(32)]
     public string SnapshotStatus { get; set; } = AttendanceSnapshotStatuses.Active;
-
-    // Idempotency stamp for AttInput appends. Set once after a successful
-    // append so retries don't duplicate rows in the sheet.
-    // PHASE4B-DROP: AttendanceSnapshots.AttInputAppendedAt - Google Sheets leftover, never written or read.
-    public DateTime? AttInputAppendedAt { get; set; }
 
     public ICollection<AttendanceSnapshotEntry> Entries { get; set; } = new List<AttendanceSnapshotEntry>();
 }
