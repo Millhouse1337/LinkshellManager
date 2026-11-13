@@ -161,9 +161,10 @@ public static class RevenueEntryConversionMap
     // linkshell and a fresh one get identical wording. The migration needs this because it has to
     // resolve category ids before it can write any lines, and the lazy provisioner has not run yet.
     //
-    // The old migration's INSERT still names Description, IsPostable and SortOrder. Nothing reads
-    // those any more (PHASE4B-DROP), so they get plain fill-in values here: no description, "not
-    // postable" only for what we're worth, and the seed order.
+    // The old migration's INSERT still names Description, IsPostable and SortOrder. Those columns
+    // exist at that point in the migration history, but a later migration
+    // (DropDeadLedgerLinkshellColumns, Phase 4B) drops them, so they only get plain fill-in values
+    // here: no description, "not postable" only for what we're worth, and the seed order.
     public static string SeedAccountsValuesSql()
     {
         var rows = LedgerAccountDefaults.BuildDefaultAccounts(0)

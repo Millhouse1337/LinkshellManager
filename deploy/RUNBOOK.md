@@ -214,7 +214,7 @@ The local `lsmanager` database still exists but has **zero tables** — it is an
 unused leftover from an earlier setup. The command this table used to recommend
 (`sudo -u postgres pg_dump lsmanager`) therefore dumped an EMPTY database and
 produced a ~700-byte file that looks like a valid dump. A real dump is ~13 MB
-across ~70 tables (~63 once Phase 4B drops seven unused ones). Do not trust a
+across ~63 tables (Phase 4B dropped seven unused ones). Do not trust a
 backup you have not size-checked.
 
 Two more traps:
@@ -261,7 +261,7 @@ What it does:
 - Writes `/var/backups/lsmanager/lsmanager-prod-YYYYMMDD-HHMMSS.sql` (UTC time, root only).
 - **Fails the deploy** if the dump is under 1 MB or has fewer than 40 `CREATE TABLE`
   lines — the "empty database looks like a valid dump" trap above. (The real database
-  has ~70 tables, ~63 after Phase 4B; the bar is low so dropping unused tables does not
+  has ~63 tables since Phase 4B dropped seven; the bar is low so dropping unused tables does not
   trip it.) The
   bad file is kept as `...sql.suspect` for a look.
 - Keeps the newest 7 good dumps and deletes older ones (only after a good dump).

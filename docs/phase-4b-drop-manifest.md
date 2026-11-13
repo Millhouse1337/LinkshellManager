@@ -1,5 +1,33 @@
 # Phase 4B drop manifest
 
+## Status: DONE (2026-11-12)
+
+Everything below was dropped in Phase 4B. Kept as the record of what went and why, in case a
+value ever has to be fished back out of the pre-4B `pg_dump`.
+
+| Commit | Migration | What it dropped |
+|---|---|---|
+| `cf9d8ec` | `20261113033818_DropDeadTables` | The 7 tables, plus `Items.RevenueEntryId`, `JournalEntries.LegacyRevenueEntryId`, `DkpLedgerEntries.SourceTodLootDetailId` |
+| `329c67e` | `20261113035228_DropDeadEventColumns` | Event, history, attendance and window columns; deletes the old `Verify` status rows first |
+| `22fdce4` | `20261113040702_DropDeadAccountAuctionChartColumns` | Account, auction, chart, Claim Shield and presence columns |
+| `187014e` | `20261113043005_DropDeadLedgerLinkshellColumns` | Ledger, treasury, linkshell, ToD, rule and addon-token columns |
+
+The sweep commit after them removed the last marker, updated the docs and added
+`tests/LinkshellManager.PostgresTests/Phase4BMigrationRoundTripTests.cs`: it fills a pre-4B
+database with rows, then runs the four migrations Up, Down and Up again.
+
+Changes from the plan below, decided after the production counts on 2026-11-12:
+
+- `Linkshells.Status`, `Linkshells.TodMonsterTimings` and `PartySetupSlots.Label` were dropped
+  too (every linkshell was 'Active', none still needed the old timings, no slot had a label). The
+  "NOT in 4B" first bullet at the end no longer applies.
+- No separate `UPDATE` cleared the old Google login: dropping the columns removed it.
+- Production had no `LinkshellDiscordWebhooks` rows, so there were no Discord webhooks to delete.
+- The drops are four migrations (one per step), not one.
+- `git grep -n "PHASE4B-DROP"` now finds only this file.
+
+---
+
 Phase 4A (commits `97bf7c2` .. this file's commit) took every reader and writer away from the
 unused tables and columns below. Nothing was dropped: the entity classes, `DbSet`s, model
 properties and `ApplicationDbContext` config were kept so the EF model still matches the
