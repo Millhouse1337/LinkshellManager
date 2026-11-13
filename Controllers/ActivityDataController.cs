@@ -21,14 +21,10 @@ public sealed partial class ActivityDataController : ActivityControllerBase
 
     private readonly InviteCandidateService _inviteCandidates;
     private readonly DiscordBotClient _discordBot;
-    private readonly AppUserProfileService _appUserProfileService;
-    private readonly IHostEnvironment _environment;
-    private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _webHostEnvironment;
     private readonly TimeZoneConversionService _timeZones;
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
     private readonly WindowEventLinkService _windowEventLinks;
     private readonly DkpSheetService _dkpSheet;
-    private readonly GlobalSettingsService _globalSettings;
     private readonly AdminOverrideService _adminOverride;
     private readonly MemberActivityService _memberActivity;
     private readonly ChannelRouteEditor _channelRoutes;
@@ -54,16 +50,12 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         DiscordIdentityService discordIdentityService,
         InviteCandidateService inviteCandidates,
         DiscordBotClient discordBot,
-        AppUserProfileService appUserProfileService,
         UserManager<AppUser> userManager,
-        IHostEnvironment environment,
-        Microsoft.AspNetCore.Hosting.IWebHostEnvironment webHostEnvironment,
         TimeZoneConversionService timeZones,
         WindowEventDkpLedgerService windowEventDkpLedger,
         WindowEventLinkService windowEventLinks,
         DkpSheetService dkpSheet,
         ILogger<ActivityDataController> logger,
-        GlobalSettingsService globalSettings,
         AdminOverrideService adminOverride,
         MemberActivityService memberActivity,
         ChannelRouteEditor channelRoutes,
@@ -88,14 +80,10 @@ public sealed partial class ActivityDataController : ActivityControllerBase
     {
         _inviteCandidates = inviteCandidates;
         _discordBot = discordBot;
-        _appUserProfileService = appUserProfileService;
-        _environment = environment;
-        _webHostEnvironment = webHostEnvironment;
         _timeZones = timeZones;
         _windowEventDkpLedger = windowEventDkpLedger;
         _windowEventLinks = windowEventLinks;
         _dkpSheet = dkpSheet;
-        _globalSettings = globalSettings;
         _adminOverride = adminOverride;
         _memberActivity = memberActivity;
         _channelRoutes = channelRoutes;

@@ -14,7 +14,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // link while signed in, and the server hands back a URL holding a protected token that names the
 // file, the linkshell and the member, expires in a few minutes and works once. Opening it
 // re-checks that the member still belongs to the linkshell.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityOverviewController
 {
     private const string DownloadLinkPurpose = "LSManager.Activity.DownloadLink.v1";
     private static readonly TimeSpan DownloadLinkLifetime = TimeSpan.FromMinutes(5);

@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityOverviewController
 {
     // How long a single long-poll request blocks waiting for a change before
     // returning empty so the client immediately re-polls. Comfortably under the

@@ -12,7 +12,7 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityOverviewController
 {
     [HttpPost("profile")]
     public async Task<IActionResult> UpdateProfileAsync(

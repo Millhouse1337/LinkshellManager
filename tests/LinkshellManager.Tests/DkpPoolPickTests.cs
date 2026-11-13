@@ -58,14 +58,14 @@ public class DkpPoolPickTests
             new DkpPool { Id = 10, LinkshellId = Ls, Name = "General", IsDefault = true },
         });
 
-        Assert.Empty(ActivityDataController.PrimaryDkpPoolOptions(single));
-        Assert.Empty(ActivityDataController.PrimaryDkpPoolOptions(null));
+        Assert.Empty(ActivityOverviewController.PrimaryDkpPoolOptions(single));
+        Assert.Empty(ActivityOverviewController.PrimaryDkpPoolOptions(null));
     }
 
     [Fact]
     public void PickerOptions_ListEveryPoolAndMarkTheDefault()
     {
-        var options = ActivityDataController.PrimaryDkpPoolOptions(TwoPoolMap());
+        var options = ActivityOverviewController.PrimaryDkpPoolOptions(TwoPoolMap());
 
         Assert.Equal(new[] { 10, 11 }, options.Select(option => option.Id));
         Assert.True(options[0].IsDefault);

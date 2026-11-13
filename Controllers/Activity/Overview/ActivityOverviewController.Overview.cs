@@ -13,7 +13,7 @@ using static LinkshellManagerDiscordApp.Controllers.ActivityMappers;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityOverviewController
 {
     [HttpGet("overview")]
     public async Task<IActionResult> GetOverviewAsync(

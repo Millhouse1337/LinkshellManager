@@ -50,7 +50,7 @@ Discord SDK entirely and uses the site's own cookie login:
 - **Website-only features**, hidden inside Discord: the super-admin **Admin** (`/api/web/admin`) and
   **Data Admin** (`/api/data-admin`) tabs. `ActivityHomeComponent.canOpenTab` gates them. (DKP Import
   and Export to Excel work in Discord too: the import uploads as base64 JSON, and inside Discord a
-  download opens in the member's browser through a one-time link, `ActivityDataController.Downloads`.
+  download opens in the member's browser through a one-time link, `ActivityOverviewController.Downloads`.
   Reviewing members' ToD submissions (ToDs tab) and /lsm now captures (Event System → Current) is on both hosts as well.)
 - `/` shows the public landing page signed out and redirects into the app signed in.
 

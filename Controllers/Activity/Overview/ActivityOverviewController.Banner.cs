@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityOverviewController
 {
     // Serves a linkshell's dashboard banner image. Intentionally UNAUTHENTICATED:
     // it's rendered via an <img> tag (which can't send a bearer token) from both

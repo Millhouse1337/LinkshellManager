@@ -15,7 +15,7 @@ What remains is a short list of **intentional** differences between the two host
 | Linkshell "Lock to this server" | Not applied: members always see their linkshells. Claiming a placeholder still respects it. | Applied: a locked linkshell only opens from its server, for its members. |
 | URL | One URL per tab and sub-view (`/discord-activity/events/past`), `?ls=<id>` switches linkshell; reload, Back and deep links work. | Never changed; the tab lives in memory (a stateful iframe URL interacts badly with the SDK's URL mapping). |
 | Website-only | Super-admin Admin and Data Admin tabs, Privacy/Terms/launcher footer. (Reviewing members' ToD submissions on the ToDs tab and /lsm now captures under Event System → Current is on both hosts.) | Hidden (`isWebsite`, `canOpenTab`). |
-| Downloads | DKP Sheet Export to Excel and the Import DKP template download directly. | Can't save a file: each opens in the member's browser through a one-time link (`DownloadLinkService`, `ActivityDataController.Downloads`). Import DKP uploads as base64 JSON, the same on both. |
+| Downloads | DKP Sheet Export to Excel and the Import DKP template download directly. | Can't save a file: each opens in the member's browser through a one-time link (`DownloadLinkService`, `ActivityOverviewController.Downloads`). Import DKP uploads as base64 JSON, the same on both. |
 | Discord-only | Hidden. | Connected-participants list and "connected now" invite shortcuts, "Set to this server" from the launching guild. |
 | Public pages | `/` landing (signed out), `/features`, `/addon`, Privacy, Terms and the sign-in page are server-rendered (`_PublicLayout`). | Not used. |
 
