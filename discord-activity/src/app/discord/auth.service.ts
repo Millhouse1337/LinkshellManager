@@ -91,6 +91,13 @@ export class AuthService {
     this.loadErrors.update(current => (current[key] === message ? current : { ...current, [key]: message }));
   }
 
+  // Called when the user presses Refresh. A notice left by a loader on another tab would never
+  // clear otherwise, since Refresh only reloads the tab on screen; any loader that fails again
+  // reports itself again.
+  clearAllLoadErrors(): void {
+    this.loadErrors.set({});
+  }
+
   clearLoadError(key: string): void {
     this.loadErrors.update(current => {
       if (!(key in current)) return current;

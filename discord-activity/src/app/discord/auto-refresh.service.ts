@@ -153,6 +153,7 @@ export class AutoRefreshService {
     if (showBusy) {
       this.activity.busyRefresh.set(true);
       this.auth.setActionError(null);
+      this.auth.clearAllLoadErrors();
     }
     try {
       this.nextRefreshTab = tab;

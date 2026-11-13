@@ -179,13 +179,9 @@ export class LinkshellTabComponent {
     return canManageLinkshellIn(this.activity.overview(), linkshellId);
   }
 
+  // The app's one current linkshell, the same one the Dashboard and Configurations read.
   protected selectedDashboardLinkshellId(): number {
-    return (
-      this.activity.overview()?.appUser?.primaryLinkshellId ??
-      this.primaryLinkshell()?.id ??
-      (this.activity.overview()?.linkshells ?? [])[0]?.id ??
-      0
-    );
+    return this.activity.currentLinkshellId();
   }
 
   protected selectedDashboardLinkshell() {

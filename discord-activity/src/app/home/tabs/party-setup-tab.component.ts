@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DiscordActivityService } from '../../discord/discord-activity.service';
@@ -30,8 +30,7 @@ export class PartySetupTabComponent {
   // A computed, not a plain method: the effect below then re-runs only when the linkshell id
   // actually changes, not on every overview refresh. The refresh timer (AutoRefreshService) and
   // each write's own reload keep the list fresh while this tab is open.
-  protected readonly primaryLinkshellId = computed(() =>
-    this.activity.overview()?.primaryLinkshell?.id ?? this.activity.overview()?.appUser?.primaryLinkshellId ?? 0);
+  protected readonly primaryLinkshellId = this.activity.currentLinkshellId;
 
   constructor() {
     effect(() => {

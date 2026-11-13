@@ -195,10 +195,7 @@ export class EventsTabComponent {
 
   // A computed, so the attendance effect above re-runs only when the linkshell id changes, not on
   // every overview refresh.
-  private readonly primaryLinkshellId = computed(() => {
-    const overview = this.activity.overview();
-    return overview?.primaryLinkshell?.id ?? overview?.appUser?.primaryLinkshellId ?? 0;
-  });
+  private readonly primaryLinkshellId = this.activity.currentLinkshellId;
 
   // Every OPEN attendance event is an unposted payout awaiting an officer, so all of them belong in
   // Current Field Activity — not just the ones traceable to a camp. Filtering on a camp link would
