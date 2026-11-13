@@ -37,13 +37,13 @@ public class AuctionStockValidationTests
     [Fact]
     public void Gil_WithinTheTreasury_IsAllowed()
     {
-        Assert.Null(ActivityDataController.DescribeAuctionGilShortfall(requestedGil: 50_000, availableGil: 50_000));
+        Assert.Null(ActivityLootController.DescribeAuctionGilShortfall(requestedGil: 50_000, availableGil: 50_000));
     }
 
     [Fact]
     public void Gil_MoreThanTheTreasury_IsRefused()
     {
-        var error = ActivityDataController.DescribeAuctionGilShortfall(requestedGil: 60_000, availableGil: 50_000);
+        var error = ActivityLootController.DescribeAuctionGilShortfall(requestedGil: 60_000, availableGil: 50_000);
         Assert.NotNull(error);
         Assert.Contains("Not enough gil", error);
     }
@@ -51,20 +51,20 @@ public class AuctionStockValidationTests
     [Fact]
     public void Gil_FromAnEmptyTreasury_IsRefused()
     {
-        Assert.NotNull(ActivityDataController.DescribeAuctionGilShortfall(requestedGil: 1, availableGil: 0));
+        Assert.NotNull(ActivityLootController.DescribeAuctionGilShortfall(requestedGil: 1, availableGil: 0));
     }
 
     [Fact]
     public void NoGilItems_NeedNoTreasury()
     {
-        Assert.Null(ActivityDataController.DescribeAuctionGilShortfall(requestedGil: 0, availableGil: 0));
-        Assert.Equal(0, ActivityDataController.SumAuctionGil(new[] { ItemRow() }));
+        Assert.Null(ActivityLootController.DescribeAuctionGilShortfall(requestedGil: 0, availableGil: 0));
+        Assert.Equal(0, ActivityLootController.SumAuctionGil(new[] { ItemRow() }));
     }
 
     [Fact]
     public void SumAuctionGil_AddsEveryGilRow()
     {
-        Assert.Equal(30_000, ActivityDataController.SumAuctionGil(new[]
+        Assert.Equal(30_000, ActivityLootController.SumAuctionGil(new[]
         {
             ItemRow(gil: 10_000),
             ItemRow(gil: 20_000),
@@ -79,7 +79,7 @@ public class AuctionStockValidationTests
         db.Items.Add(TreasuryItem(id: 5, linkshellId: 1));
         await db.SaveChangesAsync();
 
-        var error = await ActivityDataController.ValidateAuctionSourceItemsAsync(
+        var error = await ActivityLootController.ValidateAuctionSourceItemsAsync(
             db, linkshellId: 1, new[] { ItemRow(sourceItemId: 5) }, default);
 
         Assert.Null(error);
@@ -93,7 +93,7 @@ public class AuctionStockValidationTests
         db.Items.Add(TreasuryItem(id: 5, linkshellId: 2));
         await db.SaveChangesAsync();
 
-        var error = await ActivityDataController.ValidateAuctionSourceItemsAsync(
+        var error = await ActivityLootController.ValidateAuctionSourceItemsAsync(
             db, linkshellId: 1, new[] { ItemRow(sourceItemId: 5) }, default);
 
         Assert.NotNull(error);
@@ -104,7 +104,7 @@ public class AuctionStockValidationTests
     {
         await using var db = NewDb();
 
-        var error = await ActivityDataController.ValidateAuctionSourceItemsAsync(
+        var error = await ActivityLootController.ValidateAuctionSourceItemsAsync(
             db, linkshellId: 1, new[] { ItemRow(sourceItemId: 99) }, default);
 
         Assert.NotNull(error);
@@ -118,7 +118,7 @@ public class AuctionStockValidationTests
         db.Items.Add(TreasuryItem(id: 5, linkshellId: 1));
         await db.SaveChangesAsync();
 
-        var error = await ActivityDataController.ValidateAuctionSourceItemsAsync(
+        var error = await ActivityLootController.ValidateAuctionSourceItemsAsync(
             db, linkshellId: 1, new[] { ItemRow(sourceItemId: 5), ItemRow(sourceItemId: 5) }, default);
 
         Assert.Null(error);
@@ -130,7 +130,7 @@ public class AuctionStockValidationTests
     {
         await using var db = NewDb();
 
-        var error = await ActivityDataController.ValidateAuctionSourceItemsAsync(
+        var error = await ActivityLootController.ValidateAuctionSourceItemsAsync(
             db, linkshellId: 1, new[] { ItemRow(sourceItemId: 99, gil: 1_000) }, default);
 
         Assert.Null(error);
@@ -143,7 +143,7 @@ public class AuctionStockValidationTests
     [InlineData("UpdateAuctionAsync(", "_dbContext.SaveChangesAsync(")]
     public void CreateAndUpdate_RunBothStockChecks(string start, string end)
     {
-        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "ActivityDataController.Auctions.cs"));
+        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "Activity", "Loot", "ActivityLootController.Auctions.cs"));
 
         var startIndex = text.IndexOf(start, StringComparison.Ordinal);
         var endIndex = text.IndexOf(end, startIndex, StringComparison.Ordinal);

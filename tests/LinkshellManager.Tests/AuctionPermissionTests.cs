@@ -33,7 +33,7 @@ public class AuctionPermissionTests
     [Fact]
     public void Member_WithoutManageAuctions_HasNoControl_EvenIfTheyCreatedIt()
     {
-        Assert.False(ActivityDataController.CanControlAuction(
+        Assert.False(ActivityLootController.CanControlAuction(
             isMemberOfAuctionLinkshell: true, canManageAuctions: false));
     }
 
@@ -41,7 +41,7 @@ public class AuctionPermissionTests
     [Fact]
     public void Member_WithManageAuctions_ControlsAnyAuction()
     {
-        Assert.True(ActivityDataController.CanControlAuction(
+        Assert.True(ActivityLootController.CanControlAuction(
             isMemberOfAuctionLinkshell: true, canManageAuctions: true));
     }
 
@@ -49,9 +49,9 @@ public class AuctionPermissionTests
     [Fact]
     public void NonMember_HasNoControl_EvenWithThePermissionFlag()
     {
-        Assert.False(ActivityDataController.CanControlAuction(
+        Assert.False(ActivityLootController.CanControlAuction(
             isMemberOfAuctionLinkshell: false, canManageAuctions: true));
-        Assert.False(ActivityDataController.CanControlAuction(
+        Assert.False(ActivityLootController.CanControlAuction(
             isMemberOfAuctionLinkshell: false, canManageAuctions: false));
     }
 
@@ -60,10 +60,10 @@ public class AuctionPermissionTests
     {
         var auction = PendingAuction();
 
-        Assert.True(ActivityDataController.CanEditAuction(canControl: true, auction, Now));
-        Assert.True(ActivityDataController.CanStartAuction(canControl: true, auction, Now));
-        Assert.False(ActivityDataController.CanEditAuction(canControl: false, auction, Now));
-        Assert.False(ActivityDataController.CanStartAuction(canControl: false, auction, Now));
+        Assert.True(ActivityLootController.CanEditAuction(canControl: true, auction, Now));
+        Assert.True(ActivityLootController.CanStartAuction(canControl: true, auction, Now));
+        Assert.False(ActivityLootController.CanEditAuction(canControl: false, auction, Now));
+        Assert.False(ActivityLootController.CanStartAuction(canControl: false, auction, Now));
     }
 
     // Control does not override the time rules: an ended auction still can't be edited or started.
@@ -73,8 +73,8 @@ public class AuctionPermissionTests
         var auction = PendingAuction();
         var afterEnd = auction.EndTime!.Value.AddMinutes(1);
 
-        Assert.False(ActivityDataController.CanEditAuction(canControl: true, auction, afterEnd));
-        Assert.False(ActivityDataController.CanStartAuction(canControl: true, auction, afterEnd));
+        Assert.False(ActivityLootController.CanEditAuction(canControl: true, auction, afterEnd));
+        Assert.False(ActivityLootController.CanStartAuction(canControl: true, auction, afterEnd));
     }
 
     // The create gate is CanAsync(membership, r => r.CanManageAuctions). These pin what that means
@@ -96,7 +96,7 @@ public class AuctionPermissionTests
     [Fact]
     public void AuctionEndpoints_UseThePermissionGates()
     {
-        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "ActivityDataController.Auctions.cs"));
+        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "Activity", "Loot", "ActivityLootController.Auctions.cs"));
 
         var createStart = text.IndexOf("CreateAuctionAsync(", StringComparison.Ordinal);
         var createEnd = text.IndexOf("_dbContext.Auctions.Add(", createStart, StringComparison.Ordinal);

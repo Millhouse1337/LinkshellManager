@@ -41,7 +41,7 @@ public class AuctionCloseRaceTests : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     // The app's controller with only what Close touches, and a signed-in Leader.
-    private static ActivityDataController NewActivityController(ApplicationDbContext db)
+    private static ActivityLootController NewActivityController(ApplicationDbContext db)
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -64,7 +64,7 @@ public class AuctionCloseRaceTests : IAsyncLifetime
             // Empty: the close asks for the live-refresh notifier, which these tests do without.
             RequestServices = new ServiceCollection().BuildServiceProvider(),
         };
-        return ActivityControllerFactory.Create<ActivityDataController>(
+        return ActivityControllerFactory.Create<ActivityLootController>(
             http, db, userManager, new MemberActivityService(db),
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
             permissions);

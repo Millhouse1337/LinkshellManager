@@ -108,7 +108,7 @@ public class LootDeleteTests
         await using var db = NewDb();
         var (_, loot) = Seed(db, winner: "Edicius", noEvent: true);
 
-        Assert.Equal(Ls, await ActivityDataController.LootRowLinkshellIdAsync(
+        Assert.Equal(Ls, await ActivityLootController.LootRowLinkshellIdAsync(
             db, loot.Id, CancellationToken.None));
     }
 

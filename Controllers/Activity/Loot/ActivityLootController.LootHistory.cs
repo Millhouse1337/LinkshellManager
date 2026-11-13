@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityLootController
 {
     // GET /api/activity/loot-history?page=1&pageSize=20
     //

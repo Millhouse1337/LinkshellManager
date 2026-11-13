@@ -386,7 +386,7 @@ public class LootAfterEndCampTests
     [Fact]
     public void LootPicker_ListsOnlyRunningEventsAsLive()
     {
-        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "ActivityDataController.LootHistory.cs"));
+        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "Activity", "Loot", "ActivityLootController.LootHistory.cs"));
         var from = text.IndexOf("GetLootEventOptionsAsync(", StringComparison.Ordinal);
         var to = text.IndexOf("var pastQuery", from, StringComparison.Ordinal);
         Assert.True(from >= 0 && to > from, "GetLootEventOptionsAsync not found.");

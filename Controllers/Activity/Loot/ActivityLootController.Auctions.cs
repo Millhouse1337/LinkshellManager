@@ -11,7 +11,7 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityLootController
 {
     [HttpGet("auctions")]
     public async Task<IActionResult> GetAuctionsAsync(int? linkshellId, CancellationToken cancellationToken)
