@@ -8,6 +8,7 @@ import type {
   ActivityLootHistoryItem,
   ActivityLootHistoryList
 } from '../../discord/discord-activity.types';
+import { dkpPoolOptionsFor } from '../activity-home.helpers';
 
 
 interface LootEditFormModel {
@@ -59,6 +60,15 @@ export class LootHistoryPanelComponent implements OnInit {
   protected addSourceKind: "none" | "live" | "past" = "none";
   protected addEventId: number | null = null;
   protected addEventHistoryId: number | null = null;
+  // The pool picked on the Add loot form. Null = automatic (the server follows the event's type).
+  protected addDkpPoolId: number | null = null;
+
+  // The Add loot pool picker's choices; empty (hidden) for a single-pool linkshell. Keyed on the
+  // PRIMARY linkshell because that is where the server files hand-added loot.
+  protected addPoolOptions() {
+    const overview = this.activity.overview();
+    return dkpPoolOptionsFor(overview, overview?.appUser?.primaryLinkshellId);
+  }
 
   // Fetched rather than read off the overview: the overview only carries LIVE events, and past
   // ones are the whole point of the second picker.
@@ -94,6 +104,7 @@ export class LootHistoryPanelComponent implements OnInit {
     this.addSourceKind = "none";
     this.addEventId = null;
     this.addEventHistoryId = null;
+    this.addDkpPoolId = null;
     this.pastEventQuery.set("");
     this.addError.set(null);
     this.addingLoot.set(true);
@@ -106,6 +117,7 @@ export class LootHistoryPanelComponent implements OnInit {
     this.addSourceKind = "none";
     this.addEventId = null;
     this.addEventHistoryId = null;
+    this.addDkpPoolId = null;
     this.addError.set(null);
   }
 
@@ -149,7 +161,8 @@ export class LootHistoryPanelComponent implements OnInit {
       eventHistoryId: this.addSourceKind === "past" ? this.addEventHistoryId : null,
       itemName,
       itemWinner,
-      winningDkpSpent: dkp
+      winningDkpSpent: dkp,
+      dkpPoolId: this.addPoolOptions().length > 0 ? this.addDkpPoolId : null
     });
 
     if (ok) {

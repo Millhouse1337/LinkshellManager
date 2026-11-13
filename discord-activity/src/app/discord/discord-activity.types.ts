@@ -472,6 +472,16 @@ export interface ActivityPrimaryLinkshell {
   // News & Updates feed sources.
   recentAuctions: ActivityNewsAuction[];
   recentDkpAudits: ActivityNewsDkp[];
+  // The choices for the DKP pool picker on the Misc DKP, auction and Add Loot forms. Empty when
+  // the linkshell has a single pool, which hides the picker. Optional so an overview from a server
+  // that predates the field reads as "single pool".
+  dkpPools?: ActivityDkpPoolOption[];
+}
+
+export interface ActivityDkpPoolOption {
+  id: number;
+  name: string;
+  isDefault: boolean;
 }
 
 export interface ActivityNewsAuction {
@@ -2109,6 +2119,9 @@ export interface ActivityCreateAuctionInput {
   startTimeLocal?: string | null;
   endTimeLocal?: string | null;
   items: ActivityAuctionItemInput[];
+  // The DKP pool bids are paid from. Null on create = the default pool; on an edit the form always
+  // sends the auction's own pool so saving never moves it.
+  dkpPoolId?: number | null;
 }
 
 export interface ActivityUpdateProfileInput {

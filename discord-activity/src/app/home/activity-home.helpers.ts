@@ -9,7 +9,12 @@ import type {
   ActivityEventParticipant,
   ActivityStatusLedgerEntry
 } from '../discord/discord-activity.service';
-import type { ActivityLinkshellSettings, ActivityMonsterSetup, ActivityOverview } from '../discord/discord-activity.types';
+import type {
+  ActivityDkpPoolOption,
+  ActivityLinkshellSettings,
+  ActivityMonsterSetup,
+  ActivityOverview
+} from '../discord/discord-activity.types';
 import { hasSpawnWindowCadence } from './activity-home.types';
 
 // ----- Linkshell type -----
@@ -391,6 +396,25 @@ export function isLeaderRankName(rank: string | null | undefined): boolean {
 
 // Leader-tier gates (rank editing, removing members, transferring ownership).
 // Same membership-first rule as above.
+// The DKP pool picker's choices for a linkshell, or [] when it should stay hidden: the linkshell
+// has a single pool, or it isn't the primary one (the overview only carries the primary's pools).
+// An empty list means the form sends no pool and the server uses its usual default, so a
+// single-pool linkshell sees no change at all.
+export function dkpPoolOptionsFor(
+  overview: ActivityOverview | null | undefined,
+  linkshellId: number | null | undefined
+): ActivityDkpPoolOption[] {
+  const primary = overview?.primaryLinkshell;
+  if (!primary || linkshellId == null || primary.id !== linkshellId) return [];
+  const pools = primary.dkpPools ?? [];
+  return pools.length > 1 ? pools : [];
+}
+
+// The pool a picker starts on: the linkshell's default pool, or null when there is no picker.
+export function defaultDkpPoolId(pools: readonly ActivityDkpPoolOption[]): number | null {
+  return (pools.find(pool => pool.isDefault) ?? pools[0])?.id ?? null;
+}
+
 export function isLeaderTierIn(
   overview: ActivityOverview | null | undefined,
   linkshellId: number | null | undefined,

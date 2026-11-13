@@ -89,6 +89,8 @@ export class DkpService {
     sourceWindowEventId?: number | null;
     amount: number;
     reason: string;
+    // Misc only: which DKP pool it lands in. Null = the linkshell's default pool.
+    dkpPoolId?: number | null;
   }): Promise<boolean> {
     this.busyDkpAudit.set(true);
     this.auth.setActionError(null);
@@ -102,7 +104,8 @@ export class DkpService {
         relatedLedgerEntryId: input.relatedLedgerEntryId ?? null,
         sourceWindowEventId: input.sourceWindowEventId ?? null,
         amount: input.amount,
-        reason: input.reason
+        reason: input.reason,
+        dkpPoolId: input.dkpPoolId ?? null
       });
       await this.loadDkpHistory(input.linkshellId, input.targetAppUserId);
       await this.auth.refreshOverview();

@@ -8,6 +8,8 @@ import {
   canManageEventsIn,
   canManageLinkshellIn,
   canReviewSubmissionsIn,
+  defaultDkpPoolId,
+  dkpPoolOptionsFor,
   formatAlts,
   formatBreakDuration,
   formatDkp,
@@ -303,5 +305,29 @@ describe('permission gates', () => {
     expect(canReviewSubmissionsIn(ov, 4)).toBe(true);
     expect(canReviewSubmissionsIn(ov, 3)).toBe(true);
     expect(canReviewSubmissionsIn(ov, 2)).toBe(false);
+  });
+});
+
+describe('DKP pool picker', () => {
+  const pools = [
+    { id: 11, name: 'Sky', isDefault: false },
+    { id: 10, name: 'General', isDefault: true }
+  ];
+
+  it('lists the primary linkshell pools when there is more than one', () => {
+    const view = overview({ primaryLinkshell: { id: 5, dkpPools: pools } });
+    expect(dkpPoolOptionsFor(view, 5).map(pool => pool.id)).toEqual([11, 10]);
+  });
+
+  it('hides the picker for a single pool, a missing field, or another linkshell', () => {
+    expect(dkpPoolOptionsFor(overview({ primaryLinkshell: { id: 5, dkpPools: [pools[1]] } }), 5)).toEqual([]);
+    expect(dkpPoolOptionsFor(overview({ primaryLinkshell: { id: 5 } }), 5)).toEqual([]);
+    expect(dkpPoolOptionsFor(overview({ primaryLinkshell: { id: 5, dkpPools: pools } }), 6)).toEqual([]);
+    expect(dkpPoolOptionsFor(null, 5)).toEqual([]);
+  });
+
+  it('starts on the default pool, or null when there is no picker', () => {
+    expect(defaultDkpPoolId(pools)).toBe(10);
+    expect(defaultDkpPoolId([])).toBeNull();
   });
 });

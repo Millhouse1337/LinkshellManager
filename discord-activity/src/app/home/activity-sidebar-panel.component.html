@@ -547,6 +547,18 @@
                 <input type="number" step="0.01" [(ngModel)]="dkpAuditModel.amount"
                   name="auditAmountMisc" placeholder="e.g. 10 or -5" required />
               </label>
+              <!-- Only when the linkshell has more than one DKP pool. A Misc adjustment has no
+                   event type to follow, so the officer says which pool it lands in. -->
+              @if (dkpAuditPoolOptions().length > 0) {
+                <label>
+                  <span>DKP pool</span>
+                  <select [(ngModel)]="dkpAuditModel.dkpPoolId" name="auditDkpPool" required>
+                    @for (pool of dkpAuditPoolOptions(); track pool.id) {
+                      <option [ngValue]="pool.id">{{ pool.name }}</option>
+                    }
+                  </select>
+                </label>
+              }
             }
 
             <label class="dkp-audit-form__reason">

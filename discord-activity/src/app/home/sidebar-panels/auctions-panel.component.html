@@ -496,6 +496,18 @@
             <span>End time</span>
             <input [(ngModel)]="auctionFormModel.endTimeLocal" name="auctionEndTime" type="datetime-local" required />
           </label>
+          <!-- Only when the linkshell has more than one DKP pool. Locked once bids exist: bidders
+               were checked against this pool's balance, and the server refuses a change then. -->
+          @if (auctionPoolOptions().length > 0) {
+            <label [title]="auctionPoolLocked ? 'Bids have been placed, so the pool cannot change.' : 'Winning bids are paid from this DKP pool.'">
+              <span>DKP pool</span>
+              <select [(ngModel)]="auctionFormModel.dkpPoolId" name="auctionDkpPool" [disabled]="auctionPoolLocked">
+                @for (pool of auctionPoolOptions(); track pool.id) {
+                  <option [ngValue]="pool.id">{{ pool.name }}</option>
+                }
+              </select>
+            </label>
+          }
         </div>
 
         <div class="invite-section">

@@ -717,14 +717,14 @@ export class DiscordActivityService {
   // --- DkpService ---
   loadDkpHistory(linkshellId?: number | null, appUserId?: string | null): Promise<ActivityDkpHistory | null> { return this.dkpService.loadDkpHistory(linkshellId, appUserId); }
   clearDkpHistory(): void { this.dkpService.clearDkpHistory(); }
-  submitDkpAudit(input: { linkshellId: number; targetAppUserId: string; mode: 'Adjust' | 'Add' | 'Misc'; relatedLedgerEntryId?: number | null; sourceWindowEventId?: number | null; amount: number; reason: string }): Promise<boolean> { return this.dkpService.submitDkpAudit(input); }
+  submitDkpAudit(input: { linkshellId: number; targetAppUserId: string; mode: 'Adjust' | 'Add' | 'Misc'; relatedLedgerEntryId?: number | null; sourceWindowEventId?: number | null; amount: number; reason: string; dkpPoolId?: number | null }): Promise<boolean> { return this.dkpService.submitDkpAudit(input); }
   loadDkpAuditAddCandidates(linkshellId: number, targetAppUserId: string): Promise<void> { return this.dkpService.loadAddCandidates(linkshellId, targetAppUserId); }
   clearDkpAuditAddCandidates(): void { this.dkpService.clearAddCandidates(); }
 
   // --- LootHistoryService ---
   loadLootHistory(page = 1, pageSize = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(page, pageSize); }
   loadLootEventOptions(query?: string | null) { return this.lootHistoryService.loadLootEventOptions(query); }
-  addManualLoot(input: { sourceKind: "none" | "live" | "past"; eventId: number | null; eventHistoryId: number | null; itemName: string; itemWinner: string; winningDkpSpent: number }): Promise<boolean> { return this.lootHistoryService.addLoot(input); }
+  addManualLoot(input: { sourceKind: "none" | "live" | "past"; eventId: number | null; eventHistoryId: number | null; itemName: string; itemWinner: string; winningDkpSpent: number; dkpPoolId?: number | null }): Promise<boolean> { return this.lootHistoryService.addLoot(input); }
   async editEventLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
     const ok = await this.lootHistoryService.editEventLoot(lootDetailId, input);
     if (ok) { await this.auth.refreshOverview(); }

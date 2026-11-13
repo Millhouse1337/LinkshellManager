@@ -355,10 +355,11 @@ public sealed partial class ActivityDataController
             entryType = "AuditMisc";
             occurredAtUtc = nowUtc;
             // A free-standing correction has no event type to follow, so the officer picks the pool.
-            poolRef = DkpPoolRef.Pinned(
-                request.DkpPoolId is int chosen && poolMap.Pools.Any(pool => pool.Id == chosen)
-                    ? chosen
-                    : poolMap.DefaultPoolId);
+            if (!poolMap.TryPick(request.DkpPoolId, poolMap.DefaultPoolId, out var miscPoolId))
+            {
+                return BadRequest(new { error = DkpPoolMap.UnknownPoolError });
+            }
+            poolRef = DkpPoolRef.Pinned(miscPoolId);
             entryContext = new DkpEntryContext(
                 CharacterName: targetMembership.CharacterName,
                 Details: $"Audit by {officerName}: {reason}");

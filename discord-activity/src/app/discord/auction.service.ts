@@ -112,7 +112,9 @@ export class AuctionService {
         title: input.title,
         startTimeLocal: datetimeLocalToUtcIso(input.startTimeLocal),
         endTimeLocal: datetimeLocalToUtcIso(input.endTimeLocal),
-        items: input.items
+        items: input.items,
+        // Null = the linkshell's default pool.
+        dkpPoolId: input.dkpPoolId ?? null
       });
       await this.auth.refreshOverview();
       await this.loadAuctions(input.linkshellId);
@@ -137,7 +139,11 @@ export class AuctionService {
         title: input.title,
         startTimeLocal: datetimeLocalToUtcIso(input.startTimeLocal),
         endTimeLocal: datetimeLocalToUtcIso(input.endTimeLocal),
-        items: input.items
+        items: input.items,
+        // The form fills this with the auction's own pool, so an edit never moves the auction to
+        // another pool unless the officer picked one. (The server also reads a missing pool as
+        // "keep the current one".)
+        dkpPoolId: input.dkpPoolId ?? null
       });
       await this.auth.refreshOverview();
       await this.loadAuctions(input.linkshellId);

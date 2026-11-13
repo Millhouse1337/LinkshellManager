@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../discord/discord-activity.service';
 import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../discord/discord-activity.types';
 import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from './event-job-options';
-import { canManageLinkshellIn } from './activity-home.helpers';
+import { canManageLinkshellIn, defaultDkpPoolId, dkpPoolOptionsFor } from './activity-home.helpers';
 import type { ProfileView } from './activity-home.types';
 import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.helpers';
 import { AuctionsPanelComponent, AuctionsView } from './sidebar-panels/auctions-panel.component';
@@ -469,13 +469,16 @@ export class ActivitySidebarPanelComponent {
     sourceWindowEventId: number | null;
     amount: number | null;
     reason: string;
+    // Misc only: the pool the adjustment lands in. Null = the default pool (no picker shown).
+    dkpPoolId: number | null;
   } = {
     mode: 'Misc',
     targetAppUserId: '',
     relatedLedgerEntryId: null,
     sourceWindowEventId: null,
     amount: null,
-    reason: ''
+    reason: '',
+    dkpPoolId: null
   };
   protected readonly browserTimeZone = resolveBrowserTimeZone();
   protected readonly timeZoneOptions = resolveTimeZoneOptions(this.activity.overview()?.appUser?.timeZone, this.browserTimeZone);
@@ -938,8 +941,15 @@ export class ActivitySidebarPanelComponent {
     this.dkpAuditModel.sourceWindowEventId = null;
     this.dkpAuditModel.amount = null;
     this.dkpAuditModel.reason = '';
+    this.dkpAuditModel.dkpPoolId = defaultDkpPoolId(this.dkpAuditPoolOptions());
     this.activity.clearDkpAuditAddCandidates();
     this.isDkpAuditOpen = true;
+  }
+
+  // The Misc adjustment's pool picker; empty (hidden) for a single-pool linkshell. Adjust and Add
+  // don't need one: they land in the pool of the entry they correct.
+  protected dkpAuditPoolOptions() {
+    return dkpPoolOptionsFor(this.activity.overview(), this.selectedLinkshellId);
   }
 
   protected closeDkpAudit(): void {
@@ -1031,7 +1041,8 @@ export class ActivitySidebarPanelComponent {
       sourceWindowEventId:
         this.dkpAuditModel.mode === 'Add' ? this.dkpAuditModel.sourceWindowEventId : null,
       amount: this.dkpAuditModel.mode === 'Add' ? 0 : (this.dkpAuditModel.amount ?? 0),
-      reason
+      reason,
+      dkpPoolId: this.dkpAuditModel.mode === 'Misc' ? this.dkpAuditModel.dkpPoolId : null
     });
 
     if (ok) {

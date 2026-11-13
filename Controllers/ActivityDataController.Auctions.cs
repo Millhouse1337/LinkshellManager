@@ -228,9 +228,10 @@ public sealed partial class ActivityDataController
         }
 
         var createPoolMap = await _dkpPools.GetMapAsync(request.LinkshellId, cancellationToken);
-        var createPoolId = request.DkpPoolId is int picked && createPoolMap.Pools.Any(pool => pool.Id == picked)
-            ? picked
-            : createPoolMap.DefaultPoolId;
+        if (!createPoolMap.TryPick(request.DkpPoolId, createPoolMap.DefaultPoolId, out var createPoolId))
+        {
+            return BadRequest(new { error = DkpPoolMap.UnknownPoolError });
+        }
 
         var auction = new Auction
         {
@@ -322,10 +323,14 @@ public sealed partial class ActivityDataController
         }
 
         var editPoolMap = await _dkpPools.GetMapAsync(request.LinkshellId, cancellationToken);
-        var requestedPoolId = request.DkpPoolId is int picked && editPoolMap.Pools.Any(pool => pool.Id == picked)
-            ? picked
-            : editPoolMap.DefaultPoolId;
         var currentPoolId = auction.DkpPoolId ?? editPoolMap.DefaultPoolId;
+        // No pool in the request keeps the auction where it is. It used to mean "the default pool",
+        // so an edit that only fixed a title quietly moved an auction into the default pool (or
+        // failed with the bids error below even though nobody touched the pool).
+        if (!editPoolMap.TryPick(request.DkpPoolId, currentPoolId, out var requestedPoolId))
+        {
+            return BadRequest(new { error = DkpPoolMap.UnknownPoolError });
+        }
         if (requestedPoolId != currentPoolId && auction.AuctionItems.Any(item => item.Bids.Count > 0))
         {
             // Bidders were validated against the balance in the CURRENT pool. Switching pools under

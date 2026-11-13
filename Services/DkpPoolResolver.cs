@@ -35,6 +35,24 @@ public sealed record DkpPoolMap(
     // tag hides itself when this is false, which is what makes the feature invisible until it's
     // used.
     public bool HasMultiplePools => Pools.Count > 1;
+
+    // The one rule for a pool id that came from a client (the Misc DKP, auction and Add Loot
+    // forms). No pick means "use the fallback" — the default pool, or an auction's CURRENT pool
+    // on an edit, so an edit that says nothing about pools never moves one. A pick that isn't one
+    // of THIS linkshell's pools is refused rather than quietly swapped for the default: the
+    // officer chose a pool, and silently filing the DKP somewhere else would be a surprise.
+    public bool TryPick(int? requestedPoolId, int fallbackPoolId, out int poolId)
+    {
+        if (requestedPoolId is not int requested)
+        {
+            poolId = fallbackPoolId;
+            return true;
+        }
+        poolId = requested;
+        return Pools.Any(pool => pool.Id == requested);
+    }
+
+    public const string UnknownPoolError = "That DKP pool isn't part of this linkshell. Refresh and pick the pool again.";
 }
 
 // Loads (and memoizes, per request) a linkshell's pool map. Scoped, because event close resolves

@@ -7,7 +7,7 @@ import {
   DiscordActivityService
 } from '../../discord/discord-activity.service';
 import { formatElapsed, parseDate } from '../sidebar-panel.helpers';
-import { isLeaderTierIn } from '../activity-home.helpers';
+import { defaultDkpPoolId, dkpPoolOptionsFor, isLeaderTierIn } from '../activity-home.helpers';
 
 // Active = started (live, then ended-but-not-closed). Pending = start time still ahead.
 // History = closed auctions, one row per item.
@@ -33,8 +33,12 @@ export class AuctionsPanelComponent {
     title: '',
     startTimeLocal: '',
     endTimeLocal: '',
-    items: [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }]
+    items: [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }],
+    dkpPoolId: null
   };
+  // True while editing an auction that already has bids: its pool is locked (the server refuses a
+  // pool change then, because bidders were checked against that pool's balance).
+  protected auctionPoolLocked = false;
   // Per-item source mode driving the form UI: inventory pick, free-text
   // external, or a gil sale (treasury gil sold for DKP).
   protected auctionItemSourceMode: ('inventory' | 'external' | 'gil')[] = ['external'];
@@ -93,6 +97,12 @@ export class AuctionsPanelComponent {
     return this.activity.linkshellDetail();
   }
 
+  // The DKP pool picker's choices for the form's linkshell; empty (picker hidden) for a
+  // single-pool linkshell.
+  protected auctionPoolOptions() {
+    return dkpPoolOptionsFor(this.activity.overview(), this.auctionFormModel.linkshellId);
+  }
+
   protected primaryLinkshellId(): number | null {
     return this.activity.overview()?.appUser?.primaryLinkshellId ?? this.activity.overview()?.primaryLinkshell?.id ?? null;
   }
@@ -147,6 +157,10 @@ export class AuctionsPanelComponent {
     this.auctionFormModel.items = [{ id: 0, itemName: '', itemType: '', startingBidDkp: 0, notes: '', sourceItemId: null, gilAmount: null }];
     this.auctionItemSourceMode = ['external'];
     this.auctionGilAmountDrafts = [''];
+    // New auctions start on the default pool. Null when there is no picker: the server then
+    // uses the default pool itself.
+    this.auctionFormModel.dkpPoolId = defaultDkpPoolId(this.auctionPoolOptions());
+    this.auctionPoolLocked = false;
     this.scrollFormIntoView();
   }
 
@@ -170,8 +184,10 @@ export class AuctionsPanelComponent {
     title?: string | null;
     startTime?: string | null;
     endTime?: string | null;
+    dkpPoolId?: number | null;
     items: {
       id: number;
+      bidCount?: number | null;
       itemName?: string | null;
       itemType?: string | null;
       startingBidDkp?: number | null;
@@ -201,6 +217,9 @@ export class AuctionsPanelComponent {
     this.auctionItemSourceMode = this.auctionFormModel.items.map(item =>
       item.gilAmount != null ? 'gil' : item.sourceItemId != null ? 'inventory' : 'external');
     this.auctionGilAmountDrafts = this.auctionFormModel.items.map(item => this.formatGilAmount(item.gilAmount));
+    // Always carry the auction's OWN pool, picker or not, so saving an edit never moves it.
+    this.auctionFormModel.dkpPoolId = auction.dkpPoolId ?? null;
+    this.auctionPoolLocked = auction.items.some(item => (item.bidCount ?? 0) > 0);
     this.scrollFormIntoView();
   }
 
@@ -357,7 +376,8 @@ export class AuctionsPanelComponent {
             sourceItemId: isGil ? null : (item.sourceItemId ?? null),
             gilAmount: isGil ? (item.gilAmount ?? null) : null
           };
-        })
+        }),
+        dkpPoolId: this.auctionFormModel.dkpPoolId ?? null
       };
 
       if (this.editingAuctionId) {

@@ -259,6 +259,20 @@
                      [(ngModel)]="addFormModel.winningDkpSpent" name="addDkp"
                      [disabled]="addFormModel.noDkp" />
             </label>
+            <!-- Only when the linkshell has more than one DKP pool. Automatic is what the server
+                 has always done: the event's own pool, or the pool HNM loot uses when there is
+                 no event. -->
+            @if (addPoolOptions().length > 0) {
+              <label>
+                <span>DKP pool</span>
+                <select class="form-select" [(ngModel)]="addDkpPoolId" name="addDkpPool">
+                  <option [ngValue]="null">{{ addSourceKind === 'none' ? 'Automatic (same pool as HNM loot)' : 'Automatic (same pool as the event)' }}</option>
+                  @for (pool of addPoolOptions(); track pool.id) {
+                    <option [ngValue]="pool.id">{{ pool.name }}</option>
+                  }
+                </select>
+              </label>
+            }
             <label class="loot-add-form__nodkp" style="display:flex;flex-direction:row;align-items:center;gap:8px">
               <input type="checkbox" [ngModel]="addFormModel.noDkp" name="addNoDkp"
                      (ngModelChange)="onNoDkpChange($event)" />

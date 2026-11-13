@@ -31,6 +31,9 @@ export class LootHistoryService {
     itemName: string;
     itemWinner: string;
     winningDkpSpent: number;
+    // The pool the cost comes out of. Null = automatic: the event's own pool, or HNM's pool when
+    // there is no event.
+    dkpPoolId?: number | null;
   }): Promise<boolean> {
     this.busyLootAdd.set(true);
     this.auth.setActionError(null);

@@ -181,9 +181,10 @@ public sealed class ManualLootService
         var map = await _dkpPools.GetMapAsync(linkshellId, cancellationToken);
         // An explicit pick wins; otherwise follow the event's own type, and fall back to whatever
         // HNM maps to for a row with no event — which is what manual loot has always defaulted to.
-        var poolId = dkpPoolId is int chosen && map.Pools.Any(pool => pool.Id == chosen)
-            ? chosen
-            : map.Resolve(resolved.EventType ?? "HNM");
+        if (!map.TryPick(dkpPoolId, map.Resolve(resolved.EventType ?? "HNM"), out var poolId))
+        {
+            return new ManualLootResult(false, DkpPoolMap.UnknownPoolError, null);
+        }
 
         var detail = new EventLootDetail
         {

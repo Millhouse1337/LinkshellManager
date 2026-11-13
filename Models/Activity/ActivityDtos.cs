@@ -316,7 +316,14 @@ public sealed record ActivityPrimaryLinkshellDto(
     IReadOnlyList<ActivityItemDto> Items,
     // News-feed sources: recent auctions (open/close) and DKP adjustments.
     IReadOnlyList<ActivityNewsAuctionDto> RecentAuctions,
-    IReadOnlyList<ActivityNewsDkpDto> RecentDkpAudits);
+    IReadOnlyList<ActivityNewsDkpDto> RecentDkpAudits,
+    // The pools the Misc DKP, auction and Add Loot forms can pick from. EMPTY when the linkshell
+    // has a single pool — the client's cue to hide the picker so nothing changes for them.
+    IReadOnlyList<ActivityDkpPoolOptionDto> DkpPools);
+
+// One choice in a DKP pool picker. Kept apart from ActivityDkpPoolDto (the Configurations card)
+// because every officer sees this list, not just the ones who can edit pools.
+public sealed record ActivityDkpPoolOptionDto(int Id, string Name, bool IsDefault);
 
 // One auction surfaced in the News & Updates feed. `Closed` => the EndTime
 // (auction wrapped up); otherwise `When` is when bidding opened.
@@ -1120,7 +1127,8 @@ public sealed record ActivityDkpAuditRequest(
     double Amount,
     string Reason,
     // Which DKP pool a "Misc" audit lands in. Ignored for Adjust/Add, which inherit the pool of the
-    // entry they correct. Null falls back to the linkshell's default pool.
+    // entry they correct. Null falls back to the linkshell's default pool; an id from another
+    // linkshell is a 400.
     int? DkpPoolId = null);
 
 public sealed record ActivityDkpLedgerEntryDto(
@@ -1633,7 +1641,8 @@ public sealed record ActivityCreateAuctionRequest(
     string? EndTimeLocal,
     IReadOnlyList<ActivityAuctionItemInput> Items,
     // Which DKP pool bids are drawn from. An auction has no event type, so unlike event loot this
-    // can't be derived — the officer picks it. Null = the linkshell's default pool.
+    // can't be derived — the officer picks it. Null = the linkshell's default pool on create, and
+    // "keep the auction's current pool" on update. An id from another linkshell is a 400.
     int? DkpPoolId = null);
 
 public sealed record ActivityAuctionBidRequest(int BidAmount);

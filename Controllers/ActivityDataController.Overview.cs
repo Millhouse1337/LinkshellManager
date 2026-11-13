@@ -911,7 +911,8 @@ public sealed partial class ActivityDataController
                         entry.CharacterName ?? "Member",
                         entry.Amount,
                         entry.EntryType == "AuditAdjustment",
-                        entry.OccurredAt)).ToList()),
+                        entry.OccurredAt)).ToList(),
+                    PrimaryDkpPoolOptions(poolMapByLinkshell.GetValueOrDefault(primaryLinkshell.Id))),
             activeEvents.Select(evt => new ActivityEventDto(
                 evt.Id,
                 evt.LinkshellId,
@@ -1143,6 +1144,17 @@ public sealed partial class ActivityDataController
             adminOverrideActive,
             claimShieldGloballyDisabled));
     }
+
+    // The pool picker's choices for the Misc DKP, auction and Add Loot forms. Empty for a
+    // single-pool linkshell (the common case), so those forms look exactly as they did before.
+    internal static IReadOnlyList<ActivityDkpPoolOptionDto> PrimaryDkpPoolOptions(DkpPoolMap? map) =>
+        map is { HasMultiplePools: true }
+            ? map.Pools
+                .OrderBy(pool => pool.SortOrder)
+                .ThenBy(pool => pool.Id)
+                .Select(pool => new ActivityDkpPoolOptionDto(pool.Id, pool.Name, pool.Id == map.DefaultPoolId))
+                .ToList()
+            : Array.Empty<ActivityDkpPoolOptionDto>();
 
     // The compact per-linkshell monster catalog for the polled overview. Falls back to the built-in
     // defaults when the linkshell has no rows yet, which is what lets the client drop its own copies
