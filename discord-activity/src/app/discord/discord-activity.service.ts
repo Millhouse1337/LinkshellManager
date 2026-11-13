@@ -14,9 +14,12 @@ import { TodService } from './tod.service';
 import {
   formatError,
   resolveBrowserTimeZone,
+  tagDiscordCommand,
   toLocalInputValueInZone,
   withTimeout
 } from './discord-activity.helpers';
+import { readJsonResponse } from './http-response';
+import { reloadOnceForStaleBuild } from './stale-build';
 import type {
   ActivityAddonPairingCodeResponse,
   ActivityAddonTokenList,
@@ -304,12 +307,16 @@ export class DiscordActivityService {
       this.auth.discordGuildId.set(sdk.guildId ?? null);
 
       this.phase.set('Requesting Discord authorization');
+      // Tagged so formatError can tell a cancelled sign-in from other Discord failures (the
+      // SDK's rejection does not name the command).
       const { code } = await sdk.commands.authorize({
         client_id: this.clientId,
         response_type: 'code',
         prompt: 'none',
         scope: [...this.authorizeScopes],
         state: `linkshell-${Date.now()}`
+      }).catch((error: unknown) => {
+        throw tagDiscordCommand(error, 'AUTHORIZE');
       });
 
       this.phase.set('Exchanging the authorization code');
@@ -343,6 +350,8 @@ export class DiscordActivityService {
       this.status.set('ready');
       this.phase.set('Discord Activity connected');
     } catch (error) {
+      // The SDK's own file can be missing after a deploy (stale page): reload once for it.
+      if (reloadOnceForStaleBuild(error)) return;
       this.setError(formatError(error));
     }
   }
@@ -357,27 +366,7 @@ export class DiscordActivityService {
       body: JSON.stringify({ code })
     });
 
-    const responseText = await response.text();
-    let payload: unknown = {};
-
-    if (responseText) {
-      try {
-        payload = JSON.parse(responseText);
-      } catch {
-        payload = { error: responseText };
-      }
-    }
-
-    if (!response.ok) {
-      const errorPayload = payload as { error?: unknown };
-      const message =
-        typeof errorPayload.error === 'string'
-          ? errorPayload.error
-          : `Discord exchange failed with status ${response.status}.`;
-      throw new Error(message);
-    }
-
-    return payload as DiscordTokenExchangeResponse;
+    return readJsonResponse<DiscordTokenExchangeResponse>(response);
   }
 
   private async fetchLocalUser(accessToken: string): Promise<LocalActivityUser> {
@@ -388,27 +377,7 @@ export class DiscordActivityService {
       cache: 'no-store'
     });
 
-    const responseText = await response.text();
-    let payload: unknown = {};
-
-    if (responseText) {
-      try {
-        payload = JSON.parse(responseText);
-      } catch {
-        payload = { error: responseText };
-      }
-    }
-
-    if (!response.ok) {
-      const errorPayload = payload as { error?: unknown };
-      const message =
-        typeof errorPayload.error === 'string'
-          ? errorPayload.error
-          : `Loading the local app user failed with status ${response.status}.`;
-      throw new Error(message);
-    }
-
-    return payload as LocalActivityUser;
+    return readJsonResponse<LocalActivityUser>(response);
   }
 
   // Website host: ask the server whether this browser is signed in. Signed out → app.html
@@ -759,6 +728,16 @@ export class DiscordActivityService {
     const match = trimmed.match(/^\/?uploads\/(.+)$/);
     if (match) return '/api/activity/uploads/' + match[1];
     return trimmed;
+  }
+
+  // Opens an uploaded file (a ToD screenshot) in a real browser tab. A plain link with
+  // target="_blank" does nothing inside Discord, and a relative path would resolve against
+  // discordsays.com, so the path goes through resolveUploadUrl and becomes absolute first.
+  openUploadInBrowser(path: string | null | undefined): void {
+    const resolved = this.resolveUploadUrl(path);
+    if (!resolved) return;
+    const absolute = /^https?:\/\//i.test(resolved) ? resolved : window.location.origin + resolved;
+    void this.openExternalLink(absolute);
   }
 
   // Opens a URL outside the Discord iframe. The Embedded App SDK exposes

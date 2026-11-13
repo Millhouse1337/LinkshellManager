@@ -81,57 +81,58 @@ export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, mes
   }
 }
 
+// What members see when Discord sign-in (the authorize step) does not finish: most often they
+// pressed Cancel on Discord's prompt. The setup hint for the developer goes to the console.
+export const DISCORD_SIGN_IN_CANCELLED_MESSAGE =
+  'Discord sign-in was cancelled or did not finish. Press Reconnect to Discord to try again.';
+
+const DISCORD_SETUP_HINT =
+  "If sign-in keeps failing, check the Discord Developer Portal: OAuth2 redirects must include https://127.0.0.1 and Activities URL Mapping must point '/' at the current public host.";
+
+// One readable line for any error the app catches: startup, sign-out, Data Admin and the rest.
 export function formatError(error: unknown): string {
+  // Errors first. Our own HTTP client throws a plain Error whose message is the server's
+  // refusal; it has nothing to do with Discord and is shown as it is.
+  if (error instanceof Error) {
+    return error.message || 'An unknown error occurred while loading LinkshellManager.';
+  }
+
+  // A rejected Discord SDK command: a plain object with a numeric code.
   if (isDiscordRpcError(error)) {
-    const rpcMessage = error.data?.message ?? error.message ?? 'Discord RPC call failed.';
+    if (isAuthorizeCommand(error.cmd)) {
+      console.info(DISCORD_SETUP_HINT, error);
+      return DISCORD_SIGN_IN_CANCELLED_MESSAGE;
+    }
+    const rpcMessage = error.data?.message ?? error.message ?? 'No details.';
     const rpcCode = error.data?.code ?? error.code;
-    const cmd = error.cmd ?? 'unknown';
-    const details =
-      rpcCode !== undefined
-        ? `Discord ${cmd.toLowerCase()} failed (${rpcCode}): ${rpcMessage}`
-        : `Discord ${cmd.toLowerCase()} failed: ${rpcMessage}`;
-
-    return withDiscordHint(details, cmd);
+    const action = error.cmd ? `Discord ${error.cmd.toLowerCase()}` : 'A Discord request';
+    return `${action} failed (${rpcCode}): ${rpcMessage}`;
   }
 
-  if (error instanceof Error && error.message) {
-    return withDiscordHint(error.message);
-  }
-
-  return 'An unknown error occurred while initializing the Discord Activity.';
+  return 'An unknown error occurred while loading LinkshellManager.';
 }
 
+// The shape the Discord SDK rejects a command with: a plain object (not an Error) carrying a
+// numeric code, its own or under `data`.
 export function isDiscordRpcError(error: unknown): error is DiscordRpcErrorLike {
-  if (!error || typeof error !== 'object') {
+  if (!error || typeof error !== 'object' || error instanceof Error) {
     return false;
   }
-
   const candidate = error as DiscordRpcErrorLike;
-  // A plain Error (what our own HTTP client throws, e.g. a server's refusal message) has a
-  // `message` too, but none of the RPC fields. Without this check it was dressed up as
-  // "Discord unknown failed: <message>" on screens that have nothing to do with Discord.
-  // The SDK's own errors carry a `code`, so they still count.
-  if (error instanceof Error
-      && candidate.cmd === undefined
-      && candidate.code === undefined
-      && candidate.data === undefined) {
-    return false;
-  }
-  return Boolean(candidate.cmd || candidate.message || candidate.data?.message);
+  return typeof candidate.code === 'number' || typeof candidate.data?.code === 'number';
 }
 
-export function withDiscordHint(message: string, command?: string): string {
-  const normalized = message.toLowerCase();
-  const isAuthorizeFailure =
-    command?.toLowerCase() === 'authorize' ||
-    normalized.includes('authorize') ||
-    normalized.includes('authorization');
-
-  if (!isAuthorizeFailure) {
-    return message;
+// The SDK's rejection does not say which command failed. The caller knows, so it tags the
+// rejection on its way through (used for authorize, so a cancelled sign-in reads as one).
+export function tagDiscordCommand(error: unknown, cmd: string): unknown {
+  if (error && typeof error === 'object' && !(error instanceof Error)) {
+    return { ...(error as object), cmd };
   }
+  return error;
+}
 
-  return `${message} Check Discord Developer Portal OAuth2 redirects for https://127.0.0.1 and confirm Activities URL Mapping points '/' at the current public host.`;
+function isAuthorizeCommand(cmd: string | undefined): boolean {
+  return (cmd ?? '').toLowerCase() === 'authorize';
 }
 
 export function formatActionError(error: unknown, fallback: string): string {

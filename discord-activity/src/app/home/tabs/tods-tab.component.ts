@@ -62,34 +62,12 @@ export class TodsTabComponent {
   // header button and each row's Edit button drive the embedded <app-tod-form
   // #todForm /> directly from the template (openCreate / openEdit).
 
-  // Discord's URL mapping only proxies /api/* through to the backend.
-  // Static uploads at /uploads/tods/... would 404 inside the activity
-  // iframe (discordsays.com origin). Rewrite to the API proxy endpoint
-  // (GET /api/activity/uploads/tods/{file}) so the same image resolves
-  // through Discord's mapping. Paths that don't match are returned
-  // unchanged so external URLs / data URIs still work.
-  protected displayImagePath(path: string | null | undefined): string | null {
-    if (!path) return null;
-    if (path.startsWith('/uploads/tods/')) {
-      return '/api/activity/uploads/tods/' + path.substring('/uploads/tods/'.length);
-    }
-    return path;
-  }
-
-  // Click handler for the ToD screenshot thumbnail. Plain <a target="_blank">
-  // is blocked by Discord's embed sandbox, so route the click through the
-  // Discord SDK's openExternalLink (falls back to window.open outside the
-  // iframe -- e.g. ng serve during dev).
+  // Click handler for the ToD screenshot thumbnail. The image itself is shown through
+  // activity.resolveUploadUrl (the one place that maps /uploads/... onto the /api proxy Discord
+  // forwards); a click opens it in a real browser tab, since target="_blank" is blocked in Discord.
   protected openTodImage(event: Event, path: string | null | undefined): void {
     event.preventDefault();
-    const resolved = this.displayImagePath(path);
-    if (!resolved) return;
-    // Build an absolute URL so Discord's openExternalLink has something to
-    // navigate to (relative paths would resolve against discordsays.com).
-    const absolute = resolved.startsWith('http')
-      ? resolved
-      : window.location.origin + resolved;
-    void this.activity.openExternalLink(absolute);
+    this.activity.openUploadInBrowser(path);
   }
 
   public constructor() {

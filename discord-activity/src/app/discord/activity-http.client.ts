@@ -1,15 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 
 import { AuthService } from './auth.service';
+import { nonJsonMessage, readJsonResponse, withCorrelationId, type ActivityErrorBody } from './http-response';
 
 /**
  * Shared HTTP plumbing for the per-domain Activity services.
  *
- * Bytes copied from the original DiscordActivityService private helpers:
- * - postActivityAction
- * - postActivityJson
- * - fetchActivityJson
- * plus sendActivityRequest, the one path for every POST/PATCH/DELETE.
+ * fetchActivityJson for reads, and sendActivityRequest, the one path for every POST/PATCH/DELETE.
+ * Reading a reply (and turning a non-JSON one into a readable message) is shared with
+ * AuthService and the Discord sign-in calls through http-response.ts.
  *
  * The access token is sourced from AuthService so per-domain services don't
  * have to thread it through every call site.
@@ -33,34 +32,7 @@ export class ActivityHttpClient {
       signal
     });
 
-    const responseText = await response.text();
-    let payload: unknown = {};
-    let parsedJson = false;
-
-    if (responseText) {
-      try {
-        payload = JSON.parse(responseText);
-        parsedJson = true;
-      } catch {
-        // Non-JSON body (HTML 502/login/SPA-fallback page) — do NOT stuff the
-        // raw markup into the error; nonJsonMessage() produces a clean message.
-        parsedJson = false;
-      }
-    }
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        this.auth.noteUnauthorized();
-      }
-      const errorPayload = parsedJson ? (payload as ActivityErrorBody) : null;
-      const message =
-        errorPayload && typeof errorPayload.error === 'string'
-          ? withCorrelationId(errorPayload)
-          : this.nonJsonMessage(response, responseText);
-      throw new Error(message);
-    }
-
-    return payload as T;
+    return readJsonResponse<T>(response, { onUnauthorized: () => this.auth.noteUnauthorized() });
   }
 
   async postActivityAction(path: string, body?: unknown): Promise<void> {
@@ -130,7 +102,7 @@ export class ActivityHttpClient {
         // 2xx but not JSON — almost always an auth redirect followed to an HTML
         // page, or the SPA fallback. Surface a clear message, never a raw
         // "Unexpected token '<'".
-        throw new Error(this.nonJsonMessage(response, responseText));
+        throw new Error(nonJsonMessage(response.status, response.redirected, responseText));
       }
     }
 
@@ -162,7 +134,7 @@ export class ActivityHttpClient {
     if (problem) {
       throw new Error(problem);
     }
-    throw new Error(this.nonJsonMessage(response, responseText));
+    throw new Error(nonJsonMessage(response.status, response.redirected, responseText));
   }
 
   // Flattens an ASP.NET ProblemDetails body into one readable line: every field error
@@ -209,28 +181,6 @@ export class ActivityHttpClient {
       return 'Your session may have expired — reload the Activity and try again.';
     }
     return `Activity request failed with status ${status}.`;
-  }
-
-  // Turns a non-JSON response (HTML login/access-denied page, SPA fallback, a
-  // followed redirect) into a clear, actionable message instead of letting a
-  // raw JSON.parse error or a dumped HTML page reach the UI.
-  private nonJsonMessage(response: Response, text: string): string {
-    // Gateway/availability errors come back as a Cloudflare/origin HTML page.
-    // Report them as a transient server issue, not a session problem.
-    if (response.status === 502 || response.status === 503 || response.status === 504) {
-      return `The server is temporarily unavailable (HTTP ${response.status}). Please try again in a moment.`;
-    }
-    // A server crash is not a login problem. /api crashes now come back as JSON, but an
-    // HTML 500 can still reach us (e.g. a crash before the /api handler runs), and calling
-    // that "session expired" sends people to reload and retry a save that may have half-run.
-    if (response.status >= 500) {
-      return `Something went wrong on the server (HTTP ${response.status}).`;
-    }
-    const looksHtml = /^\s*</.test(text ?? '');
-    if (response.redirected || looksHtml) {
-      return 'Your session may have expired — reload the Activity and try again.';
-    }
-    return `The server returned an unexpected response (status ${response.status}).`;
   }
 
   private getAntiforgeryToken(): Promise<ActivityAntiforgeryToken | null> {
@@ -281,25 +231,6 @@ function isAntiforgeryRejection(responseText: string): boolean {
   } catch {
     return false;
   }
-}
-
-// The server's crash reply (ApiExceptionHandler) carries a correlationId: the same id sits in
-// the server log next to the real exception. Showing it lets a screenshot of the message be
-// matched to that log line. Bodies without one read exactly as before.
-function withCorrelationId(body: ActivityErrorBody): string {
-  const message = body.error ?? '';
-  const id = typeof body.correlationId === 'string' ? body.correlationId.trim() : '';
-  return id ? `${message} (Error id: ${id})` : message;
-}
-
-// Every error-body shape this client knows how to read: the app’s own { error },
-// plus the ProblemDetails ASP.NET emits for model-validation failures.
-interface ActivityErrorBody {
-  error?: string | null;
-  correlationId?: string | null;
-  title?: string | null;
-  detail?: string | null;
-  errors?: Record<string, string[] | string> | null;
 }
 
 interface ActivityAntiforgeryToken {

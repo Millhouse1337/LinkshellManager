@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  DISCORD_SIGN_IN_CANCELLED_MESSAGE,
   datetimeLocalToUtcIso,
   formatActionError,
   formatError,
   isDiscordRpcError,
+  tagDiscordCommand,
   toLocalInputValueInZone,
   withTimeout
 } from './discord-activity.helpers';
@@ -66,37 +68,51 @@ describe('datetimeLocalToUtcIso', () => {
 });
 
 describe('formatError', () => {
-  it('describes a Discord RPC error with its command and code', () => {
-    const error = { cmd: 'SUBSCRIBE', data: { code: 4006, message: 'Not allowed' } };
-    expect(formatError(error)).toBe('Discord subscribe failed (4006): Not allowed');
-  });
-
-  it('leaves the code out when there is none', () => {
-    expect(formatError({ cmd: 'SUBSCRIBE', message: 'Nope' })).toBe('Discord subscribe failed: Nope');
-    expect(formatError({ data: { message: 'Lost' } })).toBe('Discord unknown failed: Lost');
-  });
-
-  it('adds the OAuth hint to an authorize failure', () => {
-    const text = formatError({ cmd: 'AUTHORIZE', code: 5000, message: 'Denied' });
-    expect(text.startsWith('Discord authorize failed (5000): Denied ')).toBe(true);
-    expect(text).toContain('OAuth2 redirects');
-  });
-
-  it('treats the SDK error class (an Error with a code) as a Discord error', () => {
-    const sdkError = Object.assign(new Error('Socket closed'), { code: 1006 });
-    expect(formatError(sdkError)).toBe('Discord unknown failed (1006): Socket closed');
-  });
-
-  it('shows a plain Error (our own HTTP client) as just its message', () => {
+  it('shows an Error (our own HTTP client, a server refusal) as just its message', () => {
     expect(formatError(new Error('You do not have permission to edit this table.')))
       .toBe('You do not have permission to edit this table.');
     expect(isDiscordRpcError(new Error('x'))).toBe(false);
   });
 
+  it('never calls an Error a Discord failure, even one carrying a code', () => {
+    const sdkError = Object.assign(new Error('Socket closed'), { code: 1006 });
+    expect(formatError(sdkError)).toBe('Socket closed');
+    expect(formatError(new Error('Authorization header missing'))).toBe('Authorization header missing');
+  });
+
+  it('describes a rejected Discord command (a plain object with a numeric code)', () => {
+    const error = { cmd: 'SUBSCRIBE', data: { code: 4006, message: 'Not allowed' } };
+    expect(formatError(error)).toBe('Discord subscribe failed (4006): Not allowed');
+    expect(formatError({ code: 4000, message: 'Bad payload' })).toBe('A Discord request failed (4000): Bad payload');
+  });
+
+  it('does not treat an object without a numeric code as a Discord error', () => {
+    expect(isDiscordRpcError({ cmd: 'SUBSCRIBE', message: 'Nope' })).toBe(false);
+    expect(formatError({ message: 'Lost' })).toBe('An unknown error occurred while loading LinkshellManager.');
+  });
+
+  it('shows members a friendly message for a cancelled sign-in and keeps the setup hint in the console', () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    try {
+      const rejection = tagDiscordCommand({ code: 5000, message: 'User cancelled' }, 'AUTHORIZE');
+      expect(formatError(rejection)).toBe(DISCORD_SIGN_IN_CANCELLED_MESSAGE);
+      expect(DISCORD_SIGN_IN_CANCELLED_MESSAGE).not.toContain('Developer Portal');
+      expect(String(info.mock.calls[0]?.[0])).toContain('Developer Portal');
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  it('leaves an Error untouched when tagging a command', () => {
+    const error = new Error('x');
+    expect(tagDiscordCommand(error, 'AUTHORIZE')).toBe(error);
+  });
+
   it('falls back to a generic message for anything else', () => {
-    expect(formatError(undefined)).toBe('An unknown error occurred while initializing the Discord Activity.');
-    expect(formatError('boom')).toBe('An unknown error occurred while initializing the Discord Activity.');
-    expect(formatError(new Error(''))).toBe('An unknown error occurred while initializing the Discord Activity.');
+    const generic = 'An unknown error occurred while loading LinkshellManager.';
+    expect(formatError(undefined)).toBe(generic);
+    expect(formatError('boom')).toBe(generic);
+    expect(formatError(new Error(''))).toBe(generic);
   });
 });
 

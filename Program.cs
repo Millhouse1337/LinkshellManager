@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using NodaTime;
@@ -704,13 +705,28 @@ app.UseStaticFiles();
 var activityPhysicalPath = Path.Combine(app.Environment.WebRootPath, "discord-activity", "browser");
 if (Directory.Exists(activityPhysicalPath))
 {
+    // Hashed scripts/styles are cached for a year, index.html is re-checked on every load, so a
+    // deploy never leaves a browser asking for files the new build no longer has (ActivitySpaCaching).
+    static void ApplyActivityCaching(StaticFileResponseContext context)
+    {
+        var cacheControl = ActivitySpaCaching.CacheControlFor(context.File.Name);
+        if (cacheControl is not null)
+        {
+            context.Context.Response.Headers.CacheControl = cacheControl;
+        }
+    }
+
     app.UseStaticFiles(new StaticFileOptions
     {
         FileProvider = new PhysicalFileProvider(activityPhysicalPath),
-        RequestPath = "/discord-activity"
+        RequestPath = "/discord-activity",
+        OnPrepareResponse = ApplyActivityCaching
     });
 
-    app.MapFallbackToFile("/discord-activity/{*path}", "discord-activity/browser/index.html");
+    // ":nonfile" keeps a missing file (an old chunk-XXXX.js after a deploy) a real 404, instead of
+    // answering it with index.html, which the browser then fails to run as a script.
+    app.MapFallbackToFile("/discord-activity/{*path:nonfile}", "discord-activity/browser/index.html",
+        new StaticFileOptions { OnPrepareResponse = ApplyActivityCaching });
 }
 
 // The stock ASP.NET Identity pages (ExternalLogin, Manage/*, ...) answer 404 for every method,

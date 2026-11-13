@@ -6,6 +6,7 @@ import type {
   LocalActivityUser,
   WebSession
 } from './discord-activity.types';
+import { readJsonResponse } from './http-response';
 import { ResponseOrder } from './refresh-order';
 
 /**
@@ -99,8 +100,8 @@ export class AuthService {
     return this.fetchActivityJson<ActivityOverview>('/api/activity/overview', accessToken);
   }
 
-  // Inlined fetch helper, kept private to avoid a circular dependency on
-  // ActivityHttpClient (which itself depends on AuthService for the token).
+  // Its own fetch rather than ActivityHttpClient's, to avoid a circular dependency
+  // (ActivityHttpClient depends on AuthService for the token).
   private async fetchActivityJson<T>(path: string, accessToken?: string): Promise<T> {
     const headers: Record<string, string> = { ...this.guildHeaders() };
     if (accessToken) {
@@ -113,29 +114,7 @@ export class AuthService {
       credentials: 'include'
     });
 
-    const responseText = await response.text();
-    let payload: unknown = {};
-
-    if (responseText) {
-      try {
-        payload = JSON.parse(responseText);
-      } catch {
-        payload = { error: responseText };
-      }
-    }
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        this.noteUnauthorized();
-      }
-      const errorPayload = payload as { error?: unknown };
-      const message =
-        typeof errorPayload.error === 'string'
-          ? errorPayload.error
-          : `Loading linkshell activity data failed with status ${response.status}.`;
-      throw new Error(message);
-    }
-
-    return payload as T;
+    // Shared with ActivityHttpClient, so an HTML error page never lands in the banner as markup.
+    return readJsonResponse<T>(response, { onUnauthorized: () => this.noteUnauthorized() });
   }
 }

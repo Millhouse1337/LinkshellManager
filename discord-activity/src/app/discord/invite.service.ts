@@ -41,42 +41,12 @@ export class InviteService {
     this.auth.setActionError(null);
 
     try {
-      const headers: Record<string, string> = {};
-      const accessToken = this.auth.currentAccessToken();
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
-
-      const response = await fetch(
-        `/api/activity/players/search?query=${encodeURIComponent(query.trim())}&linkshellId=${linkshellId}`,
-        {
-          headers,
-          cache: 'no-store',
-          credentials: 'include'
-        }
+      // Through the shared client: it sends the guild header too, and never shows an HTML error
+      // page as the message.
+      const results = await this.http.fetchActivityJson<ActivityUserSearchResult[]>(
+        `/api/activity/players/search?query=${encodeURIComponent(query.trim())}&linkshellId=${linkshellId}`
       );
-
-      const responseText = await response.text();
-      let payload: unknown = [];
-
-      if (responseText) {
-        try {
-          payload = JSON.parse(responseText);
-        } catch {
-          payload = { error: responseText };
-        }
-      }
-
-      if (!response.ok) {
-        const errorPayload = payload as { error?: unknown };
-        throw new Error(
-          typeof errorPayload.error === 'string'
-            ? errorPayload.error
-            : `Searching players failed with status ${response.status}.`
-        );
-      }
-
-      this.inviteSearchResults.set(payload as ActivityUserSearchResult[]);
+      this.inviteSearchResults.set(Array.isArray(results) ? results : []);
     } catch (error) {
       this.inviteSearchResults.set([]);
       this.auth.setActionError(formatActionError(error, 'Searching players failed.'));
@@ -191,42 +161,10 @@ export class InviteService {
     this.auth.setActionError(null);
 
     try {
-      const headers: Record<string, string> = {};
-      const accessToken = this.auth.currentAccessToken();
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
-      }
-
-      const response = await fetch(
-        `/api/activity/linkshells/search?query=${encodeURIComponent(query.trim())}`,
-        {
-          headers,
-          cache: 'no-store',
-          credentials: 'include'
-        }
+      const results = await this.http.fetchActivityJson<ActivityLinkshellSearchResult[]>(
+        `/api/activity/linkshells/search?query=${encodeURIComponent(query.trim())}`
       );
-
-      const responseText = await response.text();
-      let payload: unknown = [];
-
-      if (responseText) {
-        try {
-          payload = JSON.parse(responseText);
-        } catch {
-          payload = { error: responseText };
-        }
-      }
-
-      if (!response.ok) {
-        const errorPayload = payload as { error?: unknown };
-        throw new Error(
-          typeof errorPayload.error === 'string'
-            ? errorPayload.error
-            : `Searching linkshells failed with status ${response.status}.`
-        );
-      }
-
-      this.linkshellSearchResults.set(payload as ActivityLinkshellSearchResult[]);
+      this.linkshellSearchResults.set(Array.isArray(results) ? results : []);
     } catch (error) {
       this.linkshellSearchResults.set([]);
       this.auth.setActionError(formatActionError(error, 'Searching linkshells failed.'));

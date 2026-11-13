@@ -67,7 +67,7 @@
                    href="#"
                    (click)="openTodImage($event, group.latest.imagePath)"
                    rel="noopener">
-                  <img [src]="displayImagePath(group.latest.imagePath)" alt="ToD screenshot" />
+                  <img [src]="activity.resolveUploadUrl(group.latest.imagePath)" alt="ToD screenshot" />
                 </a>
               }
               <div class="tod-row-actions">

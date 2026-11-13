@@ -70,7 +70,9 @@
             </div>
 
             @if (tod.imagePath) {
-              <a class="muted" [href]="activity.resolveUploadUrl(tod.imagePath)" target="_blank" rel="noopener">View the submitted screenshot</a>
+              <!-- openUploadInBrowser, not target="_blank": Discord blocks new tabs from the iframe. -->
+              <a class="muted" [href]="activity.resolveUploadUrl(tod.imagePath)" rel="noopener"
+                 (click)="$event.preventDefault(); activity.openUploadInBrowser(tod.imagePath)">View the submitted screenshot</a>
             }
 
             <div style="display:flex;gap:8px;flex-wrap:wrap">
