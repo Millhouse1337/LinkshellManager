@@ -448,7 +448,8 @@ public sealed partial class ActivityWindowEventsController
     }
 
     // What Save keeps from the card: DKP + Entry Type, per-character and per-capture amounts, and
-    // the Misc rate. Stages only; the caller saves.
+    // the Misc rate. Stages only; the caller saves. Save, Send to Review, Post and Edit Posted all
+    // use it, so the four cannot drift apart.
     private async Task ApplyDkpDraftAsync(
         WindowEvent windowEvent, ActivityWindowEventDkpRequest request, CancellationToken cancellationToken)
     {
@@ -524,33 +525,7 @@ public sealed partial class ActivityWindowEventsController
         }
         if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
 
-        // Both fields are gone from the UI; keep whatever the event already carries when the
-        // client omits them — see WindowEventDkp.Resolve / WindowEventEntryTypes.Resolve.
-        var resolvedDkp = WindowEventDkp.Resolve(request.DkpAmount, windowEvent.Value.DkpAmount);
-        windowEvent.Value.DkpAmount = resolvedDkp;
-        windowEvent.Value.EntryType = WindowEventEntryTypes.Resolve(
-            request.EntryType, windowEvent.Value.EntryType, windowEvent.Value.Name);
-        ApplyActivityMemberDkpOverrides(windowEvent.Value, resolvedDkp, request.MemberDkp);
-        ApplyActivityCaptureDkp(windowEvent.Value, request.CaptureDkp);
-        // Resolved BEFORE the assignment, or the stored-value fallback would read the value we are
-        // about to overwrite and a save carrying no misc field would silently reset it.
-        var resolvedMisc = WindowEventDkp.ResolveMisc(
-            request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount,
-            await MiscPostRateAsync(windowEvent.Value.LinkshellId, cancellationToken) ?? resolvedDkp);
-        windowEvent.Value.MiscDkpAmount = request.MiscDkpAmount;
-        // Skipped on a card that prices its captures: the Misc rate materializes itself as
-        // per-member override rows, and those are not what such a card is paid from.
-        if (!windowEvent.Value.PerCaptureDkp)
-        {
-            WindowEventMiscDkp.ApplyMiscOverrides(
-                windowEvent.Value, resolvedDkp, resolvedMisc,
-                WindowEventMiscDkp.SubmittedNames(
-                    request.MemberDkp?.Select(m => new ViewModels.WindowEventMemberDkpInput
-                    {
-                        CharacterName = m.CharacterName,
-                        DkpAmount = m.DkpAmount,
-                    })));
-        }
+        await ApplyDkpDraftAsync(windowEvent.Value, request, cancellationToken);
         // Marks the card posted (with the draft above) and pays it, in one step that only one
         // request can win. The check at the top is only a fast answer: two Posts at the same moment
         // both pass it, and the loser is caught here.
@@ -601,33 +576,7 @@ public sealed partial class ActivityWindowEventsController
         }
         if (ValidateWindowEventDkp(request) is { } error) return BadRequest(new { error });
 
-        // Both fields are gone from the UI; keep whatever the event already carries when the
-        // client omits them — see WindowEventDkp.Resolve / WindowEventEntryTypes.Resolve.
-        var resolvedDkp = WindowEventDkp.Resolve(request.DkpAmount, windowEvent.Value.DkpAmount);
-        windowEvent.Value.DkpAmount = resolvedDkp;
-        windowEvent.Value.EntryType = WindowEventEntryTypes.Resolve(
-            request.EntryType, windowEvent.Value.EntryType, windowEvent.Value.Name);
-        ApplyActivityMemberDkpOverrides(windowEvent.Value, resolvedDkp, request.MemberDkp);
-        ApplyActivityCaptureDkp(windowEvent.Value, request.CaptureDkp);
-        // Resolved BEFORE the assignment, or the stored-value fallback would read the value we are
-        // about to overwrite and a save carrying no misc field would silently reset it.
-        var resolvedMisc = WindowEventDkp.ResolveMisc(
-            request.MiscDkpAmount, windowEvent.Value.MiscDkpAmount,
-            await MiscPostRateAsync(windowEvent.Value.LinkshellId, cancellationToken) ?? resolvedDkp);
-        windowEvent.Value.MiscDkpAmount = request.MiscDkpAmount;
-        // Skipped on a card that prices its captures: the Misc rate materializes itself as
-        // per-member override rows, and those are not what such a card is paid from.
-        if (!windowEvent.Value.PerCaptureDkp)
-        {
-            WindowEventMiscDkp.ApplyMiscOverrides(
-                windowEvent.Value, resolvedDkp, resolvedMisc,
-                WindowEventMiscDkp.SubmittedNames(
-                    request.MemberDkp?.Select(m => new ViewModels.WindowEventMemberDkpInput
-                    {
-                        CharacterName = m.CharacterName,
-                        DkpAmount = m.DkpAmount,
-                    })));
-        }
+        await ApplyDkpDraftAsync(windowEvent.Value, request, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _windowEventDkpLedger.ReconcilePostedWindowEventLedgerAsync(windowEvent.Value.Id, cancellationToken);
