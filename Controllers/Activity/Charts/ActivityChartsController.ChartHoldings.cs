@@ -9,7 +9,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // one more thing to keep in step. Treasury lists them so the linkshell's stash reads as one list.
 //
 // Same read rule as the boards themselves (GetChartBoardAsync): any member.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityChartsController
 {
     [HttpGet("linkshells/{linkshellId:int}/chart-holdings")]
     public async Task<IActionResult> GetChartHoldingsAsync(int linkshellId, CancellationToken cancellationToken)

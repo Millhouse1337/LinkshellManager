@@ -13,7 +13,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // Leader/Officer rank. That is the bug GrantTreasuryToOfficersWhoUsedIt exists to document.
 //
 // Every derived number (the per-boss totals) comes from ChartBoardService. Nothing on a board is stored twice.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityChartsController
 {
     [HttpGet("linkshells/{linkshellId:int}/charts/{board}")]
     public async Task<IActionResult> GetChartBoardAsync(

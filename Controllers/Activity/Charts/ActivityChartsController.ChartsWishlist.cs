@@ -21,7 +21,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // There is no GET. A board's requests ride in the existing GET .../charts/{board} payload, for the
 // reason the ledger already does: a card's badge and the list below it are two views of one set of
 // rows, and fetching them apart is what lets a badge disagree with the list under it.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityChartsController
 {
     [HttpPost("linkshells/{linkshellId:int}/charts/{board}/wishlist")]
     public async Task<IActionResult> AddChartWishlistRequestAsync(

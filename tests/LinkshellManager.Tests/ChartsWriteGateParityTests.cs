@@ -27,7 +27,7 @@ public class ChartsWriteGateParityTests
     [Fact]
     public void TheActivityExposesAMemberLevelGate()
     {
-        Assert.NotNull(Method(typeof(ActivityDataController), "AuthorizeChartsMemberAsync"));
+        Assert.NotNull(Method(typeof(ActivityChartsController), "AuthorizeChartsMemberAsync"));
     }
 
     // The OFFICER gate must stay a separate thing: a member gate that quietly returned true for
@@ -35,7 +35,7 @@ public class ChartsWriteGateParityTests
     [Fact]
     public void TheActivityStillExposesTheOfficerGate()
     {
-        Assert.NotNull(Method(typeof(ActivityDataController), "AuthorizeChartsWriteAsync"));
+        Assert.NotNull(Method(typeof(ActivityChartsController), "AuthorizeChartsWriteAsync"));
     }
 
     /// <summary>
@@ -71,7 +71,7 @@ public class ChartsWriteGateParityTests
 
         // Exactly the one write path. A second would be a copy; a missing one would be an ungated
         // endpoint.
-        Assert.Equal(new[] { "ActivityDataController.ChartsKeyItems.cs" }, callers);
+        Assert.Equal(new[] { "ActivityChartsController.ChartsKeyItems.cs" }, callers);
     }
 
     /// <summary>
@@ -86,7 +86,7 @@ public class ChartsWriteGateParityTests
             .Select(source => Path.GetFileName(source.File))
             .ToList();
 
-        Assert.Equal(new[] { "ActivityDataController.ChartsWishlist.cs" }, callers);
+        Assert.Equal(new[] { "ActivityChartsController.ChartsWishlist.cs" }, callers);
     }
 
     private static MethodInfo? Method(Type type, string name) =>

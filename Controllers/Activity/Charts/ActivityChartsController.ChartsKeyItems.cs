@@ -11,7 +11,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 //
 // No GET here either - the grid rides in the existing GET .../charts/{board} payload alongside the
 // per-card counts derived from the same rows.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityChartsController
 {
     [HttpPost("linkshells/{linkshellId:int}/charts/{board}/keyitems")]
     public async Task<IActionResult> SetChartKeyItemAsync(

@@ -25,9 +25,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
     private readonly MemberActivityService _memberActivity;
     private readonly ChannelRouteEditor _channelRoutes;
     private readonly ItemSaleRecorder _itemSales;
-    private readonly ChartBoardService _chartBoards;
-    private readonly ChartWishlistService _chartWishlist;
-    private readonly ChartKeyItemService _chartKeyItems;
     private readonly MonsterTimingResolver _monsterTimings;
 
     public ActivityDataController(
@@ -41,9 +38,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         MemberActivityService memberActivity,
         ChannelRouteEditor channelRoutes,
         ItemSaleRecorder itemSales,
-        ChartBoardService chartBoards,
-        ChartWishlistService chartWishlist,
-        ChartKeyItemService chartKeyItems,
         MonsterTimingResolver monsterTimings,
         LinkshellPermissions permissions)
         : base(dbContext, discordIdentityService, userManager, logger, permissions)
@@ -54,9 +48,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         _memberActivity = memberActivity;
         _channelRoutes = channelRoutes;
         _itemSales = itemSales;
-        _chartBoards = chartBoards;
-        _chartWishlist = chartWishlist;
-        _chartKeyItems = chartKeyItems;
         _monsterTimings = monsterTimings;
     }
 
