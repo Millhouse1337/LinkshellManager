@@ -45,7 +45,7 @@ public class EndEventOnePathTests
 
     // The app's controller with only what End Event touches: the database, the ledger, the pools,
     // the permission check, the activity recompute, and a signed-in officer.
-    private static ActivityDataController NewActivityController(ApplicationDbContext db)
+    private static ActivityEventsController NewActivityController(ApplicationDbContext db)
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -63,7 +63,7 @@ public class EndEventOnePathTests
             User = new ClaimsPrincipal(new ClaimsIdentity(
                 new[] { new Claim(ClaimTypes.NameIdentifier, Officer) }, authenticationType: "Test")),
         };
-        return ActivityControllerFactory.Create<ActivityDataController>(
+        return ActivityControllerFactory.Create<ActivityEventsController>(
             http, db, userManager, new MemberActivityService(db),
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
             TestPermissions.For(db));
@@ -342,7 +342,7 @@ public class EndEventOnePathTests
     [Fact]
     public void TheAppsEndEvent_HasNoCloseLoopOfItsOwn()
     {
-        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "Controllers", "ActivityDataController.EventsLifecycle.cs"));
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "Controllers", "Activity", "Events", "ActivityEventsController.EventsLifecycle.cs"));
 
         Assert.Contains("EventEndService.EndEventCoreAsync(", source, StringComparison.Ordinal);
         Assert.Contains("EventEndService.EndEventOptions.Activity", source, StringComparison.Ordinal);

@@ -188,7 +188,7 @@ public class BreakReturnDenialTests
     {
         await using var db = await SeededAsync();
 
-        var result = await TodCallers.App(db).DenyReturnAsync(
+        var result = await TodCallers.App<ActivityEventsController>(db).DenyReturnAsync(
             10, new ActivityVerifyReturnRequest(2), CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result);

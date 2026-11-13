@@ -11,7 +11,7 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityEventsController
 {
     [HttpPost("events/{eventId:int}/break")]
     public async Task<IActionResult> TakeBreakAsync(int eventId, CancellationToken cancellationToken)
@@ -371,7 +371,7 @@ public sealed partial class ActivityDataController
     //
     // INVARIANT: this is the only helper that writes IsOnBreak = true, and it has TWO entry
     // points -- TakeBreakAsync/ForceBreakAsync above, and UnsignAsync in
-    // ActivityDataController.EventsParticipation.cs. BOTH must reject
+    // ActivityEventsController.EventsParticipation.cs. BOTH must reject
     // EventBreakPolicy.IsWindowedAttendance before calling, and any new caller must carry the
     // same guard. BreakReturnDenial also re-parks a member (on Deny) and carries the guard inside.
     // A windowed camp credits per posted window, so there is no clock to pause -- and a parked member vanishes from the addon roster with no surface able to bring them back.

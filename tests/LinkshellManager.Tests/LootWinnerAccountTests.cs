@@ -195,7 +195,7 @@ public class LootWinnerAccountTests
     public void LiveCardAddLoot_RefusesUnknownWinners_AndRecordsTheAccount()
     {
         var source = File.ReadAllText(Path.Combine(
-            FindRepoRoot(), "Controllers", "ActivityDataController.EventsParticipation.cs"));
+            FindRepoRoot(), "Controllers", "Activity", "Events", "ActivityEventsController.EventsParticipation.cs"));
         var start = source.IndexOf("public async Task<IActionResult> AddLootAsync(", StringComparison.Ordinal);
         Assert.True(start >= 0, "AddLootAsync not found -- did it move?");
         var body = source[start..];

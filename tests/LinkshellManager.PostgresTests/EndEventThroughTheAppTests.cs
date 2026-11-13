@@ -39,7 +39,7 @@ public class EndEventThroughTheAppTests : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     // The app's controller with only what End Event touches, and a signed-in officer.
-    private static ActivityDataController NewActivityController(ApplicationDbContext db)
+    private static ActivityEventsController NewActivityController(ApplicationDbContext db)
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -60,7 +60,7 @@ public class EndEventThroughTheAppTests : IAsyncLifetime
             User = new ClaimsPrincipal(new ClaimsIdentity(
                 new[] { new Claim(ClaimTypes.NameIdentifier, Officer) }, authenticationType: "Test")),
         };
-        return ActivityControllerFactory.Create<ActivityDataController>(
+        return ActivityControllerFactory.Create<ActivityEventsController>(
             http, db, userManager, new MemberActivityService(db),
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
             permissions);

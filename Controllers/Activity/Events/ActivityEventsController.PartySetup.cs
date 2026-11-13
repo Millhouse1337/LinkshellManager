@@ -11,9 +11,9 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // lives inside the ToD Tracker. VIEW is open to any linkshell member;
 // create/edit/delete/assign require the CanManageParties role flag. A setup is a
 // reusable template: members sign up on an EVENT's board
-// (ActivityDataController.EventPartyBoard), never on the template itself, so the
+// (ActivityEventsController.EventPartyBoard), never on the template itself, so the
 // roster officers and the Discord board see is the only roster there is.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityEventsController
 {
     private static readonly HashSet<string> PartySetupValidRoles =
         new(EventJobCatalog.JobTypeOptions, StringComparer.OrdinalIgnoreCase);

@@ -17,7 +17,7 @@ public class PartySetupTemplateViewOnlyTests
     [Fact]
     public void Template_has_no_signup_or_withdraw_endpoint()
     {
-        var templates = typeof(ActivityDataController)
+        var templates = typeof(ActivityEventsController)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .SelectMany(m => m.GetCustomAttributes<HttpPostAttribute>())
             .Select(a => a.Template ?? string.Empty)
@@ -36,7 +36,7 @@ public class PartySetupTemplateViewOnlyTests
         await db.SaveChangesAsync();
         var setupId = db.PartySetups.Single().Id;
 
-        var result = await TodCallers.App(db).GetPartySetupAsync(setupId, CancellationToken.None);
+        var result = await TodCallers.App<ActivityEventsController>(db).GetPartySetupAsync(setupId, CancellationToken.None);
 
         var json = JsonSerializer.SerializeToElement(
             Assert.IsType<OkObjectResult>(result).Value,

@@ -12,7 +12,7 @@ public class EventSignupStartTimeTests
 {
     private static readonly DateTime Now = new(2026, 11, 11, 20, 0, 0, DateTimeKind.Utc);
 
-    private static AppUserEvent Row(DateTime? commencedAt) => ActivityDataController.NewSignupRow(
+    private static AppUserEvent Row(DateTime? commencedAt) => ActivityEventsController.NewSignupRow(
         "user-1",
         new Event { Id = 42, LinkshellId = 7, EventName = "Sky", CommencementStartTime = commencedAt },
         "Mainchar",

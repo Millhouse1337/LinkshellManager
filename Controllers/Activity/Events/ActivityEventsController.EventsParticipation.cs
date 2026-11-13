@@ -11,10 +11,10 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityEventsController
 {
     // Ad-hoc event signup. Slot-level claiming lives on the event's party board
-    // (see ActivityDataController.EventPartyBoard.cs).
+    // (see ActivityEventsController.EventPartyBoard.cs).
     [HttpPost("events/{eventId:int}/signup")]
     public async Task<IActionResult> SignUpAsync(int eventId, [FromBody] ActivityEventSignupRequest request, CancellationToken cancellationToken)
     {

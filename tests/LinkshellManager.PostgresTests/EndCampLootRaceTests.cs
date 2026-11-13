@@ -180,7 +180,7 @@ public class EndCampLootRaceTests : IAsyncLifetime
     }
 
     // The app's controller with only what Add loot touches, and a signed-in Leader.
-    private static ActivityDataController NewActivityController(ApplicationDbContext db)
+    private static ActivityEventsController NewActivityController(ApplicationDbContext db)
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -201,7 +201,7 @@ public class EndCampLootRaceTests : IAsyncLifetime
             User = new ClaimsPrincipal(new ClaimsIdentity(
                 new[] { new Claim(ClaimTypes.NameIdentifier, Officer) }, authenticationType: "Test")),
         };
-        return ActivityControllerFactory.Create<ActivityDataController>(
+        return ActivityControllerFactory.Create<ActivityEventsController>(
             http, db, userManager, new MemberActivityService(db),
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
             new DkpPoolBalanceService(db, pools),

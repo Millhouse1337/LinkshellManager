@@ -11,7 +11,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // sync with the Discord board. Reuses the same
 // ActivityPartySetupDetailDto shape as the template board so the Angular panel
 // renders it unchanged.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityEventsController
 {
     [HttpGet("events/{eventId:int}/party-board")]
     public async Task<IActionResult> GetEventPartyBoardAsync(int eventId, CancellationToken cancellationToken)

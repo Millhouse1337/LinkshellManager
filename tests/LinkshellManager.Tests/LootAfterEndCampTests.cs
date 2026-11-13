@@ -369,12 +369,12 @@ public class LootAfterEndCampTests
     }
 
     // The live card's own Add loot (POST api/activity/events/{id}/loot) needs a signed-in HTTP
-    // context, so its guard is pinned by source like the other ActivityDataController routes. A
+    // context, so its guard is pinned by source like the other Activity routes. A
     // stale card open across End Camp must not drop uncharged loot on the parked board.
     [Fact]
     public void LiveCardAddLoot_RefusesAnEventThatIsNotRunning()
     {
-        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "ActivityDataController.EventsParticipation.cs"));
+        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "Activity", "Events", "ActivityEventsController.EventsParticipation.cs"));
         var from = text.IndexOf("public async Task<IActionResult> AddLootAsync(", StringComparison.Ordinal);
         var add = text.IndexOf("_dbContext.EventLootDetails.Add(", from, StringComparison.Ordinal);
         Assert.True(from >= 0 && add > from, "AddLootAsync not found.");

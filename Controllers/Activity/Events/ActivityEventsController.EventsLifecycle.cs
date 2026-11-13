@@ -11,7 +11,7 @@ using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+public sealed partial class ActivityEventsController
 {
     // How long after a create a second, byte-identical create is read as a retry rather than as a
     // second event somebody meant. Wide enough to cover a proxy retry of a slow request, far short

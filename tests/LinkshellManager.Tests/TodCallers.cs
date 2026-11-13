@@ -77,7 +77,10 @@ internal static class TodCallers
 
     // ---- the app's Log ToD (POST /api/activity/tods) ----
 
-    internal static ActivityDataController App(ApplicationDbContext db)
+    internal static ActivityDataController App(ApplicationDbContext db) => App<ActivityDataController>(db);
+
+    // The same signed-in member and services, on whichever Activity controller a test calls.
+    internal static T App<T>(ApplicationDbContext db) where T : ControllerBase
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -98,7 +101,7 @@ internal static class TodCallers
         var timeZones = new TimeZoneConversionService(
             DateTimeZoneProviders.Tzdb, NullLogger<TimeZoneConversionService>.Instance);
 
-        return ActivityControllerFactory.Create<ActivityDataController>(
+        return ActivityControllerFactory.Create<T>(
             http, db, userManager, timeZones, new MonsterTimingResolver(db), TestPermissions.For(db));
     }
 

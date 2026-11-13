@@ -8,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // Post-event discussion for the Activity: any member can read + comment (with an
 // anonymous option); the author or an officer (CanManageEvents) can delete. New
 // comments mirror to the linkshell's discussion Discord channel when configured.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityEventsController
 {
     [HttpGet("event-history/{id:int}/comments")]
     public async Task<IActionResult> GetEventCommentsAsync(int id, CancellationToken cancellationToken)
