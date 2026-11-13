@@ -118,6 +118,20 @@ public class AddonLootPermissionTests
         Assert.DoesNotContain("{availableDkp", body);
     }
 
+    // The addon hides its Loot Pool Save from someone the server would refuse, so /me has to
+    // answer with the SAME rule the loot routes use -- not canModerate, which misses Add loot.
+    [Fact]
+    public void Me_SendsCanPostLoot_FromTheLootRule()
+    {
+        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "AddonApiController.AddonAuth.cs"));
+        var from = text.IndexOf("public async Task<IActionResult> MeAsync(", StringComparison.Ordinal);
+        Assert.True(from >= 0, "MeAsync not found.");
+        var body = text[from..];
+
+        Assert.Contains("var canPostLoot = await TokenIssuerCanAsync(token, token.LinkshellId, PostsAddonLoot", body);
+        Assert.Contains("canPostLoot,", body);
+    }
+
     // ---- RecordedByAppUserId.
 
     [Fact]

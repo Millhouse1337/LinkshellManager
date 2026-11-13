@@ -88,6 +88,9 @@ public sealed partial class AddonApiController
         }
 
         var canModerate = await TokenIssuerCanModerateAsync(token, token.LinkshellId, cancellationToken);
+        // The same rule the loot routes enforce, so the addon can hide its Loot Pool Save from
+        // someone the server would refuse. Not canModerate: Add loot on its own is enough.
+        var canPostLoot = await TokenIssuerCanAsync(token, token.LinkshellId, PostsAddonLoot, cancellationToken);
 
         var claimShieldGloballyDisabled = await _globalSettings.IsClaimShieldGloballyDisabledAsync(cancellationToken);
         var claimShieldDisabled = claimShieldGloballyDisabled
@@ -110,6 +113,9 @@ public sealed partial class AddonApiController
             issuedToCharacterName,
             issuedToAppUserId = token.IssuedToAppUserId,
             canModerateLiveEvent = canModerate,
+            // May this token post loot (Add loot, or the addon's officer right)? Older addons
+            // ignore it; newer ones hide the Loot Pool's Save button without it.
+            canPostLoot,
             // Manual Check In HNM attendance mode (Standard | Wd). In Manual Check In mode, HNM attendance
             // is Discord-button-driven (self-serve x-in), so the addon can hide its
             // leader-driven "post window" UI. Normalized; fail-closed to Standard.
