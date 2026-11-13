@@ -44,29 +44,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
-builder.Services
-    .AddDefaultIdentity<AppUser>(options =>
-    {
-        options.SignIn.RequireConfirmedAccount = false;
-
-        // AddDefaultIdentity already uses 128; spelled out so the model never drifts from the
-        // migrations (see ApplicationDbContext.IdentityKeyMaxLength for why that stops startup).
-        options.Stores.MaxLengthForKeys = ApplicationDbContext.IdentityKeyMaxLength;
-
-        // Make the password/lockout policy explicit rather than relying on
-        // framework defaults (6 chars, no lockout). Discord OAuth is the primary
-        // identity provider, so this only governs any local password accounts.
-        options.Password.RequiredLength = 10;
-        options.Password.RequireDigit = true;
-        options.Password.RequireLowercase = true;
-        options.Password.RequireUppercase = true;
-        options.Password.RequireNonAlphanumeric = false;
-
-        options.Lockout.MaxFailedAccessAttempts = 5;
-        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
-        options.Lockout.AllowedForNewUsers = true;
-    })
-    .AddEntityFrameworkStores<ApplicationDbContext>();
+// Identity without the stock UI pages (and so without passwords): see AppIdentityRegistration.
+builder.Services.AddAppIdentity();
 
 var discordClientId = builder.Configuration["Discord:ClientId"]
     ?? throw new InvalidOperationException("Configuration value 'Discord:ClientId' is required.");
@@ -116,6 +95,14 @@ builder.Services
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
+    // The stock Identity UI used to set these three paths; they stay the same without it.
+    // Login is our own page. AccessDenied is our own small page, reached only when a non-/api
+    // request is refused. Nothing redirects to Logout (sign-out is POST /api/web/sign-out), so
+    // it has no page; the cookie only uses it to read a returnUrl when signing out from there.
+    options.LoginPath = "/Identity/Account/Login";
+    options.LogoutPath = "/Identity/Account/Logout";
+    options.AccessDeniedPath = "/Identity/Account/AccessDenied";
+
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.None;
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
@@ -731,19 +718,6 @@ if (Directory.Exists(activityPhysicalPath))
     app.MapFallbackToFile("/discord-activity/{*path:nonfile}", "discord-activity/browser/index.html",
         new StaticFileOptions { OnPrepareResponse = ApplyActivityCaching });
 }
-
-// The stock ASP.NET Identity pages (ExternalLogin, Manage/*, ...) answer 404 for every method,
-// so nobody can make an account with a typed email or set a password behind the app's back.
-// Only our sign-in page and the cookie's logout/access-denied pages stay. See IdentityPathGate.
-app.Use(async (context, next) =>
-{
-    if (!IdentityPathGate.IsAllowed(context.Request.Path))
-    {
-        context.Response.StatusCode = StatusCodes.Status404NotFound;
-        return;
-    }
-    await next();
-});
 
 // The old website's page addresses (bookmarks, Discord bot posts, old tabs) go to the same place
 // in the Activity UI, which is the website now. Permanent (301): the old pages are deleted, so

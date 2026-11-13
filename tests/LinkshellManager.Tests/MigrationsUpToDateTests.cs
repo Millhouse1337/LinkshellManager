@@ -1,5 +1,5 @@
+using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
-using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -15,12 +15,12 @@ public class MigrationsUpToDateTests
     [Fact]
     public void EveryModelChangeHasAMigration()
     {
-        // Program.cs uses AddDefaultIdentity, which caps the Identity key columns at 128 chars.
-        // The model reads that from the app's services, so register it the same way here or the
-        // check sees four phantom column changes on AspNetUserLogins/AspNetUserTokens.
+        // Program.cs's Identity setup caps the Identity key columns at 128 chars. The model reads
+        // that from the app's services, so register it the same way here or the check sees four
+        // phantom column changes on AspNetUserLogins/AspNetUserTokens.
         var appServices = new ServiceCollection();
         appServices.AddLogging();
-        appServices.AddDefaultIdentity<AppUser>();
+        appServices.AddAppIdentity();
         using var provider = appServices.BuildServiceProvider();
 
         using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
