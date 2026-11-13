@@ -33,11 +33,6 @@ namespace LinkshellManagerDiscordApp.Models
         public long? SoldPrice { get; set; }
         public DateTime? SoldAt { get; set; }
         public string? SoldByCharacterName { get; set; }
-        // The old RevenueEntries row for a sale made before the treasury journal existed.
-        // Replaced by JournalEntryId below; no code reads or writes it any more.
-        // PHASE4B-DROP: Items.RevenueEntryId - goes with the RevenueEntries table.
-        public int? RevenueEntryId { get; set; }
-
         // The treasury entry recorded for this sale. Unselling REVERSES it rather than deleting
         // it, so the fact that the item was once sold — and for how much — survives.
         public int? JournalEntryId { get; set; }

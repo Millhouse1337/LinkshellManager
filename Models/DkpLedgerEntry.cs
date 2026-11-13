@@ -82,10 +82,6 @@ public class DkpLedgerEntry
     [MaxLength(512)]
     public string? EditReason { get; set; }
 
-    // PHASE4B-DROP: DkpLedgerEntries.SourceTodLootDetailId (+ its index) - ToD loot is gone, so
-    // nothing writes or reads it any more.
-    public int? SourceTodLootDetailId { get; set; }
-
     // Optional back-reference so a ledger entry can be traced to the loot
     // row it was generated from. Set on edit/delete-driven entries, null on
     // legacy / non-loot entries. Not foreign-key-enforced — the loot row could

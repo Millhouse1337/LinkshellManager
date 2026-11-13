@@ -10,14 +10,12 @@
 --     psql "postgresql://doadmin:****@db-host:25060/defaultdb?sslmode=require" \
 --          -v ON_ERROR_STOP=1 -f db-wipe-activity-keep-roster.sql
 --
---  KEEPS:   Linkshells, LinkshellRoles, LinkshellDiscordChannels/Webhooks,
---           LinkshellChannelRoutes, AddonApiTokens, AddonPairingCodes,
+--  KEEPS:   Linkshells, LinkshellRoles, LinkshellChannelRoutes,
+--           AddonApiTokens, AddonPairingCodes,
 --           AppSettings, DiscordActivityUsers, AspNet* (users/identity),
 --           PartySetups templates (+Alliances/Parties/Slots), Announcements,
---           Rules, Invites, Notifications, and the AppUserLinkshells ROSTER rows
+--           Rules, Invites, and the AppUserLinkshells ROSTER rows
 --           (incl. JobLevels / StrongJobs = profile jobs).
---           (PHASE4B-DROP: LinkshellDiscordChannels/Webhooks and Notifications
---           leave this list when 4B drops those tables.)
 --
 --  WIPES:   Events (+ comments, roster snapshots and each event's own party
 --           board copy), ToDs, Loot, Auctions, DKP ledger, Attendance,
@@ -50,8 +48,6 @@ TRUNCATE TABLE
     "EventLootDetails",
     "EventPartySlotSignups",
     -- ToDs (the Tods rows themselves are deleted below) / window events / claim shields
-    -- (PHASE4B-DROP: remove the TodLootDetails line once that table is dropped; no code uses it)
-    "TodLootDetails",
     "WindowEvents",
     "WindowEventMemberDkps",
     "PendingTodSubmissions",
@@ -68,15 +64,11 @@ TRUNCATE TABLE
     "AttendanceSnapshots",
     "AttendanceSnapshotEntries",
     -- Finances (gil/treasury) + inventory
-    -- RevenueEntries is the pre-conversion shape and LedgerPeriods the removed lock feature; no
-    -- code uses either (PHASE4B-DROP: remove both lines here once the tables are dropped). The
-    -- other three treasury tables are the live ones. TRUNCATE takes them all in one statement, so the FK
-    -- ordering between them does not matter here (it does in DbWipe, which uses DELETE).
-    "RevenueEntries",
+    -- TRUNCATE takes the three treasury tables in one statement, so the FK ordering
+    -- between them does not matter here (it does in DbWipe, which uses DELETE).
     "JournalEntryLines",
     "JournalEntries",
     "LedgerAccounts",
-    "LedgerPeriods",
     "Items"
 RESTART IDENTITY;
 
@@ -107,8 +99,6 @@ SELECT
     (SELECT count(*) FROM "Tods")              AS tods,
     (SELECT count(*) FROM "Auctions")          AS auctions,
     (SELECT count(*) FROM "DkpLedgerEntries")  AS dkp_ledger,
-    -- PHASE4B-DROP: remove with the RevenueEntries table.
-    (SELECT count(*) FROM "RevenueEntries")    AS revenue_legacy,
     (SELECT count(*) FROM "JournalEntries")    AS treasury_entries,
     (SELECT count(*) FROM "JournalEntryLines") AS treasury_halves,
     (SELECT count(*) FROM "LedgerAccounts")    AS treasury_categories,

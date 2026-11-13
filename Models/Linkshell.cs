@@ -261,15 +261,9 @@ public class Linkshell
     [MaxLength(32)]
     public string? DkpSheetDiscordMessageId { get; set; }
 
-    // Named Discord channel webhooks. Every `/lsm now` attendance snapshot is
-    // posted to each of these as a party-grouped embed. Empty = Discord
-    // posting disabled. (Replaces the former single DiscordWebhookUrl column.)
-    // PHASE4B-DROP: navigation to LinkshellDiscordWebhooks - nothing reads it; goes with the table.
-    public ICollection<LinkshellDiscordWebhook> DiscordWebhooks { get; set; } = new List<LinkshellDiscordWebhook>();
-
     // User-defined Discord channel routes: which channels the bot posts each kind
-    // of content to (events/loot/auctions/attendance/ToD). Replaces the fixed
-    // LinkshellDiscordChannel purposes and the webhook post-type flags.
+    // of content to (events/loot/auctions/attendance/ToD). Replaced the old fixed-purpose
+    // channel table and the per-linkshell webhooks (both dropped in Phase 4B).
     public ICollection<LinkshellChannelRoute> ChannelRoutes { get; set; } = new List<LinkshellChannelRoute>();
 
     public ICollection<AppUserLinkshell> AppUserLinkshells { get; set; } = new List<AppUserLinkshell>();

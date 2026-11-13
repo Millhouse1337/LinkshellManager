@@ -12,8 +12,7 @@ namespace LinkshellManagerDiscordApp.Models;
 /// exactly what the card drawer renders. It also means a member who joins next month starts
 /// correctly at "needs it" with no backfill, and it removes the tri-state a nullable flag would
 /// create, where a row saying false and no row at all are two ways to say the same thing that two
-/// surfaces could word differently. Same call ChartBossProgress makes: no row at all is the normal
-/// state, not a missing one.
+/// surfaces could word differently. No row at all is the normal state, not a missing one.
 /// </summary>
 public class ChartMemberKeyItem
 {

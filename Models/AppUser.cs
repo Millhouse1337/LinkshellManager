@@ -85,7 +85,4 @@ public class AppUser : IdentityUser
     public ICollection<AppUserEvent> AppUserEvents { get; set; } = new List<AppUserEvent>();
 
     public ICollection<AppUserEventHistory> AppUserEventHistories { get; set; } = new List<AppUserEventHistory>();
-
-    // PHASE4B-DROP: navigation to Notifications - nothing reads it; goes with the table.
-    public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }

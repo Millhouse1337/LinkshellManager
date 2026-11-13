@@ -95,11 +95,6 @@ public sealed class DataAdminPolicy
                     (nameof(JournalEntry.TransactionKind), TreasuryTransactionKinds.All.Select(kind => kind.Key).ToArray())),
             },
             [typeof(JournalEntryLine)] = readOnly,
-            // PHASE4B-DROP: remove with the LedgerPeriods table.
-            [typeof(LedgerPeriod)] = readOnly,
-            // PHASE4B-DROP: remove with the TodLootDetails table. Read-only so nobody adds ToD loot here:
-            // nothing would announce it, show it in Loot History or let it be refunded.
-            [typeof(TodLootDetail)] = readOnly,
             [typeof(AuctionHistory)] = readOnly with
             {
                 DiscordSideEffect = "Changing a settled auction reposts its Discord card.",
@@ -199,12 +194,6 @@ public sealed class DataAdminPolicy
                 Flags = DataAdminPolicyFlags.NoCreate,
                 ProtectedColumns = Names(nameof(AddonPairingCode.Code)),
             },
-            // PHASE4B-DROP: keeps the old webhook URLs hidden until the table is dropped.
-            [typeof(LinkshellDiscordWebhook)] = new()
-            {
-                Flags = DataAdminPolicyFlags.NoCreate,
-                ProtectedColumns = Names(nameof(LinkshellDiscordWebhook.Url)),
-            },
             [typeof(LinkshellBanner)] = new()
             {
                 Flags = DataAdminPolicyFlags.NoCreate | DataAdminPolicyFlags.NoEdit,
@@ -229,11 +218,6 @@ public sealed class DataAdminPolicy
             {
                 Options = Opts((nameof(LinkshellMonsterTiming.WindowMethod), MonsterWindowMethods.All)),
             },
-            // PHASE4B-DROP: remove with the LinkshellDiscordChannels table.
-            [typeof(LinkshellDiscordChannel)] = new()
-            {
-                Options = Opts((nameof(LinkshellDiscordChannel.Purpose), DiscordChannelPurposes.All)),
-            },
             [typeof(AttendanceSnapshot)] = new()
             {
                 Options = Opts(
@@ -248,11 +232,6 @@ public sealed class DataAdminPolicy
             {
                 LabelColumns = new[] { nameof(Invite.DiscordDisplayName), nameof(Invite.Status) },
             },
-            // PHASE4B-DROP: remove with the Notifications table.
-            [typeof(Notification)] = new()
-            {
-                LabelColumns = new[] { nameof(Notification.NotificationType) },
-            },
 
             // ---- denormalised LinkshellName copies ------------------------------------------------
             // PHASE4B-DROP: these three go with Rules/Announcements/Items.LinkshellName. The app no
@@ -261,8 +240,6 @@ public sealed class DataAdminPolicy
             [typeof(Rule)] = new() { SyncedCopies = linkshellNameCopy },
             [typeof(Announcement)] = new() { SyncedCopies = linkshellNameCopy },
             [typeof(Item)] = new() { SyncedCopies = linkshellNameCopy },
-            // PHASE4B-DROP: remove with the RevenueEntries table.
-            [typeof(RevenueEntry)] = new() { SyncedCopies = linkshellNameCopy },
         };
     }
 

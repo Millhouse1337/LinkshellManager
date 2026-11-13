@@ -1111,24 +1111,16 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<EventPartySlotSignup> EventPartySlotSignups => Set<EventPartySlotSignup>();
         public DbSet<EventWindowRosterSnapshot> EventWindowRosterSnapshots => Set<EventWindowRosterSnapshot>();
         public DbSet<Tod> Tods => Set<Tod>();
-        // PHASE4B-DROP: TodLootDetails table - a ToD carries no loot; nothing creates or reads these rows (prod table is empty).
-        public DbSet<TodLootDetail> TodLootDetails => Set<TodLootDetail>();
         public DbSet<PartySetup> PartySetups => Set<PartySetup>();
         public DbSet<PartySetupAlliance> PartySetupAlliances => Set<PartySetupAlliance>();
         public DbSet<PartySetupParty> PartySetupParties => Set<PartySetupParty>();
         public DbSet<PartySetupSlot> PartySetupSlots => Set<PartySetupSlot>();
-        // PHASE4B-DROP: Notifications table - no feature reads or writes it any more.
-        public DbSet<Notification> Notifications => Set<Notification>();
         public DbSet<Rule> Rules => Set<Rule>();
         public DbSet<Announcement> Announcements => Set<Announcement>();
         public DbSet<Item> Items => Set<Item>();
-        // PHASE4B-DROP: RevenueEntries table - converted to JournalEntries long ago, nothing reads or writes it.
-        public DbSet<RevenueEntry> RevenueEntries => Set<RevenueEntry>();
         public DbSet<LedgerAccount> LedgerAccounts => Set<LedgerAccount>();
         public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
         public DbSet<JournalEntryLine> JournalEntryLines => Set<JournalEntryLine>();
-        // PHASE4B-DROP: LedgerPeriods table - the treasury lock feature was removed (never had a button).
-        public DbSet<LedgerPeriod> LedgerPeriods => Set<LedgerPeriod>();
         public DbSet<LinkshellRole> LinkshellRoles => Set<LinkshellRole>();
         public DbSet<JobRating> JobRatings => Set<JobRating>();
         public DbSet<EventComment> EventComments => Set<EventComment>();
@@ -1146,17 +1138,11 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<PendingTodSubmission> PendingTodSubmissions => Set<PendingTodSubmission>();
         public DbSet<ClaimShieldCapture> ClaimShieldCaptures => Set<ClaimShieldCapture>();
         public DbSet<ClaimShieldCaptureMember> ClaimShieldCaptureMembers => Set<ClaimShieldCaptureMember>();
-        // PHASE4B-DROP: LinkshellDiscordWebhooks table - replaced by LinkshellChannelRoutes, nothing posts to these.
-        public DbSet<LinkshellDiscordWebhook> LinkshellDiscordWebhooks => Set<LinkshellDiscordWebhook>();
-        // PHASE4B-DROP: LinkshellDiscordChannels table - replaced by LinkshellChannelRoutes, the one-time backfill is gone.
-        public DbSet<LinkshellDiscordChannel> LinkshellDiscordChannels => Set<LinkshellDiscordChannel>();
         public DbSet<LinkshellChannelRoute> LinkshellChannelRoutes => Set<LinkshellChannelRoute>();
         public DbSet<HnmRecurringBoard> HnmRecurringBoards => Set<HnmRecurringBoard>();
         public DbSet<LinkshellMonsterTiming> LinkshellMonsterTimings => Set<LinkshellMonsterTiming>();
         public DbSet<ChartPopItem> ChartPopItems => Set<ChartPopItem>();
         public DbSet<ChartPopItemCredit> ChartPopItemCredits => Set<ChartPopItemCredit>();
-        // PHASE4B-DROP: ChartBossProgresses table - the boss progress note was never built into any screen.
-        public DbSet<ChartBossProgress> ChartBossProgresses => Set<ChartBossProgress>();
         public DbSet<ChartWishlistRequest> ChartWishlistRequests => Set<ChartWishlistRequest>();
         public DbSet<ChartWishlistRequestZone> ChartWishlistRequestZones => Set<ChartWishlistRequestZone>();
         public DbSet<ChartMemberKeyItem> ChartMemberKeyItems => Set<ChartMemberKeyItem>();
@@ -1461,8 +1447,6 @@ namespace LinkshellManagerDiscordApp.Data
                 // Index the loot-source FKs so the Loot History view can
                 // quickly find the edit-pair ledger entries for a given
                 // loot row without scanning the full ledger.
-                // PHASE4B-DROP: this index goes with DkpLedgerEntries.SourceTodLootDetailId and TodLootDetails.
-                entity.HasIndex(item => item.SourceTodLootDetailId);
                 entity.HasIndex(item => item.SourceEventLootDetailId);
                 entity.HasIndex(item => item.SourceWindowEventId);
                 // One payout row per account per review card. Post checks "already paid?" before
@@ -1529,28 +1513,8 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
-                // PHASE4B-DROP: goes with the TodLootDetails table (keeps the database cascade until then).
-                entity.HasMany(item => item.TodLootDetails)
-                    .WithOne(item => item.Tod)
-                    .HasForeignKey(item => item.TodId)
-                    .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => new { item.LinkshellId, item.Time });
                 entity.HasIndex(item => new { item.LinkshellId, item.MonsterName });
-            });
-
-            // PHASE4B-DROP: TodLootDetails table - unused, config kept only so the model matches the database.
-            builder.Entity<TodLootDetail>(entity =>
-            {
-                entity.ToTable("TodLootDetails");
-                entity.Property(item => item.ItemName).HasMaxLength(256);
-                entity.Property(item => item.ItemWinner).HasMaxLength(256);
-                entity.Property(item => item.EditedByAppUserId).HasMaxLength(450);
-                entity.Property(item => item.EditedByCharacterName).HasMaxLength(256);
-                entity.Property(item => item.LastEditReason).HasMaxLength(512);
-                entity.HasOne(item => item.DkpPool)
-                    .WithMany()
-                    .HasForeignKey(item => item.DkpPoolId)
-                    .OnDelete(DeleteBehavior.NoAction);
             });
 
             // EventHistory has no config block of its own — conventions cover it — except for
@@ -1789,26 +1753,8 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.LinkshellId, item.ItemName });
             });
 
-            // PHASE4B-DROP: RevenueEntries table - unused, config kept only so the model matches the database.
-            builder.Entity<RevenueEntry>(entity =>
-            {
-                entity.ToTable("RevenueEntries");
-                entity.Property(item => item.LinkshellName).HasMaxLength(256);
-                entity.Property(item => item.EntryType).HasMaxLength(16).IsRequired();
-                entity.Property(item => item.Category).HasMaxLength(128);
-                entity.Property(item => item.Details).HasMaxLength(1024);
-                entity.Property(item => item.CreatedByAppUserId).HasMaxLength(450);
-                entity.Property(item => item.CreatedByCharacterName).HasMaxLength(256);
-                entity.HasOne(item => item.Linkshell)
-                    .WithMany()
-                    .HasForeignKey(item => item.LinkshellId)
-                    .OnDelete(DeleteBehavior.Cascade);
-                entity.HasIndex(item => new { item.LinkshellId, item.OccurredAt });
-            });
-
             // --- Gil treasury: categories, transactions and their two halves. ---
-            // RevenueEntry above is the shape these replace. No code uses it any more; Phase 4B
-            // drops the table.
+            // These replaced the old RevenueEntries gil list (converted long ago, table dropped).
 
             builder.Entity<LedgerAccount>(entity =>
             {
@@ -1869,13 +1815,6 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => item.ReversesJournalEntryId, "IX_JournalEntries_OneReversalPerEntry")
                     .IsUnique()
                     .HasFilter("\"Kind\" = 'Reversal'");
-                // Makes the one-time conversion replayable: if it aborts halfway, re-run it rather
-                // than restoring a snapshot.
-                // PHASE4B-DROP: this index goes with JournalEntries.LegacyRevenueEntryId and RevenueEntries.
-                entity.HasIndex(item => item.LegacyRevenueEntryId)
-                    .HasDatabaseName("IX_JournalEntries_LegacyRevenueEntryId")
-                    .IsUnique()
-                    .HasFilter("\"LegacyRevenueEntryId\" IS NOT NULL");
                 // An entry that says an earlier one was wrong has to say why.
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_JournalEntries_ReasonRequiredForFixes",
@@ -1914,23 +1853,6 @@ namespace LinkshellManagerDiscordApp.Data
                 // to an entry whose two halves are both zero, which still sums to zero.
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_JournalEntryLines_LineNumber_Positive", "\"LineNumber\" >= 1"));
-            });
-
-            // PHASE4B-DROP: LedgerPeriods table - lock feature removed, config kept only so the model matches the database.
-            builder.Entity<LedgerPeriod>(entity =>
-            {
-                entity.ToTable("LedgerPeriods");
-                entity.Property(item => item.LockedByAppUserId).HasMaxLength(450);
-                entity.Property(item => item.LockedByCharacterName).HasMaxLength(256);
-                entity.Property(item => item.UnlockedByAppUserId).HasMaxLength(450);
-                entity.Property(item => item.UnlockedByCharacterName).HasMaxLength(256);
-                entity.Property(item => item.UnlockReason).HasMaxLength(512);
-                entity.HasOne(item => item.Linkshell)
-                    .WithMany()
-                    .HasForeignKey(item => item.LinkshellId)
-                    .OnDelete(DeleteBehavior.Cascade);
-                // At most one row per linkshell; no row at all means nothing is locked.
-                entity.HasIndex(item => item.LinkshellId).IsUnique();
             });
 
             builder.Entity<LinkshellRole>(entity =>
@@ -2002,24 +1924,6 @@ namespace LinkshellManagerDiscordApp.Data
                 // whole list for a row is deleted and re-inserted in one SaveChanges — so a duplicate
                 // cannot survive a write, and a unique index would only add a normalized-name column
                 // to maintain.
-            });
-
-            // PHASE4B-DROP: ChartBossProgresses table - unused, config kept only so the model matches the database.
-            builder.Entity<ChartBossProgress>(entity =>
-            {
-                entity.ToTable("ChartBossProgresses");
-                entity.Property(item => item.Board).HasMaxLength(16).IsRequired();
-                entity.Property(item => item.Boss).HasMaxLength(64).IsRequired();
-                entity.Property(item => item.ProgressNote).HasMaxLength(128);
-                entity.Property(item => item.UpdatedByAppUserId).HasMaxLength(450);
-                entity.Property(item => item.UpdatedByCharacterName).HasMaxLength(256);
-                entity.HasOne(item => item.Linkshell)
-                    .WithMany()
-                    .HasForeignKey(item => item.LinkshellId)
-                    .OnDelete(DeleteBehavior.Cascade);
-                // At most one note per boss per linkshell; no row at all means no note, which is the
-                // normal state.
-                entity.HasIndex(item => new { item.LinkshellId, item.Board, item.Boss }).IsUnique();
             });
 
             // --- Charts: what members have ASKED for on a board. ---
@@ -2367,20 +2271,6 @@ namespace LinkshellManagerDiscordApp.Data
                 // never collides, so it is held to one row by the name index alone.
                 entity.HasIndex(item => new { item.CaptureId, item.AppUserId }).IsUnique();
                 entity.HasIndex(item => new { item.CaptureId, item.CharacterName }).IsUnique();
-            });
-
-            // PHASE4B-DROP: LinkshellDiscordWebhooks table - unused, config kept only so the model matches the database.
-            builder.Entity<LinkshellDiscordWebhook>(entity =>
-            {
-                entity.ToTable("LinkshellDiscordWebhooks");
-                entity.Property(item => item.Name).HasMaxLength(64);
-                entity.Property(item => item.Url).HasMaxLength(512).IsRequired();
-                entity.Property(item => item.TodBoardMessageId).HasMaxLength(32);
-                entity.HasOne(item => item.Linkshell)
-                    .WithMany(linkshell => linkshell.DiscordWebhooks)
-                    .HasForeignKey(item => item.LinkshellId)
-                    .OnDelete(DeleteBehavior.Cascade);
-                entity.HasIndex(item => item.LinkshellId);
             });
 
             builder.Entity<LinkshellChannelRoute>(entity =>

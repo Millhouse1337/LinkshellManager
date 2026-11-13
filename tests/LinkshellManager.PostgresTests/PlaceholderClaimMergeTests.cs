@@ -99,7 +99,7 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
                 new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = phMembershipId, SetByAppUserId = Ph },
                 new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "B", MembershipId = phMembershipId });
 
-            // Ratings, a Claim Shield capture, loot won, a notification.
+            // Ratings, a Claim Shield capture, loot won.
             db.JobRatings.Add(new JobRating { LinkshellId = linkshellId, TargetAppUserId = Ph, RaterAppUserId = Real, JobIndex = 1, UpdatedAt = When });
             var capture = new ClaimShieldCapture { LinkshellId = linkshellId, MonsterName = "Fafnir", CapturedAtUtc = When, CreatedAtUtc = When };
             db.ClaimShieldCaptures.Add(capture);
@@ -108,8 +108,6 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
                 new ClaimShieldCaptureMember { CaptureId = capture.Id, CharacterName = "Bob", AppUserId = Real },
                 new ClaimShieldCaptureMember { CaptureId = capture.Id, CharacterName = "Bobalt", AppUserId = Ph });
             db.EventLootDetails.Add(new EventLootDetail { LinkshellId = linkshellId, EventHistoryId = history.Id, ItemWinnerAppUserId = Ph });
-            // PHASE4B-DROP: remove with the Notifications table.
-            db.Notifications.Add(new Notification { AppUserId = Ph, NotificationType = "Info", CreatedAt = When });
             await db.SaveChangesAsync();
         }
 

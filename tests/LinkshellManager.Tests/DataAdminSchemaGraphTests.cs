@@ -348,12 +348,11 @@ public class DataAdminSchemaGraphTests
 
         // By a shared primary key, by a plain unique index, and by a unique index that only skips
         // the rows with no value.
-        // PHASE4B-DROP: the two LedgerPeriod lines name a table 4B drops; swap in another
-        // plain-unique-index table (or delete them) when it goes.
+        // (ClaimShieldCapture.EventId is the plain unique index: one capture per live camp.)
         Assert.True(Relationship(graph, "LinkshellBanner.LinkshellId").Unique);
-        Assert.True(Relationship(graph, "LedgerPeriod.LinkshellId").Unique);
+        Assert.True(Relationship(graph, "ClaimShieldCapture.EventId").Unique);
         Assert.True(Relationship(graph, "PartySetup.OwnerEventId").Unique);
-        Assert.True(Column(graph, "LedgerPeriod", "LinkshellId").Unique);
+        Assert.True(Column(graph, "ClaimShieldCapture", "EventId").Unique);
         Assert.True(Column(graph, "PartySetup", "OwnerEventId").Unique);
         // The banner's column is the whole primary key: PK already says unique, so no UQ badge.
         Assert.False(Column(graph, "LinkshellBanner", "LinkshellId").Unique);

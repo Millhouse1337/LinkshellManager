@@ -104,13 +104,9 @@ public class JournalEntry
     public int? SourceAuctionHistoryId { get; set; }
 
     // --- conversion bridge: permanent, never written by new code ---
-    // Which RevenueEntries row this was built from and exactly what strings it carried. A
-    // one-way conversion of real gil has to stay auditable row by row, and the pre-conversion
-    // classification is itself part of the record.
-    // PHASE4B-DROP: JournalEntries.LegacyRevenueEntryId (+ IX_JournalEntries_LegacyRevenueEntryId) -
-    // points at the RevenueEntries table, which 4B drops. LegacyEntryType/LegacyCategory below stay.
-    public int? LegacyRevenueEntryId { get; set; }
-
+    // Exactly what strings the old RevenueEntries row carried before it was converted. A
+    // one-way conversion of real gil has to stay auditable, and the pre-conversion
+    // classification is itself part of the record. (The old row id went with that table in 4B.)
     [MaxLength(32)]
     public string? LegacyEntryType { get; set; }
 

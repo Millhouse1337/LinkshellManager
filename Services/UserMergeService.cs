@@ -124,9 +124,6 @@ public sealed class UserMergeService
         yield return Column(_db.Bids, x => x.AppUserId);
         yield return Column(_db.Invites, x => x.AppUserId);
         yield return Column(_db.Linkshells, x => x.AppUserId);
-        // PHASE4B-DROP: stays while the Notifications table exists - old rows still hold a foreign
-        // key to the account, so Postgres would refuse to delete a placeholder that has one.
-        yield return Column(_db.Notifications, x => x.AppUserId);
         yield return Column(_db.AddonApiTokens, x => x.IssuedToAppUserId);
         yield return Column(_db.AddonPairingCodes, x => x.IssuedToAppUserId);
         yield return Column(_db.PendingTodSubmissions, x => x.SubmittedByAppUserId);
@@ -160,21 +157,12 @@ public sealed class UserMergeService
         yield return Column(_db.EventLootDetails, x => x.ItemWinnerAppUserId);
         yield return Column(_db.EventLootDetails, x => x.RecordedByAppUserId);
         yield return Column(_db.EventLootDetails, x => x.EditedByAppUserId);
-        // PHASE4B-DROP: stays while the TodLootDetails table exists, so a merge leaves no old id behind.
-        yield return Column(_db.TodLootDetails, x => x.EditedByAppUserId);
         yield return Column(_db.Events, x => x.CreatorUserId);
         yield return Column(_db.Events, x => x.StarterUserId);
         yield return Column(_db.HnmRecurringBoards, x => x.CreatedByAppUserId);
         yield return Column(_db.Announcements, x => x.CreatedByAppUserId);
         yield return Column(_db.Items, x => x.CreatedByAppUserId);
-        // PHASE4B-DROP: stays while the RevenueEntries table exists, so a merge leaves no old id behind.
-        yield return Column(_db.RevenueEntries, x => x.CreatedByAppUserId);
         yield return Column(_db.Rules, x => x.CreatedByAppUserId);
-        // PHASE4B-DROP: stays while the LedgerPeriods table exists, so a merge leaves no old id behind.
-        yield return Column(_db.LedgerPeriods, x => x.LockedByAppUserId);
-        yield return Column(_db.LedgerPeriods, x => x.UnlockedByAppUserId);
-        // PHASE4B-DROP: stays while the ChartBossProgresses table exists, so a merge leaves no old id behind.
-        yield return Column(_db.ChartBossProgresses, x => x.UpdatedByAppUserId);
         yield return Column(_db.ChartMemberKeyItems, x => x.SetByAppUserId);
         yield return Column(_db.ChartPopItems, x => x.CreatedByAppUserId);
         yield return Column(_db.ChartPopItemCredits, x => x.CreditedByAppUserId);

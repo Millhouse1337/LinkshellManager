@@ -48,14 +48,10 @@ public class DataAdminPolicyTests
     {
         var catalog = NewCatalog();
 
-        foreach (var ledger in new[] { typeof(DkpLedgerEntry), typeof(JournalEntry), typeof(JournalEntryLine), typeof(LedgerPeriod), typeof(AuctionHistory), typeof(AppUserEventHistory), typeof(AppUserEventStatusLedger) })
+        foreach (var ledger in new[] { typeof(DkpLedgerEntry), typeof(JournalEntry), typeof(JournalEntryLine), typeof(AuctionHistory), typeof(AppUserEventHistory), typeof(AppUserEventStatusLedger) })
         {
             Assert.True(Table(catalog, ledger).IsReadOnly, $"{ledger.Name} should be read-only.");
         }
-
-        // PHASE4B-DROP: remove with the TodLootDetails table. Nothing reads ToD loot any more, so
-        // Data Admin must not create it either.
-        Assert.True(Table(catalog, typeof(TodLootDetail)).IsReadOnly, "TodLootDetail should be read-only.");
 
         var linkshell = Table(catalog, typeof(Linkshell));
         Assert.False(linkshell.CanDelete);
@@ -109,8 +105,6 @@ public class DataAdminPolicyTests
         Assert.Equal(AttendanceSnapshotSlotKinds.All, Options(catalog, typeof(AttendanceSnapshot), nameof(AttendanceSnapshot.SlotKind)));
         Assert.Contains(AttendanceSnapshotStatuses.Active, Options(catalog, typeof(AttendanceSnapshot), nameof(AttendanceSnapshot.SnapshotStatus)));
         Assert.Contains(AttendanceSnapshotStatuses.Ignored, Options(catalog, typeof(AttendanceSnapshot), nameof(AttendanceSnapshot.SnapshotStatus)));
-        // PHASE4B-DROP: remove with the LinkshellDiscordChannels table.
-        Assert.Equal(DiscordChannelPurposes.All, Options(catalog, typeof(LinkshellDiscordChannel), nameof(LinkshellDiscordChannel.Purpose)));
         Assert.Equal(DataAdminOptions.FromConsts(typeof(JournalEntryStatuses)), Options(catalog, typeof(JournalEntry), nameof(JournalEntry.Status)));
         Assert.Contains(JournalEntryStatuses.Confirmed, Options(catalog, typeof(JournalEntry), nameof(JournalEntry.Status)));
     }

@@ -11,7 +11,7 @@
 //           Announcements/Rules content. DELETES all of that linkshell's
 //           events, loot, auctions/AH, ToDs, window events, attendance
 //           snapshots, claim shields, party setups, pending submissions, DKP
-//           ledger, inventory items, revenue, and addon tokens. Also zeroes
+//           ledger, inventory items, gil treasury, and addon tokens. Also zeroes
 //           each member's LinkshellDkp + cached JobLevels.
 //
 // Excluded from the main web-app build (see LinkshellManagerDiscordApp.csproj);
@@ -19,9 +19,9 @@
 //
 //   treasury / scrub-treasury
 //         — The GIL only, for one linkshell. `treasury` is read-only; `scrub-treasury`
-//           deletes that linkshell's transactions, any lock, and the dormant legacy
-//           revenue rows, and un-marks any items flagged sold (their sale record is
-//           going away with everything else). KEEPS the categories, so renames survive.
+//           deletes that linkshell's transactions and un-marks any items flagged
+//           sold (their sale record is going away with everything else). KEEPS the
+//           categories, so renames survive.
 //           Events, loot, DKP, auctions, ToDs and the roster are untouched — that is
 //           what makes it different from `scrub`.
 //
@@ -129,15 +129,11 @@ var tables = new[]
     "EventHistories", "AppUserEventHistories",
     "EventLootDetails",
     "Tods",
-    "TodLootDetails", // PHASE4B-DROP: remove once the table is dropped (TRUNCATE fails on a missing table).
-    "Notifications", // PHASE4B-DROP: remove once the table is dropped (TRUNCATE fails on a missing table).
     "Rules",
     "Announcements",
     "Items",
-    "RevenueEntries", // PHASE4B-DROP: remove once the table is dropped (TRUNCATE fails on a missing table).
     // Treasury: halves before entries (FK), and categories last since entries point at them.
     "JournalEntryLines", "JournalEntries", "LedgerAccounts",
-    "LedgerPeriods", // PHASE4B-DROP: remove once the table is dropped (TRUNCATE fails on a missing table).
     "LinkshellRoles",
     "AddonApiTokens", "AddonPairingCodes",
     "EventAttendanceWindows", "AppUserEventWindows",
@@ -242,8 +238,6 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("EventHistories", "DELETE FROM \"EventHistories\" WHERE \"LinkshellId\" = @ls"),
 
         // --- ToDs (Events.SourceTodId already gone above) ---
-        // PHASE4B-DROP: remove with the TodLootDetails table.
-        ("TodLootDetails", "DELETE FROM \"TodLootDetails\" WHERE \"TodId\" IN (SELECT \"Id\" FROM \"Tods\" WHERE \"LinkshellId\" = @ls)"),
         ("Tods", "DELETE FROM \"Tods\" WHERE \"LinkshellId\" = @ls"),
 
         // --- Claim shields ---
@@ -262,8 +256,6 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         // --- DKP ledger + economy ---
         ("DkpLedgerEntries", "DELETE FROM \"DkpLedgerEntries\" WHERE \"LinkshellId\" = @ls"),
         ("Items", "DELETE FROM \"Items\" WHERE \"LinkshellId\" = @ls"),
-        // PHASE4B-DROP: remove with the RevenueEntries table.
-        ("RevenueEntries", "DELETE FROM \"RevenueEntries\" WHERE \"LinkshellId\" = @ls"),
 
         // --- Gil treasury ---
         // Order matters: halves first (they FK to both entries and categories), then entries, then the
@@ -271,8 +263,6 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("JournalEntryLines", "DELETE FROM \"JournalEntryLines\" WHERE \"LinkshellId\" = @ls"),
         ("JournalEntries", "DELETE FROM \"JournalEntries\" WHERE \"LinkshellId\" = @ls"),
         ("LedgerAccounts", "DELETE FROM \"LedgerAccounts\" WHERE \"LinkshellId\" = @ls"),
-        // PHASE4B-DROP: remove with the LedgerPeriods table.
-        ("LedgerPeriods", "DELETE FROM \"LedgerPeriods\" WHERE \"LinkshellId\" = @ls"),
 
         // --- Addon tokens (user chose to revoke/delete) ---
         ("AddonPairingCodes", "DELETE FROM \"AddonPairingCodes\" WHERE \"LinkshellId\" = @ls"),
@@ -382,9 +372,6 @@ static async Task<int> ShowTreasuryAsync(NpgsqlConnection c, string[] args)
         ("  of those, drafts", "SELECT COUNT(*) FROM \"JournalEntries\" WHERE \"LinkshellId\" = @ls AND \"Status\" <> 'Confirmed'"),
         ("Halves", "SELECT COUNT(*) FROM \"JournalEntryLines\" WHERE \"LinkshellId\" = @ls"),
         ("Categories", "SELECT COUNT(*) FROM \"LedgerAccounts\" WHERE \"LinkshellId\" = @ls"),
-        // PHASE4B-DROP: remove these two counts with the LedgerPeriods and RevenueEntries tables.
-        ("Lock rows", "SELECT COUNT(*) FROM \"LedgerPeriods\" WHERE \"LinkshellId\" = @ls"),
-        ("Legacy revenue rows", "SELECT COUNT(*) FROM \"RevenueEntries\" WHERE \"LinkshellId\" = @ls"),
         ("Items marked sold", "SELECT COUNT(*) FROM \"Items\" WHERE \"LinkshellId\" = @ls AND \"IsSold\" = true"),
     };
 
@@ -431,10 +418,9 @@ static async Task<int> ShowTreasuryAsync(NpgsqlConnection c, string[] args)
 
 // DESTRUCTIVE. Clears ONE linkshell's gil and nothing else.
 //
-// Deleted: every transaction and both of its halves, any lock, and the dormant legacy revenue rows
-// the one-time conversion already read. Items marked sold are un-marked, because their sale record
-// is going away and an item flagged sold with nothing behind it is a lie the inventory page would
-// keep telling.
+// Deleted: every transaction and both of its halves. Items marked sold are un-marked, because
+// their sale record is going away and an item flagged sold with nothing behind it is a lie the
+// inventory page would keep telling.
 //
 // KEPT: the categories (LedgerAccounts), so any renames survive and the balance sheet still reads
 // in the linkshell's own words. They are a settings list, not history. Everything outside the
@@ -468,11 +454,7 @@ static async Task<int> ScrubTreasuryAsync(NpgsqlConnection c, string[] args)
         // Self-referencing (a reversal points at what it reversed), so break the link before the rows.
         ("JournalEntries (unlink reversals)", "UPDATE \"JournalEntries\" SET \"ReversesJournalEntryId\" = NULL WHERE \"LinkshellId\" = @ls"),
         ("JournalEntries", "DELETE FROM \"JournalEntries\" WHERE \"LinkshellId\" = @ls"),
-        // PHASE4B-DROP: remove with the LedgerPeriods table.
-        ("LedgerPeriods", "DELETE FROM \"LedgerPeriods\" WHERE \"LinkshellId\" = @ls"),
-        // PHASE4B-DROP: remove with the RevenueEntries table (and the RevenueEntryId part of the next line).
-        ("RevenueEntries (legacy)", "DELETE FROM \"RevenueEntries\" WHERE \"LinkshellId\" = @ls"),
-        ("Items (un-mark sold)", "UPDATE \"Items\" SET \"IsSold\" = false, \"SoldPrice\" = NULL, \"RevenueEntryId\" = NULL WHERE \"LinkshellId\" = @ls AND (\"IsSold\" = true OR \"RevenueEntryId\" IS NOT NULL)"),
+        ("Items (un-mark sold)", "UPDATE \"Items\" SET \"IsSold\" = false, \"SoldPrice\" = NULL WHERE \"LinkshellId\" = @ls AND \"IsSold\" = true"),
     };
 
     await using var tx = await c.BeginTransactionAsync();
