@@ -49,6 +49,7 @@ export class TodsTabComponent {
 
   // The linkshell whose approval queue to load, or 0 when the viewer may not review it. A computed
   // so the load below runs when this changes, not on every overview refresh.
+  private readonly partySetupLinkshellId = computed(() => this.selectedDashboardLinkshellId());
   private readonly reviewLinkshellId = computed(() =>
     this.canReviewSubmissions() ? this.selectedDashboardLinkshellId() : 0);
 
@@ -96,9 +97,11 @@ export class TodsTabComponent {
     this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
 
     // Load party setups for the active linkshell so a ToD row whose monster has
-    // an assigned setup can offer the inline sign-up panel.
+    // an assigned setup can offer the inline sign-up panel. Reads the computed id,
+    // so it runs when the linkshell changes rather than on every overview refresh;
+    // the refresh timer (AutoRefreshService, 'tods') keeps the list fresh.
     effect(() => {
-      const id = this.selectedDashboardLinkshellId();
+      const id = this.partySetupLinkshellId();
       if (id) queueMicrotask(() => void this.partySetup.loadList(id));
     });
 

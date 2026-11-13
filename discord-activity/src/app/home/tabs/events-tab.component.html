@@ -2537,7 +2537,10 @@
            Events Pending DKP Post at the same time. Browse + (officer) edit metadata / DKP /
            attendees. -->
       <div [hidden]="eventsView() !== 'past'">
-        <app-event-history-panel [linkshellId]="activity.overview()?.appUser?.primaryLinkshellId ?? 0" />
+        <!-- [active]: the panel stays mounted while hidden (keeps its search and page) but only
+             fetches while Past is showing. -->
+        <app-event-history-panel [active]="eventsView() === 'past'"
+          [linkshellId]="activity.overview()?.appUser?.primaryLinkshellId ?? 0" />
       </div>
 
       <!-- Shared ToD dialog, opened in "End Camp" mode from a live HNM camp's End Camp button. -->

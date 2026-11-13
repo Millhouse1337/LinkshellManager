@@ -11,6 +11,7 @@ import type {
   ActivityTreasuryPage,
   ActivityTreasurySettlePick
 } from './discord-activity.types';
+import { ResponseOrder } from './refresh-order';
 
 /**
  * The linkshell's gil: what it has, what moved, and recording more of it.
@@ -36,6 +37,7 @@ export class TreasuryService {
 
   /** The query the current page was loaded with, so any action can reload the same view. */
   private lastQuery: { linkshellId: number; page: number; search: string; filter: ActivityTreasuryFilter } | null = null;
+  private readonly order = new ResponseOrder();
 
   async load(
     linkshellId: number,
@@ -45,6 +47,10 @@ export class TreasuryService {
   ): Promise<void> {
     this.busyLoad.set(true);
     this.lastQuery = { linkshellId, page, search, filter };
+    // Only the reply to the newest query is shown, so a slow refresh of the old page or search
+    // cannot land on top of the one the officer just asked for (see refresh-order.ts).
+    const key = JSON.stringify(this.lastQuery);
+    const ticket = this.order.begin(key);
 
     try {
       const query = new URLSearchParams({ page: String(page) });
@@ -54,11 +60,10 @@ export class TreasuryService {
       if (filter !== 'all') {
         query.set('filter', filter);
       }
-      this.page.set(
-        await this.http.fetchActivityJson<ActivityTreasuryPage>(
-          `/api/activity/linkshells/${linkshellId}/treasury?${query.toString()}`
-        )
+      const result = await this.http.fetchActivityJson<ActivityTreasuryPage>(
+        `/api/activity/linkshells/${linkshellId}/treasury?${query.toString()}`
       );
+      if (this.order.accept(ticket, key)) this.page.set(result);
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Loading the treasury failed.'));
       throw error;

@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 
 import { AutoRefreshService } from '../../discord/auto-refresh.service';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
+import { ResponseOrder } from '../../discord/refresh-order';
 import type {
   ActivityEditEventHistoryInput,
   ActivityEventComment,
@@ -824,8 +825,9 @@ export class EventHistoryPanelComponent {
       const isFirstRun = this.lastRefreshTick === null;
       this.lastRefreshTick = tick;
       // Skip the first run: the linkshellId input setter owns the initial load, and reloading here
-      // as well would fire two identical requests on every mount.
-      if (isFirstRun || !this._linkshellId) return;
+      // as well would fire two identical requests on every mount. Skip while hidden too: opening
+      // the panel loads it fresh (see `active`).
+      if (isFirstRun || !this._linkshellId || !this._active) return;
       queueMicrotask(() => void this.load());
     });
   }
@@ -902,16 +904,42 @@ export class EventHistoryPanelComponent {
     const id = value ?? 0;
     if (id === this._linkshellId) return;
     this._linkshellId = id;
-    void this.load();
+    // Hidden: drop the old linkshell's list now and load when the panel is opened.
+    if (!this._active) this.histories.set([]);
+    // Wait a microtask so `active` (bound in the same template) is set first, whatever order
+    // Angular applies the two inputs in; a hidden panel then skips this load.
+    queueMicrotask(() => {
+      if (this._active) void this.load();
+    });
   }
   get linkshellId(): number { return this._linkshellId; }
 
+  // Whether the panel is on screen. The Event System tab keeps Past mounted but hidden (so its
+  // search, page and open card survive switching views), and without this the hidden panel would
+  // refetch the whole closed-event history on every refresh. True by default for a host that
+  // always shows it. Opening the panel always loads it fresh.
+  private _active = true;
+  @Input() set active(value: boolean) {
+    const opened = value && !this._active;
+    this._active = value;
+    if (opened && this._linkshellId) void this.load();
+  }
+
+  // Only the newest reply for the current linkshell is shown (see refresh-order.ts).
+  private readonly historyOrder = new ResponseOrder();
+
   async load(): Promise<void> {
-    if (!this._linkshellId) { this.histories.set([]); return; }
+    if (!this._linkshellId) {
+      this.historyOrder.invalidate();
+      this.histories.set([]);
+      return;
+    }
+    const linkshellId = this._linkshellId;
+    const ticket = this.historyOrder.begin(linkshellId);
     this.loading.set(true);
-    const res = await this.activity.loadEventHistory(this._linkshellId);
+    const res = await this.activity.loadEventHistory(linkshellId);
     this.loading.set(false);
-    if (res) {
+    if (res && this.historyOrder.accept(ticket, linkshellId)) {
       this.histories.set(res.histories);
       this.canManage.set(res.canManage);
     }

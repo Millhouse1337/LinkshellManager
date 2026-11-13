@@ -13,6 +13,7 @@ import type {
   BoardRenameInput,
   BoardSlotRequirementInput
 } from './discord-activity.types';
+import { ResponseOrder } from './refresh-order';
 
 // Discord Activity client for the raid-composition planner (Party Setup).
 // Mirrors window-event.service.ts: standalone, injected directly into the
@@ -33,8 +34,13 @@ export class PartySetupService {
     return this.detailsById()[setupId] ?? null;
   }
 
+  // The list is loaded by the tab, the refresh timer and every write; only the newest reply for the
+  // current linkshell is shown (see refresh-order.ts).
+  private readonly listOrder = new ResponseOrder();
+
   async loadList(linkshellId: number): Promise<void> {
     if (!linkshellId) {
+      this.listOrder.invalidate();
       this.list.set(null);
       return;
     }
@@ -42,10 +48,11 @@ export class PartySetupService {
     this.busy.set(true);
     this.auth.setActionError(null);
     try {
+      const ticket = this.listOrder.begin(linkshellId);
       const result = await this.http.fetchActivityJson<ActivityPartySetupListResponse>(
         `/api/activity/party-setups?linkshellId=${linkshellId}`
       );
-      this.list.set(result);
+      if (this.listOrder.accept(ticket, linkshellId)) this.list.set(result);
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Loading party setups failed.'));
     } finally {

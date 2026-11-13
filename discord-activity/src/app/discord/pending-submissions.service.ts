@@ -4,6 +4,7 @@ import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type { ActivityPendingSubmissions, ActivityPendingTodEdits } from './discord-activity.types';
+import { ResponseOrder } from './refresh-order';
 
 // The ToD review queue: ToDs that members without the add-ToD permission submitted for approval
 // (ActivityDataController.PendingSubmissions), shown on the ToDs tab. Every approve / reject reloads
@@ -24,12 +25,17 @@ export class PendingSubmissionsService {
     return loaded?.linkshellId === linkshellId ? loaded.queue : null;
   }
 
+  // The tab, its Pending section and the refresh timer can all load at once; only the newest reply
+  // is shown, so an approved ToD cannot reappear from a slow, older reply (see refresh-order.ts).
+  private readonly order = new ResponseOrder();
+
   async load(linkshellId: number): Promise<void> {
     this.loading.set(true);
     try {
+      const ticket = this.order.begin(linkshellId);
       const queue = await this.http.fetchActivityJson<ActivityPendingSubmissions>(
         `/api/activity/linkshells/${linkshellId}/pending-submissions`);
-      this.loaded.set({ linkshellId, queue });
+      if (this.order.accept(ticket, linkshellId)) this.loaded.set({ linkshellId, queue });
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Loading the pending submissions failed.'));
     } finally {

@@ -9,6 +9,7 @@ import type {
   ActivityAuctionHistory,
   ActivityCreateAuctionInput
 } from './discord-activity.types';
+import { ResponseOrder } from './refresh-order';
 
 @Injectable({ providedIn: 'root' })
 export class AuctionService {
@@ -23,8 +24,14 @@ export class AuctionService {
   readonly busyAuctionId = signal<number | null>(null);
   readonly busyAuctionItemId = signal<number | null>(null);
 
+  // The auction list is loaded by several panels, the refresh timer and every write; only the
+  // newest reply for the current linkshell is shown (see refresh-order.ts).
+  private readonly auctionsOrder = new ResponseOrder();
+
   async loadAuctions(linkshellId?: number | null): Promise<void> {
     this.auctionsBusy.set(true);
+    const key = linkshellId ?? 0;
+    const ticket = this.auctionsOrder.begin(key);
 
     try {
       const accessToken = this.auth.currentAccessToken();
@@ -35,9 +42,11 @@ export class AuctionService {
 
       const path =
         query.size > 0 ? `/api/activity/auctions?${query.toString()}` : '/api/activity/auctions';
-      this.auctions.set(await this.http.fetchActivityJson<ActivityAuction[]>(path, accessToken));
+      const auctions = await this.http.fetchActivityJson<ActivityAuction[]>(path, accessToken);
+      if (this.auctionsOrder.accept(ticket, key)) this.auctions.set(auctions);
     } catch (error) {
-      this.auctions.set([]);
+      // A failed OLD request must not blank a list a newer request already filled.
+      if (this.auctionsOrder.accept(ticket, key)) this.auctions.set([]);
       this.auth.setActionError(formatActionError(error, 'Loading auctions failed.'));
     } finally {
       this.auctionsBusy.set(false);

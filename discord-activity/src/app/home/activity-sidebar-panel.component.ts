@@ -616,14 +616,30 @@ export class ActivitySidebarPanelComponent {
       const gen = ++this.selectionGen;
       const isStale = (): boolean => gen !== this.selectionGen;
 
+      // This effect re-runs on every overview refresh (it reads the memberships), and this
+      // component is mounted once per section (Onboarding, Profile, Auctions, DKP, Invites). So
+      // each copy loads only what ITS sections show, instead of every copy firing all four
+      // requests on every refresh.
+      const needsDkpHistory = this.showSection('dkp');
+      const needsAuctionHistory = this.showSection('auctions');
+      const needsDetail = needsDkpHistory || needsAuctionHistory || this.showSection('roster');
+
       void (async () => {
-        await this.activity.loadLinkshellDetail(selectedLinkshellId);
-        if (isStale()) return;
-        await this.reloadDkpHistory();
-        if (isStale()) return;
+        if (needsDetail) {
+          await this.activity.loadLinkshellDetail(selectedLinkshellId);
+          if (isStale()) return;
+        }
+        if (needsDkpHistory) {
+          await this.reloadDkpHistory();
+          if (isStale()) return;
+        }
+        // Every copy still loads the auction list: the tab bar's live-auction badge and the
+        // dashboard's auction count read it, and nothing else keeps it fresh off the Auctions tab.
         await this.activity.loadAuctions(selectedLinkshellId);
         if (isStale()) return;
-        await this.activity.loadAuctionHistory(selectedLinkshellId);
+        if (needsAuctionHistory) {
+          await this.activity.loadAuctionHistory(selectedLinkshellId);
+        }
       })();
     });
   }

@@ -6,6 +6,7 @@ import type {
   LocalActivityUser,
   WebSession
 } from './discord-activity.types';
+import { ResponseOrder } from './refresh-order';
 
 /**
  * Shared auth + top-level state for the Activity facade.
@@ -73,9 +74,25 @@ export class AuthService {
     this.actionMessage.set(null);
   }
 
+  // Many callers refresh the overview at once (timer, change feed, every write), and the replies
+  // can come back out of order. Only a reply newer than the one on screen is shown, so a slow,
+  // older reply can never undo a change the user just made.
+  private readonly overviewOrder = new ResponseOrder();
+
   async refreshOverview(): Promise<void> {
-    const accessToken = this.currentAccessToken();
-    this.overview.set(await this.fetchOverview(accessToken));
+    const ticket = this.overviewOrder.begin();
+    const overview = await this.fetchOverview(this.currentAccessToken());
+    if (this.overviewOrder.accept(ticket)) {
+      this.overview.set(overview);
+    }
+  }
+
+  // For the few places that replace or patch the overview without fetching it (the reconnect
+  // reset, a saved time zone). Any fetch already on the wire started before this change, so its
+  // reply is dropped rather than allowed to undo it.
+  setOverviewLocally(overview: ActivityOverview | null): void {
+    this.overviewOrder.invalidate();
+    this.overview.set(overview);
   }
 
   async fetchOverview(accessToken?: string): Promise<ActivityOverview> {

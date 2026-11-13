@@ -255,7 +255,7 @@ export class DiscordActivityService {
     this.sdk = null;
     this.auth.session.set(null);
     this.auth.localUser.set(null);
-    this.auth.overview.set(null);
+    this.auth.setOverviewLocally(null);
     this.auth.webSession.set(null);
     this.participants.set([]);
     this.context.set(null);
@@ -331,7 +331,8 @@ export class DiscordActivityService {
       this.auth.localUser.set(await this.fetchLocalUser(token.accessToken));
 
       this.phase.set('Loading linkshell activity data');
-      this.auth.overview.set(await this.auth.fetchOverview(token.accessToken));
+      // The session set above carries this same token, so refreshOverview sends it.
+      await this.auth.refreshOverview();
 
       this.phase.set('Loading activity participants');
       const participantsResponse = (await sdk.commands.getInstanceConnectedParticipants()) as {
@@ -418,7 +419,7 @@ export class DiscordActivityService {
       const session = await this.http.fetchActivityJson<WebSession>('/api/web/session');
       this.auth.webSession.set(session);
       if (session.signedIn) {
-        this.auth.overview.set(await this.auth.fetchOverview());
+        await this.auth.refreshOverview();
       }
     } catch (error) {
       this.setError(formatError(error));
@@ -441,8 +442,7 @@ export class DiscordActivityService {
     this.auth.setActionError(null);
 
     try {
-      const accessToken = this.auth.currentAccessToken();
-      this.auth.overview.set(await this.auth.fetchOverview(accessToken));
+      await this.auth.refreshOverview();
 
       const appUser = this.auth.overview()?.appUser;
       const currentLocalUser = this.auth.localUser();
@@ -551,7 +551,7 @@ export class DiscordActivityService {
 
       const overview = this.auth.overview();
       if (overview?.appUser) {
-        this.auth.overview.set({
+        this.auth.setOverviewLocally({
           ...overview,
           appUser: { ...overview.appUser, timeZone: result.timeZone }
         });

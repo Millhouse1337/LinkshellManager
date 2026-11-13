@@ -7,6 +7,7 @@ import { formatActionError } from './discord-activity.helpers';
 import { DkpSheetService } from './dkp-sheet.service';
 import { PartySetupService } from './party-setup.service';
 import { PendingSubmissionsService } from './pending-submissions.service';
+import { RunOnceMore } from './refresh-order';
 import { TreasuryService } from './treasury.service';
 import { WindowEventService } from './window-event.service';
 import type { TabName } from '../home/activity-home.types';
@@ -52,9 +53,14 @@ export class AutoRefreshService {
   // that own data NOT on the overview (e.g. the per-event party board detail) can read
   // this in an effect to reload themselves whenever the app refreshes.
   readonly refreshSignal = signal(0);
-  // Dedupes overlapping refreshes (timer + manual button + change-feed) into a
-  // single in-flight fetch so a click during a tick never double-loads.
-  private refreshInFlight: Promise<void> | null = null;
+  // Overlapping refreshes (timer + manual button + change-feed) never run side by side. A request
+  // that arrives mid-refresh does NOT join it: that refresh may have fetched before the change the
+  // caller wants to see. It waits for one more refresh after the current one instead, and every
+  // request arriving in the meantime shares that same extra run.
+  private readonly refreshRunner = new RunOnceMore(() => this.doRefresh(this.nextRefreshTab));
+  // The tab the next refresh loads, so the extra run uses the newest caller's tab (the user may
+  // have switched tabs while the previous refresh was running).
+  private nextRefreshTab: TabName | null = null;
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private started = false;
 
@@ -140,8 +146,8 @@ export class AutoRefreshService {
   }
 
   // The single refresh path used by the timer, the manual button, and the live
-  // change-feed. Refreshes the overview AND the active tab's own data, deduping
-  // overlapping calls. `showBusy` drives the header spinner + surfaces errors —
+  // change-feed. Refreshes the overview AND the active tab's own data, folding
+  // overlapping calls together. `showBusy` drives the header spinner + surfaces errors —
   // used only by the manual button so background refreshes stay quiet.
   async refreshNow(tab: TabName | null = this.activeTab(), showBusy = false): Promise<void> {
     if (showBusy) {
@@ -149,8 +155,8 @@ export class AutoRefreshService {
       this.auth.setActionError(null);
     }
     try {
-      this.refreshInFlight ??= this.doRefresh(tab);
-      await this.refreshInFlight;
+      this.nextRefreshTab = tab;
+      await this.refreshRunner.run();
       // Manual (button) refresh only — confirm it visibly via the success banner so
       // the user can see the page actually reloaded. The silent background timer
       // (showBusy=false) never flashes this.
@@ -168,19 +174,27 @@ export class AutoRefreshService {
 
   private async doRefresh(tab: TabName | null): Promise<void> {
     try {
+      // No overview at all means start-up failed (the error banner is showing and its Reconnect
+      // button reloads everything), so there is nothing for the timer to refresh.
+      if (!this.activity.overview()) return;
+
+      // Overview backs the identity bar, sidebar, dashboard, ToDs/events tabs,
+      // and a chunk of derived per-tab signals; refreshing it covers all of
+      // those. Always refresh it, even with no linkshell yet: a new member on
+      // the Onboarding screen is waiting for exactly this (an invite an officer
+      // just sent, an approved join request) to show up.
+      await this.activity.refreshOverview();
+
+      // Read the linkshell from the FRESH overview (it may have just changed),
+      // then load the active tab's own data on top. Those loaders are all
+      // per-linkshell, so they are the only part skipped without one.
       const linkshellId =
         this.activity.overview()?.primaryLinkshell?.id ??
         this.activity.overview()?.appUser?.primaryLinkshellId ??
         0;
       if (!linkshellId) return;
-
-      // Overview backs the identity bar, sidebar, dashboard, ToDs/events tabs,
-      // and a chunk of derived per-tab signals; refreshing it covers all of
-      // those. Then load the active tab's own data on top.
-      await this.activity.refreshOverview();
       await this.loadForTab(tab, linkshellId);
     } finally {
-      this.refreshInFlight = null;
       // Let board-detail panels (and anything else off the overview) reload.
       this.refreshSignal.update(v => v + 1);
     }
@@ -200,8 +214,11 @@ export class AutoRefreshService {
         await this.partySetup.loadList(linkshellId);
         break;
       case 'tods':
-        // The ToDs ride the overview, but the ToD Submissions Needing Approval section has its own
-        // endpoint, and only reviewers may read it.
+        // The ToDs ride the overview, but two things on this tab do not: the party setup list (a
+        // ToD row whose monster has a setup offers the sign-up panel) and the ToD Submissions
+        // Needing Approval section, which has its own endpoint that only reviewers may read. The
+        // tab itself only loads them when the linkshell changes, so the timer keeps them fresh.
+        await this.partySetup.loadList(linkshellId);
         if (canReviewSubmissionsIn(this.activity.overview(), linkshellId)) {
           await this.pendingSubmissions.load(linkshellId);
         }

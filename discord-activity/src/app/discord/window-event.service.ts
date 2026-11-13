@@ -10,6 +10,7 @@ import type {
   ActivityWindowEventMemberDkpInput,
   ActivityWindowEventsResponse
 } from './discord-activity.types';
+import { ResponseOrder } from './refresh-order';
 
 @Injectable({ providedIn: 'root' })
 export class WindowEventService {
@@ -24,6 +25,11 @@ export class WindowEventService {
   private loadedFor = 0;
   private loadedAt = 0;
   private inFlight: Promise<void> | null = null;
+  // Linkshell the in-flight request is for, so a request for the linkshell the user just left is
+  // never shared with a caller asking for the new one.
+  private inFlightFor = 0;
+  // Only the newest reply for the current linkshell is shown (see refresh-order.ts).
+  private readonly order = new ResponseOrder();
 
   // ----- Attendance Archive search + paging -----
   //
@@ -34,9 +40,11 @@ export class WindowEventService {
   readonly closedQuery = signal('');
   readonly closedPage = signal(1);
 
-  // Force a refetch. Used after every write and by the manual Refresh button.
+  // Fetch now, or share a fetch for the same linkshell already on the wire. Behind first paint
+  // (ensureLoaded) and the refresh timer (loadIfStale); writes and archive searches use reloadFresh.
   async load(linkshellId: number): Promise<void> {
     if (!linkshellId) {
+      this.order.invalidate();
       this.data.set(null);
       this.loadedFor = 0;
       this.resetClosedPaging();
@@ -45,16 +53,19 @@ export class WindowEventService {
     // A different linkshell's archive is a different list, so neither the query nor the page
     // carries over — page 3 of the old one is very likely past the end of the new one.
     if (this.loadedFor && this.loadedFor !== linkshellId) this.resetClosedPaging();
-    // Since attendance moved into the Event System tab there are three callers that can land in the
-    // same frame — the tab's first-paint effect, the refresh timer, and a write's refetch. Share one
-    // request rather than firing three.
-    this.inFlight ??= this.loadCore(linkshellId);
-    await this.inFlight;
+    // Since attendance moved into the Event System tab there are callers that can land in the same
+    // frame — the tab's first-paint effect and the refresh timer. Share one request for the same
+    // linkshell rather than firing two.
+    if (this.inFlight && this.inFlightFor === linkshellId) {
+      await this.inFlight;
+      return;
+    }
+    await this.startLoad(linkshellId);
   }
 
   // First paint. No-op when this linkshell's payload is already loaded or in flight.
   async ensureLoaded(linkshellId: number): Promise<void> {
-    if (!linkshellId || this.loadedFor === linkshellId || this.inFlight) return;
+    if (!linkshellId || this.loadedFor === linkshellId || this.inFlightFor === linkshellId) return;
     await this.load(linkshellId);
   }
 
@@ -72,19 +83,19 @@ export class WindowEventService {
   async searchClosed(linkshellId: number, query: string): Promise<void> {
     this.closedQuery.set((query ?? '').trim());
     this.closedPage.set(1);
-    await this.reloadArchive(linkshellId);
+    await this.reloadFresh(linkshellId);
   }
 
   async goToClosedPage(linkshellId: number, page: number): Promise<void> {
     this.closedPage.set(Math.max(1, page));
-    await this.reloadArchive(linkshellId);
+    await this.reloadFresh(linkshellId);
   }
 
-  // Refetch with the archive state as it stands NOW. Deliberately does not join an in-flight
-  // request the way load() does: that one was issued with the previous query/page, so joining it
-  // would land a stale payload as the answer to this search and leave the input disagreeing with
-  // the cards under it.
-  private async reloadArchive(linkshellId: number): Promise<void> {
+  // Refetch with the state as it stands NOW. Deliberately does not join an in-flight request the
+  // way load() does: that one was issued BEFORE this search, page change or write, so joining it
+  // would land a stale payload as the answer (the search input disagreeing with the cards under
+  // it, or a change the officer just saved seeming to vanish until the next poll).
+  private async reloadFresh(linkshellId: number): Promise<void> {
     if (!linkshellId) return;
     // Let a poll already on the wire settle first, or its late response would overwrite ours.
     const pending = this.inFlight;
@@ -97,15 +108,30 @@ export class WindowEventService {
     this.closedPage.set(1);
   }
 
+  private startLoad(linkshellId: number): Promise<void> {
+    const request: Promise<void> = this.loadCore(linkshellId).finally(() => {
+      // Only clear the slot if it still holds THIS request; a newer one may have replaced it.
+      if (this.inFlight === request) {
+        this.inFlight = null;
+        this.inFlightFor = 0;
+      }
+    });
+    this.inFlight = request;
+    this.inFlightFor = linkshellId;
+    return request;
+  }
+
   private async loadCore(linkshellId: number): Promise<void> {
     this.busy.set(true);
     this.auth.setActionError(null);
     try {
+      const ticket = this.order.begin(linkshellId);
       const query = this.closedQuery();
       const result = await this.http.fetchActivityJson<ActivityWindowEventsResponse>(
         `/api/activity/window-events?linkshellId=${linkshellId}`
         + `&attQ=${encodeURIComponent(query)}&attPage=${this.closedPage()}`
       );
+      if (!this.order.accept(ticket, linkshellId)) return;
       // The server clamps the page to the result set, so mirror its answer back into our state —
       // otherwise a page that no longer exists (a search narrowed the archive, or an event was
       // deleted) stays in the pager and every later request asks for it again.
@@ -117,7 +143,6 @@ export class WindowEventService {
       this.auth.setActionError(formatActionError(error, 'Loading attendance events failed.'));
     } finally {
       this.busy.set(false);
-      this.inFlight = null;
     }
   }
 
@@ -302,7 +327,9 @@ export class WindowEventService {
     this.auth.setActionMessage(null);
     try {
       await this.http.postActivityAction(path, body);
-      await this.load(linkshellId);
+      // A poll already on the wire was sent before this write, so wait for it and fetch again
+      // rather than sharing its now-stale answer.
+      await this.reloadFresh(linkshellId);
       this.auth.setActionMessage(message);
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Updating attendance events failed.'));
