@@ -3,7 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
-import type { ActivityItemInput, ActivityRevenueInput } from './discord-activity.types';
+import type { ActivityItemInput } from './discord-activity.types';
 import { TreasuryService } from './treasury.service';
 
 /**
@@ -31,8 +31,6 @@ export class LinkshellContentService {
   readonly busyAnnouncementId = signal<number | null>(null);
   readonly busyItemSave = signal(false);
   readonly busyItemId = signal<number | null>(null);
-  readonly busyRevenueSave = signal(false);
-  readonly busyRevenueId = signal<number | null>(null);
 
   // ----- Rules -----
   async createRule(linkshellId: number, title: string, details: string, category: string | null): Promise<void> {
@@ -266,70 +264,6 @@ export class LinkshellContentService {
       throw error;
     } finally {
       this.busyItemId.set(null);
-    }
-  }
-
-  // ----- Revenue -----
-  async createRevenueEntry(linkshellId: number, input: ActivityRevenueInput): Promise<void> {
-    this.busyRevenueSave.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
-    try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/revenue`, {
-        entryType: input.entryType,
-        category: input.category ?? null,
-        value: input.value,
-        details: input.details ?? null,
-        occurredAt: input.occurredAt ?? null
-      });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Revenue entry saved.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Saving the revenue entry failed.'));
-      throw error;
-    } finally {
-      this.busyRevenueSave.set(false);
-    }
-  }
-
-  async updateRevenueEntry(entryId: number, input: ActivityRevenueInput): Promise<void> {
-    this.busyRevenueId.set(entryId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
-    try {
-      await this.http.postActivityAction(`/api/activity/revenue/${entryId}/update`, {
-        entryType: input.entryType,
-        category: input.category ?? null,
-        value: input.value,
-        details: input.details ?? null,
-        occurredAt: input.occurredAt ?? null
-      });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Revenue entry updated.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the revenue entry failed.'));
-      throw error;
-    } finally {
-      this.busyRevenueId.set(null);
-    }
-  }
-
-  async deleteRevenueEntry(entryId: number): Promise<void> {
-    this.busyRevenueId.set(entryId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
-    try {
-      await this.http.postActivityAction(`/api/activity/revenue/${entryId}/delete`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Revenue entry deleted.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Deleting the revenue entry failed.'));
-      throw error;
-    } finally {
-      this.busyRevenueId.set(null);
     }
   }
 }

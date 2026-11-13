@@ -30,7 +30,6 @@ export class LinkshellService {
   private readonly http = inject(ActivityHttpClient);
 
   readonly linkshellDetail = signal<ActivityLinkshellDetail | null>(null);
-  readonly linkshellDetailBusy = signal(false);
   readonly busyLinkshellId = signal<number | null>(null);
   readonly busyMemberId = signal<number | null>(null);
   readonly busyRoles = signal(false);
@@ -45,8 +44,6 @@ export class LinkshellService {
       return;
     }
 
-    this.linkshellDetailBusy.set(true);
-
     try {
       const accessToken = this.auth.currentAccessToken();
       this.linkshellDetail.set(
@@ -58,8 +55,6 @@ export class LinkshellService {
     } catch (error) {
       this.linkshellDetail.set(null);
       this.auth.setActionError(formatActionError(error, 'Loading linkshell details failed.'));
-    } finally {
-      this.linkshellDetailBusy.set(false);
     }
   }
 

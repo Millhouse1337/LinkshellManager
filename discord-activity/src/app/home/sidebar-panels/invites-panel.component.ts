@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, Input, effect, inject, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { canManageLinkshellIn } from '../activity-home.helpers';
@@ -27,11 +27,6 @@ interface InviteResultRow {
 export class InvitesPanelComponent {
   protected readonly activity = inject(DiscordActivityService);
 
-  // Bumping `linkshellPrimaryResetTick` from the parent (e.g. after a
-  // brand-new linkshell is created) rebases this panel's invite-target
-  // selection to the freshly-resolved primary linkshell.
-  @Input() linkshellPrimaryResetTick = 0;
-
   protected inviteLinkshellId = 0;
 
   // The invite card: one search box, the dropdown saying where to look, and one list.
@@ -47,16 +42,6 @@ export class InvitesPanelComponent {
   private discordRosterLoadedFor = 0;
 
   public constructor() {
-    effect(() => {
-      const tick = this.linkshellPrimaryResetTick;
-      if (tick === 0) return;
-      untracked(() => {
-        this.inviteLinkshellId = this.activity.currentLinkshellId();
-        // Force a browse reload for the newly-resolved primary linkshell.
-        this.browseLoadedFor = 0;
-      });
-    });
-
     // Load the Entire LSM Server list once per target linkshell (page 1). User
     // actions (search / paging / invite) reload it explicitly.
     effect(() => {

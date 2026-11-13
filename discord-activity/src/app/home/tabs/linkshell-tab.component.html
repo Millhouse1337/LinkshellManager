@@ -51,6 +51,11 @@
               }
             </div>
           </div>
+          <!-- Officers' claim requests (imported members someone says are them). Shows nothing
+               while none are waiting. -->
+          @if (canApproveClaimRequests(activeLinkshell.id)) {
+            <app-claim-requests-card [linkshellId]="activeLinkshell.id" />
+          }
           @if (selectedDashboardMembers().length > 0) {
             <div class="ac-roster-search" style="display:flex;align-items:center;gap:8px">
               <input

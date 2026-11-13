@@ -49,7 +49,8 @@ import type { ActivityPlaceholderClaimRequest } from '../../discord/discord-acti
     }
   `,
   styles: [`
-    .claim-requests { margin: 12px 0; }
+    /* Sits inside the roster card, lined up with its search row (.ac-roster-search). */
+    .claim-requests { padding: 12px 16px 0; }
     .claim-requests__hint { margin: 4px 0 8px; font-size: 12px; }
     .claim-requests__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     .claim-requests__row {

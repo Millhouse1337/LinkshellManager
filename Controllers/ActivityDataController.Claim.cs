@@ -229,58 +229,6 @@ public sealed partial class ActivityDataController
         return (appUser.Id, null);
     }
 
-    // Officer fallback: link an unclaimed placeholder either to a Discord id (so
-    // the next launch auto-claims it) or directly to an existing account (merge now).
-    [HttpPost("linkshells/{linkshellId:int}/members/{membershipId:int}/link")]
-    public async Task<IActionResult> LinkPlaceholderAsync(
-        int linkshellId,
-        int membershipId,
-        [FromBody] ActivityLinkPlaceholderRequest request,
-        [FromServices] PlaceholderClaimService claimService,
-        CancellationToken cancellationToken)
-    {
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null)
-        {
-            return Unauthorized(new { error = "Sign in to manage members." });
-        }
-        var membership = await GetMembershipAsync(appUser.Id, linkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageMembers, cancellationToken))
-        {
-            return Forbid();
-        }
-
-        var target = await _dbContext.AppUserLinkshells
-            .Include(m => m.AppUser)
-            .FirstOrDefaultAsync(m => m.Id == membershipId && m.LinkshellId == linkshellId, cancellationToken);
-        if (target?.AppUser is null || !target.AppUser.IsPlaceholder || target.AppUserId is null)
-        {
-            return BadRequest(new { error = "That member is not an unclaimed placeholder." });
-        }
-
-        if (request is not null && !string.IsNullOrWhiteSpace(request.DiscordUserId))
-        {
-            target.DiscordUserId = request.DiscordUserId.Trim();
-            // An officer set it, so that Discord user's first LSM launch may take the placeholder over.
-            target.DiscordIdConfirmed = true;
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            return Ok(new { success = true, linked = "discord" });
-        }
-
-        if (request is not null && !string.IsNullOrWhiteSpace(request.TargetAppUserId))
-        {
-            var result = await claimService.ClaimPlaceholderAsync(
-                target.AppUserId, request.TargetAppUserId.Trim(), linkshellId, cancellationToken);
-            if (!result.Success)
-            {
-                return BadRequest(new { error = result.Error });
-            }
-            return Ok(new { success = true, linked = "account" });
-        }
-
-        return BadRequest(new { error = "Provide a Discord ID or a target account." });
-    }
-
     // Lowercased set of a user's character names (main + alts), plus an optional
     // extra (a membership's own CharacterName).
     private static HashSet<string> NameKeys(AppUser user, string? extra = null)
@@ -296,5 +244,3 @@ public sealed partial class ActivityDataController
 }
 
 public sealed record ActivityClaimRequest(string? PlaceholderAppUserId, int LinkshellId);
-
-public sealed record ActivityLinkPlaceholderRequest(string? TargetAppUserId, string? DiscordUserId);

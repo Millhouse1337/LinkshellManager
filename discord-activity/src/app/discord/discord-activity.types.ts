@@ -608,8 +608,6 @@ export interface ActivityTreasuryEntry {
   memo?: string | null;
   counterpartyCharacterName?: string | null;
   enteredByCharacterName?: string | null;
-  recordedAt?: string | null;
-  reversesEntryId?: number | null;
   reversesEntryNumber?: string | null;
   isReversed: boolean;
   /** Cancelled by a FIX rather than an outright reversal: the right numbers were recorded in its
@@ -776,14 +774,6 @@ export interface ActivityTreasuryFixInput extends Omit<ActivityTreasuryEntryInpu
 }
 
 export type ActivityTreasuryFilter = 'all' | 'in' | 'out' | 'fixed' | 'reversed';
-
-export interface ActivityRevenueInput {
-  entryType: 'Income' | 'Expense';
-  category?: string | null;
-  value: number;
-  details?: string | null;
-  occurredAt?: string | null;
-}
 
 // Discord channel-routes config. Officers add
 // named routes, pick a channel, and tick which post types the bot posts there.
@@ -1167,7 +1157,6 @@ export interface ActivityEvent {
   hnmFocusWindow?: number;
   nextWindowAt?: string | null;
   wdFinalizedAt?: string | null;
-  wdPopWindow?: number | null;
   // What End Camp would pay out if the camp ended now. Null on anything but a Standard HNM camp.
   hnmPayout?: ActivityCampPayout | null;
   // When a ToD for this live camp's monster was last logged since the camp started (addon or
@@ -1349,18 +1338,6 @@ export interface ActivityWindowEventMemberDkpInput {
 export interface ActivityWindowEventCaptureDkpInput {
   entryId: number;
   dkpAmount: number | null;
-}
-
-export interface ActivityWindowEventDkpPayload {
-  dkpAmount: number;
-  entryType: string;
-  memberDkp?: ActivityWindowEventMemberDkpInput[];
-  // DKP for members credited ONLY by Misc posts. Null means they are paid the same as a window
-  // attendee, which is the default.
-  miscDkpAmount?: number | null;
-  // The per-capture amounts, on a card that prices its captures. Sent INSTEAD of memberDkp, never
-  // alongside it.
-  captureDkp?: ActivityWindowEventCaptureDkpInput[];
 }
 
 export interface ActivityAddSnapshotEntryInput {
@@ -1754,13 +1731,6 @@ export interface ActivityUserSearchResult {
   inDiscordServer?: boolean | null;
 }
 
-export interface ActivityLinkshellSearchResult {
-  id: number;
-  name: string;
-  details?: string | null;
-  memberCount: number;
-}
-
 // One row of the HNM claim-rate chart: `claimed` of `attempts` (every ToD marked Claimed or
 // Unclaimed; "Not specified" isn't an attempt), and `claimRate`, the two as a percentage.
 // `colorClass` is the palette letter the row paints with.
@@ -1823,13 +1793,6 @@ export interface ActivityHnmWindows {
   totalPops: number;
 }
 
-export interface ActivityOverviewStats {
-  linkshellCount: number;
-  activeEventCount: number;
-  completedEventCount: number;
-  liveEventCount: number;
-}
-
 export interface ActivityOverview {
   appUser: ActivityAppUser;
   linkshells: ActivityLinkshell[];
@@ -1847,7 +1810,6 @@ export interface ActivityOverview {
   hnmClaims: ActivityHnmClaims;
   // The same card's other tab: which window of its band each HNM pops on, off Tod.PopWindow.
   hnmWindows: ActivityHnmWindows;
-  stats: ActivityOverviewStats;
   addonConfigured: boolean;
   addonGloballyDisabled: boolean;
   // (hnmWindowSetups lived here: a global, read-only monster → windows × cadence list. Window
@@ -2483,15 +2445,13 @@ export type ChartBossKind = 'Standard' | 'MiniNm' | 'Final' | 'Tier';
 
 /**
  * Whether a tracked row is something traded TO a boss or something that fell OFF one. The rows are
- * otherwise identical - same fields, same farming credit, same ledger.
+ * otherwise identical - same fields, same farming credit.
  */
 export type ChartItemKind = 'Pop' | 'Drop';
 
 /** There is deliberately no 'Withdrawn': withdrawing deletes the request. */
 export type ChartWishlistStatus = 'Pending' | 'Fulfilled';
 
-/** Composed server-side. */
-export type ChartCreditStatus = 'Credited' | 'Partial' | 'None' | 'NotTracked';
 
 export interface ActivityChartCredit {
   characterName: string;
@@ -2507,8 +2467,6 @@ export interface ActivityChartPopItem {
   notes?: string | null;
   sortOrder: number;
   credits: ActivityChartCredit[];
-  /** What the card's "Farmers Credited" column shows. */
-  creditCount: number;
   updatedAt: string;
   /** Picks the pill beside the name and which option list the edit form offers. */
   kind: ChartItemKind;
@@ -2566,40 +2524,10 @@ export interface ActivityChartBoss {
   keyItemName?: string | null;
   keyItemHaveCount: number;
   keyItemTotalMembers: number;
-  /** Exactly who still needs it, in roster order. No longer drawn on the card - the card has an
-   *  "I Have It" button instead, and the Member Progress tab shows who is missing. */
-  keyItemMissing: string[];
   /** Whether this card gets an "add pop item" button. The server's answer; the add endpoint checks it too. */
   takesPopItems: boolean;
   /** Whether this card gets an "add drop item" button. */
   takesDropItems: boolean;
-}
-
-export interface ActivityChartLedgerCell {
-  boss: string;
-  status: ChartCreditStatus;
-  /** "6 / 8", or an em dash when the boss has nothing tracked. */
-  detail: string;
-  creditedItems: number;
-  totalItems: number;
-}
-
-export interface ActivityChartLedgerRow {
-  membershipId: number | null;
-  characterName: string;
-  /** False for someone credited on an item who has since left the linkshell. */
-  isCurrentMember: boolean;
-  rank?: string | null;
-  cells: ActivityChartLedgerCell[];
-  /** Items credited over items tracked across the whole board, plus the percentage. */
-  totalCredited: number;
-  totalTracked: number;
-  creditedPercent: number;
-}
-
-export interface ActivityChartLedger {
-  bosses: string[];
-  rows: ActivityChartLedgerRow[];
 }
 
 export interface ActivityChartRosterMember {
@@ -2648,7 +2576,6 @@ export interface ActivityChartBoard {
    * chose its own row lengths (Dynamis, Limbus, HENM).
    */
   centersRows: boolean;
-  ledger: ActivityChartLedger;
   /** Empty unless canManage — a reader has nobody to pick. */
   roster: ActivityChartRosterMember[];
   lastUpdatedUtc?: string | null;
@@ -2657,8 +2584,8 @@ export interface ActivityChartBoard {
   /** What this board offers. Branch on THESE, never on whether a list happens to be populated. */
   features: ActivityChartBoardFeatures;
   /**
-   * The board's item requests. In this payload rather than a fetch of its own, for the reason the
-   * ledger is: a card's badge and the list below it are two views of one set of rows.
+   * The board's item requests. In this payload rather than a fetch of its own, because a card's
+   * badge and the list below it are two views of one set of rows.
    */
   wishlist: ActivityChartWishlist;
   /** Per-member key item progress. No columns on a board that tracks none. */
@@ -2721,7 +2648,6 @@ export interface ActivityChartKeyItemColumn {
   caption?: string | null;
   haveCount: number;
   totalMembers: number;
-  missingCharacterNames: string[];
 }
 
 export interface ActivityChartKeyItemRow {
@@ -2748,12 +2674,6 @@ export interface ActivityChartKeyItemInput {
   keyItemName: string;
   membershipId: number;
   has: boolean;
-}
-
-/** The boards the sub-nav offers, so the client does not keep its own list. */
-export interface ActivityChartBoardSummary {
-  board: string;
-  label: string;
 }
 
 export interface ActivityChartPopItemInput {

@@ -1072,7 +1072,6 @@ public sealed partial class ActivityDataController
                 evt.HnmWindowNumber,
                 evt.NextWindowAt,
                 evt.WdFinalizedAt,
-                evt.WdPopWindow,
                 // What the UI shows — same helper the Discord board uses, so the two can't
                 // disagree. Separate from HnmWindowNumber above, which pop-window logic needs.
                 DiscordEventMessageBuilder.FocusWindow(evt),
@@ -1136,11 +1135,6 @@ public sealed partial class ActivityDataController
                 MapHnmClaimSlices(hnmClaimStatsResult.Last30Days),
                 MapHnmClaimSlices(hnmClaimStatsResult.AllTime)),
             MapHnmWindows(hnmWindowStatsResult),
-            new ActivityOverviewStatsDto(
-                linkshellMemberships.Count,
-                activeEvents.Count,
-                recentHistory.Count,
-                activeEvents.Count(evt => evt.CommencementStartTime.HasValue)),
             addonConfigured,
             addonGloballyDisabled,
             adminOverrideActive,

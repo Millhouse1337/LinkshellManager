@@ -10,12 +10,11 @@ import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.
 import { AuctionsPanelComponent, AuctionsView } from './sidebar-panels/auctions-panel.component';
 import { InvitesPanelComponent } from './sidebar-panels/invites-panel.component';
 import { JobRatingsPanelComponent } from './sidebar-panels/job-ratings-panel.component';
-import { RosterPanelComponent } from './sidebar-panels/roster-panel.component';
 import { StarRatingComponent } from './sidebar-panels/star-rating.component';
 
 @Component({
   selector: 'app-activity-sidebar-panel',
-  imports: [CommonModule, FormsModule, AuctionsPanelComponent, InvitesPanelComponent, JobRatingsPanelComponent, RosterPanelComponent, StarRatingComponent],
+  imports: [CommonModule, FormsModule, AuctionsPanelComponent, InvitesPanelComponent, JobRatingsPanelComponent, StarRatingComponent],
   templateUrl: './activity-sidebar-panel.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
@@ -484,22 +483,11 @@ export class ActivitySidebarPanelComponent {
   protected readonly timeZoneOptions = resolveTimeZoneOptions(this.activity.overview()?.appUser?.timeZone, this.browserTimeZone);
   private profileSeed = '';
 
-  // Bumped after a brand-new linkshell is created in the roster panel so
-  // the invites panel re-anchors its target to the freshly-resolved
-  // primary linkshell (matches pre-refactor behavior).
-  protected readonly invitePrimaryResetTick = signal(0);
-
   // Latest-write-wins guard. Each linkshell-selection change bumps this
   // counter; in-flight loads from a previous selection capture the older
   // value and bail before mutating state, so a slow detail/auction load
   // can't overwrite data for the user's current selection.
   private selectionGen = 0;
-
-  // Stable arrow bindings for child component callback @Inputs — wrapping
-  // the methods avoids `this` binding issues when the references are passed
-  // into `[selectLinkshell]` etc.
-  protected readonly selectLinkshellFn = (linkshellId: number) => this.selectLinkshell(linkshellId);
-  protected readonly onPrimaryLinkshellChangedFn = () => this.invitePrimaryResetTick.update(tick => tick + 1);
 
   public constructor()
   {
@@ -625,7 +613,7 @@ export class ActivitySidebarPanelComponent {
       // requests on every refresh.
       const needsDkpHistory = this.showSection('dkp');
       const needsAuctionHistory = this.showSection('auctions');
-      const needsDetail = needsDkpHistory || needsAuctionHistory || this.showSection('roster');
+      const needsDetail = needsDkpHistory || needsAuctionHistory;
 
       void (async () => {
         if (needsDetail) {
@@ -754,19 +742,6 @@ export class ActivitySidebarPanelComponent {
 
   protected dkpHistory() {
     return this.activity.dkpHistory();
-  }
-
-  protected async selectLinkshell(linkshellId: number): Promise<void> {
-    if (!linkshellId) {
-      return;
-    }
-
-    this.selectedLinkshellId = linkshellId;
-    this.selectedDkpHistoryAppUserId = '';
-    await this.activity.loadLinkshellDetail(linkshellId);
-    await this.reloadDkpHistory();
-    await this.activity.loadAuctions(linkshellId);
-    await this.activity.loadAuctionHistory(linkshellId);
   }
 
   protected async onDkpHistoryMemberChange(appUserId: string): Promise<void> {

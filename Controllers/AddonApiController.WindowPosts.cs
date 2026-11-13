@@ -7,11 +7,10 @@ using Npgsql;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-// Adding a post to a live camp from the Activity's "Add New Post": a WINDOW post (members credited
-// into one of the camp's attendance windows, the same rows the addon's Post writes) or a MISC post
-// (a capture filed on the camp as Misc, paid the Misc rate once per person). Both take the members
-// by account, picked from the linkshell roster -- an officer naming who was there, so there is no
-// scanned name to resolve.
+// Adding a post to a live camp from the Activity's "Add New Post": a MISC post (a capture filed on
+// the camp as Misc, paid the Misc rate once per person). It takes the members by account, picked
+// from the linkshell roster -- an officer naming who was there, so there is no scanned name to
+// resolve. (A Window post route used to sit here too; the app stopped offering it, so it went.)
 //
 // Also home to FindOrCreateAttendanceWindowAsync, which the addon's PostAttendanceAsync shares, so
 // the range check and the "the Close has been posted" guard cannot differ between the two.
@@ -184,8 +183,6 @@ public sealed partial class AddonApiController
         ApplicationDbContext dbContext, Func<Task<T>> post) =>
         UniqueRaceRetry.RunAsync(dbContext, post, "AppUserEventWindows", UniqueRaceRetry.Participations);
 
-    // windowSequence: which of the camp's windows; a new one is created, an existing one is added to.
-    public sealed record AddonAddWindowPostRequest(int WindowSequence, IReadOnlyList<string>? AppUserIds);
     // name: optional; "Misc post" when blank.
     // DkpAmount: what this post pays each member, replacing the linkshell's Misc post rate. Null
     // (or left out) = no price of its own, the rate applies.
@@ -249,98 +246,6 @@ public sealed partial class AddonApiController
             .ToList();
         var actorName = (actorMembership?.CharacterName ?? appUser.CharacterName ?? appUser.UserName ?? "officer").Trim();
         return (new NewPostContext(camp, appUser, actorName, members), null);
-    }
-
-    // POST /api/addon/management/events/{eventId}/window-posts   (web + Activity, cookie/bearer)
-    //
-    // Credits the picked members into window `windowSequence`, writing what the addon's Post writes
-    // for each (PostAttendanceAsync): their participation, the per-window credit row, and a Verify
-    // ledger entry. Someone already credited in that window is skipped, so posting into an existing
-    // window is how an officer adds a missed member.
-    [HttpPost("management/events/{eventId:int}/window-posts")]
-    public Task<IActionResult> AddWindowPostManagementAsync(
-        int eventId,
-        [FromBody] AddonAddWindowPostRequest request,
-        CancellationToken cancellationToken) =>
-        RetryIfWindowCreditRaceAsync(
-            _dbContext, () => AddWindowPostManagementCoreAsync(eventId, request, cancellationToken));
-
-    private async Task<IActionResult> AddWindowPostManagementCoreAsync(
-        int eventId, AddonAddWindowPostRequest request, CancellationToken cancellationToken)
-    {
-        var (context, error) = await LoadNewPostContextAsync(eventId, request.AppUserIds, cancellationToken);
-        if (error is not null) return error;
-        var (camp, actor, actorName, members) = context!;
-
-        var nowUtc = DateTime.UtcNow;
-        var source = $"{actorName} (app)";
-        var (window, windowError) = await FindOrCreateAttendanceWindowAsync(
-            camp, request.WindowSequence, isKillWindow: false, nowUtc, source, cancellationToken);
-        if (windowError is not null) return BadRequest(new { error = windowError });
-
-        var memberIds = members.Select(m => m.AppUserId).ToList();
-        var participations = await _dbContext.AppUserEvents
-            .Where(ue => ue.EventId == camp.Id && memberIds.Contains(ue.AppUserId!))
-            .ToDictionaryAsync(ue => ue.AppUserId!, StringComparer.Ordinal, cancellationToken);
-        // Keyed on the denormalized AppUserId, like the addon's Post: a roster clear can replace a
-        // participation, and the credit row has to dedupe across that.
-        var alreadyCredited = (await _dbContext.AppUserEventWindows
-                .Where(w => w.EventAttendanceWindowId == window!.Id && w.AppUserId != null)
-                .Select(w => w.AppUserId!)
-                .ToListAsync(cancellationToken))
-            .ToHashSet(StringComparer.Ordinal);
-
-        var added = 0;
-        var skipped = 0;
-        foreach (var (appUserId, characterName) in members)
-        {
-            if (!alreadyCredited.Add(appUserId))
-            {
-                skipped++;
-                continue;
-            }
-
-            if (!participations.TryGetValue(appUserId, out var participation))
-            {
-                participation = new AppUserEvent
-                {
-                    AppUserId = appUserId,
-                    EventId = camp.Id,
-                    CharacterName = characterName,
-                    StartTime = nowUtc,
-                    IsQuickJoin = true,
-                    IsVerified = true,
-                };
-                _dbContext.AppUserEvents.Add(participation);
-                participations[appUserId] = participation;
-            }
-            else if (participation.IsVerified != true)
-            {
-                participation.IsVerified = true;
-                participation.StartTime ??= nowUtc;
-            }
-
-            _dbContext.AppUserEventWindows.Add(new AppUserEventWindow
-            {
-                AppUserEvent = participation,
-                EventAttendanceWindow = window,
-                AppUserId = appUserId,
-                CharacterName = characterName,
-                VerifiedAt = nowUtc,
-                VerifiedBy = source,
-            });
-            added++;
-        }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new
-        {
-            windowId = window!.Id,
-            windowSequence = window.SequenceNumber,
-            windowLabel = HnmConfig.NormalizeWindowLabel(window.Label),
-            added,
-            alreadyInWindow = skipped,
-        });
     }
 
     // POST /api/addon/management/events/{eventId}/misc-posts   (web + Activity, cookie/bearer)

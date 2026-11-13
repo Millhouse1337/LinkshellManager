@@ -9,6 +9,7 @@ import {
 } from '../../discord/discord-activity.service';
 import type { ActivityJobRating, ActivityJobRatingOverall, ActivityJobRatingsResponse } from '../../discord/discord-activity.types';
 import { ActivitySidebarPanelComponent } from '../activity-sidebar-panel.component';
+import { ClaimRequestsCardComponent } from '../sidebar-panels/claim-requests-card.component';
 import { JobsRosterStore, type RosterCharacterJobs, type RosterJobPill } from '../jobs-roster.store';
 import {
   ADMIN_BADGE,
@@ -35,7 +36,7 @@ interface ProfileJobRow extends RosterJobPill {
 
 @Component({
   selector: 'app-linkshell-tab',
-  imports: [CommonModule, FormsModule, ActivitySidebarPanelComponent],
+  imports: [CommonModule, FormsModule, ActivitySidebarPanelComponent, ClaimRequestsCardComponent],
   templateUrl: './linkshell-tab.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
@@ -223,6 +224,14 @@ export class LinkshellTabComponent {
 
   protected canManageSelectedDashboard(): boolean {
     return this.canManageLinkshell(this.selectedDashboardLinkshellId());
+  }
+
+  // The "Manage members" PERMISSION the claim-request endpoints check (or the Leader, whom the
+  // server always lets through), not the rank: a custom role with Manage members must see the
+  // card. (The card used to sit in an old roster panel that was never shown.)
+  protected canApproveClaimRequests(linkshellId: number): boolean {
+    const permissions = (this.activity.overview()?.linkshells ?? []).find(link => link.id === linkshellId)?.permissions;
+    return permissions?.canManageMembers === true || isLeaderTierIn(this.activity.overview(), linkshellId);
   }
 
   // ----- Jobs data (every member's leveled jobs, rendered inline in the roster) -----

@@ -53,7 +53,6 @@ import type {
   ActivityLootStructure,
   ActivityMonsterTimingInput,
   ActivityQuickJoinInput,
-  ActivityRevenueInput,
   ActivityStatus,
   ActivityUpdateProfileInput,
   ActivityUpdateTodInput,
@@ -106,19 +105,16 @@ export type {
   ActivityLootHistoryItem,
   ActivityLootHistoryList,
   ActivityLinkshellRolesResponse,
-  ActivityLinkshellSearchResult,
   ActivityLinkshellSettings,
   ActivityLootInput,
   ActivityLootStructure,
   ActivityOverview,
   ActivityQuickJoinInput,
-  ActivityRevenueInput,
   ActivityRule,
   ActivityStatusLedgerEntry,
   ActivityTodEntry,
   ActivityUpdateProfileInput,
   ActivityUpdateTodInput,
-  ActivityUserSearchResult,
   DiscordParticipant,
   WebSession
 } from './discord-activity.types';
@@ -175,8 +171,6 @@ export class DiscordActivityService {
   readonly busyAnnouncementId = this.linkshellContentService.busyAnnouncementId;
   readonly busyItemSave = this.linkshellContentService.busyItemSave;
   readonly busyItemId = this.linkshellContentService.busyItemId;
-  readonly busyRevenueSave = this.linkshellContentService.busyRevenueSave;
-  readonly busyRevenueId = this.linkshellContentService.busyRevenueId;
 
   // --- Facade signal accessors (re-export per-domain signals) ---
   readonly session = this.auth.session;
@@ -190,15 +184,10 @@ export class DiscordActivityService {
   readonly busyDkpPools = this.linkshellService.busyDkpPools;
   readonly busyMonsterTimings = this.linkshellService.busyMonsterTimings;
   readonly linkshellDetail = this.linkshellService.linkshellDetail;
-  readonly linkshellDetailBusy = this.linkshellService.linkshellDetailBusy;
-  readonly inviteSearchResults = this.inviteService.inviteSearchResults;
-  readonly inviteSearchBusy = this.inviteService.inviteSearchBusy;
   readonly inviteBrowseResults = this.inviteService.inviteBrowseResults;
   readonly inviteBrowseTotal = this.inviteService.inviteBrowseTotal;
   readonly inviteBrowseBusy = this.inviteService.inviteBrowseBusy;
   readonly busyInviteId = this.inviteService.busyInviteId;
-  readonly linkshellSearchResults = this.inviteService.linkshellSearchResults;
-  readonly linkshellSearchBusy = this.inviteService.linkshellSearchBusy;
   readonly discordRosterCandidates = this.inviteService.discordRosterCandidates;
   readonly discordRosterBusy = this.inviteService.discordRosterBusy;
   readonly busyDiscordUserId = this.inviteService.busyDiscordUserId;
@@ -222,8 +211,6 @@ export class DiscordActivityService {
   readonly busyTodSave = this.todService.busyTodSave;
   readonly busyAddonTokens = this.addonTokenService.busyAddonTokens;
 
-  readonly isReady = computed(() => this.status() === 'ready');
-  readonly isStandalonePreview = computed(() => this.status() === 'standalone');
 
   // Where the app runs, fixed at startup: inside Discord's iframe, or the website in a normal
   // browser tab (signed in with the site's own cookie, no Discord SDK).
@@ -411,40 +398,6 @@ export class DiscordActivityService {
     return this.auth.refreshOverview();
   }
 
-  async refreshActivityData(): Promise<void> {
-    this.busyRefresh.set(true);
-    this.auth.setActionError(null);
-
-    try {
-      await this.auth.refreshOverview();
-
-      const appUser = this.auth.overview()?.appUser;
-      const currentLocalUser = this.auth.localUser();
-      if (appUser && currentLocalUser) {
-        this.auth.localUser.set({
-          ...currentLocalUser,
-          appUser: {
-            ...currentLocalUser.appUser,
-            ...appUser
-          }
-        });
-      }
-
-      if (this.sdk) {
-        const participantsResponse = (await this.sdk.commands.getInstanceConnectedParticipants()) as {
-          participants?: DiscordParticipant[];
-        };
-        this.participants.set(participantsResponse.participants ?? []);
-      }
-
-      this.auth.setActionMessage('Activity data refreshed.');
-    } catch (error) {
-      this.auth.setActionError(this.formatActionErrorMsg(error, 'Refreshing activity data failed.'));
-    } finally {
-      this.busyRefresh.set(false);
-    }
-  }
-
   clearActionState(): void {
     this.auth.clearActionState();
   }
@@ -546,7 +499,7 @@ export class DiscordActivityService {
     }
   }
 
-  // --- Rules / Announcements / Items / Revenue: see linkshellContentService ---
+  // --- Rules / Announcements / Items: see linkshellContentService ---
   // (delegates live in the facade-delegates section below)
 
   // --- Time / formatting helpers (kept on facade for consumer convenience) ---
@@ -723,16 +676,11 @@ export class DiscordActivityService {
   undoAuctionHistoryItem(itemId: number, linkshellId: number): Promise<void> { return this.auctionService.undoAuctionHistoryItem(itemId, linkshellId); }
 
   // --- InviteService ---
-  searchPlayers(query: string, linkshellId: number): Promise<void> { return this.inviteService.searchPlayers(query, linkshellId); }
   browsePlayers(linkshellId: number, options: { query?: string; page?: number; pageSize?: number }): Promise<void> { return this.inviteService.browsePlayers(linkshellId, options); }
-  clearInviteSearch(): void { this.inviteService.clearInviteSearch(); }
-  clearLinkshellSearch(): void { this.inviteService.clearLinkshellSearch(); }
   sendInvite(linkshellId: number, appUserId: string): Promise<void> { return this.inviteService.sendInvite(linkshellId, appUserId); }
   loadDiscordRoster(linkshellId: number): Promise<void> { return this.inviteService.loadDiscordRoster(linkshellId); }
   inviteDiscordUser(linkshellId: number, discordUserId: string): Promise<void> { return this.inviteService.inviteDiscordUser(linkshellId, discordUserId); }
   clearDiscordRoster(): void { this.inviteService.clearDiscordRoster(); }
-  searchLinkshells(query: string): Promise<void> { return this.inviteService.searchLinkshells(query); }
-  requestJoinLinkshell(linkshellId: number): Promise<void> { return this.inviteService.requestJoinLinkshell(linkshellId); }
   approveJoinRequest(inviteId: number): Promise<void> { return this.inviteService.approveJoinRequest(inviteId); }
   declineJoinRequest(inviteId: number): Promise<void> { return this.inviteService.declineJoinRequest(inviteId); }
   acceptInvite(inviteId: number): Promise<void> { return this.inviteService.acceptInvite(inviteId); }
@@ -838,7 +786,7 @@ export class DiscordActivityService {
     return out;
   }
 
-  // --- LinkshellContentService (rules / announcements / items / revenue) ---
+  // --- LinkshellContentService (rules / announcements / items) ---
   createRule(linkshellId: number, title: string, details: string, category: string | null): Promise<void> { return this.linkshellContentService.createRule(linkshellId, title, details, category); }
   updateRule(ruleId: number, title: string, details: string, category: string | null): Promise<void> { return this.linkshellContentService.updateRule(ruleId, title, details, category); }
   deleteRule(ruleId: number): Promise<void> { return this.linkshellContentService.deleteRule(ruleId); }
@@ -850,7 +798,4 @@ export class DiscordActivityService {
   deleteItem(itemId: number): Promise<void> { return this.linkshellContentService.deleteItem(itemId); }
   markItemSold(itemId: number, salePrice: number, soldByCharacterName: string): Promise<void> { return this.linkshellContentService.markItemSold(itemId, salePrice, soldByCharacterName); }
   unsellItem(itemId: number): Promise<void> { return this.linkshellContentService.unsellItem(itemId); }
-  createRevenueEntry(linkshellId: number, input: ActivityRevenueInput): Promise<void> { return this.linkshellContentService.createRevenueEntry(linkshellId, input); }
-  updateRevenueEntry(entryId: number, input: ActivityRevenueInput): Promise<void> { return this.linkshellContentService.updateRevenueEntry(entryId, input); }
-  deleteRevenueEntry(entryId: number): Promise<void> { return this.linkshellContentService.deleteRevenueEntry(entryId); }
 }

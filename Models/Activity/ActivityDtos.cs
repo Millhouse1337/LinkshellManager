@@ -19,7 +19,6 @@ public sealed record ActivityOverviewDto(
     ActivityHnmClaimsDto HnmClaims,
     // The same card's other tab: which window of its band each HNM pops on, off Tod.PopWindow.
     ActivityHnmWindowsDto HnmWindows,
-    ActivityOverviewStatsDto Stats,
     // True when the user has at least one non-revoked AddonApiToken.
     // Drives the onboarding "Set up the addon" checklist item.
     bool AddonConfigured,
@@ -357,10 +356,6 @@ public sealed record ActivityCreateItemRequest(string ItemName, string? ItemType
 
 public sealed record ActivityUpdateItemRequest(string ItemName, string? ItemType, int Quantity, string? Notes);
 
-// SUPERSEDED by ActivityRecordTreasuryEntryRequest below. The three revenue routes stay for one
-// release as delegating shims so a cached Angular bundle against a new server keeps working.
-public sealed record ActivityCreateRevenueRequest(string EntryType, string? Category, long Value, string? Details, DateTime? OccurredAt);
-
 // --- Treasury: the two halves of a transaction, its categories, and what can happen to it. ---
 // Every user-visible string here comes from TreasuryLabels or TreasuryTransactionKinds, and none of
 // it is bookkeeping jargon.
@@ -412,8 +407,6 @@ public sealed record ActivityTreasuryEntryDto(
     string? Memo,
     string? CounterpartyCharacterName,
     string? EnteredByCharacterName,
-    DateTime? RecordedAt,
-    int? ReversesEntryId,
     string? ReversesEntryNumber,
     // Whether something later cancels this one out. Read as an EXISTS rather than stored, because
     // storing it would mean updating a confirmed entry.
@@ -770,7 +763,6 @@ public sealed record ActivityEventDto(
     int HnmWindowNumber = 1,
     DateTime? NextWindowAt = null,
     DateTime? WdFinalizedAt = null,
-    int? WdPopWindow = null,
     // The window number to DISPLAY — the one the Discord board shows (the window being awaited).
     // See DiscordEventMessageBuilder.FocusWindow. Kept separate from HnmWindowNumber so fixing
     // the display can't quietly move the pop window and change DKP credit.
@@ -1345,12 +1337,6 @@ public sealed record ActivityHnmWindowsDto(
     IReadOnlyList<ActivityHnmWindowGridDto> Grids,
     int TotalPops);
 
-public sealed record ActivityOverviewStatsDto(
-    int LinkshellCount,
-    int ActiveEventCount,
-    int CompletedEventCount,
-    int LiveEventCount);
-
 public sealed record ActivityEventSignupRequest(
     int JobId,
     string? JobName = null,
@@ -1741,7 +1727,6 @@ public sealed record ActivityChartBoardDto(
     /// <summary>Draw as centred rows of fixed-width cards rather than a stretch-to-fit grid, for a
     /// board that chose its own row lengths (Dynamis, Limbus, HENM).</summary>
     bool CentersRows,
-    ActivityChartLedgerDto Ledger,
     // Who a credit can be attributed to. Empty unless CanManage — a reader has nothing to pick.
     IReadOnlyList<ActivityChartRosterMemberDto> Roster,
     DateTime? LastUpdatedUtc,
@@ -1750,7 +1735,7 @@ public sealed record ActivityChartBoardDto(
     /// a list happens to be populated.</summary>
     ActivityChartBoardFeaturesDto Features,
     /// <summary>The board's item requests. Folded into THIS payload rather than fetched separately,
-    /// for the same reason the ledger is: a card's badge and the list below it are two views of the
+    /// because a card's badge and the list below it are two views of the
     /// same rows, and fetching them apart lets one screen contradict itself.</summary>
     ActivityChartWishlistDto Wishlist,
     /// <summary>Per-member key item progress. Empty columns on a board that tracks none.</summary>
@@ -1769,9 +1754,6 @@ public sealed record ActivityChartBoardFeaturesDto(
     bool DropItems,
     bool Wishlist,
     bool KeyItems);
-
-/// <summary>The boards the Charts sub-nav offers, so the client does not keep its own list.</summary>
-public sealed record ActivityChartBoardSummaryDto(string Board, string Label);
 
 /// <summary>
 /// One held chart item, flattened across every board for Treasury → Items. Read-only there: the row
@@ -1831,8 +1813,6 @@ public sealed record ActivityChartBossDto(
     string? KeyItemName,
     int KeyItemHaveCount,
     int KeyItemTotalMembers,
-    /// <summary>Exactly who still needs it, in roster order — what the card's drawer lists.</summary>
-    IReadOnlyList<string> KeyItemMissing,
     /// <summary>Whether this card shows an "add pop item" button. The server's own answer, from
     /// ChartBoard.TakesItemKind, which is also what the add endpoint checks.</summary>
     bool TakesPopItems,
@@ -1855,41 +1835,13 @@ public sealed record ActivityChartPopItemDto(
     string? Notes,
     int SortOrder,
     IReadOnlyList<ActivityChartCreditDto> Credits,
-    /// <summary>How many farmers are credited — what the card's "Farmers Credited" column shows.</summary>
-    int CreditCount,
     DateTime UpdatedAt,
     /// <summary>ChartItemKinds.Pop or Drop. Picks the pill beside the name and which option list the
     /// edit form offers; nothing else about the row differs.</summary>
     string Kind);
 
-// Only the name: the ledger and the edit form match farmers by name.
+// Only the name: the edit form matches farmers by name.
 public sealed record ActivityChartCreditDto(string CharacterName);
-
-/// <summary><c>Bosses</c> is the column order, decided here so no client re-derives it.</summary>
-public sealed record ActivityChartLedgerDto(
-    IReadOnlyList<string> Bosses,
-    IReadOnlyList<ActivityChartLedgerRowDto> Rows);
-
-public sealed record ActivityChartLedgerRowDto(
-    int? MembershipId,
-    string CharacterName,
-    // False when this name is credited on an item but is no longer on the roster. Removing somebody
-    // from the linkshell must not erase the fact that they farmed.
-    bool IsCurrentMember,
-    string? Rank,
-    IReadOnlyList<ActivityChartLedgerCellDto> Cells,
-    // Items credited over items tracked across the whole board, plus the percentage the ledger shows.
-    int TotalCredited,
-    int TotalTracked,
-    int CreditedPercent);
-
-/// <summary><c>Status</c> is a ChartCreditStatuses value; <c>Detail</c> ("6 / 8") is composed server-side.</summary>
-public sealed record ActivityChartLedgerCellDto(
-    string Boss,
-    string Status,
-    string Detail,
-    int CreditedItems,
-    int TotalItems);
 
 public sealed record ActivityChartRosterMemberDto(
     int MembershipId,
@@ -1992,8 +1944,7 @@ public sealed record ActivityChartKeyItemColumnDto(
     /// <summary>Progression note under the column header. Reference text only.</summary>
     string? Caption,
     int HaveCount,
-    int TotalMembers,
-    IReadOnlyList<string> MissingCharacterNames);
+    int TotalMembers);
 
 /// <summary><c>Has</c> is aligned to the column order above, so no client matches by name.</summary>
 public sealed record ActivityChartKeyItemRowDto(

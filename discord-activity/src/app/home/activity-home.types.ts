@@ -21,7 +21,8 @@ export const TAB_NAMES = [
   'dkp-sheet',
   'loot',
   'endgame',
-  'messages',
+  // (A 'messages' tab used to sit here; it only ever said "No messages yet." and had no server
+  // side, so it was removed. An old /messages link now opens the dashboard.)
   // Permissions used to be its own 'permissions' tab; it is now the Configurations tab's second
   // view (/configurations/permissions). See SettingsSection.
   'configurations',

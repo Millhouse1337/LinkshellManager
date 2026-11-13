@@ -108,47 +108,4 @@ public class ChartItemKindTests
         Assert.Equal("Xarcabard", draft.Boss);
         Assert.Equal(ChartItemKinds.Pop, draft.Kind);
     }
-
-    // Drop rows are farmed and credited exactly like pop rows, so the ledger must not look at Kind
-    // at all. Counting them separately would tell somebody who was there that they are only partly
-    // square with a boss they cleared.
-    [Fact]
-    public void BuildLedger_CountsDropRowsAlongsidePopRows()
-    {
-        var board = ChartBoardCatalog.Find(ChartBoardCatalog.Sky)!;
-        var roster = new[] { new ChartRosterEntry(1, "user-1", "Aeris", "Member", Array.Empty<string>()) };
-
-        var items = new[]
-        {
-            Row(1, "Ullikummi", "Diorite", ChartItemKinds.Pop, "Aeris"),
-            Row(2, "Ullikummi", "Autumnstone", ChartItemKinds.Drop, "Aeris"),
-        };
-
-        var ledger = ChartBoardService.BuildLedger(board, items, roster);
-        var row = Assert.Single(ledger.Rows);
-        var ullikummi = Assert.Single(row.Cells, cell => cell.Boss == "Ullikummi");
-
-        Assert.Equal(2, ullikummi.TotalItems);
-        Assert.Equal(2, ullikummi.CreditedItems);
-        Assert.Equal(ChartCreditStatuses.Credited, ullikummi.Status);
-    }
-
-    private static ChartPopItem Row(int id, string boss, string name, string kind, string creditedTo)
-    {
-        var item = new ChartPopItem
-        {
-            Id = id,
-            LinkshellId = 1,
-            Board = ChartBoardCatalog.Sky,
-            Boss = boss,
-            ItemName = name,
-            Kind = kind,
-        };
-        item.Credits.Add(new ChartPopItemCredit
-        {
-            ChartPopItemId = id,
-            CharacterName = creditedTo,
-        });
-        return item;
-    }
 }

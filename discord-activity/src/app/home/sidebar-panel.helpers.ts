@@ -44,8 +44,6 @@ const CURATED_TIME_ZONES = [
   'Pacific/Auckland'
 ] as const;
 
-export const curatedTimeZones = CURATED_TIME_ZONES;
-
 // Canonical event-type ordering for the DKP "earned by event type"
 // breakdown. Anything not in this list (e.g. blank entries that get
 // bucketed as "Unspecified", or future custom types) sorts to the bottom
@@ -117,17 +115,3 @@ export function formatElapsed(totalMilliseconds: number): string {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-export function roleBadgeClass(rank?: string | null): string {
-  switch ((rank ?? 'Member').toLowerCase()) {
-    case 'leader':
-      return 'role-pill role-pill--leader';
-    case 'officer':
-      return 'role-pill role-pill--officer';
-    default:
-      return 'role-pill role-pill--member';
-  }
-}
-
-export function auctionRowSpan(auction: { items: { id: number }[] }): number {
-  return Math.max(1, auction.items.length);
-}

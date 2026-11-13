@@ -229,13 +229,6 @@
               [class.active]="activeTab() === 'profile'"
               (click)="setActiveTab('profile')">Profile</button>
       <button type="button" class="tab" role="tab"
-              [id]="tabId('messages')"
-              [attr.aria-controls]="panelId('messages')"
-              [attr.aria-selected]="activeTab() === 'messages'"
-              [attr.tabindex]="activeTab() === 'messages' ? 0 : -1"
-              [class.active]="activeTab() === 'messages'"
-              (click)="setActiveTab('messages')">Messages</button>
-      <button type="button" class="tab" role="tab"
               [id]="tabId('configurations')"
               [attr.aria-controls]="panelId('configurations')"
               [attr.aria-selected]="activeTab() === 'configurations'"
@@ -451,25 +444,6 @@
   @if (activeTab() === 'endgame' && isFeatureEnabled('enableEndgame')) {
     <div class="panel-tab fade" role="tabpanel" [id]="panelId('endgame')" [attr.aria-labelledby]="tabId('endgame')">
       <app-charts-tab [view]="chartsView()" (viewChange)="setChartsView($event)" />
-    </div>
-  }
-
-  <!-- ===== MESSAGES TAB ===== -->
-  @if (activeTab() === 'messages') {
-    <div class="panel-tab fade" role="tabpanel" [id]="panelId('messages')" [attr.aria-labelledby]="tabId('messages')">
-      <div class="section-head">
-        <div>
-          <div class="section-label">Inbox</div>
-          <div class="section-title">Messages</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-head"><div class="card-title">Messages</div></div>
-        <div class="empty-state empty-state--compact">
-          <div class="empty-state-desc">No messages yet.</div>
-        </div>
-      </div>
     </div>
   }
 

@@ -38,9 +38,9 @@ public class ChartPopItem
     /// ChartItemKinds.Pop (traded TO this boss) or Drop (fell OFF it).
     ///
     /// A column rather than a second table, because a drop row is the same row: same fields, same
-    /// per-item farming credit, same derived ledger. A ChartDropItems table would need its own twin
+    /// per-item farming credit. A ChartDropItems table would need its own twin
     /// of ChartPopItemCredit - that FK is non-nullable and cannot point at two parents - and with it
-    /// a forked BuildLedger, ResolveCreditsAsync, AttachCredits and ReplaceCreditsAsync, plus a UNION
+    /// a forked ResolveCreditsAsync, AttachCredits and ReplaceCreditsAsync, plus a UNION
     /// and a cross-id-space sort every time the holdings table is drawn. This is the same argument
     /// the class comment above makes for one table across five boards, pointed the other way.
     ///

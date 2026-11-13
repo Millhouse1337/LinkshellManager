@@ -5,7 +5,6 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityDiscordRosterCandidate,
-  ActivityLinkshellSearchResult,
   ActivityUserSearchResult
 } from './discord-activity.types';
 
@@ -14,46 +13,18 @@ export class InviteService {
   private readonly auth = inject(AuthService);
   private readonly http = inject(ActivityHttpClient);
 
-  readonly inviteSearchResults = signal<ActivityUserSearchResult[]>([]);
-  readonly inviteSearchBusy = signal(false);
   // Paginated "browse all eligible members" list (no Discord bot needed — these
   // are users already in our database).
   readonly inviteBrowseResults = signal<ActivityUserSearchResult[]>([]);
   readonly inviteBrowseTotal = signal(0);
   readonly inviteBrowseBusy = signal(false);
   readonly busyInviteId = signal<number | null>(null);
-  readonly linkshellSearchResults = signal<ActivityLinkshellSearchResult[]>([]);
-  readonly linkshellSearchBusy = signal(false);
   // "From My Discord Server": members of the linkshell's Discord server (set in
   // Configurations) who can be added straight to the linkshell (including people who
   // have never used LSM).
   readonly discordRosterCandidates = signal<ActivityDiscordRosterCandidate[]>([]);
   readonly discordRosterBusy = signal(false);
   readonly busyDiscordUserId = signal<string | null>(null);
-
-  async searchPlayers(query: string, linkshellId: number): Promise<void> {
-    if (!query.trim() || query.trim().length < 2 || linkshellId <= 0) {
-      this.inviteSearchResults.set([]);
-      return;
-    }
-
-    this.inviteSearchBusy.set(true);
-    this.auth.setActionError(null);
-
-    try {
-      // Through the shared client: it sends the guild header too, and never shows an HTML error
-      // page as the message.
-      const results = await this.http.fetchActivityJson<ActivityUserSearchResult[]>(
-        `/api/activity/players/search?query=${encodeURIComponent(query.trim())}&linkshellId=${linkshellId}`
-      );
-      this.inviteSearchResults.set(Array.isArray(results) ? results : []);
-    } catch (error) {
-      this.inviteSearchResults.set([]);
-      this.auth.setActionError(formatActionError(error, 'Searching players failed.'));
-    } finally {
-      this.inviteSearchBusy.set(false);
-    }
-  }
 
   async browsePlayers(
     linkshellId: number,
@@ -86,14 +57,6 @@ export class InviteService {
     } finally {
       this.inviteBrowseBusy.set(false);
     }
-  }
-
-  clearInviteSearch(): void {
-    this.inviteSearchResults.set([]);
-  }
-
-  clearLinkshellSearch(): void {
-    this.linkshellSearchResults.set([]);
   }
 
   async sendInvite(linkshellId: number, appUserId: string): Promise<void> {
@@ -154,36 +117,6 @@ export class InviteService {
 
   clearDiscordRoster(): void {
     this.discordRosterCandidates.set([]);
-  }
-
-  async searchLinkshells(query: string): Promise<void> {
-    this.linkshellSearchBusy.set(true);
-    this.auth.setActionError(null);
-
-    try {
-      const results = await this.http.fetchActivityJson<ActivityLinkshellSearchResult[]>(
-        `/api/activity/linkshells/search?query=${encodeURIComponent(query.trim())}`
-      );
-      this.linkshellSearchResults.set(Array.isArray(results) ? results : []);
-    } catch (error) {
-      this.linkshellSearchResults.set([]);
-      this.auth.setActionError(formatActionError(error, 'Searching linkshells failed.'));
-    } finally {
-      this.linkshellSearchBusy.set(false);
-    }
-  }
-
-  async requestJoinLinkshell(linkshellId: number): Promise<void> {
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
-    try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/join-request`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Join request sent.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Sending the join request failed.'));
-    }
   }
 
   async approveJoinRequest(inviteId: number): Promise<void> {

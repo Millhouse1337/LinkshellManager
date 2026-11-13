@@ -593,8 +593,6 @@ public sealed partial class ActivityDataController
                 .Select(line => line.CounterpartyCharacterName)
                 .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)),
             entry.ConfirmedByCharacterName ?? entry.CreatedByCharacterName,
-            entry.ConfirmedAt,
-            entry.ReversesJournalEntryId,
             entry.ReversesJournalEntryId.HasValue
                 ? targetNumbers.GetValueOrDefault(entry.ReversesJournalEntryId.Value)
                 : null,

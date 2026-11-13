@@ -118,7 +118,7 @@ public class ChartKeyItemGridTests
     }
 
     /// <summary>
-    /// Deliberately unlike ChartBoardService.BuildLedger, which keeps departed farmers.
+    /// Deliberately unlike the pop item credits, which keep departed farmers.
     ///
     /// Farming credit is a historical fact worth preserving; "does this person have the key item" is
     /// only a question about people who are here. The orphan row is harmless - there is no FK to
@@ -141,7 +141,7 @@ public class ChartKeyItemGridTests
         Assert.Empty(lantern.MissingCharacterNames);
     }
 
-    // Twin of ChartLedgerRow.CreditedPercent, including the never-divide-by-zero rule. Limbus tracks
+    // The never-divide-by-zero rule. Limbus tracks
     // no key items, so it is the real board with no columns at all.
     [Fact]
     public void BuildGrid_ReadsZeroPercentOnABoardWithNoColumns()

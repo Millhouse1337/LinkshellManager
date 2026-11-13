@@ -29,7 +29,7 @@ public sealed record ChartKeyItemGridRow(
     int HaveCount,
     int TotalColumns)
 {
-    /// <summary>Twin of ChartLedgerRow.CreditedPercent, including the never-divide-by-zero rule.</summary>
+    /// <summary>0 when there are no columns: never a divide by zero.</summary>
     public int HavePercent => TotalColumns == 0 ? 0 : (int)Math.Round(100d * HaveCount / TotalColumns);
 }
 
@@ -64,7 +64,7 @@ public sealed class ChartKeyItemService
     /// hide exactly the rows that matter.
     ///
     /// ROWS ARE ROSTER-DRIVEN, and a stored row for a membership no longer on the roster is ignored.
-    /// Deliberately unlike ChartBoardService.BuildLedger, which keeps departed farmers: farming
+    /// Deliberately unlike the pop item credits, which keep departed farmers: farming
     /// credit is a historical fact worth preserving, while "does this person have the key item" is
     /// only a question about people who are here. Those orphan rows are harmless - there is no FK to
     /// delete them, by the second-cascade-path design on the model - and re-adding the same person
@@ -91,7 +91,7 @@ public sealed class ChartKeyItemService
             }
         }
 
-        // De-duplicated the same way BuildLedger does: one row per person, first sighting wins.
+        // De-duplicated by name: one row per person, first sighting wins.
         var members = new List<ChartRosterEntry>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var member in roster)

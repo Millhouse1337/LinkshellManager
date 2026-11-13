@@ -5,23 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-/// <summary>The four states a ledger cell can be in. Strings on the wire, like JournalEntryStatuses.</summary>
-public static class ChartCreditStatuses
-{
-    public const string Credited = "Credited";
-    public const string Partial = "Partial";
-    public const string None = "None";
-
-    /// <summary>
-    /// The boss has no pop items entered at all, so "credited" is a question that cannot be asked
-    /// yet. Deliberately NOT folded into Credited: a boss with nothing tracked is vacuously fully
-    /// credited, and showing that as a green tick tells a linkshell everyone is square on Absolute
-    /// Virtue when in fact nobody has typed its sins in.
-    /// </summary>
-    public const string NotTracked = "NotTracked";
-}
-
-/// <summary>One roster entry, reduced to what the ledger needs.</summary>
+/// <summary>One roster entry, reduced to what the boards need.</summary>
 /// <param name="AltCharacterNames">This member's OWN other characters, off their profile — the same
 /// two AppUser.AltCharacterName1/2 the alt picker elsewhere in the app offers. Empty for an unsynced
 /// member, who has no account behind the name and so no alts on file.
@@ -35,32 +19,6 @@ public sealed record ChartRosterEntry(
     string CharacterName,
     string? Rank,
     IReadOnlyList<string> AltCharacterNames);
-
-/// <summary>One cell of the member × boss grid. The UI renders "{CreditedItems} / {TotalItems}".</summary>
-public sealed record ChartLedgerCell(string Boss, string Status, string Detail, int CreditedItems, int TotalItems);
-
-/// <summary>
-/// One member's row. <paramref name="IsCurrentMember"/> is false for a credited ex-member.
-///
-/// <paramref name="Rank"/> is the linkshell rank shown under the name. The mockup put a JOB there,
-/// but nothing in the roster records a main job — AppUser.JobLevels is a per-job level array, and
-/// picking a "main" out of it would be a guess presented as fact. Rank is real data in the same slot.
-/// </summary>
-public sealed record ChartLedgerRow(
-    int? MembershipId,
-    string CharacterName,
-    bool IsCurrentMember,
-    string? Rank,
-    IReadOnlyList<ChartLedgerCell> Cells,
-    int TotalCredited,
-    int TotalTracked)
-{
-    /// <summary>The ledger's trailing percentage. 0 when nothing is tracked — never a divide by zero.</summary>
-    public int CreditedPercent => TotalTracked == 0 ? 0 : (int)Math.Round(100d * TotalCredited / TotalTracked);
-}
-
-/// <summary>The whole grid: column order plus rows.</summary>
-public sealed record ChartLedger(IReadOnlyList<string> Bosses, IReadOnlyList<ChartLedgerRow> Rows);
 
 /// <summary>What an officer typed, before it is trusted.</summary>
 public sealed record ChartPopItemDraft(
@@ -83,7 +41,7 @@ public sealed record ChartCreditDraft(int? MembershipId, string? CharacterName);
 
 /// <summary>
 /// A resolved, trusted credit: a membership id has been checked against the linkshell and turned into
-/// that member's name. Only the NAME is stored - the ledger matches farmers by name, so a member who
+/// that member's name. Only the NAME is stored - farmers are matched by name, so a member who
 /// re-syncs keeps their history.
 /// </summary>
 public sealed record ChartResolvedCredit(string CharacterName);
@@ -100,11 +58,9 @@ public readonly record struct ChartBoardActor(string? AppUserId, string? Charact
 /// Board-agnostic throughout: Sky's five gods and Sea's eight Jailers differ only by what
 /// ChartBoardCatalog says, never by a branch in here.
 ///
-/// The central design decision: farming credit is stored ONLY per (pop item × person). The ledger's
-/// per-boss grid is derived from those rows on every read and never stored. The boss card shows a
-/// per-item farmer count and the ledger shows a per-boss fraction; only the finer grain can be the
-/// stored one, and deriving the coarser view is what makes it impossible for the two halves of the
-/// same page to disagree.
+/// The central design decision: farming credit is stored ONLY per (pop item × person), and every
+/// coarser view (the boss card's per-item farmer count) is derived from those rows on every read,
+/// never stored, so two parts of the same page cannot disagree.
 /// </summary>
 public sealed class ChartBoardService
 {
@@ -258,119 +214,6 @@ public sealed class ChartBoardService
             .DefaultIfEmpty()
             .Max() is var newest && newest == default ? null : newest;
     }
-
-    // ---- the derivation (pure — this is the testable core) ----------------------
-
-    /// <summary>
-    /// Builds the Farming Credit Ledger from a board's pop items and the roster. No database, no
-    /// clock, no hidden state: the same inputs always give the same grid.
-    ///
-    /// For each (person, boss) where the boss has N item rows and the person is credited on C:
-    ///
-    ///   N == 0        NotTracked  "No items tracked" — nothing entered, so nothing to be square on
-    ///   C == 0        None        "0 / N"
-    ///   0 &lt; C &lt; N   Partial     "2 / 3"
-    ///   C == N        Credited    "3 / 3"
-    ///
-    /// The row total is items credited over items tracked across the whole board, plus a percentage.
-    /// Counting ITEMS rather than fully-covered bosses is what lets one number compare a five-god
-    /// board with an eight-Jailer one, and it does not let somebody who cleared one small boss
-    /// outrank somebody who did most of the work on a large one.
-    ///
-    /// Bosses with nothing tracked contribute 0 to BOTH sides of that fraction, so an empty board
-    /// reads 0 / 0 rather than everyone sitting at 100%.
-    ///
-    /// POP AND DROP ROWS COUNT ALIKE, and this method does not look at Kind at all. A drop is farmed
-    /// by the same people on the same night and credited through the same rows, so splitting the
-    /// fraction by kind would say somebody who was there is only partly square. That the ledger
-    /// needed no change is the direct payoff of Kind being a column rather than a second table.
-    /// </summary>
-    public static ChartLedger BuildLedger(
-        ChartBoard board,
-        IReadOnlyList<ChartPopItem> items,
-        IReadOnlyList<ChartRosterEntry> roster)
-    {
-        var bosses = board.Bosses.Select(boss => boss.Name).ToList();
-
-        var itemsByBoss = bosses.ToDictionary(
-            boss => boss,
-            boss => items.Where(item => string.Equals(item.Boss, boss, StringComparison.OrdinalIgnoreCase)).ToList(),
-            StringComparer.OrdinalIgnoreCase);
-
-        // Everyone who appears anywhere: the roster, plus any credited name that has since left.
-        // Removing somebody from the linkshell must not erase the fact that they farmed.
-        var people = new List<ChartLedgerRow>();
-        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var member in roster)
-        {
-            if (!seenNames.Add(member.CharacterName))
-            {
-                continue;
-            }
-            people.Add(BuildRow(
-                member.MembershipId, member.CharacterName, isCurrentMember: true, member.Rank, bosses, itemsByBoss));
-        }
-
-        var departed = items
-            .SelectMany(item => item.Credits)
-            .Where(credit => !string.IsNullOrWhiteSpace(credit.CharacterName))
-            .Select(credit => credit.CharacterName.Trim())
-            .Where(name => !seenNames.Contains(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        foreach (var name in departed)
-        {
-            people.Add(BuildRow(
-                membershipId: null, name, isCurrentMember: false, rank: null, bosses, itemsByBoss));
-        }
-
-        return new ChartLedger(bosses, people);
-    }
-
-    private static ChartLedgerRow BuildRow(
-        int? membershipId,
-        string characterName,
-        bool isCurrentMember,
-        string? rank,
-        IReadOnlyList<string> bosses,
-        Dictionary<string, List<ChartPopItem>> itemsByBoss)
-    {
-        var cells = new List<ChartLedgerCell>(bosses.Count);
-        var totalCredited = 0;
-        var totalTracked = 0;
-
-        foreach (var boss in bosses)
-        {
-            var bossItems = itemsByBoss[boss];
-            var total = bossItems.Count;
-            // Matching is by NAME, case-insensitively, not by membership id: an unsynced farmer has
-            // no id, and a member who re-synced would otherwise lose their history.
-            var credited = bossItems.Count(item => item.Credits.Any(
-                credit => string.Equals(credit.CharacterName?.Trim(), characterName, StringComparison.OrdinalIgnoreCase)));
-
-            totalCredited += credited;
-            totalTracked += total;
-            cells.Add(new ChartLedgerCell(boss, StatusFor(credited, total), DetailFor(credited, total), credited, total));
-        }
-
-        return new ChartLedgerRow(
-            membershipId, characterName, isCurrentMember, rank, cells, totalCredited, totalTracked);
-    }
-
-    private static string StatusFor(int credited, int total)
-    {
-        if (total == 0) return ChartCreditStatuses.NotTracked;
-        if (credited == 0) return ChartCreditStatuses.None;
-        return credited >= total ? ChartCreditStatuses.Credited : ChartCreditStatuses.Partial;
-    }
-
-    // The words are decided here, once. An em dash rather than "0 / 0" for an untracked boss: a
-    // fraction implies there was something to farm.
-    private static string DetailFor(int credited, int total) =>
-        total == 0 ? "—" : $"{credited} / {total}";
 
     // ---- writes -----------------------------------------------------------------
 

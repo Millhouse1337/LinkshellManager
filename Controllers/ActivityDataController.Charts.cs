@@ -12,8 +12,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // it exists to settle. Writes need CanManageCharts, a named permission rather than the coarse
 // Leader/Officer rank. That is the bug GrantTreasuryToOfficersWhoUsedIt exists to document.
 //
-// Every derived number — per-boss totals, the ledger's cell states, the "49 / 63  78%" row total —
-// comes from ChartBoardService. Nothing on a board is stored twice.
+// Every derived number (the per-boss totals) comes from ChartBoardService. Nothing on a board is stored twice.
 public sealed partial class ActivityDataController
 {
     [HttpGet("linkshells/{linkshellId:int}/charts/{board}")]
@@ -42,13 +41,6 @@ public sealed partial class ActivityDataController
         return Ok(await BuildChartBoardAsync(
             linkshellId, catalog, canManage, appUser.Id, membership.Id, cancellationToken));
     }
-
-    /// <summary>The boards the sub-nav offers, so the client does not keep a second copy of the list.</summary>
-    [HttpGet("charts/boards")]
-    public IActionResult GetChartBoards() =>
-        Ok(ChartBoardCatalog.Boards
-            .Select(board => new ActivityChartBoardSummaryDto(board.Key, board.Label))
-            .ToList());
 
     [HttpPost("linkshells/{linkshellId:int}/charts/{board}/items")]
     public async Task<IActionResult> AddChartPopItemAsync(
@@ -211,9 +203,7 @@ public sealed partial class ActivityDataController
     {
         var items = await _chartBoards.LoadItemsAsync(linkshellId, board.Key, cancellationToken);
         var roster = await _chartBoards.LoadRosterAsync(linkshellId, cancellationToken);
-        var ledger = ChartBoardService.BuildLedger(board, items, roster);
-
-        // Shipped in the SAME payload as the cards, for the reason the ledger already is: a card's
+        // Shipped in the SAME payload as the cards: a card's
         // badge and the list below it are two views of one set of rows, and fetching them apart is
         // what lets a badge saying 3 sit above a list showing 2.
         var wishlist = ChartWishlistService.BuildWishlist(
@@ -268,7 +258,6 @@ public sealed partial class ActivityDataController
                     keyItemsByBoss.TryGetValue(boss.Name, out var keyItem) ? keyItem.Name : null,
                     keyItem?.HaveCount ?? 0,
                     keyItem?.TotalMembers ?? 0,
-                    keyItem?.MissingCharacterNames ?? Array.Empty<string>(),
                     board.TakesItemKind(boss, ChartItemKinds.Pop),
                     board.TakesItemKind(boss, ChartItemKinds.Drop));
             })
@@ -282,22 +271,6 @@ public sealed partial class ActivityDataController
             bosses,
             board.PathColumns,
             board.CentersRows,
-            new ActivityChartLedgerDto(
-                ledger.Bosses,
-                ledger.Rows
-                    .Select(row => new ActivityChartLedgerRowDto(
-                        row.MembershipId,
-                        row.CharacterName,
-                        row.IsCurrentMember,
-                        row.Rank,
-                        row.Cells
-                            .Select(cell => new ActivityChartLedgerCellDto(
-                                cell.Boss, cell.Status, cell.Detail, cell.CreditedItems, cell.TotalItems))
-                            .ToList(),
-                        row.TotalCredited,
-                        row.TotalTracked,
-                        row.CreditedPercent))
-                    .ToList()),
             canManage
                 ? roster
                     .Select(member => new ActivityChartRosterMemberDto(
@@ -334,8 +307,7 @@ public sealed partial class ActivityDataController
                         column.Boss,
                         column.Caption,
                         column.HaveCount,
-                        column.TotalMembers,
-                        column.MissingCharacterNames))
+                        column.TotalMembers))
                     .ToList(),
                 keyItems.Rows
                     .Select(row => new ActivityChartKeyItemRowDto(
@@ -363,7 +335,6 @@ public sealed partial class ActivityDataController
                 .OrderBy(credit => credit.CharacterName, StringComparer.OrdinalIgnoreCase)
                 .Select(credit => new ActivityChartCreditDto(credit.CharacterName))
                 .ToList(),
-            item.Credits.Count,
             item.UpdatedAt,
             item.Kind);
 
