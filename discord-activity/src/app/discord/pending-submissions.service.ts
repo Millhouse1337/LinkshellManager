@@ -36,8 +36,10 @@ export class PendingSubmissionsService {
       const queue = await this.http.fetchActivityJson<ActivityPendingSubmissions>(
         `/api/activity/linkshells/${linkshellId}/pending-submissions`);
       if (this.order.accept(ticket, linkshellId)) this.loaded.set({ linkshellId, queue });
+      this.auth.clearLoadError('pending-submissions');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the pending submissions failed.'));
+      // Polled by the refresh timer: its own banner, never the action one (AuthService.loadError).
+      this.auth.reportLoadError('pending-submissions', error, 'Loading the pending submissions failed.');
     } finally {
       this.loading.set(false);
     }

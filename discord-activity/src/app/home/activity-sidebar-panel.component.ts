@@ -313,7 +313,7 @@ export class ActivitySidebarPanelComponent {
 
   // Inputs for the embedded "Rate teammates" panel (alt names drive its
   // per-teammate character picker).
-  protected ratingLinkshellId(): number { return this.activity.overview()?.appUser?.primaryLinkshellId ?? 0; }
+  protected ratingLinkshellId(): number { return this.activity.currentLinkshellId(); }
   protected ratingMe(): string { return this.activity.overview()?.appUser?.id ?? ''; }
   protected ratingMembers(): { appUserId: string; characterName: string; altCharacterName1?: string | null; altCharacterName2?: string | null }[] {
     return (this.activity.overview()?.primaryLinkshell?.members ?? [])
@@ -670,7 +670,7 @@ export class ActivitySidebarPanelComponent {
   }
 
   protected primaryLinkshellId(): number | null {
-    return this.activity.overview()?.appUser?.primaryLinkshellId ?? this.activity.overview()?.primaryLinkshell?.id ?? null;
+    return this.activity.currentLinkshellId() || null;
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {

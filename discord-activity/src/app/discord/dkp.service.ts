@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
+import { mutateThenRefresh } from './mutate-then-refresh';
 import type { ActivityDkpAddCandidate, ActivityDkpHistory } from './discord-activity.types';
 
 @Injectable({ providedIn: 'root' })
@@ -93,27 +94,29 @@ export class DkpService {
     dkpPoolId?: number | null;
   }): Promise<boolean> {
     this.busyDkpAudit.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction('/api/activity/dkp-audit', {
-        linkshellId: input.linkshellId,
-        targetAppUserId: input.targetAppUserId,
-        mode: input.mode,
-        relatedLedgerEntryId: input.relatedLedgerEntryId ?? null,
-        sourceWindowEventId: input.sourceWindowEventId ?? null,
-        amount: input.amount,
-        reason: input.reason,
-        dkpPoolId: input.dkpPoolId ?? null
+      // A failed reload after the audit was recorded must not read as a failed audit: a second
+      // press would record it twice.
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction('/api/activity/dkp-audit', {
+          linkshellId: input.linkshellId,
+          targetAppUserId: input.targetAppUserId,
+          mode: input.mode,
+          relatedLedgerEntryId: input.relatedLedgerEntryId ?? null,
+          sourceWindowEventId: input.sourceWindowEventId ?? null,
+          amount: input.amount,
+          reason: input.reason,
+          dkpPoolId: input.dkpPoolId ?? null
+        }),
+        refresh: async () => {
+          await this.loadDkpHistory(input.linkshellId, input.targetAppUserId);
+          await this.auth.refreshOverview();
+        },
+        success: 'DKP audit recorded.',
+        failure: 'Submitting the DKP audit failed.'
       });
-      await this.loadDkpHistory(input.linkshellId, input.targetAppUserId);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('DKP audit recorded.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Submitting the DKP audit failed.'));
-      return false;
+      return outcome.ok;
     } finally {
       this.busyDkpAudit.set(false);
     }

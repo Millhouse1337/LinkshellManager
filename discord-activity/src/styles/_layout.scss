@@ -183,6 +183,16 @@
   color: var(--success);
 }
 
+/* A background refresh failed (AuthService.loadError): a notice, not an error the user caused. */
+.flash--warning {
+  border-color: var(--warning);
+  background: var(--warning-weak);
+}
+
+.flash--warning p {
+  color: var(--warning);
+}
+
 .flash--guide {
   border-color: var(--accent);
   background: var(--accent-weak);

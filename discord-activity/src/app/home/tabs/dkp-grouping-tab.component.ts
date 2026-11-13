@@ -60,8 +60,7 @@ export class DkpGroupingTabComponent {
   // The linkshell being configured: the one selected on the dashboard, same source the
   // Configurations tab used when this lived there.
   protected targetLinkshellId(): number {
-    const overview = this.activity.overview();
-    return overview?.primaryLinkshell?.id ?? overview?.appUser?.primaryLinkshellId ?? 0;
+    return this.activity.currentLinkshellId();
   }
 
   protected activeLinkshellName = computed(() => {

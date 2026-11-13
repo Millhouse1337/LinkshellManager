@@ -109,7 +109,7 @@ export class RosterPanelComponent {
   }
 
   protected primaryLinkshellId(): number | null {
-    return this.activity.overview()?.appUser?.primaryLinkshellId ?? this.activity.overview()?.primaryLinkshell?.id ?? null;
+    return this.activity.currentLinkshellId() || null;
   }
 
   protected isManagerMode(): boolean {

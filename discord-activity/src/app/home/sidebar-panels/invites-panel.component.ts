@@ -51,10 +51,7 @@ export class InvitesPanelComponent {
       const tick = this.linkshellPrimaryResetTick;
       if (tick === 0) return;
       untracked(() => {
-        this.inviteLinkshellId =
-          this.activity.overview()?.primaryLinkshell?.id ??
-          this.activity.overview()?.linkshells?.[0]?.id ??
-          0;
+        this.inviteLinkshellId = this.activity.currentLinkshellId();
         // Force a browse reload for the newly-resolved primary linkshell.
         this.browseLoadedFor = 0;
       });
@@ -148,12 +145,7 @@ export class InvitesPanelComponent {
   }
 
   protected inviteTargetLinkshellId(): number {
-    return (
-      this.inviteLinkshellId ||
-      this.activity.overview()?.primaryLinkshell?.id ||
-      this.activity.overview()?.linkshells?.[0]?.id ||
-      0
-    );
+    return this.inviteLinkshellId || this.activity.currentLinkshellId();
   }
 
   // Sent invites for the linkshell currently being managed only — never invites

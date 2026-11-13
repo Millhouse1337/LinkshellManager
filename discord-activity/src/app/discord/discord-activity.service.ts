@@ -163,6 +163,10 @@ export class DiscordActivityService {
   readonly context = signal<DiscordContext | null>(null);
   readonly actionMessage = this.auth.actionMessage;
   readonly actionError = this.auth.actionError;
+  // A background load that failed (shown apart from actionError; see AuthService.loadError).
+  readonly loadError = this.auth.loadError;
+  // The linkshell the app is showing, or 0. The one place to read it (AuthService.currentLinkshellId).
+  readonly currentLinkshellId = this.auth.currentLinkshellId;
   readonly busyProfileSave = signal(false);
   readonly busyRefresh = signal(false);
   readonly busyRuleSave = this.linkshellContentService.busyRuleSave;

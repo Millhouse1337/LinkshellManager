@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   DISCORD_SIGN_IN_CANCELLED_MESSAGE,
+  currentLinkshellIdOf,
   datetimeLocalToUtcIso,
   formatActionError,
   formatError,
@@ -9,6 +10,7 @@ import {
   toLocalInputValueInZone,
   withTimeout
 } from './discord-activity.helpers';
+import type { ActivityOverview } from './discord-activity.types';
 
 // vitest.config.ts pins the computer's zone to New York. Every test here uses a PROFILE zone
 // that differs from it, which is the case that used to go wrong.
@@ -131,5 +133,19 @@ describe('withTimeout', () => {
   it('rejects with the message when the timer wins', async () => {
     const never = new Promise<number>(() => undefined);
     await expect(withTimeout(never, 5, 'too slow')).rejects.toThrow('too slow');
+  });
+});
+
+describe('currentLinkshellIdOf', () => {
+  const overview = (partial: Record<string, unknown>) => partial as unknown as ActivityOverview;
+
+  it('is the linkshell the server resolved, not the raw saved id', () => {
+    // The saved id (7) is a linkshell the user has left; the server fell back to 3.
+    expect(currentLinkshellIdOf(overview({ appUser: { primaryLinkshellId: 7 }, primaryLinkshell: { id: 3 } }))).toBe(3);
+  });
+
+  it('is 0 with no linkshell or no overview', () => {
+    expect(currentLinkshellIdOf(overview({ appUser: { primaryLinkshellId: 7 }, primaryLinkshell: null }))).toBe(0);
+    expect(currentLinkshellIdOf(null)).toBe(0);
   });
 });

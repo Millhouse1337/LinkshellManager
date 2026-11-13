@@ -282,6 +282,11 @@
   @if (activity.actionMessage()) {
     <section class="flash flash--success"><p>{{ activity.actionMessage() }}</p></section>
   }
+  <!-- A background refresh that failed: apart from the action banners above, so it never hides
+       or replaces the result of something the user did. Goes away when that refresh next works. -->
+  @if (activity.loadError(); as loadError) {
+    <section class="flash flash--warning"><p>{{ loadError }} What you see may be out of date. Press Refresh to try again.</p></section>
+  }
 
   <!-- ===== DASHBOARD TAB ===== -->
   @if (activeTab() === 'dashboard') {

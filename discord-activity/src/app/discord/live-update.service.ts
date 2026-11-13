@@ -155,10 +155,9 @@ export class LiveUpdateService {
     return this.consecutiveErrors <= 3 ? this.ERROR_BACKOFF_MS : this.LONG_BACKOFF_MS;
   }
 
-  // Same linkshell-resolution the auto-refresh timer uses.
+  // The app's one current linkshell (AuthService.currentLinkshellId).
   private currentLinkshellId(): number {
-    const overview = this.auth.overview();
-    return overview?.primaryLinkshell?.id ?? overview?.appUser?.primaryLinkshellId ?? 0;
+    return this.auth.currentLinkshellId();
   }
 
   private setConnected(connected: boolean): void {

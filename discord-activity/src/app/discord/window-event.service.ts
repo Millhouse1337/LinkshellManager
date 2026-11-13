@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
+import { mutateThenRefresh } from './mutate-then-refresh';
 import type {
   ActivityAddSnapshotEntryInput,
   ActivityEventAddMemberCandidate,
@@ -121,9 +122,10 @@ export class WindowEventService {
     return request;
   }
 
+  // A background load: it reports a failure in its own banner (auth.reportLoadError) and never
+  // touches the action banner, so a poll can neither erase a real error nor invent one.
   private async loadCore(linkshellId: number): Promise<void> {
     this.busy.set(true);
-    this.auth.setActionError(null);
     try {
       const ticket = this.order.begin(linkshellId);
       const query = this.closedQuery();
@@ -139,8 +141,9 @@ export class WindowEventService {
       this.data.set(result);
       this.loadedFor = linkshellId;
       this.loadedAt = Date.now();
+      this.auth.clearLoadError('window-events');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading attendance events failed.'));
+      this.auth.reportLoadError('window-events', error, 'Loading attendance events failed.');
     } finally {
       this.busy.set(false);
     }
@@ -255,18 +258,19 @@ export class WindowEventService {
   // already paid from it, so a second press pays nobody.
   async payRegistered(windowEventId: number, linkshellId: number): Promise<void> {
     this.busy.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      const result = await this.http.postActivityJson<{ paid: number }>(
-        `/api/activity/window-events/${windowEventId}/pay-registered`);
-      await this.load(linkshellId);
-      const paid = result?.paid ?? 0;
-      this.auth.setActionMessage(paid === 0
-        ? 'Nobody new to pay. Everyone registered on this event is already paid.'
-        : `Paid ${paid} newly registered member${paid === 1 ? '' : 's'}.`);
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Paying newly registered members failed.'));
+      await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityJson<{ paid: number }>(
+          `/api/activity/window-events/${windowEventId}/pay-registered`),
+        refresh: () => this.reloadFresh(linkshellId),
+        success: result => {
+          const paid = result?.paid ?? 0;
+          return paid === 0
+            ? 'Nobody new to pay. Everyone registered on this event is already paid.'
+            : `Paid ${paid} newly registered member${paid === 1 ? '' : 's'}.`;
+        },
+        failure: 'Paying newly registered members failed.'
+      });
     } finally {
       this.busy.set(false);
     }
@@ -323,17 +327,16 @@ export class WindowEventService {
 
   private async run(linkshellId: number, path: string, body: unknown, message: string): Promise<void> {
     this.busy.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      await this.http.postActivityAction(path, body);
-      // A poll already on the wire was sent before this write, so wait for it and fetch again
-      // rather than sharing its now-stale answer.
-      await this.reloadFresh(linkshellId);
-      this.auth.setActionMessage(message);
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating attendance events failed.'));
-      throw error;
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction(path, body),
+        // A poll already on the wire was sent before this write, so wait for it and fetch again
+        // rather than sharing its now-stale answer.
+        refresh: () => this.reloadFresh(linkshellId),
+        success: message,
+        failure: 'Updating attendance events failed.'
+      });
+      if (!outcome.ok) throw outcome.error;
     } finally {
       this.busy.set(false);
     }

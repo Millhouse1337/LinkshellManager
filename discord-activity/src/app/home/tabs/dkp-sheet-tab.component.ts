@@ -26,8 +26,7 @@ export class DkpSheetTabComponent {
   // A computed, not a plain method: the effect below then re-runs only when the linkshell id
   // actually changes, not on every overview refresh. The refresh timer (AutoRefreshService) is what
   // keeps the sheet fresh while this tab is open.
-  protected readonly primaryLinkshellId = computed(() =>
-    this.activity.overview()?.primaryLinkshell?.id ?? this.activity.overview()?.appUser?.primaryLinkshellId ?? 0);
+  protected readonly primaryLinkshellId = this.activity.currentLinkshellId;
 
   constructor() {
     effect(() => {

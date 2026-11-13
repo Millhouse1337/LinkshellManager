@@ -174,10 +174,7 @@ export class ActivityHomeComponent {
     this.activeTab() === 'dkp' && this.dkpView() === 'sheet' ? 'dkp-sheet' : this.activeTab());
 
   // The linkshell the import writes to: the one the top bar has selected, as Configurations did.
-  protected readonly dkpImportLinkshellId = computed(() => {
-    const overview = this.activity.overview();
-    return overview?.appUser?.primaryLinkshellId ?? overview?.primaryLinkshell?.id ?? overview?.linkshells?.[0]?.id ?? 0;
-  });
+  protected readonly dkpImportLinkshellId = computed(() => this.activity.currentLinkshellId());
   private readonly canImportDkp = computed(() => {
     const id = this.dkpImportLinkshellId();
     const link = (this.activity.overview()?.linkshells ?? []).find(l => l.id === id);
@@ -523,7 +520,7 @@ export class ActivityHomeComponent {
   protected appUserRoleLabel(): string {
     const linkshells = this.activity.overview()?.linkshells ?? [];
     if (linkshells.length === 0) return 'Member';
-    const primaryId = this.activity.overview()?.appUser?.primaryLinkshellId;
+    const primaryId = this.activity.currentLinkshellId();
     const primary = linkshells.find(l => l.id === primaryId) ?? linkshells[0];
     const rank = (primary?.rank ?? 'Member').toString();
     return rank.charAt(0).toUpperCase() + rank.slice(1).toLowerCase();

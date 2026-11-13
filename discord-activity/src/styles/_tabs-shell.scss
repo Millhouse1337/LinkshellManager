@@ -779,6 +779,7 @@ body {
 }
 .flash--error { border-color: var(--danger-weak); color: var(--danger); background: var(--danger-weak); }
 .flash--success { border-color: var(--success-weak); color: var(--success); background: var(--success-weak); }
+.flash--warning { border-color: var(--warning-weak); color: var(--warning); background: var(--warning-weak); }
 
 /* ===== Fade animation ===== */
 .fade { animation: fade 0.3s ease both; }

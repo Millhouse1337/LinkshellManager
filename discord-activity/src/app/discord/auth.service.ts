@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 
 import type {
   ActivityOverview,
@@ -6,6 +6,7 @@ import type {
   LocalActivityUser,
   WebSession
 } from './discord-activity.types';
+import { currentLinkshellIdOf, formatActionError } from './discord-activity.helpers';
 import { readJsonResponse } from './http-response';
 import { ResponseOrder } from './refresh-order';
 
@@ -74,6 +75,39 @@ export class AuthService {
     this.actionError.set(null);
     this.actionMessage.set(null);
   }
+
+  // ----- Background load errors -----
+  //
+  // Kept apart from actionError on purpose. actionError belongs to what the user just DID (a save,
+  // a delete). Background loaders and the refresh timer used to write into it too, so a poll could
+  // wipe out a real "Saving failed" message a second after it appeared, or put up "Loading ...
+  // failed" that nobody asked for. Loaders now report here, keyed by what they load, and clear
+  // their own key when they next succeed; the shell shows the first one as a separate notice.
+  private readonly loadErrors = signal<Readonly<Record<string, string>>>({});
+  readonly loadError = computed(() => Object.values(this.loadErrors())[0] ?? null);
+
+  reportLoadError(key: string, error: unknown, fallback: string): void {
+    const message = formatActionError(error, fallback);
+    this.loadErrors.update(current => (current[key] === message ? current : { ...current, [key]: message }));
+  }
+
+  clearLoadError(key: string): void {
+    this.loadErrors.update(current => {
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
+  // ----- Current linkshell -----
+  //
+  // THE linkshell the app is showing, as the server resolved it (overview.primaryLinkshell: the
+  // saved choice when the user is still a member there, else their first membership), or 0 when
+  // there is none. It used to be worked out a dozen different ways (some from the raw saved id,
+  // some falling back to the first linkshell), and they could disagree right after a switch or
+  // after leaving a linkshell. Read this one everywhere.
+  readonly currentLinkshellId = computed(() => currentLinkshellIdOf(this.overview()));
 
   // Many callers refresh the overview at once (timer, change feed, every write), and the replies
   // can come back out of order. Only a reply newer than the one on screen is shown, so a slow,

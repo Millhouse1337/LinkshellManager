@@ -2,7 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
-import { formatActionError } from './discord-activity.helpers';
+import { mutateThenRefresh } from './mutate-then-refresh';
 import type {
   ActivitySettleOwedResult,
   ActivityTreasuryEntryInput,
@@ -64,8 +64,10 @@ export class TreasuryService {
         `/api/activity/linkshells/${linkshellId}/treasury?${query.toString()}`
       );
       if (this.order.accept(ticket, key)) this.page.set(result);
+      this.auth.clearLoadError('treasury');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the treasury failed.'));
+      // Polled by the refresh timer: its own banner, never the action one (AuthService.loadError).
+      this.auth.reportLoadError('treasury', error, 'Loading the treasury failed.');
       throw error;
     } finally {
       this.busyLoad.set(false);
@@ -217,18 +219,21 @@ export class TreasuryService {
     if (entryId !== undefined) {
       this.busyEntryId.set(entryId);
     }
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await action();
-      await this.reload();
-      // The dashboard tile reads gil on hand out of the overview payload.
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage(success);
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, failure));
-      throw error;
+      // Saved is saved: a reload that fails afterwards must not read as a failed payment, or a
+      // second press records the gil twice (mutate-then-refresh.ts).
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate: action,
+        refresh: async () => {
+          await this.reload();
+          // The dashboard tile reads gil on hand out of the overview payload.
+          await this.auth.refreshOverview();
+        },
+        success,
+        failure
+      });
+      if (!outcome.ok) throw outcome.error;
     } finally {
       this.busySave.set(false);
       this.busyEntryId.set(null);

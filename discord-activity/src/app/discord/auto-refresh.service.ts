@@ -188,10 +188,7 @@ export class AutoRefreshService {
       // Read the linkshell from the FRESH overview (it may have just changed),
       // then load the active tab's own data on top. Those loaders are all
       // per-linkshell, so they are the only part skipped without one.
-      const linkshellId =
-        this.activity.overview()?.primaryLinkshell?.id ??
-        this.activity.overview()?.appUser?.primaryLinkshellId ??
-        0;
+      const linkshellId = this.activity.currentLinkshellId();
       if (!linkshellId) return;
       await this.loadForTab(tab, linkshellId);
     } finally {

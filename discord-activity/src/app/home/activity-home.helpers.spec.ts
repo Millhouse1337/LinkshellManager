@@ -261,6 +261,7 @@ describe('small formatters', () => {
 describe('permission gates', () => {
   const ov = overview({
     appUser: { primaryLinkshellId: 2 },
+    primaryLinkshell: { id: 2 },
     linkshells: [
       { id: 1, rank: 'Member', permissions: { canModerateLiveEvent: true } },
       { id: 2, rank: 'Officer', permissions: {}, settings: { marker: 'primary' } },

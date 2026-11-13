@@ -15,6 +15,7 @@ import type {
   ActivityMonsterSetup,
   ActivityOverview
 } from '../discord/discord-activity.types';
+import { currentLinkshellIdOf } from '../discord/discord-activity.helpers';
 import { hasSpawnWindowCadence } from './activity-home.types';
 
 // ----- Linkshell type -----
@@ -26,8 +27,8 @@ import { hasSpawnWindowCadence } from './activity-home.types';
 export function primaryLinkshellSettings(
   overview: ActivityOverview | null | undefined
 ): ActivityLinkshellSettings | null {
-  const primaryId = overview?.appUser?.primaryLinkshellId;
-  if (primaryId == null) return null;
+  const primaryId = currentLinkshellIdOf(overview);
+  if (!primaryId) return null;
   return overview?.linkshells?.find(l => l.id === primaryId)?.settings ?? null;
 }
 

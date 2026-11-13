@@ -100,7 +100,7 @@ export class AuctionsPanelComponent {
   }
 
   protected primaryLinkshellId(): number | null {
-    return this.activity.overview()?.appUser?.primaryLinkshellId ?? this.activity.overview()?.primaryLinkshell?.id ?? null;
+    return this.activity.currentLinkshellId() || null;
   }
 
   // The Manage auctions permission the server checks on create, not the Leader/Officer rank -

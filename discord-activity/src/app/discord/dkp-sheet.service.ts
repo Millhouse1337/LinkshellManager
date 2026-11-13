@@ -2,7 +2,6 @@ import { Injectable, inject, signal } from '@angular/core';
 
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
-import { formatActionError } from './discord-activity.helpers';
 import type { ActivityDkpSheetResponse } from './discord-activity.types';
 import { ResponseOrder } from './refresh-order';
 
@@ -28,15 +27,16 @@ export class DkpSheetService {
     }
 
     this.busy.set(true);
-    this.auth.setActionError(null);
     try {
       const ticket = this.order.begin(linkshellId);
       const result = await this.http.fetchActivityJson<ActivityDkpSheetResponse>(
         `/api/activity/dkp-sheet?linkshellId=${linkshellId}`
       );
       if (this.order.accept(ticket, linkshellId)) this.data.set(result);
+      this.auth.clearLoadError('dkp-sheet');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the DKP sheet failed.'));
+      // Polled by the refresh timer: its own banner, never the action one (AuthService.loadError).
+      this.auth.reportLoadError('dkp-sheet', error, 'Loading the DKP sheet failed.');
     } finally {
       this.busy.set(false);
     }

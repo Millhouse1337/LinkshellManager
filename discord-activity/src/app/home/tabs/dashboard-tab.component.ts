@@ -128,12 +128,7 @@ export class DashboardTabComponent {
   }
 
   protected selectedDashboardLinkshellId(): number {
-    return (
-      this.activity.overview()?.appUser?.primaryLinkshellId ??
-      this.primaryLinkshell()?.id ??
-      this.dashboardLinkshells()[0]?.id ??
-      0
-    );
+    return this.activity.currentLinkshellId();
   }
 
   protected selectedDashboardLinkshell() {

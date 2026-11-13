@@ -98,7 +98,7 @@ export class AttendanceSectionsComponent {
   // No load effect here: EventsTabComponent owns the fetch, so mounting this component twice
   // doesn't fire two requests.
   protected primaryLinkshellId(): number {
-    return this.activity.overview()?.primaryLinkshell?.id ?? this.activity.overview()?.appUser?.primaryLinkshellId ?? 0;
+    return this.activity.currentLinkshellId();
   }
 
   protected data() {

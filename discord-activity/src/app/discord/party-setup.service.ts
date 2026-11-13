@@ -46,15 +46,16 @@ export class PartySetupService {
     }
 
     this.busy.set(true);
-    this.auth.setActionError(null);
     try {
       const ticket = this.listOrder.begin(linkshellId);
       const result = await this.http.fetchActivityJson<ActivityPartySetupListResponse>(
         `/api/activity/party-setups?linkshellId=${linkshellId}`
       );
       if (this.listOrder.accept(ticket, linkshellId)) this.list.set(result);
+      this.auth.clearLoadError('party-setups');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading party setups failed.'));
+      // Loaders report in their own banner, never the action one (see AuthService.loadError).
+      this.auth.reportLoadError('party-setups', error, 'Loading party setups failed.');
     } finally {
       this.busy.set(false);
     }
@@ -66,14 +67,14 @@ export class PartySetupService {
     }
 
     this.busy.set(true);
-    this.auth.setActionError(null);
     try {
       const result = await this.http.fetchActivityJson<ActivityPartySetupDetail>(
         `/api/activity/party-setups/${setupId}`
       );
       this.detailsById.update(map => ({ ...map, [setupId]: result }));
+      this.auth.clearLoadError('party-setup');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the party setup failed.'));
+      this.auth.reportLoadError('party-setup', error, 'Loading the party setup failed.');
     } finally {
       this.busy.set(false);
     }
@@ -94,14 +95,14 @@ export class PartySetupService {
     }
 
     this.busy.set(true);
-    this.auth.setActionError(null);
     try {
       const result = await this.http.fetchActivityJson<ActivityPartySetupDetail>(
         `/api/activity/events/${eventId}/party-board`
       );
       this.eventBoardsById.update(map => ({ ...map, [eventId]: result }));
+      this.auth.clearLoadError('party-board');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the party board failed.'));
+      this.auth.reportLoadError('party-board', error, 'Loading the party board failed.');
     } finally {
       this.busy.set(false);
     }

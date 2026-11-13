@@ -76,12 +76,7 @@ export class ChartsTabComponent {
     return tabs.find(tab => tab.key === this.chartView()) ?? tabs[0] ?? null;
   });
 
-  protected readonly linkshellId = computed<number | null>(() =>
-    this.activity.overview()?.appUser?.primaryLinkshellId
-      ?? this.activity.overview()?.primaryLinkshell?.id
-      ?? this.activity.overview()?.linkshells?.[0]?.id
-      ?? null
-  );
+  protected readonly linkshellId = computed<number | null>(() => this.activity.currentLinkshellId() || null);
 
   protected setSection(section: ChartsSectionOption): void {
     if (section.ready) {

@@ -947,10 +947,7 @@ export class ActivityQueuePanelComponent {
     this.editingEventId = null;
     // Always bind a new event to the active linkshell (selected in
     // Configurations) — the Linkshell field is read-only in the form.
-    this.createModel.linkshellId =
-      this.activity.overview()?.primaryLinkshell?.id ??
-      this.activity.overview()?.linkshells?.[0]?.id ??
-      0;
+    this.createModel.linkshellId = this.activity.currentLinkshellId();
     // Lazy-load the linkshell's PartySetup list so the dropdown is populated.
     if (this.createModel.linkshellId) {
       void this.partySetups.loadList(this.createModel.linkshellId);
@@ -1278,10 +1275,7 @@ export class ActivityQueuePanelComponent {
   }
 
   private resetCreateModel(): void {
-    const defaultLinkshellId =
-      this.activity.overview()?.primaryLinkshell?.id ??
-      this.activity.overview()?.linkshells?.[0]?.id ??
-      0;
+    const defaultLinkshellId = this.activity.currentLinkshellId();
 
     this.createModel.linkshellId = defaultLinkshellId;
     this.createModel.eventName = '';

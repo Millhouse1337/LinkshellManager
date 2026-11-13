@@ -1,4 +1,12 @@
-import type { DiscordRpcErrorLike } from './discord-activity.types';
+import type { ActivityOverview, DiscordRpcErrorLike } from './discord-activity.types';
+
+// THE linkshell the app is showing: the one the server resolved (the saved choice while the user
+// is still a member there, else their first membership), or 0 when there is none. Read through
+// AuthService.currentLinkshellId (activity.currentLinkshellId()) everywhere; this pure form is for
+// helpers that take the overview as an argument.
+export function currentLinkshellIdOf(overview: ActivityOverview | null | undefined): number {
+  return overview?.primaryLinkshell?.id ?? 0;
+}
 
 // Forwards a `<input type="datetime-local">` value to the server **as a
 // naive ISO string** (no `Z`, no offset). The server's

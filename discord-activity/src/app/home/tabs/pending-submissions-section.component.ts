@@ -38,8 +38,7 @@ export class PendingSubmissionsSectionComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly pending = inject(PendingSubmissionsService);
 
-  protected readonly linkshellId = computed(() =>
-    this.activity.overview()?.primaryLinkshell?.id ?? this.activity.overview()?.appUser?.primaryLinkshellId ?? 0);
+  protected readonly linkshellId = this.activity.currentLinkshellId;
   protected readonly queue = computed(() => this.pending.queueFor(this.linkshellId()));
   protected readonly isEmpty = computed(() => {
     const q = this.queue();
