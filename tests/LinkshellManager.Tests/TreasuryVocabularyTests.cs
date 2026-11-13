@@ -651,7 +651,7 @@ public class TreasuryVocabularyTests
     }
 
     private static string[] RecipientNames(JournalEntry entry) =>
-        ActivityDataController.RecipientLines(entry.Lines.OrderBy(line => line.LineNumber))
+        ActivityTreasuryController.RecipientLines(entry.Lines.OrderBy(line => line.LineNumber))
             .Select(line => line.CounterpartyCharacterName!)
             .ToArray();
 

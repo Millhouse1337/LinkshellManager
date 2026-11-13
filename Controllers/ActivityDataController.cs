@@ -24,10 +24,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
     private readonly AdminOverrideService _adminOverride;
     private readonly MemberActivityService _memberActivity;
     private readonly ChannelRouteEditor _channelRoutes;
-    private readonly TreasuryBalanceService _treasury;
-    private readonly TreasuryJournalWriter _treasuryJournal;
-    private readonly TreasurySettlementService _treasurySettlements;
-    private readonly LedgerAccountProvisioner _ledgerAccounts;
     private readonly ItemSaleRecorder _itemSales;
     private readonly ChartBoardService _chartBoards;
     private readonly ChartWishlistService _chartWishlist;
@@ -44,10 +40,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         AdminOverrideService adminOverride,
         MemberActivityService memberActivity,
         ChannelRouteEditor channelRoutes,
-        TreasuryBalanceService treasury,
-        TreasuryJournalWriter treasuryJournal,
-        TreasurySettlementService treasurySettlements,
-        LedgerAccountProvisioner ledgerAccounts,
         ItemSaleRecorder itemSales,
         ChartBoardService chartBoards,
         ChartWishlistService chartWishlist,
@@ -61,10 +53,6 @@ public sealed partial class ActivityDataController : ActivityControllerBase
         _adminOverride = adminOverride;
         _memberActivity = memberActivity;
         _channelRoutes = channelRoutes;
-        _treasury = treasury;
-        _treasuryJournal = treasuryJournal;
-        _treasurySettlements = treasurySettlements;
-        _ledgerAccounts = ledgerAccounts;
         _itemSales = itemSales;
         _chartBoards = chartBoards;
         _chartWishlist = chartWishlist;

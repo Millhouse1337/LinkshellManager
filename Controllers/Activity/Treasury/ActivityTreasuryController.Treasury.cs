@@ -16,7 +16,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 // rank instead, so an officer without the permission could record gil through the old website that
 // this API would refuse — a privilege escalation available by picking a front-end.
 // GrantTreasuryToOfficersWhoUsedIt preserves access for the officers who were actually using it.
-public sealed partial class ActivityDataController
+public sealed partial class ActivityTreasuryController
 {
     private const int TreasuryPageSize = 15;
 
