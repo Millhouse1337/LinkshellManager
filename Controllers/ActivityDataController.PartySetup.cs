@@ -8,9 +8,11 @@ using Microsoft.EntityFrameworkCore;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // Discord Activity API for the officer-designed raid-composition planner that
-// lives inside the ToD Tracker. VIEW + sign-up/withdraw are open to any linkshell
-// member; create/edit/delete/assign require the CanManageParties role flag
-// (added in the Phase 2 editor section below).
+// lives inside the ToD Tracker. VIEW is open to any linkshell member;
+// create/edit/delete/assign require the CanManageParties role flag. A setup is a
+// reusable template: members sign up on an EVENT's board
+// (ActivityDataController.EventPartyBoard), never on the template itself, so the
+// roster officers and the Discord board see is the only roster there is.
 public sealed partial class ActivityDataController
 {
     private static readonly HashSet<string> PartySetupValidRoles =
@@ -172,11 +174,14 @@ public sealed partial class ActivityDataController
                                 s.MainJob,
                                 s.SubJob,
                                 s.IsPartyLeader,
-                                s.SignedUpAppUserId,
-                                s.SignedUpCharacterName,
-                                s.SignedUpRole,
-                                s.SignedUpMainJob,
-                                s.SignedUpSubJob,
+                                // A template has no roster: sign-ups live on event
+                                // boards. The old template sign-up columns are no
+                                // longer read (see DROP-LATER on PartySetupSlot).
+                                null,
+                                null,
+                                null,
+                                null,
+                                null,
                                 false))
                             .ToList()))
                     .ToList()))
@@ -191,74 +196,6 @@ public sealed partial class ActivityDataController
             partySetup.Notes,
             canManage,
             alliances));
-    }
-
-    // Member self-service: claim an open slot. Any linkshell member may sign up;
-    // you hold at most one slot per setup (signing up releases any other slot you
-    // hold in the same setup so you can switch roles cleanly).
-    [HttpPost("party-setups/{id:int}/slots/{slotId:int}/signup")]
-    public async Task<IActionResult> SignUpForPartySlotAsync(
-        int id,
-        int slotId,
-        [FromBody] ActivityPartySetupSignUpRequest request,
-        CancellationToken cancellationToken)
-    {
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null) return Unauthorized(new { error = "Sign in to sign up." });
-
-        var slot = await _dbContext.PartySetupSlots
-            .Include(s => s.Party!).ThenInclude(p => p.Alliance!).ThenInclude(a => a.PartySetup!)
-            .FirstOrDefaultAsync(s => s.Id == slotId, cancellationToken);
-        var setup = slot?.Party?.Alliance?.PartySetup;
-        if (slot is null || setup is null || setup.Id != id) return NotFound(new { error = "Slot not found." });
-
-        var membership = await GetMembershipAsync(appUser.Id, setup.LinkshellId, cancellationToken);
-        if (membership is null) return Forbid();
-
-        // Snapshot the member's character name in this linkshell (fall back to
-        // their profile name) so the panel renders without extra joins.
-        var characterName = string.IsNullOrWhiteSpace(membership.CharacterName)
-            ? (appUser.CharacterName ?? appUser.UserName ?? "Member")
-            : membership.CharacterName;
-
-        var result = await PartySetupSignupService.ClaimSlotAsync(
-            _dbContext, slot, setup.Id, appUser.Id, characterName,
-            request.Role, request.MainJob, request.SubJob, cancellationToken);
-        if (!result.Success)
-        {
-            return BadRequest(new { error = result.Error });
-        }
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return Ok(new { success = true });
-    }
-
-    // Release a slot. The member who holds it can withdraw themselves; an officer
-    // with CanManageParties can clear anyone's sign-up.
-    [HttpPost("party-setups/{id:int}/slots/{slotId:int}/withdraw")]
-    public async Task<IActionResult> WithdrawFromPartySlotAsync(int id, int slotId, CancellationToken cancellationToken)
-    {
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null) return Unauthorized(new { error = "Sign in to withdraw." });
-
-        var slot = await _dbContext.PartySetupSlots
-            .Include(s => s.Party!).ThenInclude(p => p.Alliance!).ThenInclude(a => a.PartySetup!)
-            .FirstOrDefaultAsync(s => s.Id == slotId, cancellationToken);
-        var setup = slot?.Party?.Alliance?.PartySetup;
-        if (slot is null || setup is null || setup.Id != id) return NotFound(new { error = "Slot not found." });
-
-        var membership = await GetMembershipAsync(appUser.Id, setup.LinkshellId, cancellationToken);
-        if (membership is null) return Forbid();
-
-        var isHolder = slot.SignedUpAppUserId == appUser.Id;
-        if (!isHolder && !await CanAsync(membership, r => r.CanManageParties, cancellationToken))
-        {
-            return Forbid();
-        }
-
-        PartySetupSignupService.ClearSlotSignup(slot);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
     }
 
     // ----- Officer editor (create / edit / delete / assign) -----

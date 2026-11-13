@@ -300,8 +300,22 @@ the special cases above; the others seed old data). They will not compile, or wi
   `PartySetupSlots.Label`.
 - Kept and now used: `LinkshellChannelRoutes.ChannelName` (fallback label when Discord can't list
   the channels).
-- Template sign-up columns on `PartySetupSlots` (`SignedUpAtUtc`, `SignedUpAppUserId`, ...): Phase 5.3.
+- Template sign-up columns on `PartySetupSlots` (`SignedUpAtUtc`, `SignedUpAppUserId`, ...): now dead, see "Later drops (Phase 5)" below.
 - `AspNetRoles` / `AspNetUserRoles` / `AspNetRoleClaims`: Phase 7.
 - Batch U (use instead of drop, Phase 5.4) and Batch K (keep: audit stamps and deliberate copies)
   in the plan.
 - The addon's `tod/{id}/loot` endpoint: it stays, and files the loot under the camp's event.
+
+## Later drops (Phase 5)
+
+Columns that became dead in Phase 5. Nothing reads them any more; they are marked `// DROP-LATER`
+in the model. Drop them in a later migration (after the Phase 5 deploy has been live for a while).
+
+- `PartySetupSlots.SignedUpAppUserId`, `SignedUpCharacterName`, `SignedUpAtUtc`, `SignedUpRole`,
+  `SignedUpMainJob`, `SignedUpSubJob` (P5.4, dead-hnm-03). The ToDs tab party panel is view-only and
+  the template sign-up / withdraw endpoints are gone; members sign up on event boards
+  (`EventPartySlotSignups`). The template detail endpoint sends nulls for them. In the same commit
+  as the drop, remove: `PartySetupSignupReset` and its call in `TodRecorder`, the
+  `PartySetupSlots.SignedUpAppUserId` line in `UserMergeService`, and the tests that seed these
+  columns (`TodCallers.SignedUpSetup` and its uses in `TodRecorderTests` and
+  `TodRecordingCharacterizationTests`).

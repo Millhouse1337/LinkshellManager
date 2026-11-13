@@ -1,19 +1,12 @@
-using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Utils;
-using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Shared "claim / release a party-setup slot" logic, used by both the Activity
-// API (ActivityDataController.PartySetup) and the Discord interactions endpoint
-// (claim-a-slot dropdown on an event announcement) so the rules stay in one
-// place: a field the slot pins is taken from the slot (a crafted request can't
-// override a hard requirement); an unpinned field must be supplied and
-// catalog-valid; sub is optional; and a member holds at most one slot per setup
-// (claiming releases any other). Callers load the slot (with its
-// Party -> Alliance -> PartySetup chain) and verify linkshell membership first,
-// then commit (this service never calls SaveChanges).
+// The job rules for signing up to a party slot. Members only sign up on an
+// EVENT's board now (EventPartySignupService, used by the Activity and the
+// Discord board); the old "sign up on the template itself" path was removed
+// because those sign-ups never reached the event or Discord board.
 public static class PartySetupSignupService
 {
     private static readonly HashSet<string> ValidRoles =
@@ -23,14 +16,12 @@ public static class PartySetupSignupService
     private static readonly HashSet<string> ValidSubJobs =
         new(EventJobCatalog.SubJobOptions, StringComparer.OrdinalIgnoreCase);
 
-    public sealed record ClaimResult(bool Success, string? Error);
-
     public sealed record JobResolution(bool Success, string? Error, string? Role, string? MainJob, string? SubJob);
 
     // Resolves the effective role / main / sub for a slot signup: a field the slot
     // pins is taken from the slot (a crafted request can't override a hard
     // requirement); an unpinned field must be supplied and catalog-valid; sub is
-    // optional. Shared by template-slot signups and per-event signups.
+    // optional.
     public static JobResolution ResolveSignupJobs(
         PartySetupSlot slot, string? requestedRole, string? requestedMainJob, string? requestedSubJob)
     {
@@ -89,62 +80,5 @@ public static class PartySetupSignupService
         }
 
         return new JobResolution(true, null, signedRole, signedMain, signedSub);
-    }
-
-    public static async Task<ClaimResult> ClaimSlotAsync(
-        ApplicationDbContext db,
-        PartySetupSlot slot,
-        int setupId,
-        string appUserId,
-        string characterName,
-        string? requestedRole,
-        string? requestedMainJob,
-        string? requestedSubJob,
-        CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrEmpty(slot.SignedUpAppUserId) && slot.SignedUpAppUserId != appUserId)
-        {
-            return new ClaimResult(false,
-                $"That slot was just taken by {slot.SignedUpCharacterName ?? "another member"}.");
-        }
-
-        var jobs = ResolveSignupJobs(slot, requestedRole, requestedMainJob, requestedSubJob);
-        if (!jobs.Success)
-        {
-            return new ClaimResult(false, jobs.Error);
-        }
-        var signedRole = jobs.Role;
-        var signedMain = jobs.MainJob;
-        var signedSub = jobs.SubJob;
-
-        // One slot per setup: release any other slot in this setup the member holds.
-        var heldElsewhere = await db.PartySetupSlots
-            .Where(s => s.SignedUpAppUserId == appUserId
-                        && s.Party!.Alliance!.PartySetupId == setupId
-                        && s.Id != slot.Id)
-            .ToListAsync(cancellationToken);
-        foreach (var held in heldElsewhere)
-        {
-            ClearSlotSignup(held);
-        }
-
-        slot.SignedUpAppUserId = appUserId;
-        slot.SignedUpCharacterName = characterName;
-        slot.SignedUpAtUtc = DateTime.UtcNow;
-        slot.SignedUpRole = signedRole;
-        slot.SignedUpMainJob = signedMain;
-        slot.SignedUpSubJob = signedSub;
-
-        return new ClaimResult(true, null);
-    }
-
-    public static void ClearSlotSignup(PartySetupSlot slot)
-    {
-        slot.SignedUpAppUserId = null;
-        slot.SignedUpCharacterName = null;
-        slot.SignedUpAtUtc = null;
-        slot.SignedUpRole = null;
-        slot.SignedUpMainJob = null;
-        slot.SignedUpSubJob = null;
     }
 }

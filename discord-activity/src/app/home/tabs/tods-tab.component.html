@@ -91,7 +91,9 @@
               @if (setupForMonster(group.latest.monsterName); as setup) {
                 @if (isSetupExpanded(group.key)) {
                   <div class="tod-setup-panel">
-                    <app-party-setup-panel [setupId]="setup.id" [linkshellId]="selectedDashboardLinkshellId()" />
+                    <!-- View-only: members sign up on the event board, so the ToDs tab
+                         never holds a second roster officers and Discord can't see. -->
+                    <app-party-setup-panel [setupId]="setup.id" [linkshellId]="selectedDashboardLinkshellId()" [templateOnly]="true" />
                   </div>
                 }
               }

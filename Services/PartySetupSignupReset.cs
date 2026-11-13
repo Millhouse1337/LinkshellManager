@@ -11,9 +11,11 @@ public static class PartySetupSignupReset
     // every member sign-up on any party setup currently assigned to that
     // monster is released and the ToD Tracker's inline panel reopens empty for
     // the next window. Matches AssignedMonsterName case-insensitively (same
-    // canonical name as Tod.MonsterName) and mirrors the field clearing in
-    // PartySetupSignupService.ClearSlotSignup. No-op when nothing is assigned or
+    // canonical name as Tod.MonsterName). No-op when nothing is assigned or
     // nobody is signed up; returns the number of slots cleared.
+    // Template sign-ups can no longer be made (Phase 5), so this only clears
+    // leftovers from before; it goes away with the DROP-LATER columns on
+    // PartySetupSlot (see docs/phase-4b-drop-manifest.md, "Later drops").
     public static async Task<int> ClearSignupsForMonsterAsync(
         ApplicationDbContext context,
         int linkshellId,

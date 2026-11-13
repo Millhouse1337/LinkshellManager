@@ -23,7 +23,7 @@ export class EventService {
   readonly busyEventId = signal<number | null>(null);
 
   // Ad-hoc event signup. Slot-level claiming for an event's linked PartySetup
-  // is done through PartySetupService.signUp(...) — this method always posts
+  // is done through PartySetupService.signUpEvent(...) — this method always posts
   // an ad-hoc body (user's chosen Main/Sub/Role).
   async signUpForEvent(
     eventId: number,

@@ -21,10 +21,10 @@ interface SlotSignupDraft {
   asLeader: boolean;
 }
 
-// Shared interactive view of a single party setup's alliance -> party -> slot
-// tree with member sign-up / withdraw. Embedded by BOTH the Party Setup tab
-// (primary surface — works for every setup) and the ToDs tab inline panel (for
-// an assigned monster's row). The detail is cached by setup id in
+// Shared view of a single party setup's alliance -> party -> slot tree.
+// Templates (the Party Setup tab, the ToDs tab inline panel and the create form)
+// are always view-only (templateOnly); members sign up / withdraw only on an
+// EVENT's board (eventId > 0). The template detail is cached by setup id in
 // PartySetupService, so several instances on the ToDs tab don't clobber each
 // other. Option lists for the sign-up dropdowns come from the list response,
 // which the embedding tabs always load.
@@ -50,7 +50,7 @@ export class PartySetupPanelComponent {
   readonly readOnly = input<boolean>(false);
   // When true, render the setup as a pure template: every slot shows only its
   // requirement (Any Tank, RDM/WHM, …) with NO sign-up controls and NO occupant
-  // names — even for slots that have a stored signup. Used by the Party Setup tab
+  // names. Used for every template view (Party Setup tab, ToDs tab, create form)
   // (a setup is a reusable template; signing up happens on an event), so it never
   // surfaces or invites roster changes.
   readonly templateOnly = input<boolean>(false);
@@ -230,33 +230,27 @@ export class PartySetupPanelComponent {
     await this.partySetup.makeAllianceLead(this.eventId());
   }
 
+  // Sign-up and withdraw exist only on an EVENT's board. A template (no eventId)
+  // is always shown with templateOnly, so these never run for one; the guard is
+  // there because the server no longer has template sign-up endpoints.
   protected async signUp(slot: ActivityPartySetupSlot): Promise<void> {
+    if (this.eventId() <= 0) return;
     const draft = this.draftFor(slot.slotId);
     const picks = {
       role: this.needsRole(slot) ? (draft.role || null) : null,
       mainJob: this.needsMainJob(slot) ? (draft.mainJob || null) : null,
       subJob: this.needsSubJob(slot) ? (draft.subJob || null) : null
     };
-    if (this.eventId() > 0) {
-      const result = await this.partySetup.signUpEvent(
-        this.eventId(), slot.slotId, { ...picks, asLeader: draft.asLeader, characterName: this.signupCharacter() || null });
-      if (result) {
-        this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
-      }
-      return;
-    }
-    const ok = await this.partySetup.signUp(this.setupId(), slot.slotId, picks);
-    if (ok) {
+    const result = await this.partySetup.signUpEvent(
+      this.eventId(), slot.slotId, { ...picks, asLeader: draft.asLeader, characterName: this.signupCharacter() || null });
+    if (result) {
       this.setDraft(slot.slotId, { role: '', mainJob: '', subJob: '', asLeader: false });
     }
   }
 
   protected async withdraw(slot: ActivityPartySetupSlot): Promise<void> {
-    if (this.eventId() > 0) {
-      await this.partySetup.withdrawEvent(this.eventId(), slot.slotId);
-    } else {
-      await this.partySetup.withdraw(this.setupId(), slot.slotId);
-    }
+    if (this.eventId() <= 0) return;
+    await this.partySetup.withdrawEvent(this.eventId(), slot.slotId);
   }
 
   // Drop a no-slot ("Also attending") signup for the current member, then reload

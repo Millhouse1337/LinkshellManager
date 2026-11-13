@@ -38,33 +38,32 @@ public class PartySetupSlot
     // with a crown in the editor + details views.
     public bool IsPartyLeader { get; set; }
 
-    // Member sign-up. A linkshell member can claim an open slot from the ToD
-    // Tracker's inline setup panel. Stored as a plain id + a snapshot of the
-    // member's linkshell character name (mirrors the EditedByAppUserId /
-    // EditedByCharacterName pattern on EventLootDetail -- no navigation, so
-    // there's no FK cascade to reason about). Null = open.
+    // Old template sign-up (Phase 5): members used to claim a slot on the
+    // TEMPLATE from the ToD Tracker's inline panel. Those sign-ups never reached
+    // the event or Discord board, so that path was removed and the panel is now
+    // view-only; real sign-ups live in EventPartySlotSignups. Nothing writes
+    // these six columns any more except PartySetupSignupReset (sets them to
+    // null on each ToD) and UserMergeService (re-points ids); nothing reads them.
+    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
     [MaxLength(450)]
     public string? SignedUpAppUserId { get; set; }
 
+    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
     [MaxLength(256)]
     public string? SignedUpCharacterName { get; set; }
 
+    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
     public DateTime? SignedUpAtUtc { get; set; }
 
-    // What the signing-up member committed to BRING. For each of these:
-    //   * If the slot specifies the requirement (Role on a Role slot;
-    //     MainJob/SubJob on a Job slot), the sign-up snapshot mirrors the
-    //     slot's value -- the member can't override a hard requirement.
-    //   * If the slot leaves it open (Any Role, or "Any Tank" with no main
-    //     job picked), the member fills it in at sign-up time so the panel
-    //     reads "Millhouse - Tank - PLD/NIN" instead of just "Millhouse".
-    // Cleared on Withdraw alongside the SignedUp* fields above.
+    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
     [MaxLength(16)]
     public string? SignedUpRole { get; set; }
 
+    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
     [MaxLength(8)]
     public string? SignedUpMainJob { get; set; }
 
+    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
     [MaxLength(8)]
     public string? SignedUpSubJob { get; set; }
 }

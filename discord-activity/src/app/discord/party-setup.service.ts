@@ -17,7 +17,7 @@ import { ResponseOrder } from './refresh-order';
 
 // Discord Activity client for the raid-composition planner (Party Setup).
 // Mirrors window-event.service.ts: standalone, injected directly into the
-// party-setup tab AND the ToDs tab's inline sign-up panel (one root singleton,
+// party-setup tab AND the ToDs tab's inline view-only panel (one root singleton,
 // so both share the same loaded data). Detail is cached by setup id so several
 // inline panels on the ToDs tab can be open at once without clobbering each
 // other.
@@ -77,24 +77,6 @@ export class PartySetupService {
     } finally {
       this.busy.set(false);
     }
-  }
-
-  async signUp(setupId: number, slotId: number, input: ActivityPartySetupSignUpInput): Promise<boolean> {
-    return this.mutateSlot(
-      setupId,
-      `/api/activity/party-setups/${setupId}/slots/${slotId}/signup`,
-      input,
-      'Signed up.'
-    );
-  }
-
-  async withdraw(setupId: number, slotId: number): Promise<boolean> {
-    return this.mutateSlot(
-      setupId,
-      `/api/activity/party-setups/${setupId}/slots/${slotId}/withdraw`,
-      undefined,
-      'Slot released.'
-    );
   }
 
   // ----- Per-EVENT board: party setups are reusable templates, so an event's
@@ -291,23 +273,6 @@ export class PartySetupService {
       return true;
     } catch (error) {
       this.auth.setActionError(formatActionError(error, 'Updating the assignment failed.'));
-      return false;
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  private async mutateSlot(setupId: number, path: string, body: unknown, message: string): Promise<boolean> {
-    this.busy.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-    try {
-      await this.http.postActivityAction(path, body);
-      await this.loadDetail(setupId);
-      this.auth.setActionMessage(message);
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the party setup failed.'));
       return false;
     } finally {
       this.busy.set(false);
