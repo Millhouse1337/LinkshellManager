@@ -19,6 +19,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
+using LinkshellManager.TestSupport;
 
 namespace LinkshellManager.PostgresTests;
 
@@ -63,15 +64,10 @@ public class AuctionCloseRaceTests : IAsyncLifetime
             // Empty: the close asks for the live-refresh notifier, which these tests do without.
             RequestServices = new ServiceCollection().BuildServiceProvider(),
         };
-        return new ActivityDataController(
-            db, null!, null!, null!, null!, userManager, null!, null!, null!, null!, null!, null!,
-            NullLogger<ActivityDataController>.Instance, null!, null!, new MemberActivityService(db), null!,
+        return ActivityControllerFactory.Create<ActivityDataController>(
+            http, db, userManager, new MemberActivityService(db),
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
-            permissions)
-        {
-            ControllerContext = new ControllerContext { HttpContext = http },
-        };
+            permissions);
     }
 
     // One auction with one item, Carol on it at 50, ending at `endsAt`. Bob and Carol have 100 DKP.

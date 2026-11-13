@@ -17,6 +17,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Xunit;
+using LinkshellManager.TestSupport;
 
 namespace LinkshellManager.PostgresTests;
 
@@ -200,16 +201,11 @@ public class EndCampLootRaceTests : IAsyncLifetime
             User = new ClaimsPrincipal(new ClaimsIdentity(
                 new[] { new Claim(ClaimTypes.NameIdentifier, Officer) }, authenticationType: "Test")),
         };
-        return new ActivityDataController(
-            db, null!, null!, null!, null!, userManager, null!, null!, null!, null!, null!, null!,
-            NullLogger<ActivityDataController>.Instance, null!, null!, new MemberActivityService(db), null!,
+        return ActivityControllerFactory.Create<ActivityDataController>(
+            http, db, userManager, new MemberActivityService(db),
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
             new DkpPoolBalanceService(db, pools),
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
-            permissions)
-        {
-            ControllerContext = new ControllerContext { HttpContext = http },
-        };
+            permissions);
     }
 
     // Runs `then` once, just before this context's first save.

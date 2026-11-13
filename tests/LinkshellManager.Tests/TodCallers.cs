@@ -18,6 +18,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NodaTime;
 using Xunit;
+using LinkshellManager.TestSupport;
 
 namespace LinkshellManager.Tests;
 
@@ -97,15 +98,8 @@ internal static class TodCallers
         var timeZones = new TimeZoneConversionService(
             DateTimeZoneProviders.Tzdb, NullLogger<TimeZoneConversionService>.Instance);
 
-        return new ActivityDataController(
-            db, null!, null!, null!, null!, userManager, null!, null!, timeZones, null!, null!, null!,
-            NullLogger<ActivityDataController>.Instance, null!, null!, null!, null!,
-            null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
-            new MonsterTimingResolver(db), null!, null!,
-            TestPermissions.For(db))
-        {
-            ControllerContext = new ControllerContext { HttpContext = http },
-        };
+        return ActivityControllerFactory.Create<ActivityDataController>(
+            http, db, userManager, timeZones, new MonsterTimingResolver(db), TestPermissions.For(db));
     }
 
     // A ToD logged from the app, the time sent as an explicit UTC instant.

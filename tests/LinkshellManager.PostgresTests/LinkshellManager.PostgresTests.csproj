@@ -26,4 +26,10 @@
     <ProjectReference Include="..\..\LinkshellManagerDiscordApp.csproj" />
   </ItemGroup>
 
+  <!-- The unit tests' controller factory, compiled here too so both suites build the Activity
+       controllers the same way. -->
+  <ItemGroup>
+    <Compile Include="..\LinkshellManager.Tests\ActivityControllerFactory.cs" Link="ActivityControllerFactory.cs" />
+  </ItemGroup>
+
 </Project>

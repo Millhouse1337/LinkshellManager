@@ -85,7 +85,8 @@ public class RouteTableTests
     // makes MVC load the app assembly and every Razor class library it references, as at startup,
     // so a package that ships pages shows up here too. "Production" keeps the
     // machine's user-secrets out of it. The app is only built, never started: no port is opened.
-    private static WebApplication BuildApp()
+    // ApiRouteSnapshotTests builds its route list from this same app.
+    internal static WebApplication BuildApp()
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions
         {
