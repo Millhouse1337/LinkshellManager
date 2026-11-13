@@ -99,6 +99,10 @@ public sealed class TreasuryJournalWriter
     // Categories for the request, so a multi-item auction close resolves them once.
     private readonly Dictionary<int, Dictionary<int, LedgerAccount>> _accountsByLinkshell = new();
 
+    // Member names per linkshell, for filling a holder's account from their name. Cached for the
+    // request because a settle run writes one entry per member, all naming the same holder.
+    private readonly Dictionary<int, CharacterResolver<AppUserLinkshell>> _membersByLinkshell = new();
+
     public TreasuryJournalWriter(
         ApplicationDbContext db, LedgerAccountProvisioner accounts)
     {
@@ -112,6 +116,7 @@ public sealed class TreasuryJournalWriter
         {
             _nextSequence.Clear();
             _accountsByLinkshell.Clear();
+            _membersByLinkshell.Clear();
         };
     }
 
@@ -308,6 +313,11 @@ public sealed class TreasuryJournalWriter
         var amount = Math.Abs(request.Amount);
         var accounts = await AccountsAsync(entry.LinkshellId, cancellationToken);
         var recipients = request.Recipients is { Count: > 0 } named ? named : null;
+        request = request with
+        {
+            HolderAppUserId = await ResolveHolderAppUserIdAsync(
+                entry.LinkshellId, request.HolderCharacterName, request.HolderAppUserId, cancellationToken),
+        };
 
         if (recipients is null || kind.SplitAccount is not int splitAccount)
         {
@@ -335,6 +345,33 @@ public sealed class TreasuryJournalWriter
             AddHalf(entry, accounts, splitAccount, -wholeSign * share, lineNumber++,
                 recipient.AppUserId, recipient.CharacterName, null, null);
         }
+    }
+
+    // The holder's account, filled from their name. Every form sends only the name (officers pick a
+    // character, not an account), so without this the id column was never written. Matched the same
+    // way DKP matches names: membership, account and alt names. A mule that is nobody's registered
+    // character stays name-only. When the name matches, it wins over a passed id, so one line can
+    // never name one person and point at another.
+    private async Task<string?> ResolveHolderAppUserIdAsync(
+        int linkshellId, string? holderCharacterName, string? passedAppUserId, CancellationToken cancellationToken)
+    {
+        if (CharacterResolver.Normalize(holderCharacterName) is not { } name)
+        {
+            return passedAppUserId;
+        }
+
+        if (!_membersByLinkshell.TryGetValue(linkshellId, out var members))
+        {
+            var memberships = await _db.AppUserLinkshells
+                .AsNoTracking()
+                .Include(link => link.AppUser)
+                .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
+                .ToListAsync(cancellationToken);
+            members = CharacterResolver.ForMemberships(memberships);
+            _membersByLinkshell[linkshellId] = members;
+        }
+
+        return members.Resolve(name)?.AppUserId ?? passedAppUserId;
     }
 
     private static void AddHalf(

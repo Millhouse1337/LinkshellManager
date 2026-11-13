@@ -141,7 +141,10 @@ public sealed partial class ActivityDataController
         // Filled for unlinked captures, where the Unlinked Snapshots row edits it.
         double? DkpOverride = null,
         // Where it was posted from (AttendanceSnapshotPostSources), null when not recorded.
-        string? PostSource = null);
+        string? PostSource = null,
+        // The officer who confirmed someone else's capture (character name, else user name). Null
+        // when the poster confirmed it themselves, which every moderator's own post does at once.
+        string? ConfirmedByName = null);
 
     public sealed record ActivityWindowSnapshotEntryDto(
         int Id,
@@ -287,17 +290,18 @@ public sealed partial class ActivityDataController
             .ToListAsync(cancellationToken);
 
         // Who posted each unlinked capture: the account behind the addon token, which for a member's
-        // capture is not necessarily the in-game character that ran /lsm now. One query.
+        // capture is not necessarily the in-game character that ran /lsm now. Fetched in the same
+        // query as the officers who confirmed a capture someone else posted, for "Confirmed by".
         var posterIds = unlinkedSnapshots
             .Select(s => s.PostedByAppUserId)
+            .Concat(openEvents.Concat(closedEvents).SelectMany(e => e.Snapshots)
+                .Concat(unlinkedSnapshots)
+                .Select(ConfirmerIdToShow))
             .Where(id => !string.IsNullOrEmpty(id))
+            .Select(id => id!)
             .Distinct()
             .ToList();
-        var posterNames = await _dbContext.Users
-            .AsNoTracking()
-            .Where(u => posterIds.Contains(u.Id))
-            .Select(u => new { u.Id, Name = u.CharacterName ?? u.UserName })
-            .ToDictionaryAsync(u => u.Id, u => u.Name, cancellationToken);
+        var posterNames = await LoadAccountNamesAsync(posterIds, cancellationToken);
 
         // Roster character names (typeahead for the "Add a character by name…"
         // input on snapshot editors). Only fetched for managers since they're
@@ -338,8 +342,23 @@ public sealed partial class ActivityDataController
                     .Include(e => e.Snapshots).ThenInclude(s => s.Entries)
                     .Include(e => e.MemberDkpOverrides)
                     .ToListAsync(cancellationToken);
+                // These cards were not in the lookup above; fetch only the confirmers it missed.
+                var missingConfirmerIds = owingCards
+                    .SelectMany(e => e.Snapshots)
+                    .Select(ConfirmerIdToShow)
+                    .Where(id => !string.IsNullOrEmpty(id) && !posterNames.ContainsKey(id))
+                    .Select(id => id!)
+                    .Distinct()
+                    .ToList();
+                if (missingConfirmerIds.Count > 0)
+                {
+                    foreach (var (id, name) in await LoadAccountNamesAsync(missingConfirmerIds, cancellationToken))
+                    {
+                        posterNames[id] = name;
+                    }
+                }
                 postedOwingEvents = owingCards
-                    .Select(e => MapActivityWindowEvent(e, roster, miscPostRate) with
+                    .Select(e => MapActivityWindowEvent(e, roster, miscPostRate, posterNames) with
                     {
                         UnpaidRegisteredMemberCount = owing[e.Id].Count,
                         UnpaidRegisteredMemberNames = owing[e.Id],
@@ -349,12 +368,12 @@ public sealed partial class ActivityDataController
         }
 
         return Ok(new ActivityWindowEventsResponse(
-            openEvents.Select(e => MapActivityWindowEvent(e, roster, miscPostRate)).ToList(),
-            closedEvents.Select(e => MapActivityWindowEvent(e, roster, miscPostRate)).ToList(),
+            openEvents.Select(e => MapActivityWindowEvent(e, roster, miscPostRate, posterNames)).ToList(),
+            closedEvents.Select(e => MapActivityWindowEvent(e, roster, miscPostRate, posterNames)).ToList(),
             // No parent event, so no window grid and no window label — deliberately: an unlinked
             // snapshot has no camp.
             unlinkedSnapshots
-                .Select(s => MapActivityWindowSnapshot(s, null, roster) with
+                .Select(s => MapActivityWindowSnapshot(s, null, roster, posterNames) with
                 {
                     PostedByName = s.PostedByAppUserId is { } posterId && posterNames.TryGetValue(posterId, out var name) ? name : null,
                     DkpOverride = s.DkpAmount,
@@ -1150,7 +1169,8 @@ public sealed partial class ActivityDataController
     // show the rate it will pay. A card that prices its captures keeps its own value: it is paid
     // per capture, not from the Misc rate.
     internal static ActivityWindowEventDto MapActivityWindowEvent(
-        WindowEvent item, RosterNameSet? roster = null, double? miscPostRate = null)
+        WindowEvent item, RosterNameSet? roster = null, double? miscPostRate = null,
+        IReadOnlyDictionary<string, string>? accountNames = null)
     {
         var rosterNames = roster ?? RosterNameSet.Unknown;
         var miscDkp = item.PerCaptureDkp ? item.MiscDkpAmount : item.MiscDkpAmount ?? miscPostRate;
@@ -1160,7 +1180,7 @@ public sealed partial class ActivityDataController
         var snapshots = item.Snapshots
             .OrderByDescending(s => s.CapturedAtUtc)
             .ThenBy(s => s.AllianceNumber)
-            .Select(s => MapActivityWindowSnapshot(s, item, rosterNames))
+            .Select(s => MapActivityWindowSnapshot(s, item, rosterNames, accountNames))
             .ToList();
         var overrides = item.MemberDkpOverrides
             .Where(o => !string.IsNullOrWhiteSpace(o.CharacterName))
@@ -1222,8 +1242,11 @@ public sealed partial class ActivityDataController
 
     // `windowEvent` supplies the cadence and grid anchor used to name the spawn window. Omitted for
     // an UNLINKED snapshot, which has no camp and therefore no window.
+    // `accountNames` maps account ids to display names, for "Confirmed by". Without it, or without
+    // the confirmer in it, the line is simply left off.
     internal static ActivityWindowSnapshotDto MapActivityWindowSnapshot(
-        AttendanceSnapshot snapshot, WindowEvent? windowEvent = null, RosterNameSet? roster = null)
+        AttendanceSnapshot snapshot, WindowEvent? windowEvent = null, RosterNameSet? roster = null,
+        IReadOnlyDictionary<string, string>? accountNames = null)
     {
         var rosterNames = roster ?? RosterNameSet.Unknown;
 
@@ -1294,7 +1317,37 @@ public sealed partial class ActivityDataController
                 : resolvedWindow is { } slotWindow
                     ? (hasGrid && gridWindows is { } slotTotal ? $"Window {slotWindow} of {slotTotal}" : $"Window {slotWindow}")
                     : null,
-            PostSource: snapshot.PostSource);
+            PostSource: snapshot.PostSource,
+            ConfirmedByName: ConfirmerIdToShow(snapshot) is { } confirmerId
+                && accountNames is not null
+                && accountNames.TryGetValue(confirmerId, out var confirmerName)
+                    ? confirmerName
+                    : null);
+    }
+
+    // The account to name as "Confirmed by", or null when there is nothing worth saying. Only a
+    // capture still counted (Active) and only when someone OTHER than the poster confirmed it: a
+    // moderator's own post is stamped as confirmed by themselves the moment it lands.
+    internal static string? ConfirmerIdToShow(AttendanceSnapshot snapshot) =>
+        snapshot.SnapshotStatus == AttendanceSnapshotStatuses.Active
+        && !string.IsNullOrEmpty(snapshot.VerifiedByAppUserId)
+        && !string.Equals(snapshot.VerifiedByAppUserId, snapshot.PostedByAppUserId, StringComparison.Ordinal)
+            ? snapshot.VerifiedByAppUserId
+            : null;
+
+    // Account id -> character name, else user name. One query.
+    private async Task<Dictionary<string, string>> LoadAccountNamesAsync(
+        IReadOnlyCollection<string> appUserIds, CancellationToken cancellationToken)
+    {
+        if (appUserIds.Count == 0) return new Dictionary<string, string>(StringComparer.Ordinal);
+        var rows = await _dbContext.Users
+            .AsNoTracking()
+            .Where(u => appUserIds.Contains(u.Id))
+            .Select(u => new { u.Id, Name = u.CharacterName ?? u.UserName })
+            .ToListAsync(cancellationToken);
+        return rows
+            .Where(u => !string.IsNullOrWhiteSpace(u.Name))
+            .ToDictionary(u => u.Id, u => u.Name!, StringComparer.Ordinal);
     }
 
     internal static List<ActivityWindowCombinedMemberDto> BuildActivityCombinedMembers(

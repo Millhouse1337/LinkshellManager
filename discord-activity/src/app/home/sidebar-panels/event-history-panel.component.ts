@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { AutoRefreshService } from '../../discord/auto-refresh.service';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { ResponseOrder } from '../../discord/refresh-order';
+import { popWindowLabel } from '../tabs/camp-window.helpers';
 import type {
   ActivityEditEventHistoryInput,
   ActivityEventComment,
@@ -360,7 +361,7 @@ import type {
                                     <!-- A camp priced per window keeps no per-member tally (the money
                                          is on the captures above), so the column carries the one
                                          window fact that camp has: where the monster came out. -->
-                                    <span class="win-count" title="The spawn window the monster popped on.">{{ h.popWindow }}</span>
+                                    <span class="win-count" title="The spawn window the monster popped on.">{{ popWindowLabel(h) }}</span>
                                   } @else {
                                     <span class="muted">—</span>
                                   }
@@ -1029,6 +1030,11 @@ export class EventHistoryPanelComponent {
   // window, which keeps no per-member window tally.
   protected showsPopWindow(h: ActivityEventHistory): boolean {
     return h.popWindow != null && !h.participants.some(p => p.windowsAttended != null);
+  }
+
+  // "W4 of 7": the pop window against the windows the camp cycled ("W4" when the count is missing).
+  protected popWindowLabel(h: ActivityEventHistory): string {
+    return popWindowLabel(h.popWindow, h.popWindowCount);
   }
 
   // "1 DKP", or "0.5–1 DKP" when an officer re-priced somebody in that window during review.

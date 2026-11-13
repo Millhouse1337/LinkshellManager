@@ -5,6 +5,8 @@ import {
   campPostCount,
   campPostsOpenAndClose,
   campWindowLabel,
+  claimCaptureHover,
+  popWindowLabel,
   type CampWindowFields
 } from './camp-window.helpers';
 
@@ -66,5 +68,30 @@ describe('campWindowLabel', () => {
 
   it('says Close once the Close is posted, whatever the clock says', () => {
     expect(campWindowLabel({ ...openCloseNm, hnmFocusWindow: 1, attendanceWindows: posted(2) })).toBe('Close');
+  });
+});
+
+describe('popWindowLabel', () => {
+  it('reads "W4 of 7", or "W4" when the count was not recorded', () => {
+    expect(popWindowLabel(4, 7)).toBe('W4 of 7');
+    expect(popWindowLabel(4, null)).toBe('W4');
+    expect(popWindowLabel(4)).toBe('W4');
+  });
+
+  it('is empty with no pop window', () => {
+    expect(popWindowLabel(null, 7)).toBe('');
+  });
+});
+
+describe('claimCaptureHover', () => {
+  it('names who captured it, then the raw game line', () => {
+    expect(claimCaptureHover({ capturedByCharacterName: 'Millhouse', capturedMessage: 'The claim lottery was won.' }))
+      .toBe('Captured by Millhouse\nThe claim lottery was won.');
+  });
+
+  it('uses whichever half exists, and null when neither does', () => {
+    expect(claimCaptureHover({ capturedByCharacterName: 'Millhouse', capturedMessage: null })).toBe('Captured by Millhouse');
+    expect(claimCaptureHover({ capturedByCharacterName: '  ', capturedMessage: 'line' })).toBe('line');
+    expect(claimCaptureHover({})).toBeNull();
   });
 });

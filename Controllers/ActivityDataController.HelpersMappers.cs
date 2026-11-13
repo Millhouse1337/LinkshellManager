@@ -146,7 +146,8 @@ public sealed partial class ActivityDataController
             role.CanManageInvites,
             role.CanBid,
             role.CanUseAddon,
-            role.CanManageAttendanceWithAddon);
+            role.CanManageAttendanceWithAddon,
+            role.CanSubmitTodForApproval);
     }
 
     private static ActivityLinkshellRoleDto MapLinkshellRoleDto(LinkshellRole role)
@@ -175,7 +176,8 @@ public sealed partial class ActivityDataController
             role.CanManageInvites,
             role.CanBid,
             role.CanUseAddon,
-            role.CanManageAttendanceWithAddon);
+            role.CanManageAttendanceWithAddon,
+            role.CanSubmitTodForApproval);
     }
 
     private static IReadOnlyList<ActivityHnmClaimSliceDto> MapHnmClaimSlices(IReadOnlyList<HnmClaimSlice> slices) =>

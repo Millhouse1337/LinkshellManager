@@ -288,6 +288,8 @@ export class ConfigurationsTabComponent {
     { key: 'canManageRules', label: 'Manage rules' },
     { key: 'canManageAnnouncements', label: 'Manage announcements' },
     { key: 'canManageTods', label: 'Manage ToDs' },
+    // For a role WITHOUT Manage ToDs: its ToDs wait on the ToDs tab for someone with it to approve.
+    { key: 'canSubmitTodForApproval', label: 'Submit ToDs for approval' },
     { key: 'canAuditDkp', label: 'Audit DKP' },
     { key: 'canManageAuctions', label: 'Manage auctions' },
     { key: 'canLockAuctions', label: 'Lock auctions (bid freeze)' },
@@ -387,7 +389,8 @@ export class ConfigurationsTabComponent {
       canManageInvites: !!this.roleDraft.permissions['canManageInvites'],
       canBid: !!this.roleDraft.permissions['canBid'],
       canUseAddon: !!this.roleDraft.permissions['canUseAddon'],
-      canManageAttendanceWithAddon: !!this.roleDraft.permissions['canManageAttendanceWithAddon']
+      canManageAttendanceWithAddon: !!this.roleDraft.permissions['canManageAttendanceWithAddon'],
+      canSubmitTodForApproval: !!this.roleDraft.permissions['canSubmitTodForApproval']
     };
 
     const ok = this.editingRoleId !== null

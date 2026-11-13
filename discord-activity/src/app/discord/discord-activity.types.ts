@@ -392,6 +392,9 @@ export interface ActivityLinkshellPermissions {
   canManageParties: boolean;
   canManageInvites: boolean;
   canBid: boolean;
+  // Send a ToD for an officer to approve, for a role without canManageTods. The server queues it
+  // as a pending submission instead of saving it. On for Leader and Officer by default.
+  canSubmitTodForApproval: boolean;
 }
 
 export interface ActivityLinkshellRole {
@@ -424,6 +427,9 @@ export interface ActivityLinkshellRole {
   canManageParties: boolean;
   canManageInvites: boolean;
   canBid: boolean;
+  // Send a ToD for an officer to approve, for a role without canManageTods. The server queues it
+  // as a pending submission instead of saving it. On for Leader and Officer by default.
+  canSubmitTodForApproval: boolean;
 }
 
 export interface ActivityLinkshellRolesResponse {
@@ -458,6 +464,9 @@ export interface ActivityLinkshellRolePermissionsInput {
   canManageParties: boolean;
   canManageInvites: boolean;
   canBid: boolean;
+  // Send a ToD for an officer to approve, for a role without canManageTods. The server queues it
+  // as a pending submission instead of saving it. On for Leader and Officer by default.
+  canSubmitTodForApproval: boolean;
 }
 
 export interface ActivityPrimaryLinkshell {
@@ -534,6 +543,8 @@ export interface ActivityItem {
   isSold?: boolean;
   soldPrice?: number | null;
   soldByCharacterName?: string | null;
+  // When it was sold. Null on unsold items (and on any sold before the column was filled).
+  soldAt?: string | null;
 }
 
 export interface ActivityItemInput {
@@ -1265,6 +1276,8 @@ export interface ActivityClaimShieldCapture {
   // window rather than the other way round.
   nearestWindowSequence?: number | null;
   members: ActivityClaimShieldMember[];
+  // Whose addon read the lottery line. Shown, with capturedMessage, as the card's hover text.
+  capturedByCharacterName?: string | null;
 }
 
 export interface ActivityClaimShieldMember {
@@ -1449,6 +1462,9 @@ export interface ActivityWindowSnapshot {
   slotLabel?: string | null;
   // Where it was posted from: 'LsmNow' | 'AddonUi' | 'App'. Null on older posts.
   postSource?: string | null;
+  // The officer who confirmed a capture someone else posted. Null when the poster confirmed it
+  // themselves (every moderator's own post) or nobody has yet.
+  confirmedByName?: string | null;
   entries: ActivityWindowSnapshotEntry[];
 }
 

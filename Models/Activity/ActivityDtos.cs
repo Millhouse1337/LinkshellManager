@@ -275,7 +275,10 @@ public sealed record ActivityPermissionsDto(
     bool CanManageInvites,
     bool CanBid,
     bool CanUseAddon,
-    bool CanManageAttendanceWithAddon);
+    bool CanManageAttendanceWithAddon,
+    // Send a ToD for an officer to approve (a role without Manage ToDs). On for Leader and Officer
+    // by default, who can log ToDs outright anyway.
+    bool CanSubmitTodForApproval);
 
 public static class ActivityPermissions
 {
@@ -302,7 +305,8 @@ public static class ActivityPermissions
         CanManageInvites: true,
         CanBid: true,
         CanUseAddon: true,
-        CanManageAttendanceWithAddon: true);
+        CanManageAttendanceWithAddon: true,
+        CanSubmitTodForApproval: true);
 }
 
 public sealed record ActivityPrimaryLinkshellDto(
@@ -345,7 +349,9 @@ public sealed record ActivityItemDto(
     DateTime UpdatedAt,
     bool IsSold = false,
     long? SoldPrice = null,
-    string? SoldByCharacterName = null);
+    string? SoldByCharacterName = null,
+    // When it was sold. The Sold tab sorts by it; UpdatedAt moves on any later edit of the item.
+    DateTime? SoldAt = null);
 
 public sealed record ActivityCreateItemRequest(string ItemName, string? ItemType, int Quantity, string? Notes);
 
@@ -904,7 +910,10 @@ public sealed record ActivityClaimShieldCaptureDto(
     // is timestamped by the game, so it dates the window rather than the other
     // way round.
     int? NearestWindowSequence,
-    IReadOnlyList<ActivityClaimShieldMemberDto> Members);
+    IReadOnlyList<ActivityClaimShieldMemberDto> Members,
+    // Whose addon read the lottery line (the first post wins, see AddonApiController.ClaimShield).
+    // Shown with CapturedMessage as the card's hover text.
+    string? CapturedByCharacterName = null);
 
 public sealed record ActivityClaimShieldMemberDto(
     string CharacterName,
@@ -1026,7 +1035,10 @@ public sealed record ActivityLinkshellRolePermissions(
     bool CanUseAddon = true,
     // The exception: FALSE, because this one hands out authority (the addon's attendance tools)
     // rather than an everyday ability, so an older client that omits it must not grant it.
-    bool CanManageAttendanceWithAddon = false);
+    bool CanManageAttendanceWithAddon = false,
+    // Nullable, unlike the rest: null means "not sent", and leaves the stored value alone. A
+    // client from before the editor showed this flag must not switch it on or off by saving.
+    bool? CanSubmitTodForApproval = null);
 
 public sealed record ActivityLinkshellRoleDto(
     int Id,
@@ -1052,7 +1064,8 @@ public sealed record ActivityLinkshellRoleDto(
     bool CanManageInvites,
     bool CanBid,
     bool CanUseAddon,
-    bool CanManageAttendanceWithAddon);
+    bool CanManageAttendanceWithAddon,
+    bool CanSubmitTodForApproval);
 
 public sealed record ActivityLinkshellRolesResponse(
     int LinkshellId,

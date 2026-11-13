@@ -723,6 +723,11 @@
       @if (snapshot.postedByName && snapshot.postedByName !== snapshot.capturedByCharacterName) {
         · Sent by <strong>{{ snapshot.postedByName }}</strong>
       }
+      @if (snapshot.confirmedByName
+           && snapshot.confirmedByName !== snapshot.capturedByCharacterName
+           && snapshot.confirmedByName !== snapshot.postedByName) {
+        · Confirmed by <strong>{{ snapshot.confirmedByName }}</strong>
+      }
       @if (postSourceLabel(snapshot.postSource); as source) {
         · From <strong>{{ source }}</strong>
       }

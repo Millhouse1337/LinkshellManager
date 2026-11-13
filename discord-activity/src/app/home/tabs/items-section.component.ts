@@ -163,7 +163,8 @@ export class ItemsSectionComponent {
     this.items()
       .filter(item => item.isSold)
       .slice()
-      .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''))
+      // By sale time, not updatedAt: editing an old sold item's notes must not float it to the top.
+      .sort((a, b) => (b.soldAt ?? b.updatedAt ?? '').localeCompare(a.soldAt ?? a.updatedAt ?? ''))
   );
 
   protected readonly visibleItems = computed(() =>

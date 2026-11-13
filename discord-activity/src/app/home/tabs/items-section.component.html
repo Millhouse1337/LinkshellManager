@@ -104,6 +104,9 @@
           <div class="entry-item__meta">
             <span>Added by {{ item.createdByCharacterName || 'Unknown' }}</span>
             @if (activity.formatDateTime(item.updatedAt); as when) { <span>&middot; Updated {{ when }}</span> }
+            @if (item.isSold && item.soldByCharacterName) {
+              <span>&middot; Sold by {{ item.soldByCharacterName }}@if (activity.formatDateTime(item.soldAt); as soldWhen) { on {{ soldWhen }} }</span>
+            }
           </div>
 
           @if (canManage) {

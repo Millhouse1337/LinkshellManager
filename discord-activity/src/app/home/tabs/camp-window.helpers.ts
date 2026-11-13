@@ -2,7 +2,7 @@
 // be unit tested (npm test) without building the component. The component keeps one-line
 // forwarders with the same names, so its template is unchanged.
 
-import type { ActivityEvent } from '../../discord/discord-activity.types';
+import type { ActivityClaimShieldCapture, ActivityEvent } from '../../discord/discord-activity.types';
 
 // Only the fields these helpers read, so a test can pass a small object instead of a whole event.
 export type CampWindowFields = Pick<
@@ -53,4 +53,22 @@ export function campWindowLabel(event: CampWindowFields): string {
     return campClosePosted(event) || focus > 1 ? 'Close' : 'Open';
   }
   return `Window ${focus} of ${event.windowCount}`;
+}
+
+// Where an archived camp's monster popped: "W4 of 7", or just "W4" for a camp archived before
+// the count was recorded. Empty when no pop window was recorded at all.
+export function popWindowLabel(popWindow?: number | null, popWindowCount?: number | null): string {
+  if (popWindow == null) return '';
+  return popWindowCount ? `W${popWindow} of ${popWindowCount}` : `W${popWindow}`;
+}
+
+// Hover text for a Claim Shield capture: whose addon read the lottery, then the game's own line.
+// Null when neither was recorded, so the template sets no title at all.
+export function claimCaptureHover(
+  capture: Pick<ActivityClaimShieldCapture, 'capturedByCharacterName' | 'capturedMessage'>
+): string | null {
+  const by = capture.capturedByCharacterName?.trim();
+  const line = capture.capturedMessage?.trim();
+  const parts = [by ? `Captured by ${by}` : '', line ?? ''].filter(part => part.length > 0);
+  return parts.length > 0 ? parts.join('\n') : null;
 }

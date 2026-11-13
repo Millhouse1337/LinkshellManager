@@ -78,6 +78,29 @@ public class TreasuryJournalWriterTests
         Assert.Null(other.HolderAppUserId);
     }
 
+    // Every form sends only the holder's NAME, so the writer fills the account from the roster —
+    // main, account and alt names, the same rule DKP uses. A mule nobody registered stays name-only.
+    [Theory]
+    [InlineData("Edicius", "user-9")]
+    [InlineData("edimule", "user-9")]
+    [InlineData("Strangermule", null)]
+    public async Task Draft_FillsTheHolderAccountFromTheName(string holderName, string? expectedId)
+    {
+        using var db = await SeededContextAsync();
+        db.Users.Add(new AppUser { Id = "user-9", UserName = "edi", CharacterName = "Edicius", AltCharacterName1 = "Edimule" });
+        db.AppUserLinkshells.Add(new AppUserLinkshell { Id = 1, LinkshellId = Linkshell, AppUserId = "user-9", CharacterName = "Edicius" });
+        await db.SaveChangesAsync();
+        var writer = NewWriter(db);
+
+        var entry = await writer.DraftAsync(
+            Linkshell, Sale(4_000_000) with { HolderCharacterName = holderName }, Officer, CancellationToken.None);
+
+        var cash = entry.Lines.Single(line => line.AccountNumber == TreasuryAccounts.GilOnHand);
+        var other = entry.Lines.Single(line => line.AccountNumber == TreasuryAccounts.ItemSales);
+        Assert.Equal(expectedId, cash.HolderAppUserId);
+        Assert.Null(other.HolderAppUserId);
+    }
+
     // Undoing a sale has to take the gil back off the mule it was put on, or the seller is left
     // holding gil the treasury no longer counts and the difference lands in the unattributed bucket.
     [Fact]

@@ -51,7 +51,8 @@ import {
   campClosePosted,
   campPostCount,
   campPostsOpenAndClose,
-  campWindowLabel
+  campWindowLabel,
+  claimCaptureHover
 } from './camp-window.helpers';
 
 // One entry in the Attendance Windows strip. `window` is null for a window the camp REACHED but
@@ -1531,6 +1532,11 @@ export class EventsTabComponent {
 
   protected claimShieldsFor(event: { claimShieldCaptures?: ActivityClaimShieldCapture[] }): ActivityClaimShieldCapture[] {
     return event.claimShieldCaptures ?? [];
+  }
+
+  // Who captured the lottery and the game's raw line, as the card's hover text.
+  protected claimCaptureHover(capture: ActivityClaimShieldCapture): string | null {
+    return claimCaptureHover(capture);
   }
 
   // Which posted window the lottery landed in, named the same way the tabs

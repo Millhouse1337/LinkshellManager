@@ -217,7 +217,7 @@ public sealed partial class ActivityDataController
         CancellationToken cancellationToken)
         => _permissions.EnsureDefaultRolesForLinkshellsAsync(linkshellIds, cancellationToken);
 
-    private static void ApplyPermissions(LinkshellRole role, ActivityLinkshellRolePermissions permissions)
+    internal static void ApplyPermissions(LinkshellRole role, ActivityLinkshellRolePermissions permissions)
     {
         role.CanManageRoles = permissions.CanManageRoles;
         role.CanManageMembers = permissions.CanManageMembers;
@@ -239,5 +239,10 @@ public sealed partial class ActivityDataController
         role.CanBid = permissions.CanBid;
         role.CanUseAddon = permissions.CanUseAddon;
         role.CanManageAttendanceWithAddon = permissions.CanManageAttendanceWithAddon;
+        // Only when sent: an older client that never showed this flag leaves it as it was.
+        if (permissions.CanSubmitTodForApproval is { } canSubmitTod)
+        {
+            role.CanSubmitTodForApproval = canSubmitTod;
+        }
     }
 }

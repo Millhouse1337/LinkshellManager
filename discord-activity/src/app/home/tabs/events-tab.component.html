@@ -520,7 +520,7 @@
                                   Claim Shield · {{ capture.monsterName }}
                                   <span class="hnm-badge" [attr.data-tone]="capture.won ? 'success' : 'danger'">{{ capture.won ? 'WON' : 'LOST' }}</span>
                                 </div>
-                                <div class="hnm-detail__sub">
+                                <div class="hnm-detail__sub" [attr.title]="claimCaptureHover(capture)">
                                   {{ capture.capturedAtUtc | date:'shortTime' }}
                                   @if (capture.nearestWindowSequence !== null && capture.nearestWindowSequence !== undefined) {
                                     · {{ claimWindowLabel(event, capture) }}
@@ -1983,7 +1983,7 @@
                               {{ capture.won ? 'WON' : 'LOST' }}
                             </span>
                             <strong>{{ capture.monsterName }}</strong>
-                            <span class="claim-shield__meta">
+                            <span class="claim-shield__meta" [attr.title]="claimCaptureHover(capture)">
                               {{ capture.capturedAtUtc | date:'short' }}
                               · {{ capture.members.length }} of ours
                               · {{ capture.totalPlayers }} in the lottery

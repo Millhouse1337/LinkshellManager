@@ -37,9 +37,9 @@ public class Tod
     public bool Hq { get; set; }
 
     // Tri-state: true = this linkshell got the kill, false = it didn't, null = not recorded.
-    // Set from the End Camp / Post ToD form alongside Claim, and it drives the kill bonus at
-    // finalize in BOTH attendance modes (Standard via HnmStandardCampFinalizer, Manual Check In
-    // via Event.WdKilled → WdCampFinalizer).
+    // Set from the End Camp / Post ToD form alongside Claim. HISTORY ONLY: nothing pays from this
+    // column. The kill bonus comes from the same End Camp answer, handed straight to the
+    // finalizers (HnmCampPopService → HnmCampReviewHandoffService) and kept on Event.WdKilled.
     //
     // Lives on Tod rather than Event because an HNM board is RECYCLED for the next camp — an
     // Event column would be overwritten by the following pop and answer nothing historically,

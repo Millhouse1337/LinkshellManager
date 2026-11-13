@@ -411,7 +411,8 @@ public sealed partial class ActivityDataController
                         .OrderBy(member => member.CharacterName)
                         .Select(member => new ActivityClaimShieldMemberDto(
                             member.CharacterName, member.ActionMessage, member.Matched))
-                        .ToList()))
+                        .ToList(),
+                    capture.CapturedByCharacterName))
                     .ToList()
                 : new List<ActivityClaimShieldCaptureDto>();
 
@@ -894,7 +895,8 @@ public sealed partial class ActivityDataController
                         item.UpdatedAt,
                         item.IsSold,
                         item.SoldPrice,
-                        item.SoldByCharacterName)).ToList(),
+                        item.SoldByCharacterName,
+                        item.SoldAt)).ToList(),
                     primaryAuctions.Select(auction =>
                     {
                         var closed = auction.EndTime is { } end && end <= DateTime.UtcNow;
