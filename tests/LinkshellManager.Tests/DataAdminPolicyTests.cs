@@ -145,7 +145,7 @@ public class DataAdminPolicyTests
 
         Assert.True(Table(catalog, typeof(AddonApiToken)).FindColumn(nameof(AddonApiToken.TokenHash))?.IsProtected);
         Assert.True(Table(catalog, typeof(AppUser)).FindColumn(nameof(AppUser.PasswordHash))?.IsProtected);
-        Assert.True(Table(catalog, typeof(AppUser)).FindColumn(nameof(AppUser.ProfileImage))?.IsProtected);
+        Assert.True(Table(catalog, typeof(LinkshellBanner)).FindColumn(nameof(LinkshellBanner.ImageData))?.IsProtected);
         Assert.False(Table(catalog, typeof(AppUser)).FindColumn(nameof(AppUser.CharacterName))?.IsProtected);
     }
 

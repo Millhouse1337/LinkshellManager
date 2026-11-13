@@ -320,7 +320,7 @@ public sealed class DkpPoolEditor
         defaultPool!.IsDefault = true;
 
         // ---- merge away the dropped pools
-        // Their PINNED references (an auction's history, adjustments, imports) can't just
+        // Their PINNED ledger rows (auction wins, adjustments, imports) can't just
         // be orphaned — the ledger row still has to say which wallet it came out of. Repoint them at
         // the default pool; the derived balances then simply re-derive.
         if (dropped.Count > 0)
@@ -334,14 +334,6 @@ public sealed class DkpPoolEditor
                     && entry.DkpPoolId != null
                     && droppedIds.Contains(entry.DkpPoolId!.Value))
                 .ExecuteUpdateAsync(setter => setter.SetProperty(entry => entry.DkpPoolId, defaultPool.Id), cancellationToken);
-            // PHASE4B-DROP: nothing reads AuctionHistories.DkpPoolId any more, but its foreign key
-            // (NO ACTION) still refuses to delete a pool an old closed auction points at. Keep this
-            // repoint until 4B drops the column with its FK.
-            await _db.AuctionHistories
-                .Where(item => item.LinkshellId == linkshellId
-                    && item.DkpPoolId != null
-                    && droppedIds.Contains(item.DkpPoolId!.Value))
-                .ExecuteUpdateAsync(setter => setter.SetProperty(item => item.DkpPoolId, defaultPool.Id), cancellationToken);
 
             foreach (var pool in dropped)
             {

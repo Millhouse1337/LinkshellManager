@@ -23,23 +23,10 @@ public class ChartPopItemCredit
     [ForeignKey(nameof(ChartPopItemId))]
     public ChartPopItem? ChartPopItem { get; set; }
 
-    // Deliberately a plain indexed int with NO relationship. Linkshells already cascades into
-    // ChartPopItems, which cascades into here; configuring a second Linkshell relationship would be
-    // a second cascade path from Linkshells into this table, which Postgres refuses. Same reason and
-    // same shape as JournalEntryLine.LinkshellId. These rows still die with the linkshell, via
-    // ChartPopItems.
-    // PHASE4B-DROP: ChartPopItemCredits.LinkshellId - no longer written or read (the ledger reads credits through their item). NOT NULL: new rows insert 0, and there is no FK.
-    public int LinkshellId { get; set; }
-
-    // PHASE4B-DROP: ChartPopItemCredits.MembershipId - no longer written or read; farmers are matched by NAME.
-    public int? MembershipId { get; set; }
-
+    // The farmer, matched by NAME (no linkshell or membership id here: the linkshell comes from the
+    // item, and a name still works for a member with no account behind it).
     [MaxLength(256)]
     public string CharacterName { get; set; } = string.Empty;
-
-    // PHASE4B-DROP: ChartPopItemCredits.Detail - never written by any client, and no longer sent.
-    [MaxLength(256)]
-    public string? Detail { get; set; }
 
     [MaxLength(450)]
     public string? CreditedByAppUserId { get; set; }

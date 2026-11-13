@@ -61,12 +61,6 @@ public class AppUser : IdentityUser
 
     public int? PrimaryLinkshellId { get; set; }
 
-    // PHASE4B-DROP: AspNetUsers.PrimaryLinkshellName - no longer written or read; the name comes from the Linkshells row for PrimaryLinkshellId.
-    public string? PrimaryLinkshellName { get; set; }
-
-    // PHASE4B-DROP: AspNetUsers.ProfileImage - the Discord avatar download that filled it is gone; nothing ever read it.
-    public byte[]? ProfileImage { get; set; }
-
     // App-wide super admin. NOT linkshell-scoped — grants access to global
     // server controls (e.g. the addon kill-switch on the website's Admin tab).
     // Seeded on startup for the configured SuperAdmin account; see Program.cs.

@@ -32,11 +32,6 @@ public class LinkshellPresence
     [MaxLength(256)]
     public string CharacterName { get; set; } = string.Empty;
 
-    // PHASE4B-DROP: LinkshellPresences.AppUserId - no longer written, and the "isRegistered" flag
-    // that read it is gone: the addon's Lobby tags "[not in LSM]" by its own roster check.
-    [MaxLength(450)]
-    public string? AppUserId { get; set; }
-
     // Their roster main, when CharacterName is one of their alts. Same display-hint role it plays
     // on AppUserEventWindow.
     [MaxLength(256)]
@@ -71,10 +66,6 @@ public class LinkshellPresence
     public string? SubJob { get; set; }
 
     public int? SubJobLevel { get; set; }
-
-    // PHASE4B-DROP: LinkshellPresences.ReportedByCharacterName - no longer written; nothing ever read it.
-    [MaxLength(256)]
-    public string? ReportedByCharacterName { get; set; }
 
     public DateTime LastSeenUtc { get; set; }
 }

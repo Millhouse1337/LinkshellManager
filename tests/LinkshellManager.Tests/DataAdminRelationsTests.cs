@@ -113,7 +113,6 @@ public class DataAdminRelationsTests
         Assert.Contains(user.Fields, f => f.Name == nameof(AppUser.CharacterName) && f.Text == "Millhouse");
         Assert.Contains(user.Fields, f => f.Name == nameof(AppUser.IsSuperAdmin) && f.Text == "No");
         Assert.DoesNotContain(user.Fields, f => f.Name == nameof(AppUser.PasswordHash));
-        Assert.DoesNotContain(user.Fields, f => f.Name == nameof(AppUser.ProfileImage));
         Assert.Equal("Millhouse", user.Label);
     }
 

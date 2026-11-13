@@ -40,16 +40,12 @@ public class ChartMemberKeyItem
 
     // Plain int with no relationship: Linkshells already cascades into AppUserLinkshells, so an FK
     // from here would be a second cascade path into this table. Same reason as
-    // ChartPopItem.HeldByMembershipId and ChartPopItemCredit.LinkshellId.
+    // JournalEntryLine.LinkshellId.
     //
     // The consequence, accepted deliberately: removing somebody from the roster leaves their rows
     // behind. They never render - ChartKeyItemService.BuildGrid is roster-driven - and re-adding the
     // same person restores what they had, which is the friendlier of the two failures.
     public int MembershipId { get; set; }
-
-    // PHASE4B-DROP: ChartMemberKeyItems.CharacterName - no longer written or read; the grid takes names off the roster. NOT NULL: new rows insert "".
-    [MaxLength(256)]
-    public string CharacterName { get; set; } = string.Empty;
 
     // WHO ticked it. This is the whole audit the feature needs: a member ticking their own and an
     // officer ticking theirs write an identical row, and this is the only thing that tells them

@@ -59,9 +59,6 @@ public class ChartPopItem
     [MaxLength(256)]
     public string? HeldByCharacterName { get; set; }
 
-    // PHASE4B-DROP: ChartPopItems.HeldByMembershipId - the app never sent one, so it was never set; no longer read or written.
-    public int? HeldByMembershipId { get; set; }
-
     public int Quantity { get; set; } = 1;
 
     [MaxLength(512)]

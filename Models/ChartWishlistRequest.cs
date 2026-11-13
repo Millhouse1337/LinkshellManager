@@ -64,17 +64,11 @@ public class ChartWishlistRequest
     [MaxLength(450)]
     public string? RequestedByAppUserId { get; set; }
 
-    // PHASE4B-DROP: ChartWishlistRequests.RequestedByMembershipId - no longer written or read; ownership is the AppUserId above.
-    public int? RequestedByMembershipId { get; set; }
-
     /// <summary>The name the list shows. The NAME is the record, the ids are conveniences.</summary>
     [MaxLength(256)]
     public string RequestedByCharacterName { get; set; } = string.Empty;
 
     public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
-
-    // PHASE4B-DROP: ChartWishlistRequests.UpdatedAt - never read; no longer set by edits. NOT NULL: new rows get the initializer's time.
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // Set when an officer ticks it off. There is no third "Withdrawn" status: withdrawing DELETES
     // the row, because a withdrawn request is a thing nobody ever reads again and keeping one would

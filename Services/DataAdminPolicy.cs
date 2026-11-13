@@ -67,7 +67,7 @@ public sealed class DataAdminPolicy
 
     // The global protected-column rule. Type-based rather than column-type-based so it behaves the
     // same on the InMemory test model (which has no relational annotations): every jsonb column in
-    // this app is an int[]/string[] property and both bytea columns are byte[].
+    // this app is an int[]/string[] property and the bytea column (LinkshellBanner.ImageData) is byte[].
     public static bool IsProtected(Type entityType, PropertyInfo property, DataAdminEntityPolicy policy) =>
         property.PropertyType == typeof(byte[])
         || property.PropertyType.IsArray
@@ -124,7 +124,6 @@ public sealed class DataAdminPolicy
                 EditableAllowList = new[]
                 {
                     nameof(AppUser.CharacterName), nameof(AppUser.AltCharacterName1), nameof(AppUser.AltCharacterName2),
-                    // Not PrimaryLinkshellName: nothing reads it any more (the name comes from the linkshell row).
                     nameof(AppUser.TimeZone), nameof(AppUser.PrimaryLinkshellId),
                     nameof(AppUser.IsPlaceholder),
                 },

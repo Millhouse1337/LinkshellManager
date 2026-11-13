@@ -133,10 +133,6 @@ public sealed class UserMergeService
         yield return Column(_db.AttendanceSnapshots, x => x.PostedByAppUserId);
         yield return Column(_db.AttendanceSnapshots, x => x.VerifiedByAppUserId);
         yield return Column(_db.ClaimShieldCaptureMembers, x => x.AppUserId);
-        // PHASE4B-DROP: nothing writes or reads this column any more, but a presence row still being
-        // reported keeps its old value; moving it keeps "a merge leaves no old id behind" true until
-        // 4B drops it.
-        yield return Column(_db.LinkshellPresences, x => x.AppUserId);
         yield return Column(_db.EventComments, x => x.AppUserId);
         yield return Column(_db.EventPartySlotSignups, x => x.AppUserId);
         yield return Column(_db.PartySetupSlots, x => x.SignedUpAppUserId);
@@ -350,7 +346,8 @@ public sealed class UserMergeService
         }
     }
 
-    // The chart tables point at a membership by id, with no foreign key. Rows of a membership the
+    // The key-item chart points at a membership by id, with no foreign key (the other chart tables
+    // match people by name or account id). Rows of a membership the
     // caller folded into another move to that one. A key item ticked on both is one tick (that
     // table allows one per member per key item), so the moving copy is dropped.
     private async Task MoveChartMembershipsAsync(IReadOnlyDictionary<int, int> membershipIdMap, CancellationToken cancellationToken)
@@ -375,10 +372,6 @@ public sealed class UserMergeService
                     tick.MembershipId = keptId;
                 }
             }
-
-            // Not ChartPopItemCredits.MembershipId, ChartPopItems.HeldByMembershipId or
-            // ChartWishlistRequests.RequestedByMembershipId: nothing reads them any more (credits and
-            // holders are matched by name, requests by account id), and 4B drops them.
         }
     }
 

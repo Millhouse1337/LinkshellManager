@@ -36,17 +36,6 @@ public class AuctionItem
     [MaxLength(450)]
     public string? CurrentHighestBidderAppUserId { get; set; }
 
-    // PHASE4B-DROP: AuctionItems.EndingBidDkp - a copy of CurrentHighestBid made at close; no longer written, the results card reads CurrentHighestBid.
-    public int? EndingBidDkp { get; set; }
-
-    // PHASE4B-DROP: AuctionItems.StartTime - a copy of the auction's own time; no longer written or sent.
-    [DataType(DataType.DateTime)]
-    public DateTime? StartTime { get; set; }
-
-    // PHASE4B-DROP: AuctionItems.EndTime - a copy of the auction's own time; no longer written or sent.
-    [DataType(DataType.DateTime)]
-    public DateTime? EndTime { get; set; }
-
     [MaxLength(32)]
     public string? Status { get; set; }
 

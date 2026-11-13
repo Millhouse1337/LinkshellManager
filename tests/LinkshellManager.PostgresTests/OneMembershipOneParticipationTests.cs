@@ -18,13 +18,9 @@ namespace LinkshellManager.PostgresTests;
 [Collection("postgres")]
 public class OneMembershipOneParticipationTests : IAsyncLifetime
 {
-    private const string MembershipIndex = "IX_AppUserLinkshells_LinkshellId_AppUserId";
     private const string ParticipationIndex = "IX_AppUserEvents_EventId_AppUserId";
 
     // What the migrations' CreateIndex produces, so a test that drops an index can put it back.
-    private const string CreateMembershipIndexSql =
-        "CREATE UNIQUE INDEX IF NOT EXISTS \"" + MembershipIndex + "\" ON \"AppUserLinkshells\" (\"LinkshellId\", \"AppUserId\") " +
-        "WHERE \"AppUserId\" IS NOT NULL;";
     private const string CreateParticipationIndexSql =
         "CREATE UNIQUE INDEX IF NOT EXISTS \"" + ParticipationIndex + "\" ON \"AppUserEvents\" (\"EventId\", \"AppUserId\") " +
         "WHERE \"AppUserId\" IS NOT NULL;";
@@ -63,153 +59,11 @@ public class OneMembershipOneParticipationTests : IAsyncLifetime
 
     // ------------------------------------------------------------------ memberships ---
 
-    [Fact]
-    public async Task MembershipMergeSql_KeepsTheMoney_MovesChartRows_AndLetsTheIndexBuild()
-    {
-        try
-        {
-            await using (var db = _pg.CreateContext())
-            {
-                await db.Database.ExecuteSqlRawAsync($"DROP INDEX IF EXISTS \"{MembershipIndex}\";");
-            }
-
-            var linkshellId = await SeedLinkshellAsync("alice", "bob");
-            int aliceKeep, aliceDup1, aliceDup2, bobOnly, popItemId, wishId;
-            await using (var db = _pg.CreateContext())
-            {
-                // Alice joined three times (a triple-clicked sign-up). Her DKP was split across the
-                // rows; the newest row is the one an officer promoted to Officer, and the second holds
-                // the DKP import's seed.
-                var keep = Member(linkshellId, "alice", 10, "Member");
-                keep.CharacterName = null;
-                var dup1 = Member(linkshellId, "alice", 25, "Member");
-                dup1.CharacterName = "Alice";
-                dup1.SeededDkpEarned = 400;
-                dup1.SeededDkpSpent = 150;
-                dup1.DateJoined = Now.AddDays(-30);
-                var dup2 = Member(linkshellId, "alice", 5, "Officer");
-                dup2.DiscordUserId = "111";
-                var bob = Member(linkshellId, "bob", 7);
-                // Two rows without an account are not a person to dedupe: left alone.
-                var ghost1 = Member(linkshellId, null, 1);
-                var ghost2 = Member(linkshellId, null, 1);
-                db.AppUserLinkshells.AddRange(keep, dup1, dup2, bob, ghost1, ghost2);
-                await db.SaveChangesAsync();
-                aliceKeep = keep.Id;
-                aliceDup1 = dup1.Id;
-                aliceDup2 = dup2.Id;
-                bobOnly = bob.Id;
-
-                // Chart rows that point at the membership by Id (no foreign key).
-                // PHASE4B-DROP: this test runs the OLD migration's SQL against today's schema, and that
-                // SQL still moves ChartPopItems.HeldByMembershipId, ChartPopItemCredits.MembershipId and
-                // ChartWishlistRequests.RequestedByMembershipId. When 4B drops those columns, drop the
-                // seeds and asserts for them here and stop running that SQL on the current schema.
-                db.ChartMemberKeyItems.AddRange(
-                    // Ticked on the kept row AND a duplicate: one tick survives, on the kept row.
-                    new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "Ra", MembershipId = aliceKeep, CharacterName = "Alice" },
-                    new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "Ra", MembershipId = aliceDup1, CharacterName = "Alice" },
-                    // Ticked on both duplicates only: one survives, moved to the kept row.
-                    new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "Al", MembershipId = aliceDup1, CharacterName = "Alice" },
-                    new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "Al", MembershipId = aliceDup2, CharacterName = "Alice" },
-                    // Bob's own tick is untouched.
-                    new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "Ra", MembershipId = bobOnly, CharacterName = "Bob" });
-                var pop = new ChartPopItem { LinkshellId = linkshellId, Board = "Sky", Boss = "Kirin", ItemName = "Orb", HeldByMembershipId = aliceDup2 };
-                db.ChartPopItems.Add(pop);
-                var wish = new ChartWishlistRequest
-                {
-                    LinkshellId = linkshellId, Board = "Sky", ItemName = "Helm",
-                    RequestedByMembershipId = aliceDup1, RequestedByCharacterName = "Alice",
-                };
-                db.ChartWishlistRequests.Add(wish);
-                await db.SaveChangesAsync();
-                popItemId = pop.Id;
-                wishId = wish.Id;
-                db.ChartPopItemCredits.Add(new ChartPopItemCredit
-                {
-                    ChartPopItemId = popItemId, LinkshellId = linkshellId, MembershipId = aliceDup1, CharacterName = "Alice",
-                });
-                await db.SaveChangesAsync();
-
-                // Ledger watermarks: the seeded row's import watermark is the newest. The pool epochs
-                // are stamped when each row was created, so the oldest row has the earliest.
-                await db.Database.ExecuteSqlRawAsync(
-                    "UPDATE \"AppUserLinkshells\" SET \"DkpSeedLedgerId\" = CASE \"Id\" WHEN {0} THEN 90 ELSE 0 END, " +
-                    "\"DkpPoolLedgerFromId\" = CASE \"Id\" WHEN {0} THEN 4 WHEN {1} THEN 6 ELSE 2 END " +
-                    "WHERE \"AppUserId\" = 'alice';",
-                    aliceDup1, aliceDup2);
-            }
-
-            await using (var db = _pg.CreateContext())
-            {
-                await db.Database.ExecuteSqlRawAsync(OneMembershipPerLinkshell.MergeDuplicateMembershipsSql);
-            }
-
-            await using (var db = _pg.CreateContext())
-            {
-                var members = await db.AppUserLinkshells.AsNoTracking().OrderBy(m => m.Id).ToListAsync();
-
-                // One Alice, the oldest row, holding the sum of the balances and seeds.
-                var alice = Assert.Single(members, m => m.AppUserId == "alice");
-                Assert.Equal(aliceKeep, alice.Id);
-                Assert.Equal(40d, alice.LinkshellDkp);
-                Assert.Equal(400d, alice.SeededDkpEarned);
-                Assert.Equal(150d, alice.SeededDkpSpent);
-                // Seed watermark: the latest (the import folded everything up to it into the seed).
-                // Pool epoch: the earliest, when Alice first joined.
-                Assert.Equal(90, alice.DkpSeedLedgerId);
-                Assert.Equal(2, alice.DkpPoolLedgerFromId);
-
-                // So the 15 HNM-pool DKP she earned (ledger row 3) after her first join but before
-                // the duplicate rows were made stays in the HNM pool, and the default pool holds
-                // the rest of her 40. The latest epoch (6) would have moved it to the default pool.
-                const int defaultPool = 1, hnmPool = 2;
-                var pools = DkpPoolBalanceService.Project(
-                    alice.LinkshellDkp ?? 0d,
-                    new[] { new LedgerPoolRow(3, hnmPool, 15d), new LedgerPoolRow(5, null, 25d) },
-                    alice.DkpPoolLedgerFromId,
-                    defaultPool,
-                    new[] { defaultPool, hnmPool });
-                Assert.Equal(15d, pools[hnmPool]);
-                Assert.Equal(25d, pools[defaultPool]);
-                // Highest rank wins; missing name / Discord id filled from the duplicates.
-                Assert.Equal("Officer", alice.Rank);
-                Assert.Equal("Alice", alice.CharacterName);
-                Assert.Equal("111", alice.DiscordUserId);
-                Assert.Equal(Now.AddDays(-30), alice.DateJoined);
-
-                // Bob and the account-less rows are untouched.
-                Assert.Equal(7d, members.Single(m => m.Id == bobOnly).LinkshellDkp);
-                Assert.Equal(2, members.Count(m => m.AppUserId == null));
-
-                // Chart rows all point at the kept row now; one tick per key item.
-                var ticks = await db.ChartMemberKeyItems.AsNoTracking().Where(k => k.MembershipId != bobOnly).ToListAsync();
-                Assert.Equal(2, ticks.Count);
-                Assert.All(ticks, t => Assert.Equal(aliceKeep, t.MembershipId));
-                Assert.Equal(new[] { "Al", "Ra" }, ticks.Select(t => t.KeyItemName).OrderBy(n => n));
-                Assert.Single(await db.ChartMemberKeyItems.AsNoTracking().Where(k => k.MembershipId == bobOnly).ToListAsync());
-                Assert.Equal(aliceKeep, (await db.ChartPopItems.AsNoTracking().SingleAsync(p => p.Id == popItemId)).HeldByMembershipId);
-                Assert.Equal(aliceKeep, (await db.ChartPopItemCredits.AsNoTracking().SingleAsync()).MembershipId);
-                Assert.Equal(aliceKeep, (await db.ChartWishlistRequests.AsNoTracking().SingleAsync(r => r.Id == wishId)).RequestedByMembershipId);
-
-                // Running it again changes nothing (a database with no duplicates).
-                await db.Database.ExecuteSqlRawAsync(OneMembershipPerLinkshell.MergeDuplicateMembershipsSql);
-                var again = await db.AppUserLinkshells.AsNoTracking().OrderBy(m => m.Id).ToListAsync();
-                Assert.Equal(
-                    members.Select(m => (m.Id, m.LinkshellDkp, m.Rank)),
-                    again.Select(m => (m.Id, m.LinkshellDkp, m.Rank)));
-
-                // And the index the migration creates next now builds.
-                await db.Database.ExecuteSqlRawAsync(CreateMembershipIndexSql);
-            }
-        }
-        finally
-        {
-            await _pg.ResetAsync();
-            await using var db = _pg.CreateContext();
-            await db.Database.ExecuteSqlRawAsync(CreateMembershipIndexSql);
-        }
-    }
+    // No test runs OneMembershipPerLinkshell.MergeDuplicateMembershipsSql any more. That SQL also
+    // moves the chart columns ChartPopItems.HeldByMembershipId, ChartPopItemCredits.MembershipId and
+    // ChartWishlistRequests.RequestedByMembershipId, which DropDeadAccountAuctionChartColumns removed,
+    // so it can only run on the schema of its own day. It already ran on production; on a fresh
+    // database it still runs in migration order (before the drop) on empty tables.
 
     [Fact]
     public async Task SecondMembershipForTheSameAccountIsRejected_AsADuplicateMembership()
