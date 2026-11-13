@@ -59,6 +59,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Vitest over the pure helpers, in plain Node (no browser). vitest.config.ts pins the
+      # runner's time zone, so the results are the same here as on a dev machine.
+      - name: Unit tests
+        run: npm test
+
       - name: Build
         run: npm run build
 

@@ -1,0 +1,12 @@
+/* Type checking for the Vitest unit tests (npm test). The app build uses tsconfig.app.json, which leaves *.spec.ts out. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": []
+  },
+  "include": [
+    "src/**/*.spec.ts",
+    "vitest.config.ts"
+  ]
+}

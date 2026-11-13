@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "lint": "ng lint"
+    "lint": "ng lint",
+    "test": "tsc -p tsconfig.spec.json && vitest run"
   },
   "prettier": {
     "printWidth": 100,
@@ -42,6 +43,7 @@
     "baseline-browser-mapping": "^2.10.20",
     "eslint": "^9.39.1",
     "typescript": "~5.9.2",
-    "typescript-eslint": "8.46.4"
+    "typescript-eslint": "8.46.4",
+    "vitest": "4.1.12"
   }
 }

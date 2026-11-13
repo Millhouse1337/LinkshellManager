@@ -14,6 +14,7 @@ import { TodService } from './tod.service';
 import {
   formatError,
   resolveBrowserTimeZone,
+  toLocalInputValueInZone,
   withTimeout
 } from './discord-activity.helpers';
 import type {
@@ -683,40 +684,15 @@ export class DiscordActivityService {
     }).format(date);
   }
 
-  // Formats an instant for a `<input type="datetime-local">` in the viewer's zone.
+  // Formats an instant for a `<input type="datetime-local">` in the viewer's zone. The work is in
+  // toLocalInputValueInZone (discord-activity.helpers.ts) so it can be unit tested.
   //
   // includeSeconds must be true wherever the input carries `step="1"` (the event form): without
   // it the value comes back minute-resolution, so opening the edit dialog silently rewrote the
   // seconds to :00 and saving stored that. Inputs left at the default step (the auction form)
   // pass false — a seconds-bearing value would be step-mismatched there.
   toViewerLocalInputValue(value?: string | null, includeSeconds = false): string {
-    if (!value) {
-      return '';
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return '';
-    }
-
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: this.viewerTimeZone(),
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      ...(includeSeconds ? { second: '2-digit' as const } : {}),
-      // h23, not hour12: false: Chromium (Discord's client) writes midnight as "24" with the
-      // latter, which the input cannot show and the server cannot parse.
-      hourCycle: 'h23'
-    }).formatToParts(date);
-
-    const lookup = (type: Intl.DateTimeFormatPartTypes): string =>
-      parts.find(part => part.type === type)?.value ?? '';
-
-    const hhmm = `${lookup('year')}-${lookup('month')}-${lookup('day')}T${lookup('hour')}:${lookup('minute')}`;
-    return includeSeconds ? `${hhmm}:${lookup('second') || '00'}` : hhmm;
+    return toLocalInputValueInZone(value, this.viewerTimeZone(), includeSeconds);
   }
 
   // Local re-export of the helper so we don't have to import it into every

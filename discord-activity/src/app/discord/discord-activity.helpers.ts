@@ -26,6 +26,44 @@ export function datetimeLocalToUtcIso(value?: string | null): string | null {
   return trimmed;
 }
 
+// The other direction: an instant (an ISO string from the server) written as the
+// "YYYY-MM-DDTHH:mm[:ss]" text a datetime-local box shows, on the clock of `timeZone` (the
+// viewer's PROFILE zone, not the computer's). Empty for a missing or unreadable value.
+// DiscordActivityService.toViewerLocalInputValue calls this with the viewer's zone.
+export function toLocalInputValueInZone(
+  value: string | null | undefined,
+  timeZone: string,
+  includeSeconds = false
+): string {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(includeSeconds ? { second: '2-digit' as const } : {}),
+    // h23, not hour12: false: Chromium (Discord's client) writes midnight as "24" with the
+    // latter, which the input cannot show and the server cannot parse.
+    hourCycle: 'h23'
+  }).formatToParts(date);
+
+  const lookup = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find(part => part.type === type)?.value ?? '';
+
+  const hhmm = `${lookup('year')}-${lookup('month')}-${lookup('day')}T${lookup('hour')}:${lookup('minute')}`;
+  return includeSeconds ? `${hhmm}:${lookup('second') || '00'}` : hhmm;
+}
+
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -69,6 +107,16 @@ export function isDiscordRpcError(error: unknown): error is DiscordRpcErrorLike 
   }
 
   const candidate = error as DiscordRpcErrorLike;
+  // A plain Error (what our own HTTP client throws, e.g. a server's refusal message) has a
+  // `message` too, but none of the RPC fields. Without this check it was dressed up as
+  // "Discord unknown failed: <message>" on screens that have nothing to do with Discord.
+  // The SDK's own errors carry a `code`, so they still count.
+  if (error instanceof Error
+      && candidate.cmd === undefined
+      && candidate.code === undefined
+      && candidate.data === undefined) {
+    return false;
+  }
   return Boolean(candidate.cmd || candidate.message || candidate.data?.message);
 }
 
