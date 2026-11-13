@@ -1387,13 +1387,13 @@ export class ActivityQueuePanelComponent {
     return this.expandedManualSignupEventIds().has(eventId);
   }
 
-  // True when the current viewer already owns a slot in the linked PartySetup.
+  // True when the current viewer already owns a slot on this event's party board.
   // We hide the "Sign Up Manually" affordance in that case so a user who already
   // claimed a slot above can't double-sign as an ad-hoc participant on the same
-  // event.
-  protected isCurrentUserInPartySetup(partySetupId: number | null | undefined): boolean {
-    if (!partySetupId) return false;
-    const detail = this.partySetups.detailFor(partySetupId);
+  // event. Reads the EVENT board (loaded by the panel above), not the setup
+  // template: a template has no roster, so it would never find the viewer.
+  protected isCurrentUserOnEventBoard(eventId: number): boolean {
+    const detail = this.partySetups.eventBoardFor(eventId);
     if (!detail) return false;
     const me = this.activity.overview()?.appUser?.id;
     if (!me) return false;

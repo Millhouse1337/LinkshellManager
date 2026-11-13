@@ -97,7 +97,7 @@ export class TodsTabComponent {
     this.destroyRef.onDestroy(() => window.clearInterval(intervalId));
 
     // Load party setups for the active linkshell so a ToD row whose monster has
-    // an assigned setup can offer the inline sign-up panel. Reads the computed id,
+    // an assigned setup can offer the inline (view-only) setup panel. Reads the computed id,
     // so it runs when the linkshell changes rather than on every overview refresh;
     // the refresh timer (AutoRefreshService, 'tods') keeps the list fresh.
     effect(() => {

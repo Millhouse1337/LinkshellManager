@@ -661,7 +661,7 @@
 
               @if (!event.currentParticipation) {
                 <div class="manual-signup">
-                  @if (isCurrentUserInPartySetup(event.partySetupId)) {
+                  @if (isCurrentUserOnEventBoard(event.id)) {
                     <p class="manual-signup__locked-hint">
                       You're signed up to a slot above. Withdraw from it first if you want to sign up as a different job.
                     </p>

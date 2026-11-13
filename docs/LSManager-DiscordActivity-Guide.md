@@ -29,9 +29,9 @@ The top strip shows the active linkshell name and member count, a clock, a refre
   - **Pending** — **Events Pending DKP Post**: ended events whose DKP hasn't been posted yet. The button shows how many are waiting.
   - **Past** — settled events, with comments and (officers) edits.
 
-- **ToDs** — Add a ToD manually (mob, time, day, cooldown) from the full monster list. Grouped history per monster. When a monster has an assigned **Party Setup**, an inline sign-up panel lets you claim a slot right there. For those who can approve them, **ToD Submissions Needing Approval** sits at the top: ToDs posted by members who can't add them directly, to fix up and Approve or Reject.
+- **ToDs** — Add a ToD manually (mob, time, day, cooldown) from the full monster list. Grouped history per monster. When a monster has an assigned **Party Setup**, you can open it inline to see its slots (view only: you claim a slot on the event). For those who can approve them, **ToD Submissions Needing Approval** sits at the top: ToDs posted by members who can't add them directly, to fix up and Approve or Reject.
 
-- **Party Setup** — Browse alliance → party → slot raid templates and claim an open slot (one per setup). Officers get the full tree editor: create / edit / delete a setup and assign it to a monster.
+- **Party Setup** — Browse alliance → party → slot raid templates (view only: members claim slots on the event that uses the setup). Officers get the full tree editor: create / edit / delete a setup and assign it to a monster.
 
 - **Auctions** *(DKP linkshells)* — Live bid view; place bids inline. The tab carries a live-auction count badge.
 
@@ -76,6 +76,6 @@ The website has the same **Game Addon** tab.
 ## Quick reference
 - **Launch:** voice channel → Activities → LinkshellManager → tabs along the top.
 - **Sign up for an event:** Event System tab → pick an event → Sign up.
-- **Claim a party slot:** ToDs tab (or Party Setup tab) → open a setup with an assigned monster → claim a slot.
+- **Claim a party slot:** Event System tab → open the event's party setup → claim an open slot (or use the Discord board).
 - **Pair the addon:** Configurations → Game Addon → + Get Code → in FFXI `/lsm link <code>`.
 - **Companion guides:** [Web App](LSManager-WebApp-Guide.md) · [In-Game Addon](LSManager-Addon-Guide.md)

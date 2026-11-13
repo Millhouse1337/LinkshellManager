@@ -7,8 +7,8 @@ import { PartySetupService } from '../../discord/party-setup.service';
 import { PartySetupEditorComponent } from './party-setup-editor.component';
 import { PartySetupPanelComponent } from './party-setup-panel.component';
 
-// List of raid-composition setups + the selected setup's interactive tree
-// (sign-up / withdraw) via the shared <app-party-setup-panel>, plus the officer
+// List of raid-composition setups + the selected setup's view-only template tree
+// via the shared <app-party-setup-panel> (sign-ups happen on events), plus the officer
 // editor (create/edit/delete/assign) gated on CanManageParties.
 @Component({
   selector: 'app-party-setup-tab',
