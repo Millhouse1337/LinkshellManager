@@ -59,8 +59,8 @@ public sealed partial class ActivityDataController
             }
         }
 
-        if (!TryConvertUserTimeZoneToUtc(request.StartTimeLocal, appUser.TimeZone, out var startTimeUtc) ||
-            !TryConvertUserTimeZoneToUtc(request.EndTimeLocal, appUser.TimeZone, out var endTimeUtc))
+        if (!_timeZones.TryParseUserLocalOrUtc(request.StartTimeLocal, appUser.TimeZone, out var startTimeUtc) ||
+            !_timeZones.TryParseUserLocalOrUtc(request.EndTimeLocal, appUser.TimeZone, out var endTimeUtc))
         {
             return BadRequest(new { error = "Use valid local start and end times in the event form." });
         }
@@ -204,8 +204,8 @@ public sealed partial class ActivityDataController
             return Forbid();
         }
 
-        if (!TryConvertUserTimeZoneToUtc(request.StartTimeLocal, appUser.TimeZone, out var startTimeUtc) ||
-            !TryConvertUserTimeZoneToUtc(request.EndTimeLocal, appUser.TimeZone, out var endTimeUtc))
+        if (!_timeZones.TryParseUserLocalOrUtc(request.StartTimeLocal, appUser.TimeZone, out var startTimeUtc) ||
+            !_timeZones.TryParseUserLocalOrUtc(request.EndTimeLocal, appUser.TimeZone, out var endTimeUtc))
         {
             return BadRequest(new { error = "Use valid local start and end times in the event form." });
         }

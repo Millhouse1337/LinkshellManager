@@ -148,9 +148,9 @@ public class UnregisteredCaptureMemberTests
     {
         var roster = Roster("Edicius");
 
-        Assert.True(ActivityDataController.MapLinkedSnapshotEntry(
+        Assert.True(ActivityMappers.MapLinkedSnapshotEntry(
             new AttendanceSnapshotEntry { CharacterName = "Edicius" }, roster).IsRegistered);
-        Assert.False(ActivityDataController.MapLinkedSnapshotEntry(
+        Assert.False(ActivityMappers.MapLinkedSnapshotEntry(
             new AttendanceSnapshotEntry { CharacterName = "Randomguy" }, roster).IsRegistered);
     }
 
@@ -162,7 +162,7 @@ public class UnregisteredCaptureMemberTests
             new RosterNameCandidate("Edicius", null, null, null, AppUserId: "user-1"),
         });
 
-        var row = ActivityDataController.MapLinkedSnapshotEntry(
+        var row = ActivityMappers.MapLinkedSnapshotEntry(
             new AttendanceSnapshotEntry { CharacterName = "Someothercharacter", AppUserId = "user-1" }, roster);
 
         Assert.True(row.IsRegistered);

@@ -1,19 +1,46 @@
-using System.Globalization;
 using System.Net.Http.Headers;
 using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
-using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+// What every Activity controller shares: who is asking (ResolveAppUserAsync), their membership of a
+// linkshell with the Discord guild lock applied (GetMembershipAsync), and the permission check
+// (CanAsync). The Activity API was one controller; it is being split into smaller ones that all
+// inherit this, so these rules stay in one place.
+//
+// Only what every controller needs lives here. A helper used by one controller stays in it.
+// Nothing here is public: a public method on a controller base class would become an endpoint.
+// The routing attributes ([ApiController], [Route("api/activity")]) stay on each controller.
+public abstract class ActivityControllerBase : ControllerBase
 {
+    private protected const string PendingInviteStatus = "PendingInvite";
+    private protected const string PendingJoinRequestStatus = "PendingJoinRequest";
+
+    private protected readonly ApplicationDbContext _dbContext;
+    private protected readonly DiscordIdentityService _discordIdentityService;
+    private protected readonly UserManager<AppUser> _userManager;
+    private protected readonly ILogger _logger;
+    private protected readonly LinkshellPermissions _permissions;
+
+    private protected ActivityControllerBase(
+        ApplicationDbContext dbContext,
+        DiscordIdentityService discordIdentityService,
+        UserManager<AppUser> userManager,
+        ILogger logger,
+        LinkshellPermissions permissions)
+    {
+        _dbContext = dbContext;
+        _discordIdentityService = discordIdentityService;
+        _userManager = userManager;
+        _logger = logger;
+        _permissions = permissions;
+    }
+
     // When a bearer token is presented, validate it strictly. Do NOT silently
     // downgrade to cookie auth when the bearer fails — that would let an
     // attacker who can disrupt outbound calls to discord.com (or who supplies
@@ -26,7 +53,7 @@ public sealed partial class ActivityDataController
     // so a field is safe here.
     private string? _resolvedDiscordAccessToken;
 
-    private async Task<AppUser?> ResolveAppUserAsync(CancellationToken cancellationToken)
+    private protected async Task<AppUser?> ResolveAppUserAsync(CancellationToken cancellationToken)
     {
         if (TryGetBearerToken(out var accessToken))
         {
@@ -54,7 +81,7 @@ public sealed partial class ActivityDataController
         return null;
     }
 
-    private bool TryGetBearerToken(out string accessToken)
+    private protected bool TryGetBearerToken(out string accessToken)
     {
         accessToken = string.Empty;
 
@@ -80,7 +107,7 @@ public sealed partial class ActivityDataController
     // The Discord guild (server) this request came from, sent by the Activity
     // as X-Discord-Guild-Id. Null on the website (no Discord context) and when
     // launched outside a server. Used to enforce per-linkshell guild locks.
-    private string? GetRequestGuildId()
+    private protected string? GetRequestGuildId()
     {
         var value = Request.Headers["X-Discord-Guild-Id"].ToString();
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -90,7 +117,7 @@ public sealed partial class ActivityDataController
     // launched from that guild. Returns true when the lock blocks this request.
     // The website (no guild header) is intentionally unaffected — the lock only
     // governs the Discord Activity, so a request with no guild id passes.
-    private bool IsBlockedByGuildLock(Linkshell? linkshell)
+    private protected bool IsBlockedByGuildLock(Linkshell? linkshell)
     {
         // Only an explicitly *locked* linkshell restricts access. Merely having a
         // server set (LockToDiscordGuild == false) never blocks anyone.
@@ -111,7 +138,7 @@ public sealed partial class ActivityDataController
         return !string.Equals(requestGuildId, linkshell.DiscordGuildId, StringComparison.Ordinal);
     }
 
-    private async Task<AppUserLinkshell?> GetMembershipAsync(string appUserId, int linkshellId, CancellationToken cancellationToken)
+    private protected async Task<AppUserLinkshell?> GetMembershipAsync(string appUserId, int linkshellId, CancellationToken cancellationToken)
     {
         var membership = await _permissions.GetMembershipAsync(appUserId, linkshellId, cancellationToken);
 
@@ -150,7 +177,7 @@ public sealed partial class ActivityDataController
     // Fail-closed: if the membership check can't reach Discord, the locked
     // linkshell is excluded rather than 500-ing the whole request, so unlocked
     // linkshells keep working during a Discord outage.
-    private async Task<HashSet<int>> FilterAccessibleLinkshellIdsAsync(
+    private protected async Task<HashSet<int>> FilterAccessibleLinkshellIdsAsync(
         IReadOnlyCollection<(int LinkshellId, string? DiscordGuildId)> candidates,
         CancellationToken cancellationToken,
         bool lockAppliesOnWebsite = false)
@@ -197,52 +224,28 @@ public sealed partial class ActivityDataController
     // The permission rule itself lives in LinkshellPermissions (one copy, so the addon and
     // Discord paths can share it). These wrappers keep the controller's call sites as they
     // were. The guild lock is NOT in the service: GetMembershipAsync above applies it first.
-    private Task<bool> CanAsync(
+    private protected Task<bool> CanAsync(
         AppUserLinkshell? membership,
         Func<LinkshellRole, bool> selector,
         CancellationToken cancellationToken)
         => _permissions.CanAsync(membership, selector, cancellationToken);
 
-    private Task<LinkshellRole?> GetEffectiveRoleAsync(
+    private protected Task<LinkshellRole?> GetEffectiveRoleAsync(
         string? rank,
         int linkshellId,
         CancellationToken cancellationToken)
         => _permissions.GetEffectiveRoleAsync(rank, linkshellId, cancellationToken);
 
-    private Task<List<LinkshellRole>> EnsureDefaultRolesAsync(int linkshellId, CancellationToken cancellationToken)
+    private protected Task<List<LinkshellRole>> EnsureDefaultRolesAsync(int linkshellId, CancellationToken cancellationToken)
         => _permissions.EnsureDefaultRolesAsync(linkshellId, cancellationToken);
 
-    private Task<Dictionary<int, List<LinkshellRole>>> EnsureDefaultRolesForLinkshellsAsync(
+    private protected Task<Dictionary<int, List<LinkshellRole>>> EnsureDefaultRolesForLinkshellsAsync(
         IReadOnlyCollection<int> linkshellIds,
         CancellationToken cancellationToken)
         => _permissions.EnsureDefaultRolesForLinkshellsAsync(linkshellIds, cancellationToken);
 
-    internal static void ApplyPermissions(LinkshellRole role, ActivityLinkshellRolePermissions permissions)
+    private protected static bool IsLeader(AppUserLinkshell? membership)
     {
-        role.CanManageRoles = permissions.CanManageRoles;
-        role.CanManageMembers = permissions.CanManageMembers;
-        role.CanManageEvents = permissions.CanManageEvents;
-        role.CanModerateLiveEvent = permissions.CanModerateLiveEvent;
-        role.CanAddLoot = permissions.CanAddLoot;
-        role.CanManageInventory = permissions.CanManageInventory;
-        role.CanManageCharts = permissions.CanManageCharts;
-        role.CanManageTreasury = permissions.CanManageTreasury;
-        role.CanManageRules = permissions.CanManageRules;
-        role.CanManageAnnouncements = permissions.CanManageAnnouncements;
-        role.CanManageTods = permissions.CanManageTods;
-        role.CanAuditDkp = permissions.CanAuditDkp;
-        role.CanManageAuctions = permissions.CanManageAuctions;
-        role.CanLockAuctions = permissions.CanLockAuctions;
-        role.CanCustomizeLinkshell = permissions.CanCustomizeLinkshell;
-        role.CanManageParties = permissions.CanManageParties;
-        role.CanManageInvites = permissions.CanManageInvites;
-        role.CanBid = permissions.CanBid;
-        role.CanUseAddon = permissions.CanUseAddon;
-        role.CanManageAttendanceWithAddon = permissions.CanManageAttendanceWithAddon;
-        // Only when sent: an older client that never showed this flag leaves it as it was.
-        if (permissions.CanSubmitTodForApproval is { } canSubmitTod)
-        {
-            role.CanSubmitTodForApproval = canSubmitTod;
-        }
+        return membership?.Rank?.Equals(LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase) == true;
     }
 }

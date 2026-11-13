@@ -1236,21 +1236,6 @@ public sealed partial class ActivityDataController
             combined.Count(m => !m.IsRegistered));
     }
 
-    // One row of a capture linked to a live camp. Asks the roster the same question, in the same
-    // order, as the review card this camp becomes at End Camp and the ledger that pays from it.
-    internal static ActivityLinkedSnapshotEntryDto MapLinkedSnapshotEntry(
-        AttendanceSnapshotEntry entry, RosterNameSet roster)
-        => new(
-            entry.Id,
-            entry.CharacterName,
-            entry.MainJob,
-            entry.MainJobLevel,
-            entry.SubJob,
-            entry.SubJobLevel,
-            entry.Zone,
-            entry.AddedManually,
-            roster.Knows(entry.CharacterName, entry.AppUserId));
-
     // `windowEvent` supplies the cadence and grid anchor used to name the spawn window. Omitted for
     // an UNLINKED snapshot, which has no camp and therefore no window.
     // `accountNames` maps account ids to display names, for "Confirmed by". Without it, or without

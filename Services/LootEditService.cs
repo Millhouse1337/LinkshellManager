@@ -169,7 +169,7 @@ public sealed class LootEditService
             return new LootEditResult(false, "Loot record is orphaned (no parent event).");
         }
 
-        var structure = ActivityDataController.NormalizeLootStructure(lootStructure ?? "Dkp");
+        var structure = ActivityMappers.NormalizeLootStructure(lootStructure ?? "Dkp");
 
         // The new winner's account. Keeping the same name keeps the recorded account, so a price
         // fix still finds a winner who has since renamed; a new name is matched to a member.
@@ -343,7 +343,7 @@ public sealed class LootEditService
             return new LootEditResult(false, "Loot record is orphaned (no parent event).");
         }
 
-        var structure = ActivityDataController.NormalizeLootStructure(lootStructure ?? "Dkp");
+        var structure = ActivityMappers.NormalizeLootStructure(lootStructure ?? "Dkp");
         var winnerName = (detail.ItemWinner ?? string.Empty).Trim();
         var itemName = (detail.ItemName ?? string.Empty).Trim();
         var dkpRaw = detail.WinningDkpSpent.GetValueOrDefault();

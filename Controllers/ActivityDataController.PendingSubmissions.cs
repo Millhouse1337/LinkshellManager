@@ -92,7 +92,7 @@ public sealed partial class ActivityDataController
     private bool TryReadReviewTime(string? value, AppUser reviewer, out DateTime? utc)
     {
         utc = null;
-        return string.IsNullOrWhiteSpace(value) || TryConvertUserTimeZoneToUtc(value, reviewer.TimeZone, out utc);
+        return string.IsNullOrWhiteSpace(value) || _timeZones.TryParseUserLocalOrUtc(value, reviewer.TimeZone, out utc);
     }
 
     private IActionResult ReviewOutcome(ApprovalResult result, string success) => result switch

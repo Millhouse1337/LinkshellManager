@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
+using static LinkshellManagerDiscordApp.Controllers.ActivityMappers;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -52,7 +53,7 @@ public sealed partial class ActivityDataController
         var (normalizedMonsterName, normalizedHq) = TodRecorder.Normalize(monsterName, request.Hq);
         monsterName = normalizedMonsterName;
 
-        if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
+        if (!_timeZones.TryParseUserLocalOrUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
         {
             return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
         }
@@ -317,7 +318,7 @@ public sealed partial class ActivityDataController
         var (normalizedMonsterName, normalizedHq) = TodRecorder.Normalize(monsterName, request.Hq);
         monsterName = normalizedMonsterName;
 
-        if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
+        if (!_timeZones.TryParseUserLocalOrUtc(request.TimeLocal, appUser.TimeZone, out var todTimeUtc) || !todTimeUtc.HasValue)
         {
             return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
         }

@@ -56,7 +56,7 @@ public sealed partial class ActivityDataController
         DateTime? todTimeUtc = null;
         if (!string.IsNullOrWhiteSpace(request.TimeLocal))
         {
-            if (!TryConvertUserTimeZoneToUtc(request.TimeLocal, appUser.TimeZone, out todTimeUtc) || !todTimeUtc.HasValue)
+            if (!_timeZones.TryParseUserLocalOrUtc(request.TimeLocal, appUser.TimeZone, out todTimeUtc) || !todTimeUtc.HasValue)
             {
                 return BadRequest(new { error = "Enter a valid Time of Death using your local time." });
             }

@@ -202,7 +202,7 @@ public class LinkshellPermissionsTests
     [Fact]
     public void ActivityController_DelegatesToTheService()
     {
-        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "ActivityDataController.HelpersAuth.cs"));
+        var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "Activity", "ActivityControllerBase.cs"));
 
         Assert.Contains("_permissions.CanAsync(", text);
         Assert.Contains("_permissions.GetEffectiveRoleAsync(", text);

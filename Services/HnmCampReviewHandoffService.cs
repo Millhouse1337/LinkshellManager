@@ -660,7 +660,7 @@ public sealed class HnmCampReviewHandoffService
             .ToListAsync(cancellationToken);
         if (loot.Count == 0) return;
 
-        var structure = ActivityDataController.NormalizeLootStructure(linkshell.LootStructure ?? "Dkp");
+        var structure = ActivityMappers.NormalizeLootStructure(linkshell.LootStructure ?? "Dkp");
         var owed = structure == "LootCouncil"
             ? new List<EventLootDetail>()
             : loot.Where(detail => detail.DkpDebitedAt is null && detail.WinningDkpSpent.GetValueOrDefault() > 0).ToList();

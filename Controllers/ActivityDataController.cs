@@ -11,32 +11,25 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 [ApiController]
 [Route("api/activity")]
-public sealed partial class ActivityDataController : ControllerBase
+public sealed partial class ActivityDataController : ActivityControllerBase
 {
-    private const string PendingInviteStatus = "PendingInvite";
-    private const string PendingJoinRequestStatus = "PendingJoinRequest";
     // (SupportedTodMonsters lived here. Which monsters a linkshell may assign is a per-linkshell
     // question now — its built-ins plus the ones it added itself — answered by
     // MonsterTimingMap.Allows off the request's MonsterTimingResolver.)
     private static readonly HashSet<string> SupportedTodCooldowns = new(TodCatalog.SupportedCooldowns, StringComparer.OrdinalIgnoreCase);
     private static readonly HashSet<string> SupportedTodIntervals = new(TodCatalog.SupportedIntervals, StringComparer.OrdinalIgnoreCase);
 
-    private readonly ApplicationDbContext _dbContext;
-    private readonly DiscordIdentityService _discordIdentityService;
     private readonly InviteCandidateService _inviteCandidates;
     private readonly DiscordBotClient _discordBot;
     private readonly AppUserProfileService _appUserProfileService;
-    private readonly UserManager<AppUser> _userManager;
     private readonly IHostEnvironment _environment;
     private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _webHostEnvironment;
     private readonly TimeZoneConversionService _timeZones;
     private readonly WindowEventDkpLedgerService _windowEventDkpLedger;
     private readonly WindowEventLinkService _windowEventLinks;
     private readonly DkpSheetService _dkpSheet;
-    private readonly ILogger<ActivityDataController> _logger;
     private readonly GlobalSettingsService _globalSettings;
     private readonly AdminOverrideService _adminOverride;
-    private readonly LinkshellPermissions _permissions;
     private readonly MemberActivityService _memberActivity;
     private readonly ChannelRouteEditor _channelRoutes;
     private readonly DkpLedgerWriter _dkpLedger;
@@ -91,20 +84,17 @@ public sealed partial class ActivityDataController : ControllerBase
         MonsterTimingEditor monsterTimingEditor,
         LinkshellMonsterTimingProvisioner monsterTimingProvisioner,
         LinkshellPermissions permissions)
+        : base(dbContext, discordIdentityService, userManager, logger, permissions)
     {
-        _dbContext = dbContext;
-        _discordIdentityService = discordIdentityService;
         _inviteCandidates = inviteCandidates;
         _discordBot = discordBot;
         _appUserProfileService = appUserProfileService;
-        _userManager = userManager;
         _environment = environment;
         _webHostEnvironment = webHostEnvironment;
         _timeZones = timeZones;
         _windowEventDkpLedger = windowEventDkpLedger;
         _windowEventLinks = windowEventLinks;
         _dkpSheet = dkpSheet;
-        _logger = logger;
         _globalSettings = globalSettings;
         _adminOverride = adminOverride;
         _memberActivity = memberActivity;
@@ -125,7 +115,6 @@ public sealed partial class ActivityDataController : ControllerBase
         _monsterTimings = monsterTimings;
         _monsterTimingEditor = monsterTimingEditor;
         _monsterTimingProvisioner = monsterTimingProvisioner;
-        _permissions = permissions;
     }
 
     [HttpGet("antiforgery")]
@@ -147,18 +136,6 @@ public sealed partial class ActivityDataController : ControllerBase
                string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase);
     }
 
-    internal static string NormalizeLootStructure(string structure)
-    {
-        if (string.Equals(structure, "LootCouncil", StringComparison.OrdinalIgnoreCase)) return "LootCouncil";
-        if (string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase)) return "Hybrid";
-        return "Dkp";
-    }
-
-    private static bool IsLeader(AppUserLinkshell? membership)
-    {
-        return membership?.Rank?.Equals(LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase) == true;
-    }
-
     private static string? NormalizeMemberRole(string? role)
     {
         if (string.IsNullOrWhiteSpace(role))
@@ -174,7 +151,4 @@ public sealed partial class ActivityDataController : ControllerBase
             _ => null
         };
     }
-
-    private bool TryConvertUserTimeZoneToUtc(string? localDateTimeValue, string? timeZoneId, out DateTime? utcDateTime)
-        => _timeZones.TryParseUserLocalOrUtc(localDateTimeValue, timeZoneId, out utcDateTime);
 }

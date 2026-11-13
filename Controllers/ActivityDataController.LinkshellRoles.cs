@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
+using static LinkshellManagerDiscordApp.Controllers.ActivityMappers;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
@@ -218,5 +219,34 @@ public sealed partial class ActivityDataController
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new { success = true });
+    }
+
+    internal static void ApplyPermissions(LinkshellRole role, ActivityLinkshellRolePermissions permissions)
+    {
+        role.CanManageRoles = permissions.CanManageRoles;
+        role.CanManageMembers = permissions.CanManageMembers;
+        role.CanManageEvents = permissions.CanManageEvents;
+        role.CanModerateLiveEvent = permissions.CanModerateLiveEvent;
+        role.CanAddLoot = permissions.CanAddLoot;
+        role.CanManageInventory = permissions.CanManageInventory;
+        role.CanManageCharts = permissions.CanManageCharts;
+        role.CanManageTreasury = permissions.CanManageTreasury;
+        role.CanManageRules = permissions.CanManageRules;
+        role.CanManageAnnouncements = permissions.CanManageAnnouncements;
+        role.CanManageTods = permissions.CanManageTods;
+        role.CanAuditDkp = permissions.CanAuditDkp;
+        role.CanManageAuctions = permissions.CanManageAuctions;
+        role.CanLockAuctions = permissions.CanLockAuctions;
+        role.CanCustomizeLinkshell = permissions.CanCustomizeLinkshell;
+        role.CanManageParties = permissions.CanManageParties;
+        role.CanManageInvites = permissions.CanManageInvites;
+        role.CanBid = permissions.CanBid;
+        role.CanUseAddon = permissions.CanUseAddon;
+        role.CanManageAttendanceWithAddon = permissions.CanManageAttendanceWithAddon;
+        // Only when sent: an older client that never showed this flag leaves it as it was.
+        if (permissions.CanSubmitTodForApproval is { } canSubmitTod)
+        {
+            role.CanSubmitTodForApproval = canSubmitTod;
+        }
     }
 }

@@ -221,4 +221,85 @@ public sealed partial class ActivityDataController
 
         return TimeSpan.Zero;
     }
+
+    private static ActivityAuctionDto MapAuctionDto(
+        Auction auction, bool canControl, DateTime nowUtc, double? availableDkp = null, bool auctionsLocked = false,
+        int? dkpPoolId = null, string? dkpPoolName = null)
+    {
+        // canControl = CanControlAuction(...): Manage auctions in this linkshell.
+        var status = HasAuctionEnded(auction, nowUtc)
+            ? "Ended"
+            : HasAuctionStarted(auction, nowUtc)
+                ? "Live"
+                : "Pending";
+
+        return new ActivityAuctionDto(
+            auction.Id,
+            auction.LinkshellId,
+            auction.AuctionTitle,
+            auction.CreatedBy,
+            auction.StartTime,
+            auction.EndTime,
+            auction.StartedAt,
+            status,
+            CanEditAuction(canControl, auction, nowUtc),
+            CanStartAuction(canControl, auction, nowUtc),
+            // CanEnd: the controller can stop bidding while the auction is live (no
+            // archive yet — the run lingers in the active board with status
+            // Ended until they Close it).
+            canControl && IsAuctionLive(auction, nowUtc),
+            // CanClose: only after the timer expires. Closing runs the delivery
+            // confirmation + archive + inventory-removal flow.
+            canControl && HasAuctionEnded(auction, nowUtc),
+            canControl,
+            auction.AuctionItems
+                .OrderBy(item => item.Id)
+                .Select(item => new ActivityAuctionItemDto(
+                    item.Id,
+                    item.ItemName,
+                    item.ItemType,
+                    item.StartingBidDkp,
+                    item.CurrentHighestBid,
+                    item.CurrentHighestBidder,
+                    item.CurrentHighestBidderAppUserId,
+                    item.Status,
+                    item.Notes,
+                    item.Bids.Count,
+                    item.SourceItemId,
+                    item.GilAmount))
+                .ToList(),
+            availableDkp,
+            auctionsLocked,
+            dkpPoolId ?? auction.DkpPoolId,
+            dkpPoolName);
+    }
+
+    private static ActivityAuctionHistoryDto MapAuctionHistoryDto(AuctionHistory history)
+    {
+        return new ActivityAuctionHistoryDto(
+            history.Id,
+            history.LinkshellId,
+            history.AuctionTitle,
+            history.CreatedBy,
+            history.StartTime,
+            history.EndTime,
+            history.StartedAt,
+            history.ClosedAt,
+            history.AuctionItems
+                .OrderBy(item => item.Id)
+                .Select(item => new ActivityAuctionItemDto(
+                    item.Id,
+                    item.ItemName,
+                    item.ItemType,
+                    item.StartingBidDkp,
+                    item.CurrentHighestBid,
+                    item.CurrentHighestBidder,
+                    item.CurrentHighestBidderAppUserId,
+                    item.Status,
+                    item.Notes,
+                    0,
+                    item.SourceItemId,
+                    item.GilAmount))
+                .ToList());
+    }
 }

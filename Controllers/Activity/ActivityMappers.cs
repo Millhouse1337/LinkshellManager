@@ -1,19 +1,15 @@
-using System.Globalization;
-using System.Net.Http.Headers;
-using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using NodaTime;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-public sealed partial class ActivityDataController
+// Pure functions that turn rows into the Activity's DTOs (and a few name normalisers), shared by
+// more than one Activity controller. No services, no database: everything they need is passed in.
+// The controllers import them with "using static", so their call sites read as before.
+internal static class ActivityMappers
 {
-    private static ActivityLinkshellSettingsDto MapLinkshellSettingsDto(
+    internal static ActivityLinkshellSettingsDto MapLinkshellSettingsDto(
         Linkshell? linkshell,
         IReadOnlyList<ActivityMonsterSetupDto>? monsterSetups = null)
     {
@@ -62,7 +58,7 @@ public sealed partial class ActivityDataController
     // Splits the pipe-separated storage form into a clean list of names
     // (trimmed, non-empty). Pipe avoids comma collisions if FFXI ever
     // grows a mob name with a comma in it.
-    private static IReadOnlyList<string> ParseHiddenTodMonsters(string? raw)
+    internal static IReadOnlyList<string> ParseHiddenTodMonsters(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<string>();
         var parts = raw.Split('|', StringSplitOptions.RemoveEmptyEntries);
@@ -92,13 +88,13 @@ public sealed partial class ActivityDataController
         return string.Join('|', kept);
     }
 
-    private static string NormalizeDkpRounding(string? raw)
+    internal static string NormalizeDkpRounding(string? raw)
     {
         if (string.Equals(raw, "Half", StringComparison.OrdinalIgnoreCase)) return "Half";
         return "Quarter";
     }
 
-    private static ActivityPermissionsDto? ResolvePermissionsFor(
+    internal static ActivityPermissionsDto? ResolvePermissionsFor(
         int linkshellId,
         string? rank,
         Dictionary<int, Dictionary<string, LinkshellRole>> rolesByLinkshellAndName,
@@ -150,7 +146,7 @@ public sealed partial class ActivityDataController
             role.CanSubmitTodForApproval);
     }
 
-    private static ActivityLinkshellRoleDto MapLinkshellRoleDto(LinkshellRole role)
+    internal static ActivityLinkshellRoleDto MapLinkshellRoleDto(LinkshellRole role)
     {
         return new ActivityLinkshellRoleDto(
             role.Id,
@@ -180,7 +176,7 @@ public sealed partial class ActivityDataController
             role.CanSubmitTodForApproval);
     }
 
-    private static IReadOnlyList<ActivityHnmClaimSliceDto> MapHnmClaimSlices(IReadOnlyList<HnmClaimSlice> slices) =>
+    internal static IReadOnlyList<ActivityHnmClaimSliceDto> MapHnmClaimSlices(IReadOnlyList<HnmClaimSlice> slices) =>
         slices
             .Select(slice => new ActivityHnmClaimSliceDto(
                 slice.MonsterName,
@@ -192,7 +188,7 @@ public sealed partial class ActivityDataController
                 slice.HasHqVariant))
             .ToList();
 
-    private static ActivityHnmWindowsDto MapHnmWindows(HnmWindowStats stats) =>
+    internal static ActivityHnmWindowsDto MapHnmWindows(HnmWindowStats stats) =>
         new(
             stats.Grids
                 .Select(grid => new ActivityHnmWindowGridDto(
@@ -223,7 +219,7 @@ public sealed partial class ActivityDataController
                 .ToList(),
             stats.TotalPops);
 
-    private static ActivityTodDto MapTodDto(Tod tod)
+    internal static ActivityTodDto MapTodDto(Tod tod)
     {
         return new ActivityTodDto(
             tod.Id,
@@ -242,84 +238,25 @@ public sealed partial class ActivityDataController
             tod.TimeStamp);
     }
 
-    private static ActivityAuctionDto MapAuctionDto(
-        Auction auction, bool canControl, DateTime nowUtc, double? availableDkp = null, bool auctionsLocked = false,
-        int? dkpPoolId = null, string? dkpPoolName = null)
-    {
-        // canControl = CanControlAuction(...): Manage auctions in this linkshell.
-        var status = HasAuctionEnded(auction, nowUtc)
-            ? "Ended"
-            : HasAuctionStarted(auction, nowUtc)
-                ? "Live"
-                : "Pending";
+    // One row of a capture linked to a live camp. Asks the roster the same question, in the same
+    // order, as the review card this camp becomes at End Camp and the ledger that pays from it.
+    internal static ActivityLinkedSnapshotEntryDto MapLinkedSnapshotEntry(
+        AttendanceSnapshotEntry entry, RosterNameSet roster)
+        => new(
+            entry.Id,
+            entry.CharacterName,
+            entry.MainJob,
+            entry.MainJobLevel,
+            entry.SubJob,
+            entry.SubJobLevel,
+            entry.Zone,
+            entry.AddedManually,
+            roster.Knows(entry.CharacterName, entry.AppUserId));
 
-        return new ActivityAuctionDto(
-            auction.Id,
-            auction.LinkshellId,
-            auction.AuctionTitle,
-            auction.CreatedBy,
-            auction.StartTime,
-            auction.EndTime,
-            auction.StartedAt,
-            status,
-            CanEditAuction(canControl, auction, nowUtc),
-            CanStartAuction(canControl, auction, nowUtc),
-            // CanEnd: the controller can stop bidding while the auction is live (no
-            // archive yet — the run lingers in the active board with status
-            // Ended until they Close it).
-            canControl && IsAuctionLive(auction, nowUtc),
-            // CanClose: only after the timer expires. Closing runs the delivery
-            // confirmation + archive + inventory-removal flow.
-            canControl && HasAuctionEnded(auction, nowUtc),
-            canControl,
-            auction.AuctionItems
-                .OrderBy(item => item.Id)
-                .Select(item => new ActivityAuctionItemDto(
-                    item.Id,
-                    item.ItemName,
-                    item.ItemType,
-                    item.StartingBidDkp,
-                    item.CurrentHighestBid,
-                    item.CurrentHighestBidder,
-                    item.CurrentHighestBidderAppUserId,
-                    item.Status,
-                    item.Notes,
-                    item.Bids.Count,
-                    item.SourceItemId,
-                    item.GilAmount))
-                .ToList(),
-            availableDkp,
-            auctionsLocked,
-            dkpPoolId ?? auction.DkpPoolId,
-            dkpPoolName);
-    }
-
-    private static ActivityAuctionHistoryDto MapAuctionHistoryDto(AuctionHistory history)
+    internal static string NormalizeLootStructure(string structure)
     {
-        return new ActivityAuctionHistoryDto(
-            history.Id,
-            history.LinkshellId,
-            history.AuctionTitle,
-            history.CreatedBy,
-            history.StartTime,
-            history.EndTime,
-            history.StartedAt,
-            history.ClosedAt,
-            history.AuctionItems
-                .OrderBy(item => item.Id)
-                .Select(item => new ActivityAuctionItemDto(
-                    item.Id,
-                    item.ItemName,
-                    item.ItemType,
-                    item.StartingBidDkp,
-                    item.CurrentHighestBid,
-                    item.CurrentHighestBidder,
-                    item.CurrentHighestBidderAppUserId,
-                    item.Status,
-                    item.Notes,
-                    0,
-                    item.SourceItemId,
-                    item.GilAmount))
-                .ToList());
+        if (string.Equals(structure, "LootCouncil", StringComparison.OrdinalIgnoreCase)) return "LootCouncil";
+        if (string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase)) return "Hybrid";
+        return "Dkp";
     }
 }

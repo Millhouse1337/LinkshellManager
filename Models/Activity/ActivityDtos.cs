@@ -244,7 +244,7 @@ public sealed record ActivityLinkshellSettingsDto(
     // checked in from window 1, close = still checked in at the camp's last credited window.
     //
     // These three are appended LAST for the same reason the auto-snapshot pair above was — the
-    // `linkshell is null` early-return in HelpersMappers passes only the leading positional
+    // `linkshell is null` early-return in ActivityMappers passes only the leading positional
     // arguments and relies on defaults for the rest, so appending here needs no edit there.
     double WdOpenBonus = 0,
     double WdCloseBonus = 0,
