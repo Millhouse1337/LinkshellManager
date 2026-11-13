@@ -48,8 +48,9 @@ public static class LegacyUrlRedirects
         ("/Account/Settings", "admin", false),
         // The old sign-in page. The app shows its own sign-in screen to a signed-out visitor.
         ("/Account/Login", "", false),
-        ("/Messages", "messages", false),
-        ("/Contact", "messages", false),
+        // The app's Messages tab is gone (it never had any messages), so these open the dashboard.
+        ("/Messages", "", false),
+        ("/Contact", "", false),
     };
 
     // /Charts/{board}: the board is its own sub-view in the app (Sky, the default, is bare /charts).

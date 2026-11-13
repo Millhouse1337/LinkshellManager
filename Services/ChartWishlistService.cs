@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-/// <summary>The two states a request can be in. Strings on the wire, like ChartCreditStatuses.</summary>
+/// <summary>The two states a request can be in. Strings on the wire, like ChartBossKinds.</summary>
 public static class ChartWishlistStatuses
 {
     public const string Pending = "Pending";

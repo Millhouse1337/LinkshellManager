@@ -26,7 +26,7 @@ public static class ChartBossKinds
 /// <summary>
 /// Whether a tracked row is something traded TO a boss or something that fell OFF one.
 ///
-/// Strings on the wire and in the column, like ChartBossKinds and ChartCreditStatuses, rather than an
+/// Strings on the wire and in the column, like ChartBossKinds and ChartWishlistStatuses, rather than an
 /// enum: the value is stored on ChartPopItem.Kind and round-trips through two JSON payloads and a
 /// form post, and a string that survives all three unchanged is one fewer place to map.
 /// </summary>

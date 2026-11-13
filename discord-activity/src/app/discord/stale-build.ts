@@ -8,10 +8,17 @@
 const STORAGE_KEY = 'lsm-stale-build-reload-at';
 const RETRY_AFTER_MS = 60_000;
 
+// Angular's code for "an @defer block's script failed to load". Each tab sits in an @defer block,
+// and Angular drops the browser's own message and reports only this code, so it counts too.
+const DEFER_LOADING_FAILED = -750;
+
 // The messages browsers use when a dynamically imported script fails to load.
 export function isChunkLoadError(error: unknown): boolean {
+  if ((error as { code?: unknown } | null)?.code === DEFER_LOADING_FAILED) {
+    return true;
+  }
   const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-  return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Loading chunk [\w-]+ failed/i
+  return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Loading chunk [\w-]+ failed|^NG0750\b/i
     .test(message);
 }
 

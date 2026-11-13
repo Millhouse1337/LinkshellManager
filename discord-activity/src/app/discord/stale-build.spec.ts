@@ -19,6 +19,13 @@ describe('isChunkLoadError', () => {
     expect(isChunkLoadError(new Error('error loading dynamically imported module'))).toBe(true);
   });
 
+  // A tab's @defer block failing to load: Angular reports only its own code (NG0750).
+  it('recognises a failed @defer load', () => {
+    expect(isChunkLoadError(Object.assign(new Error('NG0750'), { code: -750 }))).toBe(true);
+    expect(isChunkLoadError(new Error('NG0750: Loading dependencies for `@defer` block failed'))).toBe(true);
+    expect(isChunkLoadError(Object.assign(new Error('NG0100'), { code: -100 }))).toBe(false);
+  });
+
   it('ignores other errors', () => {
     expect(isChunkLoadError(new Error('You do not have permission.'))).toBe(false);
     expect(isChunkLoadError(undefined)).toBe(false);
