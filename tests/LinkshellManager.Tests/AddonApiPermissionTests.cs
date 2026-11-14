@@ -36,7 +36,7 @@ public class AddonApiPermissionTests
             .Options);
 
     private static AddonApiController NewController(ApplicationDbContext db) =>
-        new(db, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+        new(db, null!, null!, null!, null!, null!, null!, null!, null!, null!,
             TestPermissions.For(db), NullLogger<AddonApiController>.Instance);
 
     private static AddonApiToken Token(string? issuedTo = UserId) =>

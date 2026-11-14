@@ -18,7 +18,6 @@ public sealed partial class AddonApiController : ControllerBase
     private readonly ApplicationDbContext _dbContext;
     private readonly AddonApiAuthService _auth;
     private readonly UserManager<AppUser> _userManager;
-    private readonly DiscordIdentityService _discordIdentityService;
     private readonly DiscordEventChannelQueue _eventQueue;
     private readonly GlobalSettingsService _globalSettings;
     private readonly DkpLedgerWriter _dkpLedger;
@@ -33,7 +32,6 @@ public sealed partial class AddonApiController : ControllerBase
         ApplicationDbContext dbContext,
         AddonApiAuthService auth,
         UserManager<AppUser> userManager,
-        DiscordIdentityService discordIdentityService,
         DiscordEventChannelQueue eventQueue,
         GlobalSettingsService globalSettings,
         DkpLedgerWriter dkpLedger,
@@ -47,7 +45,6 @@ public sealed partial class AddonApiController : ControllerBase
         _dbContext = dbContext;
         _auth = auth;
         _userManager = userManager;
-        _discordIdentityService = discordIdentityService;
         _eventQueue = eventQueue;
         _globalSettings = globalSettings;
         _dkpLedger = dkpLedger;

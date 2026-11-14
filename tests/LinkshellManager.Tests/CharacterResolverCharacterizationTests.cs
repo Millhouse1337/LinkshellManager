@@ -88,7 +88,7 @@ public class CharacterResolverCharacterizationTests
         http.Items[AddonApiAuthAttribute.LinkshellIdContextKey] = Ls;
         var pools = NewPools(db);
         return new AddonApiController(
-            db, null!, null!, null!, null!, null!, NewWriter(db),
+            db, null!, null!, null!, null!, NewWriter(db),
             pools, new DkpPoolBalanceService(db, pools), null!, null!, TestPermissions.For(db),
             NullLogger<AddonApiController>.Instance)
         {
