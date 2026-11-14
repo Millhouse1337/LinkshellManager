@@ -2220,8 +2220,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("LinkshellId", "TargetAppUserId");
-
                     b.HasIndex("LinkshellId", "TargetAppUserId", "RaterAppUserId", "CharacterSlot", "JobIndex")
                         .IsUnique();
 

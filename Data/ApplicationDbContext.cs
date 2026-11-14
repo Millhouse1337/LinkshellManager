@@ -1637,9 +1637,9 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.RaterAppUserId).HasMaxLength(450);
                 // One rating per rater per target's job + character within a
                 // linkshell (upsert). CharacterSlot distinguishes main/alt rows.
+                // It also serves "every rating of one target" (LinkshellId, TargetAppUserId), since
+                // those are its first two columns, so that query needs no index of its own.
                 entity.HasIndex(item => new { item.LinkshellId, item.TargetAppUserId, item.RaterAppUserId, item.CharacterSlot, item.JobIndex }).IsUnique();
-                // Aggregate a target's ratings across all raters.
-                entity.HasIndex(item => new { item.LinkshellId, item.TargetAppUserId });
             });
 
             builder.Entity<EventPartySlotSignup>(entity =>
