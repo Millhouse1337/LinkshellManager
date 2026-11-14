@@ -158,7 +158,7 @@ public class EventBreakPolicyTests
 }
 
 // The same predicate now also decides how far the board's "Withdraw" button goes
-// (DiscordInteractionsController.HandlePartySlotLeaveAsync). On a windowed camp Withdraw is a FULL
+// (PartyBoardHandler.HandlePartySlotLeaveAsync). On a windowed camp Withdraw is a FULL
 // exit — slot and attendance both — because there is no accruing clock for a kept attendance row to
 // protect, and keeping one parked the member under "Also Attending" where they still read as signed
 // up. On a duration-paid event the live case must keep it, or withdrawing destroys earned DKP.
