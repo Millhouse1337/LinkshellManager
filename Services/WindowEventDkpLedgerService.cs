@@ -580,20 +580,7 @@ public sealed class WindowEventDkpLedgerService
             return null;
         }
 
-        var history = new EventHistory
-        {
-            LinkshellId = windowEvent.LinkshellId,
-            EventName = windowEvent.Name,
-            EventType = windowEvent.CampEventType,
-            EventLocation = windowEvent.CampEventLocation,
-            StartTime = windowEvent.CampStartedAtUtc,
-            EndTime = windowEvent.CampEndedAtUtc,
-            CommencementStartTime = windowEvent.CampStartedAtUtc,
-            Duration = null,
-            CountsTowardActive = true,
-            TimeStamp = windowEvent.PostedToSheetAt ?? windowEvent.CampEndedAtUtc,
-            AppUserEventHistories = new List<AppUserEventHistory>(),
-        };
+        var history = EventHistoryBuilder.FromCampReviewCard(windowEvent);
         _db.EventHistories.Add(history);
         // Linked so a LATER re-post reconciles this same row instead of archiving the camp twice.
         windowEvent.CampEventHistory = history;
@@ -648,12 +635,17 @@ public sealed class WindowEventDkpLedgerService
 
             if (row is null)
             {
-                row = new AppUserEventHistory
-                {
-                    CharacterName = characterName,
-                    Duration = null,
-                    ActiveCredit = true,
-                };
+                // Starts blank; the account, jobs and amount are filled in below like any row.
+                row = EventHistoryBuilder.ParticipantRow(
+                    appUserId: null,
+                    characterName: characterName,
+                    jobName: null,
+                    subJobName: null,
+                    jobType: null,
+                    duration: null,
+                    eventDkp: null,
+                    activeCredit: true,
+                    windowsAttended: null);
                 history.AppUserEventHistories.Add(row);
                 if (!string.IsNullOrWhiteSpace(appUserId)) byAppUserId[appUserId] = row;
                 else byCharacterName[characterName] = row;

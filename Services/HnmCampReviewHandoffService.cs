@@ -888,27 +888,18 @@ public sealed class HnmCampReviewHandoffService
     {
         var startedAtUtc = ev.CommencementStartTime ?? ev.StartTime;
 
-        var history = new EventHistory
-        {
-            LinkshellId = ev.LinkshellId,
-            EventName = ev.EventName,
-            EventType = ev.EventType,
-            EventLocation = ev.EventLocation,
+        var history = EventHistoryBuilder.FromEvent(
+            ev,
             // Resolved to a TEMPLATE, never the per-event snapshot: a snapshot is cascade-deleted
             // with its event, so storing one here would dangle. Same call EndEventCoreAsync makes,
             // and it is what lets the next pop of this camp inherit the board.
-            PartySetupId = await PartySetupInheritance.ResolveTemplateIdAsync(_db, ev, cancellationToken),
-            StartTime = startedAtUtc,
-            EndTime = endedAtUtc,
-            CommencementStartTime = ev.CommencementStartTime,
-            Duration = startedAtUtc is { } startedAt
+            partySetupTemplateId: await PartySetupInheritance.ResolveTemplateIdAsync(_db, ev, cancellationToken),
+            startTime: startedAtUtc,
+            endTime: endedAtUtc,
+            duration: startedAtUtc is { } startedAt
                 ? (endedAtUtc - startedAt).TotalHours
                 : ev.Duration,
-            DkpPerHour = ev.DkpPerHour,
-            CountsTowardActive = ev.CountsTowardActive,
-            TimeStamp = endedAtUtc,
-            AppUserEventHistories = new List<AppUserEventHistory>(),
-        };
+            timeStamp: endedAtUtc);
 
         // ONE row per ACCOUNT, not per character. The roster above is deduped by character name,
         // which is the right key for the review card — but AppUserEventHistory is uniquely indexed
@@ -918,16 +909,16 @@ public sealed class HnmCampReviewHandoffService
         var seenAppUserIds = new Dictionary<string, AppUserEventHistory>(StringComparer.OrdinalIgnoreCase);
         foreach (var member in members)
         {
-            var row = new AppUserEventHistory
-            {
-                AppUserId = member.AppUserId,
-                CharacterName = member.CharacterName,
-                JobName = member.JobName,
-                SubJobName = member.SubJobName,
-                Duration = null,
-                EventDkp = member.Dkp,
-                ActiveCredit = true,
-            };
+            var row = EventHistoryBuilder.ParticipantRow(
+                appUserId: member.AppUserId,
+                characterName: member.CharacterName,
+                jobName: member.JobName,
+                subJobName: member.SubJobName,
+                jobType: null,
+                duration: null,
+                eventDkp: member.Dkp,
+                activeCredit: true,
+                windowsAttended: null);
 
             // A member with no account is not covered by the unique index (it is filtered to
             // non-null AppUserId), so those rows are all kept.
