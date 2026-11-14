@@ -454,7 +454,7 @@ public sealed partial class ActivityEventsController
         // scheduled anchor either way, and the addon's own start (CommencementStartTime ??=) stays
         // a no-op once we've commenced. Stamp the window anchor from the scheduled time so an early
         // manual start doesn't shift the cadence.
-        var isHnmEvent = string.Equals((eventEntity.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        var isHnmEvent = HnmCampRules.IsHnm(eventEntity);
         if (isHnmEvent)
         {
             // Same as the addon's start: a board still parked from its last camp comes back as a
@@ -672,7 +672,7 @@ public sealed partial class ActivityEventsController
             return Forbid();
         }
 
-        if (!string.Equals((eventEntity.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        if (!HnmCampRules.IsHnm(eventEntity))
         {
             return BadRequest(new
             {

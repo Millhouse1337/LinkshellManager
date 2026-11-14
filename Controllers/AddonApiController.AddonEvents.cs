@@ -400,7 +400,7 @@ public sealed partial class AddonApiController
         // (ActivityEventsController.DeleteEventAsync) -- the camp is thrown away with no ToD, no
         // history and no DKP. Any other live event still has to be ended, so its DKP is paid.
         if (eventToDelete.CommencementStartTime.HasValue
-            && !string.Equals((eventToDelete.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+            && !HnmCampRules.IsHnm(eventToDelete))
         {
             return BadRequest(new { error = "Live events cannot be canceled. End the event instead." });
         }
@@ -454,7 +454,7 @@ public sealed partial class AddonApiController
         // either way, but the anchor is also what this controller hands back to the addon
         // (windowAnchorAt) and what a manual Prev/Next re-anchors against, so an addon start has to
         // stamp it too or those two disagree with the board.
-        if (string.Equals((eventEntity.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        if (HnmCampRules.IsHnm(eventEntity))
         {
             eventEntity.WindowAnchorAt ??= eventEntity.StartTime;
         }

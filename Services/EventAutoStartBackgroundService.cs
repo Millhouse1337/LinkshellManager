@@ -112,7 +112,7 @@ public sealed class EventAutoStartBackgroundService : BackgroundService
     private static async Task StartAsync(
         ApplicationDbContext db, Event evt, DateTime nowUtc, CancellationToken cancellationToken)
     {
-        var isHnm = string.Equals((evt.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        var isHnm = HnmCampRules.IsHnm(evt);
         // An HNM camp "started" at its scheduled Window-1 time (StartTime) — so the board's Started
         // timestamp matches what was entered in the app, even for a back-dated camp ("started 4h
         // ago"), instead of reading the poll moment we happened to notice it. Ordinary auto-start

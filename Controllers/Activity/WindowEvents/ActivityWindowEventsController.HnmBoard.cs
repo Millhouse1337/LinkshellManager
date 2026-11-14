@@ -39,7 +39,7 @@ public sealed partial class ActivityWindowEventsController
             return Forbid();
         }
 
-        var isHnm = string.Equals((eventEntity.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        var isHnm = HnmCampRules.IsHnm(eventEntity);
         if (!isHnm)
         {
             return BadRequest(new { error = "Time of Death can only be posted from an HNM signup board." });

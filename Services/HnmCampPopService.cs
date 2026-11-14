@@ -82,7 +82,7 @@ public sealed class HnmCampPopService
         {
             return new Result(false, "That event is no longer open.", null, null);
         }
-        if (!string.Equals((ev.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase))
+        if (!HnmCampRules.IsHnm(ev))
         {
             return new Result(false, "Only an HNM camp can be ended this way.", null, null);
         }

@@ -105,7 +105,7 @@ public sealed class OutsideSignupHandler : DiscordInteractionHandlerBase, IDisco
         {
             return Ephemeral("That event is no longer open.");
         }
-        var isHnm = string.Equals((ev.EventType ?? string.Empty).Trim(), "HNM", StringComparison.OrdinalIgnoreCase);
+        var isHnm = HnmCampRules.IsHnm(ev);
         var outsideEnabled = await _identity.OutsideSignupAllowedAsync(ev, cancellationToken);
         if (!outsideEnabled)
         {
