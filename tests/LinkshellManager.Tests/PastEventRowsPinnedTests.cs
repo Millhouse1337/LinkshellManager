@@ -526,4 +526,43 @@ public class PastEventRowsPinnedTests
         Assert.Null(ledger.SourceWindowEventId);
         Assert.Null(ledger.AuditRelatedLedgerEntryId);
     }
+
+    // ====================================================== one place only ===
+
+    // Past Event rows are built in EventHistoryBuilder and nowhere else in the app, so a column
+    // added to (or dropped from) these tables is handled once. Tests may still build rows by hand.
+    [Fact]
+    public void PastEventRows_AreOnlyBuiltByTheBuilder()
+    {
+        var root = FindRepoRoot();
+        var files = new[] { "Areas", "Authorization", "Controllers", "Data", "Services", "Utils", "ViewModels" }
+            .Select(folder => Path.Combine(root, folder))
+            .Where(Directory.Exists)
+            .SelectMany(folder => Directory.EnumerateFiles(folder, "*.cs", SearchOption.AllDirectories))
+            .Append(Path.Combine(root, "Program.cs"))
+            .Where(path => !path.EndsWith(Path.Combine("Services", "EventHistoryBuilder.cs"), StringComparison.Ordinal))
+            .ToList();
+        Assert.Contains(files, path => path.EndsWith("EventEndService.cs", StringComparison.Ordinal));
+
+        // "new EventHistory {" / "(" / end of line: code, not a comment that says "the new EventHistory".
+        var pattern = new System.Text.RegularExpressions.Regex(
+            @"\bnew\s+(EventHistory|AppUserEventHistory)\s*(\{|\(|$)",
+            System.Text.RegularExpressions.RegexOptions.Multiline);
+        var offenders = files
+            .Where(path => pattern.IsMatch(File.ReadAllText(path)))
+            .Select(path => Path.GetRelativePath(root, path))
+            .ToList();
+        Assert.True(offenders.Count == 0,
+            "Build Past Event rows with EventHistoryBuilder instead: " + string.Join(", ", offenders));
+    }
+
+    private static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "LinkshellManagerDiscordApp.csproj")))
+        {
+            dir = dir.Parent;
+        }
+        return dir?.FullName ?? throw new InvalidOperationException("Repo root not found.");
+    }
 }
