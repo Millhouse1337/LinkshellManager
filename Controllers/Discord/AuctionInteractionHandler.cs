@@ -8,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Controllers.Discord;
 
 // The auction card in Discord: the item picker and Bid button (both open the bid-amount modal),
 // "My bids", and the bid modal's submit, which places the bid.
-public sealed class AuctionInteractionHandler : DiscordInteractionHandlerBase
+public sealed class AuctionInteractionHandler : DiscordInteractionHandlerBase, IDiscordInteractionHandler
 {
     private readonly ApplicationDbContext _db;
     private readonly DkpPoolResolver _dkpPools;
@@ -26,13 +26,44 @@ public sealed class AuctionInteractionHandler : DiscordInteractionHandlerBase
         _dkpPoolBalances = dkpPoolBalances;
     }
 
+    public IReadOnlyList<DiscordInteractionRoute> Routes => new[]
+    {
+        // The auction card's item picker → the bid-amount modal for the picked item, the same one
+        // the old per-item buttons opened. The option's value is the auction item id.
+        Component(AuctionBidService.PickSelectPrefix, nameof(BidModalAsync), async cancellationToken =>
+        {
+            var itemId = int.TryParse(SelectedValue(Data), out var picked) ? picked : 0;
+            return await BidModalAsync(itemId, AppUserId, cancellationToken);
+        }),
+
+        Component(AuctionBidService.MyBidsPrefix, nameof(MyAuctionBidsAsync), async cancellationToken =>
+        {
+            var auctionId = ParseTrailingId(CustomId, AuctionBidService.MyBidsPrefix);
+            return await MyAuctionBidsAsync(auctionId, AppUserId, cancellationToken);
+        }),
+
+        // Auction bid button → open the bid-amount modal. The bid itself is
+        // placed on modal submit (the bid modal route below).
+        Component(AuctionBidService.BidButtonPrefix, nameof(BidModalAsync), async cancellationToken =>
+        {
+            var itemId = ParseTrailingId(CustomId, AuctionBidService.BidButtonPrefix);
+            return await BidModalAsync(itemId, AppUserId, cancellationToken);
+        }),
+
+        // The bid modal's submit. A bid is recorded against the submitter's linked account, so the
+        // dispatcher asks them to sign in first when there is none.
+        Modal(AuctionBidService.BidModalPrefix, nameof(HandleBidModalAsync), async cancellationToken =>
+            await HandleBidModalAsync(CustomId, Data, Interaction.LinkedAccount!, cancellationToken))
+            with { NeedsLinkedAccount = true },
+    };
+
     // Returns a Discord modal (type 9) asking for the bid amount. custom_id
     // carries the auction item id so the submit handler knows what to bid on.
     //
     // The label and placeholder name the DKP pool this auction draws from and how much the bidder
     // has in it — otherwise someone in a linkshell with separate Sky and Sea wallets has no way to
     // know which one they're spending, and finds out only when the bid is rejected.
-    internal async Task<IActionResult> BidModalAsync(int itemId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> BidModalAsync(int itemId, string? appUserId, CancellationToken cancellationToken)
     {
         if (itemId <= 0)
         {
@@ -100,7 +131,7 @@ public sealed class AuctionInteractionHandler : DiscordInteractionHandlerBase
 
     // The auction card's "My bids": an ephemeral list of the clicker's bids on that auction and
     // whether each still leads. Needs a linked account -- bids are recorded against it.
-    internal async Task<IActionResult> MyAuctionBidsAsync(int auctionId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> MyAuctionBidsAsync(int auctionId, string? appUserId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(appUserId))
         {
@@ -125,7 +156,7 @@ public sealed class AuctionInteractionHandler : DiscordInteractionHandlerBase
         => value.Length <= maxLength ? value : value[..maxLength];
 
     // The bid modal's submit, for the submitter's linked LSM account.
-    internal async Task<IActionResult> HandleBidModalAsync(
+    private async Task<IActionResult> HandleBidModalAsync(
         string customId, JsonElement data, DiscordLinkedAccount account, CancellationToken cancellationToken)
     {
         var itemId = ParseTrailingId(customId, AuctionBidService.BidModalPrefix);

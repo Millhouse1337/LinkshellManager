@@ -198,6 +198,15 @@ internal static class DiscordInteractionHarness
             logger.LastException?.GetType().Name);
     }
 
+    // The dispatcher's whole routing table, built from the same registrations as SendAsync uses.
+    public static IReadOnlyList<DiscordInteractionRoute> RouteTable()
+    {
+        var logger = new CapturingLogger<DiscordInteractionsController>();
+        using var provider = BuildServices(Guid.NewGuid().ToString(), logger).BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        return scope.ServiceProvider.GetRequiredService<DiscordInteractionDispatcher>().Routes;
+    }
+
     private static string DescribeResult(IActionResult result) => result switch
     {
         OkObjectResult ok => JsonSerializer.Serialize(ok.Value, Wire),
@@ -249,12 +258,21 @@ internal static class DiscordInteractionHarness
         services.AddScoped<DiscordSignupIdentity>();
         services.AddScoped<DiscordPermissionGates>();
         services.AddScoped<DiscordBoardSupport>();
+        services.AddScoped<LaunchHandler>();
+        services.AddScoped<OutsideSignupHandler>();
         services.AddScoped<PartyBoardHandler>();
         services.AddScoped<HnmCampBoardHandler>();
         services.AddScoped<EndCampHandler>();
-        services.AddScoped<AuctionInteractionHandler>();
         services.AddScoped<OfficerToolsHandler>();
-        services.AddScoped<OutsideSignupHandler>();
+        services.AddScoped<AuctionInteractionHandler>();
+        services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<LaunchHandler>());
+        services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<OutsideSignupHandler>());
+        services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<PartyBoardHandler>());
+        services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<HnmCampBoardHandler>());
+        services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<EndCampHandler>());
+        services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<OfficerToolsHandler>());
+        services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<AuctionInteractionHandler>());
+        services.AddScoped<DiscordInteractionDispatcher>();
         return services;
     }
 

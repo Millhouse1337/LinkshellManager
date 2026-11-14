@@ -9,7 +9,7 @@ namespace LinkshellManagerDiscordApp.Controllers.Discord;
 // The HNM camp board's own buttons: Manual Check In's Check In / Check Out, "🔒 Stay Next Window",
 // the read-only window viewer (◀ View Previous Window and its paging), and "📋 View Camp Details"
 // on the defeated note. End Camp is EndCampHandler's.
-public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase
+public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase, IDiscordInteractionHandler
 {
     private readonly ApplicationDbContext _db;
     private readonly DiscordEventChannelQueue _eventQueue;
@@ -30,6 +30,71 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase
         _board = board;
     }
 
+    public IReadOnlyList<DiscordInteractionRoute> Routes => new[]
+    {
+        // "🔒 Stay Next Window" → the clicker toggles the lock on their OWN slot so it
+        // survives the next automatic window turnover (window-cycle HNM boards).
+        Component(DiscordEventMessageBuilder.LockNextWindowPrefix, nameof(HandleLockNextWindowAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.LockNextWindowPrefix);
+            return await HandleLockNextWindowAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // The window viewer's own navigation, sent from INSIDE the ephemeral it opened: the jump
+        // list (value = the window) and the ◀ / ▶ arrows (window baked into the id). Checked ahead
+        // of the board button below purely to keep the three ids together — they don't actually
+        // overlap under StartsWith, since "evt:winviewpick:" diverges at the 'p'.
+        Component(DiscordEventMessageBuilder.WindowViewPickPrefix, nameof(HandleViewPrevWindowAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.WindowViewPickPrefix);
+            return await HandleViewPrevWindowAsync(
+                eventId,
+                int.TryParse(SelectedValue(Data), out var picked) ? picked : null,
+                cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.WindowViewPrefix, nameof(HandleViewPrevWindowAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.WindowViewPrefix);
+            return await HandleViewPrevWindowAsync(
+                eventId,
+                ParseTrailingWindowNumber(CustomId, DiscordEventMessageBuilder.WindowViewPrefix),
+                cancellationToken);
+        }),
+
+        // "📋 View Camp Details" on the DEFEATED note → anyone in the linkshell: the camp that just
+        // ended, read-only. The trailing id is an EventHistory, not an event — the board row is
+        // recycled for the next pop, so an event id here would open whatever is being camped now.
+        Component(DiscordEventMessageBuilder.PastEventDetailsPrefix, nameof(HandlePastEventDetailsAsync), async cancellationToken =>
+        {
+            var historyId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PastEventDetailsPrefix);
+            return await HandlePastEventDetailsAsync(historyId, AppUserId, cancellationToken);
+        }),
+
+        // "◀ View Previous Window" on the board → anyone: read-only ephemeral opening on the newest
+        // captured roster, navigable from there. Boards posted before this change send the same id
+        // from what was "Prev Window", so an old button now opens the viewer instead of stepping the
+        // counter.
+        Component(DiscordEventMessageBuilder.ViewPrevWindowPrefix, nameof(HandleViewPrevWindowAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.ViewPrevWindowPrefix);
+            return await HandleViewPrevWindowAsync(eventId, requestedWindow: null, cancellationToken);
+        }),
+
+        // "✅ Check In (this window)" (Manual Check In boards) → member self-serve attendance for the current window.
+        Component(DiscordEventMessageBuilder.XinPrefix, nameof(HandleXinAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.XinPrefix);
+            return await HandleXinAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // "🚪 Check Out" (Manual Check In boards) → member leaves mid-camp; credit stops at the current window.
+        Component(DiscordEventMessageBuilder.CheckOutPrefix, nameof(HandleCheckOutAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.CheckOutPrefix);
+            return await HandleCheckOutAsync(eventId, AppUserId, cancellationToken);
+        }),
+    };
+
     // The window-roster viewer on a board whose roster wipes each window (the wyrms, either
     // attendance mode). READ-ONLY in every direction: it reads EventWindowRosterSnapshots and
     // touches nothing else, so nothing here can move the board or anyone else's view. Open to
@@ -44,7 +109,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase
     // There is no "Next Window" counterpart any more: the counter belongs to the cadence
     // (HnmWindowAdvanceBackgroundService) alone. Everything here looks BACKWARDS at what the wipe
     // already captured.
-    internal async Task<IActionResult> HandleViewPrevWindowAsync(
+    private async Task<IActionResult> HandleViewPrevWindowAsync(
         int eventId, int? requestedWindow, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -113,7 +178,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase
     //
     // Read-only and ephemeral. Anyone in the linkshell may open it — it is their own attendance and
     // their own DKP — but nobody outside it, because a Discord channel can hold guests.
-    internal async Task<IActionResult> HandlePastEventDetailsAsync(
+    private async Task<IActionResult> HandlePastEventDetailsAsync(
         int eventHistoryId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventHistoryId <= 0)
@@ -269,7 +334,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase
 
     // The window out of a viewer arrow's "{eventId}:{window}" tail, or null when it carries none
     // (in which case the caller opens on the newest capture).
-    internal static int? ParseTrailingWindowNumber(string customId, string prefix)
+    private static int? ParseTrailingWindowNumber(string customId, string prefix)
     {
         var tail = customId[prefix.Length..];
         var colon = tail.IndexOf(':');
@@ -421,7 +486,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase
     // "🚪 Check Out" (Manual Check In boards): the member is leaving mid-camp. Records their
     // departure window so credit stops there (they keep DKP for arrival..this window, inclusive).
     // They can Check In again to come back.
-    internal async Task<IActionResult> HandleCheckOutAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleCheckOutAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -467,7 +532,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase
     // the automatic window-turnover wipe. Shared board button (Discord can't gate per-user), so
     // the handler resolves the clicker (like Withdraw / Make Me Party Lead), toggles their
     // slot, and confirms privately — the board's 🔒 marker + count is the shared feedback.
-    internal async Task<IActionResult> HandleLockNextWindowAsync(
+    private async Task<IActionResult> HandleLockNextWindowAsync(
         int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)

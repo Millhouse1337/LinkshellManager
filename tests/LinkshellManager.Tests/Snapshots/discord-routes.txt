@@ -1,0 +1,60 @@
+command lsm -> LaunchHandler.HandleLaunchCardCommandAsync
+component evt:launch (exact) (before identity) -> LaunchHandler.LaunchActivity
+component evt:charpick: -> OutsideSignupHandler.HandleCharacterPickAsync
+modal evt:outsidename: -> OutsideSignupHandler.HandleOutsideNameModalAsync
+component evt:job: -> PartyBoardHandler.HandleJobSignupAsync
+component evt:withdraw: -> PartyBoardHandler.HandleWithdrawAsync
+component evt:psLsignup: -> PartyBoardHandler.HandlePartySlotSignUpAsync
+component evt:pssignup: -> PartyBoardHandler.HandlePartySlotSignUpAsync
+component evt:psLA: -> PartyBoardHandler.HandleAlliancePickedAsync
+component evt:psA: -> PartyBoardHandler.HandleAlliancePickedAsync
+component evt:psLP: -> PartyBoardHandler.HandlePartyPickedAsync
+component evt:psP: -> PartyBoardHandler.HandlePartyPickedAsync
+component evt:psLclaim: -> PartyBoardHandler.HandlePartySlotClaimAsync
+component evt:psclaim: -> PartyBoardHandler.HandlePartySlotClaimAsync
+component evt:psleave: -> PartyBoardHandler.HandlePartySlotLeaveAsync
+component evt:mkleader: -> PartyBoardHandler.HandleMakePartyLeaderAsync
+component evt:mkalead: -> PartyBoardHandler.HandleMakeAllianceLeaderAsync
+component evt:readypick: -> PartyBoardHandler.HandleReadinessPickedAsync
+component evt:ready: -> PartyBoardHandler.HandleReadinessStartAsync
+component evt:joinevent: -> PartyBoardHandler.StartGeneralJoinAsync
+component evt:gjwr: -> PartyBoardHandler.AdvanceGeneralJoinWizardAsync
+component evt:gjwm: -> PartyBoardHandler.AdvanceGeneralJoinWizardAsync
+component evt:gjws: -> PartyBoardHandler.AdvanceGeneralJoinWizardAsync
+component evt:psLwr: -> PartyBoardHandler.AdvancePartyJobWizardAsync
+component evt:pswr: -> PartyBoardHandler.AdvancePartyJobWizardAsync
+component evt:psLwm: -> PartyBoardHandler.AdvancePartyJobWizardAsync
+component evt:pswm: -> PartyBoardHandler.AdvancePartyJobWizardAsync
+component evt:psLws: -> PartyBoardHandler.AdvancePartyJobWizardAsync
+component evt:psws: -> PartyBoardHandler.AdvancePartyJobWizardAsync
+component evt:lockwin: -> HnmCampBoardHandler.HandleLockNextWindowAsync
+component evt:winviewpick: -> HnmCampBoardHandler.HandleViewPrevWindowAsync
+component evt:winview: -> HnmCampBoardHandler.HandleViewPrevWindowAsync
+component evt:pastdet: -> HnmCampBoardHandler.HandlePastEventDetailsAsync
+component evt:prevwindow: -> HnmCampBoardHandler.HandleViewPrevWindowAsync
+component evt:xin: -> HnmCampBoardHandler.HandleXinAsync
+component evt:checkout: -> HnmCampBoardHandler.HandleCheckOutAsync
+component evt:wdpop: -> EndCampHandler.HandleWdPopButtonAsync
+modal evt:wdpopmodal: -> EndCampHandler.HandleEndCampModalAsync
+component evt:oadd: -> OfficerToolsHandler.HandleOfficerAddStartAsync
+component evt:omovesrc: -> OfficerToolsHandler.HandleMoveSourcePickedAsync
+component evt:omovedst: -> OfficerToolsHandler.HandleMoveDestinationPickedAsync
+component evt:omovebench: -> OfficerToolsHandler.HandleMoveBenchAsync
+component evt:omove: -> OfficerToolsHandler.HandleMoveStartAsync
+component evt:osetleadpick: -> OfficerToolsHandler.HandleSetLeaderPickedAsync
+component evt:osetlead: -> OfficerToolsHandler.HandleSetLeaderStartAsync
+component evt:olockpick: -> OfficerToolsHandler.HandleOfficerLockPickedAsync
+component evt:olock: -> OfficerToolsHandler.HandleOfficerLockStartAsync
+component evt:owithdrawgo: -> OfficerToolsHandler.HandleWithdrawConfirmAsync
+component evt:owithdrawpick: -> OfficerToolsHandler.HandleWithdrawPickedAsync
+component evt:owithdraw: -> OfficerToolsHandler.HandleWithdrawStartAsync
+component evt:oaddpick: -> OfficerToolsHandler.HandleOfficerAddMemberPickedAsync
+component evt:oaclaim: -> PartyBoardHandler.HandlePartySlotClaimAsync (officerAdd)
+component evt:oawr: -> PartyBoardHandler.AdvancePartyJobWizardAsync (officerAdd)
+component evt:oawm: -> PartyBoardHandler.AdvancePartyJobWizardAsync (officerAdd)
+component evt:oaws: -> PartyBoardHandler.AdvancePartyJobWizardAsync (officerAdd)
+modal evt:oaddnew: -> OfficerToolsHandler.HandleOfficerAddFindModalAsync
+component auc:pick: -> AuctionInteractionHandler.BidModalAsync
+component auc:mybids: -> AuctionInteractionHandler.MyAuctionBidsAsync
+component auc:bid: -> AuctionInteractionHandler.BidModalAsync
+modal auc:bidmodal: (needs linked account) -> AuctionInteractionHandler.HandleBidModalAsync

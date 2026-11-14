@@ -90,6 +90,34 @@ public class ControllersResolveFromRealContainerTests
             + string.Join("\n", failures.Distinct().Order(StringComparer.Ordinal)));
     }
 
+    // The Discord bot's dispatcher finds its routes through IDiscordInteractionHandler. A feature
+    // handler written but not registered that way builds and starts fine, and every button it owns
+    // then answers "That action isn't recognized." So: every implementation is registered, once,
+    // and the real container builds the dispatcher (whose constructor refuses overlapping ids).
+    [Fact]
+    public void EveryDiscordInteractionHandlerIsRegistered()
+    {
+        using var host = BuildProgramHost();
+        using var scope = host.Services.CreateScope();
+
+        var registered = scope.ServiceProvider
+            .GetServices<LinkshellManagerDiscordApp.Controllers.Discord.IDiscordInteractionHandler>()
+            .Select(handler => handler.GetType().Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        var written = typeof(Program).Assembly.GetTypes()
+            .Where(type => type is { IsClass: true, IsAbstract: false }
+                && typeof(LinkshellManagerDiscordApp.Controllers.Discord.IDiscordInteractionHandler).IsAssignableFrom(type))
+            .Select(type => type.Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(written.Count >= 7, "Found too few Discord handlers; the reflection above is broken.");
+        Assert.Equal(written, registered);
+        Assert.NotEmpty(scope.ServiceProvider
+            .GetRequiredService<LinkshellManagerDiscordApp.Controllers.Discord.DiscordInteractionDispatcher>().Routes);
+    }
+
     // Runs Program.cs up to builder.Build() and hands back the host it built.
     private static IHost BuildProgramHost()
     {

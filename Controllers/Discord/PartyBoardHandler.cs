@@ -1,3 +1,4 @@
+using System.Text.Json;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -14,7 +15,7 @@ namespace LinkshellManagerDiscordApp.Controllers.Discord;
 //
 // The slot claim and job wizard also seat a member for an officer (officerAdd: true); the officer
 // tools call them for that.
-public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
+public sealed class PartyBoardHandler : DiscordInteractionHandlerBase, IDiscordInteractionHandler
 {
     private readonly ApplicationDbContext _db;
     private readonly DiscordEventChannelQueue _eventQueue;
@@ -39,6 +40,202 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
         _identity = identity;
         _gates = gates;
         _board = board;
+    }
+
+    public IReadOnlyList<DiscordInteractionRoute> Routes => new[]
+    {
+        Component(DiscordEventMessageBuilder.JobSelectPrefix, nameof(HandleJobSignupAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.JobSelectPrefix);
+            var job = Data.TryGetProperty("values", out var values)
+                && values.ValueKind == JsonValueKind.Array
+                && values.GetArrayLength() > 0
+                ? values[0].GetString()
+                : null;
+            return await HandleJobSignupAsync(eventId, AppUserId, job, cancellationToken);
+        }),
+
+        Component(DiscordEventMessageBuilder.WithdrawPrefix, nameof(HandleWithdrawAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.WithdrawPrefix);
+            return await HandleWithdrawAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // Board "Sign Up as Party Leader" → the OPEN-slot picker, restricted to
+        // parties with no leader yet; claiming marks the member as that party's
+        // leader. Checked before the normal "Sign Up" prefix (distinct strings, but
+        // the leader path is the more specific intent).
+        Component(DiscordEventMessageBuilder.PartySlotLeaderSignUpPrefix, nameof(HandlePartySlotSignUpAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PartySlotLeaderSignUpPrefix);
+            return await HandlePartySlotSignUpAsync(eventId, AppUserId, asLeader: true, cancellationToken);
+        }),
+
+        // Board "Sign Up" → an ephemeral picker of the OPEN slots; claiming joins as
+        // a regular member (no crown).
+        Component(DiscordEventMessageBuilder.PartySlotSignUpPrefix, nameof(HandlePartySlotSignUpAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PartySlotSignUpPrefix);
+            return await HandlePartySlotSignUpAsync(eventId, AppUserId, asLeader: false, cancellationToken);
+        }),
+
+        // Drill-down step 1 → 2: the member picked an alliance (value = alliance index);
+        // morph the ephemeral to its party picker. Leader checked first (distinct string).
+        Component(DiscordEventMessageBuilder.AlliancePickLeaderPrefix, nameof(HandleAlliancePickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.AlliancePickLeaderPrefix);
+            return await HandleAlliancePickedAsync(eventId, SelectedSlotId(Data), asLeader: true, cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.AlliancePickPrefix, nameof(HandleAlliancePickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.AlliancePickPrefix);
+            return await HandleAlliancePickedAsync(eventId, SelectedSlotId(Data), asLeader: false, cancellationToken);
+        }),
+
+        // Drill-down step 2 → 3: the member picked a party (value = party id); morph the
+        // ephemeral to its open-slot picker (which reuses the claim prefix).
+        Component(DiscordEventMessageBuilder.PartyPickLeaderPrefix, nameof(HandlePartyPickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PartyPickLeaderPrefix);
+            return await HandlePartyPickedAsync(eventId, SelectedSlotId(Data), asLeader: true, cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.PartyPickPrefix, nameof(HandlePartyPickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PartyPickPrefix);
+            return await HandlePartyPickedAsync(eventId, SelectedSlotId(Data), asLeader: false, cancellationToken);
+        }),
+
+        // Leader picker select → the member chose a slot to lead; claim it as leader
+        // (checked before the normal claim prefix — distinct strings).
+        Component(DiscordEventMessageBuilder.PartySlotClaimLeaderPrefix, nameof(HandlePartySlotClaimAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PartySlotClaimLeaderPrefix);
+            return await HandlePartySlotClaimAsync(eventId, SelectedSlotId(Data), AppUserId, asLeader: true, cancellationToken);
+        }),
+
+        // Picker select → the member chose a slot; claim it as a regular member.
+        Component(DiscordEventMessageBuilder.PartySlotClaimPrefix, nameof(HandlePartySlotClaimAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PartySlotClaimPrefix);
+            return await HandlePartySlotClaimAsync(eventId, SelectedSlotId(Data), AppUserId, asLeader: false, cancellationToken);
+        }),
+
+        Component(DiscordEventMessageBuilder.PartySlotLeavePrefix, nameof(HandlePartySlotLeaveAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PartySlotLeavePrefix);
+            return await HandlePartySlotLeaveAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // "Make Me Party Lead" → a member already holding a slot takes their party's
+        // crown from whoever currently holds it (overrides the existing leader).
+        Component(DiscordEventMessageBuilder.MakeLeaderPrefix, nameof(HandleMakePartyLeaderAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.MakeLeaderPrefix);
+            return await HandleMakePartyLeaderAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // "Make Me Alliance Lead" → a member already holding a slot takes their whole
+        // alliance's crown from whoever currently holds it (overrides the existing lead).
+        Component(DiscordEventMessageBuilder.MakeAllianceLeaderPrefix, nameof(HandleMakeAllianceLeaderAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.MakeAllianceLeaderPrefix);
+            return await HandleMakeAllianceLeaderAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // "🎖️ My Readiness" → the clicker's own ephemeral tag picker, and that picker's select
+        // writing the chosen set back. The pick prefix is checked first: it's the more specific
+        // string, though the two don't actually overlap under StartsWith.
+        Component(DiscordEventMessageBuilder.ReadinessPickPrefix, nameof(HandleReadinessPickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.ReadinessPickPrefix);
+            return await HandleReadinessPickedAsync(eventId, AppUserId, SelectedValues(Data), cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.ReadinessButtonPrefix, nameof(HandleReadinessStartAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.ReadinessButtonPrefix);
+            return await HandleReadinessStartAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // "Sign Up (No Slot)" → open an ephemeral job-pick wizard (role optional, job
+        // required) so the attendee still says what they're coming as.
+        Component(DiscordEventMessageBuilder.PartyJoinEventPrefix, nameof(StartGeneralJoinAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PartyJoinEventPrefix);
+            return await StartGeneralJoinAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // General-join wizard selects (role → main → sub). Raw picks ride in the
+        // custom_id; the sub step (or last needed step) creates the attendance row.
+        Component(DiscordEventMessageBuilder.PartyJoinWizardRolePrefix, nameof(AdvanceGeneralJoinWizardAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.PartyJoinWizardRolePrefix);
+            return await AdvanceGeneralJoinWizardAsync(eventId, SelectedValue(Data), null, null, false, AppUserId, cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.PartyJoinWizardMainPrefix, nameof(AdvanceGeneralJoinWizardAsync), async cancellationToken =>
+        {
+            var p = CustomId[DiscordEventMessageBuilder.PartyJoinWizardMainPrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var role = p.Length > 1 ? p[1] : null; // raw (may be the "no role" sentinel)
+            return await AdvanceGeneralJoinWizardAsync(eventId, role, SelectedValue(Data), null, false, AppUserId, cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.PartyJoinWizardSubPrefix, nameof(AdvanceGeneralJoinWizardAsync), async cancellationToken =>
+        {
+            var p = CustomId[DiscordEventMessageBuilder.PartyJoinWizardSubPrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var role = p.Length > 1 ? p[1] : null; // raw
+            var main = p.Length > 2 ? p[2] : null; // raw
+            return await AdvanceGeneralJoinWizardAsync(eventId, role, main, SelectedValue(Data), true, AppUserId, cancellationToken);
+        }),
+
+        // Job-pick wizard selects (role → main → sub). Each carries the picks made
+        // so far in its custom_id; the sub step (or the last needed step) claims.
+        // The leader-variant prefixes carry the "claim as leader" intent through.
+        Component(DiscordEventMessageBuilder.PartyWizardLeaderRolePrefix, nameof(AdvancePartyJobWizardAsync), cancellationToken =>
+            OnPartyWizardRoleAsync(isLeaderRole: true, cancellationToken)),
+        Component(DiscordEventMessageBuilder.PartyWizardRolePrefix, nameof(AdvancePartyJobWizardAsync), cancellationToken =>
+            OnPartyWizardRoleAsync(isLeaderRole: false, cancellationToken)),
+        Component(DiscordEventMessageBuilder.PartyWizardLeaderMainPrefix, nameof(AdvancePartyJobWizardAsync), cancellationToken =>
+            OnPartyWizardMainAsync(isLeaderMain: true, cancellationToken)),
+        Component(DiscordEventMessageBuilder.PartyWizardMainPrefix, nameof(AdvancePartyJobWizardAsync), cancellationToken =>
+            OnPartyWizardMainAsync(isLeaderMain: false, cancellationToken)),
+        Component(DiscordEventMessageBuilder.PartyWizardLeaderSubPrefix, nameof(AdvancePartyJobWizardAsync), cancellationToken =>
+            OnPartyWizardSubAsync(isLeaderSub: true, cancellationToken)),
+        Component(DiscordEventMessageBuilder.PartyWizardSubPrefix, nameof(AdvancePartyJobWizardAsync), cancellationToken =>
+            OnPartyWizardSubAsync(isLeaderSub: false, cancellationToken)),
+    };
+
+    // The job wizard's three steps, each for its leader prefix and its plain one.
+    private async Task<IActionResult> OnPartyWizardRoleAsync(bool isLeaderRole, CancellationToken cancellationToken)
+    {
+        var prefix = isLeaderRole ? DiscordEventMessageBuilder.PartyWizardLeaderRolePrefix : DiscordEventMessageBuilder.PartyWizardRolePrefix;
+        var p = CustomId[prefix.Length..].Split(':');
+        var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+        var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+        return await AdvancePartyJobWizardAsync(
+            eventId, slotId, SelectedValue(Data), null, null, false, AppUserId, isLeaderRole, cancellationToken);
+    }
+
+    private async Task<IActionResult> OnPartyWizardMainAsync(bool isLeaderMain, CancellationToken cancellationToken)
+    {
+        var prefix = isLeaderMain ? DiscordEventMessageBuilder.PartyWizardLeaderMainPrefix : DiscordEventMessageBuilder.PartyWizardMainPrefix;
+        var p = CustomId[prefix.Length..].Split(':');
+        var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+        var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+        var role = p.Length > 2 ? NormalizeWizardValue(p[2]) : null;
+        return await AdvancePartyJobWizardAsync(
+            eventId, slotId, role, SelectedValue(Data), null, false, AppUserId, isLeaderMain, cancellationToken);
+    }
+
+    private async Task<IActionResult> OnPartyWizardSubAsync(bool isLeaderSub, CancellationToken cancellationToken)
+    {
+        var prefix = isLeaderSub ? DiscordEventMessageBuilder.PartyWizardLeaderSubPrefix : DiscordEventMessageBuilder.PartyWizardSubPrefix;
+        var p = CustomId[prefix.Length..].Split(':');
+        var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+        var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+        var role = p.Length > 2 ? NormalizeWizardValue(p[2]) : null;
+        var main = p.Length > 3 ? NormalizeWizardValue(p[3]) : null;
+        return await AdvancePartyJobWizardAsync(
+            eventId, slotId, role, main, SelectedValue(Data), true, AppUserId, isLeaderSub, cancellationToken);
     }
 
     internal Task<IActionResult> HandleJobSignupAsync(
@@ -97,7 +294,7 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
         return await _board.UpdatedEventMessageAsync(ev.Id, cancellationToken);
     }
 
-    internal async Task<IActionResult> HandleWithdrawAsync(
+    private async Task<IActionResult> HandleWithdrawAsync(
         int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -217,7 +414,7 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
     }
 
     // Drill-down step 1 → 2: the member chose an alliance (value = its SortOrder index).
-    internal async Task<IActionResult> HandleAlliancePickedAsync(
+    private async Task<IActionResult> HandleAlliancePickedAsync(
         int eventId, int allianceIndex, bool asLeader, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -238,7 +435,7 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
     }
 
     // Drill-down step 2 → 3: the member chose a party (value = party id).
-    internal async Task<IActionResult> HandlePartyPickedAsync(
+    private async Task<IActionResult> HandlePartyPickedAsync(
         int eventId, int partyId, bool asLeader, CancellationToken cancellationToken)
     {
         if (eventId <= 0 || partyId <= 0)
@@ -516,7 +713,7 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
 
     // "Leave event" lives on the board itself, so refresh the board in place. Drops
     // BOTH the member's party slot (if any) AND their general attendance (if any).
-    internal async Task<IActionResult> HandlePartySlotLeaveAsync(
+    private async Task<IActionResult> HandlePartySlotLeaveAsync(
         int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -608,7 +805,7 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
     // the clicker, finds their slot, and refuses with a private notice when there's
     // nothing to do. Leadership is purely a board designation (no perms), so it's
     // allowed before AND during a live event.
-    internal async Task<IActionResult> HandleMakePartyLeaderAsync(
+    private async Task<IActionResult> HandleMakePartyLeaderAsync(
         int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -651,7 +848,7 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
     // per-user), so the handler resolves the clicker, finds their slot's alliance, and
     // refuses with a private notice when there's nothing to do. Purely a board designation
     // (no perms), so it's allowed before AND during a live event.
-    internal async Task<IActionResult> HandleMakeAllianceLeaderAsync(
+    private async Task<IActionResult> HandleMakeAllianceLeaderAsync(
         int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -692,7 +889,7 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
     //
     // A member declares this about THEMSELVES, so there's no officer gate here — the same
     // standing as picking the job they signed up with.
-    internal async Task<IActionResult> HandleReadinessStartAsync(
+    private async Task<IActionResult> HandleReadinessStartAsync(
         int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -732,7 +929,7 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
     //
     // `picked` is the COMPLETE set the member still claims (the select is min_values:0), so an
     // empty list means "clear them all" — never "nothing was sent, leave things alone".
-    internal async Task<IActionResult> HandleReadinessPickedAsync(
+    private async Task<IActionResult> HandleReadinessPickedAsync(
         int eventId, string? appUserId, IReadOnlyList<string> picked, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -825,7 +1022,7 @@ public sealed class PartyBoardHandler : DiscordInteractionHandlerBase
     // picks become a general-attendance AppUserEvent so the attendee always says
     // what job they're coming as (no more blank "Role Unassigned / Job/Sub" rows).
     // Re-running replaces the member's existing attendance for this event.
-    internal Task<IActionResult> AdvanceGeneralJoinWizardAsync(
+    private Task<IActionResult> AdvanceGeneralJoinWizardAsync(
         int eventId, string? role, string? main, string? sub, bool subPicked,
         string? appUserId, CancellationToken cancellationToken) =>
         _board.RetryIfParticipationRaceAsync(() => AdvanceGeneralJoinWizardOnceAsync(

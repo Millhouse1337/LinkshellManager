@@ -40,6 +40,10 @@ public sealed class DiscordInteractionContext
     // The LSM account linked to the clicker's Discord id, resolved for a button/select click. MAY be
     // null: a member who has never launched the app has no link.
     public string? AppUserId { get; set; }
+
+    // The LSM account linked to a modal's submitter, looked up only for a modal that needs one
+    // (DiscordInteractionRoute.NeedsLinkedAccount). Never null when such a modal's handler runs.
+    public DiscordLinkedAccount? LinkedAccount { get; set; }
 }
 
 // The LSM account linked to a modal's submitter: what placing a bid needs to know about them.

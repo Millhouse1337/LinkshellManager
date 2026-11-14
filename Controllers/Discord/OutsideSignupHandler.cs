@@ -12,7 +12,7 @@ namespace LinkshellManagerDiscordApp.Controllers.Discord;
 // "which character?" picker for a member with alts, and the "not synced — register yourself"
 // modal for a player with no linked account (Outside Party Signup). DiscordSignupIdentity decides
 // when to show them; this class handles the answers.
-public sealed class OutsideSignupHandler : DiscordInteractionHandlerBase
+public sealed class OutsideSignupHandler : DiscordInteractionHandlerBase, IDiscordInteractionHandler
 {
     private readonly ApplicationDbContext _db;
     private readonly SignupCharacterChoiceCache _charChoice;
@@ -39,8 +39,23 @@ public sealed class OutsideSignupHandler : DiscordInteractionHandlerBase
         _hnmCamp = hnmCamp;
     }
 
+    public IReadOnlyList<DiscordInteractionRoute> Routes => new[]
+    {
+        // The member chose which character to sign up as → remember it, then resume
+        // the flow they were on. Tail: "{token}:{eventId}[:{job}]".
+        Component(CharPickPrefix, nameof(HandleCharacterPickAsync), async cancellationToken =>
+            await HandleCharacterPickAsync(CustomId, Data, AppUserId, cancellationToken)),
+
+        // Outside Party Signup ONBOARDING modal — no linked account required. Register
+        // (create or adopt + link) an "unsynced" member for this Discord user from the
+        // main + alt names, then resume; ResolveSignupContextAsync now recognizes them
+        // by their Discord id and the signup is attributed to that member (earns DKP).
+        Modal(OutsideNamePrefix, nameof(HandleOutsideNameModalAsync), async cancellationToken =>
+            await HandleOutsideNameModalAsync(CustomId, Data, Interaction.DiscordUserId!, cancellationToken)),
+    };
+
     // The character picker's select: remember the pick, then resume the flow it interrupted.
-    internal async Task<IActionResult> HandleCharacterPickAsync(
+    private async Task<IActionResult> HandleCharacterPickAsync(
         string customId, JsonElement data, string? appUserId, CancellationToken cancellationToken)
     {
         var parts = customId[CharPickPrefix.Length..].Split(':');
@@ -74,7 +89,7 @@ public sealed class OutsideSignupHandler : DiscordInteractionHandlerBase
     }
 
     // The onboarding modal's submit. `discordUserId` is the submitter, already read from the payload.
-    internal async Task<IActionResult> HandleOutsideNameModalAsync(
+    private async Task<IActionResult> HandleOutsideNameModalAsync(
         string customId, JsonElement data, string discordUserId, CancellationToken cancellationToken)
     {
         var parts = customId[OutsideNamePrefix.Length..].Split(':');

@@ -335,17 +335,28 @@ builder.Services.AddScoped<DiscordBotClient>();
 builder.Services.AddHostedService<DiscordEntryPointConfigurator>();
 builder.Services.AddSingleton<DiscordInteractionVerifier>();
 // The interactions endpoint's code, split by feature (Controllers/Discord). One interaction per
-// request, so all of it is scoped: they share the request's DiscordInteractionContext.
+// request, so all of it is scoped: they share the request's DiscordInteractionContext. Each
+// feature handler is registered as itself (handlers call each other) and, as the same instance,
+// as an IDiscordInteractionHandler, which is how DiscordInteractionDispatcher finds its routes.
 builder.Services.AddScoped<DiscordInteractionContext>();
 builder.Services.AddScoped<DiscordSignupIdentity>();
 builder.Services.AddScoped<DiscordPermissionGates>();
 builder.Services.AddScoped<DiscordBoardSupport>();
+builder.Services.AddScoped<LaunchHandler>();
+builder.Services.AddScoped<OutsideSignupHandler>();
 builder.Services.AddScoped<PartyBoardHandler>();
 builder.Services.AddScoped<HnmCampBoardHandler>();
 builder.Services.AddScoped<EndCampHandler>();
-builder.Services.AddScoped<AuctionInteractionHandler>();
 builder.Services.AddScoped<OfficerToolsHandler>();
-builder.Services.AddScoped<OutsideSignupHandler>();
+builder.Services.AddScoped<AuctionInteractionHandler>();
+builder.Services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<LaunchHandler>());
+builder.Services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<OutsideSignupHandler>());
+builder.Services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<PartyBoardHandler>());
+builder.Services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<HnmCampBoardHandler>());
+builder.Services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<EndCampHandler>());
+builder.Services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<OfficerToolsHandler>());
+builder.Services.AddScoped<IDiscordInteractionHandler>(sp => sp.GetRequiredService<AuctionInteractionHandler>());
+builder.Services.AddScoped<DiscordInteractionDispatcher>();
 builder.Services.AddSingleton<DiscordEventChannelQueue>();
 builder.Services.AddScoped<EventBoardPoster>();
 // Edits an HNM board's Discord message to a "defeated" note when its ToD is logged.

@@ -11,7 +11,7 @@ namespace LinkshellManagerDiscordApp.Controllers.Discord;
 // "🏁 End Camp / Enter ToD" on every windowed HNM board: the button that opens the modal, and the
 // modal's submit, which logs the Time of Death and ends the camp through HnmCampPopService. Both
 // need Manage events.
-public sealed class EndCampHandler : DiscordInteractionHandlerBase
+public sealed class EndCampHandler : DiscordInteractionHandlerBase, IDiscordInteractionHandler
 {
     // "🏁 End Camp / Enter ToD" modal (every windowed HNM board — Standard + Manual Check In).
     // custom_id carries the eventId; the fields capture the Time of Death (with seconds), NQ/HQ
@@ -27,7 +27,7 @@ public sealed class EndCampHandler : DiscordInteractionHandlerBase
     // The day number is still not asked: the event form owns it, and it's the one field here the
     // officer would be re-typing rather than reporting. The wire ids keep the "wdpop" spelling so
     // boards posted before this stopped being Manual Check In-only keep working.
-    internal const string WdPopModalPrefix = "evt:wdpopmodal:";
+    private const string WdPopModalPrefix = "evt:wdpopmodal:";
     private const string WdPopTodFieldId = "wdpop_tod";
     // The Date half of the Time of Death. Its own box so a kill that is not from today can be
     // entered without the officer having to know that the time box would have taken a date too.
@@ -64,8 +64,24 @@ public sealed class EndCampHandler : DiscordInteractionHandlerBase
         _gates = gates;
     }
 
+    public IReadOnlyList<DiscordInteractionRoute> Routes => new[]
+    {
+        // "🏁 Pop / End Camp" (Manual Check In boards) → officers only: open the pop-window + ToD modal.
+        Component(DiscordEventMessageBuilder.WdPopPrefix, nameof(HandleWdPopButtonAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.WdPopPrefix);
+            return await HandleWdPopButtonAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // "🏁 Pop / End Camp" modal (every windowed HNM board) → officers only: log the ToD, cap
+        // credit at the pop window, record claim/kill, tear the camp down, and stage its roster as
+        // a pending review row in the Event System page's attendance sections. Delegates to the shared HnmCampPopService.
+        Modal(WdPopModalPrefix, nameof(HandleEndCampModalAsync), async cancellationToken =>
+            await HandleEndCampModalAsync(CustomId, Data, Interaction.DiscordUserId!, cancellationToken)),
+    };
+
     // The End Camp modal's submit. `discordUserId` is the submitter, already read from the payload.
-    internal async Task<IActionResult> HandleEndCampModalAsync(
+    private async Task<IActionResult> HandleEndCampModalAsync(
         string customId, JsonElement data, string discordUserId, CancellationToken cancellationToken)
     {
         var popEventId = int.TryParse(customId[WdPopModalPrefix.Length..], out var pid) ? pid : 0;
@@ -258,7 +274,7 @@ public sealed class EndCampHandler : DiscordInteractionHandlerBase
     }
 
     // "🏁 End Camp / Enter ToD" (every windowed HNM board) → officers only. Opens the ToD modal.
-    internal async Task<IActionResult> HandleWdPopButtonAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleWdPopButtonAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {

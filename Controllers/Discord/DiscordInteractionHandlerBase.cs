@@ -32,6 +32,28 @@ public abstract class DiscordInteractionHandlerBase
 
     protected HttpRequest Request => HttpContext.Request;
 
+    // Shortcuts for the route tables: the custom_id clicked or submitted, its "data" object, and
+    // the clicker's linked LSM account (null when they have none).
+    protected string CustomId => Interaction.CustomId;
+    protected JsonElement Data => Interaction.Data;
+    protected string? AppUserId => Interaction.AppUserId;
+
+    // Route-table entries. `method` names what the route reaches, for people and the routing
+    // snapshot; a bare method name means one on this class.
+    protected DiscordInteractionRoute Component(
+        string prefix, string method, Func<CancellationToken, Task<IActionResult>> handleAsync) =>
+        new(DiscordInteractionKind.Component, prefix, Target(method), handleAsync);
+
+    protected DiscordInteractionRoute Modal(
+        string prefix, string method, Func<CancellationToken, Task<IActionResult>> handleAsync) =>
+        new(DiscordInteractionKind.Modal, prefix, Target(method), handleAsync);
+
+    protected DiscordInteractionRoute Command(
+        string name, string method, Func<CancellationToken, Task<IActionResult>> handleAsync) =>
+        new(DiscordInteractionKind.Command, name, Target(method), handleAsync);
+
+    private string Target(string method) => method.Contains('.') ? method : $"{GetType().Name}.{method}";
+
     // The same result ControllerBase.Ok(value) returns.
     internal static OkObjectResult Ok(object? value) => new(value);
 

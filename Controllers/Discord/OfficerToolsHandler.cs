@@ -11,13 +11,14 @@ namespace LinkshellManagerDiscordApp.Controllers.Discord;
 // The party board's officer buttons: ➕ Add Member (with its "find a member by name" modal), Move
 // Member, Set Leader, 🔒 Lock Member and Remove Member. Each step re-checks Manage parties, since
 // the buttons are visible to everyone.
-public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
+public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase, IDiscordInteractionHandler
 {
     private readonly ApplicationDbContext _db;
     private readonly DiscordEventChannelQueue _eventQueue;
     private readonly OfficerAddTargetCache _officerAddTargets;
     private readonly DiscordPermissionGates _gates;
     private readonly DiscordBoardSupport _board;
+    private readonly PartyBoardHandler _partyBoard;
 
     public OfficerToolsHandler(
         DiscordInteractionContext interaction,
@@ -25,7 +26,8 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
         DiscordEventChannelQueue eventQueue,
         OfficerAddTargetCache officerAddTargets,
         DiscordPermissionGates gates,
-        DiscordBoardSupport board)
+        DiscordBoardSupport board,
+        PartyBoardHandler partyBoard)
         : base(interaction)
     {
         _db = db;
@@ -33,11 +35,144 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
         _officerAddTargets = officerAddTargets;
         _gates = gates;
         _board = board;
+        _partyBoard = partyBoard;
     }
+
+    public IReadOnlyList<DiscordInteractionRoute> Routes => new[]
+    {
+        // "➕ Add Member (officers)" → officers only: ephemeral picker of who to seat.
+        Component(DiscordEventMessageBuilder.OfficerAddButtonPrefix, nameof(HandleOfficerAddStartAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.OfficerAddButtonPrefix);
+            return await HandleOfficerAddStartAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // Officer "Move Member" — pick a participant → pick a destination slot (or bench).
+        // The more-specific src/dest/bench prefixes are checked before the bare button.
+        Component(DiscordEventMessageBuilder.MoveSourcePickPrefix, nameof(HandleMoveSourcePickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.MoveSourcePickPrefix);
+            return await HandleMoveSourcePickedAsync(eventId, AppUserId, SelectedValue(Data), cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.MoveDestClaimPrefix, nameof(HandleMoveDestinationPickedAsync), async cancellationToken =>
+        {
+            return await HandleMoveDestinationPickedAsync(CustomId, AppUserId, SelectedSlotId(Data), cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.MoveBenchPrefix, nameof(HandleMoveBenchAsync), async cancellationToken =>
+        {
+            return await HandleMoveBenchAsync(CustomId, AppUserId, cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.MoveMemberButtonPrefix, nameof(HandleMoveStartAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.MoveMemberButtonPrefix);
+            return await HandleMoveStartAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // Officer "Set Leader" — pick a seated member → set their party's 👑.
+        Component(DiscordEventMessageBuilder.SetLeaderPickPrefix, nameof(HandleSetLeaderPickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.SetLeaderPickPrefix);
+            return await HandleSetLeaderPickedAsync(eventId, AppUserId, SelectedValue(Data), cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.SetLeaderButtonPrefix, nameof(HandleSetLeaderStartAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.SetLeaderButtonPrefix);
+            return await HandleSetLeaderStartAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // Officer "🔒 Lock Member" — pick a seated member (value = s:{slotId}), toggle their
+        // "stay next window" lock. The pick prefix is checked first (it's the more specific
+        // string, though the two don't actually overlap under StartsWith).
+        Component(DiscordEventMessageBuilder.OfficerLockPickPrefix, nameof(HandleOfficerLockPickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.OfficerLockPickPrefix);
+            return await HandleOfficerLockPickedAsync(eventId, AppUserId, SelectedValue(Data), cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.OfficerLockButtonPrefix, nameof(HandleOfficerLockStartAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.OfficerLockButtonPrefix);
+            return await HandleOfficerLockStartAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // Officer "Remove Member" — pick a participant → confirm → remove completely.
+        Component(DiscordEventMessageBuilder.WithdrawMemberConfirmPrefix, nameof(HandleWithdrawConfirmAsync), async cancellationToken =>
+        {
+            return await HandleWithdrawConfirmAsync(CustomId, AppUserId, cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.WithdrawMemberPickPrefix, nameof(HandleWithdrawPickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.WithdrawMemberPickPrefix);
+            return await HandleWithdrawPickedAsync(eventId, AppUserId, SelectedValue(Data), cancellationToken);
+        }),
+        Component(DiscordEventMessageBuilder.WithdrawMemberButtonPrefix, nameof(HandleWithdrawStartAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.WithdrawMemberButtonPrefix);
+            return await HandleWithdrawStartAsync(eventId, AppUserId, cancellationToken);
+        }),
+
+        // Officer-add member picker → an existing member (value = AppUserId) or "add new"
+        // (sentinel → name modal). The chosen target is cached, then the slot picker shows.
+        Component(DiscordEventMessageBuilder.OfficerAddMemberPickPrefix, nameof(HandleOfficerAddMemberPickedAsync), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.OfficerAddMemberPickPrefix);
+            return await HandleOfficerAddMemberPickedAsync(eventId, AppUserId, SelectedValue(Data), cancellationToken);
+        }),
+
+        // Officer-add slot picker select → claim the chosen slot for the cached target member.
+        Component(DiscordEventMessageBuilder.OfficerAddSlotClaimPrefix, PartyBoardStep(nameof(PartyBoardHandler.HandlePartySlotClaimAsync)), async cancellationToken =>
+        {
+            var eventId = ParseTrailingId(CustomId, DiscordEventMessageBuilder.OfficerAddSlotClaimPrefix);
+            return await _partyBoard.HandlePartySlotClaimAsync(
+                eventId, SelectedSlotId(Data), AppUserId, asLeader: false, cancellationToken, officerAdd: true);
+        }),
+
+        // Officer-add job wizard (role → main → sub) — same shape as the self-signup
+        // wizard, but each step re-enters with officerAdd:true so the final claim is
+        // attributed to the cached target rather than the clicking officer.
+        Component(DiscordEventMessageBuilder.OfficerAddWizardRolePrefix, PartyBoardStep(nameof(PartyBoardHandler.AdvancePartyJobWizardAsync)), async cancellationToken =>
+        {
+            var p = CustomId[DiscordEventMessageBuilder.OfficerAddWizardRolePrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+            return await _partyBoard.AdvancePartyJobWizardAsync(
+                eventId, slotId, SelectedValue(Data), null, null, false, AppUserId, asLeader: false, cancellationToken, officerAdd: true);
+        }),
+        Component(DiscordEventMessageBuilder.OfficerAddWizardMainPrefix, PartyBoardStep(nameof(PartyBoardHandler.AdvancePartyJobWizardAsync)), async cancellationToken =>
+        {
+            var p = CustomId[DiscordEventMessageBuilder.OfficerAddWizardMainPrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+            var role = p.Length > 2 ? NormalizeWizardValue(p[2]) : null;
+            return await _partyBoard.AdvancePartyJobWizardAsync(
+                eventId, slotId, role, SelectedValue(Data), null, false, AppUserId, asLeader: false, cancellationToken, officerAdd: true);
+        }),
+        Component(DiscordEventMessageBuilder.OfficerAddWizardSubPrefix, PartyBoardStep(nameof(PartyBoardHandler.AdvancePartyJobWizardAsync)), async cancellationToken =>
+        {
+            var p = CustomId[DiscordEventMessageBuilder.OfficerAddWizardSubPrefix.Length..].Split(':');
+            var eventId = p.Length > 0 && int.TryParse(p[0], out var e) ? e : 0;
+            var slotId = p.Length > 1 && int.TryParse(p[1], out var s) ? s : 0;
+            var role = p.Length > 2 ? NormalizeWizardValue(p[2]) : null;
+            var main = p.Length > 3 ? NormalizeWizardValue(p[3]) : null;
+            return await _partyBoard.AdvancePartyJobWizardAsync(
+                eventId, slotId, role, main, SelectedValue(Data), true, AppUserId, asLeader: false, cancellationToken, officerAdd: true);
+        }),
+
+        // Officer-only "find a member by name" modal → look the typed name up among the people
+        // ALREADY on this linkshell's roster and seat the one meant. Nobody is created here: a
+        // player joins the roster by signing up from the board themselves. One match goes
+        // straight to the slot picker; several show a picker of just those. Re-checks the
+        // officer here since a modal submit is its own request.
+        Modal(DiscordEventMessageBuilder.OfficerAddFindModalPrefix, nameof(HandleOfficerAddFindModalAsync), async cancellationToken =>
+            await HandleOfficerAddFindModalAsync(CustomId, Data, Interaction.DiscordUserId!, cancellationToken)),
+    };
+
+    // The officer-add slot claim and job wizard are the party board's own steps, run for the
+    // cached target member.
+    private static string PartyBoardStep(string method) => $"{nameof(PartyBoardHandler)}.{method} (officerAdd)";
 
     // The "find a member by name" modal's submit. `discordUserId` is the submitting officer,
     // already read from the payload.
-    internal async Task<IActionResult> HandleOfficerAddFindModalAsync(
+    private async Task<IActionResult> HandleOfficerAddFindModalAsync(
         string customId, JsonElement data, string discordUserId, CancellationToken cancellationToken)
     {
         var eventId = ParseTrailingId(customId, DiscordEventMessageBuilder.OfficerAddFindModalPrefix);
@@ -111,7 +246,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
     // aren't already on this board, plus a "find a member by name" option (opens a name modal).
     // The select is capped at Discord's 25-option limit; rosters past that are reachable via
     // the find, which only ever matches people already on the roster (RosterMemberSearch).
-    internal async Task<IActionResult> HandleOfficerAddStartAsync(
+    private async Task<IActionResult> HandleOfficerAddStartAsync(
         int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -167,7 +302,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
 
     // Officer-add member picker select → either open the "find a member by name" modal, or
     // (a listed member) cache them as the add target and show the slot picker.
-    internal async Task<IActionResult> HandleOfficerAddMemberPickedAsync(
+    private async Task<IActionResult> HandleOfficerAddMemberPickedAsync(
         int eventId, string? appUserId, string? value, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
@@ -403,7 +538,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
     }
 
     // ── Move ──
-    internal async Task<IActionResult> HandleMoveStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleMoveStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
         var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to move members on the board.",
@@ -419,7 +554,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
         return PickerResponse(EventHeading(ev.EventName, "Move a member — pick who to move:"), picker);
     }
 
-    internal async Task<IActionResult> HandleMoveSourcePickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleMoveSourcePickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
         var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to move members on the board.",
@@ -457,7 +592,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
             rows.ToArray());
     }
 
-    internal async Task<IActionResult> HandleMoveDestinationPickedAsync(string customId, string? appUserId, int slotId, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleMoveDestinationPickedAsync(string customId, string? appUserId, int slotId, CancellationToken cancellationToken)
     {
         var (eventId, src) = ParseEventAndSource(customId, DiscordEventMessageBuilder.MoveDestClaimPrefix);
         IActionResult? err = null;
@@ -474,7 +609,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
         return _board.DismissPickerSilently();
     }
 
-    internal async Task<IActionResult> HandleMoveBenchAsync(string customId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleMoveBenchAsync(string customId, string? appUserId, CancellationToken cancellationToken)
     {
         var (eventId, src) = ParseEventAndSource(customId, DiscordEventMessageBuilder.MoveBenchPrefix);
         IActionResult? err = null;
@@ -492,7 +627,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
     }
 
     // ── Set Leader ──
-    internal async Task<IActionResult> HandleSetLeaderStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleSetLeaderStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
         var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to set the party leader.",
@@ -507,7 +642,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
         return PickerResponse(EventHeading(ev.EventName, "Set the 👑 party leader — pick a member:"), picker);
     }
 
-    internal async Task<IActionResult> HandleSetLeaderPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleSetLeaderPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
         var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to set the party leader.",
@@ -529,7 +664,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
     // ── Lock Member (stay next window) ──
     // Officers pin a member's slot so it survives the window-turnover wipe. Same shape as
     // Set Leader: button → seated-member picker → the select toggles the chosen slot's lock.
-    internal async Task<IActionResult> HandleOfficerLockStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleOfficerLockStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
         var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to lock members.",
@@ -544,7 +679,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
         return PickerResponse(EventHeading(ev.EventName, "🔒 Lock a member for next window — pick who stays:"), picker);
     }
 
-    internal async Task<IActionResult> HandleOfficerLockPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleOfficerLockPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
         var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to lock members.",
@@ -574,7 +709,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
     }
 
     // ── Remove Member ──
-    internal async Task<IActionResult> HandleWithdrawStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleWithdrawStartAsync(int eventId, string? appUserId, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
         var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to remove members from the board.",
@@ -590,7 +725,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
         return PickerResponse(EventHeading(ev.EventName, "Remove a member — pick who to remove:"), picker);
     }
 
-    internal async Task<IActionResult> HandleWithdrawPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleWithdrawPickedAsync(int eventId, string? appUserId, string? src, CancellationToken cancellationToken)
     {
         IActionResult? err = null;
         var ev = await LoadOfficerEventAsync(eventId, appUserId, "You need the **Manage parties** permission to remove members from the board.",
@@ -621,7 +756,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase
             confirm);
     }
 
-    internal async Task<IActionResult> HandleWithdrawConfirmAsync(string customId, string? appUserId, CancellationToken cancellationToken)
+    private async Task<IActionResult> HandleWithdrawConfirmAsync(string customId, string? appUserId, CancellationToken cancellationToken)
     {
         var (eventId, src) = ParseEventAndSource(customId, DiscordEventMessageBuilder.WithdrawMemberConfirmPrefix);
         IActionResult? err = null;
