@@ -139,26 +139,18 @@ public static class EventEndService
         var windowsAttendedTally = isWindowed
             ? await WindowsAttendedTally.LoadAsync(dbContext, eventEntity.Id, CancellationToken.None)
             : WindowsAttendedTally.Empty;
-        var history = new EventHistory
-        {
-            LinkshellId = eventEntity.LinkshellId,
-            EventName = eventEntity.EventName,
-            EventType = eventEntity.EventType,
-            EventLocation = eventEntity.EventLocation,
+        var history = EventHistoryBuilder.FromEvent(
+            eventEntity,
             // Resolved to a TEMPLATE before the Event row (and any per-event snapshot hanging off
             // it) is deleted below. This is the only record of the camp's board that outlives it,
             // and it is what lets the next pop come back with the same setup attached.
-            PartySetupId = await PartySetupInheritance.ResolveTemplateIdAsync(
+            partySetupTemplateId: await PartySetupInheritance.ResolveTemplateIdAsync(
                 dbContext, eventEntity, CancellationToken.None),
-            StartTime = eventEntity.StartTime,
-            EndTime = endTimeUtc,
-            CommencementStartTime = eventEntity.CommencementStartTime,
-            Duration = eventEntity.CommencementStartTime.HasValue ? (endTimeUtc - eventEntity.CommencementStartTime.Value).TotalHours : eventEntity.Duration,
-            DkpPerHour = eventEntity.DkpPerHour,
-            CountsTowardActive = eventEntity.CountsTowardActive,
-            TimeStamp = DateTime.UtcNow,
-            AppUserEventHistories = new List<AppUserEventHistory>()
-        };
+            startTime: eventEntity.StartTime,
+            endTime: endTimeUtc,
+            duration: eventEntity.CommencementStartTime.HasValue ? (endTimeUtc - eventEntity.CommencementStartTime.Value).TotalHours : eventEntity.Duration,
+            // Read after the template lookup above, as it always was (arguments run in order).
+            timeStamp: DateTime.UtcNow);
 
         var linkshellMemberships = await dbContext.AppUserLinkshells
             .Include(link => link.AppUser) // alt names, for resolving alt-won loot to the account
@@ -232,20 +224,18 @@ public static class EventEndService
                 eventDkp,
                 windowsAttended));
 
-            history.AppUserEventHistories.Add(new AppUserEventHistory
-            {
-                AppUserId = participation.AppUserId,
-                CharacterName = participation.CharacterName,
-                JobName = participation.JobName,
-                SubJobName = participation.SubJobName,
-                JobType = participation.JobType,
-                Duration = durationHours,
-                EventDkp = eventDkp,
-                ActiveCredit = credit.ActiveCredit,
+            history.AppUserEventHistories.Add(EventHistoryBuilder.ParticipantRow(
+                appUserId: participation.AppUserId,
+                characterName: participation.CharacterName,
+                jobName: participation.JobName,
+                subJobName: participation.SubJobName,
+                jobType: participation.JobType,
+                duration: durationHours,
+                eventDkp: eventDkp,
+                activeCredit: credit.ActiveCredit,
                 // Null on a timed event. On a windowed one this is the numerator of the DKP row
                 // above, so the closed event can explain its own payout.
-                WindowsAttended = windowsAttended
-            });
+                windowsAttended: windowsAttended));
 
             if (!paysNoDkp &&
                 !string.IsNullOrWhiteSpace(participation.AppUserId) &&
