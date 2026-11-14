@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
@@ -41,11 +40,6 @@ public abstract class ActivityControllerBase : ControllerBase
         _permissions = permissions;
     }
 
-    // When a bearer token is presented, validate it strictly. Do NOT silently
-    // downgrade to cookie auth when the bearer fails — that would let an
-    // attacker who can disrupt outbound calls to discord.com (or who supplies
-    // a bogus bearer to suppress preflight CSRF protection) coerce the
-    // request into the cookie-auth path.
     // The Discord bearer token of the current request, captured once the bearer
     // path validates. Only the Activity (bearer) path has a Discord token; the
     // cookie/web path leaves this null. Used by the per-linkshell guild lock to
@@ -53,56 +47,24 @@ public abstract class ActivityControllerBase : ControllerBase
     // so a field is safe here.
     private string? _resolvedDiscordAccessToken;
 
+    // Who is asking, read from the signed-in principal: the DiscordBearer authentication handler's
+    // for a bearer, the website cookie's otherwise. A bearer Discord turns down is signed out, never
+    // downgraded to the cookie (ApiSignIn.ResolveCallerAsync explains why). Null = signed out; each
+    // action answers that with its own 401 message. cancellationToken is not needed any more: the
+    // handler uses the request's own abort token, the same one MVC binds to it.
     private protected async Task<AppUser?> ResolveAppUserAsync(CancellationToken cancellationToken)
     {
-        if (TryGetBearerToken(out var accessToken))
+        var caller = await ApiSignIn.ResolveCallerAsync(HttpContext, _userManager);
+        if (caller.DiscordAccessToken is not null)
         {
-            try
-            {
-                var localUser = await _discordIdentityService.GetCurrentLocalUserAsync(accessToken, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(localUser.AppUser?.Id))
-                {
-                    _resolvedDiscordAccessToken = accessToken;
-                    return await _userManager.FindByIdAsync(localUser.AppUser.Id);
-                }
-            }
-            catch (DiscordApiException)
-            {
-                // Hard reject — never fall through to cookie auth.
-            }
-            return null;
+            _resolvedDiscordAccessToken = caller.DiscordAccessToken;
         }
 
-        if (User.Identity?.IsAuthenticated == true)
-        {
-            return await _userManager.GetUserAsync(User);
-        }
-
-        return null;
+        return caller.AppUser;
     }
 
-    private protected bool TryGetBearerToken(out string accessToken)
-    {
-        accessToken = string.Empty;
-
-        if (!AuthenticationHeaderValue.TryParse(Request.Headers.Authorization, out var headerValue))
-        {
-            return false;
-        }
-
-        if (!"Bearer".Equals(headerValue.Scheme, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(headerValue.Parameter))
-        {
-            return false;
-        }
-
-        accessToken = headerValue.Parameter;
-        return true;
-    }
+    private protected bool TryGetBearerToken(out string accessToken) =>
+        ApiSignIn.TryGetBearerToken(Request, out accessToken);
 
     // The Discord guild (server) this request came from, sent by the Activity
     // as X-Discord-Guild-Id. Null on the website (no Discord context) and when

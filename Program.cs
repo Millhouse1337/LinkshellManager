@@ -55,6 +55,8 @@ var discordClientSecret = builder.Configuration["Discord:ClientSecret"]
 
 builder.Services
     .AddAuthentication()
+    // The Activity's "Authorization: Bearer <Discord token>" (see DiscordBearerAuthenticationHandler).
+    .AddDiscordBearer()
     .AddOAuth("DiscordWebsite", options =>
     {
         options.SignInScheme = IdentityConstants.ExternalScheme;

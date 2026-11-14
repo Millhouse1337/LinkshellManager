@@ -38,7 +38,8 @@ Discord SDK entirely and uses the site's own cookie login:
   `app.html` shows a sign-in screen instead of the app. Any API 401 flips back to it. **Sign out** is
   `POST /api/web/sign-out`.
 - **Same API:** every `/api/activity/*` endpoint accepts the cookie as well as the Discord bearer token
-  (`ResolveAppUserAsync`). Cookie mutations need the `X-XSRF-TOKEN` header, which
+  (`ResolveAppUserAsync`; the bearer is checked by `DiscordBearerAuthenticationHandler`, and a bearer
+  Discord rejects is never rescued by the cookie). Cookie mutations need the `X-XSRF-TOKEN` header, which
   `ActivityHttpClient.sendActivityRequest` adds.
 - **Discord server lock:** a linkshell's "Lock to this server" governs the Discord Activity only. The
   website always shows a linkshell to its members (`GuildLockPolicy`); claiming a placeholder still

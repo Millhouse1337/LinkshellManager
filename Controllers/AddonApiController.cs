@@ -1,5 +1,4 @@
-﻿using System.Net.Http.Headers;
-using LinkshellManagerDiscordApp.Authorization;
+﻿using LinkshellManagerDiscordApp.Authorization;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -60,68 +59,13 @@ public sealed partial class AddonApiController : ControllerBase
         _logger = logger;
     }
 
-    // Dual-auth resolver for the management endpoints: tries the Discord OAuth
-    // bearer token first (so the Activity SPA can call them) and otherwise
-    // uses ASP.NET Identity cookie auth (used by the app on the website).
-    // When a bearer token is presented but fails validation, the
-    // request is rejected — we do NOT silently downgrade to cookie auth, since
-    // an attacker who can disrupt outbound calls to discord.com would
-    // otherwise be able to force the cookie path and exploit any CSRF gap.
-    private async Task<AppUser?> ResolveManagementUserAsync(CancellationToken cancellationToken)
-    {
-        if (TryGetManagementBearerToken(out var accessToken))
-        {
-            try
-            {
-                var localUser = await _discordIdentityService.GetCurrentLocalUserAsync(accessToken, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(localUser.AppUser?.Id))
-                {
-                    return await _userManager.FindByIdAsync(localUser.AppUser.Id);
-                }
-            }
-            catch (DiscordApiException)
-            {
-                // Hard reject — never fall through to cookie auth when a
-                // bearer token is presented.
-            }
-            return null;
-        }
-
-        if (User.Identity?.IsAuthenticated == true)
-        {
-            return await _userManager.GetUserAsync(User);
-        }
-
-        return null;
-    }
-
-    private bool TryGetManagementBearerToken(out string accessToken)
-    {
-        accessToken = string.Empty;
-
-        if (!AuthenticationHeaderValue.TryParse(Request.Headers.Authorization, out var headerValue))
-        {
-            return false;
-        }
-        if (!"Bearer".Equals(headerValue.Scheme, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-        if (string.IsNullOrWhiteSpace(headerValue.Parameter))
-        {
-            return false;
-        }
-
-        // Skip addon att_ tokens — those are handled by [AddonApiAuth] on
-        // separate endpoints. Only Discord OAuth tokens flow through here.
-        if (headerValue.Parameter.StartsWith("att_", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        accessToken = headerValue.Parameter;
-        return true;
-    }
+    // Who is calling a management endpoint: the Activity's Discord bearer (the DiscordBearer
+    // authentication handler) or the website cookie. A bearer Discord turns down is signed out, never
+    // downgraded to the cookie (ApiSignIn.ResolveCallerAsync explains why). An addon token
+    // ("Bearer att_...", checked by [AddonApiAuth] on the other endpoints) is ignored here, so the
+    // cookie decides.
+    private async Task<AppUser?> ResolveManagementUserAsync(CancellationToken cancellationToken) =>
+        (await ApiSignIn.ResolveCallerAsync(HttpContext, _userManager, ignoreAddonTokens: true)).AppUser;
 
     // ---------------------------------------------------------------------
     // Who may do what. Every check below goes through LinkshellPermissions, the rule the app
