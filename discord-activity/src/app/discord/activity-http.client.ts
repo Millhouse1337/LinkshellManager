@@ -1,7 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 
 import { AuthService } from './auth.service';
-import { nonJsonMessage, readJsonResponse, withCorrelationId, type ActivityErrorBody } from './http-response';
+import {
+  nonJsonMessage,
+  problemDetailsMessage,
+  readJsonResponse,
+  withCorrelationId,
+  type ActivityErrorBody
+} from './http-response';
 
 /**
  * Shared HTTP plumbing for the per-domain Activity services.
@@ -130,41 +136,11 @@ export class ActivityHttpClient {
     // hand-written { error } to read. Left unhandled, a real "this field is required"
     // surfaced as the generic "unexpected response (status 400)", which reads like a
     // server fault and tells nobody which field was wrong.
-    const problem = this.problemDetailsMessage(parsed);
+    const problem = problemDetailsMessage(parsed);
     if (problem) {
       throw new Error(problem);
     }
     throw new Error(nonJsonMessage(response.status, response.redirected, responseText));
-  }
-
-  // Flattens an ASP.NET ProblemDetails body into one readable line: every field error
-  // it carries, then its detail/title as a fallback. The field names are the server’s
-  // own DTO property names, which is precisely what makes the message diagnosable.
-  private problemDetailsMessage(body: ActivityErrorBody | null): string | null {
-    if (!body) {
-      return null;
-    }
-
-    const fieldErrors: string[] = [];
-    for (const [field, messages] of Object.entries(body.errors ?? {})) {
-      const text = (Array.isArray(messages) ? messages : [messages])
-        .filter((message): message is string => typeof message === 'string' && message.trim().length > 0)
-        .join(' ');
-      if (!text) {
-        continue;
-      }
-      // A body-level error is keyed by "" or "$" — no field name worth printing.
-      fieldErrors.push(field && field !== '$' ? `${field}: ${text}` : text);
-    }
-
-    if (fieldErrors.length > 0) {
-      return `The server rejected this request — ${fieldErrors.join('; ')}`;
-    }
-
-    // `detail` is the free-text half of ProblemDetails; `title` is the generic
-    // "One or more validation errors occurred.", still better than saying nothing.
-    const fallback = body.detail?.trim() || body.title?.trim();
-    return fallback ? `The server rejected this request — ${fallback}` : null;
   }
 
   // ASP.NET's Forbid()/Challenge() return an empty body, so there's no JSON

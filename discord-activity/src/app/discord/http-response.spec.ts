@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { nonJsonMessage, readJsonResponse, withCorrelationId } from './http-response';
+import { nonJsonMessage, problemDetailsMessage, readJsonResponse, withCorrelationId } from './http-response';
 
 function reply(body: string, status: number, contentType = 'application/json'): Response {
   return new Response(body, { status, headers: { 'Content-Type': contentType } });
@@ -53,5 +53,36 @@ describe('nonJsonMessage', () => {
 describe('withCorrelationId', () => {
   it('leaves a body without an id as it is', () => {
     expect(withCorrelationId({ error: 'Nope.' })).toBe('Nope.');
+  });
+});
+
+// contracts-13: a GET that ASP.NET rejects before the action runs (a bad query value) answers with
+// ProblemDetails, not { error }. Reads used to show "unexpected response (status 400)" for it.
+describe('readJsonResponse with a validation reply', () => {
+  it('shows the field errors', async () => {
+    const body = JSON.stringify({
+      title: 'One or more validation errors occurred.',
+      status: 400,
+      errors: { linkshellId: ["The value 'abc' is not valid."] }
+    });
+    await expect(readJsonResponse(reply(body, 400)))
+      .rejects.toThrow("The server rejected this request — linkshellId: The value 'abc' is not valid.");
+  });
+
+  it('falls back to the title when there are no field errors', async () => {
+    await expect(readJsonResponse(reply('{"title":"Bad Request","status":400}', 400)))
+      .rejects.toThrow('The server rejected this request — Bad Request');
+  });
+});
+
+describe('problemDetailsMessage', () => {
+  it('leaves out the field name for a body-level error', () => {
+    expect(problemDetailsMessage({ errors: { $: ['The JSON is invalid.'] } }))
+      .toBe('The server rejected this request — The JSON is invalid.');
+  });
+
+  it('is null for a body that is not ProblemDetails', () => {
+    expect(problemDetailsMessage(null)).toBeNull();
+    expect(problemDetailsMessage({})).toBeNull();
   });
 });

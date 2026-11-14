@@ -73,7 +73,7 @@ public sealed partial class AddonApiController
 
         if (eventEntity.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return CampInOtherLinkshell();
         }
 
         // Posting a window roster needs "Manage attendance with the addon", checked HERE and not
@@ -483,7 +483,7 @@ public sealed partial class AddonApiController
         if (attendanceWindow is null) return NotFound(new { error = "Window not found." });
         if (attendanceWindow.Event is null || attendanceWindow.Event.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return CampInOtherLinkshell();
         }
         if (!await TokenIssuerCanModerateAsync(token, attendanceWindow.Event.LinkshellId, cancellationToken))
         {
@@ -540,7 +540,7 @@ public sealed partial class AddonApiController
         if (attendanceWindow is null) return NotFound(new { error = "That window has no post to undo." });
         if (attendanceWindow.Event is null || attendanceWindow.Event.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return CampInOtherLinkshell();
         }
         // Same bar as posting one: undoing a post is the same authority as making it.
         if (!await TokenIssuerCanModerateAsync(token, attendanceWindow.Event.LinkshellId, cancellationToken))
@@ -742,7 +742,7 @@ public sealed partial class AddonApiController
         }
         if (eventEntity.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return CampInOtherLinkshell();
         }
 
         // Always addressed as the event; ManualLootService decides where it really goes. A running
@@ -779,7 +779,7 @@ public sealed partial class AddonApiController
         }
         if (tod.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return OtherLinkshell("ToD");
         }
 
         // Loot from the addon is filed against the EVENT for this monster, not against the ToD.
@@ -1182,7 +1182,7 @@ public sealed partial class AddonApiController
         }
         if (tod.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return OtherLinkshell("ToD");
         }
 
         // Changing a saved ToD's claim is editing that ToD, so it needs Manage ToDs - the same

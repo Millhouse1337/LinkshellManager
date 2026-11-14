@@ -308,7 +308,7 @@ public sealed partial class AddonApiController
         }
         if (eventEntity.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return CampInOtherLinkshell();
         }
         if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
         {
@@ -348,7 +348,7 @@ public sealed partial class AddonApiController
         }
         if (eventToDelete.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return CampInOtherLinkshell();
         }
         if (!await TokenIssuerCanModerateAsync(token, eventToDelete.LinkshellId, cancellationToken))
         {
@@ -389,7 +389,7 @@ public sealed partial class AddonApiController
         }
         if (eventEntity.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return CampInOtherLinkshell();
         }
         if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
         {
@@ -476,7 +476,7 @@ public sealed partial class AddonApiController
         }
         if (eventEntity.LinkshellId != token.LinkshellId)
         {
-            return Forbid();
+            return CampInOtherLinkshell();
         }
         if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
         {
@@ -577,7 +577,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken);
 
         if (eventEntity is null) return NotFound(new { error = "Event not found." });
-        if (eventEntity.LinkshellId != token.LinkshellId) return Forbid();
+        if (eventEntity.LinkshellId != token.LinkshellId) return CampInOtherLinkshell();
 
         var linkshell = await _dbContext.Linkshells
             .AsNoTracking()

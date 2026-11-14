@@ -31,7 +31,7 @@ public sealed partial class AddonApiController
             .Include(s => s.LinkedEvent)
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
         if (snapshot is null) return NotFound(new { error = "Misc post not found." });
-        if (snapshot.LinkshellId != token.LinkshellId) return Forbid();
+        if (snapshot.LinkshellId != token.LinkshellId) return OtherLinkshell("post");
         if (!await TokenIssuerCanModerateAsync(token, snapshot.LinkshellId, cancellationToken))
         {
             return Forbid();

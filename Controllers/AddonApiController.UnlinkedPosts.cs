@@ -90,7 +90,7 @@ public sealed partial class AddonApiController
             .Include(s => s.Entries)
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
         if (snapshot is null) return NotFound(new { error = "Post not found." });
-        if (snapshot.LinkshellId != token.LinkshellId) return Forbid();
+        if (snapshot.LinkshellId != token.LinkshellId) return OtherLinkshell("post");
         if (!await TokenIssuerCanModerateAsync(token, snapshot.LinkshellId, cancellationToken))
         {
             return Forbid();

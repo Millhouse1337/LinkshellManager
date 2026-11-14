@@ -33,9 +33,11 @@ export async function readJsonResponse<T>(response: Response, options: ReadJsonO
       options.onUnauthorized?.();
     }
     const body = parsed.ok ? (parsed.value as ActivityErrorBody | null) : null;
+    // The app's own { error } first, then ASP.NET's validation reply (a bad query string on a GET
+    // gets one too), and only then the generic status message.
     const message = body && typeof body.error === 'string'
       ? withCorrelationId(body)
-      : nonJsonMessage(response.status, response.redirected, text);
+      : problemDetailsMessage(body) ?? nonJsonMessage(response.status, response.redirected, text);
     throw new Error(message);
   }
 
@@ -66,6 +68,39 @@ export function withCorrelationId(body: ActivityErrorBody): string {
   const message = body.error ?? '';
   const id = typeof body.correlationId === 'string' ? body.correlationId.trim() : '';
   return id ? `${message} (Error id: ${id})` : message;
+}
+
+// Flattens an ASP.NET ProblemDetails body into one readable line: every field error it carries,
+// then its detail/title as a fallback. ASP.NET sends one on its own when model binding or
+// validation rejects a request, BEFORE the action runs, so there is no hand-written { error } to
+// read. The field names are the server's own DTO property names, which is what makes the message
+// diagnosable. Null when the body is not one.
+export function problemDetailsMessage(body: ActivityErrorBody | null | undefined): string | null {
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+
+  const fieldErrors: string[] = [];
+  for (const [field, messages] of Object.entries(body.errors ?? {})) {
+    const text = (Array.isArray(messages) ? messages : [messages])
+      .filter((message): message is string => typeof message === 'string' && message.trim().length > 0)
+      .join(' ');
+    if (!text) {
+      continue;
+    }
+    // A body-level error is keyed by "" or "$" — no field name worth printing.
+    fieldErrors.push(field && field !== '$' ? `${field}: ${text}` : text);
+  }
+
+  if (fieldErrors.length > 0) {
+    return `The server rejected this request — ${fieldErrors.join('; ')}`;
+  }
+
+  // `detail` is the free-text half of ProblemDetails; `title` is the generic
+  // "One or more validation errors occurred.", still better than saying nothing.
+  const fallback = (typeof body.detail === 'string' ? body.detail.trim() : '')
+    || (typeof body.title === 'string' ? body.title.trim() : '');
+  return fallback ? `The server rejected this request — ${fallback}` : null;
 }
 
 // A reply that is not the app's own JSON, turned into something a member can act on.

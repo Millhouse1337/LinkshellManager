@@ -163,6 +163,20 @@ public sealed class AddonContractPipelineTests : IClassFixture<AddonContractPipe
         Assert.Equal("Own LS", me.GetProperty("linkshellName").GetString());
     }
 
+    // ---- Another linkshell's camp (contracts-13) ----
+
+    // Forbid() used to fall through to the generic "ask a linkshell leader to update your role"
+    // body, which sent the officer to fix a role that was fine. The addon prints "error" as is.
+    [Fact]
+    public async Task AnotherLinkshellsCamp_Gets403_SayingWhy()
+    {
+        var result = await SendAsync(Get($"/api/addon/events/{OtherLinkshellCampId}", bearer: AddonToken));
+
+        Assert.Equal(
+            (HttpStatusCode.Forbidden, "{\"error\":\"That camp belongs to another linkshell.\"}"),
+            result);
+    }
+
     // ---- GET /api/addon/events (contracts-11) ----
 
     [Fact]

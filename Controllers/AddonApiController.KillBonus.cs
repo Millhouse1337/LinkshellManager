@@ -43,7 +43,7 @@ public sealed partial class AddonApiController
         var eventEntity = await _dbContext.Events
             .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
         if (eventEntity is null) return NotFound(new { error = "Event not found." });
-        if (eventEntity.LinkshellId != token.LinkshellId) return Forbid();
+        if (eventEntity.LinkshellId != token.LinkshellId) return CampInOtherLinkshell();
         if (!await TokenIssuerCanModerateAsync(token, eventEntity.LinkshellId, cancellationToken))
         {
             return Forbid();

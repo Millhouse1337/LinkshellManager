@@ -86,6 +86,14 @@ public sealed partial class AddonApiController : ControllerBase
         AddonApiToken token, int linkshellId, CancellationToken cancellationToken)
         => TokenIssuerCanAsync(token, linkshellId, r => r.CanManageAttendanceWithAddon, cancellationToken);
 
+    // A row from another linkshell than the token's. Its own 403 body rather than Forbid(): Forbid()
+    // falls through to the generic "ask a linkshell leader to update your role" body, which sends
+    // the officer to fix a role that is fine. The addon shows the "error" text as it is.
+    private ObjectResult OtherLinkshell(string what) =>
+        StatusCode(StatusCodes.Status403Forbidden, new { error = $"That {what} belongs to another linkshell." });
+
+    private ObjectResult CampInOtherLinkshell() => OtherLinkshell("camp");
+
     // Posting loot from the addon takes DKP off the winner, so it needs a loot right: the app's
     // Add loot (CanAddLoot), or the addon's officer right -- the people running the camp in game.
     internal static bool PostsAddonLoot(LinkshellRole role)

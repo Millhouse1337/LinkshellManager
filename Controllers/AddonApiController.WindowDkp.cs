@@ -44,7 +44,7 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(
                 w => w.EventId == eventId && w.SequenceNumber == sequence, cancellationToken);
         if (window?.Event is null) return NotFound(new { error = "Window not found." });
-        if (window.Event.LinkshellId != token.LinkshellId) return Forbid();
+        if (window.Event.LinkshellId != token.LinkshellId) return CampInOtherLinkshell();
         if (!await TokenIssuerCanModerateAsync(token, window.Event.LinkshellId, cancellationToken))
         {
             return Forbid();
