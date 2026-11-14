@@ -2,8 +2,8 @@ import { Injectable, inject, signal } from '@angular/core';
 
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
-import { formatActionError } from './discord-activity.helpers';
 import type { WebAdminSettings } from './discord-activity.types';
+import { loadWithNotice } from './load-notice';
 import { mutateThenRefresh } from './mutate-then-refresh';
 
 // The website-only Admin tab: the server-wide switches a super admin flips
@@ -18,12 +18,11 @@ export class WebAdminService {
   readonly settings = signal<WebAdminSettings | null>(null);
   readonly busy = signal(false);
 
+  // The tab's first read: the load notice, not the action banner (see load-notice.ts).
   async load(): Promise<void> {
-    try {
-      this.settings.set(await this.http.fetchActivityJson<WebAdminSettings>('/api/web/admin/settings'));
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the admin settings failed.'));
-    }
+    const settings = await loadWithNotice(this.auth, 'admin-settings', 'Loading the admin settings failed.',
+      () => this.http.fetchActivityJson<WebAdminSettings>('/api/web/admin/settings'));
+    if (settings) this.settings.set(settings);
   }
 
   setAdminOverride(enabled: boolean): Promise<void> {

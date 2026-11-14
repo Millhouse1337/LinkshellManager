@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
+import { loadWithNotice } from './load-notice';
 import { type MutationOutcome, mutateThenRefresh } from './mutate-then-refresh';
 import type {
   ActivityCreateLinkshellInput,
@@ -266,20 +267,35 @@ export class LinkshellService {
   // Phase 2 channel config: load the linkshell's channel bindings + the bot's
   // available channels.
   async loadDiscordChannels(linkshellId: number, refresh = false): Promise<ActivityChannelRoutesResponse | null> {
+    // The card's own load reports in the load notice (see load-notice.ts); the Refresh channels
+    // button is the user's action, so it keeps the action banner.
+    if (!refresh) {
+      this.busyDiscordChannels.set(true);
+      try {
+        return await loadWithNotice(this.auth, 'discord-channels', 'Loading Discord channels failed.',
+          () => this.http.fetchActivityJson<ActivityChannelRoutesResponse>(
+            `/api/activity/linkshells/${linkshellId}/discord-channels`,
+            this.auth.currentAccessToken()
+          ));
+      } finally {
+        this.busyDiscordChannels.set(false);
+      }
+    }
+
     this.busyDiscordChannels.set(true);
     this.auth.setActionError(null);
     try {
       const accessToken = this.auth.currentAccessToken();
       // refresh=true bypasses the bot's channel cache so a just-created Discord
       // channel appears immediately.
-      const query = refresh ? '?refresh=true' : '';
       const data = await this.http.fetchActivityJson<ActivityChannelRoutesResponse>(
-        `/api/activity/linkshells/${linkshellId}/discord-channels${query}`,
+        `/api/activity/linkshells/${linkshellId}/discord-channels?refresh=true`,
         accessToken
       );
+      this.auth.clearLoadError('discord-channels');
       // Confirm a manual refresh visibly (the success flash banner) so the user
       // can see the list actually re-pulled.
-      if (refresh && data) {
+      if (data) {
         const count = data.availableChannels?.length ?? 0;
         this.auth.setActionMessage(`Channel list refreshed — ${count} channel${count === 1 ? '' : 's'} found.`);
       }
@@ -318,15 +334,12 @@ export class LinkshellService {
 
   async loadDkpPools(linkshellId: number): Promise<ActivityDkpPoolsResponse | null> {
     this.busyDkpPools.set(true);
-    this.auth.setActionError(null);
     try {
-      return await this.http.fetchActivityJson<ActivityDkpPoolsResponse>(
-        `/api/activity/linkshells/${linkshellId}/dkp-pools`,
-        this.auth.currentAccessToken()
-      );
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading DKP pools failed.'));
-      return null;
+      return await loadWithNotice(this.auth, 'dkp-pools', 'Loading DKP pools failed.',
+        () => this.http.fetchActivityJson<ActivityDkpPoolsResponse>(
+          `/api/activity/linkshells/${linkshellId}/dkp-pools`,
+          this.auth.currentAccessToken()
+        ));
     } finally {
       this.busyDkpPools.set(false);
     }
@@ -372,15 +385,12 @@ export class LinkshellService {
 
   async loadMonsterTimings(linkshellId: number): Promise<ActivityMonsterTimingsResponse | null> {
     this.busyMonsterTimings.set(true);
-    this.auth.setActionError(null);
     try {
-      return await this.http.fetchActivityJson<ActivityMonsterTimingsResponse>(
-        `/api/activity/linkshells/${linkshellId}/monster-timings`,
-        this.auth.currentAccessToken()
-      );
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading monster setups failed.'));
-      return null;
+      return await loadWithNotice(this.auth, 'monster-timings', 'Loading monster setups failed.',
+        () => this.http.fetchActivityJson<ActivityMonsterTimingsResponse>(
+          `/api/activity/linkshells/${linkshellId}/monster-timings`,
+          this.auth.currentAccessToken()
+        ));
     } finally {
       this.busyMonsterTimings.set(false);
     }
@@ -492,15 +502,10 @@ export class LinkshellService {
   // ----- Peer job ratings -----
 
   async loadJobRatings(linkshellId: number, targetAppUserId: string, slot = 0): Promise<ActivityJobRatingsResponse | null> {
-    this.auth.setActionError(null);
-    try {
-      return await this.http.fetchActivityJson<ActivityJobRatingsResponse>(
+    return loadWithNotice(this.auth, 'job-ratings', 'Loading job ratings failed.',
+      () => this.http.fetchActivityJson<ActivityJobRatingsResponse>(
         `/api/activity/job-ratings/${encodeURIComponent(targetAppUserId)}?linkshellId=${linkshellId}&slot=${slot}`
-      );
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading job ratings failed.'));
-      return null;
-    }
+      ));
   }
 
   async rateJob(linkshellId: number, targetAppUserId: string, jobIndex: number, gear: number, skill: number, hasRelic: boolean, slot = 0, relicNames: string[] = []): Promise<boolean> {
@@ -530,28 +535,18 @@ export class LinkshellService {
   }
 
   async loadJobRatingCommentSummary(linkshellId: number, targetAppUserId: string, slot = 0): Promise<ActivityJobRatingCommentSummary | null> {
-    this.auth.setActionError(null);
-    try {
-      return await this.http.fetchActivityJson<ActivityJobRatingCommentSummary>(
+    return loadWithNotice(this.auth, 'job-rating-summary', 'Loading the feedback summary failed.',
+      () => this.http.fetchActivityJson<ActivityJobRatingCommentSummary>(
         `/api/activity/job-ratings/${encodeURIComponent(targetAppUserId)}/comment-summary?linkshellId=${linkshellId}&slot=${slot}`
-      );
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the feedback summary failed.'));
-      return null;
-    }
+      ));
   }
 
   // Overall ratings rollup across all the member's characters (averages + AI comment summary).
   async loadJobRatingOverall(linkshellId: number, targetAppUserId: string): Promise<ActivityJobRatingOverall | null> {
-    this.auth.setActionError(null);
-    try {
-      return await this.http.fetchActivityJson<ActivityJobRatingOverall>(
+    return loadWithNotice(this.auth, 'job-rating-overall', 'Loading the overall ratings failed.',
+      () => this.http.fetchActivityJson<ActivityJobRatingOverall>(
         `/api/activity/job-ratings/${encodeURIComponent(targetAppUserId)}/overall?linkshellId=${linkshellId}`
-      );
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the overall ratings failed.'));
-      return null;
-    }
+      ));
   }
 
   async updateLinkshellMemberStatus(
@@ -604,17 +599,12 @@ export class LinkshellService {
 
   async loadLinkshellRoles(linkshellId: number): Promise<ActivityLinkshellRolesResponse | null> {
     this.busyRoles.set(true);
-    this.auth.setActionError(null);
     try {
-      const accessToken = this.auth.currentAccessToken();
-      const data = await this.http.fetchActivityJson<ActivityLinkshellRolesResponse>(
-        `/api/activity/linkshells/${linkshellId}/roles`,
-        accessToken
-      );
-      return data;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading linkshell roles failed.'));
-      return null;
+      return await loadWithNotice(this.auth, 'linkshell-roles', 'Loading linkshell roles failed.',
+        () => this.http.fetchActivityJson<ActivityLinkshellRolesResponse>(
+          `/api/activity/linkshells/${linkshellId}/roles`,
+          this.auth.currentAccessToken()
+        ));
     } finally {
       this.busyRoles.set(false);
     }
@@ -625,16 +615,12 @@ export class LinkshellService {
       return null;
     }
     this.busyJobsRoster.set(true);
-    this.auth.setActionError(null);
     try {
-      const accessToken = this.auth.currentAccessToken();
-      return await this.http.fetchActivityJson<ActivityJobsRoster>(
-        `/api/activity/linkshells/${linkshellId}/jobs-roster`,
-        accessToken
-      );
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the jobs roster failed.'));
-      return null;
+      return await loadWithNotice(this.auth, 'jobs-roster', 'Loading the jobs roster failed.',
+        () => this.http.fetchActivityJson<ActivityJobsRoster>(
+          `/api/activity/linkshells/${linkshellId}/jobs-roster`,
+          this.auth.currentAccessToken()
+        ));
     } finally {
       this.busyJobsRoster.set(false);
     }

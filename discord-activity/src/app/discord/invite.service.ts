@@ -43,8 +43,9 @@ export class InviteService {
     }
 
     this.inviteBrowseBusy.set(true);
-    this.auth.setActionError(null);
 
+    // A screen read (the card opening, a search, a page): it reports in the load notice, never the
+    // action banner, so it can't wipe an invite's error (see load-notice.ts).
     try {
       const params = new URLSearchParams();
       params.set('linkshellId', String(linkshellId));
@@ -56,10 +57,11 @@ export class InviteService {
         `/api/activity/players/browse?${params.toString()}`);
       this.inviteBrowseResults.set(payload.items ?? []);
       this.inviteBrowseTotal.set(payload.total ?? 0);
+      this.auth.clearLoadError('invite-browse');
     } catch (error) {
       this.inviteBrowseResults.set([]);
       this.inviteBrowseTotal.set(0);
-      this.auth.setActionError(formatActionError(error, 'Browsing players failed.'));
+      this.auth.reportLoadError('invite-browse', error, 'Browsing players failed.');
     } finally {
       this.inviteBrowseBusy.set(false);
     }
@@ -87,9 +89,11 @@ export class InviteService {
     try {
       this.discordRosterCandidates.set(await this.http.fetchActivityJson<ActivityDiscordRosterCandidate[]>(
         `/api/activity/linkshells/${linkshellId}/discord-roster`));
+      this.auth.clearLoadError('discord-roster');
     } catch (error) {
       this.clearDiscordRoster();
-      this.auth.setActionError(formatActionError(error, 'Loading the Discord roster failed.'));
+      // A screen read: the load notice, not the action banner (see load-notice.ts).
+      this.auth.reportLoadError('discord-roster', error, 'Loading the Discord roster failed.');
     } finally {
       this.discordRosterBusy.set(false);
     }

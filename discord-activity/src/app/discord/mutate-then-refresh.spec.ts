@@ -37,6 +37,32 @@ describe('mutateThenRefresh', () => {
     expect(feedback.message).toBe(`DKP audit recorded. ${REFRESH_FAILED_NOTE}`);
   });
 
+  it('says "Saved." when a save with no success banner only fails to reload', async () => {
+    // The live camp card's edits work this way: no banner when all goes well.
+    const feedback = banners();
+    const outcome = await mutateThenRefresh(feedback, {
+      mutate: async () => undefined,
+      refresh: async () => { throw new Error('network down'); },
+      success: null,
+      failure: "Setting this window's DKP failed."
+    });
+    expect(outcome.ok).toBe(true);
+    expect(feedback.error).toBeNull();
+    expect(feedback.message).toBe(`Saved. ${REFRESH_FAILED_NOTE}`);
+  });
+
+  it('shows no banner for a save with no success banner whose reload works', async () => {
+    const feedback = banners();
+    await mutateThenRefresh(feedback, {
+      mutate: async () => undefined,
+      refresh: async () => undefined,
+      success: null,
+      failure: 'Saving failed.'
+    });
+    expect(feedback.error).toBeNull();
+    expect(feedback.message).toBeNull();
+  });
+
   it('reports a failed save with the server message and never reloads', async () => {
     const feedback = banners();
     let refreshed = false;

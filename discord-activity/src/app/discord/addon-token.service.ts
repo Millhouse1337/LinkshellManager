@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
+import { loadWithNotice } from './load-notice';
 import type {
   ActivityAddonPairingCodeResponse,
   ActivityAddonTokenList
@@ -20,16 +21,13 @@ export class AddonTokenService {
   // credentials:'include' on every fetch).
   async loadAddonTokens(linkshellId: number): Promise<ActivityAddonTokenList | null> {
     this.busyAddonTokens.set(true);
-    this.auth.setActionError(null);
     try {
-      const accessToken = this.auth.currentAccessToken();
-      return await this.http.fetchActivityJson<ActivityAddonTokenList>(
-        `/api/addon/management/tokens?linkshellId=${linkshellId}`,
-        accessToken
-      );
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading addon tokens failed.'));
-      return null;
+      // A screen read: it reports in the load notice, never the action banner (see load-notice.ts).
+      return await loadWithNotice(this.auth, 'addon-tokens', 'Loading addon tokens failed.',
+        () => this.http.fetchActivityJson<ActivityAddonTokenList>(
+          `/api/addon/management/tokens?linkshellId=${linkshellId}`,
+          this.auth.currentAccessToken()
+        ));
     } finally {
       this.busyAddonTokens.set(false);
     }
