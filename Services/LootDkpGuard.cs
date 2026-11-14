@@ -30,6 +30,21 @@ public static class LootDkpGuard
         return roster.Resolve(winnerName);
     }
 
+    // True while a live event of this linkshell holds loot with a price that is not charged yet.
+    //
+    // Such loot is charged at event close / End Camp, and WinningDkpSpent is read THEN as DKP
+    // (Dkp) or as a percent of the winner's balance (Hybrid), whichever the linkshell uses at that
+    // moment. So the Loot Structure must not change while any of it waits: the same stored number
+    // would be charged in the other unit. The settings save refuses the change until it is charged.
+    public static Task<bool> HasUnchargedLiveLootAsync(
+        ApplicationDbContext db, int linkshellId, CancellationToken cancellationToken)
+        => db.EventLootDetails.AnyAsync(
+            detail => detail.EventId != null
+                      && detail.Event!.LinkshellId == linkshellId
+                      && detail.DkpDebitedAt == null
+                      && detail.WinningDkpSpent > 0,
+            cancellationToken);
+
     // Returns null when the award is allowed, or a human-readable error to surface.
     public static async Task<string?> CheckEventLootAsync(
         ApplicationDbContext db,

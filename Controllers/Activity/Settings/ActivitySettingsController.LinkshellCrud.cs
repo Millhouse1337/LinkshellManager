@@ -245,7 +245,17 @@ public sealed partial class ActivitySettingsController
             {
                 return BadRequest(new { error = "Loot Structure must be Dkp, LootCouncil, or Hybrid." });
             }
-            linkshell.LootStructure = NormalizeLootStructure(requestedStructure);
+            var newStructure = NormalizeLootStructure(requestedStructure);
+            if (newStructure != NormalizeLootStructure(linkshell.LootStructure ?? "Dkp")
+                && await LootDkpGuard.HasUnchargedLiveLootAsync(_dbContext, linkshellId, cancellationToken))
+            {
+                return BadRequest(new
+                {
+                    error = "A running event has loot that isn't charged yet. Change the Loot Structure "
+                        + "after that event ends, so the loot is charged the way it was given out."
+                });
+            }
+            linkshell.LootStructure = newStructure;
         }
 
         if (request.EnableHnmSection.HasValue) linkshell.EnableHnmSection = request.EnableHnmSection.Value;
