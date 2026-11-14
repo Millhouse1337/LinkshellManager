@@ -396,14 +396,17 @@ export class EventService {
 
   // ----- Past event (EventHistory) browse + edit -----
 
+  // Reloaded by the refresh timer while Past Events is open, so it reports in its own notice and
+  // never clears or sets the action banner (see AuthService.loadError).
   async loadEventHistory(linkshellId: number): Promise<ActivityEventHistoryResponse | null> {
-    this.auth.setActionError(null);
     try {
-      return await this.http.fetchActivityJson<ActivityEventHistoryResponse>(
+      const history = await this.http.fetchActivityJson<ActivityEventHistoryResponse>(
         `/api/activity/event-history?linkshellId=${linkshellId}`
       );
+      this.auth.clearLoadError('event-history');
+      return history;
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading event history failed.'));
+      this.auth.reportLoadError('event-history', error, 'Loading event history failed.');
       return null;
     }
   }

@@ -66,9 +66,12 @@ export class LinkshellService {
           accessToken
         )
       );
+      this.auth.clearLoadError('linkshell-detail');
     } catch (error) {
       this.linkshellDetail.set(null);
-      this.auth.setActionError(formatActionError(error, 'Loading linkshell details failed.'));
+      // Reloaded on every overview refresh: its own notice, never the action banner
+      // (see AuthService.loadError).
+      this.auth.reportLoadError('linkshell-detail', error, 'Loading linkshell details failed.');
     }
   }
 

@@ -37,10 +37,13 @@ export class DkpService {
         query.size > 0 ? `/api/activity/dkp-history?${query.toString()}` : '/api/activity/dkp-history';
       const history = await this.http.fetchActivityJson<ActivityDkpHistory>(path, accessToken);
       this.dkpHistory.set(history);
+      this.auth.clearLoadError('dkp-history');
       return history;
     } catch (error) {
       this.dkpHistory.set(null);
-      this.auth.setActionError(formatActionError(error, 'Loading DKP History failed.'));
+      // Reloaded on every overview refresh: its own notice, never the action banner
+      // (see AuthService.loadError).
+      this.auth.reportLoadError('dkp-history', error, 'Loading DKP History failed.');
       return null;
     } finally {
       this.dkpHistoryBusy.set(false);
