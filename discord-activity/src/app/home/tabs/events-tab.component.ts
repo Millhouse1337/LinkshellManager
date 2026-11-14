@@ -1702,11 +1702,16 @@ export class EventsTabComponent {
     // before any of the window-specific comparisons below, which all read window.dkpAmount -- a
     // column a kill window never carries and the server refuses to set.
     if (window.isKillWindow) {
-      if (amount !== null && (!Number.isFinite(amount) || amount < 0)) {
+      // Same "nothing changed" rule as the open / close cells: typing back the kill bonus the box
+      // already shows writes nothing, so an old off-grid kill bonus is never refused as if typed.
+      const unchanged = amount === null
+        ? event.hnmKillBonusOverride == null
+        : Math.abs(this.standardBonus(event, 'kill') - amount) < 0.0001;
+      if (unchanged || (amount !== null && (!Number.isFinite(amount) || amount < 0))) {
         this.dropWindowDkpDraft(window);
         return;
       }
-      // Off the DKP grid: refused, and the typed value stays in the box to be fixed.
+      // A real change off the DKP grid: refused, and the typed value stays in the box to be fixed.
       if (this.refuseOffStepDkp(event, amount)) return;
       if (this.windowDkpSaving()) return;
       this.windowDkpSaving.set(true);
