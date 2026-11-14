@@ -315,7 +315,9 @@
             </div>
             @if (gilHolders().length > 0) {
               <ul class="fin-holders__list">
-                @for (holder of gilHolders(); track holder.characterName ?? '') {
+                <!-- Tracked by position: rows are grouped by member now, so two rows can show the
+                     same name. -->
+                @for (holder of gilHolders(); track $index) {
                   <li class="fin-holders__row" [class.is-unnamed]="!holder.characterName">
                     <span class="fin-holders__name">{{ holder.characterName || unnamedHolder }}</span>
                     <!-- The share of the total, so a row reads as "most of it" or "a sliver" without

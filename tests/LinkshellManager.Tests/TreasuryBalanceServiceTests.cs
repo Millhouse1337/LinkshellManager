@@ -583,4 +583,77 @@ public class TreasuryBalanceServiceTests
 
         Assert.Empty(TreasuryBalanceService.ProjectByHolder(lines));
     }
+
+    // ---- holders grouped by account ----------------------------------------------------------
+
+    private static LedgerLineRow Cash(long amount, string? holder, string? account) =>
+        new(TreasuryAccounts.GilOnHand, amount, null, holder, account);
+
+    // The bug this fixes: a member who renamed showed as two rows, one per name.
+    [Fact]
+    public void ProjectByHolder_ARenamedMemberStaysOneRow_UnderTheirNewestName()
+    {
+        var lines = new[]
+        {
+            Cash(8_000_000, "Edicius", "user-9"),
+            Cash(-1_000_000, "Edinew", "user-9"),
+        };
+
+        var holder = Assert.Single(TreasuryBalanceService.ProjectByHolder(lines));
+        Assert.Equal("Edinew", holder.CharacterName);
+        Assert.Equal(7_000_000, holder.Amount);
+    }
+
+    // A line written under the name alone (it matched nobody when it was written) joins the row of
+    // the one account that recorded the same name.
+    [Fact]
+    public void ProjectByHolder_ANameOnlyLine_JoinsTheOneAccountThatUsedThatName()
+    {
+        var lines = new[]
+        {
+            Cash(5_000_000, "Edicius", "user-9"),
+            Cash(-2_000_000, "edicius", null),
+        };
+
+        var holder = Assert.Single(TreasuryBalanceService.ProjectByHolder(lines));
+        Assert.Equal(3_000_000, holder.Amount);
+    }
+
+    // Two accounts recorded the same name: the name-only line is not handed to either of them.
+    [Fact]
+    public void ProjectByHolder_ANameTwoAccountsUsed_StaysItsOwnRow()
+    {
+        var lines = new[]
+        {
+            Cash(5_000_000, "Twin", "bob"),
+            Cash(4_000_000, "Twin", "carol"),
+            Cash(1_000_000, "Twin", null),
+        };
+
+        var holders = TreasuryBalanceService.ProjectByHolder(lines);
+
+        Assert.Equal(new long[] { 5_000_000, 4_000_000, 1_000_000 }, holders.Select(h => h.Amount));
+        Assert.All(holders, h => Assert.Equal("Twin", h.CharacterName));
+    }
+
+    // Grouping by account changes which rows exist, never the total: still adds up to gil on hand,
+    // unnamed bucket included.
+    [Fact]
+    public void ProjectByHolder_ByAccount_StillAddsUpToGilOnHand()
+    {
+        var lines = new List<LedgerLineRow>
+        {
+            Cash(8_000_000, "Edicius", "user-9"),
+            Cash(-3_000_000, "Edinew", "user-9"),
+            Cash(2_000_000, "Ukiya", null),
+            Cash(1_500_000, null, null),
+            new(TreasuryAccounts.ItemSales, -8_500_000),
+            new(TreasuryAccounts.OtherMoneyOut, 3_000_000),
+        };
+
+        var holders = TreasuryBalanceService.ProjectByHolder(lines);
+
+        Assert.Equal(3, holders.Count);
+        Assert.Equal(TreasuryBalanceService.Project(lines).CashOnHand, holders.Sum(h => h.Amount));
+    }
 }

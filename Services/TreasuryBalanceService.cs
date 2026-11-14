@@ -12,7 +12,10 @@ public readonly record struct LedgerLineRow(
     int AccountNumber, long Amount, string? CounterpartyCharacterName = null,
     // Whose mule the gil is on. Only ever set on a gil-on-hand line, and only read by
     // ProjectByHolder — defaulted for the same reason the counterparty above is.
-    string? HolderCharacterName = null);
+    string? HolderCharacterName = null,
+    // The holder's account, when the name was matched to one (see JournalEntryLine.HolderAppUserId).
+    // What ProjectByHolder groups on, so a rename does not split one person into two rows.
+    string? HolderAppUserId = null);
 
 // One category's running total, as a user should read it.
 public sealed record CategoryTotal(int AccountNumber, string AccountName, string AccountClass, long Amount, int EntryCount);
@@ -163,9 +166,19 @@ public sealed class TreasuryBalanceService
     // arriving on a mule is a positive line, gil leaving it is a negative one, and no separate
     // bookkeeping step can be forgotten.
     //
-    // Keyed on the NAME for exactly the reason ProjectByCounterparty is: the two write paths
-    // populate the account id differently, and keying on "id if present, else name" would file a
-    // sale under the id and the later spend under the name, showing one person twice.
+    // Grouped on the holder's ACCOUNT when the line has one, and on the name when it does not, so
+    // a member who renames their character stays one row. Every write fills the account from the
+    // name (TreasuryJournalWriter), and the FillJournalLineHolderAccounts migration filled it on
+    // older lines wherever the name matched exactly one member.
+    //
+    // A line with a name but no account (a name that matched nobody, or more than one member,
+    // when it was written) joins the account row that recorded the SAME name, when exactly one
+    // account did. Without that, a sale filed under the account and a later spend filed under the
+    // name alone would show one person twice. When two accounts recorded that name, it stays its
+    // own row: guessing between two people is worse than one extra row.
+    //
+    // The row shows the newest name recorded for it. The lines arrive in the order they were
+    // written (GetBalanceSheetAsync sorts them), so after a rename the new name wins.
     //
     // Unlike the obligation lists, a null name is KEPT rather than dropped: every line recorded
     // before holders existed has one, as does every gil-auction payout, and hiding that bucket
@@ -173,24 +186,42 @@ public sealed class TreasuryBalanceService
     // UnnamedHolder is what the app calls it.
     public static List<GilHolding> ProjectByHolder(IEnumerable<LedgerLineRow> lines)
     {
+        static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        var cash = lines.Where(line => line.AccountNumber == TreasuryAccounts.GilOnHand).ToList();
+
+        // Which accounts each name was recorded under.
+        var accountsByName = cash
+            .Where(line => Clean(line.HolderAppUserId) is not null && Clean(line.HolderCharacterName) is not null)
+            .GroupBy(line => Clean(line.HolderCharacterName)!.ToLowerInvariant(), StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(line => Clean(line.HolderAppUserId)!).Distinct(StringComparer.Ordinal).ToList(),
+                StringComparer.Ordinal);
+
         var totals = new Dictionary<string, (string? Name, long Amount)>(StringComparer.Ordinal);
 
-        foreach (var line in lines)
+        foreach (var line in cash)
         {
-            if (line.AccountNumber != TreasuryAccounts.GilOnHand)
+            var name = Clean(line.HolderCharacterName);
+            var account = Clean(line.HolderAppUserId);
+            if (account is null
+                && name is not null
+                && accountsByName.TryGetValue(name.ToLowerInvariant(), out var accounts)
+                && accounts.Count == 1)
             {
-                continue;
+                account = accounts[0];
             }
 
-            var name = string.IsNullOrWhiteSpace(line.HolderCharacterName)
-                ? null
-                : line.HolderCharacterName.Trim();
-            var key = name?.ToLowerInvariant() ?? string.Empty;
+            // Prefixed so an account id can never collide with a character name.
+            var key = account is not null
+                ? "account:" + account
+                : "name:" + (name?.ToLowerInvariant() ?? string.Empty);
 
             // Gil on hand's normal side is positive, so the stored amount already reads the right
             // way round and no presentation flip is needed here.
             totals[key] = totals.TryGetValue(key, out var running)
-                ? (running.Name ?? name, running.Amount + line.Amount)
+                ? (name ?? running.Name, running.Amount + line.Amount)
                 : (name, line.Amount);
         }
 
@@ -287,18 +318,22 @@ public sealed class TreasuryBalanceService
     public async Task<TreasuryBalanceSheet> GetBalanceSheetAsync(
         int linkshellId, DateTime? fromUtc, DateTime? toUtc, CancellationToken cancellationToken)
     {
+        // In the order they were written, so ProjectByHolder shows each holder's newest name.
         var holdings = await ConfirmedLines(linkshellId)
             .Where(line => line.AccountNumber < 4000)
+            .OrderBy(line => line.JournalEntryId)
+            .ThenBy(line => line.LineNumber)
             .Select(line => new LedgerLineRow(
-                line.AccountNumber, line.Amount, line.CounterpartyCharacterName, line.HolderCharacterName))
+                line.AccountNumber, line.Amount, line.CounterpartyCharacterName, line.HolderCharacterName,
+                line.HolderAppUserId))
             .ToListAsync(cancellationToken);
 
-        // All four arguments spelled out: an EF expression tree cannot call a constructor that
+        // All five arguments spelled out: an EF expression tree cannot call a constructor that
         // relies on an optional one. Flow lines carry neither a member nor a holder — only
         // what-we-owe is attributable, and only gil on hand sits on a mule.
         var flows = await InRange(ConfirmedLines(linkshellId), fromUtc, toUtc)
             .Where(line => line.AccountNumber >= 4000)
-            .Select(line => new LedgerLineRow(line.AccountNumber, line.Amount, null, null))
+            .Select(line => new LedgerLineRow(line.AccountNumber, line.Amount, null, null, null))
             .ToListAsync(cancellationToken);
 
         return new TreasuryBalanceSheet(

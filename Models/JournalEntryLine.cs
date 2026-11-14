@@ -75,6 +75,12 @@ public class JournalEntryLine
     // Nullable, and stays that way: every line recorded before this existed has no answer, and the
     // gil-auction close still has none to give. Those group into one honestly-labelled bucket
     // rather than being guessed at.
+    //
+    // The account below is filled from the name on every write (TreasuryJournalWriter), and the
+    // FillJournalLineHolderAccounts migration filled older lines where the name matched exactly one
+    // member. A name that matched nobody, or two members, keeps a NULL account. The holdings panel
+    // groups on the account when there is one (TreasuryBalanceService.ProjectByHolder), so a
+    // renamed member stays one row.
     [MaxLength(450)]
     public string? HolderAppUserId { get; set; }
 
