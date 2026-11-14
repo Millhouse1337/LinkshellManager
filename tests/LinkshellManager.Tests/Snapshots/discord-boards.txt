@@ -1,0 +1,880 @@
+=== plain roster event (no party setup)
+{
+  "content": "\uD83D\uDD52 Event Starts: <t:1786010400:D> <t:1786010400:T> · <t:1786010400:R>",
+  "embeds": [
+    {
+      "title": "⚔️ Sky: Sky Farm",
+      "description": "Bring sleep resist.",
+      "color": 5793266,
+      "fields": [
+        {
+          "name": "Starts",
+          "value": "<t:1786010400:f> (<t:1786010400:R>)",
+          "inline": true
+        },
+        {
+          "name": "DKP / hour",
+          "value": "4",
+          "inline": true
+        },
+        {
+          "name": "Location",
+          "value": "Ru'Aun Gardens",
+          "inline": true
+        },
+        {
+          "name": "Signed up (2)",
+          "value": "• **Mill** — WAR/NIN · Tank\n• **Ash** — WHM/BLM · Healer",
+          "inline": false
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "Sign up",
+          "custom_id": "evt:joinevent:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Withdraw",
+          "custom_id": "evt:withdraw:1"
+        },
+        {
+          "type": 2,
+          "style": 3,
+          "label": "Open LSManager App",
+          "custom_id": "evt:launch"
+        }
+      ]
+    }
+  ],
+  "attachments": [],
+  "allowed_mentions": {
+    "parse": []
+  }
+}
+=== wyrm mid-band, one seat locked to stay
+{
+  "content": "## \uD83E\uDE9F Tiamat · Window 4 of 25 · Day 2\n## ⌛ Window 3 passed <t:1786017600:T> <t:1786017600:R>\n## \uD83D\uDD50 Next window 4 <t:1786021200:R> <t:1786021200:T>\n\n\uD83D\uDD52 Event Started: <t:1786010400:D> <t:1786010400:T> · <t:1786010400:R>\n\n-# \uD83D\uDD12 1 staying next window",
+  "embeds": [
+    {
+      "title": "⚔️ HNM: Tiamat",
+      "description": "​",
+      "color": 5793266,
+      "fields": [
+        {
+          "name": "Location",
+          "value": "Attohwa Chasm",
+          "inline": true
+        },
+        {
+          "name": "Color Key",
+          "value": "\uD83D\uDD35 Tank · \uD83D\uDFE2 Healer · \uD83D\uDFE1 Support · \uD83D\uDD34 DPS · ⚪ Any\n\uD83D\uDD12 Staying next window (survives the window advance)\n\uD83E\uDDEA Enfeeb Ready · \uD83D\uDEE1️ Resist Ready · \uD83D\uDDE1️ Relic Weapon",
+          "inline": false
+        },
+        {
+          "name": "​",
+          "value": "​",
+          "inline": false
+        },
+        {
+          "name": "Party 1 (2/4)",
+          "value": "\uD83D\uDD35 \uD83D\uDC51 \uD83D\uDD12 **Mill** — PLD/WAR\n\uD83D\uDFE2 **Ash** — WHM\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "Party 2 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "Also Attending",
+          "value": "\uD83D\uDFE1 **Late** — Support - RDM/WHM",
+          "inline": false
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "Sign Up",
+          "custom_id": "evt:pssignup:1"
+        },
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83D\uDC51 Sign Up as Party Leader",
+          "custom_id": "evt:psLsignup:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDD12 Stay Next Window",
+          "custom_id": "evt:lockwin:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Withdraw",
+          "custom_id": "evt:psleave:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDC51 Make Me Party Lead",
+          "custom_id": "evt:mkleader:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDC51 Set Leader (officers)",
+          "custom_id": "evt:osetlead:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83C\uDF96️ My Readiness",
+          "custom_id": "evt:ready:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "➕ Add Member (officers)",
+          "custom_id": "evt:oadd:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "↔ Move Member (officers)",
+          "custom_id": "evt:omove:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDD12 Lock Member (officers)",
+          "custom_id": "evt:olock:1"
+        },
+        {
+          "type": 2,
+          "style": 4,
+          "label": "✖ Remove Member (officers)",
+          "custom_id": "evt:owithdraw:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "◀ View Previous Window",
+          "custom_id": "evt:prevwindow:1",
+          "disabled": false
+        },
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83C\uDFC1 End Camp / Enter ToD (officers)",
+          "custom_id": "evt:wdpop:1"
+        },
+        {
+          "type": 2,
+          "style": 3,
+          "label": "Open LSManager App",
+          "custom_id": "evt:launch"
+        }
+      ]
+    }
+  ],
+  "attachments": [],
+  "allowed_mentions": {
+    "parse": []
+  }
+}
+=== king queued on Open/Close posts
+{
+  "content": "## \uD83E\uDE9F Behemoth/King Behemoth · Window 1 of 7 · Day 5\n\n\uD83D\uDD52 Event Starts: <t:1786010400:D> <t:1786010400:T> · <t:1786010400:R>",
+  "embeds": [
+    {
+      "title": "⚔️ HNM: Behemoth/King Behemoth",
+      "description": "​",
+      "color": 5793266,
+      "fields": [
+        {
+          "name": "Location",
+          "value": "Behemoth's Dominion",
+          "inline": true
+        },
+        {
+          "name": "Color Key",
+          "value": "\uD83D\uDD35 Tank · \uD83D\uDFE2 Healer · \uD83D\uDFE1 Support · \uD83D\uDD34 DPS · ⚪ Any\n\uD83E\uDDEA Enfeeb Ready · \uD83D\uDEE1️ Resist Ready · \uD83D\uDDE1️ Relic Weapon",
+          "inline": false
+        },
+        {
+          "name": "​",
+          "value": "​",
+          "inline": false
+        },
+        {
+          "name": "Party 1 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "Party 2 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "Sign Up",
+          "custom_id": "evt:pssignup:1"
+        },
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83D\uDC51 Sign Up as Party Leader",
+          "custom_id": "evt:psLsignup:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Withdraw",
+          "custom_id": "evt:psleave:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "➕ Add Member (officers)",
+          "custom_id": "evt:oadd:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Window 1 (first)",
+          "custom_id": "evt:prevwindow:1",
+          "disabled": true
+        },
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83C\uDFC1 End Camp / Enter ToD (officers)",
+          "custom_id": "evt:wdpop:1"
+        },
+        {
+          "type": 2,
+          "style": 3,
+          "label": "Open LSManager App",
+          "custom_id": "evt:launch"
+        }
+      ]
+    }
+  ],
+  "attachments": [],
+  "allowed_mentions": {
+    "parse": []
+  }
+}
+=== Manual Check In king with x'd-in members
+{
+  "content": "## \uD83E\uDE9F Fafnir/Nidhogg · Window 3 of 7 · Day 4\n## ⌛ Window 2 passed <t:1786011000:T> <t:1786011000:R>\n## \uD83D\uDD50 Next window 3 <t:1786011600:R> <t:1786011600:T>\n\n\uD83D\uDD52 Event Started: <t:1786010400:D> <t:1786010400:T> · <t:1786010400:R>",
+  "embeds": [
+    {
+      "title": "⚔️ HNM: Fafnir/Nidhogg",
+      "description": "​",
+      "color": 5793266,
+      "fields": [
+        {
+          "name": "Location",
+          "value": "Dragon's Aery",
+          "inline": true
+        },
+        {
+          "name": "Color Key",
+          "value": "\uD83D\uDD35 Tank · \uD83D\uDFE2 Healer · \uD83D\uDFE1 Support · \uD83D\uDD34 DPS · ⚪ Any\n\uD83E\uDDEA Enfeeb Ready · \uD83D\uDEE1️ Resist Ready · \uD83D\uDDE1️ Relic Weapon",
+          "inline": false
+        },
+        {
+          "name": "​",
+          "value": "​",
+          "inline": false
+        },
+        {
+          "name": "Party 1 (1/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n⚪ **Mill** — BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "Party 2 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "✅ Checked In (2)",
+          "value": "**Window 1:** Mill\n**Window 2:** Ash",
+          "inline": false
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "Sign Up",
+          "custom_id": "evt:pssignup:1"
+        },
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83D\uDC51 Sign Up as Party Leader",
+          "custom_id": "evt:psLsignup:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Withdraw",
+          "custom_id": "evt:psleave:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDC51 Make Me Party Lead",
+          "custom_id": "evt:mkleader:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDC51 Set Leader (officers)",
+          "custom_id": "evt:osetlead:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83C\uDF96️ My Readiness",
+          "custom_id": "evt:ready:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "➕ Add Member (officers)",
+          "custom_id": "evt:oadd:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "↔ Move Member (officers)",
+          "custom_id": "evt:omove:1"
+        },
+        {
+          "type": 2,
+          "style": 4,
+          "label": "✖ Remove Member (officers)",
+          "custom_id": "evt:owithdraw:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 3,
+          "label": "✅ Check In (this window)",
+          "custom_id": "evt:xin:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDEAA Check Out",
+          "custom_id": "evt:checkout:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83C\uDFC1 End Camp / Enter ToD (officers)",
+          "custom_id": "evt:wdpop:1"
+        },
+        {
+          "type": 2,
+          "style": 3,
+          "label": "Open LSManager App",
+          "custom_id": "evt:launch"
+        }
+      ]
+    }
+  ],
+  "attachments": [],
+  "allowed_mentions": {
+    "parse": []
+  }
+}
+=== defeated camp across two alliances
+{
+  "content": "## \uD83E\uDE9F Adamantoise · Window 4 of 7\n## ⌛ Window 4 passed <t:1786012200:T> <t:1786012200:R>\n\n\uD83D\uDD52 Event Started: <t:1786010400:D> <t:1786010400:T> · <t:1786010400:R>",
+  "embeds": [
+    {
+      "title": "⚔️ HNM: Adamantoise",
+      "description": "​",
+      "color": 5793266,
+      "fields": [
+        {
+          "name": "Location",
+          "value": "Valley of Sorrows",
+          "inline": true
+        },
+        {
+          "name": "Color Key",
+          "value": "\uD83D\uDD35 Tank · \uD83D\uDFE2 Healer · \uD83D\uDFE1 Support · \uD83D\uDD34 DPS · ⚪ Any\n\uD83E\uDDEA Enfeeb Ready · \uD83D\uDEE1️ Resist Ready · \uD83D\uDDE1️ Relic Weapon",
+          "inline": false
+        },
+        {
+          "name": "────── Alliance 1 ──────",
+          "value": "​",
+          "inline": false
+        },
+        {
+          "name": "Party 1 (1/4)",
+          "value": "\uD83D\uDD35 \uD83D\uDC51 **Mill** — PLD/WAR\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "Party 2 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "────── Alliance 2 ──────",
+          "value": "​",
+          "inline": false
+        },
+        {
+          "name": "Party 1 (1/4)",
+          "value": "\uD83D\uDD35 **Ash** — WHM/BLM\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "Party 2 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "Sign Up",
+          "custom_id": "evt:pssignup:1"
+        },
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83D\uDC51 Sign Up as Party Leader",
+          "custom_id": "evt:psLsignup:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Withdraw",
+          "custom_id": "evt:psleave:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDC51 Make Me Party Lead",
+          "custom_id": "evt:mkleader:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDC51 Make Me Alliance Lead",
+          "custom_id": "evt:mkalead:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83D\uDC51 Set Leader (officers)",
+          "custom_id": "evt:osetlead:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83C\uDF96️ My Readiness",
+          "custom_id": "evt:ready:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "➕ Add Member (officers)",
+          "custom_id": "evt:oadd:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "↔ Move Member (officers)",
+          "custom_id": "evt:omove:1"
+        },
+        {
+          "type": 2,
+          "style": 4,
+          "label": "✖ Remove Member (officers)",
+          "custom_id": "evt:owithdraw:1"
+        },
+        {
+          "type": 2,
+          "style": 3,
+          "label": "Open LSManager App",
+          "custom_id": "evt:launch"
+        }
+      ]
+    }
+  ],
+  "attachments": [],
+  "allowed_mentions": {
+    "parse": []
+  }
+}
+=== custom NM with its own window grid, Every Window
+{
+  "content": "## \uD83E\uDE9F Serket · Window 3 of 5\n## ⌛ Window 2 passed <t:1786012200:T> <t:1786012200:R>\n## \uD83D\uDD50 Next window 3 <t:1786014000:R> <t:1786014000:T>\n\n\uD83D\uDD52 Event Started: <t:1786010400:D> <t:1786010400:T> · <t:1786010400:R>",
+  "embeds": [
+    {
+      "title": "⚔️ HNM: Serket",
+      "description": "​",
+      "color": 5793266,
+      "fields": [
+        {
+          "name": "Location",
+          "value": "Garlaige Citadel",
+          "inline": true
+        },
+        {
+          "name": "Color Key",
+          "value": "\uD83D\uDD35 Tank · \uD83D\uDFE2 Healer · \uD83D\uDFE1 Support · \uD83D\uDD34 DPS · ⚪ Any\n\uD83E\uDDEA Enfeeb Ready · \uD83D\uDEE1️ Resist Ready · \uD83D\uDDE1️ Relic Weapon",
+          "inline": false
+        },
+        {
+          "name": "​",
+          "value": "​",
+          "inline": false
+        },
+        {
+          "name": "Party 1 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "Party 2 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "Sign Up",
+          "custom_id": "evt:pssignup:1"
+        },
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83D\uDC51 Sign Up as Party Leader",
+          "custom_id": "evt:psLsignup:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Withdraw",
+          "custom_id": "evt:psleave:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "➕ Add Member (officers)",
+          "custom_id": "evt:oadd:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "◀ View Previous Window",
+          "custom_id": "evt:prevwindow:1",
+          "disabled": false
+        },
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83C\uDFC1 End Camp / Enter ToD (officers)",
+          "custom_id": "evt:wdpop:1"
+        },
+        {
+          "type": 2,
+          "style": 3,
+          "label": "Open LSManager App",
+          "custom_id": "evt:launch"
+        }
+      ]
+    }
+  ],
+  "attachments": [],
+  "allowed_mentions": {
+    "parse": []
+  }
+}
+=== finished Manual Check In wyrm
+{
+  "content": "## \uD83E\uDE9F Jormungand · Window 25 of 25\n## ⌛ Window 25 passed <t:1786096800:T> <t:1786096800:R>\n\n\uD83D\uDD52 Event Started: <t:1786010400:D> <t:1786010400:T> · <t:1786010400:R>",
+  "embeds": [
+    {
+      "title": "⚔️ HNM: Jormungand",
+      "description": "​",
+      "color": 5793266,
+      "fields": [
+        {
+          "name": "Location",
+          "value": "Uleguerand Range",
+          "inline": true
+        },
+        {
+          "name": "Color Key",
+          "value": "\uD83D\uDD35 Tank · \uD83D\uDFE2 Healer · \uD83D\uDFE1 Support · \uD83D\uDD34 DPS · ⚪ Any\n\uD83D\uDD12 Staying next window (survives the window advance)\n\uD83E\uDDEA Enfeeb Ready · \uD83D\uDEE1️ Resist Ready · \uD83D\uDDE1️ Relic Weapon",
+          "inline": false
+        },
+        {
+          "name": "​",
+          "value": "​",
+          "inline": false
+        },
+        {
+          "name": "Party 1 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "Party 2 (0/4)",
+          "value": "-# \uD83D\uDD35 \uD83D\uDC51 Any Tank\n-# \uD83D\uDFE2 Any Healer\n-# ⚪ BRD/WHM\n-# ⚪ Any Role",
+          "inline": true
+        },
+        {
+          "name": "✅ Checked In (1)",
+          "value": "**Window 7:** Mill",
+          "inline": false
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "Sign Up",
+          "custom_id": "evt:pssignup:1"
+        },
+        {
+          "type": 2,
+          "style": 1,
+          "label": "\uD83D\uDC51 Sign Up as Party Leader",
+          "custom_id": "evt:psLsignup:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Withdraw",
+          "custom_id": "evt:psleave:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "\uD83C\uDF96️ My Readiness",
+          "custom_id": "evt:ready:1"
+        }
+      ]
+    },
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 2,
+          "label": "➕ Add Member (officers)",
+          "custom_id": "evt:oadd:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "↔ Move Member (officers)",
+          "custom_id": "evt:omove:1"
+        },
+        {
+          "type": 2,
+          "style": 4,
+          "label": "✖ Remove Member (officers)",
+          "custom_id": "evt:owithdraw:1"
+        },
+        {
+          "type": 2,
+          "style": 3,
+          "label": "Open LSManager App",
+          "custom_id": "evt:launch"
+        }
+      ]
+    }
+  ],
+  "attachments": [],
+  "allowed_mentions": {
+    "parse": []
+  }
+}
+=== timed HNM camp with no party setup
+{
+  "content": "## \uD83E\uDE9F Cerberus · Window 3 of 5\n## ⌛ Window 2 passed <t:1786032000:T> <t:1786032000:R>\n## \uD83D\uDD50 Next window 3 <t:1786053600:R> <t:1786053600:T>\n\n\uD83D\uDD52 Event Started: <t:1786010400:D> <t:1786010400:T> · <t:1786010400:R>",
+  "embeds": [
+    {
+      "title": "⚔️ HNM: Cerberus",
+      "color": 5793266,
+      "fields": [
+        {
+          "name": "Started",
+          "value": "<t:1786010400:D> <t:1786010400:T> (<t:1786010400:R>)",
+          "inline": true
+        },
+        {
+          "name": "Location",
+          "value": "Mount Zhayolm",
+          "inline": true
+        },
+        {
+          "name": "Signed up (1)",
+          "value": "• **Mill** — NIN/WAR · Tank",
+          "inline": false
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "type": 1,
+      "components": [
+        {
+          "type": 2,
+          "style": 1,
+          "label": "Sign up",
+          "custom_id": "evt:joinevent:1"
+        },
+        {
+          "type": 2,
+          "style": 2,
+          "label": "Withdraw",
+          "custom_id": "evt:withdraw:1"
+        },
+        {
+          "type": 2,
+          "style": 3,
+          "label": "Open LSManager App",
+          "custom_id": "evt:launch"
+        }
+      ]
+    }
+  ],
+  "attachments": [],
+  "allowed_mentions": {
+    "parse": []
+  }
+}
