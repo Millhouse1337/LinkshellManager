@@ -316,6 +316,19 @@ public sealed class ApiSignInPipelineTests : IClassFixture<ApiSignInPipelineTest
         Assert.Equal((HttpStatusCode.Unauthorized, ManagementSignedOut), result);
     }
 
+    // An addon token (att_...) is not a Discord bearer here: it is ignored, so the cookie decides
+    // and Discord is never asked about it.
+    [Fact]
+    public async Task AddonManagement_AnAddonTokenIsIgnored_SoTheCookieDecides()
+    {
+        var withCookie = await SendAsync(Get(ManagementTokens(OpenLinkshellId), bearer: AddonToken, cookie: _host.MemberCookie));
+        var alone = await SendAsync(Get(ManagementTokens(OpenLinkshellId), bearer: AddonToken));
+
+        Assert.Equal(HttpStatusCode.OK, withCookie.Status);
+        Assert.Equal((HttpStatusCode.Unauthorized, ManagementSignedOut), alone);
+        Assert.Equal(0, App.Discord.TokenLookups(AddonToken));
+    }
+
     [Fact]
     public async Task AddonManagement_NotAMember_GetsTheGeneric403()
     {
