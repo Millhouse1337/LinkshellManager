@@ -3,12 +3,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LinkshellManagerDiscordApp.Models;
 
-// A standing "repeat the HNM signup board" template, keyed by (LinkshellId,
-// MonsterName). Created/updated when an officer creates a manual HNM signup board
-// with "Repeat post when ToD is updated" on. It survives the event's deletion (the
-// event row is removed on end/cancel) so that when a NEW ToD for the monster is
-// later recorded, HnmRecurringBoardBackgroundService can re-create + re-post the
-// board LeadHours before the predicted next pop (Tod.RepopTime - LeadHours).
+// A standing "re-post the HNM signup board" template, one per spawn (LinkshellId,
+// MonsterName). Switched on and off only by the "Re-post board" choice on the End Camp /
+// Post ToD form (HnmRecurringBoardService.ApplyEndCampChoiceAsync). After a camp ends its
+// board is parked, not deleted; when a NEW ToD for the monster is recorded,
+// HnmRecurringBoardBackgroundService brings that parked board back (or creates a new one
+// if there is none) LeadHours before the predicted next pop (Tod.RepopTime - LeadHours).
 public class HnmRecurringBoard
 {
     [Key]
@@ -23,8 +23,8 @@ public class HnmRecurringBoard
     [MaxLength(256)]
     public string MonsterName { get; set; } = string.Empty;
 
-    // Toggling the repeat option off on a later create sets this false rather than
-    // deleting the row (so the last-seen ToD stamp is preserved).
+    // Turning "Re-post board" off on the End Camp / Post ToD form (or removing the board) sets
+    // this false rather than deleting the row, so the last-seen ToD stamp is preserved.
     public bool Enabled { get; set; } = true;
 
     // How long BEFORE the predicted pop (Tod.RepopTime) the board re-posts, in hours.

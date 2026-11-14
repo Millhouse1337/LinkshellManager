@@ -26,8 +26,9 @@ public class JournalEntryLine
     public JournalEntry? JournalEntry { get; set; }
 
     // Denormalized from the header so every balance query touches ONE table. A plain indexed int
-    // rather than a second relationship to Linkshell — two cascade paths from Linkshells into
-    // the same row is a constraint Postgres will refuse.
+    // with no relationship to Linkshell; the header's own FK already ties the line to its
+    // linkshell. (Postgres would allow a second cascade path here. The old note saying it refuses
+    // one was a SQL Server rule.)
     public int LinkshellId { get; set; }
 
     public int LedgerAccountId { get; set; }

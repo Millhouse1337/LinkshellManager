@@ -90,15 +90,16 @@ public class WindowEvent
     // from their per-member overrides exactly as they were reviewed.
     public bool PerCaptureDkp { get; set; }
 
-    // Entry Type tag the sheet's downstream formulas pivot on. Must be one of the
-    // WindowEventEntryTypes constants below; auto-tagged from the monster at creation and
+    // Entry Type tag, one of the WindowEventEntryTypes constants below (a CHECK constraint holds
+    // it to that list). It began as a Google Sheets column; today Post refuses to pay a card
+    // without a valid one, and a "/lsm now" card's DKP pool is chosen by it
+    // (WindowEventDkpLedgerService.PoolEventTypeFor). Auto-tagged from the monster at creation and
     // preserved by WindowEventEntryTypes.Resolve, for the same reason DkpAmount is.
     [MaxLength(32)]
     public string? EntryType { get; set; }
 
-    // Idempotency stamp for the Post to DKP Sheet action. When set, the
-    // post-to-sheet button on the card switches into a "Already posted"
-    // state so officers don't accidentally double-append rows.
+    // When the card was Posted (paid). The name is left over from the Google Sheets days. Post
+    // sets it once, so the card shows "Already posted" and can't pay twice; Edit Posted keeps it.
     public DateTime? PostedToSheetAt { get; set; }
 
     // --- Camp handoff (HnmCampReviewHandoffService) ---
@@ -150,9 +151,9 @@ public class WindowEvent
 
     public ICollection<AttendanceSnapshot> Snapshots { get; set; } = new List<AttendanceSnapshot>();
 
-    // Per-character DKP overrides applied at post-to-sheet time. Empty when
-    // every member uses WindowEvent.DkpAmount. Populated by officers via the
-    // per-row DKP input on the Window Events card.
+    // Per-character DKP overrides applied when the card is Posted. Empty when every member uses
+    // WindowEvent.DkpAmount. Set from the per-row DKP input on the card. Not read at all on a
+    // PerCaptureDkp card, which is paid from its captures.
     public ICollection<WindowEventMemberDkp> MemberDkpOverrides { get; set; } = new List<WindowEventMemberDkp>();
 }
 
@@ -244,8 +245,7 @@ public static class WindowEventEntryTypes
     // The field was removed from the UI — it's auto-tagged from the monster at creation, so
     // asking again was busywork. It is NOT safe to let it go null, though: WindowEventDkpLedger
     // Service gates on IsValid and returns 0 with no exception and no log, so a posted event
-    // with a null tag reports "credited DKP" and credits nobody. (The sheet's column-K formulas
-    // pivot on these exact strings too.) Precedence: an explicitly supplied valid value, else
+    // with a null tag reports "credited DKP" and credits nobody. Precedence: an explicitly supplied valid value, else
     // whatever the event already carries, else re-derive from its name — which also heals rows
     // created before auto-tagging existed. Always returns a valid value, so callers need no
     // further validation.

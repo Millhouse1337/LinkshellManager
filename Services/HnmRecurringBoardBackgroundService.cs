@@ -6,13 +6,14 @@ namespace LinkshellManagerDiscordApp.Services;
 
 // Re-posts a standing HNM signup board (HnmRecurringBoard) before the next predicted
 // pop. Each tick, for every enabled template, it finds the monster's latest ToD with
-// a RepopTime; once now is within LeadHours of that pop it creates a queued HNM event
-// (which the DbContext save-hook auto-posts to Discord) and advances LastSourceTodId
-// so each ToD fires at most once. Mirrors EventAutoStartBackgroundService.
+// a RepopTime; once now is within LeadHours of that pop it brings the parked board back (or
+// creates a queued HNM event when there is none; the DbContext save-hook auto-posts it to
+// Discord) and advances LastSourceTodId so each ToD fires at most once. Mirrors
+// EventAutoStartBackgroundService.
 //
 // THE ONLY THING THAT PUTS A BOARD UP FOR A NEW POP. Posting a Time of Death does not create
-// one by itself: a board comes back only because an officer asked for it on the create form, and
-// only at the lead they set there.
+// one by itself: a board comes back only because an officer asked for it with "Re-post board" on
+// the End Camp / Post ToD form, and only at the lead they set there.
 //
 // It does NOT require EnableHnmSection / IsTrueHnm, so it works for the full signup-board monster
 // list, gated instead by the template's existence + Enabled flag.

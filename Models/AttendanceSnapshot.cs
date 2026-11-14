@@ -26,17 +26,19 @@ public class AttendanceSnapshot
     [MaxLength(128)]
     public string? Name { get; set; }
 
-    // Optional association with an Event. Visual metadata only -- linking
-    // does NOT credit attendance against the event. ON DELETE SET NULL so a
-    // deleted event leaves the snapshot intact but unlinked.
+    // The live camp (Event) this capture was filed against, while it has no Window Event yet. It
+    // shows on that camp's card, and End Camp moves it onto the camp's review card, where it is
+    // paid like any other capture (HnmCampReviewHandoffService.LoadCampFiledCapturesAsync). End
+    // Camp's own captures keep pointing at the board too. ON DELETE SET NULL so a deleted event
+    // leaves the snapshot intact but unlinked.
     public int? LinkedEventId { get; set; }
 
     [ForeignKey(nameof(LinkedEventId))]
     public Event? LinkedEvent { get; set; }
 
-    // Window Events are snapshot-native groups created from /lsm now posts.
-    // They are separate from timed Events so multi-alliance HNM/window checks
-    // can be merged, deduped, and reviewed without implying timed DKP credit.
+    // The review card (Window Event) this capture belongs to: one created from posts, or the one
+    // End Camp stages for an HNM camp. Separate from timed Events so multi-alliance window checks
+    // can be merged and reviewed without implying timed DKP credit.
     public int? WindowEventId { get; set; }
 
     [ForeignKey(nameof(WindowEventId))]

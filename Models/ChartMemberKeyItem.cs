@@ -38,9 +38,9 @@ public class ChartMemberKeyItem
     [MaxLength(128)]
     public string KeyItemName { get; set; } = string.Empty;
 
-    // Plain int with no relationship: Linkshells already cascades into AppUserLinkshells, so an FK
-    // from here would be a second cascade path into this table. Same reason as
-    // JournalEntryLine.LinkshellId.
+    // Plain int with no relationship. (It was once explained as "an FK would be a second cascade
+    // path from Linkshells into this table". That is a SQL Server rule; Postgres allows it, so an FK
+    // is possible. Do not copy that reason to new tables.)
     //
     // The consequence, accepted deliberately: removing somebody from the roster leaves their rows
     // behind. They never render - ChartKeyItemService.BuildGrid is roster-driven - and re-adding the

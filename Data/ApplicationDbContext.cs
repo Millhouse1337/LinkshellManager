@@ -1808,8 +1808,8 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.LedgerAccountId)
                     .OnDelete(DeleteBehavior.Restrict);
-                // LinkshellId is deliberately a plain indexed int with no relationship: a second
-                // cascade path from Linkshells into this table is something Postgres will refuse.
+                // LinkshellId is a plain indexed int with no relationship; the header's FK already
+                // ties the line to its linkshell (see JournalEntryLine.LinkshellId).
                 entity.HasIndex(item => new { item.LinkshellId, item.LedgerAccountId, item.TransactionDate });
                 entity.HasIndex(item => new { item.LinkshellId, item.TransactionDate });
                 entity.HasIndex(item => item.JournalEntryId);

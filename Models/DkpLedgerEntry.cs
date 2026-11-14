@@ -33,8 +33,10 @@ public class DkpLedgerEntry
     // in a linkshell that never customized its pools, so it never needs backfilling.
     //
     // Intentionally NOT a foreign key, matching SourceEventLootDetailId
-    // below: the ledger is immutable history and must survive whatever happens to the rows it
-    // points at.
+    // below: the ledger is history and must survive whatever happens to the rows it points at.
+    // (It is not strictly append-only: the past-event editor and the posted review-card
+    // reconciler change or remove rows through DkpLedgerWriter.Amend / Remove, moving the balance
+    // with them.)
     public int? DkpPoolId { get; set; }
 
     // False (the default): DkpPoolId is a CACHE of "which pool does EventType map to right
@@ -78,7 +80,7 @@ public class DkpLedgerEntry
     // Optional back-reference so a ledger entry can be traced to the loot
     // row it was generated from. Set on edit/delete-driven entries, null on
     // legacy / non-loot entries. Not foreign-key-enforced — the loot row could
-    // be deleted later, and we want the ledger to remain immutable regardless.
+    // be deleted later, and the ledger row must stay regardless.
     public int? SourceEventLootDetailId { get; set; }
 
     // Populated when a Window Event built from attendance snapshots is posted
