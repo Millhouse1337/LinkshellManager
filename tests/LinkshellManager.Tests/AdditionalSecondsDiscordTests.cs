@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Authorization;
-using LinkshellManagerDiscordApp.Controllers;
+using LinkshellManagerDiscordApp.Controllers.Discord;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -49,7 +49,7 @@ public class AdditionalSecondsDiscordTests
 
     private static JsonElement ModalRow(string monster, string? formula, string fieldId) =>
         JsonSerializer.SerializeToElement(
-                DiscordInteractionsController.BuildWdPopModalFields(
+                EndCampHandler.BuildWdPopModalFields(
                     new Event { Id = 1, AssignedMonsterName = monster, HnmWindowNumber = 1 }, null, formula))
             .EnumerateArray()
             .Single(row => row.TryGetProperty("component", out var labeled)
@@ -81,7 +81,7 @@ public class AdditionalSecondsDiscordTests
     public void Modal_WithTheNote_StaysWithinFiveRows()
     {
         var rows = JsonSerializer.SerializeToElement(
-            DiscordInteractionsController.BuildWdPopModalFields(
+            EndCampHandler.BuildWdPopModalFields(
                 new Event { Id = 1, AssignedMonsterName = "Fafnir/Nidhogg", HnmWindowNumber = 1 }, null, Formula));
 
         Assert.Equal(5, rows.GetArrayLength());

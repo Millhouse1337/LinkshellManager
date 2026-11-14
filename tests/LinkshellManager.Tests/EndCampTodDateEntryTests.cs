@@ -1,5 +1,5 @@
 using System;
-using LinkshellManagerDiscordApp.Controllers;
+using LinkshellManagerDiscordApp.Controllers.Discord;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using NodaTime;
@@ -34,7 +34,7 @@ public class EndCampTodDateEntryTests
     private static DateTime? Parse(string? date, string? time, string? zone = Zone)
     {
         Assert.True(
-            DiscordInteractionsController.TryParseCampTod(
+            EndCampHandler.TryParseCampTod(
                 TimeZones, date, time, zone, out var todUtc, out var error, Now),
             $"date=\"{date}\" time=\"{time}\" was rejected: {error}");
         return todUtc;
@@ -43,7 +43,7 @@ public class EndCampTodDateEntryTests
     private static string Reject(string? date, string? time, string? zone = Zone)
     {
         Assert.False(
-            DiscordInteractionsController.TryParseCampTod(
+            EndCampHandler.TryParseCampTod(
                 TimeZones, date, time, zone, out _, out var error, Now),
             $"date=\"{date}\" time=\"{time}\" was accepted; it should not parse.");
         Assert.False(string.IsNullOrWhiteSpace(error), "a rejection must explain itself.");
@@ -192,7 +192,7 @@ public class EndCampTodDateEntryTests
     {
         var typedAt = new DateTime(2026, 11, 9, 2, 20, 0, DateTimeKind.Utc); // 8:20 PM Nov 8 in Chicago
 
-        Assert.False(DiscordInteractionsController.TryParseCampTod(
+        Assert.False(EndCampHandler.TryParseCampTod(
             TimeZones, null, "9:05 PM", "America/Chicago", out var todUtc, out var error, typedAt));
 
         Assert.Null(todUtc);
@@ -283,7 +283,7 @@ public class EndCampTodDateEntryTests
     {
         // A 7-window HQ family: the camp that used to fill all five rows.
         var json = System.Text.Json.JsonSerializer.Serialize(
-            DiscordInteractionsController.BuildWdPopModalFields(
+            EndCampHandler.BuildWdPopModalFields(
                 new LinkshellManagerDiscordApp.Models.Event
                 {
                     Id = 1,

@@ -342,6 +342,7 @@ builder.Services.AddScoped<DiscordPermissionGates>();
 builder.Services.AddScoped<DiscordBoardSupport>();
 builder.Services.AddScoped<PartyBoardHandler>();
 builder.Services.AddScoped<HnmCampBoardHandler>();
+builder.Services.AddScoped<EndCampHandler>();
 builder.Services.AddSingleton<DiscordEventChannelQueue>();
 builder.Services.AddScoped<EventBoardPoster>();
 // Edits an HNM board's Discord message to a "defeated" note when its ToD is logged.

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using LinkshellManagerDiscordApp.Controllers;
+using LinkshellManagerDiscordApp.Controllers.Discord;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Xunit;
@@ -26,7 +26,7 @@ public class HnmEndCampModalTests
 
     private static JsonElement Fields(Event ev, double? currentLeadHours = null) =>
         JsonSerializer.SerializeToElement(
-            DiscordInteractionsController.BuildWdPopModalFields(ev, currentLeadHours));
+            EndCampHandler.BuildWdPopModalFields(ev, currentLeadHours));
 
     // A field is either a text input in an action row (type 1 → components[0]) or a select wrapped
     // in a Label (type 18 → component). Both shapes carry the custom_id one level down.
