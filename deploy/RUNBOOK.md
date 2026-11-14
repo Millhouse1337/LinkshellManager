@@ -11,18 +11,69 @@ Cloudflare (DNS + proxy + SSL termination, public)
    v
 Droplet :443  -> nginx (re-terminates SSL with Cloudflare Origin Cert)
                 -> Kestrel 127.0.0.1:5000 (LSManager .NET app)
-                -> Postgres 127.0.0.1:5432 (local on droplet)
+                     v
+                   DigitalOcean Managed Database (Postgres 18, TLS, port 25060)
 ```
 
-Nothing on the droplet is exposed except SSH (22), HTTP (80, redirect), and HTTPS (443). Postgres is loopback only.
+Nothing on the droplet is exposed except SSH (22), HTTP (80, redirect), and HTTPS (443). The
+database is not on the droplet, so losing the droplet does not lose any data (see
+**Rebuild the droplet from scratch**).
 
 ## Prerequisites
 
-- A droplet running Ubuntu 22.04 or 24.04, with a public IPv4 (you have this).
-- Postgres installed on the droplet (you have this - Option A).
-- A domain in Cloudflare DNS already pointing at your old tunnel.
-- Discord application client ID + client secret.
+- A droplet running Ubuntu 22.04 or 24.04, with a public IPv4.
+- The DigitalOcean Managed Database (its connection details are in the DO console).
+- A domain in Cloudflare DNS.
+- The values in **Settings reference** below (Discord app, bot token, your Discord user id).
 - Local: .NET 10 SDK, Node 20+, OpenSSH (Windows 10+ has it).
+
+## Settings reference
+
+Everything the app reads from `/etc/lsmanager/env`. Keep every secret in your password manager,
+never in git: this file is the only copy on the droplet, and rebuilding the droplet means typing
+them in again.
+
+| Key | Needed? | What it is | Where the value comes from |
+|---|---|---|---|
+| `ConnectionStrings__DefaultConnection` | Yes, secret | The managed database (`Host=…;Port=25060;Database=…;Username=…;Password=…;SSL Mode=Require`) | DO console → Databases → Connection details |
+| `Discord__ClientId` | Yes | The Discord application id (also in `appsettings.json`) | Discord Developer Portal → General Information |
+| `Discord__ClientSecret` | Yes, secret | Discord sign-in | Developer Portal → OAuth2 |
+| `Discord__BotToken` | Yes, secret | Posts boards and reads guild members. Without it nothing is posted to Discord | Developer Portal → Bot |
+| `Discord__PublicKey` | Yes | Checks Discord's button clicks on boards. Without it board buttons fail | Developer Portal → General Information |
+| `SuperAdmin__DiscordUserId` | Yes | Your own Discord user id; the only way to become super admin | Discord → Developer Mode → right-click your name → Copy User ID |
+| `ASPNETCORE_ENVIRONMENT`, `ASPNETCORE_URLS` | Yes | `Production` and `http://127.0.0.1:5000` | `setup-droplet.sh` writes them |
+| `DataProtection__KeyRingPath` | Yes | `/var/lib/lsmanager/keys`, keeps sign-ins across deploys | `setup-droplet.sh` writes it |
+| `Uploads__Root` | Yes | `/var/lib/lsmanager/uploads`, ToD screenshots | `setup-droplet.sh` writes it |
+| `ForwardedHeaders__KnownNetworks__N`, `ForwardedHeaders__KnownProxies__0` | Yes | Cloudflare's IP ranges and nginx, so the app sees real visitor IPs | `setup-droplet.sh` writes them; refresh from cloudflare.com/ips now and then |
+| `App__PublicBaseUrl` | Recommended | The site's public address. Auction and loot posts in Discord only carry an app link when it is set | Your domain, e.g. `https://linkshellmanager.com` |
+| `Ai__ApiKey` (or `ANTHROPIC_API_KEY`), `Ai__Model` | Optional, secret | Short summaries of job-rating comments. Off when unset | Anthropic console |
+| `RateLimiting__ApiPermitPerMinute` | Optional | Raise only if real users see "too many requests" | — |
+| `Launcher__DownloadUrl` | Optional | Overrides where **Download launcher** points (default in `appsettings.json`: the latest lsb-launcher GitHub release) | Your GitHub release |
+
+## Rebuild the droplet from scratch
+
+Use this if the droplet is lost or you move to a new one. The database is a separate managed
+service, so all data survives; only the droplet's own files need rebuilding.
+
+What is lost with the droplet, and what that means:
+- `/etc/lsmanager/env` — type it in again from your password manager (**Settings reference**).
+- `/var/lib/lsmanager/keys` — everyone has to sign in again once. Nothing else.
+- `/var/lib/lsmanager/uploads` — ToD screenshots. Copy the folder off the old droplet first if you can.
+- `/var/backups/lsmanager` — the pre-deploy dumps. The managed database keeps its own daily backups.
+- The Cloudflare origin certificate files — create a new one (Step 3).
+
+Steps:
+1. Create an Ubuntu 24.04 droplet. If the managed database has **Trusted sources** turned on, add
+   the new droplet there in the DO console, or the app cannot connect.
+2. Run **Step 1** to **Step 5** below. Step 1 installs the .NET 10 runtime (the only one needed),
+   nginx, ufw and the Postgres 18 client. It does not create a database.
+3. If you saved the old screenshots, copy them into `/var/lib/lsmanager/uploads/tods` and
+   `sudo chown -R lsmanager:lsmanager /var/lib/lsmanager/uploads`.
+4. Deploy (**Step 6**). The database already has its schema, so the backup step works and
+   `-SkipBackup` is not needed; the app only applies migrations the database does not have yet.
+5. Point the Cloudflare `A` record at the new droplet's IP (**Step 7**), then check `/healthz`
+   and sign in (**Step 8**).
+6. Destroy the old droplet once the new one is working.
 
 ## Step 1 - Bootstrap the droplet
 
@@ -36,12 +87,12 @@ ssh root@<DROPLET_IP> 'bash /tmp/setup-droplet.sh'
 
 The script:
 - installs the .NET 10 ASP.NET Core runtime (from Ubuntu's own package archive), nginx, ufw
-- creates a `lsmanager` system user
+- installs the Postgres 18 client (`pg_dump`, `psql`) for the pre-deploy backups
+- creates a `lsmanager` system user and its folders under `/var/lib/lsmanager`
 - enables ufw with 22/80/443 only
-- creates the `lsmanager` Postgres database + user with a random password
-- writes `/etc/lsmanager/env` with that connection string and placeholders for Discord secrets
+- writes `/etc/lsmanager/env` with `REPLACE_ME` placeholders for the secrets
 
-At the end it prints the generated DB password - you shouldn't need to write it down (it's already in the env file), but note that it ran.
+It does not create a database: the app uses the DigitalOcean Managed Database.
 
 ## Step 2 - Fill in the env file
 
@@ -50,13 +101,13 @@ ssh root@<DROPLET_IP>
 sudo nano /etc/lsmanager/env
 ```
 
-Set these three values:
-- `Discord__ClientId=1320463503848636568`  (your existing client id)
-- `Discord__ClientSecret=...`              (from Discord Developer Portal)
-- `SuperAdmin__DiscordUserId=...`          (your own Discord user id: Discord Settings > Advanced >
+Replace every `REPLACE_ME` (see **Settings reference** for where each value comes from):
+- `ConnectionStrings__DefaultConnection` (the managed database)
+- `Discord__ClientId`, `Discord__ClientSecret`, `Discord__BotToken`, `Discord__PublicKey`
+- `SuperAdmin__DiscordUserId` (your own Discord user id: Discord Settings > Advanced >
   Developer Mode on, then right-click your name > Copy User ID)
 
-Save. Don't change the `ConnectionStrings__DefaultConnection` line.
+Add `App__PublicBaseUrl=https://<your domain>` too. Save.
 
 `SuperAdmin__DiscordUserId` is the only way an account becomes super admin. On every start
 the app finds the account signed in with that Discord id and sets `IsSuperAdmin` on it. If it
@@ -118,9 +169,11 @@ From your dev machine, in the repo root:
 .\deploy\deploy.ps1 -DropletHost root@<DROPLET_IP>
 ```
 
-This checks the git tree is clean, runs the tests, builds the Angular activity, publishes the .NET app, uploads it, dumps the database (see **Database backups**), swaps the new build in, starts the service and waits for `/readyz`. The first start will run EF migrations against the empty Postgres DB and create the schema.
+This checks the git tree is clean, runs the tests, builds the Angular activity, publishes the .NET app, uploads it, dumps the database (see **Database backups**), swaps the new build in, starts the service and waits for `/readyz`. On start the app applies any EF migrations the database does not have yet (on an empty database, that creates the whole schema).
 
-On a brand-new droplet there is no database to back up yet, so pass `-SkipBackup` for the first deploy only.
+Only with a brand-new, **empty** database is there nothing to back up (the backup check would
+fail on the tiny dump), so pass `-SkipBackup` for that first deploy only. Rebuilding the droplet
+against the existing database needs no `-SkipBackup`.
 
 When the script finishes, tail the logs to verify:
 
@@ -200,29 +253,22 @@ The script writes the commit (`git rev-parse --short HEAD`) into `version.txt` n
 
 ## Database access — READ THIS BEFORE BACKING UP
 
-**The application does NOT use the droplet's local Postgres.** It connects to a
-DigitalOcean **Managed Database** over TLS:
+**The application does NOT use a Postgres on the droplet.** It connects to a
+DigitalOcean **Managed Database** over TLS (port 25060). The host, database, user and
+password are in `ConnectionStrings__DefaultConnection` in `/etc/lsmanager/env` and in
+the DO console.
 
-```
-Host      dbaas-db-3934998-do-user-36034864-0.e.db.ondigitalocean.com
-Port      25060
-Database  defaultdb
-User      doadmin
-```
-
-The local `lsmanager` database still exists but has **zero tables** — it is an
-unused leftover from an earlier setup. The command this table used to recommend
-(`sudo -u postgres pg_dump lsmanager`) therefore dumped an EMPTY database and
-produced a ~700-byte file that looks like a valid dump. A real dump is ~13 MB
-across ~60 tables (Phase 4B dropped seven unused ones, Phase 7 the three empty
-Identity role tables). Do not trust a
-backup you have not size-checked.
+Droplets set up before November 2026 also have a local `lsmanager` database with
+**zero tables** — an unused leftover (`setup-droplet.sh` no longer creates it). The
+command this table used to recommend (`sudo -u postgres pg_dump lsmanager`) therefore
+dumped an EMPTY database and produced a ~700-byte file that looks like a valid dump. A
+real dump is ~13 MB across ~60 tables. Do not trust a backup you have not size-checked.
 
 Two more traps:
 
 - **Client version.** The managed server is Postgres 18.x; Ubuntu 24.04 ships
-  client 16, and `pg_dump` refuses to dump a newer server. Install the matching
-  client once:
+  client 16, and `pg_dump` refuses to dump a newer server. `setup-droplet.sh` installs
+  client 18; on an older droplet install it once:
   `apt-get install -y postgresql-common && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y && apt-get install -y postgresql-client-18`
 - **TLS.** The managed database requires it — export `PGSSLMODE=require`.
 
@@ -336,51 +382,39 @@ sudo rm -rf /var/www/lsmanager.bad                                    # once you
 
 The next normal deploy overwrites `lsmanager.old` again, so roll back before deploying anything else.
 
-A rollback starts the old build with whatever .NET runtime it was built for. After the move to
-.NET 10, `lsmanager.old` is a .NET 8 build until the second .NET 10 deploy, so it only starts
-while the 8.0 runtime is still installed (see **.NET 10 runtime (November 2026)**).
+A rollback starts the old build with the .NET runtime it was built for. Since November 2026 both
+the live build and `lsmanager.old` are .NET 10, the only runtime on the droplet (see
+**.NET 10 runtime (November 2026)**).
 
 ## .NET 10 runtime (November 2026)
 
-From commit "Move every project to .NET 10 and EF Core 10" on, the app needs the **ASP.NET Core
-10 runtime** on the droplet. `deploy.ps1` checks for it first and stops, changing nothing, if
-it is missing. Install it once, **before** that deploy:
+The app needs the **ASP.NET Core 10 runtime** on the droplet. `deploy.ps1` checks for it first
+and stops, changing nothing, if it is missing. `setup-droplet.sh` installs it on a new droplet;
+by hand it is:
 
 ```bash
 ssh root@<IP>
 sudo apt-get update
 sudo apt-get install -y aspnetcore-runtime-10.0
-dotnet --list-runtimes     # expect BOTH Microsoft.AspNetCore.App 8.0.x and 10.0.x
+dotnet --list-runtimes     # expect Microsoft.AspNetCore.App 10.0.x
 ```
 
-Where it comes from: Ubuntu 24.04's own package archive, the same place the droplet's current
-8.0 runtime came from (`/usr/lib/dotnet`). Microsoft's install guide says this is the way on
-24.04: Microsoft's own package feed no longer carries .NET for Ubuntu 24.04, and the
-`ppa:dotnet/backports` PPA is only needed on 22.04 (or for .NET 9 and older versions on 24.04).
-A bonus: fixes for the runtime now arrive with ordinary `apt upgrade` runs. If
-`apt-cache policy aspnetcore-runtime-10.0` ever shows `packages.microsoft.com`, the two feeds
-are mixed; search "package mix ups on Linux" in Microsoft's docs before going further.
+Where it comes from: Ubuntu 24.04's own package archive (`/usr/lib/dotnet`). Microsoft's install
+guide says this is the way on 24.04: Microsoft's own package feed no longer carries .NET for
+Ubuntu 24.04, and the `ppa:dotnet/backports` PPA is only needed on 22.04. Fixes for the runtime
+arrive with ordinary `apt upgrade` runs. If `apt-cache policy aspnetcore-runtime-10.0` ever shows
+`packages.microsoft.com`, the two feeds are mixed; search "package mix ups on Linux" in
+Microsoft's docs before going further.
 
-**Keep the 8.0 runtime installed.** The first .NET 10 deploy leaves the last .NET 8 build in
-`/var/www/lsmanager.old`, and **Rollback** above needs 8.0 to start it. Only after a second .NET
-10 deploy (so `lsmanager.old` is .NET 10 too) is it safe to `apt-get remove aspnetcore-runtime-8.0`.
+**The .NET 8 runtime was removed from the droplet on 2026-11-13**, after the second .NET 10
+deploy made `lsmanager.old` a .NET 10 build too. Nothing needs it now. Only a rollback to a build
+from before the .NET 10 move (commit "Move every project to .NET 10 and EF Core 10") would need
+it back: `sudo apt-get install -y aspnetcore-runtime-8.0`.
 
-That deploy adds one migration, `EfCore10ModelSnapshot`, which changes nothing in the database
-(it only refreshes EF's own record of the model). Swapping back to the .NET 8 build is therefore
-safe: the old build ignores the extra row in `__EFMigrationsHistory`.
-
-It also adds `DropIdentityRoleTables`, which drops `AspNetRoles`, `AspNetUserRoles` and
-`AspNetRoleClaims`. The app never used Identity roles (permissions are `LinkshellRoles`), so
-they should be empty. Check before the deploy (expect `0 | 0 | 0`; if not, stop and ask):
-
-```sql
-SELECT (SELECT count(*) FROM "AspNetRoles")      AS roles,
-       (SELECT count(*) FROM "AspNetUserRoles")  AS user_roles,
-       (SELECT count(*) FROM "AspNetRoleClaims") AS role_claims;
-```
-
-The .NET 8 build in `lsmanager.old` still starts without them: it never called `AddRoles`, so
-its user store and sign-in never read those tables, and it ignores the extra history row too.
+The .NET 10 move added two migrations. `EfCore10ModelSnapshot` changes nothing in the database
+(it only refreshes EF's own record of the model). `DropIdentityRoleTables` dropped the unused
+`AspNetRoles`, `AspNetUserRoles` and `AspNetRoleClaims` (permissions are `LinkshellRoles`); older
+builds never read those tables, so they still start without them.
 
 ## One-time migration: persistent Data Protection keys
 

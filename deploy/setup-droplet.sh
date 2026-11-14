@@ -2,14 +2,16 @@
 # One-time droplet bootstrap for LSManager.
 # Target: Ubuntu 22.04 / 24.04. Run as root or with sudo.
 # Usage:   bash setup-droplet.sh
+#
+# The database is NOT on the droplet: the app uses a DigitalOcean Managed Database. This script
+# only installs the Postgres CLIENT (pg_dump / psql, for deploy backups) and leaves the
+# connection string as REPLACE_ME for you to fill in (deploy/RUNBOOK.md, Step 2).
 
 set -euo pipefail
 
 APP_USER="lsmanager"
 APP_DIR="/var/www/lsmanager"
 ENV_FILE="/etc/lsmanager/env"
-DB_NAME="lsmanager"
-DB_USER="lsmanager"
 
 if [[ $EUID -ne 0 ]]; then
   echo "Run as root (sudo bash $0)" >&2
@@ -20,16 +22,14 @@ echo "==> Updating apt"
 apt-get update -y
 apt-get upgrade -y
 
-echo "==> Installing .NET 10 runtime, Postgres, nginx, ufw"
-apt-get install -y wget gnupg ca-certificates openssl ufw nginx postgresql postgresql-contrib
+echo "==> Installing .NET 10 runtime, nginx, ufw"
+apt-get install -y wget gnupg ca-certificates openssl ufw nginx
 
 # .NET 10 comes from Ubuntu's own packages, which is what Microsoft's install guide says to use:
 # Microsoft's package feed no longer carries .NET for Ubuntu 24.04, and mixing the two feeds
 # breaks installs. Ubuntu 24.04 has aspnetcore-runtime-10.0 in its normal archive, so it gets
 # security fixes through ordinary apt upgrades. Ubuntu 22.04 only has it in Canonical's
-# .NET backports PPA, so add that there.
-# This never removes an older runtime: on an existing droplet keep 8.0 installed, because the
-# previous build in /var/www/lsmanager.old is what a rollback starts (deploy/RUNBOOK.md).
+# .NET backports PPA, so add that there. .NET 10 is the only runtime the app needs.
 if ! dotnet --list-runtimes 2>/dev/null | grep -q '^Microsoft.AspNetCore.App 10\.'; then
   if [[ "$(. /etc/os-release && echo "$VERSION_ID")" == "22.04" ]]; then
     apt-get install -y software-properties-common
@@ -39,12 +39,20 @@ if ! dotnet --list-runtimes 2>/dev/null | grep -q '^Microsoft.AspNetCore.App 10\
   apt-get install -y aspnetcore-runtime-10.0
 fi
 
+# pg_dump refuses to dump a server newer than itself, and the managed database runs Postgres 18
+# while Ubuntu ships an older client. Take the client from the PostgreSQL project's own apt repo.
+echo "==> Installing the Postgres 18 client (for deploy backups)"
+if ! command -v pg_dump >/dev/null 2>&1 || ! pg_dump --version | grep -q ' 18\.'; then
+  apt-get install -y postgresql-common
+  /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+  apt-get install -y postgresql-client-18
+fi
+
 echo "==> Creating app user and directories"
 id -u "$APP_USER" >/dev/null 2>&1 || useradd --system --shell /usr/sbin/nologin --home "$APP_DIR" "$APP_USER"
 # /var/lib/lsmanager/keys is the persistent Data Protection key ring. It MUST
 # live outside $APP_DIR because the deploy script replaces $APP_DIR wholesale on
-# every release; keeping the keys here is what lets a Google Sheet connection
-# (and login sessions) survive redeploys.
+# every release; keeping the keys here is what keeps people signed in across redeploys.
 # /var/lib/lsmanager/uploads holds ToD screenshots for the same reason (Uploads__Root).
 mkdir -p "$APP_DIR" /etc/lsmanager /var/log/lsmanager /var/lib/lsmanager/keys /var/lib/lsmanager/uploads/tods
 chown -R "$APP_USER:$APP_USER" "$APP_DIR" /var/log/lsmanager /var/lib/lsmanager
@@ -56,51 +64,27 @@ ufw allow 443/tcp
 ufw allow 80/tcp   # for ACME challenges if you ever switch off Origin Cert
 ufw --force enable
 
-echo "==> Creating Postgres database and user"
-if [[ -f "$ENV_FILE" ]]; then
-  CONNECTION_STRING=$(grep -E '^ConnectionStrings__DefaultConnection=' "$ENV_FILE" | tail -n 1 || true)
-  DB_PASSWORD="${CONNECTION_STRING##*Password=}"
-  DB_PASSWORD="${DB_PASSWORD%%;*}"
-
-  if [[ -z "$CONNECTION_STRING" || "$DB_PASSWORD" == "$CONNECTION_STRING" || -z "$DB_PASSWORD" ]]; then
-    echo "Could not read DB password from existing $ENV_FILE. Fix the env file or move it aside, then rerun." >&2
-    exit 1
-  fi
-else
-  DB_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
-fi
-
-sudo -u postgres psql <<SQL
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${DB_USER}') THEN
-    CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASSWORD}';
-  ELSE
-    ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
-  END IF;
-END
-\$\$;
-SQL
-
-if ! sudo -u postgres psql -lqt | cut -d '|' -f 1 | tr -d ' ' | grep -qx "${DB_NAME}"; then
-  sudo -u postgres createdb -O "${DB_USER}" "${DB_NAME}"
-fi
-
 echo "==> Writing environment file ($ENV_FILE)"
 if [[ ! -f "$ENV_FILE" ]]; then
   cat > "$ENV_FILE" <<EOF
 # LSManager runtime environment.
-# This file is read by the systemd unit (EnvironmentFile=). chmod 600.
+# This file is read by the systemd unit (EnvironmentFile=). chmod 640, owner root:lsmanager.
+# Every REPLACE_ME is a secret: keep the real values in your password manager, never in git.
+# deploy/RUNBOOK.md, "Settings reference", lists every key.
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://127.0.0.1:5000
-ConnectionStrings__DefaultConnection=Host=127.0.0.1;Port=5432;Database=${DB_NAME};Username=${DB_USER};Password=${DB_PASSWORD}
+# The DigitalOcean Managed Database (DO console -> Databases -> Connection details).
+# Example shape: Host=<host>;Port=25060;Database=defaultdb;Username=doadmin;Password=<pw>;SSL Mode=Require
+ConnectionStrings__DefaultConnection=REPLACE_ME
 # Persistent Data Protection key ring (outside the deploy artifact dir) so
-# Google Sheet connections and login sessions survive redeploys.
+# login sessions survive redeploys.
 DataProtection__KeyRingPath=/var/lib/lsmanager/keys
 # ToD screenshots, also outside the deploy artifact dir so they survive redeploys.
 Uploads__Root=/var/lib/lsmanager/uploads
 Discord__ClientId=REPLACE_ME
 Discord__ClientSecret=REPLACE_ME
+Discord__BotToken=REPLACE_ME
+Discord__PublicKey=REPLACE_ME
 # Your own Discord user id (Discord: Settings > Advanced > Developer Mode, then
 # right-click your name > Copy User ID). The ONLY way an account becomes super admin.
 SuperAdmin__DiscordUserId=REPLACE_ME
@@ -134,8 +118,7 @@ EOF
   chown root:"$APP_USER" "$ENV_FILE"
   chmod 640 "$ENV_FILE"
   echo
-  echo "Generated DB password: $DB_PASSWORD"
-  echo "Saved into $ENV_FILE. Edit it now to set Discord__ClientId, Discord__ClientSecret and SuperAdmin__DiscordUserId."
+  echo "Wrote $ENV_FILE. Edit it now and replace every REPLACE_ME (deploy/RUNBOOK.md, Step 2)."
 else
   echo "$ENV_FILE already exists - leaving it alone."
 fi
@@ -143,8 +126,8 @@ fi
 echo
 echo "==> Bootstrap done."
 echo "Next steps:"
-echo "  1. Edit $ENV_FILE and fill in Discord__ClientId / Discord__ClientSecret / SuperAdmin__DiscordUserId."
+echo "  1. Edit $ENV_FILE and replace every REPLACE_ME (connection string, Discord values, SuperAdmin id)."
 echo "  2. Place the Cloudflare Origin Cert at /etc/ssl/cloudflare/origin.pem and key at /etc/ssl/cloudflare/origin.key (chmod 600)."
 echo "  3. Copy nginx-lsmanager.conf into /etc/nginx/sites-available/, symlink, and reload nginx."
-echo "  4. Copy lsmanager.service into /etc/systemd/system/, then 'systemctl daemon-reload && systemctl enable --now lsmanager'."
+echo "  4. Copy lsmanager.service into /etc/systemd/system/, then 'systemctl daemon-reload && systemctl enable lsmanager'."
 echo "  5. Run the deploy script from your dev machine to publish the app."
