@@ -252,6 +252,7 @@ internal static class DiscordInteractionHarness
         services.AddScoped<PartyBoardHandler>();
         services.AddScoped<HnmCampBoardHandler>();
         services.AddScoped<EndCampHandler>();
+        services.AddScoped<AuctionInteractionHandler>();
         return services;
     }
 

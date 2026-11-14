@@ -41,3 +41,6 @@ public sealed class DiscordInteractionContext
     // null: a member who has never launched the app has no link.
     public string? AppUserId { get; set; }
 }
+
+// The LSM account linked to a modal's submitter: what placing a bid needs to know about them.
+public sealed record DiscordLinkedAccount(string? IdentityUserId, string? CharacterName, string? UserName);
