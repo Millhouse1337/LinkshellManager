@@ -24,8 +24,8 @@ public readonly record struct AuctionChannelJob(AuctionChannelJobKind Kind, int 
 // ApplicationDbContext on a successful commit (a new Auction → Create, a new
 // AuctionHistory → Close) so every create/close path
 // triggers it without per-controller wiring. Drained by
-// DiscordAuctionChannelBackgroundService. Singleton, single-reader, mirrors
-// DiscordTodBoardQueue / DiscordDkpSpendQueue.
+// DiscordAuctionChannelBackgroundService. Singleton, single-reader, like
+// DiscordTodBoardQueue.
 public sealed class DiscordAuctionChannelQueue
 {
     private readonly Channel<AuctionChannelJob> _channel =

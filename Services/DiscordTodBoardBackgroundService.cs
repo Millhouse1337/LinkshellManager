@@ -3,8 +3,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // Drains DiscordTodBoardQueue and rebuilds each affected linkshell's live
 // Discord ToD board. Debounces: a burst of ToD changes (e.g. an addon
 // posting several pops, or an officer editing rows) coalesces into a single
-// board edit per linkshell instead of one Discord PATCH per change. Mirrors
-// SheetSyncBackgroundService's read-one-then-coalesce loop.
+// board edit per linkshell instead of one Discord PATCH per change
+// (it reads one item, then takes whatever else is already queued).
 public sealed class DiscordTodBoardBackgroundService : BackgroundService
 {
     private static readonly TimeSpan Debounce = TimeSpan.FromSeconds(4);

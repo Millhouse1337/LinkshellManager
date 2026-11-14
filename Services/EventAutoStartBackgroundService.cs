@@ -101,7 +101,7 @@ public sealed class EventAutoStartBackgroundService : BackgroundService
             && evt.StartTime <= nowUtc
             && evt.EndTime == null
             && (
-                // Opt-in auto-start for ordinary events (unchanged): the AutoStart flag, never HNM.
+                // Opt-in auto-start for ordinary events: the AutoStart flag, never HNM.
                 (evt.AutoStart && (evt.EventType == null || evt.EventType.ToLower() != "hnm"))
                 // HNM camps always auto-start at their scheduled window-1 time — no opt-in flag —
                 // so the board goes live and the window advancer takes over. Skip once popped.

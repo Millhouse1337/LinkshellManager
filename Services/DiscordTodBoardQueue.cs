@@ -7,8 +7,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // added / modified / deleted (so every mutation path — web, addon, Activity,
 // approval — triggers it without per-controller wiring) and from the
 // Customize save. Drained + debounced by DiscordTodBoardBackgroundService,
-// which edits the existing board message in place. Singleton, single-reader,
-// mirrors DiscordWebhookQueue.
+// which edits the existing board message in place. Singleton, single-reader.
 public sealed class DiscordTodBoardQueue
 {
     private readonly Channel<int> _channel = Channel.CreateUnbounded<int>(new UnboundedChannelOptions

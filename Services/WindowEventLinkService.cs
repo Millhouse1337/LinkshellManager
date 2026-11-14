@@ -6,10 +6,9 @@ namespace LinkshellManagerDiscordApp.Services;
 
 // Find-or-create a Window Event by name, and attach a snapshot to one.
 //
-// Three call sites used to own private copies of this — the addon ingest
-// (AddonApiController.AttendanceSnapshots), the web attach (WindowEventsController) and the
-// Activity attach (ActivityWindowEventsController.WindowEvents) — and they had drifted apart in ways that
-// showed up as bugs rather than as style:
+// The addon ingest (AddonApiController.AttendanceSnapshots) and the Activity attach
+// (ActivityWindowEventsController.WindowEvents) both use this. Their old private copies had
+// drifted apart in ways that showed up as bugs rather than as style:
 //
 //   * only the addon copy stamped WindowAnchorAtUtc / WindowCount / WindowMinutes, so an event
 //     created from either web surface had NO window grid and every snapshot filed under it showed

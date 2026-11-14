@@ -25,7 +25,7 @@ public sealed class DiscordIdentityService
     // How long a validated bearer-token -> local-user resolution is trusted
     // before we re-validate against discord.com. Short enough that a revoked
     // token stops working quickly; long enough to spare the per-request round
-    // trip + LastSeen write during normal Activity polling.
+    // trip during normal Activity polling.
     private static readonly TimeSpan TokenValidationTtl = TimeSpan.FromSeconds(90);
 
     // How long a token Discord rejected is refused without asking Discord again.

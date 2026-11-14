@@ -9,7 +9,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // Minimal reader for an uploaded DKP import file — the inverse of
 // SampleDkpTemplateWorkbook. Reads an .xlsx (Office Open XML: a ZIP of XML
 // parts) or a .csv into a simple 2D grid (rows of cell values) that
-// DkpTemplateSheetService then interprets header-aware. Hand-rolled to avoid
+// DkpImportService then interprets header-aware. Hand-rolled to avoid
 // taking an Excel dependency for one upload path; only cell text/number values
 // are needed (no styles/formulas), so the parse stays tiny and forgiving.
 public static class XlsxImportReader

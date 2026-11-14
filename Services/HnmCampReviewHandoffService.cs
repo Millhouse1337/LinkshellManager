@@ -947,10 +947,6 @@ public sealed class HnmCampReviewHandoffService
         // queued off this commit and skips itself while the board is parked as the defeated note
         // (which carries it). With a second save it could read the board in between, skip, and
         // then the board was gone -- no summary anywhere.
-        //
-        // Off used to fall through to HnmAutoEventService, which revived the board for the next pop
-        // on the spot. That put a fresh board straight back into the channel for a camp whose
-        // officer had said not to repeat it.
         var repeats = await RepeatsOnTodAsync(ev, cancellationToken);
         if (!repeats)
         {

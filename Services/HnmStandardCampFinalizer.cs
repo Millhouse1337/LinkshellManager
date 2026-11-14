@@ -59,11 +59,10 @@ namespace LinkshellManagerDiscordApp.Services;
 // their claim, and a late arrival who helped kill it earns their kill.
 //
 // The per-window base rate is HnmStandardWindowBonus, and it is still NOT Event.DkpPerHour. That
-// column is 0 on HNM boards created through the Activity, but HnmAutoEventService copies a prior
-// event's rate onto auto-created boards — so folding it in would make turning on a bonus silently
-// start paying a per-window rate that appears nowhere in the HNM Settings card. The rate a camp
-// pays per window is only ever the one an officer typed into "Regular window" (or the per-camp
-// override), and it defaults to 0, which is the open/close-only payout every camp had before it.
+// column is a timed-event rate, not an HNM one, so folding it in could start paying a per-window
+// rate that appears nowhere in the HNM Settings card. The rate a camp pays per window is only
+// ever the one an officer typed into "Regular window" (or the per-camp override), and it defaults
+// to 0, which is the open/close-only payout every camp had before it.
 //
 // This no longer PAYS anything. End Camp hands the roster to HnmCampReviewHandoffService, which
 // stages it as a pending row in the Event System page's attendance sections; an officer's Post is what credits DKP. So

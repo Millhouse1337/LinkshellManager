@@ -10,11 +10,9 @@ namespace LinkshellManagerDiscordApp.Services;
 // (which the DbContext save-hook auto-posts to Discord) and advances LastSourceTodId
 // so each ToD fires at most once. Mirrors EventAutoStartBackgroundService.
 //
-// THE ONLY THING THAT PUTS A BOARD UP FOR A NEW POP. Posting a Time of Death used to create one
-// too, straight away, through HnmAutoEventService -- so a ToD entered for a monster nobody had
-// asked to repeat still queued a camp, and a ToD entered while its camp was still live queued a
-// second one beside it. That path is gone. A board now comes back only because an officer asked
-// for it on the create form, and only at the lead they set there.
+// THE ONLY THING THAT PUTS A BOARD UP FOR A NEW POP. Posting a Time of Death does not create
+// one by itself: a board comes back only because an officer asked for it on the create form, and
+// only at the lead they set there.
 //
 // It does NOT require EnableHnmSection / IsTrueHnm, so it works for the full signup-board monster
 // list, gated instead by the template's existence + Enabled flag.
@@ -159,15 +157,12 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         var nextDay = HnmDayCycle.NextDay(tod, boardDay: null);
         var nextMonster = HnmDayCycle.WasHq(tod) ? HnmConfig.BaseMonsterName(monster)! : monster;
 
-        // Idempotency / addon coexistence: reuse an existing not-yet-ended event that was created
+        // Idempotency: reuse an existing not-yet-ended event that was created
         // from this exact ToD, or ANY board for this monster within ±10 min of the pop.
         //
-        // It used to match that second case on the event NAME -- the template's name -- which only
-        // catches a board this poller posted itself. An officer who had already put up their own
-        // board for the pop, under their own name, was invisible to it: it posted the template's
-        // board beside theirs, both scheduled to the same second off the same ToD, and both went
-        // live together at the pop. HnmAutoEventService, the addon's copy of this job, has matched
-        // on the monster for exactly this reason; the two creators now agree.
+        // The second case matches on the MONSTER, not only the template's name: an officer who
+        // already put up their own board for the pop, under their own name, must not get the
+        // template's board posted beside it.
         //
         // Same-named is kept for a board whose AssignedMonsterName was never set.
         var existing = await db.Events.FirstOrDefaultAsync(e =>

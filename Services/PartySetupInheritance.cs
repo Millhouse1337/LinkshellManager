@@ -51,9 +51,6 @@ public static class PartySetupInheritance
     //   1. the monster's recurring board, when one is configured — that is the officer's explicit
     //      standing choice for this camp, so it outranks anything inferred;
     //   2. the most recent closed event for the same monster/name, via EventHistory.
-    //
-    // Mirrors how HnmAutoEventService already inherits DkpPerHour from the previous camp: same
-    // idea, same fallback shape, so the two can't disagree about which camp "the last one" was.
     public static async Task<int?> ResolveForNewPopAsync(
         ApplicationDbContext db,
         int linkshellId,

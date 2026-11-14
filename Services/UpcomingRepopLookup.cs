@@ -7,9 +7,9 @@ namespace LinkshellManagerDiscordApp.Services;
 // still in the future, one per spawn.
 //
 // Exists so the create-event form can pre-fill Start with the pop the officer is almost certainly
-// creating the camp for. That is the same instant HnmAutoEventService stamps on the event it
-// creates from a ToD (StartTime = Tod.RepopTime), so a hand-made camp and an auto-made one land
-// on the same schedule instead of drifting by however precisely the officer retyped the time.
+// creating the camp for. That is the same instant the recurring board poller schedules from a ToD
+// (StartTime = Tod.RepopTime), so a hand-made camp and an auto-made one land on the same
+// schedule instead of drifting by however precisely the officer retyped the time.
 //
 // Used by the Activity's create-event modal. Server-side because of the merge-pair matching,
 // which a client-side lookup keyed on the raw stored name would get wrong (a "Fafnir" ToD is the

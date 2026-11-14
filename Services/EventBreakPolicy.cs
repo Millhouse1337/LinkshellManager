@@ -36,7 +36,7 @@ public static class EventBreakPolicy
     //                     AssignedMonsterName ?? EventName). Feeds the Discord board, the Activity
     //                     DTO, and the addon's event list.
     //   "Credit" chain  — WindowCountOverride ?? GetWindowCount(EventName). Used by
-    //                     EndEventCoreAsync, WdCampFinalizer, and the addon late-join guard.
+    //                     EndEventCoreAsync and WdCampFinalizer.
     //
     // Neither dominates the other (an event named "Fafnir" with a custom AssignedMonsterName gives
     // display=1, credit=2), so taking the max keeps this gate from ever being LOOSER than whichever

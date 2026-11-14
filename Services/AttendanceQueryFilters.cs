@@ -6,9 +6,6 @@ namespace LinkshellManagerDiscordApp.Services;
 // Where an attendance event or capture lives, as shared query filters. The Activity's window-events
 // endpoint and the addon's Misc Posts panel both list these rows, and a card that drops out of one
 // list has to drop into the other everywhere or it becomes invisible.
-//
-// (This was AttendanceSectionsBuilder, which also built the old website's Event System sections.
-// Those pages are gone; the app's own mappers live in ActivityWindowEventsController.WindowEvents.)
 public static class AttendanceQueryFilters
 {
     // The split is ENDED vs STILL LIVE -- deliberately not Open vs Closed. An HNM camp handed off

@@ -54,9 +54,8 @@ public static class HnmEventSeeder
     // Recycles an EXISTING event row for the next pop instead of leaving it behind and inserting a
     // second one: new repop, window back to 1, signups cleared, day advanced.
     //
-    // Two callers, and they must not diverge — HnmRecurringBoardBackgroundService reviving a board
-    // parked as "defeated", and HnmAutoEventService reviving the queued event when a fresh ToD is
-    // posted from the addon. Every line below is here because leaving it out broke something:
+    // Called by HnmRecurringBoardBackgroundService and HnmRecurringBoardService to revive a board
+    // parked as "defeated". Every line below is here because leaving it out broke something:
     //
     //   * CommencementStartTime / WindowAnchorAt / NextWindowAt — without these the recycled board
     //     reads as "Started" and carries the PREVIOUS pop's window countdown.
