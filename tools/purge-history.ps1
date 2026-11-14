@@ -17,7 +17,7 @@
 
     Deleting EventHistories also deletes, through their cascading foreign keys,
     each past event's archived attendance windows (EventAttendanceWindows and
-    their AppUserEventWindows). Loot, ledger, Claim Shield and window-event rows
+    their AppUserEventWindows) and its comments (EventComments). Loot, ledger, Claim Shield and window-event rows
     that point at a past event are kept and simply unlinked (SetNull).
 
     DEFAULTS TO A DRY RUN (prints counts, changes nothing). Pass -Execute to apply.

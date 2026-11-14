@@ -400,7 +400,7 @@ static async Task<int> ShowTreasuryAsync(NpgsqlConnection c, string[] args)
 // treasury — roster, events, loot, DKP, auctions, ToDs — is untouched.
 //
 // Requires naming BOTH the connected database and the linkshell, the same double confirmation
-// `wipe` and `reset-schema` use.
+// `scrub` uses.
 static async Task<int> ScrubTreasuryAsync(NpgsqlConnection c, string[] args)
 {
     if (args.Length < 3 || !string.Equals(args[1], c.Database, StringComparison.Ordinal))

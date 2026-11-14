@@ -51,7 +51,7 @@ public sealed class DiscordEventChannelPublisher
         if (!_bot.IsConfigured)
         {
             _logger.LogInformation(
-                "Event {EventId} not announced: the Discord bot token is not configured (DiscordOAuth:BotToken). " +
+                "Event {EventId} not announced: the Discord bot token is not configured (Discord:BotToken). " +
                 "Event channel posting requires the bot — webhooks can't carry the signup buttons.",
                 eventId);
             return;
