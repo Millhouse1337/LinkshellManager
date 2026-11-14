@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using LinkshellManagerDiscordApp.Controllers;
+using LinkshellManagerDiscordApp.Controllers.Discord;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Options;
@@ -244,6 +245,10 @@ internal static class DiscordInteractionHarness
         services.AddScoped<DkpPoolBalanceService>();
         services.AddScoped<MonsterTimingResolver>();
         services.AddScoped(sp => new ManualMemberService(sp.GetRequiredService<ApplicationDbContext>(), null!, null!));
+        services.AddScoped<DiscordInteractionContext>();
+        services.AddScoped<DiscordSignupIdentity>();
+        services.AddScoped<DiscordPermissionGates>();
+        services.AddScoped<DiscordBoardSupport>();
         return services;
     }
 

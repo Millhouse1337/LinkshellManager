@@ -2,14 +2,12 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using LinkshellManagerDiscordApp.Controllers;
+using LinkshellManagerDiscordApp.Controllers.Discord;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
-using LinkshellManagerDiscordApp.Options;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -37,11 +35,10 @@ public class DiscordPermissionGateTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options);
 
-    // Only the database and the permission service are used by the gates; the rest stay null.
-    private static DiscordInteractionsController NewController(ApplicationDbContext db) =>
-        new(null!, db, null!, NullLogger<DiscordInteractionsController>.Instance, null!,
-            Microsoft.Extensions.Options.Options.Create(new DiscordOAuthOptions()),
-            null!, null!, null!, null!, null!, null!, TestPermissions.For(db));
+    // The gates moved out of DiscordInteractionsController into DiscordPermissionGates; they need
+    // only the database and the permission service.
+    private static DiscordPermissionGates NewController(ApplicationDbContext db) =>
+        new(db, TestPermissions.For(db));
 
     private static Event BoardIn(int linkshellId) => new() { Id = 10, LinkshellId = linkshellId };
 

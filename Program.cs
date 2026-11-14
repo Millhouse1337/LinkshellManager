@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using LinkshellManagerDiscordApp.Authorization;
+using LinkshellManagerDiscordApp.Controllers.Discord;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Options;
@@ -333,6 +334,12 @@ builder.Services.AddScoped<DiscordBotClient>();
 // Suppress the public Activity "launch" card by making the entry-point app-handled.
 builder.Services.AddHostedService<DiscordEntryPointConfigurator>();
 builder.Services.AddSingleton<DiscordInteractionVerifier>();
+// The interactions endpoint's code, split by feature (Controllers/Discord). One interaction per
+// request, so all of it is scoped: they share the request's DiscordInteractionContext.
+builder.Services.AddScoped<DiscordInteractionContext>();
+builder.Services.AddScoped<DiscordSignupIdentity>();
+builder.Services.AddScoped<DiscordPermissionGates>();
+builder.Services.AddScoped<DiscordBoardSupport>();
 builder.Services.AddSingleton<DiscordEventChannelQueue>();
 builder.Services.AddScoped<EventBoardPoster>();
 // Edits an HNM board's Discord message to a "defeated" note when its ToD is logged.

@@ -4,13 +4,11 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using LinkshellManagerDiscordApp.Controllers;
+using LinkshellManagerDiscordApp.Controllers.Discord;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
-using LinkshellManagerDiscordApp.Options;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace LinkshellManager.Tests;
@@ -34,7 +32,7 @@ public class EndCampGateParityTests
     // surface is a deliberate edit here instead of a silently-passing test.
     private static readonly string[] EndCampGateFiles =
     {
-        "DiscordInteractionsController.cs",
+        Path.Combine("Discord", "DiscordPermissionGates.cs"),
         Path.Combine("Activity", "WindowEvents", "ActivityWindowEventsController.HnmBoard.cs"),
     };
 
@@ -45,7 +43,7 @@ public class EndCampGateParityTests
     [Fact]
     public void TheDiscordControllerExposesAnEventPermissionGate()
     {
-        Assert.NotNull(Method(typeof(DiscordInteractionsController), "CanEndCampAsync"));
+        Assert.NotNull(Method(typeof(DiscordPermissionGates), "CanEndCampAsync"));
     }
 
     /// <summary>
@@ -57,7 +55,8 @@ public class EndCampGateParityTests
     [Fact]
     public void TheDiscordControllerHasNoPermissionRuleOfItsOwn()
     {
-        var text = ControllerSource("DiscordInteractionsController.cs");
+        // The controller and the handler classes split out of it (Controllers/Discord).
+        var text = DiscordBotSource();
         Assert.DoesNotContain("IsLeaderOrOfficer", text);
         Assert.DoesNotContain("LinkshellRanks.IsLeader", text);
         Assert.DoesNotContain("IsEventOfficerAsync", text);
@@ -65,7 +64,7 @@ public class EndCampGateParityTests
         Assert.DoesNotContain("CanManageEventsAsync", text);
         Assert.DoesNotContain("AdminOverrideService", text);
         Assert.False(text.Contains("LinkshellRoles", StringComparison.Ordinal),
-            "DiscordInteractionsController reads LinkshellRoles itself; ask LinkshellPermissions instead.");
+            "The Discord bot reads LinkshellRoles itself; ask LinkshellPermissions instead.");
     }
 
     /// <summary>
@@ -87,12 +86,9 @@ public class EndCampGateParityTests
         db.AppUserLinkshells.Add(new AppUserLinkshell { AppUserId = "u1", LinkshellId = 1, Rank = "Camp Lead" });
         await db.SaveChangesAsync();
 
-        var controller = new DiscordInteractionsController(
-            null!, db, null!, NullLogger<DiscordInteractionsController>.Instance, null!,
-            Microsoft.Extensions.Options.Options.Create(new DiscordOAuthOptions()),
-            null!, null!, null!, null!, null!, null!, TestPermissions.For(db));
+        var gates = new DiscordPermissionGates(db, TestPermissions.For(db));
 
-        Assert.Equal(flag, await controller.CanEndCampAsync("u1", 1, CancellationToken.None));
+        Assert.Equal(flag, await gates.CanEndCampAsync("u1", 1, CancellationToken.None));
     }
 
     /// <summary>
@@ -153,6 +149,11 @@ public class EndCampGateParityTests
 
     private static string ControllerSource(string fileName) =>
         File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), fileName));
+
+    private static string DiscordBotSource() =>
+        string.Join("\n", new[] { Path.Combine(FindRepoPath("Controllers"), "DiscordInteractionsController.cs") }
+            .Concat(Directory.GetFiles(Path.Combine(FindRepoPath("Controllers"), "Discord"), "*.cs"))
+            .Select(File.ReadAllText));
 
     private static (string File, string Text)[] ControllerSources() =>
         Directory.GetFiles(FindRepoPath("Controllers"), "*.cs", SearchOption.AllDirectories)
