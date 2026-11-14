@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { formatActionError } from '../../discord/discord-activity.helpers';
+import { formatActionError, offDkpStepMessage } from '../../discord/discord-activity.helpers';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { WindowEventService } from '../../discord/window-event.service';
 import type {
@@ -30,6 +30,8 @@ interface MemberDkpDraft {
   // True while the row mirrors the event's Default DKP. Goes false the moment
   // the officer types into the per-row input.
   followsDefault: boolean;
+  // The value the row started with. Only a changed row is checked against the DKP grid.
+  seed: number | null;
 }
 
 // Attendance snapshots used to be their own tab. They now render as two slices of the Event System
@@ -79,6 +81,9 @@ export class AttendanceSectionsComponent {
   // and the regular rate in the next, so a per-character draft could only hold one of them — which
   // is exactly how every capture came to show the same number.
   protected readonly captureDkpDrafts: Record<number, Record<number, number | null>> = {};
+  // What each capture box started with, so only a changed one is checked against the DKP grid
+  // (a bonus capture's server-worked remainder can sit off it).
+  private readonly captureDkpSeeds: Record<number, Record<number, number | null>> = {};
   // Snapshot id -> "add a character by name" input value.
   protected readonly addPersonDrafts: Record<number, string> = {};
   // Two-click confirm state for destructive actions — the Discord iframe
@@ -314,6 +319,8 @@ export class AttendanceSectionsComponent {
     if (value !== null && (!Number.isFinite(value) || value < 0)) {
       throw new Error('DKP must be 0 or more.');
     }
+    const offStep = offDkpStepMessage(this.dkpStep(), [value]);
+    if (offStep) throw new Error(offStep);
     if (!(await this.activity.setMiscPostDkp(snapshot.id, value))) {
       throw new Error(this.activity.actionError() ?? "Setting this post's DKP failed.");
     }
@@ -470,6 +477,12 @@ export class AttendanceSectionsComponent {
     if (ids.length === 0 || this.newPostSaving() || !linkshellId) return;
     // Sent only when it differs from the rate, like the live camp form.
     const dkpAmount = this.newPostHasOwnDkp() ? this.newPostDkp() ?? null : null;
+    const offStep = offDkpStepMessage(this.dkpStep(), [dkpAmount]);
+    if (offStep) {
+      this.activity.actionError.set(offStep);
+      this.activity.actionMessage.set(null);
+      return;
+    }
     this.newPostSaving.set(true);
     try {
       await this.windows.addMiscPost(event.id, linkshellId, this.newPostName().trim() || null, ids, dkpAmount);
@@ -729,9 +742,10 @@ export class AttendanceSectionsComponent {
     const key = member.characterName.trim();
     if (!(key in bucket)) {
       const hasOverride = member.dkpAmountOverride !== null && member.dkpAmountOverride !== undefined;
-      bucket[key] = hasOverride
-        ? { value: member.dkpAmountOverride ?? null, followsDefault: false }
-        : { value: member.effectiveDkpAmount ?? this.currentDefault(event), followsDefault: true };
+      const value = hasOverride
+        ? member.dkpAmountOverride ?? null
+        : member.effectiveDkpAmount ?? this.currentDefault(event);
+      bucket[key] = { value, followsDefault: !hasOverride, seed: value };
     }
     return bucket[key];
   }
@@ -754,6 +768,7 @@ export class AttendanceSectionsComponent {
     const bucket = (this.captureDkpDrafts[event.id] ??= {});
     if (!(entry.id in bucket)) {
       bucket[entry.id] = entry.dkpAmount ?? null;
+      (this.captureDkpSeeds[event.id] ??= {})[entry.id] = entry.dkpAmount ?? null;
     }
     return bucket[entry.id];
   }
@@ -858,6 +873,37 @@ export class AttendanceSectionsComponent {
     return draft.amount === null || draft.amount >= 0;
   }
 
+  // The DKP boxes' step: the current linkshell's DKP grid (0.25 or 0.5, set in Configurations).
+  protected dkpStep(): number {
+    return this.activity.currentDkpStep();
+  }
+
+  // Save / Send to Review / Post / Update send every row, so only the rows the officer CHANGED are
+  // checked against the DKP grid: an untouched off-grid amount (a bonus capture's remainder, or a
+  // price from before the linkshell switched grids) must not block the rest. Puts the message in
+  // the error banner and returns false when a changed row is off the grid.
+  private dkpOnStep(event: ActivityWindowEvent): boolean {
+    const changed: (number | null)[] = [];
+    if (event.perCaptureDkp) {
+      const drafts = this.captureDkpDrafts[event.id] ?? {};
+      const seeds = this.captureDkpSeeds[event.id] ?? {};
+      for (const [entryId, value] of Object.entries(drafts)) {
+        if (value !== (seeds[Number(entryId)] ?? null)) changed.push(value);
+      }
+    } else {
+      for (const row of Object.values(this.memberDkpDrafts[event.id] ?? {})) {
+        if (row.value !== row.seed) changed.push(row.value);
+      }
+    }
+    const message = offDkpStepMessage(this.dkpStep(), changed);
+    if (message) {
+      this.activity.actionError.set(message);
+      this.activity.actionMessage.set(null);
+      return false;
+    }
+    return true;
+  }
+
   protected dkpActionsDisabled(event: ActivityWindowEvent): boolean {
     return this.windows.busy() || !this.dkpDraftValid(event);
   }
@@ -865,7 +911,7 @@ export class AttendanceSectionsComponent {
   protected async saveDkp(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
-    if (!id || !this.dkpDraftValid(event)) return;
+    if (!id || !this.dkpDraftValid(event) || !this.dkpOnStep(event)) return;
     await this.windows.saveDkp(event.id, id, draft.amount, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 
@@ -879,7 +925,7 @@ export class AttendanceSectionsComponent {
   protected async sendToReview(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
-    if (!id || !this.dkpDraftValid(event)) return;
+    if (!id || !this.dkpDraftValid(event) || !this.dkpOnStep(event)) return;
     await this.windows.sendToReview(event.id, id, draft.amount, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 
@@ -889,14 +935,14 @@ export class AttendanceSectionsComponent {
   protected async postToSheet(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
-    if (!id || !this.dkpDraftValid(event)) return;
+    if (!id || !this.dkpDraftValid(event) || !this.dkpOnStep(event)) return;
     await this.windows.postToSheet(event.id, id, draft.amount, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 
   protected async editPosted(event: ActivityWindowEvent): Promise<void> {
     const id = this.primaryLinkshellId();
     const draft = this.dkpDraft(event);
-    if (!id || !this.dkpDraftValid(event)) return;
+    if (!id || !this.dkpDraftValid(event) || !this.dkpOnStep(event)) return;
     await this.windows.editPosted(event.id, id, draft.amount, draft.entryType, this.buildMemberDkpPayload(event), draft.misc, this.buildCaptureDkpPayload(event));
   }
 }

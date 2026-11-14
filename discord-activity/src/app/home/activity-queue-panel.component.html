@@ -277,7 +277,7 @@
                 @for (field of hnmBonusFields(); track field.key) {
                   <label class="cem__field">
                     <span class="cem__label">{{ field.label }} <em>{{ field.hint }}</em></span>
-                    <input class="cem__input" type="number" min="0" step="0.25"
+                    <input class="cem__input" type="number" min="0" [step]="hnmDkpStep()"
                       [name]="field.key" [(ngModel)]="createModel[field.key]"
                       [placeholder]="hnmLinkshellBonus(field.key)" />
                   </label>

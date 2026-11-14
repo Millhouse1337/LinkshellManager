@@ -393,13 +393,13 @@
                       <div class="customize-form__bonus-row">
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Open bonus</span>
-                          <input type="number" min="0" step="0.05" name="hnmStandardOpenBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="hnmStandardOpenBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardOpenBonus"
                             (ngModelChange)="customizeDraft.hnmStandardOpenBonus = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Regular window</span>
-                          <input type="number" min="0" step="0.05" name="hnmStandardWindowBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="hnmStandardWindowBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardWindowBonus"
                             (ngModelChange)="customizeDraft.hnmStandardWindowBonus = $event; onCustomizeFieldChange()" />
                         </label>
@@ -407,25 +407,25 @@
                              any window. One post can still be re-priced from the addon. -->
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Misc post</span>
-                          <input type="number" min="0" step="0.05" name="hnmStandardMiscBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="hnmStandardMiscBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardMiscBonus"
                             (ngModelChange)="customizeDraft.hnmStandardMiscBonus = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Close bonus</span>
-                          <input type="number" min="0" step="0.05" name="hnmStandardCloseBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="hnmStandardCloseBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardCloseBonus"
                             (ngModelChange)="customizeDraft.hnmStandardCloseBonus = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Tag bonus</span>
-                          <input type="number" min="0" step="0.05" name="hnmStandardClaimBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="hnmStandardClaimBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardClaimBonus"
                             (ngModelChange)="customizeDraft.hnmStandardClaimBonus = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Kill bonus</span>
-                          <input type="number" min="0" step="0.05" name="hnmStandardKillBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="hnmStandardKillBonusDraft"
                             [ngModel]="customizeDraft.hnmStandardKillBonus"
                             (ngModelChange)="customizeDraft.hnmStandardKillBonus = $event; onCustomizeFieldChange()" />
                         </label>
@@ -444,31 +444,31 @@
                       <div class="customize-form__bonus-row">
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">DKP / window</span>
-                          <input type="number" min="0" step="0.05" name="wdDkpPerWindowDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="wdDkpPerWindowDraft"
                             [ngModel]="customizeDraft.wdDkpPerWindow"
                             (ngModelChange)="customizeDraft.wdDkpPerWindow = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Open bonus</span>
-                          <input type="number" min="0" step="0.05" name="wdOpenBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="wdOpenBonusDraft"
                             [ngModel]="customizeDraft.wdOpenBonus"
                             (ngModelChange)="customizeDraft.wdOpenBonus = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Close bonus</span>
-                          <input type="number" min="0" step="0.05" name="wdCloseBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="wdCloseBonusDraft"
                             [ngModel]="customizeDraft.wdCloseBonus"
                             (ngModelChange)="customizeDraft.wdCloseBonus = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Tag bonus</span>
-                          <input type="number" min="0" step="0.05" name="wdClaimBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="wdClaimBonusDraft"
                             [ngModel]="customizeDraft.wdClaimBonus"
                             (ngModelChange)="customizeDraft.wdClaimBonus = $event; onCustomizeFieldChange()" />
                         </label>
                         <label class="customize-form__field">
                           <span style="display:block;font-size:12px;color:var(--fg-2);margin-bottom:4px">Kill bonus</span>
-                          <input type="number" min="0" step="0.05" name="wdKillBonusDraft"
+                          <input type="number" min="0" [step]="customizeDkpStep()" name="wdKillBonusDraft"
                             [ngModel]="customizeDraft.wdKillBonus"
                             (ngModelChange)="customizeDraft.wdKillBonus = $event; onCustomizeFieldChange()" />
                         </label>

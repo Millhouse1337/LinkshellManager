@@ -515,7 +515,7 @@
 
               <label>
                 <span>Corrected amount (DKP)</span>
-                <input type="number" step="0.01" [(ngModel)]="dkpAuditModel.amount"
+                <input type="number" [step]="dkpAuditStep()" [(ngModel)]="dkpAuditModel.amount"
                   name="auditAmountAdjust" placeholder="e.g. 45" required />
               </label>
             } @else if (dkpAuditModel.mode === 'Add') {
@@ -536,7 +536,7 @@
             } @else {
               <label>
                 <span>Amount (positive to add, negative to subtract)</span>
-                <input type="number" step="0.01" [(ngModel)]="dkpAuditModel.amount"
+                <input type="number" [step]="dkpAuditStep()" [(ngModel)]="dkpAuditModel.amount"
                   name="auditAmountMisc" placeholder="e.g. 10 or -5" required />
               </label>
               <!-- Only when the linkshell has more than one DKP pool. A Misc adjustment has no

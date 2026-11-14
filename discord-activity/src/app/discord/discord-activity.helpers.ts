@@ -8,6 +8,56 @@ export function currentLinkshellIdOf(overview: ActivityOverview | null | undefin
   return overview?.primaryLinkshell?.id ?? 0;
 }
 
+// ----- The DKP rounding grid -----
+//
+// Each linkshell picks a grid in Configurations (dkpRoundingIncrement): "Quarter" = steps of 0.25
+// (the default), "Half" = steps of 0.5. The server rounds every DKP amount it WORKS OUT onto that
+// grid (Services/DkpRounding.cs). An amount a person TYPES is saved as typed, so the app refuses
+// one that is off the grid instead of sending it. It never rounds it quietly.
+export type DkpStep = 0.25 | 0.5;
+
+// The grid step for a linkshell's dkpRoundingIncrement. Mirrors DkpRounding.StepFor.
+export function dkpStepFor(increment: string | null | undefined): DkpStep {
+  return (increment ?? '').trim().toLowerCase() === 'half' ? 0.5 : 0.25;
+}
+
+// The grid step of one linkshell, read from the overview (0.25 when it is not there).
+export function dkpStepOf(
+  overview: ActivityOverview | null | undefined,
+  linkshellId: number | null | undefined
+): DkpStep {
+  const link = overview?.linkshells?.find(l => l.id === linkshellId);
+  return dkpStepFor(link?.settings?.dkpRoundingIncrement);
+}
+
+// True when `value` is a whole number of steps. Negative values count too (an adjustment can take
+// DKP away). The small tolerance absorbs floating-point noise: 0.7 + 0.05 is 0.7499999999999999.
+export function isOnDkpStep(value: number, step: number): boolean {
+  if (!Number.isFinite(value) || !(step > 0)) return false;
+  const steps = value / step;
+  return Math.abs(steps - Math.round(steps)) < 1e-9;
+}
+
+export function dkpStepMessage(step: number): string {
+  return `DKP must be in steps of ${step} (set in Configurations).`;
+}
+
+// The message for the first value that is off the grid, or null when they are all fine. A blank or
+// non-numeric value is skipped: whether a box may be blank is each form's own check.
+export function offDkpStepMessage(
+  step: number,
+  values: Iterable<number | string | null | undefined>
+): string | null {
+  for (const raw of values) {
+    if (raw === null || raw === undefined) continue;
+    if (typeof raw === 'string' && raw.trim() === '') continue;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) continue;
+    if (!isOnDkpStep(value, step)) return dkpStepMessage(step);
+  }
+  return null;
+}
+
 // Forwards a `<input type="datetime-local">` value to the server **as a
 // naive ISO string** (no `Z`, no offset). The server's
 // TryConvertUserTimeZoneToUtc interprets naive input with the user's

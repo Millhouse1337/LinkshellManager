@@ -13,11 +13,13 @@ import { LinkshellService } from './linkshell.service';
 import { mutateThenRefresh } from './mutate-then-refresh';
 import { TodService } from './tod.service';
 import {
+  dkpStepOf,
   formatError,
   resolveBrowserTimeZone,
   tagDiscordCommand,
   toLocalInputValueInZone,
-  withTimeout
+  withTimeout,
+  type DkpStep
 } from './discord-activity.helpers';
 import { readJsonResponse } from './http-response';
 import { formatInZone, zonedDayKey, type ZonedTimeStyle } from './zoned-time';
@@ -164,6 +166,10 @@ export class DiscordActivityService {
   readonly loadError = this.auth.loadError;
   // The linkshell the app is showing, or 0. The one place to read it (AuthService.currentLinkshellId).
   readonly currentLinkshellId = this.auth.currentLinkshellId;
+  // The DKP grid step (0.25 or 0.5) a linkshell set in Configurations. Typed DKP amounts must sit on
+  // it (see offDkpStepMessage in discord-activity.helpers).
+  readonly currentDkpStep = computed<DkpStep>(() => dkpStepOf(this.overview(), this.currentLinkshellId()));
+  dkpStepForLinkshell(linkshellId: number | null | undefined): DkpStep { return dkpStepOf(this.overview(), linkshellId); }
   readonly busyProfileSave = signal(false);
   readonly busyRefresh = signal(false);
   readonly busyRuleSave = this.linkshellContentService.busyRuleSave;

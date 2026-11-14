@@ -18,6 +18,7 @@ import type {
   ActivityMonsterTimingsResponse
 } from '../../discord/discord-activity.types';
 import { canManageLinkshellIn, pairingCountdownLabel } from '../activity-home.helpers';
+import { dkpStepFor, offDkpStepMessage } from '../../discord/discord-activity.helpers';
 
 // (PoolDraft moved to tabs/dkp-grouping-tab.component.ts with the editor it belongs to.)
 
@@ -1050,7 +1051,28 @@ export class ConfigurationsTabComponent {
     this.customizeDraft.hnmStandardKillBonus = settings.hnmStandardKillBonus ?? 0;
     this.customizeDraft.hnmStandardWindowBonus = settings.hnmStandardWindowBonus ?? 0;
     this.customizeDraft.hnmStandardMiscBonus = settings.hnmStandardMiscBonus ?? 0;
+    this.customizeBonusBaseline = {};
+    for (const key of ConfigurationsTabComponent.DKP_AMOUNT_KEYS) {
+      this.customizeBonusBaseline[key] = this.customizeDraft[key];
+    }
     this.customizeDirty = false;
+  }
+
+  // The HNM Settings boxes that hold a DKP amount (not a rate or a count). Each must sit on the
+  // linkshell's DKP grid -- the one picked in this same form, so switching to Half and typing 0.25
+  // in the same save is caught.
+  private static readonly DKP_AMOUNT_KEYS = [
+    'wdDkpPerWindow', 'wdClaimBonus', 'wdKillBonus', 'wdOpenBonus', 'wdCloseBonus',
+    'hnmStandardOpenBonus', 'hnmStandardCloseBonus', 'hnmStandardClaimBonus',
+    'hnmStandardKillBonus', 'hnmStandardWindowBonus', 'hnmStandardMiscBonus'
+  ] as const;
+
+  // The amounts as last loaded, so only a box the officer changed is checked: an old off-grid
+  // amount must not block saving some other setting.
+  private customizeBonusBaseline: Partial<Record<(typeof ConfigurationsTabComponent.DKP_AMOUNT_KEYS)[number], number>> = {};
+
+  protected customizeDkpStep(): number {
+    return dkpStepFor(this.customizeDraft.dkpRoundingIncrement);
   }
 
   protected onCustomizeFieldChange(): void {
@@ -1062,6 +1084,15 @@ export class ConfigurationsTabComponent {
     if (!id) return;
     const link = this.dashboardLinkshells().find(l => l.id === id);
     if (!link) return;
+    const changedAmounts = ConfigurationsTabComponent.DKP_AMOUNT_KEYS
+      .filter(key => this.customizeDraft[key] !== this.customizeBonusBaseline[key])
+      .map(key => this.customizeDraft[key]);
+    const offStep = offDkpStepMessage(this.customizeDkpStep(), changedAmounts);
+    if (offStep) {
+      this.activity.actionError.set(offStep);
+      this.activity.actionMessage.set(null);
+      return;
+    }
     if (!(await this.confirmChange())) return;
 
     try {

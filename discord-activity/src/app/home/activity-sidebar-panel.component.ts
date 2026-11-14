@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, Input, effect, inject, input, model, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../discord/discord-activity.service';
+import { offDkpStepMessage } from '../discord/discord-activity.helpers';
 import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../discord/discord-activity.types';
 import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from './event-job-options';
 import { canManageLinkshellIn, defaultDkpPoolId, dkpPoolOptionsFor } from './activity-home.helpers';
@@ -950,6 +951,11 @@ export class ActivitySidebarPanelComponent {
     );
   }
 
+  // The audit amount box's step: the linkshell's DKP grid (0.25 or 0.5, set in Configurations).
+  protected dkpAuditStep(): number {
+    return this.activity.dkpStepForLinkshell(this.selectedLinkshellId);
+  }
+
   protected async submitDkpAudit(): Promise<void> {
     if (!this.selectedLinkshellId) {
       this.activity.actionError.set('Select a linkshell before submitting an audit.');
@@ -978,6 +984,12 @@ export class ActivitySidebarPanelComponent {
       const amount = this.dkpAuditModel.amount;
       if (amount === null || Number.isNaN(amount)) {
         this.activity.actionError.set('Enter a numeric amount for the audit.');
+        return;
+      }
+      // Typed amounts are saved as typed, so one off the linkshell's DKP grid is refused here.
+      const offStep = offDkpStepMessage(this.dkpAuditStep(), [amount]);
+      if (offStep) {
+        this.activity.actionError.set(offStep);
         return;
       }
       if (this.dkpAuditModel.mode === 'Adjust' && !this.dkpAuditModel.relatedLedgerEntryId) {

@@ -24,7 +24,7 @@ import {
   EVENT_SUB_JOB_OPTIONS
 } from './event-job-options';
 import { hasHqVariant, isHnmTierMonster } from './activity-home.types';
-import { datetimeLocalToUtcIso } from '../discord/discord-activity.helpers';
+import { datetimeLocalToUtcIso, dkpStepFor, offDkpStepMessage } from '../discord/discord-activity.helpers';
 import { PartySetupService } from '../discord/party-setup.service';
 import { TodService } from '../discord/tod.service';
 import {
@@ -622,6 +622,31 @@ export class ActivityQueuePanelComponent {
 
   protected hnmDkpOverrideOpen = false;
 
+  // The Camp DKP boxes as they were when the form opened (or Change DKP seeded them). Only a box
+  // the officer changed is checked against the DKP grid, so an old off-grid price (say, from
+  // before the linkshell switched to Half) never blocks an unrelated edit.
+  private hnmBonusBaseline: Partial<Record<HnmBonusKey, number | null>> = {};
+
+  private snapshotHnmBonusBaseline(): void {
+    this.hnmBonusBaseline = {};
+    for (const key of HNM_BONUS_KEYS) {
+      this.hnmBonusBaseline[key] = this.createModel[key] ?? null;
+    }
+  }
+
+  // The Camp DKP boxes' step: the picked linkshell's DKP grid (0.25 or 0.5, set in Configurations).
+  protected hnmDkpStep(): number {
+    return dkpStepFor(this.selectedLinkshellSettings()?.dkpRoundingIncrement);
+  }
+
+  // The grid message when a changed Camp DKP box is off the grid, else null.
+  private hnmBonusOffStepMessage(): string | null {
+    const changed = this.hnmBonusFields()
+      .filter(field => (this.createModel[field.key] ?? null) !== (this.hnmBonusBaseline[field.key] ?? null))
+      .map(field => this.createModel[field.key]);
+    return offDkpStepMessage(this.hnmDkpStep(), changed);
+  }
+
   protected hnmBonusFields(): readonly HnmBonusField[] {
     if (this.isWdAttendanceMode()) {
       return ActivityQueuePanelComponent.MANUAL_CHECK_IN_BONUS_FIELDS;
@@ -691,6 +716,8 @@ export class ActivityQueuePanelComponent {
       for (const field of this.hnmBonusFields()) {
         this.createModel[field.key] = this.hnmLinkshellBonus(field.key);
       }
+      // Seeded, not typed: the linkshell's own amounts are not the officer's to fix here.
+      this.snapshotHnmBonusBaseline();
     }
     this.hnmDkpOverrideOpen = true;
   }
@@ -702,6 +729,7 @@ export class ActivityQueuePanelComponent {
     for (const key of HNM_BONUS_KEYS) {
       this.createModel[key] = null;
     }
+    this.hnmBonusBaseline = {};
     this.hnmDkpOverrideOpen = false;
   }
 
@@ -1023,6 +1051,11 @@ export class ActivityQueuePanelComponent {
         this.activity.actionError.set('Select a monster for the HNM event.');
         return;
       }
+      const offStep = this.hnmBonusOffStepMessage();
+      if (offStep) {
+        this.activity.actionError.set(offStep);
+        return;
+      }
     }
 
     const nextPartySetupId = this.partySetupNotSpecified ? null : (this.createModel.partySetupId ?? null);
@@ -1246,6 +1279,7 @@ export class ActivityQueuePanelComponent {
     this.createModel.hnmClaimBonusOverride = event.hnmClaimBonusOverride ?? null;
     this.createModel.hnmKillBonusOverride = event.hnmKillBonusOverride ?? null;
     this.createModel.hnmPerWindowOverride = event.hnmPerWindowOverride ?? null;
+    this.snapshotHnmBonusBaseline();
     this.hnmDkpOverrideOpen = this.hasHnmBonusOverrides();
     // External callers (e.g. live-event Edit on the events tab) reach this
     // method through a viewChild — Angular's OnPush check for the queue panel

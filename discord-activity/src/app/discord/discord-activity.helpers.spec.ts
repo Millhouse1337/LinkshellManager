@@ -3,9 +3,14 @@ import {
   DISCORD_SIGN_IN_CANCELLED_MESSAGE,
   currentLinkshellIdOf,
   datetimeLocalToUtcIso,
+  dkpStepFor,
+  dkpStepMessage,
+  dkpStepOf,
   formatActionError,
   formatError,
   isDiscordRpcError,
+  isOnDkpStep,
+  offDkpStepMessage,
   tagDiscordCommand,
   toLocalInputValueInZone,
   withTimeout
@@ -147,5 +152,86 @@ describe('currentLinkshellIdOf', () => {
   it('is 0 with no linkshell or no overview', () => {
     expect(currentLinkshellIdOf(overview({ appUser: { primaryLinkshellId: 7 }, primaryLinkshell: null }))).toBe(0);
     expect(currentLinkshellIdOf(null)).toBe(0);
+  });
+});
+
+describe('DKP rounding grid', () => {
+  it('maps the Configurations setting to a step', () => {
+    expect(dkpStepFor('Quarter')).toBe(0.25);
+    expect(dkpStepFor('Half')).toBe(0.5);
+    expect(dkpStepFor('half')).toBe(0.5);
+    // Anything else is the default, Quarter (as DkpRounding.StepFor on the server).
+    expect(dkpStepFor(null)).toBe(0.25);
+    expect(dkpStepFor('')).toBe(0.25);
+  });
+
+  it('reads one linkshell\'s step from the overview', () => {
+    const overview = {
+      linkshells: [
+        { id: 1, settings: { dkpRoundingIncrement: 'Quarter' } },
+        { id: 2, settings: { dkpRoundingIncrement: 'Half' } }
+      ]
+    } as unknown as ActivityOverview;
+    expect(dkpStepOf(overview, 1)).toBe(0.25);
+    expect(dkpStepOf(overview, 2)).toBe(0.5);
+    expect(dkpStepOf(overview, 99)).toBe(0.25);
+    expect(dkpStepOf(null, 2)).toBe(0.25);
+  });
+
+  it('accepts amounts on the Quarter grid and refuses the rest', () => {
+    for (const value of [0, 0.25, 0.5, 0.75, 1, 2.25, 10.75, 100]) {
+      expect(isOnDkpStep(value, 0.25)).toBe(true);
+    }
+    expect(isOnDkpStep(2.3, 0.25)).toBe(false);
+    expect(isOnDkpStep(0.1, 0.25)).toBe(false);
+    expect(isOnDkpStep(1.05, 0.25)).toBe(false);
+  });
+
+  it('accepts amounts on the Half grid and refuses quarters', () => {
+    expect(isOnDkpStep(0.5, 0.5)).toBe(true);
+    expect(isOnDkpStep(3, 0.5)).toBe(true);
+    expect(isOnDkpStep(2.25, 0.25)).toBe(true);
+    expect(isOnDkpStep(2.25, 0.5)).toBe(false);
+    expect(isOnDkpStep(0.75, 0.5)).toBe(false);
+  });
+
+  it('allows negative amounts on the grid', () => {
+    expect(isOnDkpStep(-5, 0.25)).toBe(true);
+    expect(isOnDkpStep(-0.25, 0.25)).toBe(true);
+    expect(isOnDkpStep(-1.5, 0.5)).toBe(true);
+    expect(isOnDkpStep(-0.25, 0.5)).toBe(false);
+    expect(isOnDkpStep(-2.3, 0.25)).toBe(false);
+  });
+
+  it('ignores floating-point noise', () => {
+    // 0.7 + 0.05 is 0.7499999999999999, and 0.1 * 3 is 0.30000000000000004.
+    expect(isOnDkpStep(0.7 + 0.05, 0.25)).toBe(true);
+    expect(isOnDkpStep(0.1 * 5, 0.5)).toBe(true);
+    expect(isOnDkpStep(0.1 + 0.2, 0.25)).toBe(false);
+    expect(isOnDkpStep(0.1 * 3 + 0.45, 0.25)).toBe(true);
+  });
+
+  it('refuses values that are not numbers', () => {
+    expect(isOnDkpStep(Number.NaN, 0.25)).toBe(false);
+    expect(isOnDkpStep(Number.POSITIVE_INFINITY, 0.25)).toBe(false);
+  });
+
+  it('builds the message from the step', () => {
+    expect(dkpStepMessage(0.25)).toBe('DKP must be in steps of 0.25 (set in Configurations).');
+    expect(dkpStepMessage(0.5)).toBe('DKP must be in steps of 0.5 (set in Configurations).');
+  });
+
+  it('returns the message only when a value is off the grid', () => {
+    expect(offDkpStepMessage(0.25, [1, 2.25, -0.75])).toBeNull();
+    expect(offDkpStepMessage(0.25, [1, 2.3])).toBe(dkpStepMessage(0.25));
+    expect(offDkpStepMessage(0.5, [2.25])).toBe(dkpStepMessage(0.5));
+    // Typed into a text box: strings count the same as numbers.
+    expect(offDkpStepMessage(0.5, ['1.5'])).toBeNull();
+    expect(offDkpStepMessage(0.5, ['1.25'])).toBe(dkpStepMessage(0.5));
+  });
+
+  it('skips blank and non-numeric values (other checks own those)', () => {
+    expect(offDkpStepMessage(0.25, [null, undefined, '', '  ', 'abc'])).toBeNull();
+    expect(offDkpStepMessage(0.25, [])).toBeNull();
   });
 });

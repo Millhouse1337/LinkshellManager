@@ -236,7 +236,7 @@
                       <!-- The DKP each member gets, editable: starts on the linkshell's Misc post rate;
                            a different number gives this post its own price. Empty = the rate. -->
                       <span class="hnm-formula__chip">
-                        <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                        <input type="number" [step]="eventDkpStep(event)" min="0" class="input num roster-dkp-input"
                           aria-label="DKP per member for this post"
                           [title]="'Leave empty for the Misc post rate (' + (postRate | number:'1.0-2') + ')'"
                           [ngModel]="newPostDkpBox(event)" (ngModelChange)="setNewPostDkp($event)"
@@ -691,13 +691,13 @@
                                         @if (snapshot.dkpPerMember == null || entry.isRegistered === false) {
                                           <span class="roster-muted">-</span>
                                         } @else if (snapshot.isMisc && editCamp) {
-                                          <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                          <input type="number" [step]="eventDkpStep(event)" min="0" class="input num roster-dkp-input"
                                                  [attr.aria-label]="'DKP for ' + entry.characterName"
                                                  [disabled]="windowDkpSaving()"
                                                  [value]="miscDkpDraft(snapshot)"
                                                  [title]="miscDkpHint(snapshot)"
                                                  (input)="setMiscDkpDraft(snapshot, $event)"
-                                                 (change)="commitMiscDkp(snapshot)" />
+                                                 (change)="commitMiscDkp(event, snapshot)" />
                                         } @else {
                                           {{ snapshot.dkpPerMember }}
                                         }
@@ -791,7 +791,7 @@
                                 @if (isKill) {
                                   @if (editCamp) {
                                     <label class="hnm-formula__chip hnm-formula__chip--edit">
-                                      <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
+                                      <input type="number" [step]="eventDkpStep(event)" min="0" class="input num hnm-formula__input"
                                              aria-label="Kill bonus"
                                              [disabled]="windowDkpSaving()"
                                              [value]="windowDkpDraft(event, win)"
@@ -806,7 +806,7 @@
                                 } @else {
                                   @if (editCamp) {
                                     <label class="hnm-formula__chip hnm-formula__chip--edit">
-                                      <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
+                                      <input type="number" [step]="eventDkpStep(event)" min="0" class="input num hnm-formula__input"
                                              aria-label="DKP for this window"
                                              [disabled]="windowDkpSaving()"
                                              [value]="windowDkpDraft(event, win)"
@@ -821,7 +821,7 @@
                                   @if (isOpenWindow(win) && editCamp) {
                                     <span class="hnm-formula__op">+</span>
                                     <label class="hnm-formula__chip hnm-formula__chip--edit">
-                                      <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
+                                      <input type="number" [step]="eventDkpStep(event)" min="0" class="input num hnm-formula__input"
                                              aria-label="Open bonus"
                                              [disabled]="windowDkpSaving()"
                                              [value]="openBonusDraft(event)"
@@ -837,7 +837,7 @@
                                   @if (isCloseWindow(event, win) && editCamp) {
                                     <span class="hnm-formula__op">+</span>
                                     <label class="hnm-formula__chip hnm-formula__chip--edit">
-                                      <input type="number" step="0.25" min="0" class="input num hnm-formula__input"
+                                      <input type="number" [step]="eventDkpStep(event)" min="0" class="input num hnm-formula__input"
                                              aria-label="Closing bonus"
                                              [disabled]="windowDkpSaving()"
                                              [value]="closeBonusDraft(event)"
@@ -929,7 +929,7 @@
                                                on change (blur / Enter), not per keystroke. -->
                                           <td class="num">
                                             @if (editCamp) {
-                                              <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                              <input type="number" [step]="eventDkpStep(event)" min="0" class="input num roster-dkp-input"
                                                      [attr.aria-label]="(isKill ? 'Kill bonus for ' : 'DKP for ') + (attendee.characterName || 'attendee')"
                                                      [disabled]="windowDkpSaving()"
                                                      [value]="windowDkpDraft(event, win)"
@@ -944,7 +944,7 @@
                                             <!-- The camp's open bonus: editable on window 1, 0 elsewhere. -->
                                             <td class="num">
                                               @if (isOpenWindow(win) && editCamp) {
-                                                <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                                <input type="number" [step]="eventDkpStep(event)" min="0" class="input num roster-dkp-input"
                                                        [attr.aria-label]="'Open bonus for ' + (attendee.characterName || 'attendee')"
                                                        [disabled]="windowDkpSaving()"
                                                        [value]="openBonusDraft(event)"
@@ -960,7 +960,7 @@
                                             <!-- The camp's close bonus: editable on the close, 0 elsewhere. -->
                                             <td class="num">
                                               @if (isCloseWindow(event, win) && editCamp) {
-                                                <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                                <input type="number" [step]="eventDkpStep(event)" min="0" class="input num roster-dkp-input"
                                                        [attr.aria-label]="'Close bonus for ' + (attendee.characterName || 'attendee')"
                                                        [disabled]="windowDkpSaving()"
                                                        [value]="closeBonusDraft(event)"
@@ -1643,7 +1643,7 @@
                                          is paid nothing for standing there. -->
                                     <td class="num">
                                       @if (canEditLiveCamp(event.linkshellId) && !isWdCamp(event)) {
-                                        <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                        <input type="number" [step]="eventDkpStep(event)" min="0" class="input num roster-dkp-input"
                                                [attr.aria-label]="'DKP for ' + (attendee.characterName || 'attendee')"
                                                [disabled]="windowDkpSaving()"
                                                [value]="windowDkpDraft(event, activeWindow)"
@@ -1666,7 +1666,7 @@
                                         @if (activeWindow.isKillWindow) {
                                           <span class="roster-muted">—</span>
                                         } @else if (isOpenWindow(activeWindow) && canEditLiveCamp(event.linkshellId)) {
-                                          <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                          <input type="number" [step]="eventDkpStep(event)" min="0" class="input num roster-dkp-input"
                                                  [attr.aria-label]="'Open bonus for ' + (attendee.characterName || 'attendee')"
                                                  [disabled]="windowDkpSaving()"
                                                  [value]="openBonusDraft(event)"
@@ -1683,7 +1683,7 @@
                                         @if (activeWindow.isKillWindow) {
                                           <span class="roster-muted">—</span>
                                         } @else if (isCloseWindow(event, activeWindow) && canEditLiveCamp(event.linkshellId)) {
-                                          <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                          <input type="number" [step]="eventDkpStep(event)" min="0" class="input num roster-dkp-input"
                                                  [attr.aria-label]="'Close bonus for ' + (attendee.characterName || 'attendee')"
                                                  [disabled]="windowDkpSaving()"
                                                  [value]="closeBonusDraft(event)"
@@ -1914,13 +1914,13 @@
                                       @if (snapshot.dkpPerMember == null || entry.isRegistered === false) {
                                         <span class="roster-muted">-</span>
                                       } @else if (snapshot.isMisc && canEditLiveCamp(event.linkshellId)) {
-                                        <input type="number" step="0.25" min="0" class="input num roster-dkp-input"
+                                        <input type="number" [step]="eventDkpStep(event)" min="0" class="input num roster-dkp-input"
                                                [attr.aria-label]="'DKP for ' + entry.characterName"
                                                [disabled]="windowDkpSaving()"
                                                [value]="miscDkpDraft(snapshot)"
                                                [title]="miscDkpHint(snapshot)"
                                                (input)="setMiscDkpDraft(snapshot, $event)"
-                                               (change)="commitMiscDkp(snapshot)" />
+                                               (change)="commitMiscDkp(event, snapshot)" />
                                       } @else {
                                         {{ snapshot.dkpPerMember }}
                                       }

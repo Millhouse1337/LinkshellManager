@@ -4,6 +4,7 @@ import { ZonedTimePipe } from '../zoned-time.pipe';
 
 import { AutoRefreshService } from '../../discord/auto-refresh.service';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
+import { offDkpStepMessage } from '../../discord/discord-activity.helpers';
 import { ResponseOrder } from '../../discord/refresh-order';
 import { popWindowLabel } from '../tabs/camp-window.helpers';
 import type {
@@ -1101,10 +1102,10 @@ export class EventHistoryPanelComponent {
   }
 
   // Step the DKP inputs by this linkshell's rounding increment (Quarter → 0.25,
-  // Half → 0.5) so manual edits stay on the same grid as earned DKP.
+  // Half → 0.5) so manual edits stay on the same grid as earned DKP. saveDkp refuses an
+  // amount off that grid.
   protected dkpStep(): number {
-    const ls = this.activity.overview()?.linkshells?.find(l => l.id === this._linkshellId);
-    return ls?.settings?.dkpRoundingIncrement === 'Half' ? 0.5 : 0.25;
+    return this.activity.dkpStepForLinkshell(this._linkshellId);
   }
 
   protected async loadComments(historyId: number): Promise<void> {
@@ -1132,6 +1133,12 @@ export class EventHistoryPanelComponent {
   }
 
   async saveDkp(h: ActivityEventHistory, p: ActivityEventHistoryParticipant): Promise<void> {
+    const offStep = offDkpStepMessage(this.dkpStep(), [this.dkpDraft[p.id]]);
+    if (offStep) {
+      this.activity.actionError.set(offStep);
+      this.activity.actionMessage.set(null);
+      return;
+    }
     if (await this.activity.setEventHistoryParticipantDkp(h.id, p.id, Number(this.dkpDraft[p.id] ?? 0))) { await this.load(); }
   }
 

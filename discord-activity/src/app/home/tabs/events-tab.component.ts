@@ -38,6 +38,7 @@ import {
   EVENT_MAIN_JOB_OPTIONS,
   EVENT_SUB_JOB_OPTIONS
 } from '../event-job-options';
+import { dkpStepFor, offDkpStepMessage } from '../../discord/discord-activity.helpers';
 import {
   breakSessionInfo,
   canEditLiveCampIn,
@@ -223,6 +224,21 @@ export class EventsTabComponent {
   private linkshellSettingsFor(linkshellId: number): ActivityLinkshellSettings | null {
     const link = this.activity.overview()?.linkshells?.find(l => l.id === linkshellId);
     return link?.settings ?? null;
+  }
+
+  // The DKP boxes' step on an event's card: its linkshell's DKP grid (0.25 or 0.5, set in
+  // Configurations). Typed amounts off that grid are refused, never rounded quietly.
+  protected eventDkpStep(event: ActivityEvent): number {
+    return dkpStepFor(this.linkshellSettingsFor(event.linkshellId)?.dkpRoundingIncrement);
+  }
+
+  // Puts the grid message in the error banner and returns true when `amount` is off the grid.
+  private refuseOffStepDkp(event: ActivityEvent, amount: number | null): boolean {
+    const message = offDkpStepMessage(this.eventDkpStep(event), [amount]);
+    if (!message) return false;
+    this.activity.actionError.set(message);
+    this.activity.actionMessage.set(null);
+    return true;
   }
 
   protected lootStructureFor(linkshellId: number): ActivityLootStructure {
@@ -733,6 +749,7 @@ export class EventsTabComponent {
     // Sent only when it differs from the rate, so an untouched post keeps following the rate (and
     // any later change to it) instead of freezing today's value onto the post.
     const dkpAmount = this.newPostHasOwnDkp(event) ? this.newPostDkp() ?? null : null;
+    if (this.refuseOffStepDkp(event, dkpAmount)) return;
     this.newPostSaving.set(true);
     try {
       const ok = await this.activity.addCampMiscPost(event.id, this.newPostName().trim() || null, ids, dkpAmount);
@@ -1689,6 +1706,8 @@ export class EventsTabComponent {
         this.dropWindowDkpDraft(window);
         return;
       }
+      // Off the DKP grid: refused, and the typed value stays in the box to be fixed.
+      if (this.refuseOffStepDkp(event, amount)) return;
       if (this.windowDkpSaving()) return;
       this.windowDkpSaving.set(true);
       try {
@@ -1727,6 +1746,9 @@ export class EventsTabComponent {
       this.dropWindowDkpDraft(window);
       return;
     }
+
+    // A real change off the DKP grid: refused, and the typed value stays in the box to be fixed.
+    if (this.refuseOffStepDkp(event, amount)) return;
 
     await this.writeWindowDkp(window, amount);
   }
@@ -1821,6 +1843,8 @@ export class EventsTabComponent {
       this.dropCloseBonusDraft(event);
       return;
     }
+    // A real change off the DKP grid: refused, and the typed value stays in the box to be fixed.
+    if (this.refuseOffStepDkp(event, amount)) return;
 
     if (this.windowDkpSaving()) return;
     this.windowDkpSaving.set(true);
@@ -1870,6 +1894,8 @@ export class EventsTabComponent {
       this.dropOpenBonusDraft(event);
       return;
     }
+    // A real change off the DKP grid: refused, and the typed value stays in the box to be fixed.
+    if (this.refuseOffStepDkp(event, amount)) return;
 
     if (this.windowDkpSaving()) return;
     this.windowDkpSaving.set(true);
@@ -1911,7 +1937,7 @@ export class EventsTabComponent {
     this.miscDkpDrafts.update(map => ({ ...map, [snapshot.id]: value }));
   }
 
-  protected async commitMiscDkp(snapshot: ActivityLinkedSnapshot): Promise<void> {
+  protected async commitMiscDkp(event: ActivityEvent, snapshot: ActivityLinkedSnapshot): Promise<void> {
     const raw = this.miscDkpDraft(snapshot).trim();
     const amount = raw === '' ? null : Number(raw);
     const current = snapshot.dkpOverride ?? null;
@@ -1922,6 +1948,8 @@ export class EventsTabComponent {
       this.dropMiscDkpDraft(snapshot);
       return;
     }
+    // A real change off the DKP grid: refused, and the typed value stays in the box to be fixed.
+    if (this.refuseOffStepDkp(event, amount)) return;
 
     if (this.windowDkpSaving()) return;
     this.windowDkpSaving.set(true);
