@@ -321,7 +321,8 @@ export class AttendanceSectionsComponent {
     }
     const offStep = offDkpStepMessage(this.dkpStep(), [value]);
     if (offStep) throw new Error(offStep);
-    if (!(await this.activity.setMiscPostDkp(snapshot.id, value))) {
+    // No overview reload: this post is not on a camp yet, so nothing the overview draws changed.
+    if (!(await this.activity.setMiscPostDkp(snapshot.id, value, false))) {
       throw new Error(this.activity.actionError() ?? "Setting this post's DKP failed.");
     }
     this.attachDkpSaved[snapshot.id] = value;
@@ -614,10 +615,9 @@ export class AttendanceSectionsComponent {
     if (selection.startsWith('camp:')) {
       const campId = Number(selection.slice(5));
       if (!campId) return;
+      // Also reloads the overview, which the camp card reads, so the snapshot shows there now
+      // rather than at the next poll.
       await this.windows.attachSnapshot(snapshot.id, linkshellId, { linkedEventId: campId });
-      // The camp card reads from the overview, not the window-events payload, so it
-      // needs its own refresh or the snapshot won't appear until the next poll.
-      await this.activity.refreshOverview();
     }
   }
 

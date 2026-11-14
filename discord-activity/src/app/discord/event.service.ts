@@ -557,31 +557,37 @@ export class EventService {
     }
   }
 
+  // The live camp card's edits below all go through here. The camp card reads the overview, so
+  // each one reloads it afterwards. mutateThenRefresh keeps the two halves apart: once the server
+  // took the edit it counts as saved, and a reload that fails only adds "press Refresh" instead of
+  // making the edit look failed (which invited a second, duplicate edit).
+  //
+  // refreshOverview=false is for a caller that reloads something else itself straight after.
+  private async saveCampEdit(send: () => Promise<unknown>, failure: string, refreshOverview = true): Promise<boolean> {
+    const outcome = await mutateThenRefresh(this.auth, {
+      mutate: send,
+      refresh: refreshOverview ? () => this.auth.refreshOverview() : undefined,
+      success: null,
+      failure
+    });
+    return outcome.ok;
+  }
+
   // Removes a single AppUserEventWindow row (a participant's attendance for one
   // posted HNM window). The server cleans up the matching ledger entry too.
   async removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('DELETE', `/api/addon/management/window-attendees/${attendeeId}`);
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Removing the attendee failed.'));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('DELETE', `/api/addon/management/window-attendees/${attendeeId}`),
+      'Removing the attendee failed.');
   }
 
   // Deletes a whole posted window on a live camp (its attendee rows and their ledger entries go
   // with it). The server refuses an ended camp and, on an Open/Close camp, the Open while the Close
   // is filed, and returns why.
   async deleteAttendanceWindow(windowId: number): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('DELETE', `/api/addon/management/windows/${windowId}`);
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Deleting the window failed.'));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('DELETE', `/api/addon/management/windows/${windowId}`),
+      'Deleting the window failed.');
   }
 
   // Prices ONE posted attendance window: what it pays each attendee, replacing the camp's default
@@ -593,14 +599,9 @@ export class EventService {
   // camps that don't pay off this column (Manual Check In, timed events) and returns the reason,
   // which formatActionError surfaces verbatim.
   async setAttendanceWindowDkp(windowId: number, dkpAmount: number | null): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('PATCH', `/api/addon/management/attendance-windows/${windowId}/dkp`, { dkpAmount });
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, "Setting this window's DKP failed."));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('PATCH', `/api/addon/management/attendance-windows/${windowId}/dkp`, { dkpAmount }),
+      "Setting this window's DKP failed.");
   }
 
   // Sets this CAMP's kill bonus -- what the Kill tab's "Kill DKP" box edits.
@@ -612,14 +613,9 @@ export class EventService {
   //
   // null clears the override and puts the camp back on the linkshell's kill bonus.
   async setCampKillBonus(eventId: number, killBonus: number | null): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('PATCH', `/api/addon/management/events/${eventId}/kill-bonus`, { killBonus });
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, "Setting the camp's kill bonus failed."));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('PATCH', `/api/addon/management/events/${eventId}/kill-bonus`, { killBonus }),
+      "Setting the camp's kill bonus failed.");
   }
 
   // Sets this CAMP's close bonus -- what the Closing window cell on the ticked window edits. A camp
@@ -627,94 +623,62 @@ export class EventService {
   //
   // null clears the override and puts the camp back on the linkshell's close bonus.
   async setCampCloseBonus(eventId: number, closeBonus: number | null): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('PATCH', `/api/addon/management/events/${eventId}/close-bonus`, { closeBonus });
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, "Setting the camp's close bonus failed."));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('PATCH', `/api/addon/management/events/${eventId}/close-bonus`, { closeBonus }),
+      "Setting the camp's close bonus failed.");
   }
 
   // Add New Post (always a Misc post): files a new Misc post on the camp with the picked members.
   // dkpAmount is the post's own price per member; null leaves it on the linkshell's Misc post rate.
   async addCampMiscPost(eventId: number, name: string | null, appUserIds: string[], dkpAmount: number | null): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('POST', `/api/addon/management/events/${eventId}/misc-posts`, { name, appUserIds, dkpAmount });
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Adding the misc post failed.'));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('POST', `/api/addon/management/events/${eventId}/misc-posts`, { name, appUserIds, dkpAmount }),
+      'Adding the misc post failed.');
   }
 
   // Sets the camp's OPEN bonus — what window 1 adds on top of its own amount. null puts the camp
   // back on the linkshell's open bonus.
   async setCampOpenBonus(eventId: number, openBonus: number | null): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('PATCH', `/api/addon/management/events/${eventId}/open-bonus`, { openBonus });
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, "Setting the camp's open bonus failed."));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('PATCH', `/api/addon/management/events/${eventId}/open-bonus`, { openBonus }),
+      "Setting the camp's open bonus failed.");
   }
 
-  // Prices ONE misc post linked to a live camp: what it pays each person on it, replacing the
-  // linkshell's Misc post rate. null puts it back on that rate.
-  async setMiscPostDkp(snapshotId: number, dkpAmount: number | null): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('PATCH', `/api/addon/management/attendance-snapshots/${snapshotId}/dkp`, { dkpAmount });
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, "Setting this misc post's DKP failed."));
-      return false;
-    }
+  // Prices ONE misc post: what it pays each person on it, replacing the linkshell's Misc post rate.
+  // null puts it back on that rate. The camp card reloads the overview; the Attendance section,
+  // which files the post straight after, passes refreshOverview=false and reloads its own list.
+  async setMiscPostDkp(snapshotId: number, dkpAmount: number | null, refreshOverview = true): Promise<boolean> {
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('PATCH', `/api/addon/management/attendance-snapshots/${snapshotId}/dkp`, { dkpAmount }),
+      "Setting this misc post's DKP failed.",
+      refreshOverview);
   }
 
   // Undoes linking a capture to a live camp: it goes back to Unlinked Snapshots, unfiled, and stops
   // paying anyone on the camp.
   async unlinkCampSnapshot(snapshotId: number): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('POST', `/api/activity/window-events/snapshots/${snapshotId}/unlink`);
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Unlinking this snapshot failed.'));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('POST', `/api/activity/window-events/snapshots/${snapshotId}/unlink`),
+      'Unlinking this snapshot failed.');
   }
 
   // Deletes a snapshot linked to a live camp, entries and all (the same endpoint the Attendance
   // tab's Delete uses). Returns false, with the error shown, when the server refuses.
   async deleteCampSnapshot(snapshotId: number): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('POST', `/api/activity/window-events/snapshots/${snapshotId}/delete`);
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Deleting this snapshot failed.'));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('POST', `/api/activity/window-events/snapshots/${snapshotId}/delete`),
+      'Deleting this snapshot failed.');
   }
 
   // Marks (or unmarks) ONE posted window as the camp's close. On a numbered camp that is the only
   // thing that pays the close bonus, which adds to whatever the window already pays.
   //
   // The server enforces the one-close-per-camp rule, which is why this cannot be a client-side flag
-  // flip — see AddonApiController.SetClosingWindowAsync.
+  // flip — see AddonApiController.SetClosingWindowAsync. Marking one window unmarks another, so the
+  // whole overview reloads rather than flipping a flag locally.
   async setAttendanceWindowClosing(windowId: number, isClosingWindow: boolean): Promise<boolean> {
-    this.auth.setActionError(null);
-    try {
-      await this.http.sendActivityRequest('PATCH', `/api/addon/management/attendance-windows/${windowId}/closing`, { isClosingWindow });
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Marking the closing window failed.'));
-      return false;
-    }
+    return this.saveCampEdit(
+      () => this.http.sendActivityRequest('PATCH', `/api/addon/management/attendance-windows/${windowId}/closing`, { isClosingWindow }),
+      'Marking the closing window failed.');
   }
 }

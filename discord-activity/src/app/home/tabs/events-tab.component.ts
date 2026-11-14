@@ -753,10 +753,8 @@ export class EventsTabComponent {
     this.newPostSaving.set(true);
     try {
       const ok = await this.activity.addCampMiscPost(event.id, this.newPostName().trim() || null, ids, dkpAmount);
-      if (ok) {
-        this.closeNewPost();
-        await this.activity.refreshOverview();
-      }
+      // The service reloads the overview itself; a failed reload never makes the post look failed.
+      if (ok) this.closeNewPost();
     } finally {
       this.newPostSaving.set(false);
     }
@@ -1610,10 +1608,8 @@ export class EventsTabComponent {
 
   protected async confirmRemoveAttendee(attendeeId: number): Promise<void> {
     this.pendingRemoveAttendeeId.set(null);
-    const ok = await this.activity.removeAttendanceWindowAttendee(attendeeId);
-    if (ok) {
-      await this.activity.refreshOverview();
-    }
+    // Reloads the overview itself (EventService.saveCampEdit).
+    await this.activity.removeAttendanceWindowAttendee(attendeeId);
   }
 
   // The same two-click confirm for deleting a WHOLE window (the x in its detail panel's header):
@@ -1626,9 +1622,7 @@ export class EventsTabComponent {
     this.pendingDeleteWindowId.set(null);
     this.deletingWindowId.set(windowId);
     try {
-      if (await this.activity.deleteAttendanceWindow(windowId)) {
-        await this.activity.refreshOverview();
-      }
+      await this.activity.deleteAttendanceWindow(windowId);
     } finally {
       this.deletingWindowId.set(null);
     }
@@ -1718,7 +1712,6 @@ export class EventsTabComponent {
       try {
         if (await this.activity.setCampKillBonus(event.id, amount)) {
           this.dropWindowDkpDraft(window);
-          await this.activity.refreshOverview();
         }
       } finally {
         this.windowDkpSaving.set(false);
@@ -1776,7 +1769,6 @@ export class EventsTabComponent {
         // Drop the draft so the field re-reads the server's value — which may differ from what was
         // typed, since the server snaps to the linkshell's rounding grid on write.
         this.dropWindowDkpDraft(window);
-        await this.activity.refreshOverview();
       }
     } finally {
       this.windowDkpSaving.set(false);
@@ -1809,12 +1801,9 @@ export class EventsTabComponent {
     if (this.windowDkpSaving()) return;
     this.windowDkpSaving.set(true);
     try {
-      const ok = await this.activity.setAttendanceWindowClosing(window.id, !window.isClosingWindow);
-      if (ok) {
-        // Full refresh rather than a local flag flip — marking one window UNMARKS another, and the
-        // whole Closing window column repaints when the close moves.
-        await this.activity.refreshOverview();
-      }
+      // The service reloads the whole overview rather than flipping a flag here: marking one window
+      // UNMARKS another, and the whole Closing window column repaints when the close moves.
+      await this.activity.setAttendanceWindowClosing(window.id, !window.isClosingWindow);
     } finally {
       this.windowDkpSaving.set(false);
     }
@@ -1856,7 +1845,6 @@ export class EventsTabComponent {
     try {
       if (await this.activity.setCampCloseBonus(event.id, amount)) {
         this.dropCloseBonusDraft(event);
-        await this.activity.refreshOverview();
       }
     } finally {
       this.windowDkpSaving.set(false);
@@ -1907,7 +1895,6 @@ export class EventsTabComponent {
     try {
       if (await this.activity.setCampOpenBonus(event.id, amount)) {
         this.dropOpenBonusDraft(event);
-        await this.activity.refreshOverview();
       }
     } finally {
       this.windowDkpSaving.set(false);
@@ -1961,7 +1948,6 @@ export class EventsTabComponent {
     try {
       if (await this.activity.setMiscPostDkp(snapshot.id, amount)) {
         this.dropMiscDkpDraft(snapshot);
-        await this.activity.refreshOverview();
       }
     } finally {
       this.windowDkpSaving.set(false);
@@ -1980,7 +1966,6 @@ export class EventsTabComponent {
       if (await this.activity.unlinkCampSnapshot(snapshot.id)) {
         this.pendingUnlinkSnapshotId.set(null);
         this.dropMiscDkpDraft(snapshot);
-        await this.activity.refreshOverview();
       }
     } finally {
       this.unlinkingSnapshotId.set(null);
@@ -2009,7 +1994,6 @@ export class EventsTabComponent {
       if (await this.activity.deleteCampSnapshot(snapshot.id)) {
         this.pendingDeleteSnapshotId.set(null);
         this.dropMiscDkpDraft(snapshot);
-        await this.activity.refreshOverview();
       }
     } finally {
       this.deletingSnapshotId.set(null);

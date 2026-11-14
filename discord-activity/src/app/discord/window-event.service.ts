@@ -178,7 +178,9 @@ export class WindowEventService {
       // No slot: the server files every capture as a misc post.
     },
   ): Promise<void> {
-    await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/attach`, input, 'Snapshot attached.');
+    // Filed on a camp, it shows on the camp card, which reads the overview rather than this list.
+    await this.run(linkshellId, `/api/activity/window-events/snapshots/${snapshotId}/attach`, input, 'Snapshot attached.',
+      Boolean(input.linkedEventId));
   }
 
   async setSnapshotStatus(snapshotId: number, linkshellId: number, status: string): Promise<void> {
@@ -325,14 +327,24 @@ export class WindowEventService {
       { name, appUserIds, dkpAmount }, 'Misc post added.');
   }
 
-  private async run(linkshellId: number, path: string, body: unknown, message: string): Promise<void> {
+  // alsoRefreshOverview reloads the overview too, inside the same "saved" step, so a reload that
+  // fails never makes the write look failed (see mutateThenRefresh).
+  private async run(
+    linkshellId: number, path: string, body: unknown, message: string, alsoRefreshOverview = false
+  ): Promise<void> {
     this.busy.set(true);
     try {
       const outcome = await mutateThenRefresh(this.auth, {
         mutate: () => this.http.postActivityAction(path, body),
         // A poll already on the wire was sent before this write, so wait for it and fetch again
         // rather than sharing its now-stale answer.
-        refresh: () => this.reloadFresh(linkshellId),
+        refresh: async () => {
+          try {
+            await this.reloadFresh(linkshellId);
+          } finally {
+            if (alsoRefreshOverview) await this.auth.refreshOverview();
+          }
+        },
         success: message,
         failure: 'Updating attendance events failed.'
       });
