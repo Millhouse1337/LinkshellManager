@@ -190,7 +190,8 @@ public class LootWinnerAccountTests
     }
 
     // AddLootAsync needs a signed-in HTTP context, so its winner rule is pinned by source: it
-    // resolves the typed name to a member, refuses one it cannot find, and records the account.
+    // resolves the typed name to a member, refuses one it cannot find, and records the account and
+    // the linkshell.
     [Fact]
     public void LiveCardAddLoot_RefusesUnknownWinners_AndRecordsTheAccount()
     {
@@ -203,6 +204,7 @@ public class LootWinnerAccountTests
         Assert.Contains("LootDkpGuard.ResolveWinnerAsync(", body, StringComparison.Ordinal);
         Assert.Contains("Winner must be a current linkshell member.", body, StringComparison.Ordinal);
         Assert.Contains("ItemWinnerAppUserId = winner?.AppUserId", body, StringComparison.Ordinal);
+        Assert.Contains("LinkshellId = eventEntity.LinkshellId", body, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()

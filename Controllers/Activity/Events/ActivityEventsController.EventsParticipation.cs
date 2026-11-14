@@ -613,6 +613,8 @@ public sealed partial class ActivityEventsController
         _dbContext.EventLootDetails.Add(new EventLootDetail
         {
             EventId = eventId,
+            // Every loot row carries its linkshell (see EventLootDetail.LinkshellId).
+            LinkshellId = eventEntity.LinkshellId,
             ItemName = request.ItemName.Trim(),
             ItemWinner = winnerName,
             ItemWinnerAppUserId = winner?.AppUserId,
