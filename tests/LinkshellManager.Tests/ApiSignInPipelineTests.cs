@@ -283,6 +283,47 @@ public sealed class ApiSignInPipelineTests : IClassFixture<ApiSignInPipelineTest
         Assert.Equal((HttpStatusCode.Unauthorized, "{\"error\":\"Addon token is invalid or revoked.\"}"), result);
     }
 
+    // ---- The addon's management endpoints: the Activity's bearer or the website cookie ----
+
+    private const string ManagementSignedOut =
+        "{\"error\":\"Not signed in. Open /Identity/Account/Login on this same host first, or launch the activity inside Discord.\"}";
+
+    private static string ManagementTokens(int linkshellId) => $"/api/addon/management/tokens?linkshellId={linkshellId}";
+
+    [Fact]
+    public async Task AddonManagement_NoCredentials_GetsItsOwn401()
+    {
+        var result = await SendAsync(Get(ManagementTokens(OpenLinkshellId)));
+
+        Assert.Equal((HttpStatusCode.Unauthorized, ManagementSignedOut), result);
+    }
+
+    [Fact]
+    public async Task AddonManagement_AGoodBearerOrCookie_IsServed()
+    {
+        var bearer = await SendAsync(Get(ManagementTokens(OpenLinkshellId), bearer: MemberToken));
+        var cookie = await SendAsync(Get(ManagementTokens(OpenLinkshellId), cookie: _host.MemberCookie));
+
+        Assert.Equal(HttpStatusCode.OK, bearer.Status);
+        Assert.Equal(HttpStatusCode.OK, cookie.Status);
+    }
+
+    [Fact]
+    public async Task AddonManagement_ARejectedTokenWithAGoodCookie_IsStillSignedOut()
+    {
+        var result = await SendAsync(Get(ManagementTokens(OpenLinkshellId), bearer: "RejectedTokenGGGGGGGGGGGGGGGGGG", cookie: _host.MemberCookie));
+
+        Assert.Equal((HttpStatusCode.Unauthorized, ManagementSignedOut), result);
+    }
+
+    [Fact]
+    public async Task AddonManagement_NotAMember_GetsTheGeneric403()
+    {
+        var result = await SendAsync(Get(ManagementTokens(OpenLinkshellId), bearer: OutsiderToken));
+
+        Assert.Equal((HttpStatusCode.Forbidden, GenericForbidden), result);
+    }
+
     // ---- Other signed-in surfaces ----
 
     [Fact]
