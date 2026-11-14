@@ -40,11 +40,4 @@ public sealed partial class ActivitySettingsController : ActivityControllerBase
         _itemSales = itemSales;
         _monsterTimings = monsterTimings;
     }
-
-    private static bool IsValidLootStructure(string? structure)
-    {
-        return string.Equals(structure, "Dkp", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(structure, "LootCouncil", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase);
-    }
 }

@@ -3,7 +3,7 @@ using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
-using Loot = LinkshellManagerDiscordApp.Controllers.ActivityMappers;
+using Loot = LinkshellManagerDiscordApp.Services.LootStructures;
 using Tods = LinkshellManagerDiscordApp.Controllers.ActivityWindowEventsController;
 
 namespace LinkshellManager.Tests;

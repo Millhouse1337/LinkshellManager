@@ -184,7 +184,7 @@ public static class EventEndService
         // Read up front (it used to be read after the payout loop) because Loot Council also
         // decides what the loop pays when LootCouncilPaysNoDkp is on. Loot Council charges no loot,
         // Hybrid charges a percentage of the winner's pool balance, everything else the stated DKP.
-        var lootStructure = ActivityMappers.NormalizeLootStructure(
+        var lootStructure = LootStructures.NormalizeLootStructure(
             eventEntity.Linkshell?.LootStructure
             ?? await dbContext.Linkshells
                 .Where(l => l.Id == eventEntity.LinkshellId)

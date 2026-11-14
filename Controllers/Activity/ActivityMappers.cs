@@ -252,11 +252,4 @@ internal static class ActivityMappers
             entry.Zone,
             entry.AddedManually,
             roster.Knows(entry.CharacterName, entry.AppUserId));
-
-    internal static string NormalizeLootStructure(string structure)
-    {
-        if (string.Equals(structure, "LootCouncil", StringComparison.OrdinalIgnoreCase)) return "LootCouncil";
-        if (string.Equals(structure, "Hybrid", StringComparison.OrdinalIgnoreCase)) return "Hybrid";
-        return "Dkp";
-    }
 }

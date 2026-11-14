@@ -670,7 +670,7 @@ public sealed partial class AddonApiController
         {
             characterNames,
             roster,
-            lootStructure = ActivityMappers.NormalizeLootStructure(linkshell?.LootStructure ?? "Dkp")
+            lootStructure = LootStructures.NormalizeLootStructure(linkshell?.LootStructure ?? "Dkp")
         });
     }
 
@@ -939,7 +939,7 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "WinningDkpSpent must be a positive number." });
         }
 
-        var lootStructure = ActivityMappers.NormalizeLootStructure(linkshell?.LootStructure ?? "Dkp");
+        var lootStructure = LootStructures.NormalizeLootStructure(linkshell?.LootStructure ?? "Dkp");
         if (lootStructure == "LootCouncil")
         {
             return BadRequest(new { error = "Linkshell uses LootCouncil - DKP loot posts are disabled." });
