@@ -11,14 +11,13 @@ namespace LinkshellManagerDiscordApp.Services;
 // they want to IMPORT. Hand-rolled (an .xlsx is just a ZIP of a few XML parts)
 // to avoid pulling in an Excel library for one static download.
 //
-// Styling mirrors the LIVE Google Sheets export (DkpTemplateSheetService) one
-// for one: navy title bar (#262939, white bold), lavender summary block
-// (#EDF0FA, bold labels + big values), periwinkle header row (#6366F2, white
-// bold), and alternating white / #F2F2FF member stripes — relying on the
-// spreadsheet's default light gridlines rather than a heavy black grid, so it
-// reads the same in Excel or Google Sheets. The importable layout (Member Name |
-// Alt 1 | Alt 2 | Current DKP | Biddable DKP | Total DKP | Total DKP Spent) is
-// what the importer matches on.
+// Styling (kept from the old Google Sheets export): navy title bar (#262939,
+// white bold), lavender summary block (#EDF0FA, bold labels + big values),
+// periwinkle header row (#6366F2, white bold), and alternating white / #F2F2FF
+// member stripes — relying on the spreadsheet's default light gridlines rather
+// than a heavy black grid, so it reads the same in Excel or Google Sheets. The
+// importable layout (Member Name | Alt 1 | Alt 2 | Current DKP | Biddable DKP |
+// Total DKP | Total DKP Spent) is what the importer matches on.
 public static class SampleDkpTemplateWorkbook
 {
     public const string FileName = "LSM-DKP-Template-Sample.xlsx";
@@ -108,7 +107,7 @@ public static class SampleDkpTemplateWorkbook
     private const int SDataNumWhite = 8;   // member #,##0.00 cell, white stripe
     private const int SDataNumBand = 9;    // member #,##0.00 cell, lavender stripe
 
-    // Palette lifted verbatim from the live export (DkpTemplateSheetService):
+    // Palette (kept from the old Google Sheets export):
     //   title #262939 · summary #EDF0FA · header #6366F2 · band #F2F2FF.
     private const string StylesXml =
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +

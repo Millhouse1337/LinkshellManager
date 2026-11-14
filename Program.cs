@@ -675,7 +675,7 @@ app.Use(async (ctx, next) =>
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
             $"script-src 'self' 'nonce-{nonce}';",
             "object-src 'none';",
-            $"frame-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com https://docs.google.com https://accounts.google.com{devTunnelHostFragment};"
+            $"frame-src 'self' https://discord.com https://*.discord.com https://*.discordsays.com{devTunnelHostFragment};"
         );
 
         ctx.Response.Headers["Content-Security-Policy"] = csp;

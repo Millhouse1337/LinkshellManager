@@ -60,10 +60,10 @@ public class WindowEvent
     [MaxLength(256)]
     public string? CreatedByCharacterName { get; set; }
 
-    // DKP per attending character once this event is posted to the linkshell's Google Sheet
-    // AttInput tab — the baseline for anyone without a per-snapshot override. No longer entered
-    // on the card (DKP is set per snapshot); saves run it through WindowEventDkp.Resolve, which
-    // never lets it go back to null. See that helper for why null is dangerous.
+    // DKP per attending character once this event is posted — the baseline for anyone without
+    // a per-snapshot override. No longer entered on the card (DKP is set per snapshot); saves run
+    // it through WindowEventDkp.Resolve, which never lets it go back to null. See that helper for
+    // why null is dangerous.
     public double? DkpAmount { get; set; }
 
     // DKP for members credited ONLY from Misc posts — people at the camp but outside any window.
@@ -163,9 +163,6 @@ public static class WindowEventStatuses
     public const string Archived = "Archived";
 }
 
-// Valid AttInput "Entry Type" tags (column K). The downstream sheet formulas
-// pivot on these exact strings, so values that don't match the set will fall
-// through the formula chain silently.
 // The event-wide DKP baseline. Officers set DKP per snapshot now, so the card no longer asks
 // for this — but it still backs every member who has no override, so a save must never null it.
 public static class WindowEventDkp

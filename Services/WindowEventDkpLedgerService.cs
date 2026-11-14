@@ -399,8 +399,7 @@ public sealed class WindowEventDkpLedgerService
     // missing rows, so it can't correct existing ones — this walks the existing
     // SnapshotEarned ledger entries for the window event, recomputes each
     // ACCOUNT's amount (the same figure Post pays), applies the delta to LinkshellDkp,
-    // and rewrites the entry amount + type. Was previously done by the (now
-    // removed) AttInput sheet job; this is the DB-only equivalent.
+    // and rewrites the entry amount + type.
     public async Task<int> ReconcilePostedWindowEventLedgerAsync(int windowEventId, CancellationToken cancellationToken)
     {
         var windowEvent = await _db.WindowEvents
