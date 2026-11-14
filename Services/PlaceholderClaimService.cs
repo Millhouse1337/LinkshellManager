@@ -187,13 +187,12 @@ public sealed class PlaceholderClaimService
         var seedFrom = Math.Min(existing.DkpSeedLedgerId, ph.DkpSeedLedgerId);
         var seedTo = Math.Max(existing.DkpSeedLedgerId, ph.DkpSeedLedgerId);
         var laterSeedRows = existing.DkpSeedLedgerId > ph.DkpSeedLedgerId ? realRows : phRows;
-        var seededGap = laterSeedRows
-            .Where(r => r.Id > seedFrom && r.Id <= seedTo && !ReconciliationEntryTypes.Contains(r.EntryType ?? string.Empty))
-            .ToList();
-        existing.SeededDkpEarned = existing.SeededDkpEarned + ph.SeededDkpEarned
-            - seededGap.Where(r => r.Amount > 0).Sum(r => r.Amount);
-        existing.SeededDkpSpent = existing.SeededDkpSpent + ph.SeededDkpSpent
-            - seededGap.Where(r => r.Amount < 0).Sum(r => -r.Amount);
+        // Counted the way DkpSheetService counts them: a past-event correction with the row it corrects.
+        var (gapEarned, gapSpent) = DkpLifetimeTotals.Sum(
+            laterSeedRows.Select(r => new DkpLifetimeTotals.Row(r.Id, r.Amount, r.EntryType, r.CorrectsId)).ToList(),
+            root => root.Id > seedFrom && root.Id <= seedTo && !ReconciliationEntryTypes.Contains(root.EntryType ?? string.Empty));
+        existing.SeededDkpEarned = existing.SeededDkpEarned + ph.SeededDkpEarned - gapEarned;
+        existing.SeededDkpSpent = existing.SeededDkpSpent + ph.SeededDkpSpent - gapSpent;
         existing.DkpSeedLedgerId = seedFrom;
 
         var poolFrom = Math.Min(existing.DkpPoolLedgerFromId, ph.DkpPoolLedgerFromId);
@@ -232,10 +231,10 @@ public sealed class PlaceholderClaimService
     private Task<List<LedgerRow>> LedgerRowsAsync(string appUserId, int linkshellId, CancellationToken cancellationToken) =>
         _db.DkpLedgerEntries
             .Where(e => e.AppUserId == appUserId && e.LinkshellId == linkshellId)
-            .Select(e => new LedgerRow(e.Id, e.Amount, e.EntryType))
+            .Select(e => new LedgerRow(e.Id, e.Amount, e.EntryType, e.AuditRelatedLedgerEntryId))
             .ToListAsync(cancellationToken);
 
-    private sealed record LedgerRow(int Id, double Amount, string? EntryType);
+    private sealed record LedgerRow(int Id, double Amount, string? EntryType, int? CorrectsId);
 
     // The 0-DKP history line that explains a claim (see the class comment).
     private void AddMergeRow(string appUserId, int linkshellId, string? characterName, DateTime now, string details)

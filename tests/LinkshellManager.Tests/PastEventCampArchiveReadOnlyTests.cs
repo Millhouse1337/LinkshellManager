@@ -132,7 +132,7 @@ public class PastEventCampArchiveReadOnlyTests
         var db = await SeededAsync();
         var (edits, _) = NewServices(db);
 
-        var outcome = await edits.SetParticipantDkpAsync(CampHistoryId, CampHistoryId * 100, 3, CancellationToken.None);
+        var outcome = await edits.SetParticipantDkpAsync(CampHistoryId, CampHistoryId * 100, 3, DkpCorrectionNote.None, CancellationToken.None);
 
         Assert.Equal(EventHistoryEditOutcome.CampArchive, outcome);
         Assert.Equal(20, await BalanceAsync(db, "alice"));
@@ -146,7 +146,7 @@ public class PastEventCampArchiveReadOnlyTests
         var db = await SeededAsync();
         var (edits, _) = NewServices(db);
 
-        var outcome = await edits.RemoveParticipantAsync(CampHistoryId, CampHistoryId * 100, CancellationToken.None);
+        var outcome = await edits.RemoveParticipantAsync(CampHistoryId, CampHistoryId * 100, DkpCorrectionNote.None, CancellationToken.None);
 
         Assert.Equal(EventHistoryEditOutcome.CampArchive, outcome);
         Assert.True(await db.AppUserEventHistories.AnyAsync(p => p.Id == CampHistoryId * 100));
@@ -230,7 +230,7 @@ public class PastEventCampArchiveReadOnlyTests
         var (edits, _) = NewServices(db);
 
         Assert.Equal(EventHistoryEditOutcome.Done,
-            await edits.SetParticipantDkpAsync(TimedHistoryId, TimedHistoryId * 100, 4, CancellationToken.None));
+            await edits.SetParticipantDkpAsync(TimedHistoryId, TimedHistoryId * 100, 4, DkpCorrectionNote.None, CancellationToken.None));
         Assert.Equal(14, await BalanceAsync(db, "alice"));
 
         Assert.Equal(EventHistoryEditOutcome.Done,

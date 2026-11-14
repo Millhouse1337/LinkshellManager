@@ -1567,9 +1567,14 @@ public sealed record ActivityEditEventHistoryRequest(
     string? EventType,
     string? EventLocation,
     double? Duration,
-    int? DkpPerHour);
+    int? DkpPerHour,
+    // Optional: why the rate changed. Kept on each attendee's correction row.
+    string? Reason = null);
 
-public sealed record ActivitySetParticipantDkpRequest(double Amount);
+// Reason is optional: why the officer changed this DKP. Kept on the correction row.
+public sealed record ActivitySetParticipantDkpRequest(double Amount, string? Reason = null);
+
+public sealed record ActivityRemoveEventHistoryParticipantRequest(string? Reason = null);
 
 // Add a member to a closed event after the fact + grant DKP (wired into the ledger/balance).
 public sealed record ActivityAddEventHistoryParticipantRequest(

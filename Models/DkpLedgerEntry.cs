@@ -34,9 +34,9 @@ public class DkpLedgerEntry
     //
     // Intentionally NOT a foreign key, matching SourceEventLootDetailId
     // below: the ledger is history and must survive whatever happens to the rows it points at.
-    // (It is not strictly append-only: the past-event editor and the posted review-card
-    // reconciler change or remove rows through DkpLedgerWriter.Amend / Remove, moving the balance
-    // with them.)
+    // (It is not strictly append-only: a posted review card's Update re-prices its own payout rows
+    // (DkpLedgerWriter.Amend), and deleting a whole past event removes its rows (Remove). A DKP
+    // change on a past event appends a "Correction" row instead -- see DkpCorrections.)
     public int? DkpPoolId { get; set; }
 
     // False (the default): DkpPoolId is a CACHE of "which pool does EventType map to right
@@ -70,10 +70,9 @@ public class DkpLedgerEntry
     [MaxLength(1024)]
     public string? Details { get; set; }
 
-    // Populated when this ledger entry was produced by the Loot History edit
-    // flow (EntryType = "LootEditRefund" / "LootEditSpent"). Surfaces in the
-    // DKP-history view as an "Edited" tag with the reason on hover. Null on
-    // organic earn/spend/refund entries.
+    // The officer's reason, on rows produced by the Loot History edit flow
+    // (EntryType = "LootEditRefund" / "LootEditSpent") and on a past event's
+    // "Correction" rows (when one was typed). Null on organic earn/spend/refund entries.
     [MaxLength(512)]
     public string? EditReason { get; set; }
 
@@ -88,8 +87,9 @@ public class DkpLedgerEntry
     // rows and prevents backfills from creating duplicates.
     public int? SourceWindowEventId { get; set; }
 
-    // For audit adjustments, points at the ledger entry being corrected. This
-    // lets subsequent corrections calculate the delta from the current audited
-    // value instead of repeatedly comparing against the original amount.
+    // For audit adjustments and past-event "Correction" rows, points at the ledger
+    // entry being corrected. This lets subsequent corrections calculate the delta
+    // from the current corrected value instead of repeatedly comparing against the
+    // original amount.
     public int? AuditRelatedLedgerEntryId { get; set; }
 }

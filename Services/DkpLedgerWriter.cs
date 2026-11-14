@@ -187,13 +187,83 @@ public sealed class DkpLedgerWriter
         return entry;
     }
 
-    // Change an existing row's amount in place, moving the balance by the delta. Used by the
-    // closed-event editor and the window-event reconciler, which correct history rather than
-    // appending compensating rows.
+    // Append a "Correction" row of `delta` on top of `corrected` (see DkpCorrections) and move the
+    // balance by the same amount. The corrected row is never touched.
     //
-    // member may be null: EventHistoryEditService mutates ledger rows for accounts whose
-    // membership has since been removed. Then the row changes and the (non-existent) balance
-    // doesn't — which is exactly what happened before, just now it's explicit.
+    // The correction lands in the corrected row's own pool, with its pinned-ness, event and card,
+    // so a remap, a retype or a Delete of the event treats both rows alike. Officer intent: like a
+    // DKP audit it may take the member below zero.
+    //
+    // member may be null: a past event can still list an account whose membership has since been
+    // removed. Then the row is written (Past Events show the corrected figure) and the
+    // non-existent balance doesn't move, as an in-place edit did before.
+    public async Task<DkpLedgerEntry?> AppendCorrectionAsync(
+        DkpLedgerEntry corrected,
+        AppUserLinkshell? member,
+        double delta,
+        DateTime occurredAtUtc,
+        string details,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(corrected.AppUserId))
+        {
+            return null;
+        }
+        if (corrected.Id <= 0)
+        {
+            throw new InvalidOperationException("A correction needs a saved ledger row to point at.");
+        }
+
+        var entry = new DkpLedgerEntry
+        {
+            AppUserId = corrected.AppUserId,
+            LinkshellId = corrected.LinkshellId,
+            EntryType = DkpCorrections.EntryType,
+            Amount = delta,
+            Sequence = await NextSequenceAsync(corrected.LinkshellId, corrected.AppUserId, cancellationToken),
+            OccurredAt = occurredAtUtc,
+            DkpPoolId = corrected.DkpPoolId,
+            DkpPoolPinned = corrected.DkpPoolPinned,
+            CharacterName = corrected.CharacterName ?? member?.CharacterName,
+            EventName = corrected.EventName,
+            EventType = corrected.EventType,
+            EventLocation = corrected.EventLocation,
+            ItemName = corrected.ItemName,
+            Details = Truncate(details, 1024),
+            EditReason = Truncate(DkpCorrections.CleanReason(reason), 512),
+            EventHistoryId = corrected.EventHistoryId,
+            SourceWindowEventId = corrected.SourceWindowEventId,
+            AuditRelatedLedgerEntryId = corrected.Id,
+        };
+        _db.DkpLedgerEntries.Add(entry);
+
+        if (member is null
+            || string.IsNullOrWhiteSpace(member.AppUserId)
+            || !string.Equals(member.AppUserId, corrected.AppUserId, StringComparison.Ordinal))
+        {
+            if (Math.Abs(delta) > 1e-9)
+            {
+                _logger.LogWarning(
+                    "Correction of ledger entry {EntryId} by {Delta} DKP has no membership to credit — balance not moved.",
+                    corrected.Id, delta);
+            }
+            return entry;
+        }
+
+        member.LinkshellDkp = (member.LinkshellDkp ?? 0d) + delta;
+        StageDelta(member.LinkshellId, member.AppUserId!, corrected.DkpPoolId ?? 0, delta);
+        return entry;
+    }
+
+    private static string? Truncate(string? value, int max) =>
+        value is null || value.Length <= max ? value : value[..max];
+
+    // Change an existing row's amount in place, moving the balance by the delta. Only the review
+    // card's Update (WindowEventDkpLedgerService) still re-prices its own payout rows this way;
+    // a Past Event edit appends a correction instead (AppendCorrectionAsync).
+    //
+    // member may be null: the row changes and the (non-existent) balance doesn't.
     public void Amend(DkpLedgerEntry entry, double newAmount, string? newDetails, AppUserLinkshell? member)
     {
         var delta = newAmount - entry.Amount;
@@ -218,7 +288,8 @@ public sealed class DkpLedgerWriter
         StageDelta(member.LinkshellId, member.AppUserId!, entry.DkpPoolId ?? 0, delta);
     }
 
-    // Delete a row and reverse ITS OWN amount from the balance.
+    // Delete a row and reverse ITS OWN amount from the balance. Only deleting a whole past event
+    // does this (EventHistoryEditService.DeleteEventAsync): the event and its history go together.
     //
     // Reversing entry.Amount (rather than whatever the caller thinks the row was worth) is what
     // makes this safe: the previous code subtracted a separately-tracked figure that could have

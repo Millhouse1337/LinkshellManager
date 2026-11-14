@@ -182,14 +182,17 @@ public class ConcurrencyTests : IAsyncLifetime
                 dbB, new DkpLedgerWriter(dbB, pools, NullLogger<DkpLedgerWriter>.Instance), pools);
             Assert.Equal(
                 EventHistoryEditOutcome.Done,
-                await edits.SetParticipantDkpAsync(historyId, participantId, 20, CancellationToken.None));
+                await edits.SetParticipantDkpAsync(historyId, participantId, 20, DkpCorrectionNote.None, CancellationToken.None));
         }
 
         await using var check = _pg.CreateContext();
         var saved = await check.AppUserLinkshells.SingleAsync();
         Assert.Equal(125, saved.LinkshellDkp);
         Assert.Equal(25, (await check.DkpLedgerEntries.Select(e => e.Amount).ToListAsync()).Sum());
-        Assert.Equal(20, (await check.DkpLedgerEntries.SingleAsync(e => e.EntryType == "EventEarned")).Amount);
+        // R2.1: the payout stays at 10; the edit is one +10 correction on top (written once, not
+        // once per retry).
+        Assert.Equal(10, (await check.DkpLedgerEntries.SingleAsync(e => e.EntryType == "EventEarned")).Amount);
+        Assert.Equal(10, (await check.DkpLedgerEntries.SingleAsync(e => e.EntryType == DkpCorrections.EntryType)).Amount);
     }
 
     // Two officers end/hand off the same event at the same moment: the later save is turned away,

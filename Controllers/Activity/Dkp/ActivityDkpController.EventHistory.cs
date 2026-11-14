@@ -253,12 +253,12 @@ public sealed partial class ActivityDkpController
     [HttpPost("event-history/{id:int}/edit")]
     public async Task<IActionResult> EditEventHistoryAsync(int id, [FromBody] ActivityEditEventHistoryRequest request, CancellationToken cancellationToken)
     {
-        var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
+        var (history, note, forbid) = await AuthorizeHistoryDkpEditAsync(id, request.Reason, cancellationToken);
         if (forbid is not null) return forbid;
 
         var outcome = await EventHistoryEdits().EditEventAsync(history!.Id,
             new EventHistoryEditInput(request.EventName, request.EventType, request.EventLocation,
-                request.Duration, request.DkpPerHour),
+                request.Duration, request.DkpPerHour, note),
             cancellationToken);
         return outcome switch
         {
@@ -277,11 +277,11 @@ public sealed partial class ActivityDkpController
     public async Task<IActionResult> SetEventHistoryParticipantDkpAsync(
         int id, int participantId, [FromBody] ActivitySetParticipantDkpRequest request, CancellationToken cancellationToken)
     {
-        var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
+        var (history, note, forbid) = await AuthorizeHistoryDkpEditAsync(id, request.Reason, cancellationToken);
         if (forbid is not null) return forbid;
 
         var outcome = await EventHistoryEdits()
-            .SetParticipantDkpAsync(history!.Id, participantId, request.Amount, cancellationToken);
+            .SetParticipantDkpAsync(history!.Id, participantId, request.Amount, note!, cancellationToken);
         return outcome switch
         {
             EventHistoryEditOutcome.Done => Ok(new { success = true }),
@@ -292,13 +292,14 @@ public sealed partial class ActivityDkpController
 
     [HttpPost("event-history/{id:int}/participants/{participantId:int}/remove")]
     public async Task<IActionResult> RemoveEventHistoryParticipantAsync(
-        int id, int participantId, CancellationToken cancellationToken)
+        int id, int participantId, [FromBody] ActivityRemoveEventHistoryParticipantRequest? request, CancellationToken cancellationToken)
     {
-        var (history, forbid) = await AuthorizeHistoryEditAsync(id, cancellationToken);
+        // The body is optional: an app loaded before the Reason box existed sends none.
+        var (history, note, forbid) = await AuthorizeHistoryDkpEditAsync(id, request?.Reason, cancellationToken);
         if (forbid is not null) return forbid;
 
         var outcome = await EventHistoryEdits()
-            .RemoveParticipantAsync(history!.Id, participantId, cancellationToken);
+            .RemoveParticipantAsync(history!.Id, participantId, note!, cancellationToken);
         return outcome switch
         {
             EventHistoryEditOutcome.Done => Ok(new { success = true }),
@@ -383,23 +384,47 @@ public sealed partial class ActivityDkpController
 
     private async Task<(EventHistory? History, IActionResult? Result)> AuthorizeHistoryEditAsync(int id, CancellationToken cancellationToken)
     {
+        var (history, _, result) = await AuthorizeHistoryEditCoreAsync(id, cancellationToken);
+        return (history, result);
+    }
+
+    // For the edits that can change DKP: also checks the optional reason and says who is editing,
+    // for the correction row the edit appends (DkpCorrections).
+    private async Task<(EventHistory? History, DkpCorrectionNote? Note, IActionResult? Result)> AuthorizeHistoryDkpEditAsync(
+        int id, string? reason, CancellationToken cancellationToken)
+    {
+        var (history, appUser, result) = await AuthorizeHistoryEditCoreAsync(id, cancellationToken);
+        if (result is not null) return (null, null, result);
+
+        if (reason is not null && reason.Trim().Length > DkpCorrections.MaxReasonLength)
+        {
+            return (null, null, BadRequest(new { error = $"Reason must be {DkpCorrections.MaxReasonLength} characters or fewer." }));
+        }
+
+        var officerName = appUser!.CharacterName ?? appUser.UserName ?? "Officer";
+        return (history, new DkpCorrectionNote(officerName, DkpCorrections.CleanReason(reason)), null);
+    }
+
+    private async Task<(EventHistory? History, AppUser? AppUser, IActionResult? Result)> AuthorizeHistoryEditCoreAsync(
+        int id, CancellationToken cancellationToken)
+    {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
         {
-            return (null, Unauthorized(new { error = "Sign in to edit event history." }));
+            return (null, null, Unauthorized(new { error = "Sign in to edit event history." }));
         }
 
         var history = await _dbContext.EventHistories.AsNoTracking().FirstOrDefaultAsync(h => h.Id == id, cancellationToken);
         if (history is null)
         {
-            return (null, NotFound(new { error = "Event not found." }));
+            return (null, null, NotFound(new { error = "Event not found." }));
         }
 
         var membership = await GetMembershipAsync(appUser.Id, history.LinkshellId, cancellationToken);
         if (!await CanAsync(membership, r => r.CanManageEvents, cancellationToken))
         {
-            return (null, Forbid());
+            return (null, null, Forbid());
         }
-        return (history, null);
+        return (history, appUser, null);
     }
 }

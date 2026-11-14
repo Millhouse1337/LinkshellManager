@@ -4,13 +4,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// Edits a CLOSED event (EventHistory) and keeps DKP consistent. Unlike loot
-// edits (which append refund/spend ledger rows), a finished event's per-member
-// "EventEarned" ledger row is the canonical record of what that member earned —
-// so we mutate it in place (Amount + Details), adjust the member's LinkshellDkp
-// by the delta, and update the AppUserEventHistory.EventDkp. This keeps BOTH the
-// spendable balance and the lifetime Total (which sums ledger amounts by sign)
-// correct without misclassifying a downward edit as a "spend".
+// Edits a CLOSED event (EventHistory) and keeps DKP consistent. A finished event's per-member
+// "EventEarned" ledger row is what that member was paid, and it is never edited or deleted
+// afterwards: a DKP change (a new rate, "set to N", Remove) appends ONE "Correction" row for the
+// difference that points at it (DkpCorrections), moves the balance by the same amount, and
+// updates the AppUserEventHistory.EventDkp copy. The member's history then shows the payout, who
+// changed it, when and why. The lifetime Total folds a correction into the row it corrects
+// (DkpLifetimeTotals), so a downward edit is still not counted as a "spend".
 //
 // Only DkpPerHour drives earnings (each member earned their own duration × rate),
 // so a rate change rescales every member; the event-level Duration field is
@@ -105,7 +105,7 @@ public sealed class EventHistoryEditService
             var step = await StepForAsync(history.LinkshellId, cancellationToken);
             var memberships = await MembershipsAsync(history.LinkshellId, cancellationToken);
             var earnedEntries = await EarnedEntriesAsync(history.Id, cancellationToken);
-            var audits = await AuditsByCorrectedRowAsync(earnedEntries.Values, cancellationToken);
+            var audits = await AuditsByCorrectedRowAsync(earnedEntries.Values.SelectMany(rows => rows), cancellationToken);
 
             foreach (var p in history.AppUserEventHistories)
             {
@@ -117,8 +117,10 @@ public sealed class EventHistoryEditService
                 var newEarned = oldRate > 0
                     ? DkpRounding.Round(oldEarned * newRate / oldRate, step)
                     : DkpRounding.Round((p.Duration ?? 0) * newRate, step);
-                ApplyEarnedChange(p, newEarned, memberships, earnedEntries, audits,
-                    $"DKP earned from completed event (edited: rate {oldRate} -> {newRate}).");
+                await ApplyEarnedChangeAsync(p, newEarned, memberships, earnedEntries, audits,
+                    input.Note ?? DkpCorrectionNote.None,
+                    $"Rate {oldRate} -> {newRate} DKP per hour",
+                    cancellationToken);
             }
             history.DkpPerHour = newRate;
         }
@@ -133,10 +135,12 @@ public sealed class EventHistoryEditService
         int historyId,
         int participantId,
         double amount,
+        DkpCorrectionNote note,
         CancellationToken cancellationToken) =>
-        ConcurrencyRetry.RunAsync(_db, () => SetParticipantDkpOnceAsync(historyId, participantId, amount, cancellationToken));
+        ConcurrencyRetry.RunAsync(_db, () => SetParticipantDkpOnceAsync(historyId, participantId, amount, note, cancellationToken));
 
-    private async Task<EventHistoryEditOutcome> SetParticipantDkpOnceAsync(int historyId, int participantId, double amount, CancellationToken cancellationToken)
+    private async Task<EventHistoryEditOutcome> SetParticipantDkpOnceAsync(
+        int historyId, int participantId, double amount, DkpCorrectionNote note, CancellationToken cancellationToken)
     {
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)
@@ -148,10 +152,10 @@ public sealed class EventHistoryEditService
         var step = await StepForAsync(history.LinkshellId, cancellationToken);
         var memberships = await MembershipsAsync(history.LinkshellId, cancellationToken);
         var earnedEntries = await EarnedEntriesAsync(history.Id, cancellationToken);
-        var audits = await AuditsByCorrectedRowAsync(earnedEntries.Values, cancellationToken);
+        var audits = await AuditsByCorrectedRowAsync(earnedEntries.Values.SelectMany(rows => rows), cancellationToken);
 
-        ApplyEarnedChange(participant, DkpRounding.Round(amount, step),
-            memberships, earnedEntries, audits, "DKP earned from completed event (edited).");
+        await ApplyEarnedChangeAsync(participant, DkpRounding.Round(amount, step),
+            memberships, earnedEntries, audits, note, "Set by hand", cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
         return EventHistoryEditOutcome.Done;
@@ -220,7 +224,8 @@ public sealed class EventHistoryEditService
         history.AppUserEventHistories.Add(row);
 
         // DKP tie-in: add to the spendable balance + record the canonical EventEarned ledger row
-        // (one per member per event — edits/removals rely on it existing). It earns into the same
+        // (edits and removals put their correction rows on it; a member removed earlier keeps their
+        // old, corrected-to-0 row next to this one). It earns into the same
         // pool the event's type maps to, exactly as if they'd been on the original roster.
         await _dkpLedger.AppendAsync(
             membership,
@@ -317,13 +322,15 @@ public sealed class EventHistoryEditService
         return true;
     }
 
-    // Remove a member from the event: refund their earned DKP (subtract from
-    // balance, delete the EventEarned ledger row) and drop the attendance record.
-    // Re-run on a lost balance race (see EditEventAsync).
-    public Task<EventHistoryEditOutcome> RemoveParticipantAsync(int historyId, int participantId, CancellationToken cancellationToken) =>
-        ConcurrencyRetry.RunAsync(_db, () => RemoveParticipantOnceAsync(historyId, participantId, cancellationToken));
+    // Remove a member from the event: take back everything they got from it (one correction row
+    // of minus their total; the earned and audit rows stay as history) and drop the attendance
+    // record. Re-run on a lost balance race (see EditEventAsync).
+    public Task<EventHistoryEditOutcome> RemoveParticipantAsync(
+        int historyId, int participantId, DkpCorrectionNote note, CancellationToken cancellationToken) =>
+        ConcurrencyRetry.RunAsync(_db, () => RemoveParticipantOnceAsync(historyId, participantId, note, cancellationToken));
 
-    private async Task<EventHistoryEditOutcome> RemoveParticipantOnceAsync(int historyId, int participantId, CancellationToken cancellationToken)
+    private async Task<EventHistoryEditOutcome> RemoveParticipantOnceAsync(
+        int historyId, int participantId, DkpCorrectionNote note, CancellationToken cancellationToken)
     {
         var history = await _db.EventHistories
             .Include(h => h.AppUserEventHistories)
@@ -336,23 +343,23 @@ public sealed class EventHistoryEditService
         {
             var memberships = await MembershipsAsync(history.LinkshellId, cancellationToken);
             var earnedEntries = await EarnedEntriesAsync(history.Id, cancellationToken);
-            if (earnedEntries.TryGetValue(participant.AppUserId, out var entry))
+            var audits = await AuditsByCorrectedRowAsync(earnedEntries.Values.SelectMany(rows => rows), cancellationToken);
+            // Take back what the LEDGER says they got here (earned rows + every audit and earlier
+            // correction of them), not the participant's EventDkp: the two can disagree, and
+            // reversing the display copy would leave the balance off by the difference. A -2
+            // audit is part of that total, so it is taken back too.
+            if (LedgerTotal(participant, earnedEntries, audits) is double total
+                && Math.Abs(total) > DkpCorrections.Epsilon)
             {
-                // Reverse the LEDGER ROW's amount, not the participant's EventDkp. The two can
-                // disagree (the ledger row may have been audited since), and reversing the display
-                // field would leave the balance off by the difference — permanently, with nothing
-                // left pointing at the discrepancy.
                 memberships.TryGetValue(participant.AppUserId, out var membership);
-                _dkpLedger.Remove(entry, membership);
-
-                // And every DKP audit correction of that row: it only existed to adjust what this
-                // member earned here. Left behind, a -2 audit kept them 2 short for an event they
-                // are no longer on.
-                var audits = await AuditsByCorrectedRowAsync(new[] { entry }, cancellationToken);
-                foreach (var audit in audits[entry.Id])
-                {
-                    _dkpLedger.Remove(audit, membership);
-                }
+                await _dkpLedger.AppendCorrectionAsync(
+                    earnedEntries[participant.AppUserId][^1],
+                    membership,
+                    -total,
+                    DateTime.UtcNow,
+                    DkpCorrections.Details(note, $"Removed from the event: {DkpCorrections.Amount(total)} -> 0."),
+                    note.Reason,
+                    cancellationToken);
             }
         }
 
@@ -446,48 +453,62 @@ public sealed class EventHistoryEditService
 
     // ---- helpers ------------------------------------------------------------
 
-    // Set a participant's earned DKP to `newEarned`, moving the balance and the canonical
-    // EventEarned ledger row together.
+    // Set a participant's earned DKP to `newEarned` by appending one correction row for the
+    // difference (none when nothing changes). The earned row is never touched.
     //
-    // The ledger row is the source of truth for the delta, not the participant's EventDkp: those
+    // The ledger is the source of truth for the difference, not the participant's EventDkp: those
     // two can disagree (an officer can audit the ledger row directly), and taking the delta from
     // the display field would then leave the balance permanently off by the difference.
     //
-    // `newEarned` is what the member should end up with from this event IN TOTAL. A DKP audit may
-    // already have corrected the row (10 earned, audited -2 = 8); those corrections stay, so the
-    // row is set to the rest. Setting the row itself to 8 made the member 6.
-    private void ApplyEarnedChange(
+    // `newEarned` is what the member should end up with from this event IN TOTAL. A DKP audit (or
+    // an earlier correction) may already have changed it (10 earned, audited -2 = 8); setting 8
+    // then writes nothing, and setting 6 writes -2.
+    private async Task ApplyEarnedChangeAsync(
         AppUserEventHistory participant,
         double newEarned,
         IReadOnlyDictionary<string, AppUserLinkshell> memberships,
-        IReadOnlyDictionary<string, DkpLedgerEntry> earnedEntries,
+        IReadOnlyDictionary<string, List<DkpLedgerEntry>> earnedEntries,
         IReadOnlyDictionary<int, List<DkpLedgerEntry>> auditsByRow,
-        string ledgerDetails)
+        DkpCorrectionNote note,
+        string change,
+        CancellationToken cancellationToken)
     {
         participant.EventDkp = newEarned;
-        if (string.IsNullOrWhiteSpace(participant.AppUserId)) return;
-        if (!earnedEntries.TryGetValue(participant.AppUserId, out var entry)) return;
+        if (LedgerTotal(participant, earnedEntries, auditsByRow) is not double current) return;
 
-        var audited = auditsByRow.TryGetValue(entry.Id, out var audits) ? audits.Sum(a => a.Amount) : 0d;
-        memberships.TryGetValue(participant.AppUserId, out var membership);
-        _dkpLedger.Amend(entry, newEarned - audited, ledgerDetails, membership);
+        var delta = newEarned - current;
+        if (Math.Abs(delta) <= DkpCorrections.Epsilon) return;
+
+        memberships.TryGetValue(participant.AppUserId!, out var membership);
+        await _dkpLedger.AppendCorrectionAsync(
+            // The newest earned row: a member removed and added back has two, and the correction
+            // belongs with the one they are on the event for now.
+            earnedEntries[participant.AppUserId!][^1],
+            membership,
+            delta,
+            DateTime.UtcNow,
+            DkpCorrections.Details(note,
+                $"{change}: {DkpCorrections.Amount(current)} -> {DkpCorrections.Amount(newEarned)}."),
+            note.Reason,
+            cancellationToken);
     }
 
-    // What the member actually got from this event in the ledger: their earned row plus every audit
-    // correction of it. Null when they have no earned row (then the shown figure is all there is).
+    // What the member actually got from this event in the ledger: their earned row(s) plus every
+    // audit and correction of them. Null when they have no earned row (then the shown figure is all
+    // there is).
     private static double? LedgerTotal(
         AppUserEventHistory participant,
-        IReadOnlyDictionary<string, DkpLedgerEntry> earnedEntries,
+        IReadOnlyDictionary<string, List<DkpLedgerEntry>> earnedEntries,
         IReadOnlyDictionary<int, List<DkpLedgerEntry>> auditsByRow)
     {
         if (string.IsNullOrWhiteSpace(participant.AppUserId)) return null;
-        if (!earnedEntries.TryGetValue(participant.AppUserId, out var entry)) return null;
-        var audited = auditsByRow.TryGetValue(entry.Id, out var audits) ? audits.Sum(a => a.Amount) : 0d;
-        return entry.Amount + audited;
+        if (!earnedEntries.TryGetValue(participant.AppUserId, out var rows)) return null;
+        return rows.Sum(row =>
+            row.Amount + (auditsByRow.TryGetValue(row.Id, out var audits) ? audits.Sum(a => a.Amount) : 0d));
     }
 
-    // Every DKP audit correction of each given row, keyed by that row's id (DkpAuditChain). Tracked,
-    // because Remove and Delete reverse these rows.
+    // Every DKP audit or correction of each given row, keyed by that row's id (DkpAuditChain).
+    // Tracked, because Delete reverses these rows.
     private Task<Dictionary<int, List<DkpLedgerEntry>>> AuditsByCorrectedRowAsync(
         IEnumerable<DkpLedgerEntry> rows, CancellationToken cancellationToken) =>
         DkpAuditChain.ByCorrectedRowAsync(_db.DkpLedgerEntries, rows, cancellationToken);
@@ -511,13 +532,19 @@ public sealed class EventHistoryEditService
         return map;
     }
 
-    private async Task<Dictionary<string, DkpLedgerEntry>> EarnedEntriesAsync(int historyId, CancellationToken cancellationToken)
+    // Each member's EventEarned row(s) here, oldest first. Usually one; a member removed and then
+    // added back keeps the first row (corrected to 0) and gets a second.
+    private async Task<Dictionary<string, List<DkpLedgerEntry>>> EarnedEntriesAsync(int historyId, CancellationToken cancellationToken)
     {
         var rows = await _db.DkpLedgerEntries
             .Where(e => e.EventHistoryId == historyId && e.AppUserId != null && e.EntryType == EventEarnedEntryType)
             .ToListAsync(cancellationToken);
-        var map = new Dictionary<string, DkpLedgerEntry>(StringComparer.Ordinal);
-        foreach (var row in rows) { map[row.AppUserId!] = row; } // one EventEarned per member per event
+        var map = new Dictionary<string, List<DkpLedgerEntry>>(StringComparer.Ordinal);
+        foreach (var row in rows.OrderBy(r => r.Id))
+        {
+            if (!map.TryGetValue(row.AppUserId!, out var list)) map[row.AppUserId!] = list = new List<DkpLedgerEntry>();
+            list.Add(row);
+        }
         return map;
     }
 
@@ -539,4 +566,6 @@ public sealed record EventHistoryEditInput(
     string? EventType,
     string? EventLocation,
     double? Duration,
-    int? DkpPerHour);
+    int? DkpPerHour,
+    // Who is editing and why: written on the correction rows a rate change appends.
+    DkpCorrectionNote? Note = null);

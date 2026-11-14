@@ -122,21 +122,22 @@ public sealed class DkpSheetService
 
     // ---- ledger helpers (lifetime totals = seed + post-watermark ledger) -----
 
-    private sealed record LedgerLite(int Id, double Amount, string EntryType, int? DkpPoolId);
+    private sealed record LedgerLite(int Id, double Amount, string EntryType, int? DkpPoolId, int? CorrectsId);
 
     private async Task<Dictionary<string, List<LedgerLite>>> LoadLedgerByUserAsync(int linkshellId, CancellationToken cancellationToken)
     {
         var rows = await _db.DkpLedgerEntries
             .AsNoTracking()
             .Where(e => e.LinkshellId == linkshellId && e.AppUserId != null)
-            .Select(e => new { e.AppUserId, e.Id, e.Amount, e.EntryType, e.DkpPoolId })
+            .Select(e => new { e.AppUserId, e.Id, e.Amount, e.EntryType, e.DkpPoolId, e.AuditRelatedLedgerEntryId })
             .ToListAsync(cancellationToken);
 
         return rows
             .GroupBy(e => e.AppUserId!)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(e => new LedgerLite(e.Id, e.Amount, e.EntryType ?? string.Empty, e.DkpPoolId)).ToList(),
+                g => g.Select(e => new LedgerLite(
+                    e.Id, e.Amount, e.EntryType ?? string.Empty, e.DkpPoolId, e.AuditRelatedLedgerEntryId)).ToList(),
                 StringComparer.Ordinal);
     }
 
@@ -148,13 +149,12 @@ public sealed class DkpSheetService
 
         if (member.AppUserId is not null && ledgerByUser.TryGetValue(member.AppUserId, out var entries))
         {
-            foreach (var e in entries)
-            {
-                if (e.Id <= member.DkpSeedLedgerId) { continue; }
-                if (ReconciliationEntryTypes.Contains(e.EntryType)) { continue; }
-                if (e.Amount > 0) { earned += e.Amount; }
-                else if (e.Amount < 0) { spent += -e.Amount; }
-            }
+            // A past-event correction counts with the row it corrects (DkpLifetimeTotals).
+            var (ledgerEarned, ledgerSpent) = DkpLifetimeTotals.Sum(
+                entries.Select(e => new DkpLifetimeTotals.Row(e.Id, e.Amount, e.EntryType, e.CorrectsId)).ToList(),
+                root => root.Id > member.DkpSeedLedgerId && !ReconciliationEntryTypes.Contains(root.EntryType ?? string.Empty));
+            earned += ledgerEarned;
+            spent += ledgerSpent;
         }
 
         return (DkpRounding.Round(earned, step), DkpRounding.Round(spent, step));

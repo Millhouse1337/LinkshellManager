@@ -88,11 +88,15 @@ public class PastEventAuditCorrectionTests
         await using var db = NewDb();
         await SeedAsync(db, auditCarriesEvent: false);
 
-        var outcome = await NewServices(db).Edits.RemoveParticipantAsync(HistoryId, ParticipantId, CancellationToken.None);
+        var outcome = await NewServices(db).Edits.RemoveParticipantAsync(HistoryId, ParticipantId, DkpCorrectionNote.None, CancellationToken.None);
 
         Assert.Equal(EventHistoryEditOutcome.Done, outcome);
         Assert.Equal(0, BobDkp(db));
-        Assert.Empty(db.DkpLedgerEntries);
+        // R2.1: the payout and the audit stay as history; one correction takes back the 8 he had.
+        var rows = db.DkpLedgerEntries.AsNoTracking().OrderBy(e => e.Id).ToList();
+        Assert.Equal(new[] { 10d, -2d, -8d }, rows.Select(e => e.Amount));
+        Assert.Equal(DkpCorrections.EntryType, rows[2].EntryType);
+        Assert.Equal(rows[0].Id, rows[2].AuditRelatedLedgerEntryId);
     }
 
     [Fact]
@@ -101,7 +105,7 @@ public class PastEventAuditCorrectionTests
         await using var db = NewDb();
         var (earned, audit) = await SeedAsync(db, auditCarriesEvent: true);
 
-        var outcome = await NewServices(db).Edits.SetParticipantDkpAsync(HistoryId, ParticipantId, 8, CancellationToken.None);
+        var outcome = await NewServices(db).Edits.SetParticipantDkpAsync(HistoryId, ParticipantId, 8, DkpCorrectionNote.None, CancellationToken.None);
 
         Assert.Equal(EventHistoryEditOutcome.Done, outcome);
         Assert.Equal(8, BobDkp(db));

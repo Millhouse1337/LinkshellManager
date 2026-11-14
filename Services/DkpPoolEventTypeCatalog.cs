@@ -40,8 +40,9 @@ public sealed class DkpPoolEventTypeCatalog
 
     public async Task<IReadOnlyList<DkpPoolEventTypeOption>> LoadAsync(int linkshellId, CancellationToken cancellationToken)
     {
-        // Lifetime EARNED per event type (positive ledger amounts only). Doubles as the "what
-        // does this remap move" hint and as the source of the unmapped-types warning.
+        // Lifetime EARNED per event type (positive ledger amounts, plus past-event corrections,
+        // which change an earned row). Doubles as the "what does this remap move" hint and as the
+        // source of the unmapped-types warning.
         //
         // "Sheet" is excluded: it's the pseudo-type on DKP-import reconciliation rows, not
         // something anyone ran, and offering it as assignable would be nonsense (those rows are
@@ -50,7 +51,7 @@ public sealed class DkpPoolEventTypeCatalog
             .Where(entry => entry.LinkshellId == linkshellId
                 && entry.EventType != null
                 && entry.EventType != ImportEventType
-                && entry.Amount > 0)
+                && (entry.Amount > 0 || entry.EntryType == DkpCorrections.EntryType))
             .GroupBy(entry => entry.EventType!)
             .Select(group => new { EventType = group.Key, Earned = group.Sum(entry => entry.Amount) })
             .ToListAsync(cancellationToken);
