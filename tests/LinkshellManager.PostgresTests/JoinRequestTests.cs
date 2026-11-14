@@ -321,6 +321,53 @@ public class JoinRequestTests : IAsyncLifetime
         Assert.Equal(Officer, answered.ResolvedByAppUserId);
     }
 
+    // Two officers pressing at the same moment: an approve and a deny, or two approves. The
+    // request row is locked while it is answered, so exactly one wins and the other is told it
+    // was already answered. The status and the roster always agree.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TwoAnswersAtTheSameMoment_OnlyOneWins(bool bothApprove)
+    {
+        var (hunters, _) = await SeedAsync();
+        const int rounds = 6;
+        await using (var db = _pg.CreateContext())
+        {
+            for (var round = 0; round < rounds; round++)
+            {
+                db.Users.Add(new AppUser { Id = $"racer{round}", UserName = $"racer{round}", CharacterName = $"Racer{round}" });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        for (var round = 0; round < rounds; round++)
+        {
+            var player = $"racer{round}";
+            Assert.IsType<OkObjectResult>(await AskAsync(player, hunters));
+            var request = await RequestRowAsync(player, hunters);
+
+            var results = await Task.WhenAll(
+                Task.Run(() => ApproveAsync(Officer, request.Id)),
+                Task.Run(() => bothApprove ? ApproveAsync(Leader, request.Id) : DenyAsync(Leader, request.Id)));
+
+            Assert.Single(results, r => r is OkObjectResult);
+            var loser = Assert.Single(results, r => r is not OkObjectResult);
+            Assert.Contains("already answered", JsonSerializer.Serialize(Assert.IsType<BadRequestObjectResult>(loser).Value));
+
+            var answered = await RequestRowAsync(player, hunters);
+            var memberships = await MembershipsAsync(player, hunters);
+            if (answered.Status == JoinRequestService.ApprovedStatus)
+            {
+                Assert.Single(memberships);
+            }
+            else
+            {
+                Assert.Equal(JoinRequestService.DeniedStatus, answered.Status);
+                Assert.Empty(memberships);
+            }
+        }
+    }
+
     [Fact]
     public async Task ApprovingSomeoneWhoAlreadyJoined_MarksItApproved_AndAddsNoSecondRow()
     {
