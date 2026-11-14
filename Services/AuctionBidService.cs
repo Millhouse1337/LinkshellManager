@@ -13,7 +13,7 @@ public sealed record AuctionBidResult(bool Success, string? Error, string? ItemN
 // locking live in one place.
 public static class AuctionBidService
 {
-    // custom_id prefixes routed by DiscordInteractionsController:
+    // custom_id prefixes routed by AuctionInteractionHandler (Controllers/Discord):
     //   auc:pick:{auctionId}         — the card's item select → opens the bid modal for the pick
     //   auc:mybids:{auctionId}       — button → the clicker's bids on this auction (ephemeral)
     //   auc:bid:{auctionItemId}      — the old per-item button (cards posted before the select;

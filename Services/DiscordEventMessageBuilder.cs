@@ -30,7 +30,7 @@ public static class DiscordEventMessageBuilder
 {
     private const int EmbedColor = 0x5865F2; // Blurple.
 
-    // custom_id prefixes routed by DiscordInteractionsController.
+    // custom_id prefixes routed by the Discord interaction handlers (Controllers/Discord).
     public const string JobSelectPrefix = "evt:job:";
     public const string WithdrawPrefix = "evt:withdraw:";
     // Party-setup board interactions:
@@ -1735,7 +1735,7 @@ public static class DiscordEventMessageBuilder
     }
 
     // The green "Open LSManager App" button. It reuses the /lsm launch card's "Join" id, so the
-    // click handler (DiscordInteractionsController) already opens the Activity for whoever clicks.
+    // click handler (LaunchHandler) already opens the Activity for whoever clicks.
     public const string LaunchAppButtonId = "evt:launch";
 
     // Wraps each row of buttons into a Discord action row, with "Open LSManager App" always the

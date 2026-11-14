@@ -17,7 +17,7 @@ public class AppUserLinkshell
     // user id of the player it belongs to. Set when they self-register via the Discord
     // board's "you're not synced" modal, so later board signups auto-recognize them by
     // Discord id (no re-typing). Null for real, synced members. See ManualMemberService
-    // + DiscordInteractionsController.ResolveSignupContextAsync.
+    // + DiscordSignupIdentity.ResolveSignupContextAsync.
     [MaxLength(32)]
     public string? DiscordUserId { get; set; }
 

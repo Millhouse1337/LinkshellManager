@@ -10,7 +10,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // no Discord login → can never sign in or show up in invite search) so the player gets
 // a real AppUserId — which lets the entire AppUserId-keyed DKP / history / loot system
 // track them. Called from the Discord board's self-service onboarding modal
-// (DiscordInteractionsController), which keys the member to the player's Discord id so
+// (OutsideSignupHandler), which keys the member to the player's Discord id so
 // later signups auto-recognize them.
 public sealed class ManualMemberService
 {

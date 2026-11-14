@@ -104,7 +104,7 @@ public sealed class DiscordSignupIdentity : DiscordInteractionHandlerBase
         var enabled = await OutsideSignupAllowedAsync(ev, cancellationToken);
         if (!enabled || string.IsNullOrEmpty(Interaction.DiscordUserId))
         {
-            // The Discord id is already guaranteed (the click handler rejects an unreadable
+            // The Discord id is already guaranteed (the dispatcher rejects an unreadable
             // account earlier), so reaching here means the toggle is OFF for this linkshell.
             // Name it, instead of telling the player to "sign in" — which doesn't address
             // the real cause.

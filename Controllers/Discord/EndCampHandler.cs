@@ -543,7 +543,7 @@ public sealed class EndCampHandler : DiscordInteractionHandlerBase, IDiscordInte
     // guessed.
     //
     // Static, and internal so the accepted spellings can be pinned directly in tests. The zone
-    // service and `nowUtc` are passed in rather than read off the controller and the system clock
+    // service and `nowUtc` are passed in rather than read off the handler and the system clock
     // for the same reason: every branch here turns on the officer's LOCAL clock, so a test that
     // cannot choose the zone and the moment cannot actually test the rolling-back rules.
     internal static bool TryParseCampTod(

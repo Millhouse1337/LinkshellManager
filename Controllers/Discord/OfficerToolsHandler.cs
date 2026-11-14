@@ -353,7 +353,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase, IDiscor
     }
 
     // The "find a member by name" modal: the officer types a name (main or alt, or part of
-    // one). On submit (HandleModalSubmitAsync) it's looked up among the people already on the
+    // one). On submit (HandleOfficerAddFindModalAsync) it's looked up among the people already on the
     // roster. A single text field — Discord modals are text-only.
     private IActionResult OfficerAddFindModal(int eventId)
     {
