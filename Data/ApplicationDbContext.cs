@@ -2108,6 +2108,20 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasDefaultValue(AttendanceSnapshotSlotKinds.Window);
                 entity.Property(item => item.PostedByAppUserId).HasMaxLength(450);
                 entity.Property(item => item.VerifiedByAppUserId).HasMaxLength(450);
+                // Closed lists (see ClosedListCheck). Added NOT VALID by the migration, so rows saved
+                // before it are not checked until an owner runs VALIDATE CONSTRAINT.
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_AttendanceSnapshots_SnapshotStatus",
+                        ClosedListCheck("SnapshotStatus",
+                            AttendanceSnapshotStatuses.Active,
+                            AttendanceSnapshotStatuses.Ignored,
+                            AttendanceSnapshotStatuses.Pending));
+                    table.HasCheckConstraint(
+                        "CK_AttendanceSnapshots_SlotKind",
+                        ClosedListCheck("SlotKind", AttendanceSnapshotSlotKinds.All.ToArray()));
+                });
             });
             builder.Entity<LinkshellPresence>(entity =>
             {
@@ -2159,6 +2173,28 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.CampEventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.CampEventHistoryId);
+                // Closed lists (see ClosedListCheck), added NOT VALID. EntryType may be null.
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_WindowEvents_Status",
+                        ClosedListCheck("Status",
+                            WindowEventStatuses.Open,
+                            WindowEventStatuses.Closed,
+                            WindowEventStatuses.Archived));
+                    table.HasCheckConstraint(
+                        "CK_WindowEvents_EntryType",
+                        "\"EntryType\" IS NULL OR "
+                        + ClosedListCheck("EntryType", WindowEventEntryTypes.All.ToArray()));
+                });
+            });
+            // Only the closed-list check is configured here; everything else on Linkshell comes from
+            // its attributes. Added NOT VALID, like the two above.
+            builder.Entity<Linkshell>(entity =>
+            {
+                entity.ToTable(table => table.HasCheckConstraint(
+                    "CK_Linkshells_HnmAttendanceMode",
+                    ClosedListCheck("HnmAttendanceMode", HnmAttendanceModes.All.ToArray())));
             });
             builder.Entity<WindowEventMemberDkp>(entity =>
             {
@@ -2238,5 +2274,12 @@ namespace LinkshellManagerDiscordApp.Data
             builder.Entity<Auction>()
                 .Property(item => item.DiscordChannelId).HasMaxLength(32);
         }
+
+        // SQL for a CHECK that a status/type column holds one of a fixed set of values, built from
+        // the same constants the code writes, so the two cannot drift apart. For example
+        // ClosedListCheck("SlotKind", "Window", "Misc") gives "SlotKind" IN ('Window', 'Misc').
+        // Adding a new value to one of these lists needs a migration that replaces the constraint.
+        private static string ClosedListCheck(string column, params string[] values)
+            => $"\"{column}\" IN ({string.Join(", ", values.Select(value => $"'{value}'"))})";
     }
 }

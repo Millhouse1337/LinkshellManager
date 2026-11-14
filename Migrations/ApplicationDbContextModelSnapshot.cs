@@ -680,7 +680,12 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("LinkshellId", "SnapshotStatus");
 
-                    b.ToTable("AttendanceSnapshots");
+                    b.ToTable("AttendanceSnapshots", t =>
+                        {
+                            t.HasCheckConstraint("CK_AttendanceSnapshots_SlotKind", "\"SlotKind\" IN ('Window', 'Misc')");
+
+                            t.HasCheckConstraint("CK_AttendanceSnapshots_SnapshotStatus", "\"SnapshotStatus\" IN ('Active', 'Ignored', 'Pending')");
+                        });
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AttendanceSnapshotEntry", b =>
@@ -2571,7 +2576,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("AppUserId");
 
-                    b.ToTable("Linkshells");
+                    b.ToTable("Linkshells", t =>
+                        {
+                            t.HasCheckConstraint("CK_Linkshells_HnmAttendanceMode", "\"HnmAttendanceMode\" IN ('Standard', 'Wd')");
+                        });
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.LinkshellBanner", b =>
@@ -3356,7 +3364,12 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("LinkshellId", "Status", "NormalizedName");
 
-                    b.ToTable("WindowEvents", (string)null);
+                    b.ToTable("WindowEvents", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_WindowEvents_EntryType", "\"EntryType\" IS NULL OR \"EntryType\" IN ('Kings Camp', 'Wyrms Camp', 'Misc Camp', 'Kill')");
+
+                            t.HasCheckConstraint("CK_WindowEvents_Status", "\"Status\" IN ('Open', 'Closed', 'Archived')");
+                        });
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.WindowEventMemberDkp", b =>
