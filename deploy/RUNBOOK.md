@@ -490,6 +490,29 @@ deploy throws new screenshots away again, exactly as before.
 Uploading a screenshot now also needs a linkshell role that can log a ToD, submit one for
 approval, or manage events (the Leader always can), and each account may upload 30 a day.
 
+## Discord work queues live in memory (accepted risk)
+
+Discord posts are not sent inside the save that causes them. The save drops an item on an
+in-memory queue (`Services/*Queue.cs`: event boards, event-ended summaries, board deletions,
+auction cards, loot posts, the ToD board and the DKP sheet), and a background worker sends it a
+moment later. Nothing writes these items to the database, and a failed send is logged, not
+retried.
+
+So a restart or deploy while items are queued, or a Discord outage, can lose them. The database
+is always right; only the Discord copy can be stale. What that looks like, and the fix:
+
+| Lost item | What you see | Fix |
+|---|---|---|
+| Event board, auction card, ToD board, DKP sheet | Old or missing message | The next change to it re-posts it (edit the event, log a ToD, change some DKP) |
+| Event-ended summary or loot post | No summary/loot message for that event | Post it by hand if anyone needs it |
+| Board deletion | An ended event's board stays in the channel | Delete the message in Discord |
+
+This is accepted on purpose: deploys are short and rare, and every lost item is cosmetic. If it
+starts to matter, the first step is a small `DiscordPendingDeletes` table for board deletions (the
+one case nothing heals on its own), written in the same save and removed only after Discord
+confirms. If a board looks wrong after a deploy, look in the log for the worker's error line (for
+example `Unhandled error in DiscordEventChannelBackgroundService loop`).
+
 ## Things to set up later (not blocking go-live)
 
 - Automated daily `pg_dump` to a DO Spaces bucket (or any object store). The pre-deploy dumps (**Database backups**) only live on the droplet, so they do not survive losing it.
