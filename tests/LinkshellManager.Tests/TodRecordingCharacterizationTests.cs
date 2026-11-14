@@ -76,20 +76,6 @@ public class TodRecordingCharacterizationTests
     }
 
     [Fact]
-    public async Task App_ResetsThePartySignUpsForThatMonster()
-    {
-        await using var db = await TodCallers.SeededAsync();
-        var slot = TodCallers.SignedUpSetup(db, "Cerberus");
-        var other = TodCallers.SignedUpSetup(db, "Tiamat");
-        await db.SaveChangesAsync();
-
-        await TodCallers.AppPostAsync(db, TodCallers.AppRequest("Cerberus", KilledAt));
-
-        Assert.Null(slot.SignedUpAppUserId);
-        Assert.Equal(TodCallers.User, other.SignedUpAppUserId);
-    }
-
-    [Fact]
     public async Task App_MovesAParkedBoardToTheNewRepop()
     {
         await using var db = await TodCallers.SeededAsync();
@@ -156,18 +142,6 @@ public class TodRecordingCharacterizationTests
         Assert.Equal(2, (await db.Tods.SingleAsync()).DayNumber);
     }
 
-    [Fact]
-    public async Task Addon_ResetsThePartySignUpsForThatMonster()
-    {
-        await using var db = await TodCallers.SeededAsync();
-        var slot = TodCallers.SignedUpSetup(db, "Cerberus");
-        await db.SaveChangesAsync();
-
-        await TodCallers.AddonPostAsync(db, "Cerberus", KilledAt);
-
-        Assert.Null(slot.SignedUpAppUserId);
-    }
-
     // ---- approving a member's submission ----
 
     // The repop the member submitted (or the reviewer typed) is the one saved.
@@ -203,27 +177,6 @@ public class TodRecordingCharacterizationTests
         Assert.False(tod.Claim);
         Assert.Equal("/uploads/tods/kill.png", tod.ImagePath);
         Assert.Empty(await db.PendingTodSubmissions.ToListAsync());
-    }
-
-    [Fact]
-    public async Task Approval_ResetsThePartySignUpsForThatMonster()
-    {
-        await using var db = await TodCallers.SeededAsync();
-        var slot = TodCallers.SignedUpSetup(db, "Cerberus");
-        var pending = new PendingTodSubmission
-        {
-            LinkshellId = TodCallers.LinkshellId,
-            SubmittedAtUtc = KilledAt,
-            MonsterName = "Cerberus",
-            Time = KilledAt,
-            Cooldown = "48 Hour",
-        };
-        db.PendingTodSubmissions.Add(pending);
-        await db.SaveChangesAsync();
-
-        await TodCallers.Approvals(db).ApproveTodAsync(pending.Id, CancellationToken.None);
-
-        Assert.Null(slot.SignedUpAppUserId);
     }
 
     // ---- End Camp ----

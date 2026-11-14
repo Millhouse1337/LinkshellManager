@@ -3025,29 +3025,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
-                    b.Property<string>("SignedUpAppUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.Property<DateTime?>("SignedUpAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SignedUpCharacterName")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("SignedUpMainJob")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
-
-                    b.Property<string>("SignedUpRole")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<string>("SignedUpSubJob")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
-
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
 

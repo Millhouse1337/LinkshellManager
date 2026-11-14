@@ -175,8 +175,8 @@ public sealed partial class ActivityEventsController
                                 s.SubJob,
                                 s.IsPartyLeader,
                                 // A template has no roster: sign-ups live on event
-                                // boards. The old template sign-up columns are no
-                                // longer read (see DROP-LATER on PartySetupSlot).
+                                // boards. The fields stay in the reply, always empty,
+                                // so the app's view of a slot keeps its shape.
                                 null,
                                 null,
                                 null,

@@ -180,15 +180,10 @@ internal static class TodCallers
         AdditionalSeconds = additionalSeconds,
     };
 
-    // A party setup with one member signed up, assigned to `monster`: what a new ToD resets.
-    internal static PartySetupSlot SignedUpSetup(ApplicationDbContext db, string monster)
+    // A party setup with one slot, assigned to `monster`.
+    internal static PartySetupSlot AssignedSetup(ApplicationDbContext db, string monster)
     {
-        var slot = new PartySetupSlot
-        {
-            SignedUpAppUserId = User,
-            SignedUpCharacterName = "Tester",
-            SignedUpAtUtc = DateTime.UtcNow,
-        };
+        var slot = new PartySetupSlot();
         db.PartySetups.Add(new PartySetup
         {
             LinkshellId = LinkshellId,

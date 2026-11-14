@@ -135,7 +135,6 @@ public sealed class UserMergeService
         yield return Column(_db.ClaimShieldCaptureMembers, x => x.AppUserId);
         yield return Column(_db.EventComments, x => x.AppUserId);
         yield return Column(_db.EventPartySlotSignups, x => x.AppUserId);
-        yield return Column(_db.PartySetupSlots, x => x.SignedUpAppUserId);
         yield return Column(_db.PartySetups, x => x.CreatedByAppUserId);
         yield return Column(_db.JobRatings, x => x.TargetAppUserId);
         yield return Column(_db.JobRatings, x => x.RaterAppUserId);

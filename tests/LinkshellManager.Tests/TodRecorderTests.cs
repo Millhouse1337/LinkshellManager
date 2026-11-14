@@ -71,21 +71,6 @@ public class TodRecorderTests
         Assert.Equal(expectedHq, tod.Hq);
     }
 
-    // A party setup still assigned to the half the addon posted is reset as before.
-    [Fact]
-    public async Task Addon_StillResetsASetupAssignedToTheHalfItPosted()
-    {
-        await using var db = await TodCallers.SeededAsync();
-        var half = TodCallers.SignedUpSetup(db, "Fafnir");
-        var pair = TodCallers.SignedUpSetup(db, "Fafnir/Nidhogg");
-        await db.SaveChangesAsync();
-
-        await TodCallers.AddonPostAsync(db, "Fafnir", KilledAt);
-
-        Assert.Null(half.SignedUpAppUserId);
-        Assert.Null(pair.SignedUpAppUserId);
-    }
-
     // ---- every path moves a parked board now, not only the app ----
 
     [Fact]
@@ -173,13 +158,11 @@ public class TodRecorderTests
     // ---- the recorder itself ----
 
     [Fact]
-    public async Task ASecondPostOfTheKill_FillsAMissingScreenshot_AndResetsNothing()
+    public async Task ASecondPostOfTheKill_FillsAMissingScreenshot()
     {
         await using var db = await TodCallers.SeededAsync();
         var recorder = TodCallers.Recorder(db);
         await recorder.RecordAsync(Input("Cerberus", KilledAt), CancellationToken.None);
-        var slot = TodCallers.SignedUpSetup(db, "Cerberus"); // signed up for the NEXT pop
-        await db.SaveChangesAsync();
 
         var second = await recorder.RecordAsync(
             Input("Cerberus", KilledAt.AddSeconds(30)) with { ImagePath = "/uploads/tods/kill.png" },
@@ -187,7 +170,6 @@ public class TodRecorderTests
 
         Assert.True(second.MergedIntoExisting);
         Assert.Equal("/uploads/tods/kill.png", (await db.Tods.SingleAsync()).ImagePath);
-        Assert.Equal(TodCallers.User, slot.SignedUpAppUserId);
     }
 
     // End Camp's "nobody saw it die": a row with no time and no repop, which nothing can match.

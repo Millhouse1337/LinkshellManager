@@ -38,32 +38,8 @@ public class PartySetupSlot
     // with a crown in the editor + details views.
     public bool IsPartyLeader { get; set; }
 
-    // Old template sign-up (Phase 5): members used to claim a slot on the
-    // TEMPLATE from the ToD Tracker's inline panel. Those sign-ups never reached
-    // the event or Discord board, so that path was removed and the panel is now
-    // view-only; real sign-ups live in EventPartySlotSignups. Nothing writes
-    // these six columns any more except PartySetupSignupReset (sets them to
-    // null on each ToD) and UserMergeService (re-points ids); nothing reads them.
-    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
-    [MaxLength(450)]
-    public string? SignedUpAppUserId { get; set; }
-
-    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
-    [MaxLength(256)]
-    public string? SignedUpCharacterName { get; set; }
-
-    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
-    public DateTime? SignedUpAtUtc { get; set; }
-
-    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
-    [MaxLength(16)]
-    public string? SignedUpRole { get; set; }
-
-    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
-    [MaxLength(8)]
-    public string? SignedUpMainJob { get; set; }
-
-    // DROP-LATER: template sign-ups removed in Phase 5; column is never set.
-    [MaxLength(8)]
-    public string? SignedUpSubJob { get; set; }
+    // (Six SignedUp* columns used to live here: the old template sign-up, where members claimed a
+    // slot on the TEMPLATE from the ToD Tracker's panel. Those sign-ups never reached the event or
+    // the Discord board, so Phase 5 removed them; members sign up on an event board instead
+    // (EventPartySlotSignup). The DropPartySetupTemplateSignupColumns migration dropped the columns.)
 }

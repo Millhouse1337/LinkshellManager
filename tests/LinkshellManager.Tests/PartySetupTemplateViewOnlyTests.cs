@@ -29,10 +29,10 @@ public class PartySetupTemplateViewOnlyTests
     }
 
     [Fact]
-    public async Task Template_detail_hides_leftover_signups()
+    public async Task Template_detail_sends_empty_signup_fields()
     {
         await using var db = await TodCallers.SeededAsync();
-        var slot = TodCallers.SignedUpSetup(db, "Cerberus"); // a sign-up stored before the change
+        var slot = TodCallers.AssignedSetup(db, "Cerberus");
         await db.SaveChangesAsync();
         var setupId = db.PartySetups.Single().Id;
 

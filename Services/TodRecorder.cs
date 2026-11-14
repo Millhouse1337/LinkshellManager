@@ -67,8 +67,7 @@ public static class TodSources
 //   3. a kill already saved within TodSameKill.Tolerance is the same kill: the new answers are added
 //      to that row and nothing else happens;
 //   4. otherwise saves a new row, repop = time + cooldown + Additional Seconds;
-//   5. then, for a new row only, resets the party sign-ups for the monster and moves any parked
-//      board to the new repop.
+//   5. then, for a new row only, moves any parked board to the new repop.
 public sealed class TodRecorder
 {
     private readonly ApplicationDbContext _db;
@@ -182,20 +181,11 @@ public sealed class TodRecorder
 
         if (merged)
         {
-            // Nothing else runs for a kill that was already saved. In particular not the sign-up
-            // reset, which would wipe anyone who signed up for the next pop since the first post.
+            // Nothing else runs for a kill that was already saved.
             _logger.LogInformation(
                 "ToD from {Source} for '{Monster}' in linkshell {LinkshellId} matched ToD {TodId} for the same kill.",
                 input.Source, storedName, input.LinkshellId, tod.Id);
             return new TodRecordResult(tod, true, tod.RepopTime);
-        }
-
-        // A new ToD = a new pop window, so the old roster on any party setup for this monster is for
-        // the pop that just happened. Reset under the name it was posted with too: a setup assigned
-        // to "Fafnir" would not match the stored "Fafnir/Nidhogg".
-        foreach (var name in new[] { rawName, storedName }.Where(n => n is not null).Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            await PartySetupSignupReset.ClearSignupsForMonsterAsync(_db, tod.LinkshellId, name, cancellationToken);
         }
 
         // A board parked waiting to re-post keeps advertising the old pop time until it re-posts.

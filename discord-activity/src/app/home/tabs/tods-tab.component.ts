@@ -91,8 +91,8 @@ export class TodsTabComponent {
   // ----- Party setup inline panel -----
 
   // The party setup (if any) assigned to a ToD group's monster. Matched
-  // case-insensitively + trimmed, the same convention as
-  // PartySetupSignupReset.ClearSignupsForMonsterAsync.
+  // case-insensitively + trimmed, the convention the server uses for monster
+  // names everywhere.
   protected setupForMonster(monsterName: string | null | undefined): ActivityPartySetupListRow | null {
     const target = (monsterName ?? '').trim().toLowerCase();
     if (!target) return null;
