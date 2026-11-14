@@ -2,7 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
-import { formatActionError } from './discord-activity.helpers';
+import { mutateThenRefresh } from './mutate-then-refresh';
 import type {
   ActivityPartySetupDetail,
   ActivityPartySetupEditorInput,
@@ -111,17 +111,15 @@ export class PartySetupService {
   // Returns true on signup, false on error.
   async signUpEvent(eventId: number, slotId: number, input: ActivityPartySetupSignUpInput): Promise<boolean> {
     this.busy.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      await this.http.postActivityJson<{ success?: boolean }>(
-        `/api/activity/events/${eventId}/party-slots/${slotId}/signup`, input);
-      await this.loadEventBoard(eventId);
-      this.auth.setActionMessage('Signed up.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Signing up failed.'));
-      return false;
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityJson<{ success?: boolean }>(
+          `/api/activity/events/${eventId}/party-slots/${slotId}/signup`, input),
+        refresh: () => this.loadEventBoard(eventId),
+        success: 'Signed up.',
+        failure: 'Signing up failed.'
+      });
+      return outcome.ok;
     } finally {
       this.busy.set(false);
     }
@@ -192,17 +190,25 @@ export class PartySetupService {
   }
 
   private async mutateEventSlot(eventId: number, path: string, body: unknown, message: string): Promise<boolean> {
+    return this.save(
+      () => this.http.postActivityAction(path, body),
+      () => this.loadEventBoard(eventId),
+      message,
+      'Updating the party board failed.');
+  }
+
+  // Send one change, then reload what it touched. True when the save worked, even if the reload
+  // after it did not (see mutate-then-refresh.ts).
+  private async save(
+    mutate: () => Promise<unknown>,
+    refresh: () => Promise<unknown>,
+    success: string,
+    failure: string
+  ): Promise<boolean> {
     this.busy.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      await this.http.postActivityAction(path, body);
-      await this.loadEventBoard(eventId);
-      this.auth.setActionMessage(message);
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the party board failed.'));
-      return false;
+      const outcome = await mutateThenRefresh(this.auth, { mutate, refresh, success, failure });
+      return outcome.ok;
     } finally {
       this.busy.set(false);
     }
@@ -212,71 +218,46 @@ export class PartySetupService {
 
   async create(input: ActivityPartySetupEditorInput): Promise<number | null> {
     this.busy.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      const result = await this.http.postActivityJson<{ id: number }>('/api/activity/party-setups', input);
-      await this.loadList(input.linkshellId);
-      this.auth.setActionMessage('Party setup created.');
-      return result?.id ?? null;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Creating the party setup failed.'));
-      return null;
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityJson<{ id: number }>('/api/activity/party-setups', input),
+        refresh: () => this.loadList(input.linkshellId),
+        success: 'Party setup created.',
+        failure: 'Creating the party setup failed.'
+      });
+      return outcome.ok ? outcome.result?.id ?? null : null;
     } finally {
       this.busy.set(false);
     }
   }
 
   async update(id: number, input: ActivityPartySetupEditorInput): Promise<boolean> {
-    this.busy.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-    try {
-      await this.http.postActivityJson(`/api/activity/party-setups/${id}`, input);
-      await this.loadList(input.linkshellId);
-      await this.loadDetail(id);
-      this.auth.setActionMessage('Party setup updated.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the party setup failed.'));
-      return false;
-    } finally {
-      this.busy.set(false);
-    }
+    return this.save(
+      () => this.http.postActivityJson(`/api/activity/party-setups/${id}`, input),
+      async () => {
+        await this.loadList(input.linkshellId);
+        await this.loadDetail(id);
+      },
+      'Party setup updated.',
+      'Updating the party setup failed.');
   }
 
   async remove(id: number, linkshellId: number): Promise<boolean> {
-    this.busy.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-    try {
-      await this.http.postActivityJson(`/api/activity/party-setups/${id}/delete`);
-      await this.loadList(linkshellId);
-      this.auth.setActionMessage('Party setup deleted.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Deleting the party setup failed.'));
-      return false;
-    } finally {
-      this.busy.set(false);
-    }
+    return this.save(
+      () => this.http.postActivityJson(`/api/activity/party-setups/${id}/delete`),
+      () => this.loadList(linkshellId),
+      'Party setup deleted.',
+      'Deleting the party setup failed.');
   }
 
   async assign(id: number, monsterName: string | null, linkshellId: number): Promise<boolean> {
-    this.busy.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-    try {
-      await this.http.postActivityJson(`/api/activity/party-setups/${id}/assign`, { monsterName });
-      await this.loadList(linkshellId);
-      await this.loadDetail(id);
-      this.auth.setActionMessage(monsterName ? `Assigned to ${monsterName}.` : 'Cleared monster assignment.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the assignment failed.'));
-      return false;
-    } finally {
-      this.busy.set(false);
-    }
+    return this.save(
+      () => this.http.postActivityJson(`/api/activity/party-setups/${id}/assign`, { monsterName }),
+      async () => {
+        await this.loadList(linkshellId);
+        await this.loadDetail(id);
+      },
+      monsterName ? `Assigned to ${monsterName}.` : 'Cleared monster assignment.',
+      'Updating the assignment failed.');
   }
 }

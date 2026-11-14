@@ -3,6 +3,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
+import { type MutationOutcome, mutateThenRefresh } from './mutate-then-refresh';
 import type {
   ActivityCreateLinkshellInput,
   ActivityChannelRouteInput,
@@ -38,6 +39,19 @@ export class LinkshellService {
   readonly busyMonsterTimings = signal(false);
   readonly busyJobsRoster = signal(false);
 
+  // Most saves here send one change and then reload the overview. Kept apart by mutateThenRefresh,
+  // so a reload that fails after a save that worked never reports the save as failed.
+  private saveThenRefreshOverview<T>(
+    mutate: () => Promise<T>, success: string, failure: string
+  ): Promise<MutationOutcome<T>> {
+    return mutateThenRefresh(this.auth, {
+      mutate,
+      refresh: () => this.auth.refreshOverview(),
+      success,
+      failure
+    });
+  }
+
   async loadLinkshellDetail(linkshellId: number): Promise<void> {
     if (linkshellId <= 0) {
       this.linkshellDetail.set(null);
@@ -63,20 +77,14 @@ export class LinkshellService {
   }
 
   async createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> {
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
-    try {
-      await this.http.postActivityAction('/api/activity/linkshells', {
+    const outcome = await this.saveThenRefreshOverview(
+      () => this.http.postActivityAction('/api/activity/linkshells', {
         name: input.name,
         details: input.details || null
-      });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Linkshell created.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Creating the linkshell failed.'));
-      throw error;
-    }
+      }),
+      'Linkshell created.',
+      'Creating the linkshell failed.');
+    if (!outcome.ok) throw outcome.error;
   }
 
   async updateLinkshell(
@@ -119,46 +127,43 @@ export class LinkshellService {
     }
   ): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/update`, {
-        name: input.name,
-        details: input.details || null,
-        lootStructure: input.lootStructure ?? null,
-        enableHnmSection: input.enableHnmSection ?? null,
-        enableAuctions: input.enableAuctions ?? null,
-        enableToDs: input.enableToDs ?? null,
-        enableEndgame: input.enableEndgame ?? null,
-        enableEvents: input.enableEvents ?? null,
-        enableDkp: input.enableDkp ?? null,
-        enableTreasury: input.enableTreasury ?? null,
-        dkpRoundingIncrement: input.dkpRoundingIncrement ?? null,
-        enableActivityTracking: input.enableActivityTracking ?? null,
-        inactiveAfterAbsences: input.inactiveAfterAbsences ?? null,
-        activeAfterAttendances: input.activeAfterAttendances ?? null,
-        hiddenTodMonsters: input.hiddenTodMonsters ?? null,
-        discordGuildId: input.discordGuildId ?? null,
-        outsidePartySignupEnabled: input.outsidePartySignupEnabled ?? null,
-        hnmAttendanceMode: input.hnmAttendanceMode ?? null,
-        wdDkpPerWindow: input.wdDkpPerWindow ?? null,
-        wdClaimBonus: input.wdClaimBonus ?? null,
-        wdKillBonus: input.wdKillBonus ?? null,
-        wdOpenBonus: input.wdOpenBonus ?? null,
-        wdCloseBonus: input.wdCloseBonus ?? null,
-        hnmStandardOpenBonus: input.hnmStandardOpenBonus ?? null,
-        hnmStandardCloseBonus: input.hnmStandardCloseBonus ?? null,
-        hnmStandardClaimBonus: input.hnmStandardClaimBonus ?? null,
-        hnmStandardKillBonus: input.hnmStandardKillBonus ?? null,
-        hnmStandardWindowBonus: input.hnmStandardWindowBonus ?? null,
-        hnmStandardMiscBonus: input.hnmStandardMiscBonus ?? null
-      });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Linkshell updated.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the linkshell failed.'));
-      throw error;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/update`, {
+          name: input.name,
+          details: input.details || null,
+          lootStructure: input.lootStructure ?? null,
+          enableHnmSection: input.enableHnmSection ?? null,
+          enableAuctions: input.enableAuctions ?? null,
+          enableToDs: input.enableToDs ?? null,
+          enableEndgame: input.enableEndgame ?? null,
+          enableEvents: input.enableEvents ?? null,
+          enableDkp: input.enableDkp ?? null,
+          enableTreasury: input.enableTreasury ?? null,
+          dkpRoundingIncrement: input.dkpRoundingIncrement ?? null,
+          enableActivityTracking: input.enableActivityTracking ?? null,
+          inactiveAfterAbsences: input.inactiveAfterAbsences ?? null,
+          activeAfterAttendances: input.activeAfterAttendances ?? null,
+          hiddenTodMonsters: input.hiddenTodMonsters ?? null,
+          discordGuildId: input.discordGuildId ?? null,
+          outsidePartySignupEnabled: input.outsidePartySignupEnabled ?? null,
+          hnmAttendanceMode: input.hnmAttendanceMode ?? null,
+          wdDkpPerWindow: input.wdDkpPerWindow ?? null,
+          wdClaimBonus: input.wdClaimBonus ?? null,
+          wdKillBonus: input.wdKillBonus ?? null,
+          wdOpenBonus: input.wdOpenBonus ?? null,
+          wdCloseBonus: input.wdCloseBonus ?? null,
+          hnmStandardOpenBonus: input.hnmStandardOpenBonus ?? null,
+          hnmStandardCloseBonus: input.hnmStandardCloseBonus ?? null,
+          hnmStandardClaimBonus: input.hnmStandardClaimBonus ?? null,
+          hnmStandardKillBonus: input.hnmStandardKillBonus ?? null,
+          hnmStandardWindowBonus: input.hnmStandardWindowBonus ?? null,
+          hnmStandardMiscBonus: input.hnmStandardMiscBonus ?? null
+        }),
+        'Linkshell updated.',
+        'Updating the linkshell failed.');
+      if (!outcome.ok) throw outcome.error;
     } finally {
       this.busyLinkshellId.set(null);
     }
@@ -190,20 +195,16 @@ export class LinkshellService {
     guildName: string | null
   ): Promise<boolean> {
     this.busyLinkshellId.set(linkshellId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/set-guild`, {
-        guildId: guildId?.trim() || null,
-        guildName: guildName?.trim() || null
-      });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Discord server set for this linkshell.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Setting the linkshell\'s Discord server failed.'));
-      return false;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/set-guild`, {
+          guildId: guildId?.trim() || null,
+          guildName: guildName?.trim() || null
+        }),
+        'Discord server set for this linkshell.',
+        'Setting the linkshell\'s Discord server failed.');
+      return outcome.ok;
     } finally {
       this.busyLinkshellId.set(null);
     }
@@ -212,17 +213,13 @@ export class LinkshellService {
   // Clear the linkshell's Discord server association (also turns off the lock).
   async clearLinkshellGuild(linkshellId: number): Promise<boolean> {
     this.busyLinkshellId.set(linkshellId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/clear-guild`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Discord server cleared for this linkshell.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Clearing the linkshell\'s Discord server failed.'));
-      return false;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/clear-guild`),
+        'Discord server cleared for this linkshell.',
+        'Clearing the linkshell\'s Discord server failed.');
+      return outcome.ok;
     } finally {
       this.busyLinkshellId.set(null);
     }
@@ -232,23 +229,15 @@ export class LinkshellService {
   // the caller must be in that server (enforced server-side).
   async setLinkshellGuildLock(linkshellId: number, locked: boolean): Promise<boolean> {
     this.busyLinkshellId.set(linkshellId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/set-guild-lock`, { locked });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage(
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/set-guild-lock`, { locked }),
         locked
           ? 'Linkshell locked — only accessible from its Discord server.'
-          : 'Linkshell unlocked — accessible from any server.'
-      );
-      return true;
-    } catch (error) {
-      this.auth.setActionError(
-        formatActionError(error, locked ? 'Locking the linkshell failed.' : 'Unlocking the linkshell failed.')
-      );
-      return false;
+          : 'Linkshell unlocked — accessible from any server.',
+        locked ? 'Locking the linkshell failed.' : 'Unlocking the linkshell failed.');
+      return outcome.ok;
     } finally {
       this.busyLinkshellId.set(null);
     }
@@ -258,18 +247,14 @@ export class LinkshellService {
   // mirror to.
   async setDiscussionChannel(linkshellId: number, channelId: string | null): Promise<boolean> {
     this.busyLinkshellId.set(linkshellId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/discussion-channel`, { channelId });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage(channelId
-        ? 'Discussion channel set — new post-event comments mirror there.'
-        : 'Discussion channel cleared — comments stay in-app.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the discussion channel failed.'));
-      return false;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/discussion-channel`, { channelId }),
+        channelId
+          ? 'Discussion channel set — new post-event comments mirror there.'
+          : 'Discussion channel cleared — comments stay in-app.',
+        'Updating the discussion channel failed.');
+      return outcome.ok;
     } finally {
       this.busyLinkshellId.set(null);
     }
@@ -403,21 +388,17 @@ export class LinkshellService {
     rows: ActivityMonsterTimingInput[]
   ): Promise<ActivityMonsterTimingsResponse | null> {
     this.busyMonsterTimings.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      const saved = await this.http.postActivityJson<ActivityMonsterTimingsResponse>(
-        `/api/activity/linkshells/${linkshellId}/monster-timings`,
-        { rows }
-      );
-      this.auth.setActionMessage('Monster setups updated.');
       // The overview carries the compact copy the ToD form and the create-event picker read, so
       // it has to be refreshed or those two keep offering the old catalog until the next poll.
-      await this.auth.refreshOverview();
-      return saved;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Saving monster setups failed.'));
-      return null;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityJson<ActivityMonsterTimingsResponse>(
+          `/api/activity/linkshells/${linkshellId}/monster-timings`,
+          { rows }
+        ),
+        'Monster setups updated.',
+        'Saving monster setups failed.');
+      return outcome.ok ? outcome.result : null;
     } finally {
       this.busyMonsterTimings.set(false);
     }
@@ -425,17 +406,12 @@ export class LinkshellService {
 
   async setPrimaryLinkshell(linkshellId: number): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/primary`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Selected linkshell updated.');
-    } catch (error) {
-      this.auth.setActionError(
-        formatActionError(error, 'Updating the selected linkshell failed.')
-      );
+      await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/primary`),
+        'Selected linkshell updated.',
+        'Updating the selected linkshell failed.');
     } finally {
       this.busyLinkshellId.set(null);
     }
@@ -443,16 +419,13 @@ export class LinkshellService {
 
   async deleteLinkshell(linkshellId: number): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/delete`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Linkshell deleted.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Deleting the linkshell failed.'));
-      throw error;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/delete`),
+        'Linkshell deleted.',
+        'Deleting the linkshell failed.');
+      if (!outcome.ok) throw outcome.error;
     } finally {
       this.busyLinkshellId.set(null);
     }
@@ -460,16 +433,13 @@ export class LinkshellService {
 
   async leaveLinkshell(linkshellId: number): Promise<void> {
     this.busyLinkshellId.set(linkshellId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/leave`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Linkshell membership updated.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Leaving the linkshell failed.'));
-      throw error;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/leave`),
+        'Linkshell membership updated.',
+        'Leaving the linkshell failed.');
+      if (!outcome.ok) throw outcome.error;
     } finally {
       this.busyLinkshellId.set(null);
     }
@@ -477,17 +447,14 @@ export class LinkshellService {
 
   async removeLinkshellMember(linkshellId: number, memberId: number): Promise<void> {
     this.busyMemberId.set(memberId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(
-        `/api/activity/linkshells/${linkshellId}/members/${memberId}/remove`
-      );
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Linkshell member removed.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Removing the linkshell member failed.'));
+      await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(
+          `/api/activity/linkshells/${linkshellId}/members/${memberId}/remove`
+        ),
+        'Linkshell member removed.',
+        'Removing the linkshell member failed.');
     } finally {
       this.busyMemberId.set(null);
     }
@@ -500,25 +467,20 @@ export class LinkshellService {
     characterName?: string | null
   ): Promise<void> {
     this.busyMemberId.set(memberId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(
-        `/api/activity/linkshells/${linkshellId}/members/${memberId}/role`,
-        { role }
-      );
-      await this.auth.refreshOverview();
       const who = characterName?.trim() || 'Member';
-      this.auth.setActionMessage(
+      await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(
+          `/api/activity/linkshells/${linkshellId}/members/${memberId}/role`,
+          { role }
+        ),
         role === 'Leader'
           ? `Leadership transferred to ${who}.`
           : role === 'Officer'
             ? `${who} promoted to officer.`
-            : `${who}'s role changed to ${role}.`
-      );
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the member role failed.'));
+            : `${who}'s role changed to ${role}.`,
+        'Updating the member role failed.');
     } finally {
       this.busyMemberId.set(null);
     }
@@ -596,19 +558,16 @@ export class LinkshellService {
     characterName?: string | null
   ): Promise<void> {
     this.busyMemberId.set(memberId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(
-        `/api/activity/linkshells/${linkshellId}/members/${memberId}/status`,
-        { status }
-      );
-      await this.auth.refreshOverview();
       const who = characterName?.trim() || 'Member';
-      this.auth.setActionMessage(`${who}'s status set to ${status}.`);
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the member status failed.'));
+      await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(
+          `/api/activity/linkshells/${linkshellId}/members/${memberId}/status`,
+          { status }
+        ),
+        `${who}'s status set to ${status}.`,
+        'Updating the member status failed.');
     } finally {
       this.busyMemberId.set(null);
     }
@@ -624,20 +583,17 @@ export class LinkshellService {
     streakType: 'credit' | 'absent' = 'credit'
   ): Promise<void> {
     this.busyMemberId.set(memberId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(
-        `/api/activity/linkshells/${linkshellId}/members/${memberId}/active-credit-count`,
-        { count, streakType }
-      );
-      await this.auth.refreshOverview();
       const who = characterName?.trim() || 'Member';
       const label = streakType === 'absent' ? 'absence streak' : 'active credit';
-      this.auth.setActionMessage(`${who}'s ${label} set to ${count}.`);
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating active credit failed.'));
+      await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(
+          `/api/activity/linkshells/${linkshellId}/members/${memberId}/active-credit-count`,
+          { count, streakType }
+        ),
+        `${who}'s ${label} set to ${count}.`,
+        'Updating active credit failed.');
     } finally {
       this.busyMemberId.set(null);
     }
@@ -686,16 +642,12 @@ export class LinkshellService {
     input: ActivityLinkshellRolePermissionsInput
   ): Promise<boolean> {
     this.busyRoles.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/roles`, input);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Role created.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Creating the role failed.'));
-      return false;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/roles`, input),
+        'Role created.',
+        'Creating the role failed.');
+      return outcome.ok;
     } finally {
       this.busyRoles.set(false);
     }
@@ -707,19 +659,15 @@ export class LinkshellService {
     input: ActivityLinkshellRolePermissionsInput
   ): Promise<boolean> {
     this.busyRoles.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      await this.http.postActivityAction(
-        `/api/activity/linkshells/${linkshellId}/roles/${roleId}/update`,
-        input
-      );
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Role updated.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the role failed.'));
-      return false;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(
+          `/api/activity/linkshells/${linkshellId}/roles/${roleId}/update`,
+          input
+        ),
+        'Role updated.',
+        'Updating the role failed.');
+      return outcome.ok;
     } finally {
       this.busyRoles.set(false);
     }
@@ -727,18 +675,14 @@ export class LinkshellService {
 
   async deleteLinkshellRole(linkshellId: number, roleId: number): Promise<boolean> {
     this.busyRoles.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      await this.http.postActivityAction(
-        `/api/activity/linkshells/${linkshellId}/roles/${roleId}/delete`
-      );
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Role deleted.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Deleting the role failed.'));
-      return false;
+      const outcome = await this.saveThenRefreshOverview(
+        () => this.http.postActivityAction(
+          `/api/activity/linkshells/${linkshellId}/roles/${roleId}/delete`
+        ),
+        'Role deleted.',
+        'Deleting the role failed.');
+      return outcome.ok;
     } finally {
       this.busyRoles.set(false);
     }
@@ -748,30 +692,18 @@ export class LinkshellService {
   // dataUrl is a "data:image/...;base64,..." string from FileReader; the server
   // strips the prefix and validates the bytes.
   async uploadBanner(linkshellId: number, dataUrl: string): Promise<boolean> {
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-    try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/banner`, { dataBase64: dataUrl });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Banner updated.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the banner failed.'));
-      return false;
-    }
+    const outcome = await this.saveThenRefreshOverview(
+      () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/banner`, { dataBase64: dataUrl }),
+      'Banner updated.',
+      'Updating the banner failed.');
+    return outcome.ok;
   }
 
   async removeBanner(linkshellId: number): Promise<boolean> {
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-    try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/banner/remove`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Banner removed.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Removing the banner failed.'));
-      return false;
-    }
+    const outcome = await this.saveThenRefreshOverview(
+      () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/banner/remove`),
+      'Banner removed.',
+      'Removing the banner failed.');
+    return outcome.ok;
   }
 }

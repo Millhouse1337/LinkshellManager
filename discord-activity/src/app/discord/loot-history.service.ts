@@ -8,6 +8,7 @@ import type {
   ActivityLootEventOptions,
   ActivityLootHistoryList
 } from "./discord-activity.types";
+import { mutateThenRefresh } from './mutate-then-refresh';
 
 // Client wrapper around /api/activity/loot-history endpoints. Mirrors the
 // shape of DkpService so the home component can wire it in identically.
@@ -104,33 +105,33 @@ export class LootHistoryService {
     return this.deleteLoot(`/api/activity/loot-history/event/${lootDetailId}/delete`, reason);
   }
 
-  private async deleteLoot(path: string, reason: string): Promise<boolean> {
-    this.busyLootEdit.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-    try {
-      await this.http.postActivityJson(path, { reason: reason || null });
-      this.auth.setActionMessage('Loot record deleted and DKP refunded.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Deleting the loot record failed.'));
-      return false;
-    } finally {
-      this.busyLootEdit.set(false);
-    }
+  private deleteLoot(path: string, reason: string): Promise<boolean> {
+    return this.saveLootChange(
+      () => this.http.postActivityJson(path, { reason: reason || null }),
+      'Loot record deleted and DKP refunded.',
+      'Deleting the loot record failed.');
   }
 
-  private async editLoot(path: string, input: ActivityLootEditInput): Promise<boolean> {
+  private editLoot(path: string, input: ActivityLootEditInput): Promise<boolean> {
+    return this.saveLootChange(
+      () => this.http.postActivityJson(path, input),
+      'Loot record updated.',
+      'Saving the loot edit failed.');
+  }
+
+  // An edit or delete moves DKP, so the overview (balances, live cards) is reloaded after it. A reload
+  // that fails never reports the change as failed (see mutate-then-refresh.ts): a second press would
+  // refund the DKP twice.
+  private async saveLootChange(mutate: () => Promise<unknown>, success: string, failure: string): Promise<boolean> {
     this.busyLootEdit.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      await this.http.postActivityJson(path, input);
-      this.auth.setActionMessage('Loot record updated.');
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Saving the loot edit failed.'));
-      return false;
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate,
+        refresh: () => this.auth.refreshOverview(),
+        success,
+        failure
+      });
+      return outcome.ok;
     } finally {
       this.busyLootEdit.set(false);
     }

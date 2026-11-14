@@ -2,7 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
-import { formatActionError } from './discord-activity.helpers';
+import { mutateThenRefresh } from './mutate-then-refresh';
 import type {
   ActivityChartBoard,
   ActivityChartHolding,
@@ -60,8 +60,11 @@ export class ChartBoardService {
         `/api/activity/linkshells/${linkshellId}/charts/${board}`
       );
       this.boards.update(current => ({ ...current, [board]: payload }));
+      this.auth.clearLoadError('chart');
     } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Loading the chart failed.'));
+      // A load, so its own notice rather than the action banner (see AuthService.loadError). Still
+      // throws, so a save's reload that fails is reported as "saved, press Refresh".
+      this.auth.reportLoadError('chart', error, 'Loading the chart failed.');
       throw error;
     } finally {
       this.busyLoad.set(false);
@@ -189,7 +192,7 @@ export class ChartBoardService {
     );
   }
 
-  // Every write shares the same shape: flag busy, clear the banners, act, reload, report.
+  // Every write shares the same shape: flag busy, act, reload, report.
   //
   // Reloading rather than patching in place keeps every derived number honest — the per-boss totals,
   // the ledger's cell states and the "49 / 63  78%" row total are all computed server-side, and a
@@ -211,16 +214,16 @@ export class ChartBoardService {
     if (requestId !== undefined) {
       this.busyRequestId.set(requestId);
     }
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
     try {
-      await action();
-      await this.reload();
-      this.auth.setActionMessage(success);
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, failure));
-      throw error;
+      // A reload that fails after a save that worked never reports the save as failed (see
+      // mutate-then-refresh.ts); only a failed save throws.
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate: action,
+        refresh: () => this.reload(),
+        success,
+        failure
+      });
+      if (!outcome.ok) throw outcome.error;
     } finally {
       this.busySave.set(false);
       this.busyItemId.set(null);

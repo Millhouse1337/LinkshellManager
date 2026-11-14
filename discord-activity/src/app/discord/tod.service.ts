@@ -10,6 +10,7 @@ import type {
   ActivityUpcomingRepop,
   ActivityUpdateTodInput
 } from './discord-activity.types';
+import { mutateThenRefresh } from './mutate-then-refresh';
 
 @Injectable({ providedIn: 'root' })
 export class TodService {
@@ -21,36 +22,35 @@ export class TodService {
 
   async createTod(input: ActivityCreateTodInput): Promise<void> {
     this.busyTodSave.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      // Use postActivityJson so we can inspect the {pending} flag the server
-      // returns when the caller has only CanSubmitTodForApproval (member-tier).
-      // alreadyPosted: the kill was already saved (the addon or another officer, within a couple of
-      // minutes), so this one's answers were added to that ToD instead of saving a second.
-      const response = await this.http.postActivityJson<{ pending?: boolean; alreadyPosted?: boolean }>('/api/activity/tods', {
-        linkshellId: input.linkshellId,
-        monsterName: input.monsterName,
-        dayNumber: input.dayNumber ?? null,
-        popWindow: input.popWindow ?? null,
-        hq: input.hq,
-        additionalSeconds: input.additionalSeconds,
-        claim: input.claim,
-        timeLocal: input.timeLocal,
-        cooldown: input.cooldown || null,
-        interval: input.interval || null,
-        imagePath: input.imagePath ?? null
+      const outcome = await mutateThenRefresh(this.auth, {
+        // Use postActivityJson so we can inspect the {pending} flag the server
+        // returns when the caller has only CanSubmitTodForApproval (member-tier).
+        // alreadyPosted: the kill was already saved (the addon or another officer, within a couple of
+        // minutes), so this one's answers were added to that ToD instead of saving a second.
+        mutate: () => this.http.postActivityJson<{ pending?: boolean; alreadyPosted?: boolean }>('/api/activity/tods', {
+          linkshellId: input.linkshellId,
+          monsterName: input.monsterName,
+          dayNumber: input.dayNumber ?? null,
+          popWindow: input.popWindow ?? null,
+          hq: input.hq,
+          additionalSeconds: input.additionalSeconds,
+          claim: input.claim,
+          timeLocal: input.timeLocal,
+          cooldown: input.cooldown || null,
+          interval: input.interval || null,
+          imagePath: input.imagePath ?? null
+        }),
+        refresh: () => this.auth.refreshOverview(),
+        success: response => response?.pending
+          ? 'ToD submitted for officer approval.'
+          : response?.alreadyPosted
+            ? 'This kill was already logged, so your answers were added to that ToD.'
+            : 'ToD entry saved.',
+        failure: 'Saving the ToD entry failed.'
       });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage(response?.pending
-        ? 'ToD submitted for officer approval.'
-        : response?.alreadyPosted
-          ? 'This kill was already logged, so your answers were added to that ToD.'
-          : 'ToD entry saved.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Saving the ToD entry failed.'));
-      throw error;
+      if (!outcome.ok) throw outcome.error;
     } finally {
       this.busyTodSave.set(false);
     }
@@ -100,27 +100,23 @@ export class TodService {
 
   async updateTod(input: ActivityUpdateTodInput): Promise<void> {
     this.busyTodSave.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/tods/${input.todId}/update`, {
-        monsterName: input.monsterName,
-        dayNumber: input.dayNumber ?? null,
-        popWindow: input.popWindow ?? null,
-        hq: input.hq,
-        additionalSeconds: input.additionalSeconds,
-        claim: input.claim,
-        timeLocal: input.timeLocal,
-        cooldown: input.cooldown || null,
-        interval: input.interval || null,
-        imagePath: input.imagePath ?? null
-      });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('ToD entry updated.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the ToD entry failed.'));
-      throw error;
+      await this.save(
+        () => this.http.postActivityAction(`/api/activity/tods/${input.todId}/update`, {
+          monsterName: input.monsterName,
+          dayNumber: input.dayNumber ?? null,
+          popWindow: input.popWindow ?? null,
+          hq: input.hq,
+          additionalSeconds: input.additionalSeconds,
+          claim: input.claim,
+          timeLocal: input.timeLocal,
+          cooldown: input.cooldown || null,
+          interval: input.interval || null,
+          imagePath: input.imagePath ?? null
+        }),
+        'ToD entry updated.',
+        'Updating the ToD entry failed.');
     } finally {
       this.busyTodSave.set(false);
     }
@@ -149,29 +145,25 @@ export class TodService {
     imagePath?: string | null;
   }): Promise<void> {
     this.busyTodSave.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/events/${eventId}/post-tod`, {
-        timeLocal: fields.timeLocal,
-        cooldown: fields.cooldown || null,
-        interval: fields.interval || null,
-        dayNumber: fields.dayNumber ?? null,
-        claim: fields.claim,
-        hq: fields.hq,
-        additionalSeconds: fields.additionalSeconds,
-        popWindow: fields.popWindow ?? null,
-        killed: fields.killed ?? null,
-        repost: fields.repost ?? null,
-        repostLeadHours: fields.repostLeadHours ?? null,
-        imagePath: fields.imagePath ?? null
-      });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Time of Death posted — the board re-posts automatically before the next pop.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Posting the Time of Death failed.'));
-      throw error;
+      await this.save(
+        () => this.http.postActivityAction(`/api/activity/events/${eventId}/post-tod`, {
+          timeLocal: fields.timeLocal,
+          cooldown: fields.cooldown || null,
+          interval: fields.interval || null,
+          dayNumber: fields.dayNumber ?? null,
+          claim: fields.claim,
+          hq: fields.hq,
+          additionalSeconds: fields.additionalSeconds,
+          popWindow: fields.popWindow ?? null,
+          killed: fields.killed ?? null,
+          repost: fields.repost ?? null,
+          repostLeadHours: fields.repostLeadHours ?? null,
+          imagePath: fields.imagePath ?? null
+        }),
+        'Time of Death posted — the board re-posts automatically before the next pop.',
+        'Posting the Time of Death failed.');
     } finally {
       this.busyTodSave.set(false);
     }
@@ -179,19 +171,27 @@ export class TodService {
 
   async deleteTod(todId: number): Promise<void> {
     this.busyTodId.set(todId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/tods/${todId}/delete`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('ToD entry deleted.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Deleting the ToD entry failed.'));
-      throw error;
+      await this.save(
+        () => this.http.postActivityAction(`/api/activity/tods/${todId}/delete`),
+        'ToD entry deleted.',
+        'Deleting the ToD entry failed.');
     } finally {
       this.busyTodId.set(null);
     }
+  }
+
+  // Send one change, then reload the overview. Throws only when the SAVE failed (see
+  // mutate-then-refresh.ts): a reload that fails after a save that worked never reports it as failed.
+  private async save(mutate: () => Promise<unknown>, success: string, failure: string): Promise<void> {
+    const outcome = await mutateThenRefresh(this.auth, {
+      mutate,
+      refresh: () => this.auth.refreshOverview(),
+      success,
+      failure
+    });
+    if (!outcome.ok) throw outcome.error;
   }
 
   // The server checks the uploader can log or submit ToDs in this linkshell.

@@ -7,6 +7,7 @@ import type {
   ActivityDiscordRosterCandidate,
   ActivityUserSearchResult
 } from './discord-activity.types';
+import { mutateThenRefresh } from './mutate-then-refresh';
 
 @Injectable({ providedIn: 'root' })
 export class InviteService {
@@ -60,18 +61,14 @@ export class InviteService {
   }
 
   async sendInvite(linkshellId: number, appUserId: string): Promise<void> {
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
-    try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/invites`, {
+    await mutateThenRefresh(this.auth, {
+      mutate: () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/invites`, {
         appUserId
-      });
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Member added to the linkshell.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Adding the member failed.'));
-    }
+      }),
+      refresh: () => this.auth.refreshOverview(),
+      success: 'Member added to the linkshell.',
+      failure: 'Adding the member failed.'
+    });
   }
 
   async loadDiscordRoster(linkshellId: number): Promise<void> {
@@ -95,21 +92,22 @@ export class InviteService {
 
   async inviteDiscordUser(linkshellId: number, discordUserId: string): Promise<void> {
     this.busyDiscordUserId.set(discordUserId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/invites/discord`, {
-        discordUserId
+      await mutateThenRefresh(this.auth, {
+        mutate: async () => {
+          await this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/invites/discord`, {
+            discordUserId
+          });
+          // Drop the invited person from the roster; the refresh below updates sent invites.
+          this.discordRosterCandidates.update(list =>
+            list.filter(candidate => candidate.discordUserId !== discordUserId)
+          );
+        },
+        refresh: () => this.auth.refreshOverview(),
+        success: 'Member added. (New players join on their first sign-in.)',
+        failure: 'Adding the member failed.'
       });
-      // Drop the invited person from the roster and refresh sent invites.
-      this.discordRosterCandidates.update(list =>
-        list.filter(candidate => candidate.discordUserId !== discordUserId)
-      );
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Member added. (New players join on their first sign-in.)');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Adding the member failed.'));
     } finally {
       this.busyDiscordUserId.set(null);
     }
@@ -121,15 +119,13 @@ export class InviteService {
 
   async approveJoinRequest(inviteId: number): Promise<void> {
     this.busyInviteId.set(inviteId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
     try {
-      await this.http.postActivityAction(`/api/activity/join-requests/${inviteId}/approve`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Join request approved.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Approving the join request failed.'));
+      await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction(`/api/activity/join-requests/${inviteId}/approve`),
+        refresh: () => this.auth.refreshOverview(),
+        success: 'Join request approved.',
+        failure: 'Approving the join request failed.'
+      });
     } finally {
       this.busyInviteId.set(null);
     }
@@ -137,15 +133,13 @@ export class InviteService {
 
   async declineJoinRequest(inviteId: number): Promise<void> {
     this.busyInviteId.set(inviteId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
     try {
-      await this.http.postActivityAction(`/api/activity/join-requests/${inviteId}/decline`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Join request declined.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Declining the join request failed.'));
+      await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction(`/api/activity/join-requests/${inviteId}/decline`),
+        refresh: () => this.auth.refreshOverview(),
+        success: 'Join request declined.',
+        failure: 'Declining the join request failed.'
+      });
     } finally {
       this.busyInviteId.set(null);
     }
@@ -153,15 +147,13 @@ export class InviteService {
 
   async acceptInvite(inviteId: number): Promise<void> {
     this.busyInviteId.set(inviteId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
     try {
-      await this.http.postActivityAction(`/api/activity/invites/${inviteId}/accept`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Invite accepted.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Accepting the invite failed.'));
+      await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction(`/api/activity/invites/${inviteId}/accept`),
+        refresh: () => this.auth.refreshOverview(),
+        success: 'Invite accepted.',
+        failure: 'Accepting the invite failed.'
+      });
     } finally {
       this.busyInviteId.set(null);
     }
@@ -169,15 +161,13 @@ export class InviteService {
 
   async declineInvite(inviteId: number): Promise<void> {
     this.busyInviteId.set(inviteId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
     try {
-      await this.http.postActivityAction(`/api/activity/invites/${inviteId}/decline`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Invite declined.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Declining the invite failed.'));
+      await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction(`/api/activity/invites/${inviteId}/decline`),
+        refresh: () => this.auth.refreshOverview(),
+        success: 'Invite declined.',
+        failure: 'Declining the invite failed.'
+      });
     } finally {
       this.busyInviteId.set(null);
     }
@@ -185,15 +175,13 @@ export class InviteService {
 
   async revokeInvite(inviteId: number): Promise<void> {
     this.busyInviteId.set(inviteId);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
-
     try {
-      await this.http.postActivityAction(`/api/activity/invites/${inviteId}/revoke`);
-      await this.auth.refreshOverview();
-      this.auth.setActionMessage('Invite revoked.');
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Revoking the invite failed.'));
+      await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction(`/api/activity/invites/${inviteId}/revoke`),
+        refresh: () => this.auth.refreshOverview(),
+        success: 'Invite revoked.',
+        failure: 'Revoking the invite failed.'
+      });
     } finally {
       this.busyInviteId.set(null);
     }

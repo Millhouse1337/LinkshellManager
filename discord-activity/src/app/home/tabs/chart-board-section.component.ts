@@ -166,7 +166,8 @@ export class ChartBoardSectionComponent {
     this.loadedKey = key;
     // Switching boards resets any open editor — they belong to rows that are about to be replaced.
     this.closeAll();
-    void this.charts.load(linkshellId, board);
+    // A failure shows in the load notice; catching it here only stops an unhandled-rejection log.
+    void this.charts.load(linkshellId, board).catch(() => undefined);
   }
 
   protected readonly chart = computed(() => this.charts.board(this.boardKey()));

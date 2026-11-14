@@ -10,6 +10,7 @@ import { EventService } from './event.service';
 import { InviteService } from './invite.service';
 import { LinkshellContentService } from './linkshell-content.service';
 import { LinkshellService } from './linkshell.service';
+import { mutateThenRefresh } from './mutate-then-refresh';
 import { TodService } from './tod.service';
 import {
   formatError,
@@ -405,46 +406,47 @@ export class DiscordActivityService {
   // --- Profile (kept on facade — also rewrites localUser snapshot) ---
   async updateProfile(input: ActivityUpdateProfileInput): Promise<void> {
     this.busyProfileSave.set(true);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
 
     try {
-      await this.http.postActivityAction('/api/activity/profile', {
-        characterName: input.characterName,
-        timeZone: input.timeZone || null,
-        altCharacterName1: input.altCharacterName1 || null,
-        altCharacterName2: input.altCharacterName2 || null,
-        jobLevels: input.jobLevels ?? null,
-        alt1JobLevels: input.alt1JobLevels ?? null,
-        alt2JobLevels: input.alt2JobLevels ?? null,
-        strongJobs: input.strongJobs ?? null,
-        alt1StrongJobs: input.alt1StrongJobs ?? null,
-        alt2StrongJobs: input.alt2StrongJobs ?? null,
-        craftLevels: input.craftLevels ?? null,
-        alt1CraftLevels: input.alt1CraftLevels ?? null,
-        alt2CraftLevels: input.alt2CraftLevels ?? null,
-        meritJobs: input.meritJobs ?? null,
-        alt1MeritJobs: input.alt1MeritJobs ?? null,
-        alt2MeritJobs: input.alt2MeritJobs ?? null
-      });
-      await this.auth.refreshOverview();
+      // A reload that fails after the profile saved never reports the save as failed.
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction('/api/activity/profile', {
+          characterName: input.characterName,
+          timeZone: input.timeZone || null,
+          altCharacterName1: input.altCharacterName1 || null,
+          altCharacterName2: input.altCharacterName2 || null,
+          jobLevels: input.jobLevels ?? null,
+          alt1JobLevels: input.alt1JobLevels ?? null,
+          alt2JobLevels: input.alt2JobLevels ?? null,
+          strongJobs: input.strongJobs ?? null,
+          alt1StrongJobs: input.alt1StrongJobs ?? null,
+          alt2StrongJobs: input.alt2StrongJobs ?? null,
+          craftLevels: input.craftLevels ?? null,
+          alt1CraftLevels: input.alt1CraftLevels ?? null,
+          alt2CraftLevels: input.alt2CraftLevels ?? null,
+          meritJobs: input.meritJobs ?? null,
+          alt1MeritJobs: input.alt1MeritJobs ?? null,
+          alt2MeritJobs: input.alt2MeritJobs ?? null
+        }),
+        refresh: async () => {
+          await this.auth.refreshOverview();
 
-      const appUser = this.auth.overview()?.appUser;
-      const currentLocalUser = this.auth.localUser();
-      if (appUser && currentLocalUser) {
-        this.auth.localUser.set({
-          ...currentLocalUser,
-          appUser: {
-            ...currentLocalUser.appUser,
-            ...appUser
+          const appUser = this.auth.overview()?.appUser;
+          const currentLocalUser = this.auth.localUser();
+          if (appUser && currentLocalUser) {
+            this.auth.localUser.set({
+              ...currentLocalUser,
+              appUser: {
+                ...currentLocalUser.appUser,
+                ...appUser
+              }
+            });
           }
-        });
-      }
-
-      this.auth.setActionMessage('Profile updated.');
-    } catch (error) {
-      this.auth.setActionError(this.formatActionErrorMsg(error, 'Updating the profile failed.'));
-      throw error;
+        },
+        success: 'Profile updated.',
+        failure: 'Updating the profile failed.'
+      });
+      if (!outcome.ok) throw outcome.error;
     } finally {
       this.busyProfileSave.set(false);
     }
@@ -565,15 +567,6 @@ export class DiscordActivityService {
     return toLocalInputValueInZone(value, this.viewerTimeZone(), includeSeconds);
   }
 
-  // Local re-export of the helper so we don't have to import it into every
-  // facade method that needs it.
-  private formatActionErrorMsg(error: unknown, fallback: string): string {
-    if (error instanceof Error && error.message) {
-      return error.message;
-    }
-    return fallback;
-  }
-
   // ===========================================================================
   // Facade delegate methods — one-line forwarders to the per-domain services.
   // Method signatures and behavior are identical to the pre-refactor versions.
@@ -595,16 +588,9 @@ export class DiscordActivityService {
   loadLootHistory(page = 1, pageSize = 20): Promise<ActivityLootHistoryList | null> { return this.lootHistoryService.loadLootHistory(page, pageSize); }
   loadLootEventOptions(query?: string | null) { return this.lootHistoryService.loadLootEventOptions(query); }
   addManualLoot(input: { sourceKind: "none" | "live" | "past"; eventId: number | null; eventHistoryId: number | null; itemName: string; itemWinner: string; winningDkpSpent: number; dkpPoolId?: number | null }): Promise<boolean> { return this.lootHistoryService.addLoot(input); }
-  async editEventLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> {
-    const ok = await this.lootHistoryService.editEventLoot(lootDetailId, input);
-    if (ok) { await this.auth.refreshOverview(); }
-    return ok;
-  }
-  async deleteLoot(lootDetailId: number, reason: string): Promise<boolean> {
-    const ok = await this.lootHistoryService.deleteEventLoot(lootDetailId, reason);
-    if (ok) { await this.auth.refreshOverview(); }
-    return ok;
-  }
+  // Both reload the overview themselves once the change is saved.
+  editEventLoot(lootDetailId: number, input: ActivityLootEditInput): Promise<boolean> { return this.lootHistoryService.editEventLoot(lootDetailId, input); }
+  deleteLoot(lootDetailId: number, reason: string): Promise<boolean> { return this.lootHistoryService.deleteEventLoot(lootDetailId, reason); }
 
   // --- TodService ---
   createTod(input: ActivityCreateTodInput): Promise<void> { return this.todService.createTod(input); }

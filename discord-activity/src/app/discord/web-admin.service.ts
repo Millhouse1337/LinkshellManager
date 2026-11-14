@@ -4,6 +4,7 @@ import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type { WebAdminSettings } from './discord-activity.types';
+import { mutateThenRefresh } from './mutate-then-refresh';
 
 // The website-only Admin tab: the server-wide switches a super admin flips
 // (/api/web/admin, WebAdminController). Every change answers with the fresh settings plus a
@@ -47,14 +48,18 @@ export class WebAdminService {
 
   private async change(path: string, body: object, failure: string): Promise<void> {
     this.busy.set(true);
-    this.auth.clearActionState();
     try {
-      const result = await this.http.postActivityJson<WebAdminSettings>(`/api/web/admin/settings/${path}`, body);
-      this.settings.set(result);
-      this.auth.setActionMessage(result.message);
-      await this.auth.refreshOverview();
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, failure));
+      // A reload that fails after the switch was saved never reports the save as failed.
+      await mutateThenRefresh(this.auth, {
+        mutate: async () => {
+          const result = await this.http.postActivityJson<WebAdminSettings>(`/api/web/admin/settings/${path}`, body);
+          this.settings.set(result);
+          return result;
+        },
+        refresh: () => this.auth.refreshOverview(),
+        success: result => result.message ?? null,
+        failure
+      });
     } finally {
       this.busy.set(false);
     }

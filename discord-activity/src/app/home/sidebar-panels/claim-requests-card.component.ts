@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, effect, inject, input, signal } fro
 
 import { ActivityHttpClient } from '../../discord/activity-http.client';
 import { AuthService } from '../../discord/auth.service';
-import { formatActionError } from '../../discord/discord-activity.helpers';
 import type { ActivityPlaceholderClaimRequest } from '../../discord/discord-activity.types';
+import { mutateThenRefresh } from '../../discord/mutate-then-refresh';
 
 // Roster card for officers: people asking to take over an imported (placeholder) member by name.
 // A character name is public, so the server only files the request; Approve here is what hands
@@ -77,23 +77,19 @@ export class ClaimRequestsCardComponent {
   protected async resolve(request: ActivityPlaceholderClaimRequest, approve: boolean): Promise<void> {
     const linkshellId = this.linkshellId();
     this.busyId.set(request.id);
-    this.auth.setActionError(null);
-    this.auth.setActionMessage(null);
     try {
-      await this.http.postActivityJson(
-        `/api/activity/linkshells/${linkshellId}/claim-requests/${request.id}/${approve ? 'approve' : 'deny'}`
-      );
-      this.auth.setActionMessage(
-        approve
-          ? `Approved: ${request.placeholderName} now belongs to ${request.requesterName}.`
-          : `Denied ${request.requesterName}'s request for ${request.placeholderName}.`
-      );
-      if (approve) {
+      // A reload that fails after the approval was saved never reports it as failed.
+      await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityJson(
+          `/api/activity/linkshells/${linkshellId}/claim-requests/${request.id}/${approve ? 'approve' : 'deny'}`
+        ),
         // The roster and DKP changed (a member moved or got linked).
-        await this.auth.refreshOverview();
-      }
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Updating the claim request failed.'));
+        refresh: approve ? () => this.auth.refreshOverview() : undefined,
+        success: approve
+          ? `Approved: ${request.placeholderName} now belongs to ${request.requesterName}.`
+          : `Denied ${request.requesterName}'s request for ${request.placeholderName}.`,
+        failure: 'Updating the claim request failed.'
+      });
     } finally {
       this.busyId.set(null);
       await this.load(linkshellId);

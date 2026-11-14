@@ -4,10 +4,11 @@ import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type { ActivityDkpImportPreview } from './discord-activity.types';
+import { mutateThenRefresh } from './mutate-then-refresh';
 
 // DKP import (website and Discord): a linkshell migrating from another tracker uploads a spreadsheet
 // of its existing DKP. Two steps, like the old Razor page: preview classifies every row without
-// changing anything, then commit applies the previewed rows. ActivityDataController.DkpImport.
+// changing anything, then commit applies the previewed rows. ActivityDkpController.DkpImport.
 @Injectable({ providedIn: 'root' })
 export class DkpImportService {
   private readonly http = inject(ActivityHttpClient);
@@ -49,18 +50,21 @@ export class DkpImportService {
       return false;
     }
     this.busy.set(true);
-    this.auth.clearActionState();
     try {
-      const result = await this.http.postActivityJson<{ message: string }>(
-        `/api/activity/linkshells/${pending.linkshellId}/dkp-import/commit`,
-        { rows: pending.preview.rows, sourceLabel: pending.preview.sourceLabel });
-      this.pending.set(null);
-      this.auth.setActionMessage(result.message);
-      await this.auth.refreshOverview();
-      return true;
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, 'Importing DKP failed.'));
-      return false;
+      // A reload that fails after the import was applied must not read as a failed import.
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate: async () => {
+          const result = await this.http.postActivityJson<{ message: string }>(
+            `/api/activity/linkshells/${pending.linkshellId}/dkp-import/commit`,
+            { rows: pending.preview.rows, sourceLabel: pending.preview.sourceLabel });
+          this.pending.set(null);
+          return result;
+        },
+        refresh: () => this.auth.refreshOverview(),
+        success: result => result.message,
+        failure: 'Importing DKP failed.'
+      });
+      return outcome.ok;
     } finally {
       this.busy.set(false);
     }

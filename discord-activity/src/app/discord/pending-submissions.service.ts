@@ -2,12 +2,12 @@ import { Injectable, inject, signal } from '@angular/core';
 
 import { ActivityHttpClient } from './activity-http.client';
 import { AuthService } from './auth.service';
-import { formatActionError } from './discord-activity.helpers';
 import type { ActivityPendingSubmissions, ActivityPendingTodEdits } from './discord-activity.types';
+import { mutateThenRefresh } from './mutate-then-refresh';
 import { ResponseOrder } from './refresh-order';
 
 // The ToD review queue: ToDs that members without the add-ToD permission submitted for approval
-// (ActivityDataController.PendingSubmissions), shown on the ToDs tab. Every approve / reject reloads
+// (ActivityWindowEventsController.PendingSubmissions), shown on the ToDs tab. Every approve / reject reloads
 // the queue, and the overview too, since an approved ToD shows up across the app.
 @Injectable({ providedIn: 'root' })
 export class PendingSubmissionsService {
@@ -55,14 +55,15 @@ export class PendingSubmissionsService {
 
   private async act(linkshellId: number, key: string, path: string, body: object, failure: string): Promise<void> {
     this.busyKey.set(key);
-    this.auth.clearActionState();
     try {
-      const result = await this.http.postActivityJson<{ message: string }>(
-        `/api/activity/linkshells/${linkshellId}/pending-submissions/${path}`, body);
-      this.auth.setActionMessage(result.message);
-      await this.auth.refreshOverview();
-    } catch (error) {
-      this.auth.setActionError(formatActionError(error, failure));
+      // A reload that fails after the review was saved never reports it as failed.
+      await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityJson<{ message: string }>(
+          `/api/activity/linkshells/${linkshellId}/pending-submissions/${path}`, body),
+        refresh: () => this.auth.refreshOverview(),
+        success: result => result.message,
+        failure
+      });
     } finally {
       this.busyKey.set(null);
     }
