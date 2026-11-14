@@ -40,8 +40,9 @@ public class AuctionCloseRaceTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    // The app's controller with only what Close touches, and a signed-in Leader.
-    private static ActivityLootController NewActivityController(ApplicationDbContext db)
+    // The app's controller with only what Close touches, and a signed-in Leader (or `signedIn`).
+    // Shared with AuctionCloseKeepsBidsTests.
+    internal static ActivityLootController NewActivityController(ApplicationDbContext db, string signedIn = Officer)
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -60,14 +61,14 @@ public class AuctionCloseRaceTests : IAsyncLifetime
         var http = new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
-                new[] { new Claim(ClaimTypes.NameIdentifier, Officer) }, authenticationType: "Test")),
+                new[] { new Claim(ClaimTypes.NameIdentifier, signedIn) }, authenticationType: "Test")),
             // Empty: the close asks for the live-refresh notifier, which these tests do without.
             RequestServices = new ServiceCollection().BuildServiceProvider(),
         };
         return ActivityControllerFactory.Create<ActivityLootController>(
             http, db, userManager, new MemberActivityService(db),
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance), pools,
-            permissions);
+            permissions, new TreasuryJournalWriter(db, new LedgerAccountProvisioner(db)));
     }
 
     // One auction with one item, Carol on it at 50, ending at `endsAt`. Bob and Carol have 100 DKP.

@@ -116,6 +116,22 @@ public class DiscordInteractionFeatureTests
         Assert.StartsWith("Open LSM and sign in", unlinked.Content);
     }
 
+    // Closing keeps an auction's items on its history. An old card's Bid on one still opens the
+    // plain modal (it used to find no item at all), and the submit says the item is gone.
+    [Fact]
+    public async Task Auction_BidOnAClosedAuctionsItem_IsRefusedPrivately()
+    {
+        var bid = $"auc:bid:{H.ClosedAuctionItemId}";
+        var modal = await H.SendAsync(H.Component("member", bid));
+        Assert.Equal(OpenModal, modal.ResponseType);
+        Assert.Null(modal.Threw);
+
+        var submit = await H.SendAsync(H.Modal("member", $"auc:bidmodal:{H.ClosedAuctionItemId}", ("amount", "50")));
+        Assert.Equal(Private, submit.Flags);
+        Assert.Contains("not found", submit.Content);
+        Assert.Null(submit.Threw);
+    }
+
     // Officer tools: refused privately for a member, a private picker for an officer, and a
     // finished move quietly dismisses the picker.
     [Fact]

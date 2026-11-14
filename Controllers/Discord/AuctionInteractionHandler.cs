@@ -76,8 +76,10 @@ public sealed class AuctionInteractionHandler : DiscordInteractionHandlerBase, I
         var label = "Your bid (DKP)";
         var placeholder = "e.g. 100";
 
+        // A closed auction's items are kept on its history with no Auction; those get the plain
+        // modal, and the submit then says the item was not found.
         var auction = await _db.AuctionItems
-            .Where(item => item.Id == itemId)
+            .Where(item => item.Id == itemId && item.AuctionId != null)
             .Select(item => new { item.Auction!.LinkshellId, item.Auction.DkpPoolId })
             .FirstOrDefaultAsync(cancellationToken);
 

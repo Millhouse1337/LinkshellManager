@@ -1353,8 +1353,8 @@ namespace LinkshellManagerDiscordApp.Data
                     .OnDelete(DeleteBehavior.SetNull);
                 // Exactly one parent: a live auction OR its closed history, never both and never
                 // neither. An item with neither shows on no auction and no history page, so it
-                // would sit in the table unseen. Close copies the items onto the new history and
-                // deletes the live ones, so every correct write sets just one of the two.
+                // would sit in the table unseen. Close moves each item (with its bids) from the
+                // auction to the new history in one UPDATE, so every correct write sets just one.
                 // The migration adds it NOT VALID, so old rows are not re-checked at startup; see
                 // AddOneParentCheckConstraints.
                 entity.ToTable(table => table.HasCheckConstraint(

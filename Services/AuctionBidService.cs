@@ -145,7 +145,8 @@ public static class AuctionBidService
         var item = await db.AuctionItems
             .Include(auctionItem => auctionItem.Auction)
             .FirstOrDefaultAsync(auctionItem => auctionItem.Id == itemId, cancellationToken);
-        // Closing an auction deletes its items, and an officer may have ended it while this bid waited.
+        // Closing an auction moves its items off it (onto its history), and an officer may have
+        // closed it while this bid waited.
         if (item is null || item.Auction is null || item.Auction.LinkshellId != linkshellId)
         {
             return Fail("That auction item was not found.");

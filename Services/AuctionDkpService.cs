@@ -8,7 +8,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // by the bids the member is *currently winning* across all not-yet-closed
 // auction items in the linkshell. Being outbid releases the lock because
 // CurrentHighestBidderAppUserId no longer points at the member; closing an
-// auction deletes its items so they stop contributing. Nothing is stored —
+// auction moves its items onto its history (Auction becomes null), so they stop
+// contributing -- every query here counts only items with an Auction. Nothing is stored —
 // the value is always derived so there is no reconciliation risk.
 public static class AuctionDkpService
 {

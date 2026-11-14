@@ -38,6 +38,7 @@ internal static class DiscordInteractionHarness
     public const int AdHocEventId = 20;     // plain event, no party setup
     public const int ManualCheckInEventId = 30; // Manual Check In camp (Fafnir), no party setup
     public const int PastCampHistoryId = 5; // an ended camp's EventHistory
+    public const int ClosedAuctionItemId = 8; // an item kept on a closed auction's history
     public const int OpenSlotId = 1;        // nothing pinned -> the job wizard
     public const int PinnedSlotId = 2;      // Tank PLD/WAR, held by the member below
     public const string GuildId = "g1";
@@ -285,7 +286,8 @@ internal static class DiscordInteractionHarness
     // One linkshell (outside sign-ups off) linked to guild g1, with a member (d1 -> u1, seated in
     // the pinned slot of event 10) and an officer (d2 -> u2). Event 10 is a Tiamat camp with a
     // one-alliance, one-party, two-slot setup, on window 3 with windows 1-2 captured; event 20 is a
-    // plain event with no setup; event 30 is a Manual Check In camp; history 5 is an ended camp.
+    // plain event with no setup; event 30 is a Manual Check In camp; history 5 is an ended camp;
+    // auction item 8 belongs to a closed auction.
     private static async Task SeedAsync(string dbName)
     {
         await using var db = NewDb(dbName);
@@ -358,6 +360,12 @@ internal static class DiscordInteractionHarness
             Id = PastCampHistoryId, LinkshellId = 1, EventName = "Old Tiamat", EventType = "HNM",
             StartTime = new DateTime(2029, 12, 1, 12, 0, 0, DateTimeKind.Utc),
             EndTime = new DateTime(2029, 12, 1, 14, 0, 0, DateTimeKind.Utc),
+        });
+        // A closed auction: closing keeps its item (and bids) on the history, with no Auction.
+        db.AuctionHistories.Add(new AuctionHistory
+        {
+            Id = 1, LinkshellId = 1, AuctionTitle = "Old sky drops",
+            AuctionItems = { new AuctionItem { Id = ClosedAuctionItemId, ItemName = "Kirin's Osode", Status = "NoBids" } },
         });
         db.EventPartySlotSignups.Add(new EventPartySlotSignup
         {

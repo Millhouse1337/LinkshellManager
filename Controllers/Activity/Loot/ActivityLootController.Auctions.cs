@@ -728,34 +728,22 @@ public sealed partial class ActivityLootController
             EndTime = auction.EndTime,
             StartedAt = auction.StartedAt,
             ClosedAt = closedAt,
-            AuctionItems = auction.AuctionItems
-                .OrderBy(item => item.Id)
-                .Select(item =>
-                {
-                    var hasWinner = !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId);
-                    // Inventory-sourced winners are auto-delivered (marked
-                    // Received); the decrement below transitions through
-                    // AuctionInventoryService so the post-close Received/Undo
-                    // toggle stays consistent and never double-decrements.
-                    var autoReceived = hasWinner && item.SourceItemId.HasValue;
-                    return new AuctionItem
-                    {
-                        ItemName = item.ItemName,
-                        ItemType = item.ItemType,
-                        StartingBidDkp = item.StartingBidDkp,
-                        CurrentHighestBid = item.CurrentHighestBid,
-                        CurrentHighestBidder = item.CurrentHighestBidder,
-                        CurrentHighestBidderAppUserId = item.CurrentHighestBidderAppUserId,
-                        Status = !hasWinner ? "NoBids" : autoReceived ? "Received" : "Closed",
-                        Notes = item.Notes,
-                        SourceItemId = item.SourceItemId,
-                        GilAmount = item.GilAmount
-                    };
-                })
-                .ToList()
         };
 
         _dbContext.AuctionHistories.Add(history);
+
+        // Each item's closed status, set now while SourceItemId still says where it came from (the
+        // inventory drawdown below can delete that Item, and SET NULL then clears the id).
+        foreach (var item in auction.AuctionItems)
+        {
+            var hasWinner = !string.IsNullOrWhiteSpace(item.CurrentHighestBidderAppUserId);
+            // Inventory-sourced winners are auto-delivered (marked
+            // Received); the decrement below transitions through
+            // AuctionInventoryService so the post-close Received/Undo
+            // toggle stays consistent and never double-decrements.
+            var autoReceived = hasWinner && item.SourceItemId.HasValue;
+            item.Status = !hasWinner ? "NoBids" : autoReceived ? "Received" : "Closed";
+        }
 
         // The pool the bidders were validated against. PINNED on each winner's ledger row — a later
         // remap must never relocate a historical auction purchase. (The history row no longer keeps
@@ -831,8 +819,16 @@ public sealed partial class ActivityLootController
                 auction.LinkshellId, closedAt, cancellationToken);
         }
 
-        _dbContext.Bids.RemoveRange(auction.AuctionItems.SelectMany(item => item.Bids));
-        _dbContext.AuctionItems.RemoveRange(auction.AuctionItems);
+        // The items and their bids stay: the same rows move from the auction to its history (one
+        // parent each, CK_AuctionItems_OneParent). Only the Auction row is deleted. They are taken
+        // off the auction first, so deleting it cascades to nothing.
+        foreach (var item in auction.AuctionItems.ToList())
+        {
+            item.Auction = null;
+            item.AuctionId = null;
+            item.AuctionHistory = history;
+        }
+        auction.AuctionItems.Clear();
         _dbContext.Auctions.Remove(auction);
 
         if (transaction is null)
