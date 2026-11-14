@@ -18,18 +18,13 @@ public sealed partial class AddonApiController
     {
         var linkshellId = AddonApiAuthAttribute.GetLinkshellId(HttpContext);
 
-        var query = _dbContext.Events
-            .Where(evt => evt.LinkshellId == linkshellId);
-
         // Materialized as ENTITIES (not a projection) so the shared window helpers below can be
         // called on them. HnmCampRules.FocusWindow / EffectiveWindowCount need the
         // same popped / defeated / finalized sentinels the board checks, and re-deriving any of
         // that here is exactly how the addon drifted out of sync with the board in the first
-        // place. Capped at 50 rows, so materializing is cheap.
-        var raw = await query
-            .OrderByDescending(evt => evt.CommencementStartTime)
-            .ThenByDescending(evt => evt.StartTime)
-            .Take(50)
+        // place. Capped (AddonCampList.MaxRows), so materializing is cheap. AddonCampList says
+        // which rows and why: HNM camps that have not ended, live ones first.
+        var raw = await AddonCampList.Query(_dbContext.Events, linkshellId)
             .ToListAsync(cancellationToken);
 
         // One row, for openedWindowDkp below. The addon has no way to resolve a camp's own pricing
@@ -116,35 +111,6 @@ public sealed partial class AddonApiController
             return null;
         }
 
-        // The linkshell's CONFIGURED cooldown for each camp's monster, in fractional hours. Sent so
-        // the addon can show the repop a captured ToD is about to produce ("dies now → pops at X →
-        // board back at X − lead") before the officer confirms, instead of only learning it from
-        // the POST /api/addon/tod response after the fact.
-        //
-        // Resolved through the same MonsterTimingResolver → ResolveTodCooldownHours path
-        // HnmCampPopService uses, so the addon's preview and the number the server later stores
-        // come from one source. One lookup per DISTINCT monster, not per event.
-        var cooldownHoursByMonster = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-        foreach (var monster in raw
-                     .Select(evt => evt.AssignedMonsterName?.Trim())
-                     .Where(name => !string.IsNullOrWhiteSpace(name))
-                     .Select(name => name!)
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var cooldown = await TodCooldowns.GetDefaultTodCooldownAsync(
-                _monsterTimings, linkshellId, monster, cancellationToken);
-            cooldownHoursByMonster[monster] = TodCooldowns.ResolveTodCooldownHours(cooldown);
-        }
-        double? CooldownHoursFor(string? monsterName)
-        {
-            var monster = monsterName?.Trim();
-            return !string.IsNullOrWhiteSpace(monster)
-                && cooldownHoursByMonster.TryGetValue(monster, out var hours)
-                && hours > 0
-                    ? hours
-                    : (double?)null;
-        }
-
         var shapes = raw.ToDictionary(evt => evt.Id, AddonEventWindowShape.For);
         var monsterTimings = await _monsterTimings.GetMapAsync(linkshellId, cancellationToken);
 
@@ -153,11 +119,9 @@ public sealed partial class AddonApiController
             id = evt.Id,
             name = evt.EventName,
             type = evt.EventType,
-            location = evt.EventLocation,
             startTime = evt.StartTime,
             commencementStartTime = evt.CommencementStartTime,
             isLive = evt.CommencementStartTime != null && evt.EndTime == null,
-            dkpPerHour = evt.DkpPerHour,
             // The SPAWN window count — how many pop chances the camp sits through. Same helper the
             // board uses, so "of M" can't disagree with it. This is the scale hnmWindowNumber /
             // openedWindowNumber below are on, and what the addon clamps them against.
@@ -174,14 +138,9 @@ public sealed partial class AddonApiController
             attendancePostCount = HnmCampRules.AttendancePostCount(evt),
             // How the camp posts, from its stamped Window Method (see AddonEventWindowShape). The
             // addon draws its Post buttons from these rather than from its own name tables.
-            windowMethod = shapes[evt.Id].WindowMethod,
             postsOpenAndClose = shapes[evt.Id].PostsOpenAndClose,
             windowsOpenEnded = shapes[evt.Id].WindowsOpenEnded,
             windowCadenceSeconds = shapes[evt.Id].WindowCadenceSeconds,
-            // Whether the Break Room applies. False for windowed HNM camps: they credit per posted
-            // window, so there is no timer to pause. The addon has no break buttons any more and
-            // does not read this.
-            supportsBreakRoom = EventBreakPolicy.SupportsBreakRoom(evt),
             assignedMonsterName = evt.AssignedMonsterName,
             // The monster's Additional Seconds, for the note beside the addon's ToD and End Event
             // controls: a reposted board starts at ToD + cooldown + these.
@@ -267,9 +226,9 @@ public sealed partial class AddonApiController
             // under the same day the board is printing. Without it a day-cycle monster's next
             // board would come back bare ("Nidhogg" rather than "Nidhogg D3").
             dayNumber = evt.DayNumber,
-            // The monster's configured cooldown in fractional hours, for the addon's
-            // "pops at / board back at" preview. Null when the monster has none configured.
-            todCooldownHours = CooldownHoursFor(evt.AssignedMonsterName)
+            // (location, dkpPerHour, windowMethod, supportsBreakRoom and todCooldownHours used to
+            // be sent too. No addon build reads them, and the cooldown cost a lookup per monster
+            // on every poll.)
         });
 
         return Ok(new { events });
@@ -642,11 +601,13 @@ public sealed partial class AddonApiController
             startTime = eventEntity.StartTime,
             commencementStartTime = eventEntity.CommencementStartTime,
             isLive = eventEntity.CommencementStartTime != null && eventEntity.EndTime == null,
-            windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName),
+            // The SPAWN window count, from the same helper as the events list and the board. This
+            // used to read WindowCountOverride first, which holds the POST count (2 on a
+            // king/dragon), so the two endpoints gave different answers for the same camp.
+            windowCount = HnmCampRules.EffectiveWindowCount(eventEntity),
             // Same shape fields as the events list, so a camp re-selected after a relog draws the
             // same buttons it did before.
             attendancePostCount = HnmCampRules.AttendancePostCount(eventEntity),
-            windowMethod = shape.WindowMethod,
             postsOpenAndClose = shape.PostsOpenAndClose,
             windowsOpenEnded = shape.WindowsOpenEnded,
             windowCadenceSeconds = shape.WindowCadenceSeconds,
