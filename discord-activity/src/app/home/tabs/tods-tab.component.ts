@@ -114,18 +114,10 @@ export class TodsTabComponent {
 
   // ----- Re-implemented small reads -----
 
-  protected primaryLinkshell() {
-    return this.activity.overview()?.primaryLinkshell ?? null;
-  }
-
   // May approve members' ToD submissions (the ToD Submissions Needing Approval section). Same
   // gate as the API.
   protected canReviewSubmissions(): boolean {
     return canReviewSubmissionsIn(this.activity.overview(), this.selectedDashboardLinkshellId());
-  }
-
-  protected dashboardLinkshells() {
-    return this.activity.overview()?.linkshells ?? [];
   }
 
   // The app's one current linkshell (AuthService.currentLinkshellId).
