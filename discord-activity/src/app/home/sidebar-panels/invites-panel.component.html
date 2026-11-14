@@ -39,15 +39,17 @@
       </div>
     }
 
-    @if (activity.overview()?.incomingJoinRequests?.length) {
+    <!-- Players asking to join the linkshell being managed. Only for those who may answer
+         (the Leader, or Manage invites); the server sends nobody else any. -->
+    @if (joinRequestsForTarget().length > 0) {
       <div class="invite-section">
-        <h3>Join requests</h3>
+        <h3>Join requests <span class="pill">{{ joinRequestsForTarget().length }}</span></h3>
         <ul class="compact-list compact-list--dense">
-          @for (request of activity.overview()?.incomingJoinRequests ?? []; track request.id) {
+          @for (request of joinRequestsForTarget(); track request.id) {
             <li>
               <div>
                 <strong>{{ request.appUserDisplayName }}</strong>
-                <span>Requested access to {{ request.linkshellName }}</span>
+                <span>{{ request.message ? '"' + request.message + '"' : 'Wants to join ' + request.linkshellName }}</span>
               </div>
               <div class="button-cluster">
                 <button
@@ -62,7 +64,7 @@
                   class="action-button action-button--secondary"
                   [disabled]="activity.busyInviteId() === request.id"
                   (click)="activity.declineJoinRequest(request.id)">
-                  Decline
+                  Deny
                 </button>
               </div>
             </li>
@@ -188,25 +190,6 @@
                     {{ activity.busyInviteId() === invite.id ? 'Updating...' : 'Revoke' }}
                   </button>
                 }
-              </div>
-            </li>
-          }
-        </ul>
-      </div>
-    }
-
-    @if (activity.overview()?.outgoingJoinRequests?.length) {
-      <div class="invite-section">
-        <h3>Your join requests</h3>
-        <ul class="compact-list compact-list--dense">
-          @for (request of activity.overview()?.outgoingJoinRequests ?? []; track request.id) {
-            <li>
-              <div>
-                <strong>{{ request.linkshellName }}</strong>
-                <span>Awaiting review</span>
-              </div>
-              <div class="button-cluster">
-                <span>{{ request.status }}</span>
               </div>
             </li>
           }

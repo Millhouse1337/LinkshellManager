@@ -1710,7 +1710,28 @@ export interface ActivityInvite {
   linkshellId: number;
   appUserDisplayName: string;
   linkshellName: string;
+  // Invites: PendingInvite. Join requests: PendingJoinRequest, JoinRequestApproved or
+  // JoinRequestDenied (see JOIN_REQUEST_STATUS).
   status: string;
+  // Join requests only: the player's note, when they asked, and when it was answered.
+  message?: string | null;
+  createdAtUtc?: string | null;
+  resolvedAtUtc?: string | null;
+}
+
+// The server's join-request statuses (JoinRequestService).
+export const JOIN_REQUEST_STATUS = {
+  pending: 'PendingJoinRequest',
+  approved: 'JoinRequestApproved',
+  denied: 'JoinRequestDenied'
+} as const;
+
+// A linkshell a player could ask to join. Only its name, description and member count.
+export interface ActivityLinkshellSearchResult {
+  id: number;
+  name: string;
+  details: string | null;
+  memberCount: number;
 }
 
 // A member of a locked linkshell's Discord server, offered in the

@@ -1,0 +1,81 @@
+<article class="panel" aria-labelledby="join-linkshell-heading">
+  <div class="panel__header">
+    <div>
+      <p class="eyebrow eyebrow--small">Membership</p>
+      <h2 id="join-linkshell-heading">Join a linkshell</h2>
+    </div>
+  </div>
+
+  <!-- Find a linkshell by name, then ask to join. An officer answers in the Invites view. -->
+  <div class="invite-search">
+    <input
+      [(ngModel)]="query"
+      name="joinLinkshellQuery"
+      placeholder="Linkshell name"
+      aria-label="Linkshell name"
+      (keyup.enter)="search()" />
+    <button type="button" class="action-button" [disabled]="activity.linkshellSearchBusy()" (click)="search()">
+      {{ activity.linkshellSearchBusy() ? 'Searching...' : 'Search' }}
+    </button>
+  </div>
+
+  @if (activity.linkshellSearchResults().length > 0) {
+    <div class="invite-search">
+      <input
+        [(ngModel)]="note"
+        name="joinLinkshellNote"
+        [maxlength]="maxNoteLength"
+        placeholder="Note to the officers (optional)"
+        aria-label="Note to the officers" />
+    </div>
+    <ul class="invite-results">
+      @for (result of activity.linkshellSearchResults(); track result.id) {
+        <li class="invite-result">
+          <div class="invite-result__text">
+            <strong>{{ result.name }}</strong>
+            <span>{{ memberCountLabel(result.memberCount) }}{{ result.details ? ' · ' + result.details : '' }}</span>
+          </div>
+          <button
+            type="button"
+            class="action-button"
+            [disabled]="activity.busyJoinLinkshellId() === result.id"
+            (click)="ask(result)">
+            {{ activity.busyJoinLinkshellId() === result.id ? 'Sending...' : 'Request to join' }}
+          </button>
+        </li>
+      }
+    </ul>
+  } @else if (searched() && !activity.linkshellSearchBusy()) {
+    <p class="notice">No linkshells matched. Check the name, or ask an officer to invite you.</p>
+  }
+
+  @if (requests().length > 0) {
+    <div class="invite-section">
+      <h3>Your requests</h3>
+      <ul class="compact-list compact-list--dense">
+        @for (request of requests(); track request.id) {
+          <li>
+            <div>
+              <strong>{{ request.linkshellName }}</strong>
+              @if (request.message) {
+                <span>"{{ request.message }}"</span>
+              }
+            </div>
+            <div class="button-cluster">
+              <span [class]="statusTagClass(request)">{{ statusLabel(request) }}</span>
+              @if (isPending(request)) {
+                <button
+                  type="button"
+                  class="action-button action-button--secondary"
+                  [disabled]="activity.busyInviteId() === request.id"
+                  (click)="activity.cancelJoinRequest(request.id)">
+                  {{ activity.busyInviteId() === request.id ? 'Cancelling...' : 'Cancel' }}
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+</article>

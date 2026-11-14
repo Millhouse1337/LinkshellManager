@@ -198,6 +198,9 @@ export class DiscordActivityService {
   readonly discordRosterCandidates = this.inviteService.discordRosterCandidates;
   readonly discordRosterBusy = this.inviteService.discordRosterBusy;
   readonly busyDiscordUserId = this.inviteService.busyDiscordUserId;
+  readonly linkshellSearchResults = this.inviteService.linkshellSearchResults;
+  readonly linkshellSearchBusy = this.inviteService.linkshellSearchBusy;
+  readonly busyJoinLinkshellId = this.inviteService.busyJoinLinkshellId;
   readonly dkpHistory = this.dkpService.dkpHistory;
   readonly dkpHistoryBusy = this.dkpService.dkpHistoryBusy;
   readonly busyDkpAudit = this.dkpService.busyDkpAudit;
@@ -675,6 +678,9 @@ export class DiscordActivityService {
   clearDiscordRoster(): void { this.inviteService.clearDiscordRoster(); }
   approveJoinRequest(inviteId: number): Promise<void> { return this.inviteService.approveJoinRequest(inviteId); }
   declineJoinRequest(inviteId: number): Promise<void> { return this.inviteService.declineJoinRequest(inviteId); }
+  searchLinkshells(query: string): Promise<void> { return this.inviteService.searchLinkshells(query); }
+  requestToJoin(linkshellId: number, message: string): Promise<boolean> { return this.inviteService.requestToJoin(linkshellId, message); }
+  cancelJoinRequest(inviteId: number): Promise<void> { return this.inviteService.cancelJoinRequest(inviteId); }
   acceptInvite(inviteId: number): Promise<void> { return this.inviteService.acceptInvite(inviteId); }
   declineInvite(inviteId: number): Promise<void> { return this.inviteService.declineInvite(inviteId); }
   revokeInvite(inviteId: number): Promise<void> { return this.inviteService.revokeInvite(inviteId); }

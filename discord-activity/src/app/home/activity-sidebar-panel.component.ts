@@ -10,12 +10,13 @@ import type { ProfileView } from './activity-home.types';
 import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.helpers';
 import { AuctionsPanelComponent, AuctionsView } from './sidebar-panels/auctions-panel.component';
 import { InvitesPanelComponent } from './sidebar-panels/invites-panel.component';
+import { JoinLinkshellPanelComponent } from './sidebar-panels/join-linkshell-panel.component';
 import { JobRatingsPanelComponent } from './sidebar-panels/job-ratings-panel.component';
 import { StarRatingComponent } from './sidebar-panels/star-rating.component';
 
 @Component({
   selector: 'app-activity-sidebar-panel',
-  imports: [CommonModule, FormsModule, AuctionsPanelComponent, InvitesPanelComponent, JobRatingsPanelComponent, StarRatingComponent],
+  imports: [CommonModule, FormsModule, AuctionsPanelComponent, InvitesPanelComponent, JoinLinkshellPanelComponent, JobRatingsPanelComponent, StarRatingComponent],
   templateUrl: './activity-sidebar-panel.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`

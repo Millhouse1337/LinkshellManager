@@ -401,6 +401,20 @@ export function canEditLiveCampIn(
   return permissions?.canModerateLiveEvent === true || permissions?.canManageEvents === true;
 }
 
+// Answering join requests (Approve / Deny). Mirrors the server: the Leader always, else the
+// "Manage invites" permission. The overview only sends requests to people who pass this, so it
+// also keeps the section hidden for a role that lost the flag.
+export function canManageInvitesIn(
+  overview: ActivityOverview | null | undefined,
+  linkshellId: number | null | undefined
+): boolean {
+  if (linkshellId == null) return false;
+  const membership = (overview?.linkshells ?? []).find(link => link.id === linkshellId);
+  if (!membership) return false;
+  if (isLeaderRankName(membership.rank)) return true;
+  return membership.permissions?.canManageInvites === true;
+}
+
 // True for the Leader rank name. Same test the server uses (LinkshellRanks.IsLeader:
 // "Leader", any letter case), so a custom role spelled "leader" counts too.
 export function isLeaderRankName(rank: string | null | undefined): boolean {

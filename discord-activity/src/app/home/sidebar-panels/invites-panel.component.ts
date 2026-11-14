@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, effect, inject, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
-import { canManageLinkshellIn } from '../activity-home.helpers';
+import { canManageInvitesIn, canManageLinkshellIn } from '../activity-home.helpers';
 
 /** Where the invite card looks: the dropdown beside its search box. */
 type InviteSource = 'all' | 'discord';
@@ -141,6 +141,15 @@ export class InvitesPanelComponent {
     const targetId = this.inviteTargetLinkshellId();
     return (this.activity.overview()?.sentInvites ?? [])
       .filter(invite => invite.linkshellId === targetId);
+  }
+
+  /** Open join requests for the linkshell being managed, when the user may answer them there
+   *  (the same rule the approve and deny routes check). */
+  protected joinRequestsForTarget() {
+    const targetId = this.inviteTargetLinkshellId();
+    if (!canManageInvitesIn(this.activity.overview(), targetId)) return [];
+    return (this.activity.overview()?.incomingJoinRequests ?? [])
+      .filter(request => request.linkshellId === targetId);
   }
 
   /** Every row the picked source has: for Entire LSM Server the server's current page; for

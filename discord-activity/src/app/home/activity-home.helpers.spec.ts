@@ -6,6 +6,7 @@ import {
   breakSessionInfo,
   canEditLiveCampIn,
   canManageEventsIn,
+  canManageInvitesIn,
   canManageLinkshellIn,
   canReviewSubmissionsIn,
   defaultDkpPoolId,
@@ -266,7 +267,8 @@ describe('permission gates', () => {
       { id: 1, rank: 'Member', permissions: { canModerateLiveEvent: true } },
       { id: 2, rank: 'Officer', permissions: {}, settings: { marker: 'primary' } },
       { id: 3, rank: 'leader', permissions: {} },
-      { id: 4, rank: 'Member', permissions: { canManageEvents: true, canManageTods: true } }
+      { id: 4, rank: 'Member', permissions: { canManageEvents: true, canManageTods: true } },
+      { id: 5, rank: 'Recruiter', permissions: { canManageInvites: true } }
     ]
   });
 
@@ -299,6 +301,16 @@ describe('permission gates', () => {
     expect(canEditLiveCampIn(ov, 3)).toBe(true);
     expect(canEditLiveCampIn(ov, 4)).toBe(true);
     expect(canEditLiveCampIn(ov, 99)).toBe(false);
+  });
+
+  it('canManageInvitesIn: the Leader, or the Manage invites permission', () => {
+    expect(canManageInvitesIn(ov, 3)).toBe(true);
+    expect(canManageInvitesIn(ov, 5)).toBe(true);
+    // An Officer whose role lost the flag, and a plain member.
+    expect(canManageInvitesIn(ov, 2)).toBe(false);
+    expect(canManageInvitesIn(ov, 1)).toBe(false);
+    expect(canManageInvitesIn(ov, 99)).toBe(false);
+    expect(canManageInvitesIn(ov, null)).toBe(false);
   });
 
   it('isLeaderTierIn and canReviewSubmissionsIn', () => {

@@ -303,7 +303,7 @@
         <span class="checklist__marker">{{ (activity.overview()?.linkshells?.length ?? 0) > 0 ? 'Done' : '2' }}</span>
         <div>
           <strong>Create or join a linkshell</strong>
-          <span>Linkshell membership unlocks invites, roster controls, and event management.</span>
+          <span>Ask to join one below, or get an invite from an officer.</span>
         </div>
       </li>
       @if (!activity.overview()?.addonGloballyDisabled) {
@@ -317,6 +317,8 @@
       }
     </ul>
   </article>
+  <!-- Step 2's other half: find a linkshell and ask to join it. -->
+  <app-join-linkshell-panel />
   }
 
   @if (showSection('invites')) {

@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { formatActionError } from './discord-activity.helpers';
 import type {
   ActivityDiscordRosterCandidate,
+  ActivityLinkshellSearchResult,
   ActivityUserSearchResult
 } from './discord-activity.types';
 import { mutateThenRefresh } from './mutate-then-refresh';
@@ -26,6 +27,10 @@ export class InviteService {
   readonly discordRosterCandidates = signal<ActivityDiscordRosterCandidate[]>([]);
   readonly discordRosterBusy = signal(false);
   readonly busyDiscordUserId = signal<string | null>(null);
+  // A player looking for a linkshell to ask to join (the Onboarding page).
+  readonly linkshellSearchResults = signal<ActivityLinkshellSearchResult[]>([]);
+  readonly linkshellSearchBusy = signal(false);
+  readonly busyJoinLinkshellId = signal<number | null>(null);
 
   async browsePlayers(
     linkshellId: number,
@@ -117,6 +122,63 @@ export class InviteService {
     this.discordRosterCandidates.set([]);
   }
 
+  /** Linkshells the player could ask to join, by name (two letters or more). */
+  async searchLinkshells(query: string): Promise<void> {
+    const text = query.trim();
+    if (text.length < 2) {
+      this.linkshellSearchResults.set([]);
+      return;
+    }
+
+    this.linkshellSearchBusy.set(true);
+    this.auth.setActionError(null);
+    try {
+      this.linkshellSearchResults.set(await this.http.fetchActivityJson<ActivityLinkshellSearchResult[]>(
+        `/api/activity/linkshells/search?query=${encodeURIComponent(text)}`));
+    } catch (error) {
+      this.linkshellSearchResults.set([]);
+      this.auth.setActionError(formatActionError(error, 'Searching linkshells failed.'));
+    } finally {
+      this.linkshellSearchBusy.set(false);
+    }
+  }
+
+  /** Asks to join a linkshell. True when the request was sent. */
+  async requestToJoin(linkshellId: number, message: string): Promise<boolean> {
+    this.busyJoinLinkshellId.set(linkshellId);
+    try {
+      const outcome = await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction(`/api/activity/linkshells/${linkshellId}/join-request`, {
+          message: message.trim() || null
+        }),
+        refresh: () => this.auth.refreshOverview(),
+        success: 'Request sent. An officer will answer it.',
+        failure: 'Sending the request failed.'
+      });
+      if (outcome.ok) {
+        // It now shows under "Your requests" instead.
+        this.linkshellSearchResults.update(list => list.filter(result => result.id !== linkshellId));
+      }
+      return outcome.ok;
+    } finally {
+      this.busyJoinLinkshellId.set(null);
+    }
+  }
+
+  async cancelJoinRequest(inviteId: number): Promise<void> {
+    this.busyInviteId.set(inviteId);
+    try {
+      await mutateThenRefresh(this.auth, {
+        mutate: () => this.http.postActivityAction(`/api/activity/join-requests/${inviteId}/cancel`),
+        refresh: () => this.auth.refreshOverview(),
+        success: 'Request cancelled.',
+        failure: 'Cancelling the request failed.'
+      });
+    } finally {
+      this.busyInviteId.set(null);
+    }
+  }
+
   async approveJoinRequest(inviteId: number): Promise<void> {
     this.busyInviteId.set(inviteId);
     try {
@@ -137,8 +199,8 @@ export class InviteService {
       await mutateThenRefresh(this.auth, {
         mutate: () => this.http.postActivityAction(`/api/activity/join-requests/${inviteId}/decline`),
         refresh: () => this.auth.refreshOverview(),
-        success: 'Join request declined.',
-        failure: 'Declining the join request failed.'
+        success: 'Join request denied.',
+        failure: 'Denying the join request failed.'
       });
     } finally {
       this.busyInviteId.set(null);
