@@ -254,6 +254,7 @@ internal static class DiscordInteractionHarness
         services.AddScoped<EndCampHandler>();
         services.AddScoped<AuctionInteractionHandler>();
         services.AddScoped<OfficerToolsHandler>();
+        services.AddScoped<OutsideSignupHandler>();
         return services;
     }
 
