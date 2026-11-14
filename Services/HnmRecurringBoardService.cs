@@ -291,7 +291,7 @@ public static class HnmRecurringBoardService
     public static async Task StopRepeatingForRemovedBoardAsync(
         ApplicationDbContext db, Event removed, CancellationToken cancellationToken)
     {
-        if (!DiscordEventMessageBuilder.IsHnm(removed))
+        if (!HnmCampRules.IsHnm(removed))
         {
             return;
         }

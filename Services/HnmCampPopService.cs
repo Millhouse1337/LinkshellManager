@@ -265,7 +265,7 @@ public sealed class HnmCampPopService
             ? repostAnchor.AddHours(-leadHours.Value)
             : null;
 
-        var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        var effectiveCount = HnmCampRules.EffectiveWindowCount(ev);
         // The officer's answer wins. With none, the window the in-game Repop Timer recorded on the
         // ToD it posted for this camp: a reading taken AT the pop, which is what the Window
         // frequency chart wants. Only after that the window the BOARD was showing when End Camp was
@@ -279,7 +279,7 @@ public sealed class HnmCampPopService
         var popWindow = Math.Clamp(
             request.PopWindow
                 ?? (adoptedPostedTod ? tod.PopWindow : null)
-                ?? DiscordEventMessageBuilder.FocusWindow(ev),
+                ?? HnmCampRules.FocusWindow(ev),
             1, effectiveCount);
         // Mirror it onto the ToD as well, so re-opening this pop on the ToDs tab shows the same
         // window End Camp recorded. Committed by the SaveChanges at the end of the method.
@@ -287,7 +287,7 @@ public sealed class HnmCampPopService
         ev.NextWindowAt = null; // popped — no more windows
 
         // Record the camp's outcome on the event before the handoff reads it.
-        if (DiscordEventMessageBuilder.IsWd(ev))
+        if (HnmCampRules.IsWd(ev))
         {
             ev.WdClaimed = claimed;
             ev.WdKilled = killed;
@@ -313,7 +313,7 @@ public sealed class HnmCampPopService
         // WdFinalizedAt is stamped here for the same reason — every Manual Check In surface gates on it being
         // null, and HnmEventSeeder.ClearWdCampState clears the block when the board is re-posted.
         ev.HnmDefeatedAt = nowUtc;
-        if (DiscordEventMessageBuilder.IsWd(ev))
+        if (HnmCampRules.IsWd(ev))
         {
             ev.WdFinalizedAt = nowUtc;
             ev.HnmWindowNumber = 1;
@@ -342,7 +342,7 @@ public sealed class HnmCampPopService
 
         _logger.LogInformation(
             "HNM camp popped: event {EventId} ({Monster}) window {Window}, repop {Repop:o}, mode {Mode}.",
-            ev.Id, monster, popWindow, repopUtc, DiscordEventMessageBuilder.IsWd(ev) ? "Manual Check In" : "Standard");
+            ev.Id, monster, popWindow, repopUtc, HnmCampRules.IsWd(ev) ? "Manual Check In" : "Standard");
 
         return new Result(true, null, repopUtc, ev.HnmRepostAt, cooldown, additionalSeconds);
     }

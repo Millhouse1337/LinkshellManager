@@ -123,7 +123,7 @@ public class Event
     // The highest window whose turnover has been settled, so a wyrm's roster is cleared exactly
     // once per window even though the advancer polls every few seconds.
     //
-    // On the PRINTED window scale (DiscordEventMessageBuilder.FocusWindow — the window the board
+    // On the PRINTED window scale (HnmCampRules.FocusWindow — the window the board
     // names and everyone is signing up for), NOT the HnmWindowNumber counter. The two differ by
     // one for the whole live camp, and keying this to the printed number is what makes "the board
     // changed its number" and "the roster was wiped" the same event — including at commencement,
@@ -183,7 +183,7 @@ public class Event
     //
     // Deliberately NOT WindowCountOverride: that column already means the POST count on an
     // addon-made camp and the SPAWN count on an app-made one, and the comment on
-    // DiscordEventMessageBuilder.EffectiveWindowCount is the story of what one column doing two
+    // HnmCampRules.EffectiveWindowCount is the story of what one column doing two
     // jobs cost.
     public int? SpawnWindowCount { get; set; }
     public int? SpawnWindowMinutes { get; set; }
@@ -191,7 +191,7 @@ public class Event
     // The monster's Window Method (MonsterWindowMethods), stamped beside the spawn grid and for the
     // same reason: editing Monster Setups must never change how a live camp posts. Null on every
     // camp made before the setting existed, and on an HNM board with no monster — those keep the
-    // HnmConfig post-count rules (DiscordEventMessageBuilder.LegacyAttendancePostCount).
+    // HnmConfig post-count rules (HnmCampRules.LegacyAttendancePostCount).
     [MaxLength(16)]
     public string? WindowMethod { get; set; }
 

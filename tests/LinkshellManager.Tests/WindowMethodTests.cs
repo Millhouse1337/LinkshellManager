@@ -57,14 +57,14 @@ public class WindowMethodTests
         var legacy = Seeded(null);
         var stamped = Seeded(MonsterTimingDefaults.DefaultWindowMethod(monster));
 
-        Assert.Equal(DiscordEventMessageBuilder.AttendancePostCount(legacy), DiscordEventMessageBuilder.AttendancePostCount(stamped));
-        Assert.Equal(DiscordEventMessageBuilder.EffectiveWindowCount(legacy), DiscordEventMessageBuilder.EffectiveWindowCount(stamped));
-        Assert.Equal(DiscordEventMessageBuilder.PostsOpenAndClose(legacy), DiscordEventMessageBuilder.PostsOpenAndClose(stamped));
+        Assert.Equal(HnmCampRules.AttendancePostCount(legacy), HnmCampRules.AttendancePostCount(stamped));
+        Assert.Equal(HnmCampRules.EffectiveWindowCount(legacy), HnmCampRules.EffectiveWindowCount(stamped));
+        Assert.Equal(HnmCampRules.PostsOpenAndClose(legacy), HnmCampRules.PostsOpenAndClose(stamped));
         for (var sequence = 1; sequence <= 3; sequence++)
         {
             Assert.Equal(
-                DiscordEventMessageBuilder.DefaultWindowLabel(legacy, sequence),
-                DiscordEventMessageBuilder.DefaultWindowLabel(stamped, sequence));
+                HnmCampRules.DefaultWindowLabel(legacy, sequence),
+                HnmCampRules.DefaultWindowLabel(stamped, sequence));
         }
     }
 
@@ -75,14 +75,14 @@ public class WindowMethodTests
     {
         var camp = Camp("Jugner Funguar", MonsterWindowMethods.OpenClose, windowCountOverride: 1);
 
-        Assert.Equal(1, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(camp));
-        Assert.True(DiscordEventMessageBuilder.PostsOpenAndClose(camp));
-        Assert.Equal(2, DiscordEventMessageBuilder.MaxPostSequence(camp));
-        Assert.Equal(3, DiscordEventMessageBuilder.KillPostCeiling(camp));
-        Assert.Equal("Open", DiscordEventMessageBuilder.DefaultWindowLabel(camp, 1));
-        Assert.Equal("Close", DiscordEventMessageBuilder.DefaultWindowLabel(camp, 2));
-        Assert.Equal("Kill", DiscordEventMessageBuilder.DefaultWindowLabel(camp, 3));
+        Assert.Equal(1, HnmCampRules.EffectiveWindowCount(camp));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(camp));
+        Assert.True(HnmCampRules.PostsOpenAndClose(camp));
+        Assert.Equal(2, HnmCampRules.MaxPostSequence(camp));
+        Assert.Equal(3, HnmCampRules.KillPostCeiling(camp));
+        Assert.Equal("Open", HnmCampRules.DefaultWindowLabel(camp, 1));
+        Assert.Equal("Close", HnmCampRules.DefaultWindowLabel(camp, 2));
+        Assert.Equal("Kill", HnmCampRules.DefaultWindowLabel(camp, 3));
     }
 
     // A stamped camp reads its Monster Setups grid, even when a legacy override of 1 sits beside it.
@@ -91,9 +91,9 @@ public class WindowMethodTests
     {
         var camp = Camp("Jugner Funguar", MonsterWindowMethods.OpenClose, 7, 10, windowCountOverride: 1);
 
-        Assert.Equal(7, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(camp));
-        Assert.Equal(2, DiscordEventMessageBuilder.MaxPostSequence(camp));
+        Assert.Equal(7, HnmCampRules.EffectiveWindowCount(camp));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(camp));
+        Assert.Equal(2, HnmCampRules.MaxPostSequence(camp));
     }
 
     [Fact]
@@ -101,12 +101,12 @@ public class WindowMethodTests
     {
         var camp = Camp("Jugner Funguar", MonsterWindowMethods.WindowN, 7, 10);
 
-        Assert.Equal(7, DiscordEventMessageBuilder.AttendancePostCount(camp));
-        Assert.False(DiscordEventMessageBuilder.PostsOpenAndClose(camp));
-        Assert.False(DiscordEventMessageBuilder.WindowsOpenEnded(camp));
-        Assert.Equal(7, DiscordEventMessageBuilder.MaxPostSequence(camp));
-        Assert.Equal(8, DiscordEventMessageBuilder.KillPostCeiling(camp));
-        Assert.Null(DiscordEventMessageBuilder.DefaultWindowLabel(camp, 1));
+        Assert.Equal(7, HnmCampRules.AttendancePostCount(camp));
+        Assert.False(HnmCampRules.PostsOpenAndClose(camp));
+        Assert.False(HnmCampRules.WindowsOpenEnded(camp));
+        Assert.Equal(7, HnmCampRules.MaxPostSequence(camp));
+        Assert.Equal(8, HnmCampRules.KillPostCeiling(camp));
+        Assert.Null(HnmCampRules.DefaultWindowLabel(camp, 1));
     }
 
     // Two spawn windows is NOT an Open and a Close under Window N. "post count == 2" used to be
@@ -116,9 +116,9 @@ public class WindowMethodTests
     {
         var camp = Camp("Jugner Funguar", MonsterWindowMethods.WindowN, 2, 10);
 
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(camp));
-        Assert.False(DiscordEventMessageBuilder.PostsOpenAndClose(camp));
-        Assert.Null(DiscordEventMessageBuilder.DefaultWindowLabel(camp, 2));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(camp));
+        Assert.False(HnmCampRules.PostsOpenAndClose(camp));
+        Assert.Null(HnmCampRules.DefaultWindowLabel(camp, 2));
     }
 
     [Fact]
@@ -126,10 +126,10 @@ public class WindowMethodTests
     {
         var camp = Camp("King Vinegarroon", MonsterWindowMethods.WindowN, windowCountOverride: 1);
 
-        Assert.True(DiscordEventMessageBuilder.WindowsOpenEnded(camp));
-        Assert.Equal(HnmConfig.MaxWindow, DiscordEventMessageBuilder.AttendancePostCount(camp));
-        Assert.Equal(HnmConfig.MaxWindow, DiscordEventMessageBuilder.MaxPostSequence(camp));
-        Assert.Equal(HnmConfig.MaxWindow + 1, DiscordEventMessageBuilder.KillPostCeiling(camp));
+        Assert.True(HnmCampRules.WindowsOpenEnded(camp));
+        Assert.Equal(HnmConfig.MaxWindow, HnmCampRules.AttendancePostCount(camp));
+        Assert.Equal(HnmConfig.MaxWindow, HnmCampRules.MaxPostSequence(camp));
+        Assert.Equal(HnmConfig.MaxWindow + 1, HnmCampRules.KillPostCeiling(camp));
     }
 
     // An open-ended camp posts numbered windows, so like any numbered camp it closes only on the
@@ -139,7 +139,7 @@ public class WindowMethodTests
     {
         var camp = Camp("King Vinegarroon", MonsterWindowMethods.WindowN, windowCountOverride: 1);
         var posted = new[] { 1, 2, 3, 4 };
-        var named = DiscordEventMessageBuilder.PostsOpenAndClose(camp);
+        var named = HnmCampRules.PostsOpenAndClose(camp);
 
         Assert.Equal(0, HnmStandardCampFinalizer.ResolveCloseWindow(posted, closeIsNamedPost: named));
         Assert.Equal(3, HnmStandardCampFinalizer.ResolveCloseWindow(
@@ -152,8 +152,8 @@ public class WindowMethodTests
     {
         var king = Camp("Behemoth/King Behemoth", null, 7, 10, windowCountOverride: 7);
 
-        Assert.Equal(7, DiscordEventMessageBuilder.MaxPostSequence(king));
-        Assert.Equal(8, DiscordEventMessageBuilder.KillPostCeiling(king));
+        Assert.Equal(7, HnmCampRules.MaxPostSequence(king));
+        Assert.Equal(8, HnmCampRules.KillPostCeiling(king));
     }
 
     // Manual Check In is paid from check-ins, so a stamped method must not reshape it.
@@ -162,9 +162,9 @@ public class WindowMethodTests
     {
         var king = Camp("Behemoth/King Behemoth", MonsterWindowMethods.WindowN, 7, 10, 7, HnmAttendanceModes.Wd);
 
-        Assert.Null(DiscordEventMessageBuilder.WindowMethodFor(king));
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(king));
-        Assert.True(DiscordEventMessageBuilder.PostsOpenAndClose(king));
+        Assert.Null(HnmCampRules.WindowMethodFor(king));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(king));
+        Assert.True(HnmCampRules.PostsOpenAndClose(king));
     }
 
     [Fact]
@@ -172,8 +172,8 @@ public class WindowMethodTests
     {
         var sky = Camp("Kirin", MonsterWindowMethods.OpenClose, eventType: "Sky");
 
-        Assert.Null(DiscordEventMessageBuilder.WindowMethodFor(sky));
-        Assert.False(DiscordEventMessageBuilder.PostsOpenAndClose(sky));
+        Assert.Null(HnmCampRules.WindowMethodFor(sky));
+        Assert.False(HnmCampRules.PostsOpenAndClose(sky));
     }
 
     [Fact]
@@ -181,8 +181,8 @@ public class WindowMethodTests
     {
         var king = Camp("Behemoth/King Behemoth", "Sometimes", 7, 10, 7);
 
-        Assert.Null(DiscordEventMessageBuilder.WindowMethodFor(king));
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(king));
+        Assert.Null(HnmCampRules.WindowMethodFor(king));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(king));
     }
 
     // THE REGRESSION GUARD. "Post count == 2" was how every call site recognised an Open/Close camp,

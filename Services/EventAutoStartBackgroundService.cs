@@ -128,8 +128,8 @@ public sealed class EventAutoStartBackgroundService : BackgroundService
         // there. Null when the monster has no timed cadence or it's already the only window.
         if (isHnm && evt.StartTime is { } startUtc)
         {
-            var minutes = DiscordEventMessageBuilder.EffectiveWindowMinutes(evt);
-            var count = DiscordEventMessageBuilder.EffectiveWindowCount(evt);
+            var minutes = HnmCampRules.EffectiveWindowMinutes(evt);
+            var count = HnmCampRules.EffectiveWindowCount(evt);
             evt.NextWindowAt = minutes > 0 && evt.HnmWindowNumber < count
                 ? startUtc.AddMinutes(minutes)
                 : null;

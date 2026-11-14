@@ -333,7 +333,7 @@ public sealed partial class ActivityOverviewController
                 AttendanceSnapshotSlotKinds.IsMisc(snapshot.SlotKind)
                     ? "Misc"
                     : snapshot.WindowNumber is { } window
-                        ? DiscordEventMessageBuilder.DefaultWindowLabel(evt, window)
+                        ? HnmCampRules.DefaultWindowLabel(evt, window)
                           ?? $"Window {window}"
                         : null,
                 snapshot.SnapshotStatus,
@@ -460,7 +460,7 @@ public sealed partial class ActivityOverviewController
                 var tagEach = claimBonus > 0 ? DkpRounding.Round(claimBonus, step) : 0d;
 
                 totals = HnmStandardCampFinalizer.PriceMembers(
-                        scans, taggedAppUserIds, DiscordEventMessageBuilder.PostsOpenAndClose(evt),
+                        scans, taggedAppUserIds, HnmCampRules.PostsOpenAndClose(evt),
                         windowBonus, openBonus, closeBonus, claimBonus, killBonus, step)
                     .DkpByAppUserId
                     .ToDictionary(
@@ -740,7 +740,7 @@ public sealed partial class ActivityOverviewController
         // board matches a ToD, so a Fafnir camp lights up on a Nidhogg ToD too.
         var liveHnmCamps = activeEvents
             .Where(e => e.CommencementStartTime != null && e.EndTime == null
-                        && DiscordEventMessageBuilder.IsHnm(e))
+                        && HnmCampRules.IsHnm(e))
             .ToList();
         var campTods = new List<(int LinkshellId, string MonsterName, DateTime TimeStamp)>();
         if (liveHnmCamps.Count > 0)
@@ -760,7 +760,7 @@ public sealed partial class ActivityOverviewController
         DateTime? CampTodPostedAt(Event e)
         {
             if (e.CommencementStartTime is not { } started || e.EndTime != null
-                || !DiscordEventMessageBuilder.IsHnm(e))
+                || !HnmCampRules.IsHnm(e))
             {
                 return null;
             }
@@ -1003,8 +1003,8 @@ public sealed partial class ActivityOverviewController
                 evt.SourceTodId,
                 HnmLead(evt) != null,
                 HnmLead(evt),
-                DiscordEventMessageBuilder.EffectiveWindowCount(evt),
-                DiscordEventMessageBuilder.AttendancePostCount(evt),
+                HnmCampRules.EffectiveWindowCount(evt),
+                HnmCampRules.AttendancePostCount(evt),
                 evt.AttendanceWindows
                     .OrderBy(window => window.SequenceNumber)
                     .Select(window => new ActivityAttendanceWindowDto(
@@ -1019,7 +1019,7 @@ public sealed partial class ActivityOverviewController
                         // heals those without a migration; a stored label still wins.
                         // (activeEvents is materialized, so this runs in memory.)
                         HnmConfig.NormalizeWindowLabel(window.Label)
-                            ?? DiscordEventMessageBuilder.DefaultWindowLabel(evt, window.SequenceNumber),
+                            ?? HnmCampRules.DefaultWindowLabel(evt, window.SequenceNumber),
                         window.PostedAt,
                         window.Attendees
                             // Sorted on the SAME fallback the row renders, or a roster clear would
@@ -1075,7 +1075,7 @@ public sealed partial class ActivityOverviewController
                 evt.WdFinalizedAt,
                 // What the UI shows — same helper the Discord board uses, so the two can't
                 // disagree. Separate from HnmWindowNumber above, which pop-window logic needs.
-                DiscordEventMessageBuilder.FocusWindow(evt),
+                HnmCampRules.FocusWindow(evt),
                 // Whether the Break Room applies. Same predicate the break endpoints enforce, so
                 // the Activity can never show a control the server would refuse.
                 EventBreakPolicy.SupportsBreakRoom(evt),
@@ -1088,8 +1088,8 @@ public sealed partial class ActivityOverviewController
                 evt.HnmClaimBonusOverride,
                 evt.HnmKillBonusOverride,
                 evt.HnmPerWindowOverride,
-                DiscordEventMessageBuilder.PostsOpenAndClose(evt),
-                DiscordEventMessageBuilder.WindowMethodFor(evt),
+                HnmCampRules.PostsOpenAndClose(evt),
+                HnmCampRules.WindowMethodFor(evt),
                 CampPayoutOf(evt),
                 CampTodPostedAt(evt),
                 ParkedNextDayOf(evt))).ToList(),

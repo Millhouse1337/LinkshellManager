@@ -122,14 +122,14 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase, IDiscor
         {
             return Ephemeral("That event is no longer open.");
         }
-        if (!DiscordEventMessageBuilder.UsesWindows(ev))
+        if (!HnmCampRules.UsesWindows(ev))
         {
             return Ephemeral("This board doesn't use windows.");
         }
         // The window in view is on the PRINTED scale (FocusWindow), the same number the board and
         // the captures carry — reading the raw counter here hid the camp's first capture, which is
         // taken at commencement while the counter is still on 1.
-        var liveWindow = DiscordEventMessageBuilder.FocusWindow(ev);
+        var liveWindow = HnmCampRules.FocusWindow(ev);
         if (liveWindow <= 1)
         {
             return Ephemeral("This camp is still on its first window — there's nothing before it yet.");
@@ -350,7 +350,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase, IDiscor
     private static string RenderWindowSnapshot(
         Event ev, int windowNumber, IReadOnlyList<EventWindowRosterSnapshot> rows)
     {
-        var effectiveMax = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        var effectiveMax = HnmCampRules.EffectiveWindowCount(ev);
         var lines = new List<string>
         {
             // Said outright, above the roster. What's underneath is a roster with crowns and locks
@@ -359,7 +359,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase, IDiscor
             // they're several hours back. Discord's own "Only you can see this" covers privacy but
             // says nothing about the roster being frozen.
             $"📜 **Past window · read-only** — nothing here changes the board.",
-            $"**{ev.EventName} — Window {windowNumber} of {effectiveMax}** · the camp is now on window {DiscordEventMessageBuilder.FocusWindow(ev)}",
+            $"**{ev.EventName} — Window {windowNumber} of {effectiveMax}** · the camp is now on window {HnmCampRules.FocusWindow(ev)}",
         };
         if (rows.Count == 0)
         {
@@ -418,7 +418,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase, IDiscor
         {
             return Ephemeral("That event is no longer open.");
         }
-        if (!DiscordEventMessageBuilder.IsWd(ev))
+        if (!HnmCampRules.IsWd(ev))
         {
             return Ephemeral("This board doesn't use Manual Check In.");
         }
@@ -435,10 +435,10 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase, IDiscor
         var characterName = ctx.CharacterName!;
         // Credit is recorded against the window the BOARD shows — the one being awaited — so the
         // number in this reply matches the heading directly above the button. See
-        // DiscordEventMessageBuilder.FocusWindow. HnmCampPopService stamps WdPopWindow off the
+        // HnmCampRules.FocusWindow. HnmCampPopService stamps WdPopWindow off the
         // same helper, so arrival and pop stay on one scale and total credit is unchanged.
-        var arrivalWindow = DiscordEventMessageBuilder.FocusWindow(ev);
-        var openedWindow = Math.Clamp(ev.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(ev));
+        var arrivalWindow = HnmCampRules.FocusWindow(ev);
+        var openedWindow = Math.Clamp(ev.HnmWindowNumber, 1, HnmCampRules.EffectiveWindowCount(ev));
         var checkedInEarly = arrivalWindow > openedWindow;
 
         // First x-in makes the camp live (mirrors the addon participation path), so the board
@@ -497,7 +497,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase, IDiscor
         {
             return Ephemeral("That event is no longer open.");
         }
-        if (!DiscordEventMessageBuilder.IsWd(ev) || ev.WdFinalizedAt is not null)
+        if (!HnmCampRules.IsWd(ev) || ev.WdFinalizedAt is not null)
         {
             return Ephemeral("This board isn't accepting check-outs.");
         }
@@ -518,7 +518,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase, IDiscor
         // Same scale as check-in and the pop window: the board's number. Clamped to >= arrival so
         // checking out can never record a departure before the member arrived.
         var departWindow = Math.Clamp(
-            DiscordEventMessageBuilder.FocusWindow(ev), arrival, DiscordEventMessageBuilder.EffectiveWindowCount(ev));
+            HnmCampRules.FocusWindow(ev), arrival, HnmCampRules.EffectiveWindowCount(ev));
         existing.WdDepartureWindow = departWindow;
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -547,7 +547,7 @@ public sealed class HnmCampBoardHandler : DiscordInteractionHandlerBase, IDiscor
         }
         // The button only shows on Standard windowed HNM boards, but re-check on click (a stale
         // board could surface it, and there's nothing to "stay" for without a window advance).
-        if (!DiscordEventMessageBuilder.UsesWindows(ev))
+        if (!HnmCampRules.UsesWindows(ev))
         {
             return Ephemeral("This board doesn't use windows, so there's nothing to stay for.");
         }

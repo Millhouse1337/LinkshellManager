@@ -94,7 +94,7 @@ public sealed class EndCampHandler : DiscordInteractionHandlerBase, IDiscordInte
         {
             return Ephemeral("That event is no longer open.");
         }
-        if (!DiscordEventMessageBuilder.UsesWindows(ev))
+        if (!HnmCampRules.UsesWindows(ev))
         {
             return Ephemeral("This board doesn't use windows.");
         }
@@ -134,7 +134,7 @@ public sealed class EndCampHandler : DiscordInteractionHandlerBase, IDiscordInte
         // afterwards, and an officer who did pick a window deserves to have that answer kept
         // rather than quietly replaced by the fallback. "unknown" and absent both mean null,
         // which is the same thing here.
-        var effectiveWindows = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        var effectiveWindows = HnmCampRules.EffectiveWindowCount(ev);
         var popWindowRaw = ExtractModalValue(data, WdPopWindowFieldId)?.Trim();
         int? popWindow = int.TryParse(popWindowRaw, out var pw) && pw >= 1
             ? Math.Clamp(pw, 1, effectiveWindows)
@@ -203,7 +203,7 @@ public sealed class EndCampHandler : DiscordInteractionHandlerBase, IDiscordInte
             return Ephemeral(todError!);
         }
 
-        var isWd = DiscordEventMessageBuilder.IsWd(ev);
+        var isWd = HnmCampRules.IsWd(ev);
         var popService = HttpContext.RequestServices.GetRequiredService<HnmCampPopService>();
         HnmCampPopService.Result result;
         try
@@ -285,7 +285,7 @@ public sealed class EndCampHandler : DiscordInteractionHandlerBase, IDiscordInte
         {
             return Ephemeral("That event is no longer open.");
         }
-        if (!DiscordEventMessageBuilder.UsesWindows(ev))
+        if (!HnmCampRules.UsesWindows(ev))
         {
             return Ephemeral("This board doesn't use windows.");
         }

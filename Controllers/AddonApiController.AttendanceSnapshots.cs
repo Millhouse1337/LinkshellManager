@@ -230,7 +230,7 @@ public sealed partial class AddonApiController
             snapshot.LinkedEventId = filedCamp.Id;
             WindowEventLinkService.ApplyCampSlot(
                 snapshot,
-                DiscordEventMessageBuilder.EffectiveWindowCount(filedCamp),
+                HnmCampRules.EffectiveWindowCount(filedCamp),
                 request.SlotKind,
                 request.WindowNumber);
         }

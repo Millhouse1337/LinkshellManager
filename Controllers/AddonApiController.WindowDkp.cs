@@ -92,7 +92,7 @@ public sealed partial class AddonApiController
             // be paid. Both clients render `error` verbatim, so this text reaches the officer.
             return BadRequest(new
             {
-                error = DiscordEventMessageBuilder.IsWd(eventEntity)
+                error = HnmCampRules.IsWd(eventEntity)
                     ? "This camp credits attendance from Check In to Check Out, so a single window has no price of its own."
                     : "Only HNM camps price individual windows. This event pays by the hour, or per window at its own DKP rate."
             });
@@ -154,7 +154,7 @@ public sealed partial class AddonApiController
             .Where(w => w.EventId == window.EventId)
             .ToListAsync(cancellationToken);
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
-            siblings, DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity));
+            siblings, HnmCampRules.PostsOpenAndClose(eventEntity));
 
         return Ok(new
         {

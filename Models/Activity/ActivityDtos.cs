@@ -742,7 +742,7 @@ public sealed record ActivityEventDto(
     // How many ATTENDANCE POSTS it takes — roster reads, 2 on a Standard king/dragon. A
     // different number from WindowCount above, and the one the Attendance Windows card counts
     // against: those tabs are posts, not pop chances. See
-    // DiscordEventMessageBuilder.AttendancePostCount.
+    // HnmCampRules.AttendancePostCount.
     int AttendancePostCount,
     IReadOnlyList<ActivityAttendanceWindowDto> AttendanceWindows,
     IReadOnlyList<ActivityLinkedSnapshotDto> LinkedSnapshots,
@@ -764,7 +764,7 @@ public sealed record ActivityEventDto(
     DateTime? NextWindowAt = null,
     DateTime? WdFinalizedAt = null,
     // The window number to DISPLAY — the one the Discord board shows (the window being awaited).
-    // See DiscordEventMessageBuilder.FocusWindow. Kept separate from HnmWindowNumber so fixing
+    // See HnmCampRules.FocusWindow. Kept separate from HnmWindowNumber so fixing
     // the display can't quietly move the pop window and change DKP credit.
     int HnmFocusWindow = 1,
     // Whether the Break Room (take break / force break / return / verify / deny, and the live
@@ -787,7 +787,7 @@ public sealed record ActivityEventDto(
     double? HnmKillBonusOverride = null,
     double? HnmPerWindowOverride = null,
     // Whether the camp's posts are a named Open and Close rather than numbered windows
-    // (DiscordEventMessageBuilder.PostsOpenAndClose), and the Window Method it was stamped with.
+    // (HnmCampRules.PostsOpenAndClose), and the Window Method it was stamped with.
     // The card asks this instead of testing AttendancePostCount against 2, which Window N with
     // two windows makes wrong.
     bool PostsOpenAndClose = false,

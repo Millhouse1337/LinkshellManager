@@ -135,7 +135,7 @@ public static class HnmEventSeeder
     // fallback it always used.
     //
     // The monster's Window Method rides along, for the same reason: it decides how the camp posts
-    // (DiscordEventMessageBuilder.WindowMethodFor), so a camp keeps the method it started with. An
+    // (HnmCampRules.WindowMethodFor), so a camp keeps the method it started with. An
     // HNM board with no monster gets none, and stays on the legacy post-count rules.
     public static async Task StampSpawnGridAsync(
         ApplicationDbContext db, Event ev, string? monster, CancellationToken ct = default)

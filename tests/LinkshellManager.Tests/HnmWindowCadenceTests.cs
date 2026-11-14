@@ -247,7 +247,7 @@ public class FocusWindowTests
     [InlineData("Tiamat", 2, 3)]
     [InlineData("Tiamat", 7, 8)]
     public void WipingBoard_NamesTheAwaitedWindow(string monster, int window, int expected) =>
-        Assert.Equal(expected, DiscordEventMessageBuilder.FocusWindow(Camp(monster, window)));
+        Assert.Equal(expected, HnmCampRules.FocusWindow(Camp(monster, window)));
 
     // The heading can never name a window the board itself reports as already passed. That line is
     // dated off the OPENED window, so this is the invariant the old wyrm exception broke.
@@ -257,7 +257,7 @@ public class FocusWindowTests
     public void FocusWindow_IsNeverAWindowAlreadyPassed(string monster, int window)
     {
         var camp = Camp(monster, window);
-        Assert.True(DiscordEventMessageBuilder.FocusWindow(camp) > DiscordEventMessageBuilder.OpenedWindow(camp));
+        Assert.True(HnmCampRules.FocusWindow(camp) > HnmCampRules.OpenedWindow(camp));
     }
 
     // ...and the kings/dragons, which never wipe, name it the same way.
@@ -266,13 +266,13 @@ public class FocusWindowTests
     [InlineData("Behemoth", 3, 4)]
     [InlineData("Adamantoise", 6, 7)]
     public void NonWipingBoard_StillNamesTheAwaitedWindow(string monster, int window, int expected) =>
-        Assert.Equal(expected, DiscordEventMessageBuilder.FocusWindow(Camp(monster, window)));
+        Assert.Equal(expected, HnmCampRules.FocusWindow(Camp(monster, window)));
 
     // A wyrm in Manual Check In mode doesn't wipe either (members X-in per window themselves), so
     // it keeps the awaited-window number the Check In button records against.
     [Fact]
     public void WyrmInManualCheckInMode_NamesTheAwaitedWindow() =>
-        Assert.Equal(2, DiscordEventMessageBuilder.FocusWindow(
+        Assert.Equal(2, HnmCampRules.FocusWindow(
             Camp("Tiamat", 1, mode: HnmAttendanceModes.Wd)));
 
     // No next window to await — the awaited number collapses back onto the current one either way.
@@ -280,11 +280,11 @@ public class FocusWindowTests
     [InlineData("Tiamat", 25)]
     [InlineData("Fafnir", 7)]
     public void FinalWindow_Collapses(string monster, int window) =>
-        Assert.Equal(window, DiscordEventMessageBuilder.FocusWindow(Camp(monster, window)));
+        Assert.Equal(window, HnmCampRules.FocusWindow(Camp(monster, window)));
 
     [Fact]
     public void NoNextWindowAt_Collapses() =>
-        Assert.Equal(3, DiscordEventMessageBuilder.FocusWindow(Camp("Fafnir", 3, hasNext: false)));
+        Assert.Equal(3, HnmCampRules.FocusWindow(Camp("Fafnir", 3, hasNext: false)));
 
     // The heading's condition and the advancer's clear condition are one method, so they cannot
     // drift into disagreeing about which boards wipe.
@@ -301,7 +301,7 @@ public class FocusWindowTests
     [InlineData("Fafnir", HnmAttendanceModes.Wd, false)]
     [InlineData("King Behemoth", null, false)]
     public void ClearsRosterOnWindowAdvance_MatchesTheAdvancersGate(string monster, string? mode, bool wipes) =>
-        Assert.Equal(wipes, DiscordEventMessageBuilder.ClearsRosterOnWindowAdvance(Camp(monster, 2, mode)));
+        Assert.Equal(wipes, HnmCampRules.ClearsRosterOnWindowAdvance(Camp(monster, 2, mode)));
 
     // The countdown line is driven by HasNextWindow, not by the heading number, and the two now
     // name the same window on a wiping board: the heading says which window the camp is on, the
@@ -311,12 +311,12 @@ public class FocusWindowTests
     public void WipingBoard_HeadsTheSameWindowItCountsDownTo()
     {
         var tiamat = Camp("Tiamat", 1);
-        Assert.True(DiscordEventMessageBuilder.HasNextWindow(tiamat));
-        Assert.Equal(2, DiscordEventMessageBuilder.FocusWindow(tiamat));      // heading
-        Assert.Equal(2, DiscordEventMessageBuilder.OpenedWindow(tiamat) + 1); // countdown
+        Assert.True(HnmCampRules.HasNextWindow(tiamat));
+        Assert.Equal(2, HnmCampRules.FocusWindow(tiamat));      // heading
+        Assert.Equal(2, HnmCampRules.OpenedWindow(tiamat) + 1); // countdown
 
         var last = Camp("Tiamat", 25);
-        Assert.False(DiscordEventMessageBuilder.HasNextWindow(last));
-        Assert.Equal(25, DiscordEventMessageBuilder.FocusWindow(last));
+        Assert.False(HnmCampRules.HasNextWindow(last));
+        Assert.Equal(25, HnmCampRules.FocusWindow(last));
     }
 }

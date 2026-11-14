@@ -58,7 +58,7 @@ public class EndEventCampPathRoutingTests
         => Assert.False(HnmCampReviewHandoffService.EndsThroughCampPath(Camp(eventType: eventType)));
 
     // EventType comes off a form and a JSON body, so it is matched the way every other reader
-    // matches it (DiscordEventMessageBuilder.IsHnm): case-insensitively, trimmed.
+    // matches it (HnmCampRules.IsHnm): case-insensitively, trimmed.
     [Theory]
     [InlineData("hnm")]
     [InlineData("Hnm")]
@@ -110,7 +110,7 @@ public class EndEventCampPathRoutingTests
                 + "condition that was too narrow: it let every Standard camp fall through to a 0 "
                 + "payout. Call EndsThroughCampPath instead.");
             Assert.False(
-                Regex.IsMatch(source, @"DiscordEventMessageBuilder\.IsHnm\([^)]*\)\s*&&\s*[^;]*WdFinalizedAt\s+is\s+null"),
+                Regex.IsMatch(source, @"(?:HnmCampRules|DiscordEventMessageBuilder)\.IsHnm\([^)]*\)\s*&&\s*[^;]*WdFinalizedAt\s+is\s+null"),
                 $"{relative} restates EndsThroughCampPath inline. Call the predicate so a later "
                 + "change to it reaches every end path.");
         }

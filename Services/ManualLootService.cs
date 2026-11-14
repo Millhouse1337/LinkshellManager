@@ -314,7 +314,7 @@ public sealed class ManualLootService
                 // loot belongs to is the one that just ended -- its archive. Charged now, like any
                 // past-event loot.
                 var eventName = evt.EventName ?? "That event";
-                if (!DiscordEventMessageBuilder.IsHnm(evt))
+                if (!HnmCampRules.IsHnm(evt))
                 {
                     return new ResolvedTarget(null, null, null, null,
                         $"{eventName} isn't running. Start it first, or add the loot to a past event.");

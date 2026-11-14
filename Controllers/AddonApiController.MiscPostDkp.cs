@@ -102,7 +102,7 @@ public sealed partial class AddonApiController
             {
                 return BadRequest(new
                 {
-                    error = DiscordEventMessageBuilder.IsWd(camp)
+                    error = HnmCampRules.IsWd(camp)
                         ? "This camp credits attendance from Check In to Check Out, so a misc post has no price of its own."
                         : "Only HNM camps price misc posts."
                 });

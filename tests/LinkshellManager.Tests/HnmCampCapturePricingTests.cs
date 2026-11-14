@@ -804,10 +804,10 @@ public class HnmCampCapturePricingTests
     public void APostIsStampedWithTheWindowTheCampIsIn()
     {
         var gridded = LiveCamp();   // Fafnir: a 7-window grid, on window 3
-        Assert.Equal(3, DiscordEventMessageBuilder.SpawnWindowNow(gridded));
+        Assert.Equal(3, HnmCampRules.SpawnWindowNow(gridded));
 
         var gridless = new Event { EventName = "Serket", EventType = "HNM", AssignedMonsterName = "Serket", HnmWindowNumber = 1 };
-        Assert.Null(DiscordEventMessageBuilder.SpawnWindowNow(gridless));
+        Assert.Null(HnmCampRules.SpawnWindowNow(gridless));
     }
 
     // A second scan of the same person in one window is one payment of X, not a spread of 0 to X.

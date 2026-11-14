@@ -93,7 +93,7 @@ public sealed class WdCampFinalizer
     {
         // Nobody is paid past the officer-set pop window even if the counter auto-advanced while
         // the group was fighting.
-        var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        var effectiveCount = HnmCampRules.EffectiveWindowCount(ev);
         var lastWindow = Math.Clamp(popWindow, 1, effectiveCount);
         // Per-camp overrides win over the linkshell defaults; null falls back, so a camp
         // whose creator never opened "Change DKP" pays the linkshell rate as before.

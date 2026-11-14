@@ -22,7 +22,7 @@ public sealed partial class AddonApiController
             .Where(evt => evt.LinkshellId == linkshellId);
 
         // Materialized as ENTITIES (not a projection) so the shared window helpers below can be
-        // called on them. DiscordEventMessageBuilder.FocusWindow / EffectiveWindowCount need the
+        // called on them. HnmCampRules.FocusWindow / EffectiveWindowCount need the
         // same popped / defeated / finalized sentinels the board checks, and re-deriving any of
         // that here is exactly how the addon drifted out of sync with the board in the first
         // place. Capped at 50 rows, so materializing is cheap.
@@ -75,11 +75,11 @@ public sealed partial class AddonApiController
         int NextPostSequence(Event evt)
         {
             postedSequences.TryGetValue(evt.Id, out var filed);
-            if (!DiscordEventMessageBuilder.PostsOpenAndClose(evt))
+            if (!HnmCampRules.PostsOpenAndClose(evt))
             {
-                return DiscordEventMessageBuilder.WindowsOpenEnded(evt)
+                return HnmCampRules.WindowsOpenEnded(evt)
                     ? (filed is { Count: > 0 } ? filed.Max() + 1 : 1)
-                    : Math.Clamp(evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt));
+                    : Math.Clamp(evt.HnmWindowNumber, 1, HnmCampRules.EffectiveWindowCount(evt));
             }
             return filed is not null && filed.Contains(1) ? 2 : 1;
         }
@@ -161,7 +161,7 @@ public sealed partial class AddonApiController
             // The SPAWN window count — how many pop chances the camp sits through. Same helper the
             // board uses, so "of M" can't disagree with it. This is the scale hnmWindowNumber /
             // openedWindowNumber below are on, and what the addon clamps them against.
-            windowCount = DiscordEventMessageBuilder.EffectiveWindowCount(evt),
+            windowCount = HnmCampRules.EffectiveWindowCount(evt),
             // How many attendance POSTS this camp takes, which is a different number: a Standard
             // king/dragon camp reads the roster twice (Open + Close) across those 7 spawn windows.
             // It decides how many Post buttons the addon offers and whether it NAMES its windows
@@ -171,7 +171,7 @@ public sealed partial class AddonApiController
             // That worked only while the two happened to be equal, and stopped the moment the board
             // started traversing the real spawn cycle: a Standard Behemoth camp began asking its
             // officer for seven posts instead of an Open and a Close.
-            attendancePostCount = DiscordEventMessageBuilder.AttendancePostCount(evt),
+            attendancePostCount = HnmCampRules.AttendancePostCount(evt),
             // How the camp posts, from its stamped Window Method (see AddonEventWindowShape). The
             // addon draws its Post buttons from these rather than from its own name tables.
             windowMethod = shapes[evt.Id].WindowMethod,
@@ -197,7 +197,7 @@ public sealed partial class AddonApiController
             // popped, defeated, finalized.
             //
             // Do NOT post attendance against this. See openedWindowNumber below.
-            hnmWindowNumber = DiscordEventMessageBuilder.FocusWindow(evt),
+            hnmWindowNumber = HnmCampRules.FocusWindow(evt),
             // THE window number to POST ATTENDANCE AGAINST: the window that is actually open
             // right now. Window N opens at WindowAnchorAt + (N-1)×cadence, so window 1 IS the
             // camp's start / repop time — the opener.
@@ -208,7 +208,7 @@ public sealed partial class AddonApiController
             // open-bonus test unreachable on every monster with a timed cadence.
             // Manual Check In check-in records arrival against this too, so both models share one scale.
             openedWindowNumber = Math.Clamp(
-                evt.HnmWindowNumber, 1, DiscordEventMessageBuilder.EffectiveWindowCount(evt)),
+                evt.HnmWindowNumber, 1, HnmCampRules.EffectiveWindowCount(evt)),
             // What ONE MORE snapshot, posted right now against openedWindowNumber, would be worth
             // per attendee under THIS camp's own pricing. The addon seeds its "Dkp this window"
             // box from it and displays nothing at all when it is null — "this camp does not price
@@ -567,7 +567,7 @@ public sealed partial class AddonApiController
                 endTime               = DateTime.UtcNow,
                 stagedForReview       = true,
                 staged                = staged,
-                windowCount           = DiscordEventMessageBuilder.EffectiveWindowCount(eventEntity),
+                windowCount           = HnmCampRules.EffectiveWindowCount(eventEntity),
                 participants          = Array.Empty<object>()
             });
         }
@@ -629,7 +629,7 @@ public sealed partial class AddonApiController
         // server's own numbers instead of re-deriving them from Event.DkpPerHour — the column the
         // addon itself used to write and then read back as if it were a payout.
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
-            eventEntity.AttendanceWindows, DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity));
+            eventEntity.AttendanceWindows, HnmCampRules.PostsOpenAndClose(eventEntity));
         var closeIsMarked = HnmStandardCampFinalizer.HasMarkedCloseWindow(eventEntity.AttendanceWindows);
         var shape = AddonEventWindowShape.For(eventEntity);
 
@@ -645,7 +645,7 @@ public sealed partial class AddonApiController
             windowCount = eventEntity.WindowCountOverride ?? HnmConfig.GetWindowCount(eventEntity.EventName),
             // Same shape fields as the events list, so a camp re-selected after a relog draws the
             // same buttons it did before.
-            attendancePostCount = DiscordEventMessageBuilder.AttendancePostCount(eventEntity),
+            attendancePostCount = HnmCampRules.AttendancePostCount(eventEntity),
             windowMethod = shape.WindowMethod,
             postsOpenAndClose = shape.PostsOpenAndClose,
             windowsOpenEnded = shape.WindowsOpenEnded,

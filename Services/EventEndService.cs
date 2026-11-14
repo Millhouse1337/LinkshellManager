@@ -121,7 +121,7 @@ public static class EventEndService
         // so the per-participation loop below can read from a dictionary.
         //
         // NOTE there are TWO window-count chains in this codebase and this is the CREDIT one.
-        // The other ("display") chain is DiscordEventMessageBuilder.EffectiveWindowCount, which
+        // The other ("display") chain is HnmCampRules.EffectiveWindowCount, which
         // also consults AssignedMonsterName and DefaultWindowCadence — it feeds the Discord board,
         // the Activity DTO and the addon event list. They can disagree for an event whose
         // EventName differs from its AssignedMonsterName. Unifying them would move real payouts,

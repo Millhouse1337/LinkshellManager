@@ -72,7 +72,7 @@ public static class HnmCampPricing
     // displayed is the amount those will later resolve to once the outcome lands.
     public static (double Claim, double Kill) OutcomeBonuses(Event ev, Linkshell? linkshell)
     {
-        var isWd = DiscordEventMessageBuilder.IsWd(ev);
+        var isWd = HnmCampRules.IsWd(ev);
         return (
             Math.Max(0d, ev.HnmClaimBonusOverride
                 ?? (isWd ? linkshell?.WdClaimBonus : linkshell?.HnmStandardClaimBonus) ?? 0d),
@@ -89,7 +89,7 @@ public static class HnmCampPricing
     //   Claim/Kill-style windowed — the two EndEvent bodies pay windowsAttended × DkpPerHour and
     //                    do not look at this column.
     public static bool HonoursWindowAmount(Event ev)
-        => DiscordEventMessageBuilder.IsHnm(ev) && !DiscordEventMessageBuilder.IsWd(ev);
+        => HnmCampRules.IsHnm(ev) && !HnmCampRules.IsWd(ev);
 
     // What ONE window is worth per attendee on this camp, or null when the camp does not price
     // windows at all. Null is a REAL answer that both clients render as "nothing" — never as 0.
@@ -104,9 +104,9 @@ public static class HnmCampPricing
     {
         // The snapshot pays NOTHING on a Manual Check In camp — credit comes from Check In /
         // Check Out, which is exactly what the Activity's card says on its face.
-        if (DiscordEventMessageBuilder.IsWd(ev)) return null;
+        if (HnmCampRules.IsWd(ev)) return null;
 
-        if (DiscordEventMessageBuilder.IsHnm(ev))
+        if (HnmCampRules.IsHnm(ev))
         {
             var (window, open, close, _, _) = StandardBonuses(ev, linkshell, claimed: false, killed: false);
             return HnmStandardCampFinalizer.WindowValue(
@@ -207,7 +207,7 @@ public static class HnmCampPricing
 
         if (HonoursWindowAmount(ev))
         {
-            var label = DiscordEventMessageBuilder.DefaultWindowLabel(ev, window);
+            var label = HnmCampRules.DefaultWindowLabel(ev, window);
             var (_, open, close, _, _) = StandardBonuses(ev, linkshell, claimed: false, killed: false);
             switch (label)
             {

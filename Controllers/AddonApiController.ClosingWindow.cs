@@ -86,7 +86,7 @@ public sealed partial class AddonApiController
         {
             return BadRequest(new
             {
-                error = DiscordEventMessageBuilder.IsWd(eventEntity)
+                error = HnmCampRules.IsWd(eventEntity)
                     ? "This camp credits attendance from Check In to Check Out, so no single window closes it out."
                     : "Only HNM camps have a closing window. This event pays by the hour, or per window at its own DKP rate."
             });
@@ -128,7 +128,7 @@ public sealed partial class AddonApiController
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == eventEntity.LinkshellId, cancellationToken);
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
-            siblings, DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity));
+            siblings, HnmCampRules.PostsOpenAndClose(eventEntity));
 
         return Ok(new
         {

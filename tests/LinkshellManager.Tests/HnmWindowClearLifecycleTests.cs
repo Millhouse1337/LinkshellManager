@@ -108,7 +108,7 @@ public class HnmWindowClearLifecycleTests
     {
         db.ChangeTracker.Clear();
         var ev = await db.Events.AsNoTracking().FirstAsync();
-        return (DiscordEventMessageBuilder.FocusWindow(ev),
+        return (HnmCampRules.FocusWindow(ev),
                 await db.EventPartySlotSignups.AsNoTracking().CountAsync());
     }
 

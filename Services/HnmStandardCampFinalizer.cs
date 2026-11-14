@@ -207,7 +207,7 @@ public sealed class HnmStandardCampFinalizer
     // Which window counts as the camp's "close", or 0 for none.
     //
     // The officer's tick wins outright. Without one, only a named Open/Close camp has a close
-    // (`closeIsNamedPost`, DiscordEventMessageBuilder.PostsOpenAndClose): its posts are roles, and
+    // (`closeIsNamedPost`, HnmCampRules.PostsOpenAndClose): its posts are roles, and
     // pressing Post Close rather than Post Open already said which one closes the camp, so the
     // close is its latest post. The addon offers no tick on those camps for that reason.
     //
@@ -398,7 +398,7 @@ public sealed class HnmStandardCampFinalizer
             scans.Select(s => new MemberWindowScan(
                     s.AppUserId, s.SequenceNumber, s.DkpAmount, s.IsClosingWindow, s.IsKillWindow))
                 .ToList(),
-            taggedAppUserIds, DiscordEventMessageBuilder.PostsOpenAndClose(ev),
+            taggedAppUserIds, HnmCampRules.PostsOpenAndClose(ev),
             windowBonus, openBonus, closeBonus, claimBonus, killBonus, step);
 
         var participations = await _db.AppUserEvents

@@ -23,13 +23,13 @@ public sealed record AddonEventWindowShape(
 {
     public static AddonEventWindowShape For(Event ev)
     {
-        var minutes = DiscordEventMessageBuilder.UsesWindows(ev)
-            ? DiscordEventMessageBuilder.EffectiveWindowMinutes(ev)
+        var minutes = HnmCampRules.UsesWindows(ev)
+            ? HnmCampRules.EffectiveWindowMinutes(ev)
             : 0;
         return new AddonEventWindowShape(
-            DiscordEventMessageBuilder.WindowMethodFor(ev),
-            DiscordEventMessageBuilder.PostsOpenAndClose(ev),
-            DiscordEventMessageBuilder.WindowsOpenEnded(ev),
+            HnmCampRules.WindowMethodFor(ev),
+            HnmCampRules.PostsOpenAndClose(ev),
+            HnmCampRules.WindowsOpenEnded(ev),
             minutes > 0 ? minutes * 60 : null);
     }
 }

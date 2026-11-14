@@ -41,16 +41,16 @@ public class EventSpawnWindowStampTests
     public void UnstampedCamp_UsesTheBuiltInGrid()
     {
         var camp = Camp();
-        Assert.Equal(7, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
-        Assert.Equal(10, DiscordEventMessageBuilder.EffectiveWindowMinutes(camp));
+        Assert.Equal(7, HnmCampRules.EffectiveWindowCount(camp));
+        Assert.Equal(10, HnmCampRules.EffectiveWindowMinutes(camp));
     }
 
     [Fact]
     public void StampedCamp_UsesItsOwnGrid()
     {
         var camp = Camp(spawnWindowCount: 12, spawnWindowMinutes: 30);
-        Assert.Equal(12, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
-        Assert.Equal(30, DiscordEventMessageBuilder.EffectiveWindowMinutes(camp));
+        Assert.Equal(12, HnmCampRules.EffectiveWindowCount(camp));
+        Assert.Equal(30, HnmCampRules.EffectiveWindowMinutes(camp));
     }
 
     // The stamp wins over the monster's built-in cadence — that is the whole point of it — but it
@@ -59,7 +59,7 @@ public class EventSpawnWindowStampTests
     public void StampedCamp_IsStillClampedToMaxWindow()
     {
         var camp = Camp(spawnWindowCount: 999, spawnWindowMinutes: 30);
-        Assert.Equal(HnmConfig.MaxWindow, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
+        Assert.Equal(HnmConfig.MaxWindow, HnmCampRules.EffectiveWindowCount(camp));
     }
 
     // WindowCountOverride == 1 means "this camp is NOT windowed, pay it by accumulated duration",
@@ -70,7 +70,7 @@ public class EventSpawnWindowStampTests
     public void OverrideOfOne_StillShortCircuits_EvenWithAStamp()
     {
         var camp = Camp(spawnWindowCount: 12, spawnWindowMinutes: 30, windowCountOverride: 1);
-        Assert.Equal(1, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
+        Assert.Equal(1, HnmCampRules.EffectiveWindowCount(camp));
     }
 
     // An addon-made camp stores its POST count in WindowCountOverride. The stamp moves only the
@@ -80,12 +80,12 @@ public class EventSpawnWindowStampTests
     {
         var camp = Camp(spawnWindowCount: 12, spawnWindowMinutes: 30, windowCountOverride: 2);
 
-        Assert.Equal(12, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
+        Assert.Equal(12, HnmCampRules.EffectiveWindowCount(camp));
         // AttendancePostCount comes off the monster's tier for a curated HNM, not off the stamp,
         // so no camp gets its windows re-labelled Open/Close (or stops being).
         Assert.Equal(
             HnmConfig.GetWindowCount(camp.AssignedMonsterName),
-            DiscordEventMessageBuilder.AttendancePostCount(camp));
+            HnmCampRules.AttendancePostCount(camp));
     }
 
     // A monster with no BUILT-IN cadence that a linkshell gave one must light up the window UI, or
@@ -94,12 +94,12 @@ public class EventSpawnWindowStampTests
     public void MonsterWithNoBuiltInCadence_UsesWindowsOnceStamped()
     {
         var unstamped = Camp("Serket");
-        Assert.False(DiscordEventMessageBuilder.UsesWindows(unstamped));
+        Assert.False(HnmCampRules.UsesWindows(unstamped));
 
         var stamped = Camp("Serket", spawnWindowCount: 6, spawnWindowMinutes: 20);
-        Assert.True(DiscordEventMessageBuilder.UsesWindows(stamped));
-        Assert.Equal(6, DiscordEventMessageBuilder.EffectiveWindowCount(stamped));
-        Assert.Equal(20, DiscordEventMessageBuilder.EffectiveWindowMinutes(stamped));
+        Assert.True(HnmCampRules.UsesWindows(stamped));
+        Assert.Equal(6, HnmCampRules.EffectiveWindowCount(stamped));
+        Assert.Equal(20, HnmCampRules.EffectiveWindowMinutes(stamped));
     }
 
     // A grid-less monster must NOT be handed a cadence just because it carries a ToD check interval,
@@ -108,7 +108,7 @@ public class EventSpawnWindowStampTests
     public void GridlessMonster_StaysManual()
     {
         var camp = Camp("Serket");
-        Assert.Equal(0, DiscordEventMessageBuilder.EffectiveWindowMinutes(camp));
+        Assert.Equal(0, HnmCampRules.EffectiveWindowMinutes(camp));
     }
 
     // The merge window scales to the window length a camp ACTUALLY runs, so a configured cadence

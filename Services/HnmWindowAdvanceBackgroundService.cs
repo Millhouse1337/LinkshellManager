@@ -18,7 +18,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // On a Manual Check In camp the clear takes the party grid only: the check-in ledger those camps are
 // paid from rides through it (see EventPartySignupService.ClearWindowRosterAsync).
 //
-// The clear tracks the number the BOARD PRINTS (DiscordEventMessageBuilder.FocusWindow), not the
+// The clear tracks the number the BOARD PRINTS (HnmCampRules.FocusWindow), not the
 // raw counter, so the two can never come apart: every change of that number wipes the roster it
 // was naming — including the change the camp makes by going LIVE, where window 1's single pop
 // chance is spent the instant the camp forms and the board steps to window 2 with the counter
@@ -125,11 +125,11 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
     {
         var changed = false;
         // Only advance a counter the board actually renders + an officer can correct.
-        if (!DiscordEventMessageBuilder.UsesWindows(ev))
+        if (!HnmCampRules.UsesWindows(ev))
         {
             return false;
         }
-        var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        var effectiveCount = HnmCampRules.EffectiveWindowCount(ev);
         if (effectiveCount <= 1)
         {
             return false;
@@ -143,7 +143,7 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
         {
             return false; // window 1 hasn't opened yet
         }
-        var minutes = DiscordEventMessageBuilder.EffectiveWindowMinutes(ev);
+        var minutes = HnmCampRules.EffectiveWindowMinutes(ev);
         if (minutes <= 0)
         {
             return false; // this monster has no built-in cadence — it advances manually
@@ -187,10 +187,10 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
         // `HnmClearedWindow` is therefore on the SAME scale — the highest printed window whose
         // predecessor's roster has been settled. Null reads as 1: a board that has not gone
         // live yet is still collecting window 1's signups and must never be wiped.
-        var focusWindow = DiscordEventMessageBuilder.FocusWindow(ev);
+        var focusWindow = HnmCampRules.FocusWindow(ev);
         if (focusWindow > 1
             && (ev.HnmClearedWindow ?? 1) < focusWindow
-            && DiscordEventMessageBuilder.ClearsRosterOnWindowAdvance(ev))
+            && HnmCampRules.ClearsRosterOnWindowAdvance(ev))
         {
             var windowOpenedAt = anchor.AddMinutes((ev.HnmWindowNumber - 1) * (double)minutes);
             if (now >= windowOpenedAt + HnmConfig.WindowClearGrace)
@@ -245,9 +245,9 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
     // Stages only; the caller saves.
     public static void ReanchorToStart(Event ev, DateTime startUtc, DateTime nowUtc)
     {
-        var count = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
-        var minutes = DiscordEventMessageBuilder.EffectiveWindowMinutes(ev);
-        if (!DiscordEventMessageBuilder.UsesWindows(ev) || count <= 1 || minutes <= 0)
+        var count = HnmCampRules.EffectiveWindowCount(ev);
+        var minutes = HnmCampRules.EffectiveWindowMinutes(ev);
+        if (!HnmCampRules.UsesWindows(ev) || count <= 1 || minutes <= 0)
         {
             return;
         }
@@ -258,6 +258,6 @@ public sealed class HnmWindowAdvanceBackgroundService : BackgroundService
         ev.NextWindowAt = ev.HnmWindowNumber >= count
             ? null
             : startUtc.AddMinutes(ev.HnmWindowNumber * (double)minutes);
-        ev.HnmClearedWindow = DiscordEventMessageBuilder.FocusWindow(ev);
+        ev.HnmClearedWindow = HnmCampRules.FocusWindow(ev);
     }
 }

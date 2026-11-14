@@ -40,7 +40,7 @@ public class EventAttendanceWindow
 
     public DateTime PostedAt { get; set; }
 
-    // The SPAWN window the camp was in when this was posted (DiscordEventMessageBuilder
+    // The SPAWN window the camp was in when this was posted (HnmCampRules
     // .SpawnWindowNow), stamped once at creation. A different scale from SequenceNumber: on an
     // Open/Close camp the sequence counts POSTS -- Open 1, Close 2, Kill 3 -- and a camp that pops on
     // window 1 posts all three inside it. Null on a camp with no window grid, and on rows posted

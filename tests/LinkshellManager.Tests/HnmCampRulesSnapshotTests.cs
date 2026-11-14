@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using LinkshellManagerDiscordApp.Models;
 using Xunit;
-using Rules = LinkshellManagerDiscordApp.Services.DiscordEventMessageBuilder;
+using Rules = LinkshellManagerDiscordApp.Services.HnmCampRules;
 
 namespace LinkshellManager.Tests;
 

@@ -67,7 +67,7 @@ public sealed class HnmCampReviewHandoffService
             ?? await _db.Linkshells.FirstOrDefaultAsync(l => l.Id == ev.LinkshellId, cancellationToken);
         if (linkshell is null) return null;
 
-        var isWd = DiscordEventMessageBuilder.IsWd(ev);
+        var isWd = HnmCampRules.IsWd(ev);
         // FIRST, and before anything below touches the camp: both finalizers read the claim bonus
         // off ClaimShieldCapture.EventId, which the re-parent at the end of this method clears.
         var members = isWd
@@ -224,7 +224,7 @@ public sealed class HnmCampReviewHandoffService
         // no honest per-capture number to write. They keep the per-member rows below.
         var perCapture = HnmCampPricing.HonoursWindowAmount(ev);
         var closeWindow = HnmStandardCampFinalizer.ResolveCloseWindow(
-            campWindows, DiscordEventMessageBuilder.PostsOpenAndClose(ev));
+            campWindows, HnmCampRules.PostsOpenAndClose(ev));
         var closeIsMarked = HnmStandardCampFinalizer.HasMarkedCloseWindow(campWindows);
         var (_, _, _, _, killBonus) = HnmCampPricing.StandardBonuses(ev, linkshell, claimed, killed);
         var valueBySequence = perCapture
@@ -317,7 +317,7 @@ public sealed class HnmCampReviewHandoffService
                     : splitClose ? ownRole : WindowRoleLabel(window, closeWindow),
                 // The SPAWN window the post was taken in, not its sequence -- see
                 // CaptureWindowNumber. Which post it was is CampWindowId's job.
-                WindowNumber = CaptureWindowNumber(window, popWindow, DiscordEventMessageBuilder.PostsOpenAndClose(ev)),
+                WindowNumber = CaptureWindowNumber(window, popWindow, HnmCampRules.PostsOpenAndClose(ev)),
                 CampWindowId = window.Id,
                 SlotKind = AttendanceSnapshotSlotKinds.Window,
                 // First alliance seen in the window. A camp fielding two alliances posts two
@@ -585,7 +585,7 @@ public sealed class HnmCampReviewHandoffService
         // answer this later. The count is the camp's EFFECTIVE one, so a board with a window-count
         // override reads "4 of 5", not the monster's default.
         archive.PopWindow = popWindow;
-        archive.PopWindowCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        archive.PopWindowCount = HnmCampRules.EffectiveWindowCount(ev);
 
         // The camp's lotteries move onto the archive with it. See ClaimShieldCapture.EventHistoryId
         // for why leaving them on the recycled board was paying the claim bonus over and over.
@@ -856,7 +856,7 @@ public sealed class HnmCampReviewHandoffService
     // handed off answers false, so a second End Event falls through to the generic path — which is
     // what actually removes the recycled board.
     public static bool EndsThroughCampPath(Event ev)
-        => DiscordEventMessageBuilder.IsHnm(ev) && ev.WdFinalizedAt is null;
+        => HnmCampRules.IsHnm(ev) && ev.WdFinalizedAt is null;
 
     // "End this camp" for callers OUTSIDE the board's End Camp form — the generic End Event
     // actions, which would otherwise archive an HNM camp as a normal event and pay 0, discarding
@@ -873,7 +873,7 @@ public sealed class HnmCampReviewHandoffService
         if (ev is null || ev.WdFinalizedAt is not null) return false;
 
         var nowUtc = DateTime.UtcNow;
-        var effectiveCount = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        var effectiveCount = HnmCampRules.EffectiveWindowCount(ev);
         var popWindow = Math.Clamp(ev.WdPopWindow ?? ev.HnmWindowNumber, 1, effectiveCount);
 
         // THE CAMP'S OUTCOME, from evidence rather than from the two Manual Check In columns.
@@ -897,7 +897,7 @@ public sealed class HnmCampReviewHandoffService
         //              paths: a camp is ended because the mob died unless someone says otherwise.
         var claimed = ev.WdClaimed;
         var killed = ev.WdKilled;
-        if (!DiscordEventMessageBuilder.IsWd(ev))
+        if (!HnmCampRules.IsWd(ev))
         {
             claimed = await _db.ClaimShieldCaptures
                 .AnyAsync(capture => capture.EventId == ev.Id, cancellationToken);

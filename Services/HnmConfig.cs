@@ -637,7 +637,7 @@ public static class HnmConfig
     // Event.SpawnWindowCount / SpawnWindowMinutes. This is the fallback the capture falls back TO —
     // for a camp created before setups existed, and for a monster nobody configured.
     //
-    // Read DiscordEventMessageBuilder.EffectiveWindowCount(Event) instead when you have an event;
+    // Read HnmCampRules.EffectiveWindowCount(Event) instead when you have an event;
     // it applies the stamp first. This overload answers only "what does this monster run by
     // default", which is what seeding a new setup needs and not much else.
     public static int EffectiveWindowCount(string? monster) =>
@@ -734,7 +734,7 @@ public static class HnmConfig
     }
 
     // The same labels, for a caller that already knows the camp's shape. A camp with an Event in
-    // hand asks DiscordEventMessageBuilder.DefaultWindowLabel, which decides `namedOpenClose` from
+    // hand asks HnmCampRules.DefaultWindowLabel, which decides `namedOpenClose` from
     // the camp's Window Method rather than from a post count.
     public static string? GetDefaultWindowLabel(int sequenceNumber, bool namedOpenClose)
     {

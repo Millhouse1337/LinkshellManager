@@ -346,8 +346,8 @@ public class HnmWindowMethodStampTests
 
         Assert.Equal(MonsterWindowMethods.WindowN, camp.WindowMethod);
         Assert.Equal(7, camp.SpawnWindowCount);
-        Assert.Equal(7, DiscordEventMessageBuilder.AttendancePostCount(camp));
-        Assert.False(DiscordEventMessageBuilder.PostsOpenAndClose(camp));
+        Assert.Equal(7, HnmCampRules.AttendancePostCount(camp));
+        Assert.False(HnmCampRules.PostsOpenAndClose(camp));
     }
 
     // The seeder used to write an override of 1 for every custom NM, which pinned the camp to one
@@ -361,8 +361,8 @@ public class HnmWindowMethodStampTests
         await HnmEventSeeder.SeedHnmEventAsync(db, camp, linkshell: null, camp.AssignedMonsterName);
 
         Assert.Equal(MonsterWindowMethods.OpenClose, camp.WindowMethod);
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(camp));
-        Assert.True(DiscordEventMessageBuilder.PostsOpenAndClose(camp));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(camp));
+        Assert.True(HnmCampRules.PostsOpenAndClose(camp));
     }
 
     [Fact]

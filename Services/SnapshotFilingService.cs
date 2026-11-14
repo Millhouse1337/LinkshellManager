@@ -81,7 +81,7 @@ public sealed class SnapshotFilingService
             snapshot.LinkedEventId = camp.Id;
             WindowEventLinkService.ApplyCampSlot(
                 snapshot,
-                DiscordEventMessageBuilder.EffectiveWindowCount(camp),
+                HnmCampRules.EffectiveWindowCount(camp),
                 AttendanceSnapshotSlotKinds.Misc,
                 windowNumber: null);
 

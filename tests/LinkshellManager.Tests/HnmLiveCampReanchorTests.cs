@@ -45,7 +45,7 @@ public class HnmLiveCampReanchorTests
         Assert.Equal(1, ev.HnmWindowNumber);
         Assert.Equal(realPop.AddMinutes(10), ev.NextWindowAt);
         // Board now reads Window 2 (awaited); marked settled so the edit itself wipes nothing.
-        Assert.Equal(2, DiscordEventMessageBuilder.FocusWindow(ev));
+        Assert.Equal(2, HnmCampRules.FocusWindow(ev));
         Assert.Equal(2, ev.HnmClearedWindow);
     }
 

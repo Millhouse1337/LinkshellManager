@@ -158,7 +158,7 @@ public sealed partial class AddonApiController
         // non-HNM windowed events DO pay windowsAttended × DkpPerHour via EndEventCoreAsync, so
         // they keep reporting it.
         var paysPerWindow = !(string.Equals(eventEntity.EventType, "HNM", StringComparison.OrdinalIgnoreCase)
-                              && !DiscordEventMessageBuilder.IsWd(eventEntity));
+                              && !HnmCampRules.IsWd(eventEntity));
         double? perWindowDkp = null;
         // The same window before any close bonus: what the addon's per-window price box shows.
         double? baseWindowDkp = null;
@@ -184,7 +184,7 @@ public sealed partial class AddonApiController
                 perWindowDkp = HnmCampPricing.WindowValueFor(
                     eventEntity, campLinkshell, attendanceWindow.SequenceNumber,
                     HnmStandardCampFinalizer.ResolveCloseWindow(
-                        campWindows, DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity)),
+                        campWindows, HnmCampRules.PostsOpenAndClose(eventEntity)),
                     attendanceWindow.DkpAmount, attendanceWindow.IsKillWindow,
                     HnmStandardCampFinalizer.HasMarkedCloseWindow(campWindows));
                 baseWindowDkp = HnmCampPricing.BaseWindowValueFor(
@@ -581,7 +581,7 @@ public sealed partial class AddonApiController
         // Only on a 2-post camp, which is the only shape that guard applies to; a numbered camp
         // re-posts any window freely, so it may be undone in any order.
         if (attendanceWindow.Event is not null
-            && DiscordEventMessageBuilder.PostsOpenAndClose(attendanceWindow.Event)
+            && HnmCampRules.PostsOpenAndClose(attendanceWindow.Event)
             && !attendanceWindow.IsKillWindow
             && await _dbContext.EventAttendanceWindows.AnyAsync(
                 w => w.EventId == eventId && w.SequenceNumber > sequence && !w.IsKillWindow,

@@ -12,8 +12,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // gating the Break Room panel while still offering Force break / Verify / Deny on the same camp.
 //
 // Deliberately NOT in HnmConfig (string-in/int-out by design, no Models dependency) and not in
-// DiscordEventMessageBuilder (owns the window-count DATA, but "may this event use the Break Room"
-// is a policy question, and burying it in a message renderer is how it stays un-found).
+// HnmCampRules (owns the window-count DATA, but "may this event use the Break Room"
+// is a policy question, and burying it among the window rules is how it stays un-found).
 public static class EventBreakPolicy
 {
     // The one message every surface shows when a break action is refused. Both clients render the
@@ -31,7 +31,7 @@ public static class EventBreakPolicy
 
     // MAX of the two window-count chains that exist in this codebase:
     //
-    //   "Display" chain — DiscordEventMessageBuilder.EffectiveWindowCount: WindowCountOverride
+    //   "Display" chain — HnmCampRules.EffectiveWindowCount: WindowCountOverride
     //                     ?? DefaultWindowCadence(AssignedMonsterName) ?? GetWindowCount(
     //                     AssignedMonsterName ?? EventName). Feeds the Discord board, the Activity
     //                     DTO, and the addon's event list.
@@ -43,7 +43,7 @@ public static class EventBreakPolicy
     // chain a credit path happens to consult. This is a fail-closed gate, NOT a unification of the
     // two chains — unifying them would move real DKP payouts and belongs in its own change.
     public static int GatingWindowCount(Event ev) => Math.Max(
-        DiscordEventMessageBuilder.EffectiveWindowCount(ev),
+        HnmCampRules.EffectiveWindowCount(ev),
         Math.Clamp(ev.WindowCountOverride ?? HnmConfig.GetWindowCount(ev.EventName), 1, HnmConfig.MaxWindow));
 
     // Windowedness and EventType are orthogonal axes today: an EventType="HNM" board can have one

@@ -37,10 +37,10 @@ public sealed partial class AddonApiController
         // there is no in-range sequence left for it — the range check would reject the very
         // post the Post Kill button exists to make. Everything else still has to name a real
         // window.
-        var postsOpenAndClose = DiscordEventMessageBuilder.PostsOpenAndClose(eventEntity);
+        var postsOpenAndClose = HnmCampRules.PostsOpenAndClose(eventEntity);
         var ceiling = isKillWindow
-            ? DiscordEventMessageBuilder.KillPostCeiling(eventEntity)
-            : DiscordEventMessageBuilder.MaxPostSequence(eventEntity);
+            ? HnmCampRules.KillPostCeiling(eventEntity)
+            : HnmCampRules.MaxPostSequence(eventEntity);
         if (windowSequence < 1 || windowSequence > ceiling)
         {
             return (null, $"Window sequence {windowSequence} is out of range for this event (max {ceiling}).");
@@ -93,11 +93,11 @@ public sealed partial class AddonApiController
                 // never carry, since the close is the window an officer ticked.
                 Label = isKillWindow
                     ? "Kill"
-                    : DiscordEventMessageBuilder.DefaultWindowLabel(eventEntity, windowSequence),
+                    : HnmCampRules.DefaultWindowLabel(eventEntity, windowSequence),
                 PostedAt = nowUtc,
                 // Which spawn window this was taken in, kept apart from the sequence above.
                 // Nothing can work it out later: the counter keeps ticking through the fight.
-                SpawnWindow = DiscordEventMessageBuilder.SpawnWindowNow(eventEntity),
+                SpawnWindow = HnmCampRules.SpawnWindowNow(eventEntity),
                 PostedBySource = postedBySource,
                 IsKillWindow = isKillWindow
             }, cancellationToken);
@@ -293,7 +293,7 @@ public sealed partial class AddonApiController
         };
         WindowEventLinkService.ApplyCampSlot(
             snapshot,
-            DiscordEventMessageBuilder.EffectiveWindowCount(camp),
+            HnmCampRules.EffectiveWindowCount(camp),
             AttendanceSnapshotSlotKinds.Misc,
             windowNumber: null);
         foreach (var (appUserId, characterName) in members)

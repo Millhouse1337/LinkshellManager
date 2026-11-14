@@ -66,7 +66,7 @@ public class EventBreakPolicyTests
     public void HnmEventType_HasNoBreakRoom_EvenAtOneWindow(string type)
     {
         var ev = Ev("Some Unknown Mob", type);
-        Assert.Equal(1, DiscordEventMessageBuilder.EffectiveWindowCount(ev));
+        Assert.Equal(1, HnmCampRules.EffectiveWindowCount(ev));
         Assert.True(EventBreakPolicy.IsWindowedAttendance(ev));
     }
 
@@ -102,7 +102,7 @@ public class EventBreakPolicyTests
     {
         var ev = Ev("Fafnir", "Event", assignedMonster: "Custom Thing");
 
-        var displayChain = DiscordEventMessageBuilder.EffectiveWindowCount(ev);
+        var displayChain = HnmCampRules.EffectiveWindowCount(ev);
         var creditChain = ev.WindowCountOverride ?? HnmConfig.GetWindowCount(ev.EventName);
 
         Assert.Equal(1, displayChain);
@@ -118,7 +118,7 @@ public class EventBreakPolicyTests
         var ev = Ev("Tuesday Night Run", "Event", assignedMonster: "Tiamat");
 
         Assert.Equal(1, ev.WindowCountOverride ?? HnmConfig.GetWindowCount(ev.EventName));
-        Assert.Equal(25, DiscordEventMessageBuilder.EffectiveWindowCount(ev));
+        Assert.Equal(25, HnmCampRules.EffectiveWindowCount(ev));
         Assert.True(EventBreakPolicy.IsWindowedAttendance(ev));
     }
 

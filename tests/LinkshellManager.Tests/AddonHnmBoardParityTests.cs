@@ -96,7 +96,7 @@ public class AddonHnmBoardParityTests
     {
         var addon = Camp(1, windowCountOverride: 2);
 
-        Assert.Equal(7, DiscordEventMessageBuilder.EffectiveWindowCount(addon));
+        Assert.Equal(7, HnmCampRules.EffectiveWindowCount(addon));
         // The post count is untouched — it is what the addon labels Open / Close from.
         Assert.Equal(2, addon.WindowCountOverride);
         Assert.Equal(2, HnmConfig.GetWindowCount(addon.AssignedMonsterName));
@@ -112,8 +112,8 @@ public class AddonHnmBoardParityTests
         var app = Camp(2, HnmConfig.EffectiveWindowCount("Behemoth/King Behemoth"));
 
         Assert.Equal(
-            DiscordEventMessageBuilder.EffectiveWindowCount(app),
-            DiscordEventMessageBuilder.EffectiveWindowCount(addon));
+            HnmCampRules.EffectiveWindowCount(app),
+            HnmCampRules.EffectiveWindowCount(addon));
     }
 
     // The post count is what NAMES a window, and it must not depend on where the camp was filed.
@@ -126,8 +126,8 @@ public class AddonHnmBoardParityTests
         var addon = Camp(1, windowCountOverride: 2);
         var app = Camp(2, HnmConfig.EffectiveWindowCount("Behemoth/King Behemoth"));
 
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(addon));
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(app));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(addon));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(app));
     }
 
     // The pair, on one camp: 7 pop chances, 2 roster reads. The whole point of keeping them apart.
@@ -136,8 +136,8 @@ public class AddonHnmBoardParityTests
     {
         var camp = Camp(1, windowCountOverride: 2);
 
-        Assert.Equal(7, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(camp));
+        Assert.Equal(7, HnmCampRules.EffectiveWindowCount(camp));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(camp));
     }
 
     // ...and the post count is what makes the windows read Open / Close. The spawn count sends
@@ -147,13 +147,13 @@ public class AddonHnmBoardParityTests
     public void PostCount_NamesTheWindowsOpenAndClose()
     {
         var camp = Camp(1, windowCountOverride: 2);
-        var posts = DiscordEventMessageBuilder.AttendancePostCount(camp);
+        var posts = HnmCampRules.AttendancePostCount(camp);
 
         Assert.Equal("Open", HnmConfig.GetDefaultWindowLabel(camp.EventName, 1, posts));
         Assert.Equal("Close", HnmConfig.GetDefaultWindowLabel(camp.EventName, 2, posts));
         // The spawn count is exactly what used to leave these unnamed.
         Assert.Null(HnmConfig.GetDefaultWindowLabel(
-            camp.EventName, 1, DiscordEventMessageBuilder.EffectiveWindowCount(camp)));
+            camp.EventName, 1, HnmCampRules.EffectiveWindowCount(camp)));
     }
 
     // A wyrm posts once per hour-long window, so its windows stay numbered on both scales. Pins
@@ -169,10 +169,10 @@ public class AddonHnmBoardParityTests
         var camp = Camp(1, windowCountOverride: 24);
         camp.AssignedMonsterName = "Tiamat";
 
-        Assert.Equal(25, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
-        Assert.Equal(25, DiscordEventMessageBuilder.AttendancePostCount(camp));
+        Assert.Equal(25, HnmCampRules.EffectiveWindowCount(camp));
+        Assert.Equal(25, HnmCampRules.AttendancePostCount(camp));
         Assert.Null(HnmConfig.GetDefaultWindowLabel(
-            camp.EventName, 1, DiscordEventMessageBuilder.AttendancePostCount(camp)));
+            camp.EventName, 1, HnmCampRules.AttendancePostCount(camp)));
     }
 
     // A non-curated monster has no monster-derived post count, so the override it was created with
@@ -189,7 +189,7 @@ public class AddonHnmBoardParityTests
             WindowCountOverride = 2,
         };
 
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(nm));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(nm));
         Assert.Equal("Open", HnmConfig.GetDefaultWindowLabel(nm.EventName, 1, 2));
     }
 
@@ -202,7 +202,7 @@ public class AddonHnmBoardParityTests
     {
         var camp = Camp(1, windowCountOverride: 1);
 
-        Assert.Equal(1, DiscordEventMessageBuilder.EffectiveWindowCount(camp));
+        Assert.Equal(1, HnmCampRules.EffectiveWindowCount(camp));
     }
 
     // "The same sign up buttons": no button gate depends on who created the camp, so two identically
@@ -226,7 +226,7 @@ public class AddonHnmBoardParityTests
     {
         var camp = Camp(1, windowCountOverride: 2);
 
-        Assert.True(DiscordEventMessageBuilder.UsesWindows(camp));
+        Assert.True(HnmCampRules.UsesWindows(camp));
 
         var json = ComponentsJson(camp);
         Assert.Contains(DiscordEventMessageBuilder.ViewPrevWindowPrefix, json, StringComparison.Ordinal);
@@ -243,7 +243,7 @@ public class AddonHnmBoardParityTests
         var camp = Camp(1, windowCountOverride: null);
         camp.AssignedMonsterName = null;
 
-        Assert.False(DiscordEventMessageBuilder.UsesWindows(camp));
+        Assert.False(HnmCampRules.UsesWindows(camp));
 
         var json = ComponentsJson(camp);
         Assert.DoesNotContain(DiscordEventMessageBuilder.ViewPrevWindowPrefix, json, StringComparison.Ordinal);
@@ -267,8 +267,8 @@ public class AddonHnmBoardParityTests
             WindowCountOverride = 2,
         };
 
-        Assert.Equal(2, DiscordEventMessageBuilder.EffectiveWindowCount(nm));
-        Assert.False(DiscordEventMessageBuilder.UsesWindows(nm));
+        Assert.Equal(2, HnmCampRules.EffectiveWindowCount(nm));
+        Assert.False(HnmCampRules.UsesWindows(nm));
     }
 }
 

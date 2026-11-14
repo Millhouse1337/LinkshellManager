@@ -45,20 +45,20 @@ public class UndoWindowPostGuardTests
     // The guard as the endpoint spells it: an Open/Close camp, an ordinary (non-kill) window, and a
     // later ordinary window already filed.
     private static bool UnwindBlocked(Event camp, int sequence, bool isKillWindow, params int[] existing)
-        => DiscordEventMessageBuilder.PostsOpenAndClose(camp)
+        => HnmCampRules.PostsOpenAndClose(camp)
            && !isKillWindow
            && existing.Any(seq => seq > sequence);
 
     [Fact]
     public void AnOpenCloseCamp_TakesTwoPosts()
     {
-        Assert.Equal(2, DiscordEventMessageBuilder.AttendancePostCount(OpenCloseCamp()));
-        Assert.True(DiscordEventMessageBuilder.PostsOpenAndClose(OpenCloseCamp()));
+        Assert.Equal(2, HnmCampRules.AttendancePostCount(OpenCloseCamp()));
+        Assert.True(HnmCampRules.PostsOpenAndClose(OpenCloseCamp()));
     }
 
     [Fact]
     public void AWyrm_PostsPerWindow_SoTheOrderingRuleDoesNotApply()
-        => Assert.False(DiscordEventMessageBuilder.PostsOpenAndClose(NumberedCamp()));
+        => Assert.False(HnmCampRules.PostsOpenAndClose(NumberedCamp()));
 
     // ---- the ordering rule ----
 
