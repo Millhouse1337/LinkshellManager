@@ -5,7 +5,7 @@ import { AuthService } from './auth.service';
 import { DiscordActivityService } from './discord-activity.service';
 import { formatActionError } from './discord-activity.helpers';
 
-// What a download link can fetch (ActivityDataController.Downloads): the linkshell's DKP Sheet as
+// What a download link can fetch (ActivityOverviewController.Downloads): the linkshell's DKP Sheet as
 // .xlsx, or the sample Import DKP template.
 export type DownloadKind = 'dkp-sheet' | 'dkp-template';
 

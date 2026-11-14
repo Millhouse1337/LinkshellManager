@@ -364,7 +364,7 @@ export function canManageLinkshellIn(
 }
 
 // The "manage events" PERMISSION, not the rank — the gate the server's event
-// lifecycle endpoints actually apply (ActivityDataController: CanManageEvents).
+// lifecycle endpoints actually apply (ActivityEventsController: CanManageEvents).
 // Use this, not canManageLinkshellIn(), for anything that ends up calling one of
 // them; gating a button on rank while the endpoint checks a permission is what let
 // a custom role with Manage events on call End Camp but never see its button.
