@@ -139,100 +139,10 @@ public sealed class HnmCampReviewHandoffService
         StageUncapturedCredit(ev, windowEvent, byCharacterName, perCapture, tally, nowUtc);
         StageMemberDkpOverrides(windowEvent, byCharacterName, perCapture);
 
-        // CAPTURES FILED AGAINST THE CAMP while it was live: a `/lsm now` an officer filed as Misc
-        // (or into a window) from the Activity. They were parked on the Event row with no Window
-        // Event precisely so they would land HERE -- on the camp's own review card, beside its
-        // windows -- in the slot the officer chose. They used to be filed onto a second card minted
-        // from the camp's name, which this method never looked at, so a misc post never reached
-        // Events Pending DKP Post at all.
-        //
-        // Every status moves, Ignored included: anything left pointing at the recycled board would
-        // be collected again by the NEXT pop's End Camp.
-        //
-        // They are also PRICED on the way in, at the post's own price if an officer set one and
-        // the linkshell's Misc post rate otherwise (HnmCampPricing.MiscValueFor). Until now they
-        // arrived carrying no amount at all, and on a per-capture card the money IS the capture
-        // amounts -- so a misc post reached the review card worth exactly nothing, and the Misc
-        // DKP box beside it fell back to this card's 0 baseline and said so.
-        //
-        // NOT added to pricedByKey, and that is why this sits after the Tags block rather than
-        // inside it: that dictionary answers "how much of the FINALIZER's total has been handed
-        // out", and the finalizer never counted misc posts. Feeding them in would drive the Tags
-        // remainder negative and take the money straight back off the member.
-        foreach (var filed in campFiled)
-        {
-            filed.WindowEvent = windowEvent;
-            if (perCapture && AttendanceSnapshotSlotKinds.IsMisc(filed.SlotKind))
-            {
-                var miscValue = HnmCampPricing.MiscValueFor(ev, linkshell, filed.DkpAmount) ?? 0d;
-                // One payment per person per post: the same name listed twice in one capture is
-                // one body standing there once. Priced whatever the capture's status -- an
-                // Ignored row pays nothing regardless, and a Pending one an officer later
-                // approves must not land on the card still worth zero.
-                var paidHere = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var entry in filed.Entries)
-                {
-                    if (string.IsNullOrWhiteSpace(entry.CharacterName)) continue;
-                    entry.DkpAmount = paidHere.Add(entry.CharacterName.Trim()) ? miscValue : 0d;
-                }
-            }
-            if (filed.CapturedAtUtc < windowEvent.FirstCapturedAtUtc)
-            {
-                windowEvent.FirstCapturedAtUtc = filed.CapturedAtUtc;
-            }
-            if (filed.CapturedAtUtc > windowEvent.LastCapturedAtUtc)
-            {
-                windowEvent.LastCapturedAtUtc = filed.CapturedAtUtc;
-            }
-        }
+        AdoptCampFiledCaptures(ev, linkshell, windowEvent, campFiled, perCapture);
 
-        // THE PAST EVENT, written HERE — at End Camp — rather than at Post.
-        //
-        // Ending a camp is what makes it past, and for these camps nothing else records that it
-        // happened: the board is RECYCLED for the next pop rather than deleted, so a camp that
-        // ended vanished from the live list, never appeared under Past Events, and existed only
-        // as a pending review row until somebody got round to it. On a recurring board that gap
-        // could run for days, and a camp nobody ever reviewed left no trace at all.
-        //
-        // Post still owns the money: WindowEventDkpLedgerService reconciles this history's roster
-        // and amounts to whatever the review settled on, and writes the ledger. The amounts staged
-        // below are the camp's own proposal — the same numbers the review row opens with — so the
-        // archive is never blank and never disagrees with what the officer is looking at.
-        var archive = await BuildCampArchiveAsync(
-            ev, byCharacterName.Values, nowUtc, cancellationToken);
-        windowEvent.CampEventHistory = archive;
-
-        // The pop window, onto the archive -- see EventHistory.PopWindow for why nothing else can
-        // answer this later. The count is the camp's EFFECTIVE one, so a board with a window-count
-        // override reads "4 of 5", not the monster's default.
-        archive.PopWindow = popWindow;
-        archive.PopWindowCount = HnmCampRules.EffectiveWindowCount(ev);
-
-        // The camp's lotteries move onto the archive with it. See ClaimShieldCapture.EventHistoryId
-        // for why leaving them on the recycled board was paying the claim bonus over and over.
-        foreach (var capture in captures)
-        {
-            capture.EventHistory = archive;
-            capture.EventId = null;
-        }
-
-        // The camp's posted attendance windows move onto the archive for the same reason. These
-        // rows are the ONLY record of which windows a camp posted and who was scanned in each --
-        // nothing re-derives them. All three End Camp callers used to DELETE them once the board
-        // recycled, so any camp that posted a ToD lost its entire window history and showed no
-        // windows under Past Events. Clearing EventId also frees the unique
-        // (EventId, SequenceNumber) index the recycled board needs for the next camp's window-1
-        // scan, which is what those deletes were really for -- so archiving replaces them rather
-        // than being additive. Matches the generic close (EventEndService.EndEventCoreAsync, which
-        // both End Event buttons run), which archives exactly this way.
-        // Reuses campWindows from above rather than re-querying: same rows, same tracked
-        // instances, one round trip.
-        foreach (var window in campWindows)
-        {
-            window.EventHistory = archive;
-            window.Event = null;
-            window.EventId = null;
-        }
+        var archive = await ArchiveCampAsync(
+            ev, popWindow, byCharacterName, windowEvent, captures, campWindows, nowUtc, cancellationToken);
 
         // The camp's loot: charged now that the camp has ended, and moved onto the archive.
         await SettleCampLootAsync(ev, linkshell, archive, nowUtc, cancellationToken);
@@ -713,6 +623,124 @@ public sealed class HnmCampReviewHandoffService
                 });
             }
         }
+    }
+
+    // Moves the captures filed against the live camp onto its review card, pricing the misc ones.
+    private static void AdoptCampFiledCaptures(
+        Event ev,
+        Linkshell linkshell,
+        WindowEvent windowEvent,
+        List<AttendanceSnapshot> campFiled,
+        bool perCapture)
+    {
+        // CAPTURES FILED AGAINST THE CAMP while it was live: a `/lsm now` an officer filed as Misc
+        // (or into a window) from the Activity. They were parked on the Event row with no Window
+        // Event precisely so they would land HERE -- on the camp's own review card, beside its
+        // windows -- in the slot the officer chose. They used to be filed onto a second card minted
+        // from the camp's name, which this method never looked at, so a misc post never reached
+        // Events Pending DKP Post at all.
+        //
+        // Every status moves, Ignored included: anything left pointing at the recycled board would
+        // be collected again by the NEXT pop's End Camp.
+        //
+        // They are also PRICED on the way in, at the post's own price if an officer set one and
+        // the linkshell's Misc post rate otherwise (HnmCampPricing.MiscValueFor). Until now they
+        // arrived carrying no amount at all, and on a per-capture card the money IS the capture
+        // amounts -- so a misc post reached the review card worth exactly nothing, and the Misc
+        // DKP box beside it fell back to this card's 0 baseline and said so.
+        //
+        // NOT added to pricedByKey, and that is why this sits after the Tags block rather than
+        // inside it: that dictionary answers "how much of the FINALIZER's total has been handed
+        // out", and the finalizer never counted misc posts. Feeding them in would drive the Tags
+        // remainder negative and take the money straight back off the member.
+        foreach (var filed in campFiled)
+        {
+            filed.WindowEvent = windowEvent;
+            if (perCapture && AttendanceSnapshotSlotKinds.IsMisc(filed.SlotKind))
+            {
+                var miscValue = HnmCampPricing.MiscValueFor(ev, linkshell, filed.DkpAmount) ?? 0d;
+                // One payment per person per post: the same name listed twice in one capture is
+                // one body standing there once. Priced whatever the capture's status -- an
+                // Ignored row pays nothing regardless, and a Pending one an officer later
+                // approves must not land on the card still worth zero.
+                var paidHere = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in filed.Entries)
+                {
+                    if (string.IsNullOrWhiteSpace(entry.CharacterName)) continue;
+                    entry.DkpAmount = paidHere.Add(entry.CharacterName.Trim()) ? miscValue : 0d;
+                }
+            }
+            if (filed.CapturedAtUtc < windowEvent.FirstCapturedAtUtc)
+            {
+                windowEvent.FirstCapturedAtUtc = filed.CapturedAtUtc;
+            }
+            if (filed.CapturedAtUtc > windowEvent.LastCapturedAtUtc)
+            {
+                windowEvent.LastCapturedAtUtc = filed.CapturedAtUtc;
+            }
+        }
+    }
+
+    // Stages the camp's Past Event and moves its Claim Shield captures and posted windows onto it.
+    private async Task<EventHistory> ArchiveCampAsync(
+        Event ev,
+        int popWindow,
+        Dictionary<string, HnmCampMember> byCharacterName,
+        WindowEvent windowEvent,
+        List<ClaimShieldCapture> captures,
+        List<EventAttendanceWindow> campWindows,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        // THE PAST EVENT, written HERE — at End Camp — rather than at Post.
+        //
+        // Ending a camp is what makes it past, and for these camps nothing else records that it
+        // happened: the board is RECYCLED for the next pop rather than deleted, so a camp that
+        // ended vanished from the live list, never appeared under Past Events, and existed only
+        // as a pending review row until somebody got round to it. On a recurring board that gap
+        // could run for days, and a camp nobody ever reviewed left no trace at all.
+        //
+        // Post still owns the money: WindowEventDkpLedgerService reconciles this history's roster
+        // and amounts to whatever the review settled on, and writes the ledger. The amounts staged
+        // below are the camp's own proposal — the same numbers the review row opens with — so the
+        // archive is never blank and never disagrees with what the officer is looking at.
+        var archive = await BuildCampArchiveAsync(
+            ev, byCharacterName.Values, nowUtc, cancellationToken);
+        windowEvent.CampEventHistory = archive;
+
+        // The pop window, onto the archive -- see EventHistory.PopWindow for why nothing else can
+        // answer this later. The count is the camp's EFFECTIVE one, so a board with a window-count
+        // override reads "4 of 5", not the monster's default.
+        archive.PopWindow = popWindow;
+        archive.PopWindowCount = HnmCampRules.EffectiveWindowCount(ev);
+
+        // The camp's lotteries move onto the archive with it. See ClaimShieldCapture.EventHistoryId
+        // for why leaving them on the recycled board was paying the claim bonus over and over.
+        foreach (var capture in captures)
+        {
+            capture.EventHistory = archive;
+            capture.EventId = null;
+        }
+
+        // The camp's posted attendance windows move onto the archive for the same reason. These
+        // rows are the ONLY record of which windows a camp posted and who was scanned in each --
+        // nothing re-derives them. All three End Camp callers used to DELETE them once the board
+        // recycled, so any camp that posted a ToD lost its entire window history and showed no
+        // windows under Past Events. Clearing EventId also frees the unique
+        // (EventId, SequenceNumber) index the recycled board needs for the next camp's window-1
+        // scan, which is what those deletes were really for -- so archiving replaces them rather
+        // than being additive. Matches the generic close (EventEndService.EndEventCoreAsync, which
+        // both End Event buttons run), which archives exactly this way.
+        // Reuses campWindows from above rather than re-querying: same rows, same tracked
+        // instances, one round trip.
+        foreach (var window in campWindows)
+        {
+            window.EventHistory = archive;
+            window.Event = null;
+            window.EventId = null;
+        }
+
+        return archive;
     }
 
     // THE CAMP'S LOOT, at End Camp: charge what is still owed, then move every row off the board.
