@@ -13,18 +13,14 @@ export type CampWindowFields = Pick<
 // How many roster reads this camp takes — 2 on a Standard king/dragon (Open + Close), against
 // the 7 SPAWN windows windowCount reports. Everything that NAMES or COUNTS a posted window goes
 // by this; only the "Window N of M" camp heading goes by windowCount.
-//
-// Falls back to windowCount for a payload from a server predating the split, which is exactly
-// what the code here read before the two were separated.
 export function campPostCount(event: CampWindowFields): number {
-  return event.attendancePostCount ?? event.windowCount ?? 1;
+  return event.attendancePostCount;
 }
 
 // Whether the camp's posts are a named Open and Close. The server decides it from the camp's
-// Window Method; a payload from a server predating the field falls back to the old "two posts"
-// test, which is what this was before Window N could have exactly two windows.
+// Window Method (a Window N camp with exactly two windows is still numbered).
 export function campPostsOpenAndClose(event: CampWindowFields): boolean {
-  return event.postsOpenAndClose ?? campPostCount(event) === 2;
+  return event.postsOpenAndClose;
 }
 
 // An Open/Close camp whose Close has landed. Both the addon and the server refuse further

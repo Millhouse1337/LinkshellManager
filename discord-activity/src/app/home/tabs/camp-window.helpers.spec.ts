@@ -24,17 +24,16 @@ const openCloseNm: CampWindowFields = { windowCount: 1, attendancePostCount: 2, 
 const everyWindow: CampWindowFields = { windowCount: 7, attendancePostCount: 7, postsOpenAndClose: false };
 
 describe('campPostCount / campPostsOpenAndClose', () => {
-  it('counts roster reads, falling back to windowCount for an older server', () => {
+  it('counts roster reads, not spawn windows', () => {
     expect(campPostCount(kingCamp)).toBe(2);
-    expect(campPostCount({ windowCount: 5 })).toBe(5);
+    expect(campPostCount(everyWindow)).toBe(7);
   });
 
-  it('takes the server flag, else treats exactly two posts as Open/Close', () => {
+  it('takes the server flag', () => {
     expect(campPostsOpenAndClose(kingCamp)).toBe(true);
     expect(campPostsOpenAndClose(everyWindow)).toBe(false);
-    expect(campPostsOpenAndClose({ windowCount: 2 })).toBe(true);
     // A Window N camp with exactly two windows is numbered, and the server flag says so.
-    expect(campPostsOpenAndClose({ windowCount: 2, postsOpenAndClose: false })).toBe(false);
+    expect(campPostsOpenAndClose({ windowCount: 2, attendancePostCount: 2, postsOpenAndClose: false })).toBe(false);
   });
 });
 

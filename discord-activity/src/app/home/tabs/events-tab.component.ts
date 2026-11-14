@@ -308,11 +308,9 @@ export class EventsTabComponent {
   // can never show a control the endpoints would reject with a 400.
   //
   // A windowed (HNM) camp credits attendance per posted window, so there is no timer to pause and
-  // the whole Lobby / Active Room / Break Room concept is meaningless for it. The local fallback
-  // mirrors the server predicate (windowed OR HNM-typed) and only runs against a server that
-  // predates the flag.
+  // the whole Lobby / Active Room / Break Room concept is meaningless for it.
   protected supportsBreakRoom(event: ActivityEvent): boolean {
-    return event.supportsBreakRoom ?? ((event.windowCount ?? 1) <= 1 && !this.isHnmEvent(event));
+    return event.supportsBreakRoom;
   }
 
   // Members left in a break state on a windowed camp — only possible from an older build, before
