@@ -190,7 +190,6 @@ export class DiscordActivityService {
   readonly busyDiscordChannels = this.linkshellService.busyDiscordChannels;
   readonly busyDkpPools = this.linkshellService.busyDkpPools;
   readonly busyMonsterTimings = this.linkshellService.busyMonsterTimings;
-  readonly linkshellDetail = this.linkshellService.linkshellDetail;
   readonly inviteBrowseResults = this.inviteService.inviteBrowseResults;
   readonly inviteBrowseTotal = this.inviteService.inviteBrowseTotal;
   readonly inviteBrowseBusy = this.inviteService.inviteBrowseBusy;
@@ -686,8 +685,6 @@ export class DiscordActivityService {
   revokeInvite(inviteId: number): Promise<void> { return this.inviteService.revokeInvite(inviteId); }
 
   // --- LinkshellService ---
-  loadLinkshellDetail(linkshellId: number): Promise<void> { return this.linkshellService.loadLinkshellDetail(linkshellId); }
-  clearLinkshellDetail(): void { this.linkshellService.clearLinkshellDetail(); }
   createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> { return this.linkshellService.createLinkshell(input); }
   updateLinkshell(linkshellId: number, input: ActivityCreateLinkshellInput & { lootStructure?: ActivityLootStructure | null; enableHnmSection?: boolean | null; enableAuctions?: boolean | null; enableToDs?: boolean | null; enableEndgame?: boolean | null; enableEvents?: boolean | null; enableDkp?: boolean | null; enableTreasury?: boolean | null; dkpRoundingIncrement?: ActivityDkpRoundingIncrement | null; enableActivityTracking?: boolean | null; inactiveAfterAbsences?: number | null; activeAfterAttendances?: number | null; hiddenTodMonsters?: string[] | null; discordGuildId?: string | null; outsidePartySignupEnabled?: boolean | null; hnmAttendanceMode?: string | null; wdDkpPerWindow?: number | null; wdClaimBonus?: number | null; wdKillBonus?: number | null; wdOpenBonus?: number | null; wdCloseBonus?: number | null; hnmStandardOpenBonus?: number | null; hnmStandardCloseBonus?: number | null; hnmStandardClaimBonus?: number | null; hnmStandardKillBonus?: number | null; hnmStandardWindowBonus?: number | null; hnmStandardMiscBonus?: number | null }): Promise<void> { return this.linkshellService.updateLinkshell(linkshellId, input); }
   setPrimaryLinkshell(linkshellId: number): Promise<void> { return this.linkshellService.setPrimaryLinkshell(linkshellId); }

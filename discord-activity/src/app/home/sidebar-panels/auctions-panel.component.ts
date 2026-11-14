@@ -90,7 +90,7 @@ export class AuctionsPanelComponent {
       };
     }
 
-    return this.activity.linkshellDetail();
+    return null;
   }
 
   // The DKP pool picker's choices for the form's linkshell; empty (picker hidden) for a

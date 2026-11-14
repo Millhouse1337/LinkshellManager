@@ -490,6 +490,8 @@ export class ActivitySidebarPanelComponent {
   // value and bail before mutating state, so a slow detail/auction load
   // can't overwrite data for the user's current selection.
   private selectionGen = 0;
+  // The linkshell this copy last loaded the auction list for (see the effect below).
+  private auctionListLoadedFor = 0;
 
   public constructor()
   {
@@ -582,7 +584,7 @@ export class ActivitySidebarPanelComponent {
       const memberships = this.linkshellMemberships();
 
       if (!selectedLinkshellId || !memberships.some(linkshell => linkshell.id === selectedLinkshellId)) {
-        this.activity.clearLinkshellDetail();
+        this.auctionListLoadedFor = 0;
         this.selectedDkpHistoryAppUserId = '';
         this.activity.clearDkpHistory();
         this.activity.clearAuctionState();
@@ -594,25 +596,28 @@ export class ActivitySidebarPanelComponent {
 
       // This effect re-runs on every overview refresh (it reads the memberships), and this
       // component is mounted once per section (Onboarding, Profile, Auctions, DKP, Invites). So
-      // each copy loads only what ITS sections show, instead of every copy firing all four
-      // requests on every refresh.
+      // each copy loads only what ITS sections show, instead of every copy firing all its
+      // requests on every refresh. (No linkshell details: the selected linkshell is always the
+      // overview's primary one, which selectedLinkshell() reads.)
       const needsDkpHistory = this.showSection('dkp');
       const needsAuctionHistory = this.showSection('auctions');
-      const needsDetail = needsDkpHistory || needsAuctionHistory;
+      // The Auctions tab's copy loads the auction list only when it first shows a linkshell: on
+      // that tab the refresh timer (AutoRefreshService) reloads the list on every refresh, so
+      // loading it here as well sent the same request twice. Every other copy still loads it: the
+      // tab bar's live-auction badge and the dashboard's auction count read it, and nothing else
+      // keeps it fresh off the Auctions tab.
+      const needsAuctionList = !needsAuctionHistory || this.auctionListLoadedFor !== selectedLinkshellId;
+      this.auctionListLoadedFor = selectedLinkshellId;
 
       void (async () => {
-        if (needsDetail) {
-          await this.activity.loadLinkshellDetail(selectedLinkshellId);
-          if (isStale()) return;
-        }
         if (needsDkpHistory) {
           await this.reloadDkpHistory();
           if (isStale()) return;
         }
-        // Every copy still loads the auction list: the tab bar's live-auction badge and the
-        // dashboard's auction count read it, and nothing else keeps it fresh off the Auctions tab.
-        await this.activity.loadAuctions(selectedLinkshellId);
-        if (isStale()) return;
+        if (needsAuctionList) {
+          await this.activity.loadAuctions(selectedLinkshellId);
+          if (isStale()) return;
+        }
         if (needsAuctionHistory) {
           await this.activity.loadAuctionHistory(selectedLinkshellId);
         }
@@ -635,7 +640,7 @@ export class ActivitySidebarPanelComponent {
       };
     }
 
-    return this.activity.linkshellDetail();
+    return null;
   }
 
   protected linkshellMemberships() {

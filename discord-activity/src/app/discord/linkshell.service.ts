@@ -18,7 +18,6 @@ import type {
   ActivityJobRatingOverall,
   ActivityJobRatingsResponse,
   ActivityJobsRoster,
-  ActivityLinkshellDetail,
   ActivityLinkshellRolePermissionsInput,
   ActivityLinkshellRolesResponse,
   ActivityLootStructure,
@@ -31,7 +30,6 @@ export class LinkshellService {
   private readonly auth = inject(AuthService);
   private readonly http = inject(ActivityHttpClient);
 
-  readonly linkshellDetail = signal<ActivityLinkshellDetail | null>(null);
   readonly busyLinkshellId = signal<number | null>(null);
   readonly busyMemberId = signal<number | null>(null);
   readonly busyRoles = signal(false);
@@ -51,33 +49,6 @@ export class LinkshellService {
       success,
       failure
     });
-  }
-
-  async loadLinkshellDetail(linkshellId: number): Promise<void> {
-    if (linkshellId <= 0) {
-      this.linkshellDetail.set(null);
-      return;
-    }
-
-    try {
-      const accessToken = this.auth.currentAccessToken();
-      this.linkshellDetail.set(
-        await this.http.fetchActivityJson<ActivityLinkshellDetail>(
-          `/api/activity/linkshells/${linkshellId}`,
-          accessToken
-        )
-      );
-      this.auth.clearLoadError('linkshell-detail');
-    } catch (error) {
-      this.linkshellDetail.set(null);
-      // Reloaded on every overview refresh: its own notice, never the action banner
-      // (see AuthService.loadError).
-      this.auth.reportLoadError('linkshell-detail', error, 'Loading linkshell details failed.');
-    }
-  }
-
-  clearLinkshellDetail(): void {
-    this.linkshellDetail.set(null);
   }
 
   async createLinkshell(input: ActivityCreateLinkshellInput): Promise<void> {

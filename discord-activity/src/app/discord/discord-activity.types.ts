@@ -881,14 +881,6 @@ export interface ActivityDkpPoolPreview {
   warnings: string[];
 }
 
-export interface ActivityLinkshellDetail {
-  id: number;
-  name: string;
-  memberCount: number;
-  details?: string | null;
-  members: ActivityMember[];
-}
-
 export interface ActivityMember {
   id: number;
   appUserId?: string | null;
