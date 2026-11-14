@@ -88,7 +88,7 @@ public class ClaimShieldOneCapturePerCampTests
         http.Items[AddonApiAuthAttribute.LinkshellIdContextKey] = LinkshellId;
 
         var controller = new AddonApiController(
-            db, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+            db, null!, null!, null!, null!, null!, null!, null!, null!,
             null!, null!, TestPermissions.For(db), NullLogger<AddonApiController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = http },

@@ -7,8 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // DKP: the DKP history and audit (manual add/remove), DKP pools, the DKP import, the DKP sheet and
-// past events (event history and its edits). Split out of ActivityDataController; the endpoints,
-// URLs and rules are unchanged.
+// past events (event history and its edits).
 [ApiController]
 [Route("api/activity")]
 public sealed partial class ActivityDkpController : ActivityControllerBase

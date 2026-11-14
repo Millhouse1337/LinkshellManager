@@ -7,8 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // Linkshell settings: create, update, delete and leave a linkshell, its Discord server, lock and
-// channels, plus its rules, announcements and items. Split out of ActivityDataController; the
-// endpoints, URLs and rules are unchanged.
+// channels, plus its rules, announcements and items.
 [ApiController]
 [Route("api/activity")]
 public sealed partial class ActivitySettingsController : ActivityControllerBase

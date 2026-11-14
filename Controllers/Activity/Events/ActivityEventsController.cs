@@ -7,8 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // Timed events from start to finish: create, start, end and delete (Lifecycle), sign-up and
-// loot (Participation), breaks, comments, the party board and party setups. Split out of
-// ActivityDataController; the endpoints, URLs and rules are unchanged.
+// loot (Participation), breaks, comments, the party board and party setups.
 [ApiController]
 [Route("api/activity")]
 public sealed partial class ActivityEventsController : ActivityControllerBase

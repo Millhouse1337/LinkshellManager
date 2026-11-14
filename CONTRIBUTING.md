@@ -107,8 +107,7 @@ permission check). Pure mapping functions are in `ActivityMappers`.
 | `ActivityRosterController` | Members, roles, invites, claims, job ratings, jobs roster |
 | `ActivitySettingsController` | Create/update/delete a linkshell, its Discord setup, rules, announcements, items |
 
-They all keep `[Route("api/activity")]`, so no URL changed when the old single
-`ActivityDataController` was split up. `ApiRouteSnapshotTests` pins every route; a new endpoint
+They all use `[Route("api/activity")]`. `ApiRouteSnapshotTests` pins every route; a new endpoint
 goes in the controller that owns its area.
 
 ## Code style

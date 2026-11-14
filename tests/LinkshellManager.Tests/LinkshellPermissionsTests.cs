@@ -9,8 +9,7 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 // LinkshellPermissions is the one copy of "may this member do X in this linkshell?".
-// It was moved out of ActivityDataController.HelpersAuth unchanged, so these tests pin the
-// rule order that controller already used:
+// These tests pin its rule order:
 //   no membership -> false; admin override -> true; Leader -> true; role flag, with an
 //   unknown rank falling back to the Member role.
 // Later steps point the addon and Discord copies at this service; if one of these tests
@@ -205,7 +204,6 @@ public class LinkshellPermissionsTests
         var text = File.ReadAllText(Path.Combine(FindRepoPath("Controllers"), "Activity", "ActivityControllerBase.cs"));
 
         Assert.Contains("_permissions.CanAsync(", text);
-        Assert.Contains("_permissions.GetEffectiveRoleAsync(", text);
         Assert.Contains("_permissions.GetMembershipAsync(", text);
         Assert.DoesNotContain("LinkshellRanks.IsLeader(", text);
         Assert.DoesNotContain("BuildDefaultRoles(", text);

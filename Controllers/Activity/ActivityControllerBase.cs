@@ -10,9 +10,8 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 // What every Activity controller shares: who is asking (ResolveAppUserAsync), their membership of a
 // linkshell with the Discord guild lock applied (GetMembershipAsync), and the permission check
-// (CanAsync). The Activity API was one controller (ActivityDataController); it is now split into
-// smaller ones that all inherit this, so these rules stay in one place. See "Activity API
-// controllers" in CONTRIBUTING.md for which controller owns what.
+// (CanAsync). Every Activity controller inherits this, so these rules stay in one place. See
+// "Activity API controllers" in CONTRIBUTING.md for which controller owns what.
 //
 // Only what every controller needs lives here. A helper used by one controller stays in it.
 // Nothing here is public: a public method on a controller base class would become an endpoint.
@@ -230,12 +229,6 @@ public abstract class ActivityControllerBase : ControllerBase
         Func<LinkshellRole, bool> selector,
         CancellationToken cancellationToken)
         => _permissions.CanAsync(membership, selector, cancellationToken);
-
-    private protected Task<LinkshellRole?> GetEffectiveRoleAsync(
-        string? rank,
-        int linkshellId,
-        CancellationToken cancellationToken)
-        => _permissions.GetEffectiveRoleAsync(rank, linkshellId, cancellationToken);
 
     private protected Task<List<LinkshellRole>> EnsureDefaultRolesAsync(int linkshellId, CancellationToken cancellationToken)
         => _permissions.EnsureDefaultRolesAsync(linkshellId, cancellationToken);

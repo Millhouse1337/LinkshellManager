@@ -7,8 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // The roster: members (remove, rank, status), roles and their permissions, invites and join
-// requests, claiming imported DKP, job ratings and the jobs roster. Split out of
-// ActivityDataController; the endpoints, URLs and rules are unchanged.
+// requests, claiming imported DKP, job ratings and the jobs roster.
 [ApiController]
 [Route("api/activity")]
 public sealed partial class ActivityRosterController : ActivityControllerBase

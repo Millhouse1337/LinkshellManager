@@ -2,8 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 
-// The antiforgery token the app fetches before its first write. It lived in ActivityDataController
-// itself; it moved here when that controller was split up. Same URL and response.
+// The antiforgery token the app fetches before its first write.
 public sealed partial class ActivityOverviewController
 {
     [HttpGet("antiforgery")]

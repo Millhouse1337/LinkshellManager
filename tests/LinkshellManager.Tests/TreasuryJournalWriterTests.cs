@@ -694,7 +694,7 @@ public class TreasuryJournalWriterTests
         await db.SaveChangesAsync();
 
         // One name, on the what-we-owe half, for the whole amount.
-        var owedLine = Assert.Single(entry.Lines.Where(line => line.AccountNumber == TreasuryAccounts.WeOwe));
+        var owedLine = Assert.Single(entry.Lines, line => line.AccountNumber == TreasuryAccounts.WeOwe);
         Assert.Equal("Ashira", owedLine.CounterpartyCharacterName);
         Assert.Equal(-300_000, owedLine.Amount);
         Assert.Equal(0, entry.Lines.Sum(line => line.Amount));

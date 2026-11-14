@@ -7,8 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // The Activity's home screens: the overview (linkshells, events, DKP at a glance), the live
-// change feed, the member's profile, the one-time download links and the banner. Split out of
-// ActivityDataController; the endpoints, URLs and rules are unchanged.
+// change feed, the member's profile, the one-time download links and the banner.
 [ApiController]
 [Route("api/activity")]
 public sealed partial class ActivityOverviewController : ActivityControllerBase

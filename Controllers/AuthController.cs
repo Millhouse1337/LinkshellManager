@@ -11,16 +11,13 @@ public sealed class AuthController : ControllerBase
 {
     private readonly DiscordIdentityService _discordIdentityService;
     private readonly ILogger<AuthController> _logger;
-    private readonly IHostEnvironment _environment;
 
     public AuthController(
         DiscordIdentityService discordIdentityService,
-        ILogger<AuthController> logger,
-        IHostEnvironment environment)
+        ILogger<AuthController> logger)
     {
         _discordIdentityService = discordIdentityService;
         _logger = logger;
-        _environment = environment;
     }
 
     [HttpPost("exchange")]

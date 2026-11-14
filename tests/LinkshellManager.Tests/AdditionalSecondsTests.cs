@@ -89,7 +89,7 @@ public class AdditionalSecondsTests
         http.Items[AddonApiAuthAttribute.LinkshellIdContextKey] = LinkshellId;
 
         return new AddonApiController(
-            db, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+            db, null!, null!, null!, null!, null!, null!, null!, null!,
             new MonsterTimingResolver(db), null!, TestPermissions.For(db), NullLogger<AddonApiController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = http },

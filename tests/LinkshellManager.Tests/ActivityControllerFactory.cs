@@ -11,10 +11,9 @@ namespace LinkshellManager.TestSupport;
 // constructor BY TYPE. Anything not given is passed as null (the test never reaches it), and an
 // ILogger<T> becomes a NullLogger<T>.
 //
-// Why: the controller's constructor changes as the Activity API is split into smaller
-// controllers. A test written as `new ActivityDataController(db, null!, null!, ...)` breaks on every
-// change and is easy to get wrong by position; this keeps working, and moving a test to a new
-// controller is only a change of the type argument.
+// Why: a test written as `new ActivityEventsController(db, null!, null!, ...)` breaks every time
+// the constructor changes and is easy to get wrong by position; this keeps working, and moving a
+// test to another controller is only a change of the type argument.
 //
 // Shared with LinkshellManager.PostgresTests, which compiles this same file (see its .csproj).
 internal static class ActivityControllerFactory

@@ -75,7 +75,7 @@ public class CampBonusGuardTests
                 new[] { new Claim(ClaimTypes.NameIdentifier, User) }, authenticationType: "Test")),
         };
         return new AddonApiController(
-            db, null!, userManager, null!, null!, null!, null!, null!, null!, null!,
+            db, null!, userManager, null!, null!, null!, null!, null!, null!,
             new MonsterTimingResolver(db), null!, TestPermissions.For(db), NullLogger<AddonApiController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = http },

@@ -7,8 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // Charts: the farming boards (pop and drop items, credits), the wishlist, key item progress and
-// the chart holdings Treasury lists. Split out of ActivityDataController; the endpoints, URLs and
-// rules are unchanged.
+// the chart holdings Treasury lists.
 [ApiController]
 [Route("api/activity")]
 public sealed partial class ActivityChartsController : ActivityControllerBase

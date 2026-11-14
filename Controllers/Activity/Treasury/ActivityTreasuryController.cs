@@ -7,8 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // Treasury: the gil ledger (balances, entries, drafts, confirm, reverse, fix) and settling what
-// members owe or are owed. Split out of ActivityDataController; the endpoints, URLs and rules are
-// unchanged.
+// members owe or are owed.
 [ApiController]
 [Route("api/activity")]
 public sealed partial class ActivityTreasuryController : ActivityControllerBase

@@ -224,7 +224,7 @@ public class LootAfterEndCampTests
         http.Items[AddonApiAuthAttribute.LinkshellIdContextKey] = Ls;
         var pools = new DkpPoolResolver(db, new DkpPoolProvisioner(db));
         return new AddonApiController(
-            db, null!, null!, null!, null!, null!, null!,
+            db, null!, null!, null!, null!, null!,
             new DkpLedgerWriter(db, pools, NullLogger<DkpLedgerWriter>.Instance),
             pools, new DkpPoolBalanceService(db, pools), null!, null!, TestPermissions.For(db),
             NullLogger<AddonApiController>.Instance)

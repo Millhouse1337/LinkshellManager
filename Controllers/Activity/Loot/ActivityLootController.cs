@@ -7,8 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LinkshellManagerDiscordApp.Controllers;
 
 // Loot: the loot history (add, edit, delete loot rows) and auctions (create, edit, start, bid,
-// close, history). Split out of ActivityDataController; the endpoints, URLs and rules are
-// unchanged.
+// close, history).
 [ApiController]
 [Route("api/activity")]
 public sealed partial class ActivityLootController : ActivityControllerBase

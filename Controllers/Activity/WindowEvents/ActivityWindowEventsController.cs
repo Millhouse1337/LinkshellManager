@@ -8,8 +8,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 
 // HNM camps and their records: window events (camp cards, captures, Post), window posts, the HNM
 // board and claim stats, ToDs (log, edit, delete, screenshots), upcoming repops, monster timings
-// and the pending-submission queue. Split out of ActivityDataController; the endpoints, URLs and
-// rules are unchanged.
+// and the pending-submission queue.
 [ApiController]
 [Route("api/activity")]
 public sealed partial class ActivityWindowEventsController : ActivityControllerBase
