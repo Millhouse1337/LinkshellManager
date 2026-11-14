@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// What "Deny" on a member's own "I'm back" does. Shared by the Activity and addon deny endpoints.
+// What "Deny" on a member's own "I'm back" does. Used by the Activity deny endpoint.
 //
 // A self-return restarts the member's clock straight away and only ASKS an officer to confirm it.
 // Deny used to just stamp the request as denied, so the clock kept running and the member was paid
@@ -21,7 +21,7 @@ public static class BreakReturnDenial
 {
     public enum Outcome { Denied, ReturnNotFound, AlreadyResolved, ParticipantNotFound }
 
-    // The whole Deny, for both endpoints (the caller has checked permissions): find the request,
+    // The whole Deny (the caller has checked permissions): find the request,
     // check it is still pending, take the time back, save.
     //
     // The request's row is locked first. Two Denies of one return (a double click, or one officer in

@@ -178,10 +178,9 @@ public sealed partial class AddonApiController
             postsOpenAndClose = shapes[evt.Id].PostsOpenAndClose,
             windowsOpenEnded = shapes[evt.Id].WindowsOpenEnded,
             windowCadenceSeconds = shapes[evt.Id].WindowCadenceSeconds,
-            // Whether the Break Room applies (take break / force break / return / verify / deny).
-            // False for windowed HNM camps: they credit per posted window, so there is no timer
-            // to pause. Same predicate the break endpoints enforce, so the addon can't offer a
-            // button the server would refuse — see events_sync.break_room_applies.
+            // Whether the Break Room applies. False for windowed HNM camps: they credit per posted
+            // window, so there is no timer to pause. The addon has no break buttons any more and
+            // does not read this.
             supportsBreakRoom = EventBreakPolicy.SupportsBreakRoom(evt),
             assignedMonsterName = evt.AssignedMonsterName,
             // The monster's Additional Seconds, for the note beside the addon's ToD and End Event

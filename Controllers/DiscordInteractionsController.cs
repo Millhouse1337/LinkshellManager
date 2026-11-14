@@ -43,11 +43,6 @@ public sealed class DiscordInteractionsController : ControllerBase
     // flow), where token ∈ slot | slotL | join | job picks the flow to resume.
     private const string CharPickPrefix = "evt:charpick:";
 
-    // Prefix for the "quick sign up" select that lists a member's 3 most recent
-    // job combos. Tail: "{eventId}". Option values: "c|{main}|{sub}|{role}" to
-    // claim a matching open slot, or "m" to fall through to the manual picker.
-    private const string QuickComboPrefix = "evt:quickcombo:";
-
     // Prefix for the "Outside Party Signup" character-name MODAL — shown when a
     // Discord member with NO linked LSM account signs up (and the linkshell has the
     // setting on). Tail mirrors CharPickPrefix: "{token}:{eventId}[:{job}]". The
@@ -120,7 +115,7 @@ public sealed class DiscordInteractionsController : ControllerBase
 
     // True when this component click is ON an ephemeral picker (a previous step in
     // the same signup flow). The next picker step then MORPHS that message in place
-    // instead of stacking a new "Which character…/Quick sign up…" ephemeral.
+    // instead of stacking a new "Which character…" ephemeral.
     private bool _isEphemeralSource;
 
     public DiscordInteractionsController(
@@ -374,27 +369,6 @@ public sealed class DiscordInteractionsController : ControllerBase
                 return await ResumeSignupFlowAsync(token, pickEventId, appUserId: null, job, cancellationToken);
             }
             return Ephemeral("Open LSM and sign in with Discord once to link your account, then try again.");
-        }
-
-        // Quick sign up: the member picked a recent job combo (auto-claim a matching
-        // open slot) or "manual" (fall through to the slot picker).
-        if (customId.StartsWith(QuickComboPrefix, StringComparison.Ordinal))
-        {
-            var eventId = ParseTrailingId(customId, QuickComboPrefix);
-            var value = SelectedValue(data);
-            if (string.Equals(value, "m", StringComparison.Ordinal))
-            {
-                return await HandlePartySlotSignUpAsync(eventId, appUserId, asLeader: false, cancellationToken, skipQuickCombo: true);
-            }
-            if (value is not null && value.StartsWith("c|", StringComparison.Ordinal))
-            {
-                var p = value[2..].Split('|');
-                var main = p.Length > 0 ? p[0] : string.Empty;
-                var sub = p.Length > 1 && p[1].Length > 0 ? p[1] : null;
-                var role = p.Length > 2 && p[2].Length > 0 ? p[2] : null;
-                return await HandleQuickComboClaimAsync(eventId, appUserId, main, sub, role, cancellationToken);
-            }
-            return Ephemeral("That option isn't recognized.");
         }
 
         if (customId.StartsWith(DiscordEventMessageBuilder.JobSelectPrefix, StringComparison.Ordinal))
@@ -3216,7 +3190,7 @@ public sealed class DiscordInteractionsController : ControllerBase
     // runs HandlePartySlotClaimAsync (job wizard + claim), unchanged. The leader path
     // restricts every level to leaderless parties.
     private async Task<IActionResult> HandlePartySlotSignUpAsync(
-        int eventId, string? appUserId, bool asLeader, CancellationToken cancellationToken, bool skipQuickCombo = false)
+        int eventId, string? appUserId, bool asLeader, CancellationToken cancellationToken)
     {
         if (eventId <= 0)
         {
@@ -3359,174 +3333,6 @@ public sealed class DiscordInteractionsController : ControllerBase
             return false; // leader flow: skip parties that already have a leader
         }
         return party.Slots.Any(s => !slotSignups.ContainsKey(s.Id));
-    }
-
-    private sealed record JobCombo(string Main, string? Sub, string? Role);
-
-    private static readonly HashSet<string> ValidMainJobs = new(EventJobCatalog.MainJobOptions, StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> ValidSubJobs = new(EventJobCatalog.SubJobOptions, StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> ValidRoles = new(EventJobCatalog.JobTypeOptions, StringComparer.OrdinalIgnoreCase);
-
-    // The member's up-to-3 most recent DISTINCT (main, sub, role) combos in this
-    // linkshell, newest first, from their completed-event history. Filtered to
-    // catalog-valid jobs so an offered combo is reliably claimable (a slot claim
-    // always needs a valid role + main; an invalid sub would also be rejected).
-    private async Task<List<JobCombo>> RecentCombosAsync(string appUserId, int linkshellId, CancellationToken cancellationToken)
-    {
-        var rows = await _db.AppUserEventHistories
-            .Where(p => p.AppUserId == appUserId
-                        && p.EventHistory!.LinkshellId == linkshellId
-                        && p.JobName != null && p.JobType != null)
-            .OrderByDescending(p => p.EventHistory!.EndTime ?? p.EventHistory!.TimeStamp)
-            .Select(p => new { p.JobName, p.SubJobName, p.JobType })
-            .Take(50)
-            .ToListAsync(cancellationToken);
-
-        var combos = new List<JobCombo>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in rows)
-        {
-            var main = row.JobName?.Trim();
-            var role = row.JobType?.Trim();
-            if (string.IsNullOrWhiteSpace(main) || string.IsNullOrWhiteSpace(role)) continue;
-            if (!ValidMainJobs.Contains(main) || !ValidRoles.Contains(role)) continue;
-            var sub = string.IsNullOrWhiteSpace(row.SubJobName) ? null : row.SubJobName!.Trim();
-            if (sub is not null && (!ValidSubJobs.Contains(sub) || string.Equals(sub, main, StringComparison.OrdinalIgnoreCase)))
-            {
-                sub = null; // drop an invalid/duplicate sub rather than reject the combo
-            }
-            if (!seen.Add($"{main}|{sub}|{role}")) continue;
-            combos.Add(new JobCombo(main!, sub, role));
-            if (combos.Count == 3) break;
-        }
-        return combos;
-    }
-
-    // The best OPEN slot a combo can fill, or null if none: a Job slot whose main
-    // (and pinned sub, if any) match; else a Role slot whose role matches; else any
-    // open "Any" slot. Most-specific wins so the member lands in the right slot.
-    // With ignoreOccupied=true the taken check is skipped, so it answers "does a slot
-    // of this shape exist on the board AT ALL" — used to tell "full" (slot exists but
-    // taken) apart from "not on the board" (no such slot) in the quick-signup message.
-    private static PartySetupSlot? FindBestOpenSlotForCombo(
-        PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> signups, JobCombo combo,
-        bool ignoreOccupied = false)
-    {
-        PartySetupSlot? jobMatch = null, roleMatch = null, anyMatch = null;
-        foreach (var party in setup.Alliances.SelectMany(a => a.Parties))
-        {
-            foreach (var slot in party.Slots.OrderBy(s => s.SortOrder))
-            {
-                if (!ignoreOccupied && signups.ContainsKey(slot.Id)) continue; // taken
-                var type = slot.RequirementType ?? "Any";
-                if (string.Equals(type, "Job", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (Eq(slot.MainJob, combo.Main)
-                        && (string.IsNullOrWhiteSpace(slot.SubJob) || Eq(slot.SubJob, combo.Sub)))
-                    {
-                        jobMatch ??= slot;
-                    }
-                }
-                else if (string.Equals(type, "Role", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (Eq(slot.Role, combo.Role)) roleMatch ??= slot;
-                }
-                else
-                {
-                    anyMatch ??= slot;
-                }
-            }
-        }
-        return jobMatch ?? roleMatch ?? anyMatch;
-
-        static bool Eq(string? a, string? b) => string.Equals(a?.Trim(), b?.Trim(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string ComboLabel(JobCombo combo)
-        => $"{combo.Main}/{(string.IsNullOrWhiteSpace(combo.Sub) ? "—" : combo.Sub)}"
-           + (string.IsNullOrWhiteSpace(combo.Role) ? string.Empty : $" · {combo.Role}");
-
-    // Ephemeral "quick sign up" select: one option per available recent combo (auto-
-    // claims its matching slot) plus a manual fallback. Unavailable recent combos are
-    // only described in the text (never selectable), and worded accurately: a combo
-    // whose matching slot exists but is taken is "Full right now", while a combo with
-    // no slot of that shape on the board at all is "Not on the board" — the old code
-    // called both "full", which read as wrong when the slot simply didn't exist.
-    private IActionResult QuickComboPicker(
-        int eventId, List<JobCombo> available, List<JobCombo> unavailable,
-        PartySetup setup, IReadOnlyDictionary<int, EventPartySlotSignup> signups, string? eventName)
-    {
-        var options = available
-            .Select(c => (object)new { label = $"{ComboLabel(c)} · open", value = $"c|{c.Main}|{c.Sub}|{c.Role}" })
-            .Append((object)new { label = "Pick a slot manually →", value = "m" })
-            .ToArray();
-
-        var content = "⚡ Quick sign up — pick a recent job, or choose a slot manually:";
-
-        // A matching slot exists (ignoring occupancy) ⇒ it's genuinely full; otherwise
-        // there's no slot of that shape on the board.
-        var full = unavailable
-            .Where(c => FindBestOpenSlotForCombo(setup, signups, c, ignoreOccupied: true) is not null)
-            .ToList();
-        var notOnBoard = unavailable.Where(c => !full.Contains(c)).ToList();
-        if (full.Count > 0)
-        {
-            content += $"\nFull right now: {string.Join(", ", full.Select(ComboLabel))}.";
-        }
-        if (notOnBoard.Count > 0)
-        {
-            content += $"\nNot on the board: {string.Join(", ", notOnBoard.Select(ComboLabel))}.";
-        }
-
-        return PickerResponse(EventHeading(eventName, content), SelectRow(QuickComboPrefix, eventId.ToString(), "Pick a recent job", options));
-    }
-
-    // Auto-claim the best open slot matching a chosen recent combo. Refuses (no
-    // signup) when nothing's open for it — including a last-moment race.
-    private async Task<IActionResult> HandleQuickComboClaimAsync(
-        int eventId, string? appUserId, string main, string? sub, string? role, CancellationToken cancellationToken)
-    {
-        if (eventId <= 0 || string.IsNullOrWhiteSpace(main))
-        {
-            return Ephemeral("That option isn't recognized.");
-        }
-
-        var ev = await LoadEventWithSetupAsync(eventId, cancellationToken);
-        if (ev is null || ev.PartySetup is null)
-        {
-            return Ephemeral("That event is no longer open.");
-        }
-
-        var ctx = await ResolveSignupContextAsync(ev, appUserId, $"slot:{eventId}", cancellationToken);
-        if (ctx.ShouldStop)
-        {
-            return ctx.Interrupt!;
-        }
-
-        var slotSignups = await EventPartySignupService.GetSignupsForEventAsync(_db, eventId, cancellationToken);
-        var combo = new JobCombo(main.Trim(), sub, role);
-        var slot = FindBestOpenSlotForCombo(ev.PartySetup, slotSignups, combo);
-        if (slot is null)
-        {
-            return Ephemeral($"No open slot for {ComboLabel(combo)} right now — sign up again to pick another, or choose a slot manually.");
-        }
-
-        var result = await EventPartySignupService.ClaimSlotAsync(
-            _db, eventId, slot, ctx.AppUserId, ctx.CharacterName!, role, main, sub, cancellationToken,
-            claimAsLeader: false, discordUserId: ctx.DiscordUserId);
-        if (!result.Success)
-        {
-            return Ephemeral(result.Error ?? "Couldn't claim that slot.");
-        }
-        if (!await TryCommitSlotClaimAsync(cancellationToken))
-        {
-            return Ephemeral("That slot was just taken by another member. Sign up again to pick another.");
-        }
-        await EventPartySignupService.SyncParticipationAfterClaimAsync(_db, ev, ctx.AppUserId, cancellationToken, ctx.DiscordUserId);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        _eventQueue.Enqueue(eventId);
-        return DismissPickerSilently();
     }
 
     // Picker select → claim the chosen slot for THIS event. If the slot pins both
@@ -3763,7 +3569,7 @@ public sealed class DiscordInteractionsController : ControllerBase
 
     // A picker/select step in a signup flow. When the click came from an ephemeral
     // picker (an earlier step), MORPH that message in place so the chain never piles
-    // up stale "Which character…/Quick sign up…" messages; otherwise (a board click)
+    // up stale "Which character…" messages; otherwise (a board click)
     // send a fresh ephemeral. The terminal step deletes the single message.
     private IActionResult PickerResponse(string content, object[] components) =>
         _isEphemeralSource

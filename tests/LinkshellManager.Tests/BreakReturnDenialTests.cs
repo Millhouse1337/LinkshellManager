@@ -199,19 +199,4 @@ public class BreakReturnDenialTests
         Assert.NotNull(denied.DeniedAt);
         Assert.False(denied.RequiresVerification);
     }
-
-    [Fact]
-    public async Task AddonDeny_PutsTheMemberBackOnBreak()
-    {
-        await using var db = await SeededAsync();
-
-        var result = await TodCallers.Addon(db).DenyReturnAsync(
-            10, new AddonApiController.AddonVerifyReturnRequest(2), CancellationToken.None);
-
-        Assert.IsType<OkObjectResult>(result);
-        var participation = await db.AppUserEvents.SingleAsync();
-        Assert.True(participation.IsOnBreak);
-        Assert.Equal(1, participation.Duration);
-        Assert.NotNull((await db.AppUserEventStatusLedgers.SingleAsync(entry => entry.Id == 2)).DeniedAt);
-    }
 }

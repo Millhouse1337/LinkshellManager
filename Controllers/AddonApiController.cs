@@ -123,44 +123,6 @@ public sealed partial class AddonApiController : ControllerBase
         return true;
     }
 
-    private sealed class BreakActionContext
-    {
-        public AddonApiToken? Token { get; set; }
-        public Event? EventEntity { get; set; }
-        public AppUserEvent? Participation { get; set; }
-        public bool IsModeratorAction { get; set; }
-        public IActionResult? Error { get; set; }
-    }
-
-    private async Task<BreakActionContext> ResolveBreakContextAsync(
-        int eventId, int participantId, CancellationToken cancellationToken)
-    {
-        var ctx = new BreakActionContext { Token = AddonApiAuthAttribute.GetToken(HttpContext) };
-        var eventEntity = await _dbContext.Events
-            .FirstOrDefaultAsync(evt => evt.Id == eventId, cancellationToken);
-        if (eventEntity is null) { ctx.Error = NotFound(new { error = "Event not found." }); return ctx; }
-        if (eventEntity.LinkshellId != ctx.Token!.LinkshellId) { ctx.Error = Forbid(); return ctx; }
-        if (!eventEntity.CommencementStartTime.HasValue)
-        {
-            ctx.Error = BadRequest(new { error = "Break status is only available after the event has started." });
-            return ctx;
-        }
-
-        var participation = await _dbContext.AppUserEvents
-            .FirstOrDefaultAsync(p => p.Id == participantId && p.EventId == eventId, cancellationToken);
-        if (participation is null) { ctx.Error = NotFound(new { error = "Participant not found." }); return ctx; }
-
-        var isSelf = !string.IsNullOrEmpty(ctx.Token.IssuedToAppUserId)
-            && string.Equals(participation.AppUserId, ctx.Token.IssuedToAppUserId, StringComparison.OrdinalIgnoreCase);
-        var canModerate = await TokenIssuerCanModerateAsync(ctx.Token, eventEntity.LinkshellId, cancellationToken);
-        if (!isSelf && !canModerate) { ctx.Error = Forbid(); return ctx; }
-
-        ctx.EventEntity = eventEntity;
-        ctx.Participation = participation;
-        ctx.IsModeratorAction = !isSelf && canModerate;
-        return ctx;
-    }
-
     // ---------------------------------------------------------------------
     // Who may do what. Every check below goes through LinkshellPermissions, the rule the app
     // uses: no membership -> no; super-admin override -> yes; Leader -> yes; otherwise the role's
@@ -262,19 +224,6 @@ public sealed partial class AddonApiController : ControllerBase
         // Both null from an addon that predates this. Stored as null, never resolved to 1.
         int? AllianceNumber = null,
         string? AllianceKey = null);
-
-    public sealed record AddonBreakRequest(int ParticipantId);
-
-    public sealed record AddonVerifyReturnRequest(int LedgerEntryId);
-
-    // Late-join body for POST /events/{id}/join. JobType ("Main"/"Sub"/etc.)
-    // is optional because the addon scan doesn't always carry it; the server
-    // stores null when unset which matches the existing per-row data shape
-    // from PostAttendance.
-    public sealed record AddonJoinEventRequest(
-        string? MainJob,
-        string? SubJob,
-        string? JobType);
 
     public sealed record AddonAttendanceEntry(
         string CharacterName,

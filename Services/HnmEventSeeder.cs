@@ -38,7 +38,7 @@ public static class HnmEventSeeder
     // WdCampFinalizer pays a camp out by stamping both WdFinalizedAt and HnmDefeatedAt and then
     // recycling the Event row; HnmRecurringBoardBackgroundService revives that same row for the next
     // pop. Clearing only HnmDefeatedAt left WdFinalizedAt set forever, and every Manual Check In surface gates on
-    // it being null — the camp vanished from /api/addon/wd-camps, the Discord Check In row stopped
+    // it being null — the Discord Check In row stopped
     // rendering, FocusWindow froze the counter, the advance poller skipped it, and End Camp refused.
     //
     // All four move TOGETHER, which is the reason this is one named method rather than four lines at

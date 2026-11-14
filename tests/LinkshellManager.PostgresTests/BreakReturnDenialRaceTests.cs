@@ -11,7 +11,7 @@ namespace LinkshellManager.PostgresTests;
 
 // Deny on a member's "I'm back" takes the time back. When the member has taken another break since,
 // that means taking the banked time off Duration -- so two Denies of the same return (a double
-// click, or one officer in the app and one in the addon) must not both do it. BreakReturnDenial
+// click, or two officers at once) must not both do it. BreakReturnDenial
 // locks the request's row: the second Deny waits, then finds it already resolved.
 [Collection("postgres")]
 public class BreakReturnDenialRaceTests : IAsyncLifetime
