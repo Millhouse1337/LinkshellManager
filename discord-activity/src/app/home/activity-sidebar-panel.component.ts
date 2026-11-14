@@ -572,28 +572,11 @@ export class ActivitySidebarPanelComponent {
     });
 
     effect(() => {
-      const memberships = this.linkshellMemberships();
-      if (memberships.length === 0) {
-        this.selectedLinkshellId = 0;
-        this.activity.clearLinkshellDetail();
-        return;
-      }
-
-      const preferredId =
-        this.selectedLinkshellId ||
-        this.primaryLinkshellId() ||
-        memberships[0]?.id ||
-        0;
-
-      if (!memberships.some(linkshell => linkshell.id === preferredId)) {
-        this.selectedLinkshellId = memberships[0].id;
-      } else if (this.selectedLinkshellId === 0) {
-        this.selectedLinkshellId = preferredId;
-      }
-    });
-
-    effect(() => {
-      const selectedLinkshellId = this.selectedLinkshellId;
+      // Follows the app's one current linkshell (AuthService.currentLinkshellId). It used to keep
+      // the first one it saw, so after a switch in the top bar the DKP and Auctions sections kept
+      // showing (and acting on) the old linkshell until the tab was reopened.
+      const selectedLinkshellId = this.activity.currentLinkshellId();
+      this.selectedLinkshellId = selectedLinkshellId;
       const memberships = this.linkshellMemberships();
 
       if (!selectedLinkshellId || !memberships.some(linkshell => linkshell.id === selectedLinkshellId)) {
@@ -655,10 +638,6 @@ export class ActivitySidebarPanelComponent {
 
   protected linkshellMemberships() {
     return this.activity.overview()?.linkshells ?? [];
-  }
-
-  protected primaryLinkshellId(): number | null {
-    return this.activity.currentLinkshellId() || null;
   }
 
   protected canManageLinkshell(linkshellId: number): boolean {

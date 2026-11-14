@@ -27,12 +27,8 @@ import { ItemsSectionComponent } from './items-section.component';
 export class TreasuryTabComponent {
   protected readonly activity = inject(DiscordActivityService);
 
-  protected readonly linkshellId = computed<number | null>(() =>
-    this.activity.overview()?.appUser?.primaryLinkshellId
-      ?? this.activity.overview()?.primaryLinkshell?.id
-      ?? this.activity.overview()?.linkshells?.[0]?.id
-      ?? null
-  );
+  // The app's one current linkshell (AuthService.currentLinkshellId), or null when there is none.
+  protected readonly linkshellId = computed<number | null>(() => this.activity.currentLinkshellId() || null);
 
   private readonly membership = computed(() => {
     const id = this.linkshellId();

@@ -2533,14 +2533,14 @@
 
       <!-- ===== Past: settled history ===== -->
       <!-- SETTLED events only. An ended camp is held back until its DKP is posted
-           (ActivityDataController.EventHistory), so it never shows here and under Current's
+           (ActivityDkpController.EventHistory), so it never shows here and under Current's
            Events Pending DKP Post at the same time. Browse + (officer) edit metadata / DKP /
            attendees. -->
       <div [hidden]="eventsView() !== 'past'">
         <!-- [active]: the panel stays mounted while hidden (keeps its search and page) but only
              fetches while Past is showing. -->
         <app-event-history-panel [active]="eventsView() === 'past'"
-          [linkshellId]="activity.overview()?.appUser?.primaryLinkshellId ?? 0" />
+          [linkshellId]="activity.currentLinkshellId()" />
       </div>
 
       <!-- Shared ToD dialog, opened in "End Camp" mode from a live HNM camp's End Camp button. -->

@@ -128,13 +128,9 @@ export class TodsTabComponent {
     return this.activity.overview()?.linkshells ?? [];
   }
 
+  // The app's one current linkshell (AuthService.currentLinkshellId).
   protected selectedDashboardLinkshellId(): number {
-    return (
-      this.activity.overview()?.appUser?.primaryLinkshellId ??
-      this.primaryLinkshell()?.id ??
-      this.dashboardLinkshells()[0]?.id ??
-      0
-    );
+    return this.activity.currentLinkshellId();
   }
 
   protected selectedDashboardTods() {
