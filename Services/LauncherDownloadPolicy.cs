@@ -1,29 +1,25 @@
 namespace LinkshellManagerDiscordApp.Services;
 
-public enum LauncherUrlOutcome
-{
-    // Empty box: clear the URL (and switch the link off).
-    Clear,
-    Save,
-    Invalid
-}
-
-// The rule for the launcher download URL a super admin pastes into the Activity's Admin tab
-// (WebAdminController). Empty clears it; anything else must be an absolute https:// address,
-// because the URL is handed to every visitor, including signed-out ones.
+// Where the website's "Download launcher" link sends people. The address is fixed server config
+// (Launcher:DownloadUrl in appsettings.json, or Launcher__DownloadUrl in the droplet's env file),
+// not a setting anyone can change from the website: every visitor, signed in or not, downloads
+// and runs whatever it points at. Only the on/off switch lives in the Admin tab.
 public static class LauncherDownloadPolicy
 {
-    public static LauncherUrlOutcome Check(string? url, out string? normalized)
+    public const string ConfigKey = "Launcher:DownloadUrl";
+
+    // The configured address, trimmed, or null when it is missing or not an absolute https://
+    // address. A null keeps the link off (LauncherController answers 404).
+    public static string? Validate(string? url)
     {
-        normalized = url?.Trim();
-        if (string.IsNullOrEmpty(normalized))
+        var trimmed = url?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
         {
-            normalized = null;
-            return LauncherUrlOutcome.Clear;
+            return null;
         }
 
-        return Uri.TryCreate(normalized, UriKind.Absolute, out var parsed) && parsed.Scheme == Uri.UriSchemeHttps
-            ? LauncherUrlOutcome.Save
-            : LauncherUrlOutcome.Invalid;
+        return Uri.TryCreate(trimmed, UriKind.Absolute, out var parsed) && parsed.Scheme == Uri.UriSchemeHttps
+            ? trimmed
+            : null;
     }
 }

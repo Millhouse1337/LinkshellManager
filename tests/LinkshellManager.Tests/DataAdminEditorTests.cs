@@ -235,16 +235,16 @@ public class DataAdminEditorTests
     {
         using var db = await SeededAsync();
         var (catalog, editor, settings) = Harness(db);
-        Assert.Null(await settings.GetLauncherDownloadUrlAsync()); // primes the 30s cache
+        Assert.False(await settings.IsAddonGloballyDisabledAsync()); // primes the 30s cache
 
         var result = await editor.CreateAsync(
             Table(catalog, typeof(AppSetting)),
-            Values(("Key", GlobalSettingsService.LauncherDownloadUrlKey), ("Value", "https://example.test/launcher")),
+            Values(("Key", GlobalSettingsService.AddonDisabledKey), ("Value", "true")),
             Actor,
             CancellationToken.None);
 
         Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(e => e.Message)));
-        Assert.Equal("https://example.test/launcher", await settings.GetLauncherDownloadUrlAsync());
+        Assert.True(await settings.IsAddonGloballyDisabledAsync());
 
         var blankKey = await editor.CreateAsync(Table(catalog, typeof(AppSetting)), Values(("Key", ""), ("Value", "x")), Actor, CancellationToken.None);
         Assert.Contains(blankKey.Errors, e => e.Field == "Key");

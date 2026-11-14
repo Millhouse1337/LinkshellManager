@@ -60,7 +60,8 @@ tabs after a divider at the end of the tab strip.
 
 ### Admin *(super admin only)*
 The server-wide switches: turn the in-game addon or its Claim Shield capture off for everyone, turn the
-**admin override** on or off, and set the **launcher download** link shown on the home page. It also links
+**admin override** on or off, and show or hide the **launcher download** link on the home page (its address
+is fixed in the server config, `Launcher__DownloadUrl`). It also links
 to **Data Admin**.
 
 ### Data Admin *(super admin only)*

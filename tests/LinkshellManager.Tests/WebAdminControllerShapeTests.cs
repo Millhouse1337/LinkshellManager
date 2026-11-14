@@ -42,7 +42,7 @@ public class WebAdminControllerShapeTests
     {
         var posts = Actions().Where(action => action.GetCustomAttribute<HttpPostAttribute>() is not null).ToList();
 
-        Assert.Equal(5, posts.Count);
+        Assert.Equal(4, posts.Count); // the launcher URL is server config now, so no launcher-url POST
         Assert.All(posts, post => Assert.NotNull(post.GetCustomAttribute<ValidateAntiForgeryTokenAttribute>()));
     }
 }

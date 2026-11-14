@@ -25,13 +25,11 @@ public sealed class GlobalSettingsService
     // a member of. See AdminOverrideService.
     public const string AdminOverrideKey = "admin.override";
 
-    // Keys stored in the AppSettings table for the launcher download link. The URL is kept as a
-    // setting rather than hard-coded so a new launcher build can be published by pasting its
-    // release URL here, with no redeploy. The enabled flag gates whether the link is shown at
-    // all -- and LauncherController re-checks it, so turning it off actually blocks the download
-    // rather than just hiding the button.
+    // Key stored in the AppSettings table for the launcher download link. It only gates whether
+    // the link is shown -- and LauncherController re-checks it, so turning it off actually blocks
+    // the download rather than just hiding the button. The address itself is fixed server config
+    // (LauncherDownloadPolicy.ConfigKey), not a setting anyone can change from the website.
     public const string LauncherDownloadEnabledKey = "launcher.download.enabled";
-    public const string LauncherDownloadUrlKey = "launcher.download.url";
 
     private const string CachePrefix = "globalsetting:";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(30);
@@ -77,13 +75,6 @@ public sealed class GlobalSettingsService
     public Task SetLauncherDownloadEnabledAsync(bool enabled, CancellationToken cancellationToken = default)
         => SetBoolAsync(LauncherDownloadEnabledKey, enabled, cancellationToken);
 
-    // The absolute URL the download link points at, or null if one has never been saved.
-    public Task<string?> GetLauncherDownloadUrlAsync(CancellationToken cancellationToken = default)
-        => GetStringAsync(LauncherDownloadUrlKey, cancellationToken);
-
-    public Task SetLauncherDownloadUrlAsync(string? url, CancellationToken cancellationToken = default)
-        => SetStringAsync(LauncherDownloadUrlKey, url, cancellationToken);
-
     // Drop one cached value so a row written by something other than this service (the Data
     // Admin editor) is read fresh on the next call instead of after the TTL.
     public void Invalidate(string key) => _cache.Remove(CachePrefix + key);
@@ -122,44 +113,6 @@ public sealed class GlobalSettingsService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Invalidate so the new state is visible immediately on this instance.
-        _cache.Remove(CachePrefix + key);
-    }
-
-    // A missing row reads as null. Cached on the same short TTL as the bools so a never-set
-    // value still avoids a query on every page render.
-    private async Task<string?> GetStringAsync(string key, CancellationToken cancellationToken)
-    {
-        var cacheKey = CachePrefix + key;
-        if (_cache.TryGetValue(cacheKey, out string? cached))
-        {
-            return cached;
-        }
-
-        var raw = await _dbContext.AppSettings
-            .AsNoTracking()
-            .Where(s => s.Key == key)
-            .Select(s => s.Value)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        _cache.Set(cacheKey, raw, CacheTtl);
-        return raw;
-    }
-
-    private async Task SetStringAsync(string key, string? value, CancellationToken cancellationToken)
-    {
-        var setting = await _dbContext.AppSettings
-            .FirstOrDefaultAsync(s => s.Key == key, cancellationToken);
-        if (setting is null)
-        {
-            setting = new AppSetting { Key = key };
-            _dbContext.AppSettings.Add(setting);
-        }
-
-        // Store null rather than a blank row when the value is cleared.
-        setting.Value = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        // Invalidate so the new value is visible immediately on this instance.
         _cache.Remove(CachePrefix + key);
     }
 }

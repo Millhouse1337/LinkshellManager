@@ -224,8 +224,8 @@ public class DataAdminCatalogTests
         Assert.True(Table(catalog, typeof(Rule)).TryParseKey("12", out var intKey));
         Assert.Equal(12, intKey);
         Assert.False(Table(catalog, typeof(Rule)).TryParseKey("abc", out _));
-        Assert.True(Table(catalog, typeof(AppSetting)).TryParseKey("launcher.download.url", out var stringKey));
-        Assert.Equal("launcher.download.url", stringKey);
+        Assert.True(Table(catalog, typeof(AppSetting)).TryParseKey("addon.disabled", out var stringKey));
+        Assert.Equal("addon.disabled", stringKey);
         Assert.False(Table(catalog, typeof(AppSetting)).TryParseKey(" ", out _));
         var guid = Guid.NewGuid();
         Assert.True(Table(catalog, typeof(DiscordActivityUser)).TryParseKey(guid.ToString(), out var guidKey));

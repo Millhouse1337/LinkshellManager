@@ -38,10 +38,6 @@ export class WebAdminService {
     return this.change('claim-shield-kill-switch', { disabled }, 'Changing the Claim Shield switch failed.');
   }
 
-  setLauncherUrl(url: string): Promise<void> {
-    return this.change('launcher-url', { url }, 'Saving the launcher URL failed.');
-  }
-
   setLauncherDownload(enabled: boolean): Promise<void> {
     return this.change('launcher-download', { enabled }, 'Changing the launcher link failed.');
   }

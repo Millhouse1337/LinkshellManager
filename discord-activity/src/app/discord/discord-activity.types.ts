@@ -18,6 +18,7 @@ export interface WebAdminSettings {
   claimShieldGloballyDisabled: boolean;
   adminOverrideEnabled: boolean;
   launcherDownloadEnabled: boolean;
+  // Read-only: fixed in the server config (Launcher:DownloadUrl). Null when unset or not https.
   launcherDownloadUrl: string | null;
   message: string | null;
 }

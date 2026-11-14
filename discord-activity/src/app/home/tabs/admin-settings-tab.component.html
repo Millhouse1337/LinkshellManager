@@ -108,16 +108,11 @@
             home page is reachable without signing in, so a tester can get the launcher before they have a
             Discord account. Turning this off blocks the download link itself, not just the button.
           </p>
-          <label style="display:flex;flex-direction:column;gap:6px">
-            <span class="muted">
-              Download URL (https). Point this at the installer asset on the lsb-launcher GitHub release.
-              Saving an empty box clears the URL and switches the link off.
-            </span>
-            <input type="url" placeholder="https://…" [value]="launcherUrl()"
-                   (input)="launcherUrl.set($any($event.target).value)" />
-          </label>
+          <p class="muted" style="margin:0">
+            Download URL: <code style="word-break:break-all">{{ s.launcherDownloadUrl ?? 'not set' }}</code>. It is fixed in the server
+            config (<code>Launcher__DownloadUrl</code>), not here.
+          </p>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn sm" [disabled]="admin.busy()" (click)="saveLauncherUrl()">Save URL</button>
             @if (s.launcherDownloadEnabled) {
               <button type="button" class="btn danger-outline sm" [disabled]="admin.busy()"
                       (click)="admin.setLauncherDownload(false)">Hide download link</button>

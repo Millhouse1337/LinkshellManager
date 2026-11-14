@@ -18,11 +18,13 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public sealed class WebAdminController : ControllerBase
 {
     private readonly GlobalSettingsService _globalSettings;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<WebAdminController> _logger;
 
-    public WebAdminController(GlobalSettingsService globalSettings, ILogger<WebAdminController> logger)
+    public WebAdminController(GlobalSettingsService globalSettings, IConfiguration configuration, ILogger<WebAdminController> logger)
     {
         _globalSettings = globalSettings;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -75,33 +77,16 @@ public sealed class WebAdminController : ControllerBase
             : "Claim Shield re-enabled globally. Each linkshell's per-monster switches apply again.", cancellationToken));
     }
 
-    [HttpPost("settings/launcher-url")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SetLauncherDownloadUrlAsync([FromBody] WebAdminLauncherUrlRequest request, CancellationToken cancellationToken)
-    {
-        switch (LauncherDownloadPolicy.Check(request.Url, out var url))
-        {
-            case LauncherUrlOutcome.Clear:
-                await _globalSettings.SetLauncherDownloadUrlAsync(null, cancellationToken);
-                await _globalSettings.SetLauncherDownloadEnabledAsync(false, cancellationToken);
-                return Ok(await ReadSettingsAsync("Launcher download URL cleared, and the link switched off.", cancellationToken));
-            case LauncherUrlOutcome.Invalid:
-                return BadRequest(new { error = "Launcher URL must be an absolute https:// address. Nothing was changed." });
-            default:
-                await _globalSettings.SetLauncherDownloadUrlAsync(url, cancellationToken);
-                return Ok(await ReadSettingsAsync("Launcher download URL saved.", cancellationToken));
-        }
-    }
-
     // LauncherController re-checks this on every download, so off blocks the download itself.
+    // The address is fixed server config (Launcher:DownloadUrl), so there is no endpoint to change it.
     [HttpPost("settings/launcher-download")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SetLauncherDownloadAsync([FromBody] WebAdminEnabledRequest request, CancellationToken cancellationToken)
     {
         // Refuse to switch the link on with nothing to point at, or every click would 404.
-        if (request.Enabled && string.IsNullOrWhiteSpace(await _globalSettings.GetLauncherDownloadUrlAsync(cancellationToken)))
+        if (request.Enabled && ConfiguredLauncherUrl() is null)
         {
-            return BadRequest(new { error = "Save a launcher download URL before turning the link on." });
+            return BadRequest(new { error = "No launcher download URL is configured on the server (Launcher__DownloadUrl), so the link stays off." });
         }
 
         await _globalSettings.SetLauncherDownloadEnabledAsync(request.Enabled, cancellationToken);
@@ -110,12 +95,14 @@ public sealed class WebAdminController : ControllerBase
             : "Launcher download link hidden, and the download URL is blocked until you turn it back on.", cancellationToken));
     }
 
+    private string? ConfiguredLauncherUrl() => LauncherDownloadPolicy.Validate(_configuration[LauncherDownloadPolicy.ConfigKey]);
+
     private async Task<WebAdminSettingsDto> ReadSettingsAsync(string? message, CancellationToken cancellationToken) => new(
         await _globalSettings.IsAddonGloballyDisabledAsync(cancellationToken),
         await _globalSettings.IsClaimShieldGloballyDisabledAsync(cancellationToken),
         await _globalSettings.IsAdminOverrideEnabledAsync(cancellationToken),
         await _globalSettings.IsLauncherDownloadEnabledAsync(cancellationToken),
-        await _globalSettings.GetLauncherDownloadUrlAsync(cancellationToken),
+        ConfiguredLauncherUrl(),
         message);
 }
 
@@ -124,6 +111,7 @@ public sealed record WebAdminSettingsDto(
     bool ClaimShieldGloballyDisabled,
     bool AdminOverrideEnabled,
     bool LauncherDownloadEnabled,
+    // The configured address (read-only here), or null when it is missing or not https.
     string? LauncherDownloadUrl,
     // What the last change did, in words; null on a plain read.
     string? Message);
@@ -131,5 +119,3 @@ public sealed record WebAdminSettingsDto(
 public sealed record WebAdminEnabledRequest(bool Enabled);
 
 public sealed record WebAdminDisabledRequest(bool Disabled);
-
-public sealed record WebAdminLauncherUrlRequest(string? Url);

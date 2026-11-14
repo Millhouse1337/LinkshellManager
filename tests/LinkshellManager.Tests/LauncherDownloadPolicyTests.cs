@@ -3,25 +3,23 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The launcher URL is shown to every visitor, signed in or not, so only an absolute https://
-// address may be saved; an empty box clears it.
+// The launcher URL comes from server config and is handed to every visitor, signed in or not, so
+// only an absolute https:// address is used; anything else keeps the link off.
 public class LauncherDownloadPolicyTests
 {
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Empty_Clears(string? url)
+    public void Missing_IsNull(string? url)
     {
-        Assert.Equal(LauncherUrlOutcome.Clear, LauncherDownloadPolicy.Check(url, out var normalized));
-        Assert.Null(normalized);
+        Assert.Null(LauncherDownloadPolicy.Validate(url));
     }
 
     [Fact]
-    public void Https_IsSaved_Trimmed()
+    public void Https_IsUsed_Trimmed()
     {
-        Assert.Equal(LauncherUrlOutcome.Save, LauncherDownloadPolicy.Check("  https://example.com/setup.exe ", out var normalized));
-        Assert.Equal("https://example.com/setup.exe", normalized);
+        Assert.Equal("https://example.com/setup.exe", LauncherDownloadPolicy.Validate("  https://example.com/setup.exe "));
     }
 
     [Theory]
@@ -29,8 +27,8 @@ public class LauncherDownloadPolicyTests
     [InlineData("javascript:alert(1)")]
     [InlineData("/download/launcher")]
     [InlineData("example.com/setup.exe")]
-    public void AnythingElse_IsInvalid(string url)
+    public void AnythingElse_IsNull(string url)
     {
-        Assert.Equal(LauncherUrlOutcome.Invalid, LauncherDownloadPolicy.Check(url, out _));
+        Assert.Null(LauncherDownloadPolicy.Validate(url));
     }
 }
