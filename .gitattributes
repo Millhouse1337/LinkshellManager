@@ -1,0 +1,5 @@
+# Files copied to the Linux droplet keep LF line endings even on a Windows checkout
+# (core.autocrlf=true): bash and systemd choke on CRLF.
+deploy/*.sh text eol=lf
+deploy/*.service text eol=lf
+deploy/*.conf text eol=lf
