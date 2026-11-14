@@ -178,13 +178,14 @@ gets the number wrong, an officer can change it on the post (the **Alliance** bo
 | `/lsm roster` | Check the linkshell roster against your alliance — who your next post will and won't pay. |
 | `/lsm jobs` | List the jobs the addon has learned this session. |
 | `/lsm slots` · `/lsm slots swap` | Check what each pearl slot reads, or swap them if they're backwards. |
+| `/lsm http [sync\|async]` | Show or set how background refreshes reach the server. `async` (the default) never pauses the game. |
 | `/lsm server <url>` | Point at a self-hosted LSManager. |
 | `/lsm help` | Print the command list in chat. |
 
 **Troubleshooting toggles:** `/lsm todcapture` (log every defeat line), `/lsm claimshield debug`,
 `/lsm repop debug`, `/lsm seaprobe` (Lobby **Scan** problems).
 
-Gone for good: `/lsm alliance` (automatic now), `/lsm checkin` / `/lsm checkout` (Manual Check In
+Gone for good: `/lsm alliance` (automatic now), `/tod` (now `/repop`), `/lsm checkin` / `/lsm checkout` (Manual Check In
 camps use the **Check In** / **Check Out** buttons on the Discord camp board), and creating events
 in game.
 

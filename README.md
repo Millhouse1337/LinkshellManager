@@ -192,7 +192,7 @@ check it points at `localhost` first with `dotnet user-secrets list`):
 ```
 
 `database update` applies every migration under `Migrations/` in order. The initial schema is
-`20260512035741_InitialSchema`; later migrations add per-linkshell job levels, Google Sheet config,
+`20260512035741_InitialSchema`; later migrations add (and some later drop) features such as job levels,
 attendance snapshots, window events, party setup, and more. Run `dotnet ef migrations list` to see the
 full, current set.
 

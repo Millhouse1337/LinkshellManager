@@ -1,228 +1,47 @@
-```
-╔══════════════════════════════════════════════════════════════════════╗
-║                                                                      ║
-║                    LSM ADDON · QUICK REFERENCE                       ║
-║                                                                      ║
-║              Commands · Snapshot Tie-Ins · De-Duplication            ║
-║                                                                      ║
-╚══════════════════════════════════════════════════════════════════════╝
-```
+# LSM Addon — Quick Reference
 
-> **What this is.** A one-page reference for officers using the in-game
-> `lsm` addon — every command it registers, how the `/lsm now <name>`
-> snapshot ties into the Window Events page, and how the server avoids
-> double-counting attendance when you snap the same fight twice.
+A one-page card for the in-game `lsm` addon. For the full walkthrough with pictures, see the
+[In-Game Addon Guide](LSManager-Addon-Guide.md). `/lsm help` in game prints the same list.
 
----
+The addon is for **HNM and NM camps**. Events are made in Discord or the app; the addon picks
+them up.
 
-## ▌ PANEL 1 · COMMAND REFERENCE
+## First time
 
-### Web sync / pairing
+1. `/addon load lsm`
+2. In the app: **Game Addon** tab → **Pair Code** → **+ Get Code**.
+3. In game: `/lsm link <code>`. One code pairs every linkshell you are in.
+4. `/attend` to open the launcher.
+
+## Commands
 
 | Command | What it does |
 |---|---|
-| `/lsm server <url>` | Point at a different LSManager. Only needed if you self-host — the addon ships pointed at `https://linkshellmanager.com`. |
-| `/lsm link <code> [1\|2]` | Redeem a pairing code on slot 1 or 2 (default 1). |
-| `/lsm unlink [1\|2\|all]` | Drop a slot pairing (or all). |
-| `/lsm status` | Show server + pairings. Auto-drops revoked tokens. |
+| `/attend` · `/attend close` | Open or close the launcher. |
+| `/repop` · `/repop close` | Open or close the Repop Timer. |
+| `/lsm link <code>` | Pair the addon. |
+| `/lsm unlink [name\|all]` | Drop one pairing, or all of them. |
+| `/lsm status` | Show the server, your pairings and which pearl slot each shell is in. |
+| `/lsm now [name] [p\|a]` | Snap your alliance (`a`, the default) or party (`p`). It lands in **Unlinked Posts** for an officer to file. |
+| `/lsm roster` | Check the linkshell roster against your alliance. |
+| `/lsm jobs` | List the jobs the addon has learned this session. |
+| `/lsm slots` · `/lsm slots swap` | Check what each pearl slot reads, or swap them if they are backwards. |
+| `/lsm http [sync\|async]` | Show or set how background refreshes reach the server. `async` (the default) never pauses the game. |
+| `/lsm server <url>` | Only if you self-host. The addon ships pointed at `https://linkshellmanager.com`. |
+| `/lsm help` | Print the command list in chat. |
 
-### Alliance / party snapshot
+**Troubleshooting:** `/lsm claimshield` (status) · `/lsm claimshield debug` · `/lsm repop debug` ·
+`/lsm todcapture` (log every defeat line) · `/lsm seaprobe` (Lobby **Scan** problems).
 
-A capture is **one alliance**. The game gives the addon no way to see past your own alliance, so
-an event spanning two alliances needs **one paired poster in each** — otherwise the second
-alliance is not counted at all.
+## Things to remember
 
-| Command | What it does |
-|---|---|
-| `/lsm now [name] [p\|a]` | Write a local CSV **and** push the same payload to LSManager. Optional **name** labels it in the web UI. Trailing scope: `p` = own party (slots 0-5), `a` (default) = your full alliance (slots 0-17). Quoted names with spaces work: `/lsm now "Fafnir Window 2" p`. |
-| `/lsm alliance <1-6>` | Set which alliance you are posting for. Rides along with every capture and is what keeps two alliances from being merged into one roster on the web. Shown by `/lsm status`. |
+- **Every alliance needs its own poster.** The game only shows the addon your own alliance.
+  Nobody sets an alliance number; the addon reads the alliance leader.
+- **Only a Post pays.** The Lobby is for looking.
+- **End Event does not pay.** It hands the camp to the app, where an officer posts the DKP.
 
-Anyone paired to the linkshell may post. A capture from someone without live-event moderation
-rights arrives **Pending** — visible on the event, but not in the roster and earning nothing until
-an officer confirms it on the web or in the Discord Activity.
+## Gone
 
-### Windows / panels
-
-| Command | What it does |
-|---|---|
-| `/attend` | Toggle the main LSM launcher window. |
-| `/attend close` | Close the launcher. |
-| `/repop` | Toggle the standalone Repop Timer window. |
-| `/repop close` | Close the Repop Timer window. |
-| `/lsm repop` | Alias for `/repop`. |
-| `/lsm repop debug` | Toggle verbose pop-signal attribution logging. |
-
-### Diagnostics
-
-| Command | What it does |
-|---|---|
-| `/lsm claimshield` | Print current Claim Shield capture status. |
-| `/lsm claimshield debug` | Toggle verbose Claim Shield capture logging. |
-
-### Help
-
-| Command | What it does |
-|---|---|
-| `/lsm help` | Print the full command list + quick-start in chat. Also runs as the fallback for bare `/lsm` or an unrecognized subcommand. |
-
-> 💡 **Quick start:** `/lsm link <code>` → `/attend`.
-
----
-
-## ▌ PANEL 2 · `/lsm now <name>` — MONSTER-NAME TIE-IN
-
-When you call `/lsm now Fafnir`, the addon ships the name verbatim. The
-server then **auto-tags the Window Event's Entry Type** so officers don't
-have to set it manually for every kill. The mapping lives in
-`WindowEventEntryTypes.FromMonsterName()` and is case- and
-whitespace-insensitive.
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│   YOU TYPE                       →   ENTRY TYPE              │
-├──────────────────────────────────────────────────────────────┤
-│   Tiamat · Jormungand · Vrtra    →   Wyrms Camp              │
-│                                                              │
-│   Adamantoise · Aspidochelone    →   Kings Camp              │
-│   Behemoth · Fafnir                                          │
-│   King Behemoth · Nidhogg                                    │
-│                                                              │
-│   anything else                  →   Misc Camp               │
-│   (including no name)                                        │
-└──────────────────────────────────────────────────────────────┘
-```
-
-> 📌 **Why this matters.** The Entry Type is picked from the monster name, so
-> typing `/lsm now Fafnir` is tagged **Kings Camp** automatically — no officer
-> hand-edit needed. (It used to feed the Google Sheet, which has been removed.)
-
-> ⚠️ **Note.** Jormungand is intentionally only in the **Wyrms** set even
-> though FFXI lore puts it on both lists. Wyrms wins per the linkshell
-> convention.
-
-> ⚠️ **Note.** The ToAU three — Cerberus, Hydra, Khimaira — run the wyrms'
-> 60 min × 25 window band but are neither wyrms nor kings, so they fall to
-> **Misc Camp**. Move them into `WyrmsMonsters` in `WindowEventEntryTypes`
-> if they should be tagged as wyrms.
-
-> 🚫 **What it does NOT auto-detect.**
-> - Does **not** auto-switch to HNM-style multi-window mode (`/lsm now` is
->   always a single-window snapshot).
-> - Does **not** set DKP rate — that's applied per-window from the Window
->   Events page or inherited from a linked Event.
-> - Does **not** consult `HnmConfig.LongWindowHnms` / `ShortWindowHnms` —
->   that list only feeds the ToD Tracker.
-
----
-
-## ▌ PANEL 3 · TWO `/lsm now` CALLS A MINUTE APART
-
-The server uses **two independent mechanisms** to keep repeat snapshots
-sane: one *groups* them onto the same Window Event, the other *flags*
-near-duplicates so nobody gets DKP twice.
-
-### A) Grouping into the same Window Event
-
-`FindOrCreateWindowEventAsync` reuses an existing Window Event when
-**all four** conditions hold:
-
-| Condition | Detail |
-|---|---|
-| **Same linkshell** | `LinkshellId` must match the caller's pairing |
-| **Still open** | `Status == Open` — closed events never absorb new snaps |
-| **Same normalized name** | trim → collapse whitespace → uppercase. `"Fafnir"`, `"fafnir"`, `" Fafnir "` all match |
-| **Not stale** | `LastCapturedAtUtc ≥ capturedAt − 21 hours` |
-
-So `/lsm now Fafnir` and again 1 minute later → **same Window Event**,
-two snapshots attached as siblings. The stale clock slides forward
-each time.
-
-```
-                  21h
-   ┌────────────────────────────────────┐
-   │           SAME WINDOW EVENT        │      (FRESH WINDOW EVENT)
-   │                                    │
-   ●──●─●────────●───●───────────────●─ │  ─────────●──
-   ↑              ↑                  ↑                ↑
-  first       same name           still <21h       22h gap →
- /lsm now     1m later             attaches        new event
-```
-
-### B) Folding close-together posts into one roster
-
-Nothing is flagged as a duplicate. A post landing close in time to an
-existing snapshot on the same Window Event is **folded into it** — its
-members are unioned in and no second snapshot row is created:
-
-| Condition | Detail |
-|---|---|
-| **Same Window Event** | Both posts attached to the same parent |
-| **Target still Active** | A row an officer marked `Duplicate`/`Ignored` is never a target |
-| **Within the merge window** | `\|target.CapturedAt − this.CapturedAt\| ≤ merge window` |
-
-The merge window is scaled to the monster's own spawn window, so a fold
-can never span two real windows (`HnmConfig.SnapshotMergeWindow`):
-
-| Camp | Spawn window | Merge window |
-|---|---|---|
-| Tiamat / Jormungand / Vrtra | 60 min × 25 | **5 min** |
-| Cerberus / Hydra / Khimaira | 60 min × 25 | **5 min** |
-| Fafnir / Behemoth / Adamantoise (+HQ) | 10 min × 7 | **3 min** |
-| Everything else (Sky, farm NMs, ad-hoc) | — | **3 min** |
-
-There is no roster-similarity test. Two officers each scanning their own
-alliance barely overlap, and that is exactly the case that most needs
-combining. The target's `CapturedAt` does not move when a post folds in,
-so a steady drip of posts eventually starts a fresh snapshot instead of
-chaining into one that grows all camp long.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│   1-MINUTE-LATER SCENARIO                                   │
-├─────────────────────────────────────────────────────────────┤
-│   Inside the merge window   →  folded in; one snapshot,     │
-│                                union of both rosters        │
-│                                                             │
-│   Outside the merge window  →  fresh Active snapshot on the │
-│                                same event (combined roster) │
-└─────────────────────────────────────────────────────────────┘
-```
-
-> **Why this replaced duplicate detection.** DKP is credited per Window
-> Event, not per snapshot, so double-posting never double-paid. But a
-> flagged snapshot is *excluded* from the combined roster — so anyone who
-> appeared only in the flagged post silently lost their credit. Folding
-> keeps every name.
-
----
-
-## ▌ PANEL 4 · WHEN TO OVERRIDE THE DEFAULTS
-
-| You want… | How to do it |
-|---|---|
-| A **new event** for a same-name repop within 21h | Close the previous Window Event on the web UI first — closed events are no longer absorbed. |
-| Two posts to stay **separate** rows | Leave more than the merge window between them (5 min on a wyrm, 3 min otherwise), or post the second under a different event name. |
-| To mark a snapshot junk | Window Events page → set status to `Ignored`. |
-| To track multi-day pops separately | Use a day suffix in the name: `/lsm now Fafnir D2`, `/lsm now Fafnir D3` — they normalize differently so they don't group. |
-
----
-
-## ▌ WHY THE SPECIFIC NUMBERS
-
-| Threshold | Reasoning |
-|---|---|
-| **21 hours** stale cutoff | Shorter than the shortest HNM repop (~22h). The same name posted a day later correctly becomes a new event instead of merging with yesterday's. |
-| **±8 minutes** duplicate window | Wide enough to catch officers double-tapping the command or two officers each running a snapshot for the same kill. |
-| **75% overlap** threshold | Sweet spot — common dedup cases (network blip re-post, simultaneous officer captures) all sit well above it; "different people zoning in mid-fight" sits below. |
-
----
-
-```
-══════════════════════════════════════════════════════════════════════
-  Source pointers
-  ──────────────────────────────────────────────────────────────────
-  Commands ............ lsm/commands.lua
-  Snapshot endpoint ... Controllers/AddonApiController.AttendanceSnapshots.cs
-  Monster mapping ..... Models/WindowEvent.cs · WindowEventEntryTypes
-══════════════════════════════════════════════════════════════════════
-```
+`/lsm alliance` (automatic now), `/tod` (now `/repop`), `/lsm checkin` / `/lsm checkout`
+(use the Discord camp board), `/lsm link <code> 1|2` (no slot to pick), Auto-Post, and making
+events in game.

@@ -8,22 +8,21 @@ LinkshellManager (LSManager) is a three-piece system over one shared database. E
 | --- | --- | --- | --- |
 | **Web App** | `https://your-host/` (any browser) | The same app as the Discord Activity, plus the super-admin tools (Admin, Data Admin) | **[Web App Guide](LSManager-WebApp-Guide.md)** |
 | **Discord Activity** | Inside Discord — voice "Activities" tray | Quick member-facing experience while everyone's in voice | **[Discord Activity Guide](LSManager-DiscordActivity-Guide.md)** |
-| **In-Game Addon** (`lsm`) | Ashita v3 / HorizonXI client | Live attendance, ToD capture, loot logging, event creation | **[In-Game Addon Guide](LSManager-Addon-Guide.md)** |
+| **In-Game Addon** (`lsm`) | Ashita v3 / HorizonXI client | HNM camp attendance, ToD, Claim Shield and loot capture | **[In-Game Addon Guide](LSManager-Addon-Guide.md)** |
 
 All three share the **same database** — anything done on one surface shows up on the others in seconds.
 
 ---
 
-## Putting it all together — a typical Sky run
+## Putting it all together — a typical HNM camp
 
-1. **Officer** — on the web or Discord Activity, *Events → Create Event* "Kirin", DKP 5/hr, 18 slots.
-2. **Members** — sign up from Discord Activity or web.
-3. **Raid leader** — in game, `/attend` to open the launcher and confirm the queued event is loaded.
-4. **At pop** — leader runs `/lsm kirin ls h` — addon does `/sea limbus_zone linkshell`, builds the attendance, posts it to the live event, writes the local HNM log file.
-5. **Kirin dies** — addon auto-captures the ToD and posts it to the linked linkshell.
-6. **Loot rolls** — winners are recorded with DKP spent.
-7. **Event ends** — leader closes it on web or Discord; the event moves to *Event History*; DKP balances update on every member's profile.
-8. **Next pop window** — anyone glancing at the Dashboard sees the Kirin countdown ticking down to repop.
+1. **Officer** — in the app, *Event System → Create Event* for "Fafnir" (or let the HNM board post itself from the last ToD).
+2. **Members** — sign up from the Discord board, the Activity or the web.
+3. **Camp leader** — in game, `/attend` opens the launcher; pick the queued camp.
+4. **During the camp** — **Start & Post** the first roster, then post the rest as the camp goes (the monster's *Window Method* decides which). Every alliance needs its own paired poster.
+5. **Fafnir dies** — post the last rosters (**Close**, **Kill**). The addon catches the ToD, the Claim Shield lottery and the loot from chat; press **Post** on each.
+6. **End Event** — hands the camp to the app. An officer reviews it and posts the DKP; balances update on every member's profile.
+7. **Next pop** — `/repop` in game, or the Dashboard's ToD Tracker, counts down to the next window.
 
 ---
 
@@ -31,13 +30,13 @@ All three share the **same database** — anything done on one surface shows up 
 
 **Web** — `https://your-host/` → Sign in with Discord → tabs along the top, the same as in Discord. See the [Web App Guide](LSManager-WebApp-Guide.md).
 **Discord** — voice channel → Activities → LinkshellManager → tabs along the top. See the [Discord Activity Guide](LSManager-DiscordActivity-Guide.md).
-**Addon** — `/addon load att` → generate code on web/Discord → `/lsm link <code> [1|2]` → `/attend`. The addon ships pointed at `https://linkshellmanager.com`, so there is no server to set. See the [Addon Guide](LSManager-Addon-Guide.md).
+**Addon** — `/addon load lsm` → in the app, **Game Addon → Pair Code → + Get Code** → `/lsm link <code>` → `/attend`. One code pairs every linkshell you are in, and there is no server to set. See the [Addon Guide](LSManager-Addon-Guide.md).
 
 **Most-used in-game commands:**
 - `/attend` — open the launcher
-- `/lsm <event>` — take attendance
-- `/lsm here` — attendance for current zone
+- `/repop` — open the Repop Timer
+- `/lsm now [name]` — snap your alliance now; an officer files it from Unlinked Posts
 - `/lsm status` — show pairings
-- `/lsm link <code> [1|2]` — pair to a linkshell
-- `/lsm unlink [1|2|all]` — unpair
-- `/lsm help` — open the in-game help window
+- `/lsm link <code>` — pair the addon
+- `/lsm unlink [name|all]` — unpair
+- `/lsm help` — print the command list in chat
