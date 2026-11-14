@@ -126,6 +126,10 @@ public sealed class UserMergeService
         yield return Column(_db.AddonPairingCodes, x => x.IssuedToAppUserId);
         yield return Column(_db.PendingTodSubmissions, x => x.SubmittedByAppUserId);
         yield return Column(_db.DiscordActivityUsers, x => x.IdentityUserId);
+        // Foreign keys since JobRatingsForeignKeys (cascade): MergeJobRatingsAsync above folds the
+        // pair first, so moving them here keeps every rating instead of losing it with the account.
+        yield return Column(_db.JobRatings, x => x.TargetAppUserId);
+        yield return Column(_db.JobRatings, x => x.RaterAppUserId);
 
         // Plain columns (no foreign key).
         yield return Column(_db.AppUserEventWindows, x => x.AppUserId);
@@ -136,8 +140,6 @@ public sealed class UserMergeService
         yield return Column(_db.EventComments, x => x.AppUserId);
         yield return Column(_db.EventPartySlotSignups, x => x.AppUserId);
         yield return Column(_db.PartySetups, x => x.CreatedByAppUserId);
-        yield return Column(_db.JobRatings, x => x.TargetAppUserId);
-        yield return Column(_db.JobRatings, x => x.RaterAppUserId);
         yield return Column(_db.Auctions, x => x.CreatedByUserId);
         yield return Column(_db.AuctionHistories, x => x.CreatedByUserId);
         yield return Column(_db.AuctionItems, x => x.CurrentHighestBidderAppUserId);

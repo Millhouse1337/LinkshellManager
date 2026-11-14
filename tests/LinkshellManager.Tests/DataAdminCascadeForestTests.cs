@@ -100,13 +100,18 @@ public class DataAdminCascadeForestTests
     }
 
     [Fact]
-    public void RealModel_AppUserReachesInviteOnly_AndNeverIdentityTables()
+    public void RealModel_AppUserReachesInviteAndJobRatingOnly_AndNeverIdentityTables()
     {
         var catalog = NewCatalog();
         var node = NodeOf(catalog, typeof(AppUser));
 
-        Assert.Equal(new[] { typeof(Invite) }, node.CascadeDescendants.Select(m => m.ClrType));
-        Assert.Empty(node.Children); // Invite files under Linkshell by the tie rule
+        // JobRating joined Invite with JobRatingsForeignKeys (its rated account and its rater).
+        Assert.Equal(
+            new[] { typeof(Invite), typeof(JobRating) }.OrderBy(t => t.Name),
+            node.CascadeDescendants.Select(m => m.ClrType).OrderBy(t => t.Name));
+        Assert.Empty(node.Children); // both file under Linkshell by the tie rule
+        Assert.Equal(typeof(Linkshell), ParentOf(catalog, typeof(JobRating)));
+        Assert.Equal(new[] { typeof(AppUser) }, AlsoOf(catalog, typeof(JobRating)));
     }
 
     [Fact]

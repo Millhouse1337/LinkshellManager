@@ -2244,6 +2244,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("RaterAppUserId");
+
+                    b.HasIndex("TargetAppUserId");
+
                     b.HasIndex("LinkshellId", "TargetAppUserId", "RaterAppUserId", "CharacterSlot", "JobIndex")
                         .IsUnique();
 
@@ -4062,6 +4066,27 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .IsRequired();
 
                     b.Navigation("Linkshell");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.JobRating", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", null)
+                        .WithMany()
+                        .HasForeignKey("LinkshellId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("RaterAppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("TargetAppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.JournalEntry", b =>

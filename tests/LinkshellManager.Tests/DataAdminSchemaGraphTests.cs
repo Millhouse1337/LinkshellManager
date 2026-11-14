@@ -338,6 +338,20 @@ public class DataAdminSchemaGraphTests
         Assert.Equal("restrict", Relationship(graph, "Auction.DkpPoolId").OnDelete);
         Assert.Equal("NoAction", Relationship(graph, "Auction.DkpPoolId").EfDelete);
 
+        // JobRatingsForeignKeys: a rating goes with its linkshell, the rated account or the rater.
+        foreach (var (column, principal) in new[]
+                 {
+                     ("LinkshellId", "Linkshell"), ("TargetAppUserId", "AppUser"), ("RaterAppUserId", "AppUser"),
+                 })
+        {
+            var rating = Relationship(graph, "JobRating." + column);
+            Assert.Equal("JobRating", rating.From);
+            Assert.Equal(principal, rating.To);
+            Assert.True(rating.Required);
+            Assert.Equal("cascade", rating.OnDelete);
+            Assert.True(Column(graph, "JobRating", column).Fk);
+        }
+
         var cloned = Relationship(graph, "PartySetup.ClonedFromPartySetupId");
         Assert.Equal("PartySetup", cloned.From);
         Assert.Equal(cloned.From, cloned.To);

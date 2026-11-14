@@ -1651,6 +1651,22 @@ namespace LinkshellManagerDiscordApp.Data
                 // It also serves "every rating of one target" (LinkshellId, TargetAppUserId), since
                 // those are its first two columns, so that query needs no index of its own.
                 entity.HasIndex(item => new { item.LinkshellId, item.TargetAppUserId, item.RaterAppUserId, item.CharacterSlot, item.JobIndex }).IsUnique();
+                // Real foreign keys (JobRatingsForeignKeys): a rating of, or by, an account or
+                // linkshell that no longer exists is shown nowhere, so it goes with them. A claimed
+                // placeholder's ratings are moved first (UserMergeService), so a claim keeps them.
+                // No navigations: nothing reads a rating through its linkshell or its users.
+                entity.HasOne<Linkshell>()
+                    .WithMany()
+                    .HasForeignKey(item => item.LinkshellId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne<AppUser>()
+                    .WithMany()
+                    .HasForeignKey(item => item.TargetAppUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne<AppUser>()
+                    .WithMany()
+                    .HasForeignKey(item => item.RaterAppUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             builder.Entity<EventPartySlotSignup>(entity =>
