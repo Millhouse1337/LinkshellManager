@@ -445,11 +445,13 @@ export class EventService {
     return outcome.ok;
   }
 
-  async setEventHistoryParticipantDkp(id: number, participantId: number, amount: number): Promise<boolean> {
+  // A past event's DKP is never edited in place: the server adds a "Correction" row for the
+  // difference, with the officer's name and this optional reason.
+  async setEventHistoryParticipantDkp(id: number, participantId: number, amount: number, reason?: string | null): Promise<boolean> {
     const outcome = await mutateThenRefresh(this.auth, {
       mutate: () => this.http.postActivityAction(
         `/api/activity/event-history/${id}/participants/${participantId}/dkp`,
-        { amount }
+        { amount, reason: reason?.trim() || null }
       ),
       refresh: () => this.auth.refreshOverview(),
       success: 'Attendee DKP updated.',
@@ -506,10 +508,11 @@ export class EventService {
     return outcome.ok;
   }
 
-  async removeEventHistoryParticipant(id: number, participantId: number): Promise<boolean> {
+  async removeEventHistoryParticipant(id: number, participantId: number, reason?: string | null): Promise<boolean> {
     const outcome = await mutateThenRefresh(this.auth, {
       mutate: () => this.http.postActivityAction(
-        `/api/activity/event-history/${id}/participants/${participantId}/remove`
+        `/api/activity/event-history/${id}/participants/${participantId}/remove`,
+        { reason: reason?.trim() || null }
       ),
       refresh: () => this.auth.refreshOverview(),
       success: 'Attendee removed and DKP refunded.',

@@ -2079,6 +2079,8 @@ export interface ActivityEditEventHistoryInput {
   eventLocation?: string | null;
   duration?: number | null;
   dkpPerHour?: number | null;
+  // Optional: why the rate changed. Kept on each attendee's "Correction" DKP row.
+  reason?: string | null;
 }
 
 export interface ActivityAuctionItemInput {

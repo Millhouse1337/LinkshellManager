@@ -816,6 +816,9 @@ export class ActivitySidebarPanelComponent {
         return 'Audit · Adjustment';
       case 'AuditMisc':
         return 'Audit · Misc';
+      case 'Correction':
+        // An officer changed a past event's DKP. The row's details say who and why.
+        return 'Correction';
       default:
         return entryType || 'Entry';
     }
@@ -834,7 +837,8 @@ export class ActivitySidebarPanelComponent {
     const entries = this.dkpHistory()?.entries ?? [];
     const totals = new Map<string, number>();
     for (const entry of entries) {
-      if (entry.entryType !== 'EventEarned' && entry.entryType !== 'SnapshotEarned') continue;
+      // A correction changes what a past event paid, so it counts with the earnings.
+      if (entry.entryType !== 'EventEarned' && entry.entryType !== 'SnapshotEarned' && entry.entryType !== 'Correction') continue;
       const key = (entry.eventType ?? '').trim() || 'Unspecified';
       totals.set(key, (totals.get(key) ?? 0) + entry.amount);
     }

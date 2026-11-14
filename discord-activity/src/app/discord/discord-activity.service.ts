@@ -755,12 +755,12 @@ export class DiscordActivityService {
   loadEventHistoryWindows(id: number): Promise<ActivityEventHistoryWindowsResponse | null> { return this.eventService.loadEventHistoryWindows(id); }
   editEventHistory(id: number, input: ActivityEditEventHistoryInput): Promise<boolean> { return this.eventService.editEventHistory(id, input); }
   deleteEventHistory(id: number): Promise<boolean> { return this.eventService.deleteEventHistory(id); }
-  setEventHistoryParticipantDkp(id: number, participantId: number, amount: number): Promise<boolean> { return this.eventService.setEventHistoryParticipantDkp(id, participantId, amount); }
+  setEventHistoryParticipantDkp(id: number, participantId: number, amount: number, reason?: string | null): Promise<boolean> { return this.eventService.setEventHistoryParticipantDkp(id, participantId, amount, reason); }
   setEventHistoryParticipantActiveCredit(id: number, participantId: number, credited: boolean): Promise<boolean> { return this.eventService.setEventHistoryParticipantActiveCredit(id, participantId, credited); }
   addEventHistoryParticipant(id: number, input: { appUserId: string; dkp: number; jobType?: string | null; jobName?: string | null; subJobName?: string | null }): Promise<boolean> { return this.eventService.addEventHistoryParticipant(id, input); }
   clearEventHistoryActiveCredit(id: number): Promise<boolean> { return this.eventService.clearEventHistoryActiveCredit(id); }
   clearEventHistoryAbsences(id: number): Promise<boolean> { return this.eventService.clearEventHistoryAbsences(id); }
-  removeEventHistoryParticipant(id: number, participantId: number): Promise<boolean> { return this.eventService.removeEventHistoryParticipant(id, participantId); }
+  removeEventHistoryParticipant(id: number, participantId: number, reason?: string | null): Promise<boolean> { return this.eventService.removeEventHistoryParticipant(id, participantId, reason); }
   loadEventComments(historyId: number): Promise<ActivityEventCommentsResponse | null> { return this.eventService.loadEventComments(historyId); }
   addEventComment(historyId: number, body: string, isAnonymous: boolean): Promise<boolean> { return this.eventService.addEventComment(historyId, body, isAnonymous); }
   deleteEventComment(commentId: number): Promise<boolean> { return this.eventService.deleteEventComment(commentId); }

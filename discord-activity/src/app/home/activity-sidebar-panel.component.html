@@ -628,7 +628,8 @@
                       <td class="dkph-details">
                         {{ entry.details || '—' }}
                         @if (entry.itemName) { <span class="dkph-pill dkph-pill--item">{{ entry.itemName }}</span> }
-                        @if (entry.editReason) { <span class="dkph-pill" [title]="entry.editReason">Edited</span> }
+                        <!-- A correction row already names the officer and the reason in its details. -->
+                        @if (entry.editReason && entry.entryType !== 'Correction') { <span class="dkph-pill" [title]="entry.editReason">Edited</span> }
                       </td>
                       <td class="num dkph-amount" [class.dkph-pos]="entry.amount > 0" [class.dkph-neg]="entry.amount < 0">
                         {{ entry.amount >= 0 ? '+' : '' }}{{ entry.amount }}

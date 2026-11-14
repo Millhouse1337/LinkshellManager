@@ -134,6 +134,8 @@ import type {
                          existing value unchanged instead of rescaling every attendee's DKP. -->
                     @if (!isHnm(h) && !isCampArchive(h)) {
                       <label>DKP per hour<input type="number" [(ngModel)]="draft.dkpPerHour" [name]="'eRate' + h.id" /></label>
+                      <label>Reason (optional)<input [(ngModel)]="draft.reason" [name]="'eReason' + h.id" maxlength="500"
+                                                     placeholder="Why the rate changed" /></label>
                     }
                     <button type="button" class="primary" (click)="saveEvent(h)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
@@ -143,7 +145,7 @@ import type {
                   @if (isCampArchive(h)) {
                     <p class="hint">This camp's DKP was paid from its review card, so only the name, type and location change here.</p>
                   } @else if (!isHnm(h)) {
-                    <p class="hint">Changing DKP per hour rescales every attendee's earned DKP and balance.</p>
+                    <p class="hint">Changing DKP per hour rescales every attendee's DKP. Each change is added to their DKP history as a correction.</p>
                   } @else {
                     <p class="hint">This camp pays per window, not by the hour.</p>
                   }
@@ -321,6 +323,13 @@ import type {
                         This HNM camp was paid from its review card, so its DKP can't be changed here.
                         To correct someone's DKP, use <strong>DKP → DKP History → Add Audit</strong>.
                       </p>
+                    } @else {
+                      <!-- One box for the whole table: it goes on whichever Save or Remove comes next. -->
+                      <label class="reason-box">Reason (optional)
+                        <input [(ngModel)]="reasonDraft[h.id]" [name]="'pReason' + h.id" maxlength="500"
+                               placeholder="Why you're changing DKP" />
+                      </label>
+                      <p class="hint camp-note">Save and Remove add a correction to the member's DKP history, with your name and this reason.</p>
                     }
 
                     <div class="table-wrap">
@@ -641,6 +650,7 @@ import type {
     }
     .hint { color: var(--fg-3); margin: 10px 0 0; font-size: 12px; }
     .hint.camp-note { margin: 0 0 12px; }
+    .reason-box { margin-bottom: 6px; }
     .muted { color: var(--fg-3); }
 
     /* Inputs */
@@ -886,6 +896,8 @@ export class EventHistoryPanelComponent {
   // Per-event edit drafts + per-attendee DKP drafts (keyed by id).
   protected readonly edit: Record<number, ActivityEditEventHistoryInput> = {};
   protected readonly dkpDraft: Record<number, number> = {};
+  // Optional reason for the next attendee Save / Remove, per event.
+  protected readonly reasonDraft: Record<number, string> = {};
 
   // Archived attendance windows per closed camp, fetched on expand. A key present with an empty
   // window list means "asked, nothing there" — distinct from an absent key ("not asked yet"), so
@@ -1129,7 +1141,11 @@ export class EventHistoryPanelComponent {
   }
 
   async saveEvent(h: ActivityEventHistory): Promise<void> {
-    if (await this.activity.editEventHistory(h.id, this.edit[h.id] ?? {})) { await this.load(); }
+    const draft = this.edit[h.id] ?? {};
+    if (await this.activity.editEventHistory(h.id, { ...draft, reason: draft.reason?.trim() || null })) {
+      draft.reason = null;
+      await this.load();
+    }
   }
 
   async saveDkp(h: ActivityEventHistory, p: ActivityEventHistoryParticipant): Promise<void> {
@@ -1139,11 +1155,17 @@ export class EventHistoryPanelComponent {
       this.activity.actionMessage.set(null);
       return;
     }
-    if (await this.activity.setEventHistoryParticipantDkp(h.id, p.id, Number(this.dkpDraft[p.id] ?? 0))) { await this.load(); }
+    if (await this.activity.setEventHistoryParticipantDkp(h.id, p.id, Number(this.dkpDraft[p.id] ?? 0), this.reasonDraft[h.id])) {
+      this.reasonDraft[h.id] = '';
+      await this.load();
+    }
   }
 
   async removeParticipant(h: ActivityEventHistory, p: ActivityEventHistoryParticipant): Promise<void> {
-    if (await this.activity.removeEventHistoryParticipant(h.id, p.id)) { await this.load(); }
+    if (await this.activity.removeEventHistoryParticipant(h.id, p.id, this.reasonDraft[h.id])) {
+      this.reasonDraft[h.id] = '';
+      await this.load();
+    }
   }
 
   async toggleCredit(h: ActivityEventHistory, p: ActivityEventHistoryParticipant, credited: boolean): Promise<void> {
