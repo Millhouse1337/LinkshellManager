@@ -6,6 +6,7 @@ using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
 
@@ -123,16 +124,7 @@ public sealed partial class ActivityRosterController
         // Auto-join: inviting a player adds them straight to the roster — no accept
         // step. (Discord-only people without an LSM account are handled separately
         // in SendDiscordInviteAsync and auto-join on first sign-in.)
-        _dbContext.AppUserLinkshells.Add(new AppUserLinkshell
-        {
-            AppUserId = targetUser.Id,
-            LinkshellId = linkshellId,
-            LinkshellDkp = 0,
-            DateJoined = DateTime.UtcNow,
-            CharacterName = targetUser.CharacterName ?? targetUser.UserName,
-            Rank = LinkshellRanks.Member,
-            Status = "Active"
-        });
+        _dbContext.AppUserLinkshells.Add(LinkshellMembership.NewMember(targetUser, linkshellId, DateTime.UtcNow));
         targetUser.PrimaryLinkshellId ??= linkshellId;
 
         try
@@ -215,9 +207,12 @@ public sealed partial class ActivityRosterController
             : BadRequest(new { error = result.Error });
     }
 
+    // A player looking for a linkshell to ask to join. Only names, descriptions and member counts
+    // come back (JoinRequestService.SearchAsync says which linkshells are listed).
     [HttpGet("linkshells/search")]
     public async Task<IActionResult> SearchLinkshellsAsync(
         [FromQuery] string? query,
+        [FromServices] JoinRequestService joinRequests,
         CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
@@ -229,43 +224,18 @@ public sealed partial class ActivityRosterController
             });
         }
 
-        var normalizedQuery = query?.Trim();
-        var existingMembershipIds = await _dbContext.AppUserLinkshells
-            .Where(link => link.AppUserId == appUser.Id)
-            .Select(link => link.LinkshellId)
-            .ToListAsync(cancellationToken);
-
-        var pendingRequestIds = await _dbContext.Invites
-            .Where(invite => invite.AppUserId == appUser.Id && invite.Status == PendingJoinRequestStatus)
-            .Select(invite => invite.LinkshellId)
-            .ToListAsync(cancellationToken);
-
-        var memberCounts = await _dbContext.AppUserLinkshells
-            .GroupBy(link => link.LinkshellId)
-            .Select(group => new { LinkshellId = group.Key, Count = group.Count() })
-            .ToDictionaryAsync(item => item.LinkshellId, item => item.Count, cancellationToken);
-
-        var results = await _dbContext.Linkshells
-            .Where(linkshell =>
-                !existingMembershipIds.Contains(linkshell.Id) &&
-                !pendingRequestIds.Contains(linkshell.Id) &&
-                linkshell.LinkshellName != null &&
-                (string.IsNullOrWhiteSpace(normalizedQuery) ||
-                 EF.Functions.ILike(linkshell.LinkshellName, $"%{normalizedQuery}%")))
-            .OrderBy(linkshell => linkshell.LinkshellName)
-            .Take(10)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        return Ok(results.Select(linkshell => new ActivityLinkshellSearchResultDto(
-            linkshell.Id,
-            linkshell.LinkshellName ?? "Unknown linkshell",
-            linkshell.Details,
-            memberCounts.GetValueOrDefault(linkshell.Id, 0))).ToList());
+        var results = await joinRequests.SearchAsync(appUser.Id, query, GetRequestGuildId(), cancellationToken);
+        return Ok(results
+            .Select(result => new ActivityLinkshellSearchResultDto(result.Id, result.Name, result.Details, result.MemberCount))
+            .ToList());
     }
 
     [HttpPost("linkshells/{linkshellId:int}/join-request")]
-    public async Task<IActionResult> RequestJoinLinkshellAsync(int linkshellId, CancellationToken cancellationToken)
+    public async Task<IActionResult> RequestJoinLinkshellAsync(
+        int linkshellId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ActivityJoinRequestInput? request,
+        [FromServices] JoinRequestService joinRequests,
+        CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
@@ -275,45 +245,66 @@ public sealed partial class ActivityRosterController
                 error = "Sign in with ASP.NET Identity or provide a Discord bearer token to request linkshell access."
             });
         }
+        if (appUser.IsPlaceholder)
+        {
+            return Forbid();
+        }
 
-        var linkshell = await _dbContext.Linkshells
+        var lockInfo = await _dbContext.Linkshells
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.Id == linkshellId, cancellationToken);
-
-        if (linkshell is null)
+            .Where(item => item.Id == linkshellId)
+            .Select(item => new { item.LockToDiscordGuild, item.DiscordGuildId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (lockInfo is null)
         {
-            return NotFound(new { error = "The selected linkshell was not found." });
+            return NotFound(new { error = "That linkshell was not found." });
         }
 
-        var existingMembership = await _dbContext.AppUserLinkshells
-            .AnyAsync(link => link.LinkshellId == linkshellId && link.AppUserId == appUser.Id, cancellationToken);
-
-        if (existingMembership)
+        // A linkshell locked to its Discord server takes requests only from people in that
+        // server. Asking leads to JOINING, so the website gets no pass (like a DKP claim).
+        var lockGuildId = lockInfo.LockToDiscordGuild ? lockInfo.DiscordGuildId : null;
+        var accessible = await FilterAccessibleLinkshellIdsAsync(
+            new[] { (linkshellId, lockGuildId) }, cancellationToken, lockAppliesOnWebsite: true);
+        if (!accessible.Contains(linkshellId))
         {
-            return BadRequest(new { error = "You already belong to that linkshell." });
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = "That linkshell only takes requests from its own Discord server."
+            });
         }
 
-        var existingRequest = await _dbContext.Invites
-            .AnyAsync(invite =>
-                invite.LinkshellId == linkshellId &&
-                invite.AppUserId == appUser.Id &&
-                invite.Status == PendingJoinRequestStatus,
-                cancellationToken);
-
-        if (existingRequest)
+        var result = await joinRequests.RequestAsync(linkshellId, appUser.Id, request?.Message, cancellationToken);
+        return result.Outcome switch
         {
-            return BadRequest(new { error = "A join request is already pending for that linkshell." });
+            JoinRequestService.Outcome.Done => Ok(new { success = true }),
+            JoinRequestService.Outcome.NotFound => NotFound(new { error = result.Error }),
+            _ => BadRequest(new { error = result.Error })
+        };
+    }
+
+    // The player takes back their own request while it waits.
+    [HttpPost("join-requests/{inviteId:int}/cancel")]
+    public async Task<IActionResult> CancelJoinRequestAsync(
+        int inviteId,
+        [FromServices] JoinRequestService joinRequests,
+        CancellationToken cancellationToken)
+    {
+        var appUser = await ResolveAppUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return Unauthorized(new
+            {
+                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to cancel join requests."
+            });
         }
 
-        _dbContext.Invites.Add(new Invite
+        var result = await joinRequests.CancelAsync(inviteId, appUser.Id, cancellationToken);
+        return result.Outcome switch
         {
-            AppUserId = appUser.Id,
-            LinkshellId = linkshellId,
-            Status = PendingJoinRequestStatus
-        });
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
+            JoinRequestService.Outcome.Done => Ok(new { success = true }),
+            JoinRequestService.Outcome.NotFound => NotFound(new { error = result.Error }),
+            _ => BadRequest(new { error = result.Error })
+        };
     }
 
     [HttpPost("invites/{inviteId:int}/revoke")]
@@ -375,16 +366,7 @@ public sealed partial class ActivityRosterController
 
         if (!existingMembership)
         {
-            _dbContext.AppUserLinkshells.Add(new AppUserLinkshell
-            {
-                AppUserId = appUser.Id,
-                LinkshellId = invite.LinkshellId,
-                LinkshellDkp = 0,
-                DateJoined = DateTime.UtcNow,
-                CharacterName = appUser.CharacterName ?? appUser.UserName,
-                Rank = LinkshellRanks.Member,
-                Status = "Active"
-            });
+            _dbContext.AppUserLinkshells.Add(LinkshellMembership.NewMember(appUser, invite.LinkshellId, DateTime.UtcNow));
         }
 
         appUser.PrimaryLinkshellId ??= invite.LinkshellId;
@@ -430,99 +412,59 @@ public sealed partial class ActivityRosterController
         return Ok(new { success = true });
     }
 
+    // Approve: the player joins as a Member, the same way an accepted invite joins them.
     [HttpPost("join-requests/{inviteId:int}/approve")]
-    public async Task<IActionResult> ApproveJoinRequestAsync(int inviteId, CancellationToken cancellationToken)
-    {
-        var appUser = await ResolveAppUserAsync(cancellationToken);
-        if (appUser is null)
-        {
-            return Unauthorized(new
-            {
-                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to approve join requests."
-            });
-        }
+    public Task<IActionResult> ApproveJoinRequestAsync(
+        int inviteId,
+        [FromServices] JoinRequestService joinRequests,
+        CancellationToken cancellationToken) =>
+        AnswerJoinRequestAsync(inviteId, "approve", joinRequests, joinRequests.ApproveAsync, cancellationToken);
 
-        var invite = await _dbContext.Invites
-            .Include(item => item.Linkshell)
-            .Include(item => item.AppUser)
-            .FirstOrDefaultAsync(item => item.Id == inviteId && item.Status == PendingJoinRequestStatus, cancellationToken);
-
-        if (invite is null)
-        {
-            return NotFound(new { error = "The selected join request was not found." });
-        }
-
-        var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
-        if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
-        {
-            return Forbid();
-        }
-
-        var existingMembership = await _dbContext.AppUserLinkshells
-            .AnyAsync(link => link.LinkshellId == invite.LinkshellId && link.AppUserId == invite.AppUserId, cancellationToken);
-
-        if (!existingMembership)
-        {
-            _dbContext.AppUserLinkshells.Add(new AppUserLinkshell
-            {
-                AppUserId = invite.AppUserId,
-                LinkshellId = invite.LinkshellId,
-                LinkshellDkp = 0,
-                DateJoined = DateTime.UtcNow,
-                CharacterName = invite.AppUser?.CharacterName ?? invite.AppUser?.UserName,
-                Rank = LinkshellRanks.Member,
-                Status = "Active"
-            });
-        }
-
-        try
-        {
-            if (invite.AppUser is not null)
-            {
-                invite.AppUser.PrimaryLinkshellId ??= invite.LinkshellId;
-                // Saves everything staged so far, the new membership included.
-                await _userManager.UpdateAsync(invite.AppUser);
-            }
-
-            _dbContext.Invites.Remove(invite);
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateMembership(ex))
-        {
-            // Another officer approved the same request a moment earlier: the player is in.
-            return Ok(new { success = true });
-        }
-        return Ok(new { success = true });
-    }
-
+    // Deny. The request stays on the player's list as denied.
     [HttpPost("join-requests/{inviteId:int}/decline")]
-    public async Task<IActionResult> DeclineJoinRequestAsync(int inviteId, CancellationToken cancellationToken)
+    public Task<IActionResult> DeclineJoinRequestAsync(
+        int inviteId,
+        [FromServices] JoinRequestService joinRequests,
+        CancellationToken cancellationToken) =>
+        AnswerJoinRequestAsync(inviteId, "decline", joinRequests, joinRequests.DenyAsync, cancellationToken);
+
+    // Who may answer: anyone who may send invites in that linkshell (the invite section's rule).
+    private async Task<IActionResult> AnswerJoinRequestAsync(
+        int inviteId,
+        string verb,
+        JoinRequestService joinRequests,
+        Func<int, string, CancellationToken, Task<JoinRequestService.Result>> answer,
+        CancellationToken cancellationToken)
     {
         var appUser = await ResolveAppUserAsync(cancellationToken);
         if (appUser is null)
         {
             return Unauthorized(new
             {
-                error = "Sign in with ASP.NET Identity or provide a Discord bearer token to decline join requests."
+                error = $"Sign in with ASP.NET Identity or provide a Discord bearer token to {verb} join requests."
             });
         }
 
-        var invite = await _dbContext.Invites
-            .FirstOrDefaultAsync(item => item.Id == inviteId && item.Status == PendingJoinRequestStatus, cancellationToken);
-
-        if (invite is null)
+        var linkshellId = await joinRequests.LinkshellOfAsync(inviteId, cancellationToken);
+        if (linkshellId is null)
         {
             return NotFound(new { error = "The selected join request was not found." });
         }
 
-        var membership = await GetMembershipAsync(appUser.Id, invite.LinkshellId, cancellationToken);
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId.Value, cancellationToken);
         if (!await CanAsync(membership, r => r.CanManageInvites, cancellationToken))
         {
             return Forbid();
         }
 
-        _dbContext.Invites.Remove(invite);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { success = true });
+        var result = await answer(inviteId, appUser.Id, cancellationToken);
+        return result.Outcome switch
+        {
+            JoinRequestService.Outcome.Done => Ok(new { success = true }),
+            // They joined some other way first: what the request asked for has happened.
+            JoinRequestService.Outcome.AlreadyMember => Ok(new { success = true, alreadyMember = true }),
+            JoinRequestService.Outcome.NotFound => NotFound(new { error = result.Error }),
+            _ => BadRequest(new { error = result.Error })
+        };
     }
 }

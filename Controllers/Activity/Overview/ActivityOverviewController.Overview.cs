@@ -164,11 +164,18 @@ public sealed partial class ActivityOverviewController
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+        // The player's own requests: the open ones, plus ones approved or denied lately so they can
+        // see the answer where they asked. Cancelled ones are gone from their list.
+        var answeredSince = DateTime.UtcNow - JoinRequestService.AnsweredShownFor;
         var outgoingJoinRequests = await _dbContext.Invites
             .Include(invite => invite.Linkshell)
             .Include(invite => invite.AppUser)
-            .Where(invite => invite.AppUserId == appUser.Id && invite.Status == PendingJoinRequestStatus)
-            .OrderBy(invite => invite.Linkshell!.LinkshellName)
+            .Where(invite => invite.AppUserId == appUser.Id &&
+                (invite.Status == PendingJoinRequestStatus ||
+                 ((invite.Status == JoinRequestService.ApprovedStatus || invite.Status == JoinRequestService.DeniedStatus) &&
+                  invite.ResolvedAtUtc >= answeredSince)))
+            .OrderBy(invite => invite.Status == PendingJoinRequestStatus ? 0 : 1)
+            .ThenBy(invite => invite.Linkshell!.LinkshellName)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -611,6 +618,12 @@ public sealed partial class ActivityOverviewController
         // roster rows get the ADMIN badge.
         var adminOverrideActive = await _adminOverride.IsActiveForAsync(appUser, cancellationToken);
         var adminOverrideEnabled = await _adminOverride.IsEnabledAsync(cancellationToken);
+
+        // Join requests go only to those who may answer them. A plain member sees none.
+        var answersJoinRequestsIn = linkshellMemberships
+            .Where(link => AnswersJoinRequests(link.LinkshellId, link.Rank, rolesByLinkshellAndName, adminOverrideActive))
+            .Select(link => link.LinkshellId)
+            .ToHashSet();
 
         Response.Headers.CacheControl = "no-store";
         Response.Headers.Pragma = "no-cache";
@@ -1107,20 +1120,28 @@ public sealed partial class ActivityOverviewController
                 invite.AppUser?.CharacterName ?? invite.AppUser?.UserName ?? invite.DiscordDisplayName ?? "Unknown member",
                 invite.Linkshell?.LinkshellName ?? "Unknown linkshell",
                 invite.Status)).ToList(),
-            incomingJoinRequests.Select(invite => new ActivityInviteDto(
-                invite.Id,
-                invite.AppUserId,
-                invite.LinkshellId,
-                invite.AppUser?.CharacterName ?? invite.AppUser?.UserName ?? "Unknown member",
-                invite.Linkshell?.LinkshellName ?? "Unknown linkshell",
-                invite.Status)).ToList(),
+            incomingJoinRequests
+                .Where(invite => answersJoinRequestsIn.Contains(invite.LinkshellId))
+                .Select(invite => new ActivityInviteDto(
+                    invite.Id,
+                    invite.AppUserId,
+                    invite.LinkshellId,
+                    invite.AppUser?.CharacterName ?? invite.AppUser?.UserName ?? "Unknown member",
+                    invite.Linkshell?.LinkshellName ?? "Unknown linkshell",
+                    invite.Status,
+                    invite.Message,
+                    invite.CreatedAtUtc,
+                    invite.ResolvedAtUtc)).ToList(),
             outgoingJoinRequests.Select(invite => new ActivityInviteDto(
                 invite.Id,
                 invite.AppUserId,
                 invite.LinkshellId,
                 invite.AppUser?.CharacterName ?? invite.AppUser?.UserName ?? "Unknown member",
                 invite.Linkshell?.LinkshellName ?? "Unknown linkshell",
-                invite.Status)).ToList(),
+                invite.Status,
+                invite.Message,
+                invite.CreatedAtUtc,
+                invite.ResolvedAtUtc)).ToList(),
             recentHistory.Select(history => new ActivityHistoryDto(
                 history.Id,
                 history.LinkshellId,

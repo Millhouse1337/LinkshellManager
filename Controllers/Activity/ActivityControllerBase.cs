@@ -18,7 +18,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public abstract class ActivityControllerBase : ControllerBase
 {
     private protected const string PendingInviteStatus = "PendingInvite";
-    private protected const string PendingJoinRequestStatus = "PendingJoinRequest";
+    private protected const string PendingJoinRequestStatus = JoinRequestService.PendingStatus;
 
     private protected readonly ApplicationDbContext _dbContext;
     private protected readonly DiscordIdentityService _discordIdentityService;

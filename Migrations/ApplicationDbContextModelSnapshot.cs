@@ -2087,6 +2087,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
+                    b.Property<DateTime?>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("DiscordDisplayName")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -2097,6 +2100,17 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolvedByAppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -2110,6 +2124,11 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("DiscordUserId");
 
                     b.HasIndex("LinkshellId");
+
+                    b.HasIndex("LinkshellId", "AppUserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Invites_OneOpenJoinRequest")
+                        .HasFilter("\"Status\" = 'PendingJoinRequest'");
 
                     b.ToTable("Invites");
                 });

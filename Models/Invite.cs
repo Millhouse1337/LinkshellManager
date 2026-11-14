@@ -37,4 +37,18 @@ public class Invite
     // pending-invite list can show who was invited before they have an account.
     [MaxLength(64)]
     public string? DiscordDisplayName { get; set; }
+
+    // Join requests only (JoinRequestService): the player's short note to the officers.
+    [MaxLength(200)]
+    public string? Message { get; set; }
+
+    // When the row was written. Null on rows from before this column existed.
+    public DateTime? CreatedAtUtc { get; set; }
+
+    // Join requests only: when, and by whom, it was approved, denied or cancelled. Null while it
+    // waits. No foreign key, like the other "done by" columns: the row records who did it.
+    public DateTime? ResolvedAtUtc { get; set; }
+
+    [MaxLength(450)]
+    public string? ResolvedByAppUserId { get; set; }
 }

@@ -94,6 +94,17 @@ internal static class ActivityMappers
         return "Quarter";
     }
 
+    // Whether the overview sends this member the linkshell's open join requests: the same rule the
+    // approve and deny routes check (LinkshellPermissions: the Leader always, else "Manage
+    // invites"). A plain member gets none.
+    internal static bool AnswersJoinRequests(
+        int linkshellId,
+        string? rank,
+        Dictionary<int, Dictionary<string, LinkshellRole>> rolesByLinkshellAndName,
+        bool adminOverrideActive)
+        => LinkshellRanks.IsLeader(rank)
+           || ResolvePermissionsFor(linkshellId, rank, rolesByLinkshellAndName, adminOverrideActive)?.CanManageInvites == true;
+
     internal static ActivityPermissionsDto? ResolvePermissionsFor(
         int linkshellId,
         string? rank,

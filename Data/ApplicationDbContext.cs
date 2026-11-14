@@ -1292,6 +1292,17 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(invite => invite.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                // One open join request per player per linkshell. The request path checks first,
+                // but a double click passes that check twice; the database is what says no.
+                // Answered, cancelled and invite rows are not covered.
+                entity.HasIndex(invite => new { invite.LinkshellId, invite.AppUserId })
+                    .IsUnique()
+                    .HasFilter("\"Status\" = 'PendingJoinRequest'")
+                    .HasDatabaseName("IX_Invites_OneOpenJoinRequest");
+                // Kept: the index above only holds open join requests, so it cannot answer
+                // "every invite of this linkshell" (and EF would otherwise drop this one for it).
+                entity.HasIndex(invite => invite.LinkshellId);
             });
 
             builder.Entity<Auction>(entity =>

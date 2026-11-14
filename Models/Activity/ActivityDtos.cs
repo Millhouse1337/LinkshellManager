@@ -1225,7 +1225,11 @@ public sealed record ActivityInviteDto(
     int LinkshellId,
     string AppUserDisplayName,
     string LinkshellName,
-    string Status);
+    string Status,
+    // Join requests only: the player's note, when they asked, and when it was answered.
+    string? Message = null,
+    DateTime? CreatedAtUtc = null,
+    DateTime? ResolvedAtUtc = null);
 
 // A member of a locked linkshell's Discord server, offered as an invite target
 // in the "From your Discord server" roster. HasLsmAccount is true when this
@@ -1472,6 +1476,10 @@ public sealed record ActivityGuildOptionDto(string Id, string Name);
 public sealed record ActivitySendInviteRequest(string AppUserId);
 
 public sealed record ActivityDiscordInviteRequest(string DiscordUserId);
+
+// A player asking to join a linkshell. Message is an optional short note to the officers (cut to
+// JoinRequestService.MaxMessageLength).
+public sealed record ActivityJoinRequestInput(string? Message);
 
 public sealed record ActivityStartEventRequest(IReadOnlyList<int>? AbsentParticipantIds);
 
