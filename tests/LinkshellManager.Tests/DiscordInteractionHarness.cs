@@ -250,6 +250,7 @@ internal static class DiscordInteractionHarness
         services.AddScoped<DiscordPermissionGates>();
         services.AddScoped<DiscordBoardSupport>();
         services.AddScoped<PartyBoardHandler>();
+        services.AddScoped<HnmCampBoardHandler>();
         return services;
     }
 
