@@ -578,6 +578,9 @@ export class DiscordActivityService {
   // ===========================================================================
   // Facade delegate methods — one-line forwarders to the per-domain services.
   // Method signatures and behavior are identical to the pre-refactor versions.
+  // New code injects the domain service it needs instead of adding a forwarder
+  // here, and a component that is being changed anyway moves over (the live
+  // camp card's edits now call EventService directly).
   // ===========================================================================
 
   // --- AddonTokenService ---
@@ -743,17 +746,6 @@ export class DiscordActivityService {
   denyReturn(eventId: number, ledgerEntryId: number): Promise<void> { return this.eventService.denyReturn(eventId, ledgerEntryId); }
   addLoot(eventId: number, input: ActivityLootInput): Promise<void> { return this.eventService.addLoot(eventId, input); }
   quickJoinLiveEvent(eventId: number, input: ActivityQuickJoinInput): Promise<void> { return this.eventService.quickJoinLiveEvent(eventId, input); }
-  removeAttendanceWindowAttendee(attendeeId: number): Promise<boolean> { return this.eventService.removeAttendanceWindowAttendee(attendeeId); }
-  deleteAttendanceWindow(windowId: number): Promise<boolean> { return this.eventService.deleteAttendanceWindow(windowId); }
-  setAttendanceWindowDkp(windowId: number, dkpAmount: number | null): Promise<boolean> { return this.eventService.setAttendanceWindowDkp(windowId, dkpAmount); }
-  setCampKillBonus(eventId: number, killBonus: number | null): Promise<boolean> { return this.eventService.setCampKillBonus(eventId, killBonus); }
-  setCampCloseBonus(eventId: number, closeBonus: number | null): Promise<boolean> { return this.eventService.setCampCloseBonus(eventId, closeBonus); }
-  setCampOpenBonus(eventId: number, openBonus: number | null): Promise<boolean> { return this.eventService.setCampOpenBonus(eventId, openBonus); }
-  addCampMiscPost(eventId: number, name: string | null, appUserIds: string[], dkpAmount: number | null): Promise<boolean> { return this.eventService.addCampMiscPost(eventId, name, appUserIds, dkpAmount); }
-  setMiscPostDkp(snapshotId: number, dkpAmount: number | null, refreshOverview = true): Promise<boolean> { return this.eventService.setMiscPostDkp(snapshotId, dkpAmount, refreshOverview); }
-  unlinkCampSnapshot(snapshotId: number): Promise<boolean> { return this.eventService.unlinkCampSnapshot(snapshotId); }
-  deleteCampSnapshot(snapshotId: number): Promise<boolean> { return this.eventService.deleteCampSnapshot(snapshotId); }
-  setAttendanceWindowClosing(windowId: number, isClosingWindow: boolean): Promise<boolean> { return this.eventService.setAttendanceWindowClosing(windowId, isClosingWindow); }
   loadEventHistory(linkshellId: number): Promise<ActivityEventHistoryResponse | null> { return this.eventService.loadEventHistory(linkshellId); }
   loadEventHistoryWindows(id: number): Promise<ActivityEventHistoryWindowsResponse | null> { return this.eventService.loadEventHistoryWindows(id); }
   editEventHistory(id: number, input: ActivityEditEventHistoryInput): Promise<boolean> { return this.eventService.editEventHistory(id, input); }

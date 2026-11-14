@@ -33,6 +33,7 @@ import { TodFormComponent } from './tod-form.component';
 import { ZonedTimePipe } from '../zoned-time.pipe';
 import { PartySetupService } from '../../discord/party-setup.service';
 import { WindowEventService } from '../../discord/window-event.service';
+import { EventService } from '../../discord/event.service';
 import {
   EVENT_JOB_TYPE_OPTIONS,
   EVENT_MAIN_JOB_OPTIONS,
@@ -106,6 +107,8 @@ export class EventsTabComponent {
   protected readonly activity = inject(DiscordActivityService);
   protected readonly partySetups = inject(PartySetupService);
   protected readonly windows = inject(WindowEventService);
+  // The live camp card's edits go straight to EventService, not through the facade.
+  private readonly eventService = inject(EventService);
   private readonly now = inject(ClockService).now;
   private readonly queuePanel = viewChild.required(ActivityQueuePanelComponent);
   private readonly todForm = viewChild(TodFormComponent);
@@ -752,7 +755,7 @@ export class EventsTabComponent {
     if (this.refuseOffStepDkp(event, dkpAmount)) return;
     this.newPostSaving.set(true);
     try {
-      const ok = await this.activity.addCampMiscPost(event.id, this.newPostName().trim() || null, ids, dkpAmount);
+      const ok = await this.eventService.addCampMiscPost(event.id, this.newPostName().trim() || null, ids, dkpAmount);
       // The service reloads the overview itself; a failed reload never makes the post look failed.
       if (ok) this.closeNewPost();
     } finally {
@@ -1609,7 +1612,7 @@ export class EventsTabComponent {
   protected async confirmRemoveAttendee(attendeeId: number): Promise<void> {
     this.pendingRemoveAttendeeId.set(null);
     // Reloads the overview itself (EventService.saveCampEdit).
-    await this.activity.removeAttendanceWindowAttendee(attendeeId);
+    await this.eventService.removeAttendanceWindowAttendee(attendeeId);
   }
 
   // The same two-click confirm for deleting a WHOLE window (the x in its detail panel's header):
@@ -1622,7 +1625,7 @@ export class EventsTabComponent {
     this.pendingDeleteWindowId.set(null);
     this.deletingWindowId.set(windowId);
     try {
-      await this.activity.deleteAttendanceWindow(windowId);
+      await this.eventService.deleteAttendanceWindow(windowId);
     } finally {
       this.deletingWindowId.set(null);
     }
@@ -1710,7 +1713,7 @@ export class EventsTabComponent {
       if (this.windowDkpSaving()) return;
       this.windowDkpSaving.set(true);
       try {
-        if (await this.activity.setCampKillBonus(event.id, amount)) {
+        if (await this.eventService.setCampKillBonus(event.id, amount)) {
           this.dropWindowDkpDraft(window);
         }
       } finally {
@@ -1764,7 +1767,7 @@ export class EventsTabComponent {
     if (this.windowDkpSaving()) return;
     this.windowDkpSaving.set(true);
     try {
-      const ok = await this.activity.setAttendanceWindowDkp(window.id, amount);
+      const ok = await this.eventService.setAttendanceWindowDkp(window.id, amount);
       if (ok) {
         // Drop the draft so the field re-reads the server's value — which may differ from what was
         // typed, since the server snaps to the linkshell's rounding grid on write.
@@ -1803,7 +1806,7 @@ export class EventsTabComponent {
     try {
       // The service reloads the whole overview rather than flipping a flag here: marking one window
       // UNMARKS another, and the whole Closing window column repaints when the close moves.
-      await this.activity.setAttendanceWindowClosing(window.id, !window.isClosingWindow);
+      await this.eventService.setAttendanceWindowClosing(window.id, !window.isClosingWindow);
     } finally {
       this.windowDkpSaving.set(false);
     }
@@ -1843,7 +1846,7 @@ export class EventsTabComponent {
     if (this.windowDkpSaving()) return;
     this.windowDkpSaving.set(true);
     try {
-      if (await this.activity.setCampCloseBonus(event.id, amount)) {
+      if (await this.eventService.setCampCloseBonus(event.id, amount)) {
         this.dropCloseBonusDraft(event);
       }
     } finally {
@@ -1893,7 +1896,7 @@ export class EventsTabComponent {
     if (this.windowDkpSaving()) return;
     this.windowDkpSaving.set(true);
     try {
-      if (await this.activity.setCampOpenBonus(event.id, amount)) {
+      if (await this.eventService.setCampOpenBonus(event.id, amount)) {
         this.dropOpenBonusDraft(event);
       }
     } finally {
@@ -1946,7 +1949,7 @@ export class EventsTabComponent {
     if (this.windowDkpSaving()) return;
     this.windowDkpSaving.set(true);
     try {
-      if (await this.activity.setMiscPostDkp(snapshot.id, amount)) {
+      if (await this.eventService.setMiscPostDkp(snapshot.id, amount)) {
         this.dropMiscDkpDraft(snapshot);
       }
     } finally {
@@ -1963,7 +1966,7 @@ export class EventsTabComponent {
     if (this.unlinkingSnapshotId() !== null) return;
     this.unlinkingSnapshotId.set(snapshot.id);
     try {
-      if (await this.activity.unlinkCampSnapshot(snapshot.id)) {
+      if (await this.eventService.unlinkCampSnapshot(snapshot.id)) {
         this.pendingUnlinkSnapshotId.set(null);
         this.dropMiscDkpDraft(snapshot);
       }
@@ -1991,7 +1994,7 @@ export class EventsTabComponent {
     if (this.deletingSnapshotId() !== null) return;
     this.deletingSnapshotId.set(snapshot.id);
     try {
-      if (await this.activity.deleteCampSnapshot(snapshot.id)) {
+      if (await this.eventService.deleteCampSnapshot(snapshot.id)) {
         this.pendingDeleteSnapshotId.set(null);
         this.dropMiscDkpDraft(snapshot);
       }

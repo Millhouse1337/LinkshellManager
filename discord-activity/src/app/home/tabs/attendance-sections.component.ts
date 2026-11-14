@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { formatActionError, offDkpStepMessage } from '../../discord/discord-activity.helpers';
 import { DiscordActivityService } from '../../discord/discord-activity.service';
 import { WindowEventService } from '../../discord/window-event.service';
+import { EventService } from '../../discord/event.service';
 import type {
   ActivityEvent,
   ActivityEventAddMemberCandidate,
@@ -61,6 +62,7 @@ export class AttendanceSectionsComponent {
 
   protected readonly activity = inject(DiscordActivityService);
   protected readonly windows = inject(WindowEventService);
+  private readonly eventService = inject(EventService);
   protected readonly attachNames: Record<number, string> = {};
   // Snapshot id -> the event picked in its Event dropdown. Kept here rather than read off the
   // <select>, so picking one re-checks the Attach button.
@@ -322,7 +324,7 @@ export class AttendanceSectionsComponent {
     const offStep = offDkpStepMessage(this.dkpStep(), [value]);
     if (offStep) throw new Error(offStep);
     // No overview reload: this post is not on a camp yet, so nothing the overview draws changed.
-    if (!(await this.activity.setMiscPostDkp(snapshot.id, value, false))) {
+    if (!(await this.eventService.setMiscPostDkp(snapshot.id, value, false))) {
       throw new Error(this.activity.actionError() ?? "Setting this post's DKP failed.");
     }
     this.attachDkpSaved[snapshot.id] = value;
