@@ -77,16 +77,6 @@ public sealed partial class AddonApiController
         var linkshell = await _dbContext.Linkshells
             .FirstOrDefaultAsync(ls => ls.Id == token.LinkshellId, cancellationToken);
 
-        string? issuedToCharacterName = null;
-        if (!string.IsNullOrEmpty(token.IssuedToAppUserId))
-        {
-            var membership = await _dbContext.AppUserLinkshells
-                .FirstOrDefaultAsync(
-                    m => m.LinkshellId == token.LinkshellId && m.AppUserId == token.IssuedToAppUserId,
-                    cancellationToken);
-            issuedToCharacterName = membership?.CharacterName;
-        }
-
         var canModerate = await TokenIssuerCanModerateAsync(token, token.LinkshellId, cancellationToken);
         // The same rule the loot routes enforce, so the addon can hide its Loot Pool Save from
         // someone the server would refuse. Not canModerate: Add loot on its own is enough.
@@ -110,8 +100,9 @@ public sealed partial class AddonApiController
         {
             linkshellId = token.LinkshellId,
             linkshellName = linkshell?.LinkshellName,
-            issuedToCharacterName,
-            issuedToAppUserId = token.IssuedToAppUserId,
+            // (issuedToCharacterName, issuedToAppUserId, snapshotScope and maxAllianceNumber used
+            // to be sent too. No addon build reads them, and this is polled every minute per
+            // pairing, so the membership lookup behind the first one went with them.)
             canModerateLiveEvent = canModerate,
             // May this token post loot (Add loot, or the addon's officer right)? Older addons
             // ignore it; newer ones hide the Loot Pool's Save button without it.
@@ -122,15 +113,6 @@ public sealed partial class AddonApiController
             attendanceMode = HnmAttendanceModes.Normalize(linkshell?.HnmAttendanceMode),
             // (hnmAutoSnapshotEnabled / hnmAutoSnapshotDelaySeconds were sent here for the addon's
             // armed Auto-Post. The feature is gone; every window is posted by an officer.)
-            // How wide a capture is allowed to be. "alliance" means party memory only — the server
-            // rejects anything over 18 entries, so an addon still offering a zone scan would post
-            // captures that bounce. Sent as a string rather than a bool so a future scope can be
-            // added without every addon build having to understand it: an unrecognized value should
-            // be treated as the most restrictive one the addon knows.
-            snapshotScope = "alliance",
-            // The most alliances a poster may claim to be in. Drives the addon's selector range so
-            // it cannot offer a number the server will clamp away.
-            maxAllianceNumber = AttendanceSnapshotAlliances.MaxAllianceNumber,
             // Claim Shield. The master switch is the super-admin's; the per-monster switches are
             // the linkshell's, and only apply while the master is on.
             //

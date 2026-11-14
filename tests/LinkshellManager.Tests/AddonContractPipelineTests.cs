@@ -139,6 +139,30 @@ public sealed class AddonContractPipelineTests : IClassFixture<AddonContractPipe
         return JsonDocument.Parse(body).RootElement.Clone();
     }
 
+    // ---- GET /api/addon/me (contracts-12) ----
+
+    // Polled every minute per pairing. Four fields nobody read are gone; what the addon reads stays.
+    [Fact]
+    public async Task Me_SendsOnlyWhatTheAddonReads()
+    {
+        var me = await GetJsonAsync("/api/addon/me");
+
+        foreach (var dropped in new[] { "issuedToCharacterName", "issuedToAppUserId", "snapshotScope", "maxAllianceNumber" })
+        {
+            Assert.False(me.TryGetProperty(dropped, out _), $"'{dropped}' should no longer be sent.");
+        }
+        foreach (var kept in new[]
+        {
+            "linkshellId", "linkshellName", "canModerateLiveEvent", "canPostLoot", "attendanceMode",
+            "claimShieldEnabled", "claimShieldDisabledMonsters", "todCaptureMonsters",
+        })
+        {
+            Assert.True(me.TryGetProperty(kept, out _), $"'{kept}' must still be sent.");
+        }
+        Assert.Equal(OwnLinkshellId, me.GetProperty("linkshellId").GetInt32());
+        Assert.Equal("Own LS", me.GetProperty("linkshellName").GetString());
+    }
+
     // ---- GET /api/addon/events (contracts-11) ----
 
     [Fact]
