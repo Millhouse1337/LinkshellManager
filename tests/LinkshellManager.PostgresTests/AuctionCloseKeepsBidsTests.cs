@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
@@ -217,6 +219,31 @@ public class AuctionCloseKeepsBidsTests : IAsyncLifetime
             db, pools, new DkpPoolBalanceService(db, pools), "carol", "Carol", seeded.OsodeId, 60, CancellationToken.None);
         Assert.False(bid.Success);
         Assert.Equal(4, await db.Bids.CountAsync());
+    }
+
+    // The history's bid list: a member of the linkshell sees who bid what; anyone else is refused.
+    [Fact]
+    public async Task HistoryItemBids_ShowToMembersOnly()
+    {
+        var seeded = await SeedAsync();
+        Assert.IsType<OkObjectResult>(await CloseAsync(seeded.AuctionId));
+
+        await using var db = _pg.CreateContext();
+        var ok = Assert.IsType<OkObjectResult>(
+            await AuctionCloseRaceTests.NewActivityController(db, signedIn: "carol").GetAuctionItemBidsAsync(seeded.OsodeId, CancellationToken.None));
+        var bids = Assert.IsAssignableFrom<IEnumerable<ActivityAuctionBidDto>>(ok.Value).ToList();
+        Assert.Equal(new[] { ("Bob", 50), ("Carol", 40) }, bids.Select(b => (b.CharacterName, b.BidAmount)).ToArray());
+
+        await using var other = _pg.CreateContext();
+        Assert.IsType<ForbidResult>(
+            await AuctionCloseRaceTests.NewActivityController(other, signedIn: "stranger").GetAuctionItemBidsAsync(seeded.OsodeId, CancellationToken.None));
+
+        // The history list counts each item's kept bids.
+        await using var list = _pg.CreateContext();
+        var historyOk = Assert.IsType<OkObjectResult>(
+            await AuctionCloseRaceTests.NewActivityController(list, signedIn: "carol").GetAuctionHistoryAsync(seeded.LinkshellId, CancellationToken.None));
+        var history = Assert.Single(Assert.IsAssignableFrom<IEnumerable<ActivityAuctionHistoryDto>>(historyOk.Value));
+        Assert.Equal(new[] { 2, 1, 1, 0 }, history.Items.Select(i => i.BidCount).ToArray());
     }
 
     private static async Task<double> BalanceAsync(ApplicationDbContext db, string appUserId)

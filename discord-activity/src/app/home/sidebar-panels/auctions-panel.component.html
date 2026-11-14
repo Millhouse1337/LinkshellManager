@@ -434,8 +434,38 @@
                     } @else {
                       <span class="muted" style="font-size:11px">No bids placed</span>
                     }
+                    <!-- Closing keeps the bids, so a closed item can show who bid what. Auctions
+                         closed before that have no bids saved (bidCount 0), so no button. -->
+                    @if (row.item.bidCount > 0) {
+                      <button type="button" class="btn ghost sm history-bids-toggle" (click)="toggleAuctionBids(row.item.id)">
+                        {{ expandedAuctionBidItems[row.item.id] ? 'Hide Bids' : 'View Bids (' + row.item.bidCount + ')' }}
+                      </button>
+                    }
                   </td>
                 </tr>
+                @if (expandedAuctionBidItems[row.item.id] && row.item.bidCount > 0) {
+                  <tr>
+                    <td colspan="7" class="history-bids-cell">
+                      <div class="bid-history">
+                        @if (auctionBids(row.item.id).length > 0) {
+                          @for (bid of auctionBids(row.item.id); track bid.id; let bidIdx = $index) {
+                            <div class="bid-row" [class.top]="bidIdx === 0">
+                              <div class="bid-rank num">#{{ bidIdx + 1 }}</div>
+                              <div class="bidder">
+                                <div class="bidder-av {{ bidderAvatarVariant(bid.characterName) }}">{{ bidderInitials(bid.characterName) }}</div>
+                                <div class="bid-who">{{ bid.characterName }}</div>
+                              </div>
+                              <div class="bid-val num">{{ bid.bidAmount }} DKP</div>
+                              <div class="bid-when">{{ activity.formatDateTime(bid.createdAt) }}</div>
+                            </div>
+                          }
+                        } @else {
+                          <div class="no-bids">Loading bids...</div>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                }
               }
             </tbody>
           </table>

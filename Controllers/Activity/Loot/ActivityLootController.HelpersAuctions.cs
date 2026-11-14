@@ -297,7 +297,7 @@ public sealed partial class ActivityLootController
                     item.CurrentHighestBidderAppUserId,
                     item.Status,
                     item.Notes,
-                    0,
+                    item.Bids.Count,
                     item.SourceItemId,
                     item.GilAmount))
                 .ToList());

@@ -394,3 +394,7 @@
   letter-spacing: -0.02em;
 }
 .auctions-panel .num { font-family: var(--font-mono); font-feature-settings: "tnum"; }
+
+/* Auction History: a closed item's kept bids open in a full-width row under it. */
+.auctions-panel .history-bids-cell { padding: 0; }
+.auctions-panel .history-bids-toggle { margin-left: 6px; }

@@ -145,6 +145,9 @@ public sealed partial class ActivityLootController
 
         var history = await _dbContext.AuctionHistories
             .Include(item => item.AuctionItems.OrderBy(auctionItem => auctionItem.Id))
+                // Only to count them for the row's "View Bids". Auctions closed before items were
+                // kept have none (that close deleted them).
+                .ThenInclude(auctionItem => auctionItem.Bids)
             .Where(item => item.LinkshellId == selectedLinkshellId)
             .OrderByDescending(item => item.ClosedAt)
             .Take(25)
@@ -163,18 +166,22 @@ public sealed partial class ActivityLootController
             return Unauthorized(new { error = "Sign in to load bid history." });
         }
 
+        // A live auction's item, or a closed one's: closing keeps the items and their bids on the
+        // auction's history, so the history page can show them too.
         var auctionItem = await _dbContext.AuctionItems
             .Include(item => item.Auction)
+            .Include(item => item.AuctionHistory)
             .Include(item => item.Bids.OrderByDescending(bid => bid.BidAmount).ThenBy(bid => bid.CreatedAt))
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == itemId, cancellationToken);
 
-        if (auctionItem is null || auctionItem.Auction is null)
+        var linkshellId = auctionItem?.Auction?.LinkshellId ?? auctionItem?.AuctionHistory?.LinkshellId;
+        if (auctionItem is null || linkshellId is null)
         {
             return NotFound(new { error = "Auction item not found." });
         }
 
-        var membership = await GetMembershipAsync(appUser.Id, auctionItem.Auction.LinkshellId, cancellationToken);
+        var membership = await GetMembershipAsync(appUser.Id, linkshellId.Value, cancellationToken);
         if (membership is null)
         {
             return Forbid();
