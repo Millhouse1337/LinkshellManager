@@ -216,7 +216,7 @@ public sealed class TodRecorder
     // new ToD uses this.
     public static DateTime RepopFor(DateTime timeUtc, string? cooldown, int additionalSeconds) =>
         timeUtc
-            .AddHours(ActivityWindowEventsController.ResolveTodCooldownHours(cooldown))
+            .AddHours(TodCooldowns.ResolveTodCooldownHours(cooldown))
             .AddSeconds(Math.Max(0, additionalSeconds));
 
     // The cooldown label and seconds this ToD uses: what the caller sent, else the monster's setup.

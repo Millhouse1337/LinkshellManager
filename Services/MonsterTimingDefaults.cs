@@ -127,7 +127,7 @@ public static class MonsterTimingDefaults
     public const int ToauCooldownMinutes = 48 * 60;
 
     // Repop cooldown in minutes. This is the canonical owner of the fact — the string-labelled
-    // ActivityWindowEventsController.GetDefaultTodCooldown formats this rather than repeating it.
+    // TodCooldowns.GetDefaultTodCooldown formats this rather than repeating it.
     //
     // Tolerant of a combined "Base/Stronger" label: the merge families all sit on the same 22h
     // band, but reading segments keeps that a consequence of the data rather than a coincidence

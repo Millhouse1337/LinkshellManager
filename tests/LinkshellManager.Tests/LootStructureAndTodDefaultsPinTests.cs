@@ -4,7 +4,7 @@ using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 using Loot = LinkshellManagerDiscordApp.Services.LootStructures;
-using Tods = LinkshellManagerDiscordApp.Controllers.ActivityWindowEventsController;
+using Tods = LinkshellManagerDiscordApp.Services.TodCooldowns;
 
 namespace LinkshellManager.Tests;
 

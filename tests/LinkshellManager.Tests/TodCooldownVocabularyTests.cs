@@ -1,4 +1,4 @@
-using LinkshellManagerDiscordApp.Controllers;
+using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
 using Xunit;
 
@@ -22,7 +22,7 @@ public class TodCooldownVocabularyTests
     [InlineData("2 Hour", 2d)]
     [InlineData("5 Min", 5d / 60d)]
     public void EveryPreset_ResolvesToItsOwnLength(string label, double expectedHours) =>
-        Assert.Equal(expectedHours, ActivityWindowEventsController.ResolveTodCooldownHours(label), 6);
+        Assert.Equal(expectedHours, TodCooldowns.ResolveTodCooldownHours(label), 6);
 
     // The whole point of the change: a linkshell can configure an arbitrary cooldown, and the form
     // composes it as "<number> <unit>".
@@ -32,13 +32,13 @@ public class TodCooldownVocabularyTests
     [InlineData("3 Hour", 3d)]
     [InlineData("1 Hour 30 Min", 1.5d)]
     public void FreeFormDurations_Resolve(string label, double expectedHours) =>
-        Assert.Equal(expectedHours, ActivityWindowEventsController.ResolveTodCooldownHours(label), 6);
+        Assert.Equal(expectedHours, TodCooldowns.ResolveTodCooldownHours(label), 6);
 
     // A unit-less cooldown has always meant hours — the field's own convention, and changing it
     // would silently divide every legacy "72" by 60.
     [Fact]
     public void BareNumberCooldown_MeansHours() =>
-        Assert.Equal(72d, ActivityWindowEventsController.ResolveTodCooldownHours("72"), 6);
+        Assert.Equal(72d, TodCooldowns.ResolveTodCooldownHours("72"), 6);
 
     // ...while a unit-less interval means minutes, the opposite default, for the same reason.
     [Fact]
@@ -55,7 +55,7 @@ public class TodCooldownVocabularyTests
     [InlineData("soon")]
     [InlineData("0 Hour")]
     public void UnreadableCooldown_FallsBackToTwentyTwoHours(string? label) =>
-        Assert.Equal(22d, ActivityWindowEventsController.ResolveTodCooldownHours(label), 6);
+        Assert.Equal(22d, TodCooldowns.ResolveTodCooldownHours(label), 6);
 
     [Theory]
     [InlineData("22 Hour")]
@@ -63,7 +63,7 @@ public class TodCooldownVocabularyTests
     [InlineData("3.5 Hour")]
     [InlineData("72")]
     public void AcceptableCooldowns_Validate(string label) =>
-        Assert.True(ActivityWindowEventsController.IsAcceptableTodCooldown(label));
+        Assert.True(TodCooldowns.IsAcceptableTodCooldown(label));
 
     [Theory]
     [InlineData(null)]
@@ -71,7 +71,7 @@ public class TodCooldownVocabularyTests
     [InlineData("whenever")]
     [InlineData("0")]
     public void UnacceptableCooldowns_AreRejected(string? label) =>
-        Assert.False(ActivityWindowEventsController.IsAcceptableTodCooldown(label));
+        Assert.False(TodCooldowns.IsAcceptableTodCooldown(label));
 
     // An interval used to be an (hours, minutes) pair, so minutes had to be under 60. A configured
     // cadence of 90 minutes is a legitimate answer now and must not be rejected.
@@ -81,7 +81,7 @@ public class TodCooldownVocabularyTests
     [InlineData("90 Min")]
     [InlineData("2 Hour 30 Min")]
     public void AcceptableIntervals_Validate(string label) =>
-        Assert.True(ActivityWindowEventsController.IsAcceptableTodInterval(label));
+        Assert.True(TodCooldowns.IsAcceptableTodInterval(label));
 
     // Round-tripping is what keeps every path printing the same thing for one configured
     // monster: whole hours render as hours, everything else stays in minutes, and nothing invents

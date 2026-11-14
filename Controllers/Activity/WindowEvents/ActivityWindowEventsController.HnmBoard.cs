@@ -2,6 +2,7 @@ using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using static LinkshellManagerDiscordApp.Services.TodCooldowns;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 

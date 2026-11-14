@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NodaTime;
 using static LinkshellManagerDiscordApp.Controllers.ActivityMappers;
+using static LinkshellManagerDiscordApp.Services.TodCooldowns;
 
 namespace LinkshellManagerDiscordApp.Controllers;
 

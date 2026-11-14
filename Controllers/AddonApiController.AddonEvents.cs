@@ -131,9 +131,9 @@ public sealed partial class AddonApiController
                      .Select(name => name!)
                      .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var cooldown = await ActivityWindowEventsController.GetDefaultTodCooldownAsync(
+            var cooldown = await TodCooldowns.GetDefaultTodCooldownAsync(
                 _monsterTimings, linkshellId, monster, cancellationToken);
-            cooldownHoursByMonster[monster] = ActivityWindowEventsController.ResolveTodCooldownHours(cooldown);
+            cooldownHoursByMonster[monster] = TodCooldowns.ResolveTodCooldownHours(cooldown);
         }
         double? CooldownHoursFor(string? monsterName)
         {
