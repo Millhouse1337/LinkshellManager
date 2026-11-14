@@ -84,28 +84,7 @@ public sealed class HnmCampReviewHandoffService
             .Where(capture => capture.EventId == ev.Id)
             .ToListAsync(cancellationToken);
 
-        // Collapse to one row per CHARACTER NAME. Both the snapshot entries and the override rows
-        // are keyed by name downstream — and WindowEventMemberDkp has a UNIQUE (WindowEventId,
-        // CharacterName) index, so a duplicate name here would throw on save. Keep the HIGHEST
-        // amount on a collision so a name clash can never silently underpay someone.
-        var byCharacterName = new Dictionary<string, HnmCampMember>(StringComparer.OrdinalIgnoreCase);
-        foreach (var member in members)
-        {
-            var key = member.CharacterName.Trim();
-            if (key.Length == 0) continue;
-            if (byCharacterName.TryGetValue(key, out var existing))
-            {
-                if (member.Dkp > existing.Dkp)
-                {
-                    byCharacterName[key] = member with { CharacterName = key };
-                }
-                _logger.LogWarning(
-                    "HNM camp handoff: event {EventId} has two roster rows for character {Character}; "
-                    + "keeping the larger amount.", ev.Id, key);
-                continue;
-            }
-            byCharacterName[key] = member with { CharacterName = key };
-        }
+        var byCharacterName = FoldRosterByCharacterName(ev.Id, members);
         // `/lsm now` captures an officer filed against this camp while it was live (always as misc
         // posts). They are attendance in their own right: the roster above is built from window
         // posts and taggers only, so a camp whose attendance was ALL misc posts came out "empty",
@@ -117,57 +96,14 @@ public sealed class HnmCampReviewHandoffService
 
         if (byCharacterName.Count == 0 && !hasFiledAttendance)
         {
-            // Nobody to review, so no archive to hand the captures to — but they still must not
-            // follow the board into the next pop. Detached and left as linkshell-level records,
-            // which is where a capture taken with no camp open already lives.
-            foreach (var capture in captures) capture.EventId = null;
-            // Same for any (Ignored or empty) capture filed against this camp: back to the unlinked
-            // queue, rather than riding into the next pop's handoff on the recycled board.
-            foreach (var filed in campFiled)
-            {
-                filed.LinkedEventId = null;
-            }
-            // The camp's loot is still charged -- the camp ended -- and detached from the board.
-            await SettleCampLootAsync(ev, linkshell, archive: null, DateTime.UtcNow, cancellationToken);
-            _logger.LogInformation(
-                "HNM camp handoff skipped: event {EventId} ended with nobody on the roster.", ev.Id);
+            await DetachEmptyCampAsync(ev, linkshell, captures, campFiled, cancellationToken);
             return null;
         }
 
         var nowUtc = DateTime.UtcNow;
         var monster = ev.AssignedMonsterName?.Trim();
 
-        var windowEvent = new WindowEvent
-        {
-            LinkshellId = ev.LinkshellId,
-            Name = ev.EventName,
-            // NormalizedName is deliberately left NULL. It is the key the addon's
-            // FindOrCreateWindowEventAsync matches on to fold a later "/lsm now <monster>" into an
-            // open event — and folding un-priced scan entries into a camp row whose amounts are
-            // already computed would quietly add members at the 0 baseline. Officers can still
-            // attach a snapshot by hand from the card.
-            NormalizedName = null,
-            Status = WindowEventStatuses.Open,
-            CreatedAtUtc = nowUtc,
-            FirstCapturedAtUtc = nowUtc,
-            LastCapturedAtUtc = nowUtc,
-            // Pre-tag the camp so the sheet's Entry Type column is right without officer input.
-            EntryType = WindowEventEntryTypes.FromMonsterName(monster ?? ev.EventName),
-            // Everyone gets an explicit per-character override below, so this baseline only ever
-            // applies to someone an officer ADDS during review. 0 (not the 1.5 default) keeps an
-            // accidental add from silently paying — note WindowEventDkp.Resolve treats 0 as a real
-            // value and won't fall through to its default.
-            DkpAmount = 0d,
-            PostedToSheetAt = null,          // ← pending review; Post is what credits DKP
-            SourceEventId = ev.Id,
-            // Snapshotted because they are NOT recoverable later: the pop re-points
-            // Event.StartTime to the next predicted repop and clears CommencementStartTime.
-            CampStartedAtUtc = ev.CommencementStartTime ?? ev.StartTime,
-            CampEndedAtUtc = nowUtc,
-            CampEventType = ev.EventType,
-            CampEventLocation = ev.EventLocation,
-        };
-        _db.WindowEvents.Add(windowEvent);
+        var windowEvent = StageReviewCard(ev, monster, nowUtc);
 
         // ONE SNAPSHOT PER POSTED WINDOW, built from the camp's REAL scans.
         //
@@ -623,6 +559,96 @@ public sealed class HnmCampReviewHandoffService
             ev.Id, monster, isWd ? "Manual Check In" : "Standard",
             byCharacterName.Count, byCharacterName.Values.Sum(m => m.Dkp));
 
+        return windowEvent;
+    }
+
+    // Collapse to one row per CHARACTER NAME. Both the snapshot entries and the override rows
+    // are keyed by name downstream — and WindowEventMemberDkp has a UNIQUE (WindowEventId,
+    // CharacterName) index, so a duplicate name here would throw on save. Keep the HIGHEST
+    // amount on a collision so a name clash can never silently underpay someone.
+    private Dictionary<string, HnmCampMember> FoldRosterByCharacterName(
+        int eventId, IEnumerable<HnmCampMember> members)
+    {
+        var byCharacterName = new Dictionary<string, HnmCampMember>(StringComparer.OrdinalIgnoreCase);
+        foreach (var member in members)
+        {
+            var key = member.CharacterName.Trim();
+            if (key.Length == 0) continue;
+            if (byCharacterName.TryGetValue(key, out var existing))
+            {
+                if (member.Dkp > existing.Dkp)
+                {
+                    byCharacterName[key] = member with { CharacterName = key };
+                }
+                _logger.LogWarning(
+                    "HNM camp handoff: event {EventId} has two roster rows for character {Character}; "
+                    + "keeping the larger amount.", eventId, key);
+                continue;
+            }
+            byCharacterName[key] = member with { CharacterName = key };
+        }
+        return byCharacterName;
+    }
+
+    // A camp with nobody to review: no review card and no archive. Stages only, like the rest.
+    private async Task DetachEmptyCampAsync(
+        Event ev,
+        Linkshell linkshell,
+        List<ClaimShieldCapture> captures,
+        List<AttendanceSnapshot> campFiled,
+        CancellationToken cancellationToken)
+    {
+        // Nobody to review, so no archive to hand the captures to — but they still must not
+        // follow the board into the next pop. Detached and left as linkshell-level records,
+        // which is where a capture taken with no camp open already lives.
+        foreach (var capture in captures) capture.EventId = null;
+        // Same for any (Ignored or empty) capture filed against this camp: back to the unlinked
+        // queue, rather than riding into the next pop's handoff on the recycled board.
+        foreach (var filed in campFiled)
+        {
+            filed.LinkedEventId = null;
+        }
+        // The camp's loot is still charged -- the camp ended -- and detached from the board.
+        await SettleCampLootAsync(ev, linkshell, archive: null, DateTime.UtcNow, cancellationToken);
+        _logger.LogInformation(
+            "HNM camp handoff skipped: event {EventId} ended with nobody on the roster.", ev.Id);
+    }
+
+    // The pending review card itself, staged (not saved). Its captures and amounts are added by
+    // the steps after it.
+    private WindowEvent StageReviewCard(Event ev, string? monster, DateTime nowUtc)
+    {
+        var windowEvent = new WindowEvent
+        {
+            LinkshellId = ev.LinkshellId,
+            Name = ev.EventName,
+            // NormalizedName is deliberately left NULL. It is the key the addon's
+            // FindOrCreateWindowEventAsync matches on to fold a later "/lsm now <monster>" into an
+            // open event — and folding un-priced scan entries into a camp row whose amounts are
+            // already computed would quietly add members at the 0 baseline. Officers can still
+            // attach a snapshot by hand from the card.
+            NormalizedName = null,
+            Status = WindowEventStatuses.Open,
+            CreatedAtUtc = nowUtc,
+            FirstCapturedAtUtc = nowUtc,
+            LastCapturedAtUtc = nowUtc,
+            // Pre-tag the camp so the sheet's Entry Type column is right without officer input.
+            EntryType = WindowEventEntryTypes.FromMonsterName(monster ?? ev.EventName),
+            // Everyone gets an explicit per-character override below, so this baseline only ever
+            // applies to someone an officer ADDS during review. 0 (not the 1.5 default) keeps an
+            // accidental add from silently paying — note WindowEventDkp.Resolve treats 0 as a real
+            // value and won't fall through to its default.
+            DkpAmount = 0d,
+            PostedToSheetAt = null,          // ← pending review; Post is what credits DKP
+            SourceEventId = ev.Id,
+            // Snapshotted because they are NOT recoverable later: the pop re-points
+            // Event.StartTime to the next predicted repop and clears CommencementStartTime.
+            CampStartedAtUtc = ev.CommencementStartTime ?? ev.StartTime,
+            CampEndedAtUtc = nowUtc,
+            CampEventType = ev.EventType,
+            CampEventLocation = ev.EventLocation,
+        };
+        _db.WindowEvents.Add(windowEvent);
         return windowEvent;
     }
 
