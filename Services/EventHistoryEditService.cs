@@ -205,18 +205,19 @@ public sealed class EventHistoryEditService
         var earned = DkpRounding.Round(Math.Max(0, dkp), step);
         var characterName = membership.CharacterName ?? membership.AppUser?.CharacterName ?? membership.AppUser?.UserName ?? "Unknown member";
 
-        history.AppUserEventHistories.Add(new AppUserEventHistory
-        {
-            EventHistoryId = history.Id,
-            AppUserId = appUserId,
-            CharacterName = characterName,
-            JobType = Clean(jobType),
-            JobName = Clean(jobName),
-            SubJobName = Clean(subJobName),
-            Duration = history.Duration,
-            EventDkp = earned,
-            ActiveCredit = activeCredit,
-        });
+        var row = EventHistoryBuilder.ParticipantRow(
+            appUserId: appUserId,
+            characterName: characterName,
+            jobName: Clean(jobName),
+            subJobName: Clean(subJobName),
+            jobType: Clean(jobType),
+            // A member added later is credited with the whole event's length.
+            duration: history.Duration,
+            eventDkp: earned,
+            activeCredit: activeCredit,
+            windowsAttended: null);
+        row.EventHistoryId = history.Id;
+        history.AppUserEventHistories.Add(row);
 
         // DKP tie-in: add to the spendable balance + record the canonical EventEarned ledger row
         // (one per member per event — edits/removals rely on it existing). It earns into the same
