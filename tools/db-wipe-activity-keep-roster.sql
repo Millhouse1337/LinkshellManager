@@ -2,26 +2,42 @@
 --  LSManager — wipe operational data, KEEP roster / settings / profile jobs /
 --  party setups. Applies to ALL linkshells.
 --
---  >>> TAKE A DATABASE SNAPSHOT FIRST. THIS CANNOT BE UNDONE. <<<
---  (DigitalOcean managed Postgres: create an on-demand backup / fork before
---   running.)
+--  >>> TAKE A DATABASE BACKUP FIRST. THIS CANNOT BE UNDONE. <<<
+--  (On the droplet: sudo /usr/local/bin/lsm-backup.sh — see deploy/RUNBOOK.md.)
 --
---  Run against the PRODUCTION managed database, e.g.:
---     psql "postgresql://doadmin:****@db-host:25060/defaultdb?sslmode=require" \
---          -v ON_ERROR_STOP=1 -f db-wipe-activity-keep-roster.sql
+--  Run with psql, naming the database you are connected to as "confirm".
+--  The script refuses to run without it, or when the name does not match:
+--     psql "<connection string>" -v ON_ERROR_STOP=1 -v confirm=<database name> \
+--          -f tools/db-wipe-activity-keep-roster.sql
 --
---  KEEPS:   Linkshells, LinkshellRoles, LinkshellChannelRoutes,
---           AddonApiTokens, AddonPairingCodes,
+--  KEEPS:   Linkshells and their settings (LinkshellRoles, LinkshellChannelRoutes,
+--           LinkshellMonsterTimings, LinkshellBanners, DkpPools, DkpPoolEventTypes,
+--           HnmRecurringBoards), AddonApiTokens, AddonPairingCodes,
 --           AppSettings, DiscordActivityUsers, AspNet* (users/identity),
 --           PartySetups templates (+Alliances/Parties/Slots), Announcements,
---           Rules, Invites, and the AppUserLinkshells ROSTER rows
---           (incl. JobLevels / StrongJobs = profile jobs).
+--           Rules, Invites, Charts (Chart* tables), JobRatings,
+--           LinkshellPresences, PlaceholderClaimRequests, and the
+--           AppUserLinkshells ROSTER rows (incl. JobLevels / StrongJobs =
+--           profile jobs).
 --
 --  WIPES:   Events (+ comments, roster snapshots and each event's own party
 --           board copy), ToDs, Loot, Auctions, DKP ledger, Attendance,
 --           Gil/treasury and Inventory (Items) — and zeroes the cached DKP
 --           balance columns on the roster rows.
 -- ============================================================================
+
+-- Guard: stop unless -v confirm=<this database's name> was passed.
+\if :{?confirm}
+\else
+  \echo 'Refusing to run: pass -v confirm=<database name> (the database you are connected to).'
+  \quit
+\endif
+SELECT current_database() = :'confirm' AS confirm_matches \gset
+\if :confirm_matches
+\else
+  \echo 'Refusing to run: confirm does not match the database you are connected to. Nothing changed.'
+  \quit
+\endif
 
 BEGIN;
 
@@ -92,6 +108,10 @@ SET "LinkshellDkp"        = 0,
     "SeededDkpSpent"      = 0,
     "DkpSeedLedgerId"     = 0,
     "DkpPoolLedgerFromId" = 0;
+
+-- The HNM boards stay, but each remembers the last ToD it posted for. ToD ids start again from 1
+-- above, so a remembered id would match a NEW ToD later and that board would skip posting it.
+UPDATE "HnmRecurringBoards" SET "LastSourceTodId" = NULL;
 
 -- Sanity check — every wiped table should read 0; roster should be unchanged.
 SELECT

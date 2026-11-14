@@ -72,11 +72,13 @@ In non-development environments the app applies pending migrations automatically
 |---|---|
 | `LinkshellManagerDiscordApp.csproj` | The host: JSON APIs + EF Core, a few public Razor pages, and the Angular app |
 | `discord-activity/` | The Angular SPA: the Discord Activity inside Discord and the website in a browser (built into `wwwroot/`) |
-| `DbWipe/` | **Destructive** dev utility — truncates all tables to reset a local DB |
+| `DbWipe/` | **Destructive** dev utility — empty a local DB (`wipe`), or one linkshell (`scrub`, `scrub-treasury`); `verify` / `treasury` only read |
+| `tools/db-wipe-activity-keep-roster.sql` | **Destructive** psql script — empties events, ToDs, loot, DKP and gil, keeps the roster and settings. Needs `-v confirm=<database name>` |
+| `tools/purge-history.ps1` | **Destructive** — deletes past events and the DKP ledger. Dry run unless `-Execute` |
 | `tools/DbInspector/` | Read-only DB inspection (+ a guarded `reset-public`) |
 
-The two utility projects are intentionally separate console apps, run by hand. Both refuse destructive
-operations unless you pass the connected database name as confirmation — never point them at production.
+The two utility projects are separate console apps, run by hand. Every destructive tool here refuses to run
+unless you name the connected database as confirmation — never point them at production.
 
 DbInspector reads its connection string only from an environment variable you set for that run; it never
 falls back to user-secrets. Set exactly one:

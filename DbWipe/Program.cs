@@ -1,21 +1,26 @@
 // DbWipe — DESTRUCTIVE local/dev database utilities.
 //
-// Two modes:
+// Modes:
 //
-//   wipe  — TRUNCATEs every domain + ASP.NET Identity table (RESTART IDENTITY
-//           CASCADE), resetting the whole database to empty.
-//           (There are no Identity role tables; they were dropped in Phase 7.)
+//   wipe  — TRUNCATEs every table in the public schema except __EFMigrationsHistory (RESTART
+//           IDENTITY CASCADE), resetting the whole database to empty. The table list is read from
+//           the database, so it always matches the schema.
 //
 //   scrub — Single-linkshell activity reset. KEEPS the linkshell row, its
-//           members (AppUserLinkshells), roles (LinkshellRoles), and the
-//           Announcements/Rules content. DELETES all of that linkshell's
-//           events, loot, auctions/AH, ToDs, window events, attendance
-//           snapshots, claim shields, party setups, pending submissions, DKP
-//           ledger, inventory items, gil treasury, and addon tokens. Also zeroes
-//           each member's LinkshellDkp + cached JobLevels.
+//           members (AppUserLinkshells), roles (LinkshellRoles), the
+//           Announcements/Rules content, and its settings (DKP pools, monster
+//           setups, HNM boards, channel routes, banners, Charts). DELETES all of
+//           that linkshell's events, loot, auctions/AH, ToDs, window events,
+//           attendance snapshots, claim shields, party setups, pending
+//           submissions, DKP ledger, inventory items, gil treasury, and addon
+//           tokens. Also zeroes each member's DKP (balance, imported seed and
+//           watermarks) + cached JobLevels.
 //
 // Excluded from the main web-app build (see LinkshellManagerDiscordApp.csproj);
 // run by hand against a local or test database only. NEVER point it at production.
+// (There used to be a `reset-schema` mode that dropped the whole schema. It is gone: dropping
+// the schema is never the right fix on a real database. Locally, delete and recreate the Docker
+// container instead.)
 //
 //   treasury / scrub-treasury
 //         — The GIL only, for one linkshell. `treasury` is read-only; `scrub-treasury`
@@ -75,31 +80,6 @@ if (args.Length > 0 && args[0] == "scrub-treasury")
     return await ScrubTreasuryAsync(c, args);
 }
 
-// reset-schema: full schema reset for hosts where `dotnet ef database drop`
-// can't run (e.g. DigitalOcean managed Postgres has no `postgres` maintenance
-// DB and won't let you drop the connected database). Drops + recreates the
-// `public` schema, removing every table INCLUDING __EFMigrationsHistory, so a
-// squashed/consolidated migration can be applied fresh via `dotnet ef database
-// update`. Requires naming the connected database to confirm.
-if (args.Length > 0 && args[0] == "reset-schema")
-{
-    if (args.Length < 2 || !string.Equals(args[1], c.Database, StringComparison.Ordinal))
-    {
-        Console.Error.WriteLine(
-            "Refusing to reset. To confirm, type the name of the database LSM_CONN points at:\n" +
-            "  dotnet run --project DbWipe -- reset-schema <database-name>");
-        return 1;
-    }
-
-    await using var resetCmd = c.CreateCommand();
-    resetCmd.CommandText = "DROP SCHEMA public CASCADE; CREATE SCHEMA public;";
-    await resetCmd.ExecuteNonQueryAsync();
-    Console.WriteLine(
-        $"Schema reset complete on '{c.Database}'. All tables + migration history dropped.\n" +
-        "Next: dotnet ef database update");
-    return 0;
-}
-
 // The destructive path requires an explicit confirmation that names the
 // connected database, so an accidental run (no args, or the wrong database)
 // can never wipe data.
@@ -113,34 +93,25 @@ if (args.Length < 2 || args[0] != "wipe" || !string.Equals(args[1], c.Database, 
     return 1;
 }
 
-// Full reset: domain tables + Identity. CASCADE on AspNetUsers also empties
-// AspNetUserLogins / AspNetUserTokens / AspNetUserClaims since they FK back to
-// it. The app has no Identity roles (the DropIdentityRoleTables migration
-// removed AspNetRoles / AspNetUserRoles / AspNetRoleClaims).
-var tables = new[]
+// Full reset: every table in the public schema except EF's own migration history, so the schema
+// stays where `dotnet ef database update` left it. The list is read from the database itself, so a
+// table added or dropped by a migration never leaves this mode out of date.
+var tables = new List<string>();
+await using (var list = c.CreateCommand())
 {
-    "AspNetUsers",
-    "DiscordActivityUsers",
-    "Linkshells",
-    "AppUserLinkshells",
-    "Invites",
-    "Auctions", "AuctionItems", "Bids", "AuctionHistories",
-    "Events", "AppUserEvents", "AppUserEventStatusLedgers", "DkpLedgerEntries",
-    "EventHistories", "AppUserEventHistories",
-    "EventLootDetails",
-    "Tods",
-    "Rules",
-    "Announcements",
-    "Items",
-    // Treasury: halves before entries (FK), and categories last since entries point at them.
-    "JournalEntryLines", "JournalEntries", "LedgerAccounts",
-    "LinkshellRoles",
-    "AddonApiTokens", "AddonPairingCodes",
-    "EventAttendanceWindows", "AppUserEventWindows",
-    "WindowEvents",
-    "AttendanceSnapshots", "AttendanceSnapshotEntries",
-    "PendingTodSubmissions",
-};
+    list.CommandText =
+        "SELECT table_name FROM information_schema.tables " +
+        "WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name <> '__EFMigrationsHistory' " +
+        "ORDER BY table_name";
+    await using var r = await list.ExecuteReaderAsync();
+    while (await r.ReadAsync()) tables.Add(r.GetString(0));
+}
+
+if (tables.Count == 0)
+{
+    Console.WriteLine("No tables found in the public schema. Nothing to wipe.");
+    return 0;
+}
 
 var quoted = string.Join(", ", tables.Select(t => $"\"{t}\""));
 var sql = $"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE;";
@@ -148,7 +119,7 @@ var sql = $"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE;";
 await using var truncCmd = c.CreateCommand();
 truncCmd.CommandText = sql;
 await truncCmd.ExecuteNonQueryAsync();
-Console.WriteLine($"TRUNCATE complete ({tables.Length} tables).");
+Console.WriteLine($"TRUNCATE complete ({tables.Count} tables).");
 return 0;
 
 
@@ -269,7 +240,9 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("AddonApiTokens", "DELETE FROM \"AddonApiTokens\" WHERE \"LinkshellId\" = @ls"),
 
         // --- Reset member DKP balances + cached job levels ---
-        ("AppUserLinkshells (reset DKP/jobs)", "UPDATE \"AppUserLinkshells\" SET \"LinkshellDkp\" = 0, \"JobLevels\" = NULL WHERE \"LinkshellId\" = @ls"),
+        // The imported seed (SeededDkp*) and the two ledger watermarks go too: the DKP sheet adds the
+        // seed to the ledger, so leaving it would bring the old balance back on top of the new one.
+        ("AppUserLinkshells (reset DKP/jobs)", "UPDATE \"AppUserLinkshells\" SET \"LinkshellDkp\" = 0, \"SeededDkpEarned\" = 0, \"SeededDkpSpent\" = 0, \"DkpSeedLedgerId\" = 0, \"DkpPoolLedgerFromId\" = 0, \"JobLevels\" = NULL WHERE \"LinkshellId\" = @ls"),
 
         // (The old "disconnect Google Sheet" UPDATE is gone: Google Sheets was removed, and it named
         // two columns dropped in June, so it failed and rolled the whole scrub back.)

@@ -10,11 +10,15 @@
         3. DkpLedgerEntries        (the entire DKP history ledger)
         4. AppUserEventHistories   (per-member attendance rows of past events)
         5. EventHistories          ("Past events" list)
-    Optionally (-ResetBalances) also zeroes AppUserLinkshell.LinkshellDkp, since
-    member balances are a stored column, not re-derived from the ledger.
+    Optionally (-ResetBalances) also zeroes each member's DKP: the stored
+    LinkshellDkp balance, the imported seed (SeededDkpEarned / SeededDkpSpent)
+    and the two ledger watermarks (DkpSeedLedgerId, DkpPoolLedgerFromId). The DKP
+    sheet adds the seed to the ledger, so leaving it would keep old DKP showing.
 
-    EventLootDetails / DkpLedgerEntries FKs onto EventHistories are SetNull, so
-    deleting EventHistories never fails and any loot rows are preserved (unlinked).
+    Deleting EventHistories also deletes, through their cascading foreign keys,
+    each past event's archived attendance windows (EventAttendanceWindows and
+    their AppUserEventWindows). Loot, ledger, Claim Shield and window-event rows
+    that point at a past event are kept and simply unlinked (SetNull).
 
     DEFAULTS TO A DRY RUN (prints counts, changes nothing). Pass -Execute to apply.
 
@@ -25,7 +29,7 @@
     before passing -Execute.
 
     Windows PowerShell 5.1 can't load the .NET Npgsql.dll, so this generates a
-    tiny throwaway .NET 10 console tool and runs it via `dotnet run` (Npgsql 8.0.6
+    tiny throwaway .NET 10 console tool and runs it via `dotnet run` (Npgsql 10.0.3,
     restores offline from the existing NuGet cache).
 
 .EXAMPLE
@@ -46,8 +50,8 @@ param(
     # Limit the purge to a single linkshell (by exact name). Omit = all linkshells.
     [string]$LinkshellName,
 
-    # Also set AppUserLinkshell.LinkshellDkp = 0 (in scope) so stored balances
-    # match the now-empty ledger.
+    # Also zero each member's DKP (in scope): LinkshellDkp, the imported seed and
+    # the ledger watermarks, so balances match the now-empty ledger.
     [switch]$ResetBalances,
 
     # Required to actually delete. Without it the script only prints counts.
@@ -85,7 +89,7 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 Write-Host "Target DB : $dbHost / $dbName"
 Write-Host ("Scope     : " + $(if ($LinkshellName) { "linkshell '$LinkshellName'" } else { "ALL linkshells" }))
 Write-Host ("Mode      : " + $(if ($Execute) { "EXECUTE (will DELETE)" } else { "DRY RUN (counts only)" }))
-Write-Host ("Balances  : " + $(if ($ResetBalances) { "reset LinkshellDkp = 0" } else { "left unchanged" }))
+Write-Host ("Balances  : " + $(if ($ResetBalances) { "reset member DKP (balance, seed, watermarks) to 0" } else { "left unchanged" }))
 Write-Host ""
 
 # --- 2. Confirmation guard when actually deleting -----------------------------
@@ -113,7 +117,7 @@ try {
     <AssemblyName>lsmpurge</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Npgsql" Version="8.0.6" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 </Project>
 '@ | Set-Content -Path (Join-Path $work 'purge.csproj') -Encoding UTF8
@@ -219,10 +223,10 @@ try
         await using var cmd = c.CreateCommand();
         cmd.Transaction = tx;
         var w = lsId is null ? "" : " WHERE \"LinkshellId\" = @ls";
-        cmd.CommandText = $"UPDATE \"AppUserLinkshells\" SET \"LinkshellDkp\" = 0{w}";
+        cmd.CommandText = $"UPDATE \"AppUserLinkshells\" SET \"LinkshellDkp\" = 0, \"SeededDkpEarned\" = 0, \"SeededDkpSpent\" = 0, \"DkpSeedLedgerId\" = 0, \"DkpPoolLedgerFromId\" = 0{w}";
         if (w.Contains("@ls")) cmd.Parameters.AddWithValue("ls", lsId!.Value);
         var n = await cmd.ExecuteNonQueryAsync();
-        Console.WriteLine($"  Reset LinkshellDkp = 0 on {n} membership row(s)");
+        Console.WriteLine($"  Reset DKP (balance, seed, watermarks) to 0 on {n} membership row(s)");
     }
     await tx.CommitAsync();
     Console.WriteLine($"\nDONE. Committed. {total} row(s) deleted across {targets.Length} tables.");
