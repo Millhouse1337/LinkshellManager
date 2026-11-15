@@ -174,6 +174,76 @@ public class MembershipRoleStampTests : IAsyncLifetime
         }
     }
 
+    // RosterSwitch: permissions read the role id, so renaming a custom role keeps every holder's
+    // rights -- " Raider " too, whom the old rename (matching Rank exactly) left behind on Member.
+    // Their Rank follows the new name, so Rank and id still name the same role.
+    [Fact]
+    public async Task RoleRename_ThroughTheEndpoint_KeepsEveryHoldersRights()
+    {
+        var seed = await SeedAsync();
+        var raiderRole = seed.Roles[(seed.Main, "Raider")];
+        await using (var db = _pg.CreateContext())
+        {
+            (await db.LinkshellRoles.SingleAsync(r => r.Id == raiderRole)).CanManageEvents = true;
+            await db.SaveChangesAsync();
+        }
+        Assert.True(await CanManageEventsAsync(seed.Members[Raider]));
+        Assert.True(await CanManageEventsAsync(seed.Members[Padded]));
+
+        await using (var db = _pg.CreateContext())
+        {
+            var result = await Controller(db, Leader).UpdateLinkshellRoleAsync(
+                seed.Main, raiderRole, RaiderPermissions("Strikers"), CancellationToken.None);
+            Assert.IsType<OkObjectResult>(result);
+        }
+
+        foreach (var holder in new[] { Raider, Padded })
+        {
+            Assert.True(await CanManageEventsAsync(seed.Members[holder]), holder);
+            Assert.Equal(raiderRole, await RoleIdOfAsync(seed.Members[holder]));
+            await using var db = _pg.CreateContext();
+            Assert.Equal("Strikers", (await db.AppUserLinkshells.AsNoTracking().SingleAsync(m => m.Id == seed.Members[holder])).Rank);
+        }
+        // Nobody else picked the role up.
+        Assert.False(await CanManageEventsAsync(seed.Members[Shouty]));
+    }
+
+    // A role renamed straight in the table (Data Admin edits only the role row): the holders keep
+    // it by id, so they keep its rights, even though their Rank text still says the old name.
+    [Fact]
+    public async Task RoleRenamedOnlyInTheTable_HoldersKeepItsRights()
+    {
+        var seed = await SeedAsync();
+        var raiderRole = seed.Roles[(seed.Main, "Raider")];
+        await using (var db = _pg.CreateContext())
+        {
+            var role = await db.LinkshellRoles.SingleAsync(r => r.Id == raiderRole);
+            role.CanManageEvents = true;
+            role.Name = "Strikers";
+            await db.SaveChangesAsync();
+        }
+
+        Assert.True(await CanManageEventsAsync(seed.Members[Raider]));
+        Assert.True(await CanManageEventsAsync(seed.Members[Padded]));
+    }
+
+    private async Task<bool> CanManageEventsAsync(int membershipId)
+    {
+        await using var db = _pg.CreateContext();
+        var settings = new GlobalSettingsService(db, new MemoryCache(new MemoryCacheOptions()));
+        var permissions = new LinkshellPermissions(db, new AdminOverrideService(db, settings, NullLogger<AdminOverrideService>.Instance));
+        var member = await db.AppUserLinkshells.AsNoTracking().SingleAsync(m => m.Id == membershipId);
+        return await permissions.CanAsync(member, r => r.CanManageEvents, CancellationToken.None);
+    }
+
+    private static ActivityLinkshellRolePermissions RaiderPermissions(string name) => new(
+        name,
+        CanManageRoles: false, CanManageMembers: false, CanManageEvents: true, CanModerateLiveEvent: false,
+        CanAddLoot: false, CanManageInventory: false, CanManageCharts: false, CanManageTreasury: false,
+        CanManageRules: false, CanManageAnnouncements: false, CanManageTods: false, CanAuditDkp: false,
+        CanManageAuctions: false, CanLockAuctions: false, CanCustomizeLinkshell: false, CanManageParties: false,
+        CanManageInvites: false);
+
     // The linkshell delete removes its members through EF and lets the database cascade the roles.
     [Fact]
     public async Task LinkshellDelete_WithMembersHoldingRoles_StillWorks()

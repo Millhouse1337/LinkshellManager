@@ -5,6 +5,8 @@ using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Xunit;
 
@@ -133,6 +135,10 @@ public class RosterSwitchRoundTripTests
                 await AssertTicksAsync(c, seed.ExpectedTicks);
                 Assert.Equal("u-pad", await ScalarAsync(c,
                     "SELECT \"AppUserId\" FROM \"ChartMemberKeyItems\" WHERE \"KeyItemName\" = 'LateNullYet'"));
+
+                // The app now reads roles by id. For every member, messy ones included, that gives
+                // exactly the role the old read by Rank gives.
+                await AssertRoleByIdMatchesRoleByRankAsync(connectionString);
 
                 // A deleted account takes its ticks with it; deleting a linkshell still works.
                 await ScalarAsync(c, "DELETE FROM \"AppUserLinkshells\" WHERE \"AppUserId\" = 'u-raider'");
@@ -298,6 +304,24 @@ public class RosterSwitchRoundTripTests
         foreach (var member in members)
         {
             Assert.Equal(MembershipRoleMatch.RoleIdFor(member.Rank, member.LinkshellId, roles), member.LinkshellRoleId);
+        }
+    }
+
+    private static async Task AssertRoleByIdMatchesRoleByRankAsync(string connectionString)
+    {
+        await using var db = NewContext(connectionString);
+        var settings = new GlobalSettingsService(db, new MemoryCache(new MemoryCacheOptions()));
+        var permissions = new LinkshellPermissions(db, new AdminOverrideService(db, settings, NullLogger<AdminOverrideService>.Instance));
+        var members = await db.AppUserLinkshells.AsNoTracking().ToListAsync();
+        Assert.NotEmpty(members);
+        foreach (var member in members)
+        {
+            var byRank = await permissions.GetEffectiveRoleAsync(member.Rank, member.LinkshellId, CancellationToken.None);
+            var byId = await permissions.GetEffectiveRoleAsync(member, CancellationToken.None);
+            Assert.True(byRank?.Id == byId?.Id, $"Member {member.Id} ({member.Rank}): by rank {byRank?.Id}, by id {byId?.Id}.");
+            Assert.Equal(
+                await AuctionBidService.CanRankBidAsync(db, member.LinkshellId, member.Rank, CancellationToken.None),
+                await AuctionBidService.CanMembershipBidAsync(db, member, CancellationToken.None));
         }
     }
 

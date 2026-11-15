@@ -57,7 +57,7 @@ public static class AuctionBidService
             return Fail("You're not a member of this linkshell, so you can't bid on its auctions.");
         }
 
-        if (!await CanRankBidAsync(db, item.Auction.LinkshellId, membership.Rank, cancellationToken))
+        if (!await CanMembershipBidAsync(db, membership, cancellationToken))
         {
             return Fail("Your role isn't allowed to place bids on auctions.");
         }
@@ -231,6 +231,24 @@ public static class AuctionBidService
     // the role row is missing (legacy linkshells whose roles were never seeded) so
     // bidding is never accidentally blocked — only an explicit CanBid=false (e.g.
     // the built-in Trial role) stops it.
+    // The same for a member: the role their id names (see LinkshellPermissions), else their rank's.
+    public static async Task<bool> CanMembershipBidAsync(
+        ApplicationDbContext db, AppUserLinkshell membership, CancellationToken cancellationToken)
+    {
+        if (membership.LinkshellRoleId is int roleId)
+        {
+            var held = await db.LinkshellRoles
+                .Where(r => r.LinkshellId == membership.LinkshellId && r.Id == roleId)
+                .Select(r => (bool?)r.CanBid)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (held is bool canBid)
+            {
+                return canBid;
+            }
+        }
+        return await CanRankBidAsync(db, membership.LinkshellId, membership.Rank, cancellationToken);
+    }
+
     public static async Task<bool> CanRankBidAsync(
         ApplicationDbContext db, int linkshellId, string? rank, CancellationToken cancellationToken)
     {

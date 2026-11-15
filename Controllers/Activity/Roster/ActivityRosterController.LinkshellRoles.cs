@@ -146,11 +146,18 @@ public sealed partial class ActivityRosterController
                         return BadRequest(new { error = "Another role with that name already exists." });
                     }
 
+                    // Holders keep the role: by id (what permissions read) and by name. Every
+                    // holder's Rank becomes the new name, the ones found by id too (a Rank with
+                    // extra spaces), and every holder's id is the role's, so Rank and id keep
+                    // naming the same role.
                     var previousName = role.Name;
                     role.Name = name;
                     await _dbContext.AppUserLinkshells
-                        .Where(link => link.LinkshellId == linkshellId && link.Rank == previousName)
-                        .ExecuteUpdateAsync(setters => setters.SetProperty(link => link.Rank, name), cancellationToken);
+                        .Where(link => link.LinkshellId == linkshellId
+                            && (link.Rank == previousName || link.LinkshellRoleId == roleId))
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(link => link.Rank, name)
+                            .SetProperty(link => link.LinkshellRoleId, (int?)roleId), cancellationToken);
                 }
             }
         }

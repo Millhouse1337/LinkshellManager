@@ -621,7 +621,7 @@ public sealed partial class ActivityOverviewController
 
         // Join requests go only to those who may answer them. A plain member sees none.
         var answersJoinRequestsIn = linkshellMemberships
-            .Where(link => AnswersJoinRequests(link.LinkshellId, link.Rank, rolesByLinkshellAndName, adminOverrideActive))
+            .Where(link => AnswersJoinRequests(link.LinkshellId, link.Rank, rolesByLinkshellAndName, adminOverrideActive, link.LinkshellRoleId))
             .Select(link => link.LinkshellId)
             .ToHashSet();
 
@@ -837,7 +837,7 @@ public sealed partial class ActivityOverviewController
                 itemCounts.GetValueOrDefault(link.LinkshellId, 0),
                 revenueTotals.GetValueOrDefault(link.LinkshellId, 0L),
                 link.Linkshell?.Details,
-                ResolvePermissionsFor(link.LinkshellId, link.Rank, rolesByLinkshellAndName, adminOverrideActive),
+                ResolvePermissionsFor(link.LinkshellId, link.Rank, rolesByLinkshellAndName, adminOverrideActive, link.LinkshellRoleId),
                 MapLinkshellSettingsDto(
                     link.Linkshell,
                     MonsterSetupsFor(

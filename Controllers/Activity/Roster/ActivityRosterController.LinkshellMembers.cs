@@ -197,9 +197,14 @@ public sealed partial class ActivityRosterController
 
             if (string.Equals(currentMembership!.Rank, LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase))
             {
+                // Its role id follows on save (ApplicationDbContext.StampMembershipRoleIds).
                 currentMembership.Rank = LinkshellRanks.Officer;
             }
             targetMembership.Rank = LinkshellRanks.Leader;
+            if (string.Equals(roleRow.Name, LinkshellRanks.Leader, StringComparison.Ordinal))
+            {
+                targetMembership.LinkshellRoleId = roleRow.Id;
+            }
         }
         else
         {
@@ -208,7 +213,10 @@ public sealed partial class ActivityRosterController
                 return BadRequest(new { error = "Leaders cannot change their own role without transferring leadership." });
             }
 
+            // The role by name AND by id: permissions read the id (LinkshellPermissions), and Rank
+            // stays the role's name, the way the save hook would set it.
             targetMembership.Rank = normalizedRole;
+            targetMembership.LinkshellRoleId = roleRow.Id;
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

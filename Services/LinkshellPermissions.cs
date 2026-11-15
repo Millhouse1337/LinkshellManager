@@ -16,7 +16,14 @@ namespace LinkshellManagerDiscordApp.Services;
 //   1. no membership                    -> false  (never grant inside a linkshell the user has not joined)
 //   2. super-admin override is active   -> true   (AdminOverrideService; only AFTER the membership check)
 //   3. rank is Leader                   -> true   (a stale or mis-edited role row must never lock the owner out)
-//   4. the role named by the rank decides; an unknown rank falls back to the Member role
+//   4. the member's role decides: the one their role id names (AppUserLinkshell.LinkshellRoleId),
+//      else the one their rank names; an unknown rank falls back to the Member role
+//
+// Role id vs rank (RosterSwitch): every save keeps the id in step with Rank (the role whose name
+// is the trimmed Rank, case mattering; else no id), and the migration re-filled it, so for every
+// member both give the same role. They only part when a role is RENAMED: the holders keep the id,
+// so they keep the role's rights. A NULL id (a Rank naming no role, or a role made after the
+// member) means "look it up by name", exactly as before the id existed.
 //
 // What this does NOT do: the per-linkshell Discord guild lock. That needs the request's
 // Discord bearer token and guild header, so it stays in ActivityControllerBase, which
@@ -78,7 +85,7 @@ public sealed class LinkshellPermissions
             return true;
         }
 
-        var role = await GetEffectiveRoleAsync(membership.Rank, membership.LinkshellId, ct);
+        var role = await GetEffectiveRoleAsync(membership, ct);
         return role is not null && selector(role);
     }
 
@@ -97,6 +104,24 @@ public sealed class LinkshellPermissions
 
         var membership = await GetMembershipAsync(appUserId, linkshellId, ct);
         return await CanAsync(membership, selector, ct);
+    }
+
+    // The role a member holds: the role their id names (always one of their own linkshell's: the
+    // foreign key is on (LinkshellId, LinkshellRoleId)), else the one their rank names.
+    public async Task<LinkshellRole?> GetEffectiveRoleAsync(AppUserLinkshell membership, CancellationToken ct)
+    {
+        if (membership.LinkshellRoleId is int roleId)
+        {
+            await EnsureDefaultRolesAsync(membership.LinkshellId, ct);
+            var held = await _dbContext.LinkshellRoles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.LinkshellId == membership.LinkshellId && r.Id == roleId, ct);
+            if (held is not null)
+            {
+                return held;
+            }
+        }
+        return await GetEffectiveRoleAsync(membership.Rank, membership.LinkshellId, ct);
     }
 
     // The role row a rank maps to. A blank rank means Member; a rank with no matching

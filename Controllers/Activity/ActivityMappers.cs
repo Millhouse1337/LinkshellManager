@@ -101,15 +101,20 @@ internal static class ActivityMappers
         int linkshellId,
         string? rank,
         Dictionary<int, Dictionary<string, LinkshellRole>> rolesByLinkshellAndName,
-        bool adminOverrideActive)
+        bool adminOverrideActive,
+        int? roleId = null)
         => LinkshellRanks.IsLeader(rank)
-           || ResolvePermissionsFor(linkshellId, rank, rolesByLinkshellAndName, adminOverrideActive)?.CanManageInvites == true;
+           || ResolvePermissionsFor(linkshellId, rank, rolesByLinkshellAndName, adminOverrideActive, roleId)?.CanManageInvites == true;
 
+    // The member's role, the way LinkshellPermissions finds it: the role their id names
+    // (AppUserLinkshell.LinkshellRoleId) when it is one of this linkshell's, else the role their
+    // rank names, else Member. See LinkshellPermissions for why the two agree.
     internal static ActivityPermissionsDto? ResolvePermissionsFor(
         int linkshellId,
         string? rank,
         Dictionary<int, Dictionary<string, LinkshellRole>> rolesByLinkshellAndName,
-        bool adminOverrideActive)
+        bool adminOverrideActive,
+        int? roleId = null)
     {
         // The app-wide admin override short-circuits to every permission. The caller
         // only ever passes memberships, so this cannot unlock a linkshell the user
@@ -124,12 +129,16 @@ internal static class ActivityMappers
             return null;
         }
 
-        var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
-        if (!rolesByName.TryGetValue(rankName, out var role))
+        var role = roleId is int id ? rolesByName.Values.FirstOrDefault(r => r.Id == id) : null;
+        if (role is null)
         {
-            if (!rolesByName.TryGetValue("Member", out role))
+            var rankName = string.IsNullOrWhiteSpace(rank) ? "Member" : rank.Trim();
+            if (!rolesByName.TryGetValue(rankName, out role))
             {
-                return null;
+                if (!rolesByName.TryGetValue("Member", out role))
+                {
+                    return null;
+                }
             }
         }
 

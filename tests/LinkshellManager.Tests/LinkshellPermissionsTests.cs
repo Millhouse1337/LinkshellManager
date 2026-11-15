@@ -168,6 +168,122 @@ public class LinkshellPermissionsTests
         Assert.False(await permissions.CanAsync(membership, r => r.CanManageTreasury, CancellationToken.None));
     }
 
+    // ---- RosterSwitch: the role is read by id (AppUserLinkshell.LinkshellRoleId) ----------------
+
+    // For every kind of Rank a member can hold, the id path and the old name path give the SAME
+    // role and the same answer to every permission. The save hook stamps the id from Rank, so this
+    // is the proof that switching the read changed nobody's rights.
+    [Theory]
+    [InlineData("Officer")]
+    [InlineData(" Officer ")]
+    [InlineData("officer")]
+    [InlineData("Member")]
+    [InlineData("Trial")]
+    [InlineData("Raid Lead")]
+    [InlineData("raid lead")]
+    [InlineData("Deleted Role")]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task RoleById_GivesTheSameAnswerAsRoleByRank(string? rank)
+    {
+        await using var db = NewDb();
+        db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS1", LootStructure = "Dkp" });
+        db.LinkshellRoles.AddRange(LinkshellRoleDefaults.BuildDefaultRoles(Ls));
+        db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = Ls, Name = "Raid Lead", CanManageEvents = true, CanAddLoot = true });
+        await db.SaveChangesAsync();
+        var membership = await SeedMemberAsync(db, UserId, rank);
+        var permissions = await NewServiceAsync(db);
+
+        var byId = await permissions.GetEffectiveRoleAsync(membership, CancellationToken.None);
+        var byRank = await permissions.GetEffectiveRoleAsync(rank, Ls, CancellationToken.None);
+        Assert.NotNull(byId);
+        Assert.Equal(byRank!.Id, byId!.Id);
+
+        foreach (var flag in AllFlags)
+        {
+            Assert.Equal(byRank is not null && flag(byRank), await permissions.CanAsync(membership, flag, CancellationToken.None));
+        }
+
+        // The overview and the bid check read the same role.
+        var roles = await db.LinkshellRoles.AsNoTracking().Where(r => r.LinkshellId == Ls).ToListAsync();
+        var byName = new Dictionary<int, Dictionary<string, LinkshellRole>>
+        {
+            [Ls] = roles.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase),
+        };
+        Assert.Equal(
+            LinkshellManagerDiscordApp.Controllers.ActivityMappers.ResolvePermissionsFor(Ls, rank, byName, adminOverrideActive: false),
+            LinkshellManagerDiscordApp.Controllers.ActivityMappers.ResolvePermissionsFor(Ls, rank, byName, adminOverrideActive: false, membership.LinkshellRoleId));
+        Assert.Equal(
+            await AuctionBidService.CanRankBidAsync(db, Ls, rank, CancellationToken.None),
+            await AuctionBidService.CanMembershipBidAsync(db, membership, CancellationToken.None));
+    }
+
+    // A custom role renamed (Data Admin edits only the role row): its holders keep it by id, so they
+    // keep its rights, where the name lookup alone would have dropped them to Member.
+    [Fact]
+    public async Task RenamedCustomRole_KeepsItsHoldersRights()
+    {
+        await using var db = NewDb();
+        db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS1", LootStructure = "Dkp" });
+        var raidLead = new LinkshellRole { LinkshellId = Ls, Name = "Raid Lead", CanManageEvents = true, CanBid = false };
+        db.LinkshellRoles.Add(raidLead);
+        await db.SaveChangesAsync();
+        var membership = await SeedMemberAsync(db, UserId, "Raid Lead");
+        Assert.Equal(raidLead.Id, membership.LinkshellRoleId);
+
+        raidLead.Name = "Strike Lead";
+        await db.SaveChangesAsync();
+        var permissions = await NewServiceAsync(db);
+
+        Assert.True(await permissions.CanAsync(membership, r => r.CanManageEvents, CancellationToken.None));
+        Assert.Equal("Strike Lead", (await permissions.GetEffectiveRoleAsync(membership, CancellationToken.None))?.Name);
+        Assert.False(await AuctionBidService.CanMembershipBidAsync(db, membership, CancellationToken.None));
+    }
+
+    // The Leader rule still comes first: a Leader whose role id points at a role with no rights
+    // (hand-edited, or stale) keeps every permission.
+    [Fact]
+    public async Task Leader_IsAllowed_EvenWhenTheirRoleIdNamesARoleWithNoRights()
+    {
+        await using var db = NewDb();
+        var membership = await SeedMemberAsync(db, UserId, LinkshellRanks.Leader);
+        var empty = new LinkshellRole { LinkshellId = Ls, Name = "Nothing" };
+        db.LinkshellRoles.Add(empty);
+        await db.SaveChangesAsync();
+        membership.LinkshellRoleId = empty.Id;
+        await db.SaveChangesAsync();
+        var permissions = await NewServiceAsync(db);
+
+        Assert.True(await permissions.CanAsync(membership, r => r.CanManageRoles, CancellationToken.None));
+        Assert.True(await permissions.CanAsync(membership, r => false, CancellationToken.None));
+    }
+
+    // The admin override still comes before the role, whatever the id says.
+    [Fact]
+    public async Task AdminOverride_StillGrantsEverything_WithARoleId()
+    {
+        await using var db = NewDb();
+        db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS1", LootStructure = "Dkp" });
+        db.LinkshellRoles.AddRange(LinkshellRoleDefaults.BuildDefaultRoles(Ls));
+        await db.SaveChangesAsync();
+        var membership = await SeedMemberAsync(db, AdminId, LinkshellRanks.Member, superAdmin: true);
+        Assert.NotNull(membership.LinkshellRoleId);
+
+        // Off first: switching it on is saved in the database.
+        Assert.False(await (await NewServiceAsync(db, overrideOn: false)).CanAsync(membership, r => r.CanManageTreasury, CancellationToken.None));
+        Assert.True(await (await NewServiceAsync(db, overrideOn: true)).CanAsync(membership, r => r.CanManageTreasury, CancellationToken.None));
+    }
+
+    private static readonly Func<LinkshellRole, bool>[] AllFlags =
+    {
+        r => r.CanManageRoles, r => r.CanManageMembers, r => r.CanManageEvents, r => r.CanModerateLiveEvent,
+        r => r.CanAddLoot, r => r.CanManageInventory, r => r.CanManageCharts, r => r.CanManageTreasury,
+        r => r.CanManageRules, r => r.CanManageAnnouncements, r => r.CanManageTods, r => r.CanAuditDkp,
+        r => r.CanManageAuctions, r => r.CanLockAuctions, r => r.CanCustomizeLinkshell, r => r.CanManageParties,
+        r => r.CanManageInvites, r => r.CanBid, r => r.CanUseAddon, r => r.CanManageAttendanceWithAddon,
+        r => r.CanSubmitTodForApproval,
+    };
+
     [Fact]
     public async Task EnsureDefaultRoles_SeedsMissingRolesOnce()
     {
