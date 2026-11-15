@@ -59,4 +59,69 @@ public class JoinRequestVisibilityTests
     [Fact]
     public void TheAdminOverride_SeesThem()
         => Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Member", Roles(), adminOverrideActive: true));
+
+    // ---- role id (RosterSwitch): the overview must read the role the same way enforcement does ----
+
+    // Default roles with ids, so a membership can point at one (AppUserLinkshell.LinkshellRoleId).
+    private static Dictionary<int, Dictionary<string, LinkshellRole>> RolesWithIds(Action<List<LinkshellRole>>? change = null)
+        => Roles(list =>
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                list[i].Id = 100 + i;
+            }
+            change?.Invoke(list);
+        });
+
+    // For every default role, an id stamped from the Rank gives exactly the rank's answer.
+    [Theory]
+    [InlineData("Leader")]
+    [InlineData("Officer")]
+    [InlineData("Member")]
+    [InlineData("Trial")]
+    public void ARoleIdStampedFromTheRank_GivesTheSamePermissions(string rank)
+    {
+        var roles = RolesWithIds();
+        var roleId = roles[LinkshellId][rank].Id;
+
+        Assert.Equal(
+            ActivityMappers.ResolvePermissionsFor(LinkshellId, rank, roles, adminOverrideActive: false),
+            ActivityMappers.ResolvePermissionsFor(LinkshellId, rank, roles, adminOverrideActive: false, roleId));
+        Assert.Equal(
+            ActivityMappers.AnswersJoinRequests(LinkshellId, rank, roles, adminOverrideActive: false),
+            ActivityMappers.AnswersJoinRequests(LinkshellId, rank, roles, adminOverrideActive: false, roleId));
+    }
+
+    // A custom role renamed in Data Admin: the holder's Rank still says the old name, but their id
+    // still names the role, so the overview shows its rights, as LinkshellPermissions enforces.
+    [Fact]
+    public void ARenamedRole_KeepsItsHoldersRights_ByTheirRoleId()
+    {
+        var roles = RolesWithIds(list => list.Add(
+            new LinkshellRole { Id = 500, LinkshellId = LinkshellId, Name = "Greeter", CanManageInvites = true }));
+
+        Assert.False(ActivityMappers.AnswersJoinRequests(LinkshellId, "Recruiter", roles, adminOverrideActive: false));
+        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Recruiter", roles, adminOverrideActive: false, roleId: 500));
+        Assert.True(ActivityMappers.ResolvePermissionsFor(LinkshellId, "Recruiter", roles, adminOverrideActive: false, roleId: 500)?.CanManageInvites);
+    }
+
+    // An id that is not one of this linkshell's roles is ignored: the rank decides, as before.
+    [Fact]
+    public void ARoleIdThatIsNotThisLinkshells_FallsBackToTheRank()
+    {
+        var roles = RolesWithIds();
+
+        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Officer", roles, adminOverrideActive: false, roleId: 9999));
+        Assert.False(ActivityMappers.AnswersJoinRequests(LinkshellId, "Member", roles, adminOverrideActive: false, roleId: 9999));
+    }
+
+    // The Leader rule still comes first, whatever role the id names.
+    [Fact]
+    public void TheLeader_SeesThem_EvenWhenTheirRoleIdNamesAPlainRole()
+    {
+        var roles = RolesWithIds();
+        var memberRoleId = roles[LinkshellId][LinkshellRanks.Member].Id;
+
+        Assert.True(ActivityMappers.AnswersJoinRequests(LinkshellId, "Leader", roles, adminOverrideActive: false, memberRoleId));
+    }
 }

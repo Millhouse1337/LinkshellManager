@@ -227,11 +227,8 @@ public static class AuctionBidService
 
     private static AuctionBidResult Fail(string error) => new(false, error, null, 0);
 
-    // True if the given rank may place bids in the linkshell. Defaults to true when
-    // the role row is missing (legacy linkshells whose roles were never seeded) so
-    // bidding is never accidentally blocked — only an explicit CanBid=false (e.g.
-    // the built-in Trial role) stops it.
-    // The same for a member: the role their id names (see LinkshellPermissions), else their rank's.
+    // True if this member may place bids: the role their id names (see LinkshellPermissions),
+    // else what their rank gives (CanRankBidAsync below).
     public static async Task<bool> CanMembershipBidAsync(
         ApplicationDbContext db, AppUserLinkshell membership, CancellationToken cancellationToken)
     {
@@ -249,6 +246,10 @@ public static class AuctionBidService
         return await CanRankBidAsync(db, membership.LinkshellId, membership.Rank, cancellationToken);
     }
 
+    // True if the given rank may place bids in the linkshell. Defaults to true when
+    // the role row is missing (legacy linkshells whose roles were never seeded) so
+    // bidding is never accidentally blocked — only an explicit CanBid=false (e.g.
+    // the built-in Trial role) stops it.
     public static async Task<bool> CanRankBidAsync(
         ApplicationDbContext db, int linkshellId, string? rank, CancellationToken cancellationToken)
     {
