@@ -16,16 +16,17 @@ namespace LinkshellManagerDiscordApp.Migrations
     // No row is deleted or changed, and no DKP, gil, ledger, journal or loot table is touched.
     // Safe to run twice (IF EXISTS).
     //
-    // Down (and a rollback to the deploy 3 build, which still maps the columns) re-adds the columns
-    // EMPTY and re-creates the indexes: ReAddSql. What the columns held comes back only from the
-    // pre-deploy pg_dump.
+    // Down re-adds the columns EMPTY and re-creates the indexes (ReAddSql). A rollback to the deploy
+    // 3 build, which still maps the columns, needs RollbackSql run by hand first. What the columns
+    // held comes back only from the pre-deploy pg_dump.
     public partial class Round4Contract : Migration
     {
-        // The owner runs this by hand before swapping back to the deploy 3 build (72cbe56), because
-        // that build names these columns in every query that loads a membership or a key-item tick.
-        // Down runs the same text. All columns are nullable, so no default is needed; the indexes
-        // cannot fail on the rows a deploy 4 build writes (the MembershipId column comes back all
-        // NULL, and the SpawnKey unique index already allows only one board per monster name).
+        public const string MigrationId = "20261115154156_Round4Contract";
+
+        // What Down runs: the columns back EMPTY, and the indexes. All columns are nullable, so no
+        // default is needed; the indexes cannot fail on the rows a deploy 4 build writes (the
+        // MembershipId column comes back all NULL, and the SpawnKey unique index already allows
+        // only one board per monster name).
         public const string ReAddSql = """
             ALTER TABLE "AppUserLinkshells"
                 ADD COLUMN IF NOT EXISTS "JobLevels" jsonb NULL,
@@ -38,6 +39,16 @@ namespace LinkshellManagerDiscordApp.Migrations
                 ON "HnmRecurringBoards" ("LinkshellId", "MonsterName");
             CREATE INDEX IF NOT EXISTS "IX_Tods_LinkshellId_MonsterName"
                 ON "Tods" ("LinkshellId", "MonsterName");
+            """;
+
+        // The owner runs this by hand (after a backup) BEFORE swapping back to the deploy 3 build
+        // (72cbe56): that build still maps these columns, so without them every query that loads a
+        // membership or a key-item tick fails. It is ReAddSql plus forgetting this migration, so
+        // the next deploy 4 start runs Up again and the drops happen then. Safe to run twice.
+        // (Round4ContractRoundTripTests runs exactly this text.)
+        public const string RollbackSql = ReAddSql + $"""
+
+            DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" = '{MigrationId}';
             """;
 
         /// <inheritdoc />
