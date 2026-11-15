@@ -40,22 +40,37 @@ namespace LinkshellManagerDiscordApp.Migrations
 
         // The minutes TodDurationFormat.StoredMinutes gives for a Cooldown / Interval text.
         // bareMultiplier is what a unit-less number means: 60 (hours) for a cooldown, 1 (minutes)
-        // for an interval. \y is Postgres's word boundary (.NET's \b), and round(numeric) rounds a
-        // half away from zero like MidpointRounding.AwayFromZero.
+        // for an interval. \y is Postgres's word boundary (.NET's \b).
+        //
+        // The maths is done in double precision (float8), step for step as the C# does it, NOT in
+        // exact numeric: "1.025" hours is 61.5 minutes exactly, but as a double it is
+        // 61.49999..., so the C# says 61 and exact maths would say 62. Each number is capped at
+        // 1e15 first (anything that big is more minutes than an integer holds either way, so the
+        // answer is the same) so a huge text never overflows float8. The rounding is the C#'s
+        // Math.Round(MidpointRounding.AwayFromZero): add one when the fraction is at least a half
+        // (x - trunc(x) is exact in float8).
         public static string DurationMinutesSql(string column, int bareMultiplier) => $"""
-            (SELECT CASE WHEN x.raw > 0 AND x.raw <= 2147483647 THEN x.raw::integer END
-             FROM (SELECT CASE
-                     WHEN {column} IS NULL OR {column} !~ '[^{WhitespaceChars}]' THEN NULL
-                     WHEN b.m IS NOT NULL THEN round(b.m[1]::numeric * {bareMultiplier})
-                     WHEN p.m IS NOT NULL AND (p.m[1] IS NOT NULL OR p.m[2] IS NOT NULL)
-                       THEN round(coalesce(p.m[1]::numeric, 0) * 60 + coalesce(p.m[2]::numeric, 0))
-                   END AS raw
-                   FROM (SELECT regexp_match({column},
-                            '^[{WhitespaceChars}]*([0-9]+(?:\.[0-9]+)?)[{WhitespaceChars}]*$') AS m) b,
-                        (SELECT regexp_match({column},
-                            '^[{WhitespaceChars}]*(?:([0-9]+(?:\.[0-9]+)?)[{WhitespaceChars}]*(?:hours?|hrs?|h)\y)?[{WhitespaceChars}]*(?:([0-9]+(?:\.[0-9]+)?)[{WhitespaceChars}]*(?:minutes?|mins?|m)\y)?[{WhitespaceChars}]*$',
-                            'i') AS m) p) x)
+            (SELECT CASE WHEN y.n > 0 AND y.n <= 2147483647 THEN y.n::integer END
+             FROM (SELECT CASE WHEN x.raw - trunc(x.raw) >= 0.5 THEN trunc(x.raw) + 1 ELSE trunc(x.raw) END AS n
+                   FROM (SELECT CASE
+                           WHEN {column} IS NULL OR {column} !~ '[^{WhitespaceChars}]' THEN NULL
+                           WHEN b.m IS NOT NULL THEN {Float8Sql("b.m[1]")} * {bareMultiplier}
+                           WHEN p.m IS NOT NULL AND (p.m[1] IS NOT NULL OR p.m[2] IS NOT NULL)
+                             THEN {Float8Sql("p.m[1]")} * 60
+                                  + {Float8Sql("p.m[2]")}
+                         END AS raw
+                         FROM (SELECT regexp_match({column},
+                                  '^[{WhitespaceChars}]*([0-9]+(?:\.[0-9]+)?)[{WhitespaceChars}]*$') AS m) b,
+                              (SELECT regexp_match({column},
+                                  '^[{WhitespaceChars}]*(?:([0-9]+(?:\.[0-9]+)?)[{WhitespaceChars}]*(?:hours?|hrs?|h)\y)?[{WhitespaceChars}]*(?:([0-9]+(?:\.[0-9]+)?)[{WhitespaceChars}]*(?:minutes?|mins?|m)\y)?[{WhitespaceChars}]*$',
+                                  'i') AS m) p) x) y)
             """;
+
+        // One matched number as the double the C# parses it to (0 when the group did not match, as
+        // the C# leaves it), capped at 1e15. Through numeric so the cap works on any length of text;
+        // numeric to float8 reads the exact decimal digits, like double.Parse.
+        private static string Float8Sql(string group) =>
+            $"CASE WHEN {group} IS NULL THEN 0::float8 ELSE least({group}::numeric, 1e15)::float8 END";
 
         // The key HnmConfig.SpawnKey gives for a MonsterName: blank is NULL; otherwise the pieces
         // between '/' are trimmed, empty ones dropped, and lower-cased; a name with either half of a
