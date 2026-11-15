@@ -161,6 +161,59 @@ public class MigrationBaselineAdoptionTests
         }
     }
 
+    // Two instances starting at the same moment on a production-shaped history: Baseline's row is
+    // added once, and only one of them reports (and so logs) that it added it.
+    [Fact]
+    public async Task TwoStartsAtOnce_AddTheRowOnce()
+    {
+        var connectionString = await SchemaTestDatabase.CreateAsync(_pg, "adopt_race_");
+        try
+        {
+            var oldIds = ReadOldIds();
+            await SchemaTestDatabase.MigrateToLatestAsync(connectionString);
+            await ReplaceHistoryAsync(connectionString, oldIds);
+
+            var outcomes = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+            {
+                await using var db = SchemaTestDatabase.CreateContext(connectionString);
+                return await MigrationBaseline.AdoptAsync(db);
+            }));
+
+            Assert.Single(outcomes, o => o == MigrationBaseline.Outcome.Adopted);
+            Assert.All(outcomes.Where(o => o != MigrationBaseline.Outcome.Adopted),
+                o => Assert.Equal(MigrationBaseline.Outcome.AlreadyAdopted, o));
+            var history = await ReadHistoryAsync(connectionString);
+            Assert.Equal(oldIds.Count + 1, history.Count);
+            Assert.True(history.ContainsKey(MigrationBaseline.BaselineMigrationId));
+        }
+        finally
+        {
+            await SchemaTestDatabase.DropAsync(_pg, connectionString);
+        }
+    }
+
+    // No database at all yet: adoption must not fail by opening it, because Migrate creates it.
+    [Fact]
+    public async Task MissingDatabase_IsFresh_AndMigrateCreatesIt()
+    {
+        var connectionString = new NpgsqlConnectionStringBuilder(_pg.ConnectionString)
+        {
+            Database = "adopt_missing_" + Guid.NewGuid().ToString("N")[..8],
+            Pooling = false,
+        }.ConnectionString;
+        try
+        {
+            await using var db = SchemaTestDatabase.CreateContext(connectionString);
+            Assert.Equal(MigrationBaseline.Outcome.FreshDatabase, await MigrationBaseline.AdoptAsync(db));
+            db.Database.Migrate();
+            Assert.Equal(new[] { MigrationBaseline.BaselineMigrationId }, db.Database.GetAppliedMigrations());
+        }
+        finally
+        {
+            await SchemaTestDatabase.DropAsync(_pg, connectionString);
+        }
+    }
+
     // A history table with no rows is treated like a fresh database, not refused.
     [Fact]
     public async Task EmptyHistoryTable_IsNotRefused()

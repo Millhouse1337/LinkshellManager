@@ -28,7 +28,7 @@ In one transaction it does exactly one of these:
 
 | The history table... | It does |
 |---|---|
-| does not exist (new, empty database) | nothing; `Migrate` builds it from Baseline |
+| does not exist (new, empty database, or no database yet) | nothing; `Migrate` builds it from Baseline |
 | already has Baseline's row | nothing |
 | has `20261115161909_NormalizeNamesForSquash` | adds Baseline's row (`INSERT ... ON CONFLICT DO NOTHING`) |
 | has other rows, but not that one | stops start-up: "deploy commit 4b05ee2 first" |
@@ -105,4 +105,5 @@ Kept by moving what they need: the ToD SQL helpers moved to `Data/TodDerivedSql.
 tests and `CharacterSync` keep them), the retired NM names are copied into
 `CustomMonsterCatalogTests`, and `ClosedListCheckConstraintTests` now checks the five checks on the
 Baseline database. New: `MigrationBaselineAdoptionTests` (production-shaped history, an older
-history, a fresh database, an empty history table, and running adoption twice).
+history, a fresh database, an empty history table, no database yet, two instances starting at
+once, and running adoption twice).

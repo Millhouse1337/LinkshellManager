@@ -35,13 +35,14 @@ public static class MigrationBaseline
     // What AdoptAsync did, for the start-up log and the tests.
     public enum Outcome
     {
-        // No history table: an empty database. Migrate builds it from Baseline.
+        // No history table (an empty database), or no database yet. Migrate builds it from Baseline.
         FreshDatabase,
 
         // The history table exists but has no rows. Migrate builds it from Baseline.
         EmptyHistory,
 
-        // Baseline's row was already there (a database built from Baseline, or adopted earlier).
+        // Baseline's row was already there (a database built from Baseline, adopted earlier, or
+        // adopted a moment ago by another instance starting at the same time).
         AlreadyAdopted,
 
         // The old chain's last id was there: Baseline's row was added.
@@ -53,10 +54,16 @@ public static class MigrationBaseline
     // 2. history has Baseline                 -> nothing to do (AlreadyAdopted);
     // 3. history has SquashPointMigrationId   -> INSERT Baseline's row, ON CONFLICT DO NOTHING (Adopted);
     // 4. any other non-empty history          -> throw: the database is older than the squash point.
-    // (An empty history table is treated like case 1.)
+    // (An empty history table, or no database at all, is treated like case 1. Database.Migrate
+    // creates a missing database, so this must not fail first by trying to open it.)
     public static async Task<Outcome> AdoptAsync(DbContext db, CancellationToken cancellationToken = default)
     {
         var database = db.Database;
+        if (!await db.GetService<IRelationalDatabaseCreator>().ExistsAsync(cancellationToken))
+        {
+            return Outcome.FreshDatabase;
+        }
+
         await database.OpenConnectionAsync(cancellationToken);
         try
         {
@@ -85,9 +92,11 @@ public static class MigrationBaseline
                     "ON CONFLICT (\"MigrationId\") DO NOTHING";
                 AddParameter(insert, "id", BaselineMigrationId);
                 AddParameter(insert, "version", ProductInfo.GetVersion());
-                await insert.ExecuteNonQueryAsync(cancellationToken);
+                var inserted = await insert.ExecuteNonQueryAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return Outcome.Adopted;
+
+                // Two instances starting at once: only the one whose INSERT wrote the row says so.
+                return inserted == 1 ? Outcome.Adopted : Outcome.AlreadyAdopted;
             }
 
             var rows = (long)(await ScalarAsync(connection, dbTransaction,
