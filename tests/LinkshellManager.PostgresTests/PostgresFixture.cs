@@ -118,6 +118,15 @@ public sealed class PostgresFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync(_truncateSql);
     }
 
+    // One account row with only the columns every schema since the Identity tables has. Round-trip
+    // tests seed accounts with this rather than through EF: they run at an OLDER migration, and the
+    // EF model already has account columns that later migrations add (AspNetUsers.JobLevels, say),
+    // so an EF insert would name columns that do not exist yet.
+    public static string InsertAccountSql(string id) =>
+        "INSERT INTO \"AspNetUsers\" (\"Id\", \"UserName\", \"EmailConfirmed\", \"PhoneNumberConfirmed\", " +
+        "\"TwoFactorEnabled\", \"LockoutEnabled\", \"AccessFailedCount\", \"IsSuperAdmin\", \"IsPlaceholder\") " +
+        $"VALUES ('{id.Replace("'", "''")}', '{id.Replace("'", "''")}', false, false, false, false, 0, false, false)";
+
     // Built once, after the migrations, so a table added by a future migration is wiped too.
     private async Task<string> BuildTruncateSqlAsync()
     {

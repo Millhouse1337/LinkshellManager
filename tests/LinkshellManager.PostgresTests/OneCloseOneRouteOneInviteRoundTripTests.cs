@@ -177,7 +177,7 @@ public class OneCloseOneRouteOneInviteRoundTripTests
         }
     }
 
-    // Two linkshells and two accounts through EF (the tables have many required columns), then
+    // Two linkshells through EF and two accounts by SQL (see InsertAccountSql), then
     // the messy rows.
     private static async Task<Seeded> SeedAsync(string connectionString)
     {
@@ -185,9 +185,9 @@ public class OneCloseOneRouteOneInviteRoundTripTests
         var main = new Linkshell { LinkshellName = "Main LS" };
         var second = new Linkshell { LinkshellName = "Second LS" };
         db.Linkshells.AddRange(main, second);
-        db.Users.AddRange(
-            new AppUser { Id = Player, UserName = Player },
-            new AppUser { Id = Other, UserName = Other });
+        // Accounts by SQL: the EF model has account columns later migrations add.
+        await ExecuteAsync(connectionString, PostgresFixture.InsertAccountSql(Player));
+        await ExecuteAsync(connectionString, PostgresFixture.InsertAccountSql(Other));
         await db.SaveChangesAsync();
 
         // Routes, one save each so the Ids go up in this order:

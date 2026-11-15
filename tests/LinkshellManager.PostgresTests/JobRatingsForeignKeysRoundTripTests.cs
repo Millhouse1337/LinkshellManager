@@ -136,20 +136,21 @@ public class JobRatingsForeignKeysRoundTripTests
         }
     }
 
-    // Two linkshells and three accounts, through EF (the tables have many required columns).
+    // Two linkshells through EF, three accounts by SQL (see InsertAccountSql).
     // Ratings by SQL: four good ones and three orphans the old schema let in.
     private static async Task<(int Main, int Other)> SeedAsync(string connectionString)
     {
         int main, other;
+        // Accounts by SQL: the EF model has account columns later migrations add.
+        foreach (var id in new[] { Target, Rater, Leaver })
+        {
+            await ExecuteAsync(connectionString, PostgresFixture.InsertAccountSql(id));
+        }
         await using (var db = NewContext(connectionString))
         {
             var mainLinkshell = new Linkshell { LinkshellName = "Main LS" };
             var otherLinkshell = new Linkshell { LinkshellName = "Other LS" };
             db.Linkshells.AddRange(mainLinkshell, otherLinkshell);
-            db.Users.AddRange(
-                new AppUser { Id = Target, UserName = Target },
-                new AppUser { Id = Rater, UserName = Rater },
-                new AppUser { Id = Leaver, UserName = Leaver });
             await db.SaveChangesAsync();
             main = mainLinkshell.Id;
             other = otherLinkshell.Id;

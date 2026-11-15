@@ -2146,6 +2146,10 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.KeyItemName).HasMaxLength(128).IsRequired();
                 entity.Property(item => item.SetByAppUserId).HasMaxLength(450);
                 entity.Property(item => item.SetByCharacterName).HasMaxLength(256);
+                // The membership's account (AccountJobsAndKeyItemAccounts). Plain column and plain
+                // index for now; a later deploy adds the foreign key and the per-account unique key.
+                entity.Property(item => item.AppUserId).HasMaxLength(450);
+                entity.HasIndex(item => item.AppUserId);
                 entity.HasOne(item => item.Linkshell)
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)

@@ -235,11 +235,17 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<bool>("IsSuperAdmin")
                         .HasColumnType("boolean");
 
+                    b.PrimitiveCollection<string>("JobLevels")
+                        .HasColumnType("jsonb");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<string>("MeritJobs")
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
@@ -263,6 +269,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
+
+                    b.PrimitiveCollection<string>("StrongJobs")
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("TimeZone")
                         .HasColumnType("text");
@@ -948,6 +957,10 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AppUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
                     b.Property<string>("Board")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -976,6 +989,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AppUserId");
 
                     b.HasIndex("LinkshellId", "Board", "KeyItemName", "MembershipId")
                         .IsUnique();

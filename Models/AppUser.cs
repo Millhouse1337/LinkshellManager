@@ -8,6 +8,20 @@ public class AppUser : IdentityUser
 {
     public string? CharacterName { get; set; }
 
+    // The main character's jobs, on the account: one character, one set of jobs, whichever
+    // linkshell is looking. Same formats as the alts' columns below (levels and strong flags
+    // FFXI-job-id-indexed, merit notes catalog-aligned; see ProfileJobLevels). They used to live
+    // only on each membership (AppUserLinkshell.JobLevels/StrongJobs/MeritJobs); the migration
+    // AccountJobsAndKeyItemAccounts copies them here. Null when never set.
+    [Column(TypeName = "jsonb")]
+    public int[]? JobLevels { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public int[]? StrongJobs { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public string[]? MeritJobs { get; set; }
+
     [MaxLength(64)]
     public string? AltCharacterName1 { get; set; }
 
