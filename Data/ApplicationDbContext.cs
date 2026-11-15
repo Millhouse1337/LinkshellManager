@@ -1736,8 +1736,8 @@ namespace LinkshellManagerDiscordApp.Data
                 // neither. An item with neither shows on no auction and no history page, so it
                 // would sit in the table unseen. Close moves each item (with its bids) from the
                 // auction to the new history in one UPDATE, so every correct write sets just one.
-                // The migration adds it NOT VALID, so old rows are not re-checked at startup; see
-                // AddOneParentCheckConstraints.
+                // AddOneParentCheckConstraints added it NOT VALID (old rows were not re-checked at
+                // startup); NormalizeNamesForSquash validated it once 0 rows broke it.
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_AuctionItems_OneParent",
                     "num_nonnulls(\"AuctionId\", \"AuctionHistoryId\") = 1"));
@@ -2507,8 +2507,8 @@ namespace LinkshellManagerDiscordApp.Data
                 // A window with neither is invisible on every page. Both close paths
                 // (EventEndService.EndEventCoreAsync and the HNM review handoff) set the history
                 // and clear the event in the same save, so a correct write never trips this.
-                // The migration adds it NOT VALID, so old rows are not re-checked at startup; see
-                // AddOneParentCheckConstraints.
+                // AddOneParentCheckConstraints added it NOT VALID (old rows were not re-checked at
+                // startup); NormalizeNamesForSquash validated it once 0 rows broke it.
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_EventAttendanceWindows_OneParent",
                     "num_nonnulls(\"EventId\", \"EventHistoryId\") = 1"));
@@ -2572,7 +2572,7 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.PostedByAppUserId).HasMaxLength(450);
                 entity.Property(item => item.VerifiedByAppUserId).HasMaxLength(450);
                 // Closed lists (see ClosedListCheck). Added NOT VALID by the migration, so rows saved
-                // before it are not checked until an owner runs VALIDATE CONSTRAINT.
+                // before it were not checked; NormalizeNamesForSquash validated them later.
                 entity.ToTable(table =>
                 {
                     table.HasCheckConstraint(
@@ -2636,7 +2636,7 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.CampEventHistoryId)
                     .OnDelete(DeleteBehavior.SetNull);
                 entity.HasIndex(item => item.CampEventHistoryId);
-                // Closed lists (see ClosedListCheck), added NOT VALID. EntryType may be null.
+                // Closed lists (see ClosedListCheck), added NOT VALID and validated later. EntryType may be null.
                 entity.ToTable(table =>
                 {
                     table.HasCheckConstraint(
@@ -2652,7 +2652,7 @@ namespace LinkshellManagerDiscordApp.Data
                 });
             });
             // Only the closed-list check is configured here; everything else on Linkshell comes from
-            // its attributes. Added NOT VALID, like the two above.
+            // its attributes. Added NOT VALID and validated later, like the two above.
             builder.Entity<Linkshell>(entity =>
             {
                 entity.ToTable(table => table.HasCheckConstraint(

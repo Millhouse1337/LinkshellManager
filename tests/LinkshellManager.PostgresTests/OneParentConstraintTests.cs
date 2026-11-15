@@ -171,12 +171,14 @@ public class OneParentConstraintTests : IAsyncLifetime
         }
         finally
         {
-            // The database is shared by every Postgres test class: always leave the constraint on.
+            // The database is shared by every Postgres test class: always leave the constraint on,
+            // and validated, as the full migration chain leaves it (NormalizeNamesForSquash).
             await db.Database.ExecuteSqlRawAsync(
                 "DELETE FROM \"EventAttendanceWindows\" WHERE num_nonnulls(\"EventId\", \"EventHistoryId\") <> 1");
             await db.Database.ExecuteSqlRawAsync(
                 "ALTER TABLE \"EventAttendanceWindows\" DROP CONSTRAINT IF EXISTS \"CK_EventAttendanceWindows_OneParent\"");
             await db.Database.ExecuteSqlRawAsync(AddOneParentCheckConstraints.AddWindowConstraintSql);
+            await db.Database.ExecuteSqlRawAsync(NormalizeNamesForSquash.ValidateChecksSql);
         }
     }
 

@@ -862,8 +862,8 @@ constraint	"AttendanceSnapshots".AttendanceSnapshots_Id_not_null	NOT NULL "Id"
 constraint	"AttendanceSnapshots".AttendanceSnapshots_LinkshellId_not_null	NOT NULL "LinkshellId"
 constraint	"AttendanceSnapshots".AttendanceSnapshots_SlotKind_not_null	NOT NULL "SlotKind"
 constraint	"AttendanceSnapshots".AttendanceSnapshots_SnapshotStatus_not_null	NOT NULL "SnapshotStatus"
-constraint	"AttendanceSnapshots".CK_AttendanceSnapshots_SlotKind	CHECK ((("SlotKind")::text = ANY ((ARRAY['Window'::character varying, 'Misc'::character varying])::text[]))) NOT VALID [NOT VALID]
-constraint	"AttendanceSnapshots".CK_AttendanceSnapshots_SnapshotStatus	CHECK ((("SnapshotStatus")::text = ANY ((ARRAY['Active'::character varying, 'Ignored'::character varying, 'Pending'::character varying])::text[]))) NOT VALID [NOT VALID]
+constraint	"AttendanceSnapshots".CK_AttendanceSnapshots_SlotKind	CHECK ((("SlotKind")::text = ANY ((ARRAY['Window'::character varying, 'Misc'::character varying])::text[])))
+constraint	"AttendanceSnapshots".CK_AttendanceSnapshots_SnapshotStatus	CHECK ((("SnapshotStatus")::text = ANY ((ARRAY['Active'::character varying, 'Ignored'::character varying, 'Pending'::character varying])::text[])))
 constraint	"AttendanceSnapshots".FK_AttendanceSnapshots_Events_LinkedEventId	FOREIGN KEY ("LinkedEventId") REFERENCES "Events"("Id") ON DELETE SET NULL
 constraint	"AttendanceSnapshots".FK_AttendanceSnapshots_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
 constraint	"AttendanceSnapshots".FK_AttendanceSnapshots_WindowEvents_WindowEventId	FOREIGN KEY ("WindowEventId") REFERENCES "WindowEvents"("Id") ON DELETE SET NULL
@@ -874,7 +874,7 @@ constraint	"AuctionHistories".AuctionHistories_LinkshellId_not_null	NOT NULL "Li
 constraint	"AuctionHistories".FK_AuctionHistories_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
 constraint	"AuctionHistories".PK_AuctionHistories	PRIMARY KEY ("Id")
 constraint	"AuctionItems".AuctionItems_Id_not_null	NOT NULL "Id"
-constraint	"AuctionItems".CK_AuctionItems_OneParent	CHECK ((num_nonnulls("AuctionId", "AuctionHistoryId") = 1)) NOT VALID [NOT VALID]
+constraint	"AuctionItems".CK_AuctionItems_OneParent	CHECK ((num_nonnulls("AuctionId", "AuctionHistoryId") = 1))
 constraint	"AuctionItems".FK_AuctionItems_AuctionHistories_AuctionHistoryId	FOREIGN KEY ("AuctionHistoryId") REFERENCES "AuctionHistories"("Id") ON DELETE CASCADE
 constraint	"AuctionItems".FK_AuctionItems_Auctions_AuctionId	FOREIGN KEY ("AuctionId") REFERENCES "Auctions"("Id") ON DELETE CASCADE
 constraint	"AuctionItems".FK_AuctionItems_Items_SourceItemId	FOREIGN KEY ("SourceItemId") REFERENCES "Items"("Id") ON DELETE SET NULL
@@ -911,26 +911,26 @@ constraint	"ChartMemberKeyItems".ChartMemberKeyItems_SetAt_not_null	NOT NULL "Se
 constraint	"ChartMemberKeyItems".FK_ChartMemberKeyItems_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
 constraint	"ChartMemberKeyItems".FK_ChartMemberKeyItems_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
 constraint	"ChartMemberKeyItems".PK_ChartMemberKeyItems	PRIMARY KEY ("Id")
+constraint	"ChartPopItemCredits".ChartPopItemCredits_CharacterName_not_null	NOT NULL "CharacterName"
+constraint	"ChartPopItemCredits".ChartPopItemCredits_ChartPopItemId_not_null	NOT NULL "ChartPopItemId"
+constraint	"ChartPopItemCredits".ChartPopItemCredits_CreditedAt_not_null	NOT NULL "CreditedAt"
+constraint	"ChartPopItemCredits".ChartPopItemCredits_Id_not_null	NOT NULL "Id"
 constraint	"ChartPopItemCredits".FK_ChartPopItemCredits_ChartPopItems_ChartPopItemId	FOREIGN KEY ("ChartPopItemId") REFERENCES "ChartPopItems"("Id") ON DELETE CASCADE
 constraint	"ChartPopItemCredits".PK_ChartPopItemCredits	PRIMARY KEY ("Id")
-constraint	"ChartPopItemCredits".SkyPopItemCredits_CharacterName_not_null	NOT NULL "CharacterName"
-constraint	"ChartPopItemCredits".SkyPopItemCredits_CreditedAt_not_null	NOT NULL "CreditedAt"
-constraint	"ChartPopItemCredits".SkyPopItemCredits_Id_not_null	NOT NULL "Id"
-constraint	"ChartPopItemCredits".SkyPopItemCredits_SkyPopItemId_not_null	NOT NULL "ChartPopItemId"
 constraint	"ChartPopItems".CK_ChartPopItems_Kind	CHECK ((("Kind")::text = ANY ((ARRAY['Pop'::character varying, 'Drop'::character varying])::text[])))
 constraint	"ChartPopItems".CK_ChartPopItems_Quantity_NonNegative	CHECK (("Quantity" >= 0))
 constraint	"ChartPopItems".ChartPopItems_Board_not_null	NOT NULL "Board"
+constraint	"ChartPopItems".ChartPopItems_Boss_not_null	NOT NULL "Boss"
+constraint	"ChartPopItems".ChartPopItems_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"ChartPopItems".ChartPopItems_Id_not_null	NOT NULL "Id"
+constraint	"ChartPopItems".ChartPopItems_ItemName_not_null	NOT NULL "ItemName"
 constraint	"ChartPopItems".ChartPopItems_Kind_not_null	NOT NULL "Kind"
+constraint	"ChartPopItems".ChartPopItems_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"ChartPopItems".ChartPopItems_Quantity_not_null	NOT NULL "Quantity"
+constraint	"ChartPopItems".ChartPopItems_SortOrder_not_null	NOT NULL "SortOrder"
+constraint	"ChartPopItems".ChartPopItems_UpdatedAt_not_null	NOT NULL "UpdatedAt"
 constraint	"ChartPopItems".FK_ChartPopItems_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
 constraint	"ChartPopItems".PK_ChartPopItems	PRIMARY KEY ("Id")
-constraint	"ChartPopItems".SkyPopItems_CreatedAt_not_null	NOT NULL "CreatedAt"
-constraint	"ChartPopItems".SkyPopItems_God_not_null	NOT NULL "Boss"
-constraint	"ChartPopItems".SkyPopItems_Id_not_null	NOT NULL "Id"
-constraint	"ChartPopItems".SkyPopItems_ItemName_not_null	NOT NULL "ItemName"
-constraint	"ChartPopItems".SkyPopItems_LinkshellId_not_null	NOT NULL "LinkshellId"
-constraint	"ChartPopItems".SkyPopItems_Quantity_not_null	NOT NULL "Quantity"
-constraint	"ChartPopItems".SkyPopItems_SortOrder_not_null	NOT NULL "SortOrder"
-constraint	"ChartPopItems".SkyPopItems_UpdatedAt_not_null	NOT NULL "UpdatedAt"
 constraint	"ChartWishlistRequestZones".ChartWishlistRequestZones_Boss_not_null	NOT NULL "Boss"
 constraint	"ChartWishlistRequestZones".ChartWishlistRequestZones_Id_not_null	NOT NULL "Id"
 constraint	"ChartWishlistRequestZones".ChartWishlistRequestZones_RequestId_not_null	NOT NULL "RequestId"
@@ -999,7 +999,7 @@ constraint	"DkpPools".DkpPools_Name_not_null	NOT NULL "Name"
 constraint	"DkpPools".DkpPools_SortOrder_not_null	NOT NULL "SortOrder"
 constraint	"DkpPools".FK_DkpPools_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
 constraint	"DkpPools".PK_DkpPools	PRIMARY KEY ("Id")
-constraint	"EventAttendanceWindows".CK_EventAttendanceWindows_OneParent	CHECK ((num_nonnulls("EventId", "EventHistoryId") = 1)) NOT VALID [NOT VALID]
+constraint	"EventAttendanceWindows".CK_EventAttendanceWindows_OneParent	CHECK ((num_nonnulls("EventId", "EventHistoryId") = 1))
 constraint	"EventAttendanceWindows".EventAttendanceWindows_Id_not_null	NOT NULL "Id"
 constraint	"EventAttendanceWindows".EventAttendanceWindows_IsClosingWindow_not_null	NOT NULL "IsClosingWindow"
 constraint	"EventAttendanceWindows".EventAttendanceWindows_IsKillWindow_not_null	NOT NULL "IsKillWindow"
@@ -1206,7 +1206,7 @@ constraint	"LinkshellRoles".LinkshellRoles_LinkshellId_not_null	NOT NULL "Linksh
 constraint	"LinkshellRoles".LinkshellRoles_Name_not_null	NOT NULL "Name"
 constraint	"LinkshellRoles".LinkshellRoles_SortOrder_not_null	NOT NULL "SortOrder"
 constraint	"LinkshellRoles".PK_LinkshellRoles	PRIMARY KEY ("Id")
-constraint	"Linkshells".CK_Linkshells_HnmAttendanceMode	CHECK ((("HnmAttendanceMode")::text = ANY ((ARRAY['Standard'::character varying, 'Wd'::character varying])::text[]))) NOT VALID [NOT VALID]
+constraint	"Linkshells".CK_Linkshells_HnmAttendanceMode	CHECK ((("HnmAttendanceMode")::text = ANY ((ARRAY['Standard'::character varying, 'Wd'::character varying])::text[])))
 constraint	"Linkshells".FK_Linkshells_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id")
 constraint	"Linkshells".Linkshells_ActiveAfterAttendances_not_null	NOT NULL "ActiveAfterAttendances"
 constraint	"Linkshells".Linkshells_AuctionsLocked_not_null	NOT NULL "AuctionsLocked"
@@ -1217,8 +1217,8 @@ constraint	"Linkshells".Linkshells_EnableDkp_not_null	NOT NULL "EnableDkp"
 constraint	"Linkshells".Linkshells_EnableEndgame_not_null	NOT NULL "EnableEndgame"
 constraint	"Linkshells".Linkshells_EnableEvents_not_null	NOT NULL "EnableEvents"
 constraint	"Linkshells".Linkshells_EnableHnmSection_not_null	NOT NULL "EnableHnmSection"
-constraint	"Linkshells".Linkshells_EnableRevenue_not_null	NOT NULL "EnableTreasury"
 constraint	"Linkshells".Linkshells_EnableToDs_not_null	NOT NULL "EnableToDs"
+constraint	"Linkshells".Linkshells_EnableTreasury_not_null	NOT NULL "EnableTreasury"
 constraint	"Linkshells".Linkshells_HiddenTodMonsters_not_null	NOT NULL "HiddenTodMonsters"
 constraint	"Linkshells".Linkshells_HnmAttendanceMode_not_null	NOT NULL "HnmAttendanceMode"
 constraint	"Linkshells".Linkshells_HnmStandardClaimBonus_not_null	NOT NULL "HnmStandardClaimBonus"
@@ -1302,8 +1302,8 @@ constraint	"WindowEventMemberDkps".WindowEventMemberDkps_CharacterName_not_null	
 constraint	"WindowEventMemberDkps".WindowEventMemberDkps_DkpAmount_not_null	NOT NULL "DkpAmount"
 constraint	"WindowEventMemberDkps".WindowEventMemberDkps_Id_not_null	NOT NULL "Id"
 constraint	"WindowEventMemberDkps".WindowEventMemberDkps_WindowEventId_not_null	NOT NULL "WindowEventId"
-constraint	"WindowEvents".CK_WindowEvents_EntryType	CHECK ((("EntryType" IS NULL) OR (("EntryType")::text = ANY ((ARRAY['Kings Camp'::character varying, 'Wyrms Camp'::character varying, 'Misc Camp'::character varying, 'Kill'::character varying])::text[])))) NOT VALID [NOT VALID]
-constraint	"WindowEvents".CK_WindowEvents_Status	CHECK ((("Status")::text = ANY ((ARRAY['Open'::character varying, 'Closed'::character varying, 'Archived'::character varying])::text[]))) NOT VALID [NOT VALID]
+constraint	"WindowEvents".CK_WindowEvents_EntryType	CHECK ((("EntryType" IS NULL) OR (("EntryType")::text = ANY ((ARRAY['Kings Camp'::character varying, 'Wyrms Camp'::character varying, 'Misc Camp'::character varying, 'Kill'::character varying])::text[]))))
+constraint	"WindowEvents".CK_WindowEvents_Status	CHECK ((("Status")::text = ANY ((ARRAY['Open'::character varying, 'Closed'::character varying, 'Archived'::character varying])::text[])))
 constraint	"WindowEvents".FK_WindowEvents_EventHistories_CampEventHistoryId	FOREIGN KEY ("CampEventHistoryId") REFERENCES "EventHistories"("Id") ON DELETE SET NULL
 constraint	"WindowEvents".FK_WindowEvents_Events_SourceEventId	FOREIGN KEY ("SourceEventId") REFERENCES "Events"("Id") ON DELETE SET NULL
 constraint	"WindowEvents".FK_WindowEvents_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
@@ -1534,6 +1534,8 @@ sequence	Auctions_Id_seq
 sequence	Bids_Id_seq	
 sequence	Characters_Id_seq	
 sequence	ChartMemberKeyItems_Id_seq	
+sequence	ChartPopItemCredits_Id_seq	
+sequence	ChartPopItems_Id_seq	
 sequence	ChartWishlistRequestZones_Id_seq	
 sequence	ChartWishlistRequests_Id_seq	
 sequence	ClaimShieldCaptureMembers_Id_seq	
@@ -1567,8 +1569,6 @@ sequence	PartySetups_Id_seq
 sequence	PendingTodSubmissions_Id_seq	
 sequence	PlaceholderClaimRequests_Id_seq	
 sequence	Rules_Id_seq	
-sequence	SkyPopItemCredits_Id_seq	
-sequence	SkyPopItems_Id_seq	
 sequence	Tods_Id_seq	
 sequence	WindowEventMemberDkps_Id_seq	
 sequence	WindowEvents_Id_seq	
