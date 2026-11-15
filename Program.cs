@@ -607,6 +607,18 @@ if (!app.Environment.IsDevelopment())
         var services = scope.ServiceProvider;
         try
         {
+            // The migrations were squashed into one Baseline (Round 4, D11). A database the old
+            // chain built gets Baseline's history row added here, so Migrate does not try to build
+            // it again; an older database stops start-up with a plain message. See
+            // docs/migration-squash.md.
+            var adoption = await MigrationBaseline.AdoptAsync(services.GetRequiredService<ApplicationDbContext>());
+            if (adoption == MigrationBaseline.Outcome.Adopted)
+            {
+                services.GetRequiredService<ILogger<Program>>().LogInformation(
+                    "Migration squash: added {Baseline} to the migration history (old rows kept).",
+                    MigrationBaseline.BaselineMigrationId);
+            }
+
             services.GetRequiredService<ApplicationDbContext>().Database.Migrate();
         }
         catch (Exception ex)

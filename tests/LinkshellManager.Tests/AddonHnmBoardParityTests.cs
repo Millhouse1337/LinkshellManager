@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Xunit;
@@ -269,116 +268,5 @@ public class AddonHnmBoardParityTests
 
         Assert.Equal(2, HnmCampRules.EffectiveWindowCount(nm));
         Assert.False(HnmCampRules.UsesWindows(nm));
-    }
-}
-
-// The backfill migration's monster table is hand-written SQL against real data, run once, with
-// nothing watching. This holds it against HnmConfig so a typo can't write a monster the board is
-// unable to resolve — the same guard ChartPopItemMigrationTests puts on the Sky/Sea refiles.
-public class AlignAddonHnmCampsMigrationTests
-{
-    [Fact]
-    public void EveryAliasIsACuratedHnm()
-    {
-        Assert.All(
-            AlignAddonHnmCampsWithAppBoards.Monsters,
-            m => Assert.True(
-                HnmConfig.IsTrueHnm(m.Alias),
-                $"'{m.Alias}' is not a curated HNM, so the migration would stamp a monster nothing resolves."));
-    }
-
-    // The value written into AssignedMonsterName has to resolve to the same counts as the alias it
-    // was matched by — on BOTH scales. A stored name that shifted either one would silently re-cut
-    // the camp's board traversal or its Open/Close labelling.
-    [Fact]
-    public void StoredNameCarriesTheSameCountsAsItsAlias()
-    {
-        Assert.All(
-            AlignAddonHnmCampsWithAppBoards.Monsters,
-            m =>
-            {
-                Assert.Equal(HnmConfig.EffectiveWindowCount(m.Alias), HnmConfig.EffectiveWindowCount(m.Stored));
-                Assert.Equal(HnmConfig.GetWindowCount(m.Alias), HnmConfig.GetWindowCount(m.Stored));
-            });
-    }
-
-    // On a king/dragon the two counts are genuinely different numbers — 2 roster reads across 7
-    // spawn windows — which is the whole reason they need separate columns/fields. If that ever
-    // collapses, the conflation the tests above guard against stops being detectable.
-    //
-    // A wyrm is the opposite case and must NOT be asserted apart: it posts once per hour-long
-    // window, so 25 == 25 is the correct answer there, and pinning them as distinct is what kept
-    // the stale 24 alive in GetWindowCount. Separate fields are still required — being equal on
-    // one band doesn't make them one number.
-    [Fact]
-    public void SpawnAndPostCountsAreDistinct_OnTheKingsAndDragons()
-    {
-        var byBand = AlignAddonHnmCampsWithAppBoards.Monsters
-            .ToLookup(m => HnmConfig.EffectiveWindowCount(m.Stored) == 7);
-
-        Assert.NotEmpty(byBand[true]);
-        Assert.All(
-            byBand[true],
-            m => Assert.NotEqual(HnmConfig.EffectiveWindowCount(m.Stored), HnmConfig.GetWindowCount(m.Stored)));
-
-        // The wyrms, pinned the other way so neither band can drift unnoticed.
-        Assert.NotEmpty(byBand[false]);
-        Assert.All(
-            byBand[false],
-            m => Assert.Equal(HnmConfig.EffectiveWindowCount(m.Stored), HnmConfig.GetWindowCount(m.Stored)));
-    }
-
-    // AssignedMonsterName is stored in the combined "Base/Stronger" form (HnmConfig.DisplayMonsterName
-    // narrows it per day), so every merge-pair alias must map onto the combined label rather than
-    // onto itself.
-    [Fact]
-    public void MergePairAliasesMapOntoTheCombinedLabel()
-    {
-        foreach (var (baseName, stronger) in HnmConfig.MonsterMergePairs)
-        {
-            var combined = $"{baseName}/{stronger}";
-            foreach (var alias in new[] { baseName, stronger, combined })
-            {
-                var entry = AlignAddonHnmCampsWithAppBoards.Monsters.SingleOrDefault(m => m.Alias == alias);
-                Assert.True(entry.Alias is not null, $"'{alias}' is missing from the migration's monster table.");
-                Assert.Equal(combined, entry.Stored);
-            }
-        }
-    }
-
-    // Monsters put on a timed cadence AFTER this migration shipped (2026-08-04). The migration is a
-    // one-off backfill over camps that were already on the board when it ran, and it does not re-run
-    // — so a monster that did not exist in the app until later can have no camp for it to repair,
-    // and adding it to that historical table would be a lie about what the migration did.
-    //
-    // Anything OLDER than the migration still has to be covered, which is what the test below pins.
-    // Extend this list only when you add a monster to the cadence tables, never to silence a real gap.
-    private static readonly HashSet<string> CadenceAddedAfterTheMigration =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            "Capricious Cassie",
-            "Bune",
-            "Boroka",
-            "Roc",
-            // The ToAU HNMs, added with the expansion's release on HorizonXI — long after this
-            // backfill ran, so there was never a camp of theirs for it to repair.
-            "Cerberus",
-            "Hydra",
-            "Khimaira",
-        };
-
-    // Every timed monster that predates the migration is covered — a wyrm left out keeps its
-    // 24-window count forever, since the migration is the only thing that repairs a camp already on
-    // the board.
-    [Fact]
-    public void EveryTimedHnmIsCovered()
-    {
-        var aliases = AlignAddonHnmCampsWithAppBoards.Monsters.Select(m => m.Alias).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        Assert.All(
-            HnmConfig.WindowedHnmSetups().Where(s => !CadenceAddedAfterTheMigration.Contains(s.Monster)),
-            setup => Assert.True(
-                aliases.Contains(setup.Monster),
-                $"'{setup.Monster}' runs a timed cadence but the migration would never match it."));
     }
 }

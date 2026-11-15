@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using LinkshellManagerDiscordApp.Data;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
 using Xunit;
@@ -98,11 +97,10 @@ public class TodDerivedValueTests
         Assert.Null(TodDurationFormat.StoredMinutes("\u0662\u0662", TodDurationFormat.HoursUnit));
     }
 
-    // Three copies of the merge pairs must agree: HnmConfig (the app), the 2026-11-05 board merge
-    // migration, and the SpawnKey SQL, in the same order (a name with halves of two pairs takes the
-    // first pair's key on both sides).
+    // Two copies of the merge pairs must agree: HnmConfig (the app) and the SpawnKey SQL, in the
+    // same order (a name with halves of two pairs takes the first pair's key on both sides).
     [Fact]
-    public void MergePairs_AgreeAcrossHnmConfigTheBoardMergeAndTheSpawnKeySql()
+    public void MergePairs_AgreeAcrossHnmConfigAndTheSpawnKeySql()
     {
         var fromSql = Regex.Matches(
                 TodDerivedSql.SpawnKeySql("x"),
@@ -117,7 +115,6 @@ public class TodDerivedValueTests
             .ToArray();
 
         Assert.Equal(fromConfig, fromSql);
-        Assert.Equal(HnmConfig.MonsterMergePairs.ToArray(), MergeHnmRecurringBoardsPerSpawn.Pairs);
         Assert.Equal(3, fromSql.Length);
     }
 

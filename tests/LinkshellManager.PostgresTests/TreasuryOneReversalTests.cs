@@ -2,7 +2,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Data;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
@@ -129,70 +128,5 @@ public class TreasuryOneReversalTests : IAsyncLifetime
         await using var check = _pg.CreateContext();
         Assert.Equal(2, await check.JournalEntries.CountAsync(e => e.ReversesJournalEntryId == saleId));
         Assert.Equal(900, await NewWriter(check).GetCashOnHandAsync(lsId, CancellationToken.None));
-    }
-
-    // Why the migration checks first: production may already hold an entry reversed twice, and a
-    // plain CREATE UNIQUE INDEX would fail the startup migration on it. With a duplicate in place the
-    // migration's SQL still runs (and skips the index); the owner's pre-check lists the pair; once it
-    // is resolved, the same SQL creates the index.
-    [Fact]
-    public async Task MigrationSkipsTheIndexOverAnOldDuplicate_ThenCreatesItOnceResolved()
-    {
-        var (lsId, saleId) = await SeedSaleAsync();
-        await using var db = _pg.CreateContext();
-        try
-        {
-            await NewWriter(db).ReverseAsync(await LoadAsync(db, saleId), "Sold in error.", Officer, CancellationToken.None);
-            await db.SaveChangesAsync();
-
-            await db.Database.ExecuteSqlRawAsync($"DROP INDEX \"{IndexName}\"");
-            db.JournalEntries.Add(new JournalEntry
-            {
-                LinkshellId = lsId,
-                Sequence = 999,
-                EntryNumber = "TX-999",
-                Status = JournalEntryStatuses.Draft,
-                Kind = JournalEntryKinds.Reversal,
-                ReversesJournalEntryId = saleId,
-                CorrectionReason = "Old double click.",
-            });
-            await db.SaveChangesAsync();
-
-            await db.Database.ExecuteSqlRawAsync(OneReversalPerTreasuryEntry.UpSql);
-            Assert.False(await IndexExistsAsync());
-            Assert.Equal(2, await CountPreCheckRowsAsync());
-
-            await db.Database.ExecuteSqlRawAsync(
-                "DELETE FROM \"JournalEntries\" WHERE \"EntryNumber\" = 'TX-999'");
-            Assert.Equal(0, await CountPreCheckRowsAsync());
-            await db.Database.ExecuteSqlRawAsync(OneReversalPerTreasuryEntry.UpSql);
-            Assert.True(await IndexExistsAsync());
-        }
-        finally
-        {
-            // The database is shared by every Postgres test class: always leave the index on.
-            await db.Database.ExecuteSqlRawAsync(
-                "DELETE FROM \"JournalEntries\" WHERE \"EntryNumber\" = 'TX-999'");
-            await db.Database.ExecuteSqlRawAsync(OneReversalPerTreasuryEntry.CreateIndexSql);
-        }
-    }
-
-    private async Task<bool> IndexExistsAsync()
-    {
-        await using var conn = new NpgsqlConnection(_pg.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            "SELECT count(*) FROM pg_indexes WHERE indexname = @name", conn);
-        cmd.Parameters.AddWithValue("name", IndexName);
-        return (long)(await cmd.ExecuteScalarAsync())! == 1;
-    }
-
-    private async Task<long> CountPreCheckRowsAsync()
-    {
-        await using var conn = new NpgsqlConnection(_pg.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            $"SELECT count(*) FROM ({OneReversalPerTreasuryEntry.PreCheckSql}) dup", conn);
-        return (long)(await cmd.ExecuteScalarAsync())!;
     }
 }

@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Data;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
@@ -55,11 +54,26 @@ public class CustomMonsterCatalogTests
 
     // ---- the eleven NMs that left the built-in catalog ----
 
+    // The names the retiring migrations deleted (RemoveRetiredNmMonsterTimings,
+    // RetireGroundNmMonsterTimings and RemoveSkyNmMonsterTimings, before the squash), copied here so
+    // the guard that keeps them out of the built-in catalog outlives those migrations.
+    private static readonly string[] RetiredNms =
+    {
+        "Boroka", "Bune", "Capricious Cassie", "Roc", "Serket", "Shikigami Weapon", "Simurgh", "Xolotl",
+    };
+
+    private static readonly string[] RetiredGroundNms = { "Bloodsucker", "King Arthro", "King Vinegarroon" };
+
+    private static readonly string[] SkyFarmNms =
+    {
+        "Faust", "Brigandish Blade", "Zipacna", "Olla Grande", "Steam Cleaner", "Mother Globe", "Despot", "Ullikummi",
+    };
+
     [Fact]
     public void RetiredNms_AreGoneFromTheBuiltInCatalog()
     {
-        foreach (var name in RemoveRetiredNmMonsterTimings.RetiredNms
-                     .Concat(RetireGroundNmMonsterTimings.RetiredGroundNms))
+        foreach (var name in RetiredNms
+                     .Concat(RetiredGroundNms))
         {
             Assert.DoesNotContain(name, TodCatalog.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
         }
@@ -71,8 +85,8 @@ public class CustomMonsterCatalogTests
     public void RetiredNms_AndTheCatalog_DoNotOverlap()
     {
         var catalog = TodCatalog.SupportedMonsters.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        Assert.DoesNotContain(RemoveRetiredNmMonsterTimings.RetiredNms, catalog.Contains);
-        Assert.DoesNotContain(RetireGroundNmMonsterTimings.RetiredGroundNms, catalog.Contains);
+        Assert.DoesNotContain(RetiredNms, catalog.Contains);
+        Assert.DoesNotContain(RetiredGroundNms, catalog.Contains);
     }
 
     // A retired NM must not come back on ANY linkshell, and the two ways it could are: a fresh
@@ -90,8 +104,8 @@ public class CustomMonsterCatalogTests
             .Select(row => row.MonsterName)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var name in RemoveRetiredNmMonsterTimings.RetiredNms
-                     .Concat(RetireGroundNmMonsterTimings.RetiredGroundNms))
+        foreach (var name in RetiredNms
+                     .Concat(RetiredGroundNms))
         {
             Assert.DoesNotContain(name, seeded);
         }
@@ -141,11 +155,11 @@ public class CustomMonsterCatalogTests
     [Fact]
     public void SkyFarmNms_AreNotInTheBuiltInCatalog()
     {
-        foreach (var name in RemoveSkyNmMonsterTimings.SkyFarmNms)
+        foreach (var name in SkyFarmNms)
         {
             Assert.DoesNotContain(name, TodCatalog.SupportedMonsters, StringComparer.OrdinalIgnoreCase);
         }
-        Assert.Equal(8, RemoveSkyNmMonsterTimings.SkyFarmNms.Length);
+        Assert.Equal(8, SkyFarmNms.Length);
     }
 
     // These three outlived the first cut and were the last hardcoded "Other NMs"; RetireGroundNmMonsterTimings

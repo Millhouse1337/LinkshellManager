@@ -9,12 +9,14 @@ using Xunit;
 
 namespace LinkshellManager.PostgresTests;
 
-// Rolling back the migration squash (Round 4, D11). The squash build ADDS a Baseline row to
-// __EFMigrationsHistory and keeps every old row. If the owner then swaps back to this build, the
-// history holds every id this build knows plus one it has never heard of. This proves that build
-// still starts: Program.cs's start-up path (Database.Migrate, then the Characters re-copy) runs
-// without error, sees nothing pending, changes nothing in the schema, and the app can read and
-// write. So the D11 rollback is a plain swap, with no SQL.
+// A history row this build does not know must not stop it. Written before the migration squash
+// (Round 4, D11) to prove the rollback: the squash build ADDS a Baseline row and keeps every old row,
+// so the build before it (commit 4b05ee2, which had this same test) sees one id it has never heard of.
+// It passed there, so the D11 rollback is a plain swap, with no SQL. Since the squash it also covers
+// the other side: this build's history on production holds the 173 old ids it no longer knows
+// (MigrationBaselineAdoptionTests), and the next squash or rollback will add more. This proves
+// Program.cs's start-up path (Database.Migrate, then the Characters re-copy) runs without error,
+// sees nothing pending, changes nothing in the schema, and the app can read and write.
 //
 // Its OWN database inside the test container (SchemaTestDatabase), dropped at the end.
 [Collection("postgres")]

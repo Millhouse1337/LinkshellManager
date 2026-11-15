@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Data;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
@@ -12,19 +11,13 @@ using Xunit;
 
 namespace LinkshellManager.PostgresTests;
 
-// P2.8: one membership per account per linkshell, one participation per account per event. The two
-// migrations merge the duplicates production may already hold (money kept), then unique indexes stop
-// new ones, and the join paths turn the index's "no" into "already a member" or a re-run.
+// P2.8: one membership per account per linkshell, one participation per account per event. Two
+// migrations merged the duplicates production held (money kept; before the squash, so their tests are
+// in git history), then unique indexes stop new ones, and the join paths turn the index's "no" into
+// "already a member" or a re-run.
 [Collection("postgres")]
 public class OneMembershipOneParticipationTests : IAsyncLifetime
 {
-    private const string ParticipationIndex = "IX_AppUserEvents_EventId_AppUserId";
-
-    // What the migrations' CreateIndex produces, so a test that drops an index can put it back.
-    private const string CreateParticipationIndexSql =
-        "CREATE UNIQUE INDEX IF NOT EXISTS \"" + ParticipationIndex + "\" ON \"AppUserEvents\" (\"EventId\", \"AppUserId\") " +
-        "WHERE \"AppUserId\" IS NOT NULL;";
-
     private static readonly DateTime Now = new(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private readonly PostgresFixture _pg;
@@ -111,106 +104,6 @@ public class OneMembershipOneParticipationTests : IAsyncLifetime
         AppUserId = appUserId,
         StartTime = Now,
     };
-
-    [Fact]
-    public async Task ParticipationMergeSql_MovesWindowsAndHistory_AndLetsTheIndexBuild()
-    {
-        try
-        {
-            await using (var db = _pg.CreateContext())
-            {
-                await db.Database.ExecuteSqlRawAsync($"DROP INDEX IF EXISTS \"{ParticipationIndex}\";");
-            }
-
-            var (_, eventId) = await SeedEventAsync("bob", "carol");
-            int keepId, dupId, carolId, w1, w2, w3;
-            await using (var db = _pg.CreateContext())
-            {
-                // Bob has two rows. The kept (older) row has no job and no check-in; the newer one
-                // has both.
-                var keep = Participation(eventId, "bob");
-                keep.IsVerified = true;
-                var dup = Participation(eventId, "bob");
-                dup.CharacterName = "Bob";
-                dup.JobName = "WAR";
-                dup.WdArrivalWindow = 2;
-                dup.WdDepartureWindow = 4;
-                dup.IsVerified = false; // not copied: the kept row's mark is what close paid on
-                var carol = Participation(eventId, "carol");
-                // Outside sign-ups (no account) are not merged.
-                var guest1 = Participation(eventId, null);
-                guest1.DiscordUserId = "555";
-                var guest2 = Participation(eventId, null);
-                guest2.DiscordUserId = "555";
-                db.AppUserEvents.AddRange(keep, dup, carol, guest1, guest2);
-
-                var win1 = new EventAttendanceWindow { EventId = eventId, SequenceNumber = 1, PostedAt = Now };
-                var win2 = new EventAttendanceWindow { EventId = eventId, SequenceNumber = 2, PostedAt = Now };
-                var win3 = new EventAttendanceWindow { EventId = eventId, SequenceNumber = 3, PostedAt = Now };
-                db.EventAttendanceWindows.AddRange(win1, win2, win3);
-                await db.SaveChangesAsync();
-                keepId = keep.Id;
-                dupId = dup.Id;
-                carolId = carol.Id;
-                w1 = win1.Id;
-                w2 = win2.Id;
-                w3 = win3.Id;
-
-                db.AppUserEventWindows.AddRange(
-                    new AppUserEventWindow { EventAttendanceWindowId = w1, AppUserEventId = keepId, AppUserId = "bob", VerifiedAt = Now },
-                    new AppUserEventWindow { EventAttendanceWindowId = w2, AppUserEventId = dupId, AppUserId = "bob", VerifiedAt = Now },
-                    // Window 3 credited on both rows (one is a legacy credit without an AppUserId).
-                    new AppUserEventWindow { EventAttendanceWindowId = w3, AppUserEventId = keepId, AppUserId = "bob", VerifiedAt = Now },
-                    new AppUserEventWindow { EventAttendanceWindowId = w3, AppUserEventId = dupId, AppUserId = null, VerifiedAt = Now },
-                    new AppUserEventWindow { EventAttendanceWindowId = w1, AppUserEventId = carolId, AppUserId = "carol", VerifiedAt = Now });
-                db.AppUserEventStatusLedgers.Add(new AppUserEventStatusLedger
-                {
-                    AppUserEventId = dupId, EventId = eventId, ActionType = "BreakStart", OccurredAt = Now,
-                });
-                await db.SaveChangesAsync();
-            }
-
-            await using (var db = _pg.CreateContext())
-            {
-                await db.Database.ExecuteSqlRawAsync(OneParticipationPerEvent.MergeDuplicateParticipationsSql);
-            }
-
-            await using (var db = _pg.CreateContext())
-            {
-                var rows = await db.AppUserEvents.AsNoTracking().OrderBy(p => p.Id).ToListAsync();
-                var bob = Assert.Single(rows, p => p.AppUserId == "bob");
-                Assert.Equal(keepId, bob.Id);
-                Assert.True(bob.IsVerified);
-                Assert.Equal("Bob", bob.CharacterName);
-                Assert.Equal("WAR", bob.JobName);
-                Assert.Equal(2, bob.WdArrivalWindow);
-                Assert.Equal(4, bob.WdDepartureWindow);
-                Assert.Single(rows, p => p.Id == carolId);
-                Assert.Equal(2, rows.Count(p => p.AppUserId == null));
-
-                // Bob's windows 1, 2, 3, each once, all on the kept row.
-                var bobWindows = await db.AppUserEventWindows.AsNoTracking()
-                    .Where(w => w.AppUserEventId == keepId).Select(w => w.EventAttendanceWindowId).OrderBy(id => id).ToListAsync();
-                Assert.Equal(new[] { w1, w2, w3 }, bobWindows);
-                Assert.False(await db.AppUserEventWindows.AnyAsync(w => w.AppUserEventId == dupId));
-                Assert.Equal(carolId, (await db.AppUserEventWindows.AsNoTracking().SingleAsync(w => w.AppUserId == "carol")).AppUserEventId);
-
-                // The status history moved rather than cascading away with the deleted row.
-                Assert.Equal(keepId, (await db.AppUserEventStatusLedgers.AsNoTracking().SingleAsync()).AppUserEventId);
-
-                // Idempotent, then the index builds.
-                await db.Database.ExecuteSqlRawAsync(OneParticipationPerEvent.MergeDuplicateParticipationsSql);
-                Assert.Equal(rows.Count, await db.AppUserEvents.CountAsync());
-                await db.Database.ExecuteSqlRawAsync(CreateParticipationIndexSql);
-            }
-        }
-        finally
-        {
-            await _pg.ResetAsync();
-            await using var db = _pg.CreateContext();
-            await db.Database.ExecuteSqlRawAsync(CreateParticipationIndexSql);
-        }
-    }
 
     [Fact]
     public async Task SecondParticipationForTheSameAccountIsRejected_AsADuplicateParticipation()

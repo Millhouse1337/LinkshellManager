@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Http;
@@ -450,54 +449,5 @@ public class JoinRequestTests : IAsyncLifetime
         Assert.IsType<NotFoundObjectResult>(await ApproveAsync(Officer, inviteId));
         Assert.IsType<NotFoundObjectResult>(await CancelAsync(Player, inviteId));
         Assert.Empty(await MembershipsAsync(Player, hunters));
-    }
-
-    // ---------------------------------------------------------------------- migration ---
-
-    [Fact]
-    public async Task MigrationSql_CancelsDuplicateOpenRequests_KeepingTheOldest_AndLetsTheIndexBuild()
-    {
-        var (hunters, _) = await SeedAsync();
-        const string index = "IX_Invites_OneOpenJoinRequest";
-        try
-        {
-            int first, second, third, otherPlayer;
-            await using (var db = _pg.CreateContext())
-            {
-                await db.Database.ExecuteSqlRawAsync($"DROP INDEX IF EXISTS \"{index}\";");
-                var a = new Invite { AppUserId = Player, LinkshellId = hunters, Status = JoinRequestService.PendingStatus };
-                var b = new Invite { AppUserId = Player, LinkshellId = hunters, Status = JoinRequestService.PendingStatus };
-                var c = new Invite { AppUserId = Player, LinkshellId = hunters, Status = JoinRequestService.PendingStatus };
-                var d = new Invite { AppUserId = Other, LinkshellId = hunters, Status = JoinRequestService.PendingStatus };
-                db.Invites.AddRange(a, b, c, d);
-                await db.SaveChangesAsync();
-                (first, second, third, otherPlayer) = (a.Id, b.Id, c.Id, d.Id);
-            }
-
-            await using (var db = _pg.CreateContext())
-            {
-                await db.Database.ExecuteSqlRawAsync(AddJoinRequestDetails.CancelDuplicateOpenJoinRequestsSql);
-                // Safe to run twice.
-                await db.Database.ExecuteSqlRawAsync(AddJoinRequestDetails.CancelDuplicateOpenJoinRequestsSql);
-            }
-
-            await using (var db = _pg.CreateContext())
-            {
-                var rows = await db.Invites.AsNoTracking().ToDictionaryAsync(i => i.Id);
-                Assert.Equal(4, rows.Count);
-                Assert.Equal(JoinRequestService.PendingStatus, rows[first].Status);
-                Assert.Equal(JoinRequestService.CancelledStatus, rows[second].Status);
-                Assert.Equal(JoinRequestService.CancelledStatus, rows[third].Status);
-                Assert.NotNull(rows[second].ResolvedAtUtc);
-                Assert.Equal(JoinRequestService.PendingStatus, rows[otherPlayer].Status);
-            }
-        }
-        finally
-        {
-            await using var db = _pg.CreateContext();
-            await db.Database.ExecuteSqlRawAsync(
-                $"CREATE UNIQUE INDEX IF NOT EXISTS \"{index}\" ON \"Invites\" (\"LinkshellId\", \"AppUserId\") " +
-                "WHERE \"Status\" = 'PendingJoinRequest';");
-        }
     }
 }

@@ -1,6 +1,5 @@
 using System;
 using System.Threading.Tasks;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -129,65 +128,5 @@ public class OneParentConstraintTests : IAsyncLifetime
             new AuctionItem { AuctionHistoryId = p.AuctionHistoryId, ItemName = "Kraken Club" });
         await db.SaveChangesAsync();
         Assert.Equal(2, await db.AuctionItems.CountAsync());
-    }
-
-    // Why the migration says NOT VALID: production may hold an old bad row, and a plain ADD
-    // CONSTRAINT would fail the startup migration on it. This puts a parentless window in the table,
-    // re-runs the migration's SQL, and checks it still applies; then walks the owner's follow-up
-    // (pre-check finds the row, VALIDATE refuses until it is fixed, then succeeds).
-    [Fact]
-    public async Task MigrationAppliesOverAnOldBadRow_AndOwnerCheckThenValidates()
-    {
-        var p = await SeedParentsAsync();
-        await using var db = _pg.CreateContext();
-        try
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE \"EventAttendanceWindows\" DROP CONSTRAINT \"CK_EventAttendanceWindows_OneParent\"");
-            await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO \"EventAttendanceWindows\" (\"SequenceNumber\", \"PostedAt\", \"IsClosingWindow\", \"IsKillWindow\") " +
-                "VALUES (1, now(), false, false)");
-
-            // The migration's own statement goes through despite the bad row.
-            await db.Database.ExecuteSqlRawAsync(AddOneParentCheckConstraints.AddWindowConstraintSql);
-
-            // New bad writes are refused straight away, even though the old row was not checked.
-            db.EventAttendanceWindows.Add(new EventAttendanceWindow { SequenceNumber = 2, PostedAt = DateTime.UtcNow });
-            var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
-            AssertCheckViolation(ex, "CK_EventAttendanceWindows_OneParent");
-            db.ChangeTracker.Clear();
-
-            // The owner's pre-check finds exactly the old row, and VALIDATE refuses while it is there.
-            Assert.Equal(1, await CountPreCheckRowsAsync());
-            var refused = await Assert.ThrowsAsync<PostgresException>(
-                () => db.Database.ExecuteSqlRawAsync(AddOneParentCheckConstraints.ValidateSql));
-            Assert.Equal(PostgresErrorCodes.CheckViolation, refused.SqlState);
-
-            // Fixed (here: given its archive), the pre-check comes back empty and VALIDATE succeeds.
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE \"EventAttendanceWindows\" SET \"EventHistoryId\" = {p.EventHistoryId} WHERE \"EventId\" IS NULL AND \"EventHistoryId\" IS NULL");
-            Assert.Equal(0, await CountPreCheckRowsAsync());
-            await db.Database.ExecuteSqlRawAsync(AddOneParentCheckConstraints.ValidateSql);
-        }
-        finally
-        {
-            // The database is shared by every Postgres test class: always leave the constraint on,
-            // and validated, as the full migration chain leaves it (NormalizeNamesForSquash).
-            await db.Database.ExecuteSqlRawAsync(
-                "DELETE FROM \"EventAttendanceWindows\" WHERE num_nonnulls(\"EventId\", \"EventHistoryId\") <> 1");
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE \"EventAttendanceWindows\" DROP CONSTRAINT IF EXISTS \"CK_EventAttendanceWindows_OneParent\"");
-            await db.Database.ExecuteSqlRawAsync(AddOneParentCheckConstraints.AddWindowConstraintSql);
-            await db.Database.ExecuteSqlRawAsync(NormalizeNamesForSquash.ValidateChecksSql);
-        }
-    }
-
-    private async Task<long> CountPreCheckRowsAsync()
-    {
-        await using var conn = new NpgsqlConnection(_pg.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            $"SELECT count(*) FROM ({AddOneParentCheckConstraints.PreCheckSql}) bad", conn);
-        return (long)(await cmd.ExecuteScalarAsync())!;
     }
 }

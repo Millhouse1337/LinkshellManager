@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Data;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
@@ -14,19 +13,13 @@ using Xunit;
 
 namespace LinkshellManager.PostgresTests;
 
-// P2.3: one payout row per account per review card. The OneCampCreditPerAccount migration folds the
-// duplicates already in the ledger (money kept), then a unique index stops new ones, and Post re-runs
-// its payout when that index turns away a racing second payment.
+// P2.3: one payout row per account per review card. The OneCampCreditPerAccount migration folded the
+// duplicates already in the ledger (money kept; before the squash, so its test is in git history),
+// then a unique index stops new ones, and Post re-runs its payout when that index turns away a racing
+// second payment.
 [Collection("postgres")]
 public class CampCreditTests : IAsyncLifetime
 {
-    private const string IndexName = "IX_DkpLedgerEntries_SourceWindowEventId_AppUserId";
-
-    // What the migration's CreateIndex produces, so a test that drops the index can put it back.
-    private const string CreateIndexSql =
-        "CREATE UNIQUE INDEX IF NOT EXISTS \"" + IndexName + "\" ON \"DkpLedgerEntries\" (\"SourceWindowEventId\", \"AppUserId\") " +
-        "WHERE \"EntryType\" = 'SnapshotEarned' AND \"AppUserId\" IS NOT NULL AND \"SourceWindowEventId\" IS NOT NULL;";
-
     private readonly PostgresFixture _pg;
 
     public CampCreditTests(PostgresFixture pg) => _pg = pg;
@@ -46,116 +39,6 @@ public class CampCreditTests : IAsyncLifetime
         DkpPoolId = poolId,
         OccurredAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
     };
-
-    // The duplicates production may hold can no longer be inserted once the index exists, so this
-    // drops it, seeds them, runs the migration's own fold SQL, and checks the index then builds.
-    [Fact]
-    public async Task FoldSql_KeepsTheMoneyAndLetsTheIndexBuild()
-    {
-        try
-        {
-            await using (var db = _pg.CreateContext())
-            {
-                await db.Database.ExecuteSqlRawAsync($"DROP INDEX IF EXISTS \"{IndexName}\";");
-            }
-
-            int linkshellId;
-            int aliceFirst, aliceSecond, aliceAudit, bobOnly, carolFirst;
-            await using (var db = _pg.CreateContext())
-            {
-                var linkshell = new Linkshell { LinkshellName = "LS" };
-                db.Linkshells.Add(linkshell);
-                foreach (var id in new[] { "alice", "bob", "carol" })
-                {
-                    db.Users.Add(new AppUser { Id = id, UserName = id, CharacterName = id });
-                }
-                await db.SaveChangesAsync();
-                linkshellId = linkshell.Id;
-
-                // Alice paid twice on card 1 (main 10 + alt 4), and an officer audited the SECOND row.
-                var a1 = Row(linkshellId, "alice", 1, "SnapshotEarned", 10, poolId: 7);
-                var a2 = Row(linkshellId, "alice", 1, "SnapshotEarned", 4, poolId: 7);
-                db.DkpLedgerEntries.AddRange(a1, a2);
-                await db.SaveChangesAsync();
-                var audit = Row(linkshellId, "alice", 1, "AuditAdjustment", -2, poolId: 7);
-                audit.AuditRelatedLedgerEntryId = a2.Id;
-                // Bob paid once on card 1: nothing to fold.
-                var b1 = Row(linkshellId, "bob", 1, "SnapshotEarned", 10);
-                // Carol paid three times on card 2 (two Posts that raced, plus the old page sweep).
-                var c1 = Row(linkshellId, "carol", 2, "SnapshotEarned", 5);
-                var c2 = Row(linkshellId, "carol", 2, "SnapshotEarned", 5);
-                var c3 = Row(linkshellId, "carol", 2, "SnapshotEarned", 5);
-                // Not payout rows, or not account-keyed: outside the rule, left alone.
-                var bobAudit1 = Row(linkshellId, "bob", 1, "AuditAdjustment", 1);
-                var bobAudit2 = Row(linkshellId, "bob", 1, "AuditAdjustment", 1);
-                var outside1 = Row(linkshellId, null, 1, "SnapshotEarned", 3);
-                var outside2 = Row(linkshellId, null, 1, "SnapshotEarned", 3);
-                db.DkpLedgerEntries.AddRange(audit, b1, c1, c2, c3, bobAudit1, bobAudit2, outside1, outside2);
-                await db.SaveChangesAsync();
-
-                aliceFirst = a1.Id;
-                aliceSecond = a2.Id;
-                aliceAudit = audit.Id;
-                bobOnly = b1.Id;
-                carolFirst = c1.Id;
-            }
-
-            await using (var db = _pg.CreateContext())
-            {
-                await db.Database.ExecuteSqlRawAsync(OneCampCreditPerAccount.FoldDuplicateCreditsSql);
-            }
-
-            await using (var db = _pg.CreateContext())
-            {
-                var rows = await db.DkpLedgerEntries.AsNoTracking().OrderBy(e => e.Id).ToListAsync();
-
-                // Every account's total (what LinkshellDkp caches) is unchanged.
-                double Total(string? user) => rows.Where(r => r.AppUserId == user).Sum(r => r.Amount);
-                Assert.Equal(12d, Total("alice"));
-                Assert.Equal(12d, Total("bob"));
-                Assert.Equal(15d, Total("carol"));
-                Assert.Equal(6d, Total(null));
-
-                // Alice: one payout row (the oldest) holding 14, in the same pool; the audit now
-                // points at it.
-                var alicePay = Assert.Single(rows, r => r.AppUserId == "alice" && r.EntryType == "SnapshotEarned");
-                Assert.Equal(aliceFirst, alicePay.Id);
-                Assert.Equal(14d, alicePay.Amount);
-                Assert.Equal(7, alicePay.DkpPoolId);
-                Assert.DoesNotContain(rows, r => r.Id == aliceSecond);
-                Assert.Equal(aliceFirst, rows.Single(r => r.Id == aliceAudit).AuditRelatedLedgerEntryId);
-
-                // Bob's single row is untouched, and his two audits stay two rows.
-                Assert.Equal(10d, rows.Single(r => r.Id == bobOnly).Amount);
-                Assert.Equal(2, rows.Count(r => r.AppUserId == "bob" && r.EntryType == "AuditAdjustment"));
-
-                // Carol: one row of 15.
-                var carolPay = Assert.Single(rows, r => r.AppUserId == "carol");
-                Assert.Equal(carolFirst, carolPay.Id);
-                Assert.Equal(15d, carolPay.Amount);
-
-                // Account-less rows are not covered by the index, so they are not folded either.
-                Assert.Equal(2, rows.Count(r => r.AppUserId == null));
-
-                // Running it again changes nothing (a second deploy, or a database with no duplicates).
-                await db.Database.ExecuteSqlRawAsync(OneCampCreditPerAccount.FoldDuplicateCreditsSql);
-                var again = await db.DkpLedgerEntries.AsNoTracking().OrderBy(e => e.Id).ToListAsync();
-                Assert.Equal(
-                    rows.Select(r => (r.Id, r.Amount, r.AuditRelatedLedgerEntryId)),
-                    again.Select(r => (r.Id, r.Amount, r.AuditRelatedLedgerEntryId)));
-
-                // And the index the migration creates next now builds.
-                await db.Database.ExecuteSqlRawAsync(CreateIndexSql);
-            }
-        }
-        finally
-        {
-            // Leave the shared database with its index, whatever happened above.
-            await _pg.ResetAsync();
-            await using var db = _pg.CreateContext();
-            await db.Database.ExecuteSqlRawAsync(CreateIndexSql);
-        }
-    }
 
     [Fact]
     public async Task SecondPayoutRowForTheSameAccountAndCardIsRejected()

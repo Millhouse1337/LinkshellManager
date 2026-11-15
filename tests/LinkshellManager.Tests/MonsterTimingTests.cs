@@ -3,7 +3,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Data;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.ViewModels;
@@ -94,17 +93,6 @@ public class MonsterTimingTests
         }
     }
 
-    // The migration that removes the rows already written keeps its own copy of the eight names
-    // (SQL in a migration runs once against real data with nothing watching). A name that drifts
-    // there leaves a row behind under a heading the editor no longer renders.
-    [Fact]
-    public void TheRemovalMigration_NamesTheSameEightNms()
-    {
-        Assert.Equal(
-            HnmConfig.SkyFarmNmOrder.OrderBy(name => name, StringComparer.Ordinal),
-            RemoveSkyNmMonsterTimings.SkyFarmNms.OrderBy(name => name, StringComparer.Ordinal));
-    }
-
     // The ToAU three are the case worth pinning: they sit INSIDE LongWindowHnms beside the wyrms,
     // so the only thing keeping them off the wyrms' 84h is that ToauHnms is tested first.
     [Theory]
@@ -142,19 +130,6 @@ public class MonsterTimingTests
             timing.CooldownMinutes + (timing.WindowCount!.Value - 1) * timing.WindowCadenceMinutes!.Value);
     }
 
-    // The migration that re-times the rows already written keeps its own copy of the three names
-    // and of both minute values (SQL in a migration runs once against real data with nothing
-    // watching). A name or a number that drifts there leaves a linkshell scheduling these camps a
-    // full window late — the exact failure the migration exists to clear.
-    [Fact]
-    public void TheToauCooldownMigration_NamesTheSameThreeMonsters()
-    {
-        Assert.Equal(
-            HnmConfig.ToauHnms.OrderBy(name => name, StringComparer.Ordinal),
-            AdjustToauHnmCooldowns.ToauHnms.OrderBy(name => name, StringComparer.Ordinal));
-        Assert.Equal(MonsterTimingDefaults.ToauCooldownMinutes, AdjustToauHnmCooldowns.NewCooldownMinutes);
-    }
-
     // The seeded setup for the ToAU three: five windows six hours apart, not the wyrms' 25 x 60
     // they would inherit from LongWindowHnms if any resolver tested that set first.
     [Theory]
@@ -190,28 +165,6 @@ public class MonsterTimingTests
 
         Assert.Equal(24 * 60, Span(wyrm));
         Assert.Equal(24 * 60, Span(toau));
-    }
-
-    // The migration that re-times already-seeded rows keeps its own copy of the four numbers, for
-    // the same reason it keeps its own copy of the names. A NEW value that drifts leaves every
-    // existing linkshell on a band the app no longer runs; an OLD value that drifts makes the
-    // WHERE clause match nothing and the migration a silent no-op.
-    [Fact]
-    public void TheToauWindowBandMigration_NamesTheSameMonstersAndNumbers()
-    {
-        Assert.Equal(
-            HnmConfig.ToauHnms.OrderBy(name => name, StringComparer.Ordinal),
-            AdjustToauHnmWindowBand.ToauHnms.OrderBy(name => name, StringComparer.Ordinal));
-        Assert.Equal(HnmConfig.ToauWindowCount, AdjustToauHnmWindowBand.NewWindowCount);
-        Assert.Equal(HnmConfig.ToauWindowCadenceMinutes, AdjustToauHnmWindowBand.NewWindowCadenceMinutes);
-
-        // The old values are the wyrms' band — what these rows were seeded with while the ToAU three
-        // were resolved through LongWindowHnms. Read off that set rather than restated, so the guard
-        // still means "the value the seeder wrote" if the wyrms are ever re-timed.
-        var wyrm = HnmConfig.DefaultWindowCadence("Tiamat");
-        Assert.NotNull(wyrm);
-        Assert.Equal(AdjustToauHnmWindowBand.OldWindowCount, wyrm!.Value.Windows);
-        Assert.Equal(AdjustToauHnmWindowBand.OldWindowCadenceMinutes, wyrm.Value.Minutes);
     }
 
     // Every ToAU name the migration rewrites is a long-window monster the WYRM branch would
