@@ -80,9 +80,34 @@ public sealed class ChannelRouteEditor
             return error;
         }
 
+        // Both saves below in one transaction, so nobody ever sees the in-between state (and a
+        // failure in the second undoes the first). In-memory tests have no transactions.
+        await using var transaction = _db.Database.IsRelational() && _db.Database.CurrentTransaction is null
+            ? await _db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         var existing = await _db.LinkshellChannelRoutes
             .Where(route => route.LinkshellId == linkshellId)
             .ToListAsync(cancellationToken);
+
+        // Save 1: every existing route lets go of the one-owner post types first. Moving Loot from
+        // route 2 to route 1 in a single save would, for a moment, have BOTH routes posting Loot,
+        // and a "one Loot route per linkshell" unique index refuses that moment even though the
+        // end result is fine (Postgres checks it row by row). Save 2 then sets the wanted state.
+        var owners = existing
+            .Where(route => route.PostLoot || route.PostAuctions || route.PostTodBoard || route.PostDkpSheet)
+            .ToList();
+        if (owners.Count > 0)
+        {
+            foreach (var route in owners)
+            {
+                route.PostLoot = false;
+                route.PostAuctions = false;
+                route.PostTodBoard = false;
+                route.PostDkpSheet = false;
+            }
+            await _db.SaveChangesAsync(cancellationToken);
+        }
 
         var keptIds = new HashSet<int>();
         foreach (var edit in valid)
@@ -141,6 +166,10 @@ public sealed class ChannelRouteEditor
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
         // Re-render the ToD board + the DKP sheet so a (de)selected route takes effect now.
         _todBoardQueue.Enqueue(linkshellId);
         _dkpSheetQueue.Enqueue(linkshellId);
