@@ -79,6 +79,7 @@ public sealed class UserMergeService
         await MergeEventHistoryRowsAsync(fromAppUserId, toAppUserId, cancellationToken);
         await DropDuplicateCaptureMembersAsync(fromAppUserId, toAppUserId, cancellationToken);
         await MergeJobRatingsAsync(fromAppUserId, toAppUserId, cancellationToken);
+        await DropDuplicateOpenInvitesAsync(fromAppUserId, toAppUserId, cancellationToken);
         await MoveChartMembershipsAsync(membershipIdMap, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -325,6 +326,26 @@ public sealed class UserMergeService
             .Where(m => m.AppUserId == from && captureIds.Contains(m.CaptureId))
             .ToListAsync(cancellationToken);
         _db.ClaimShieldCaptureMembers.RemoveRange(duplicates);
+    }
+
+    // One open invite and one open join request per person per linkshell (unique indexes). When
+    // both accounts have one for the same linkshell, the new account's stays. No DKP or gil: an
+    // invite only says "you may join". Answered rows are not open and simply move.
+    private async Task DropDuplicateOpenInvitesAsync(string from, string to, CancellationToken cancellationToken)
+    {
+        var openStatuses = InviteCandidateService.PendingInviteStatuses;
+        var theirs = await _db.Invites
+            .Where(i => i.AppUserId == to && openStatuses.Contains(i.Status))
+            .Select(i => new { i.LinkshellId, i.Status })
+            .ToListAsync(cancellationToken);
+        if (theirs.Count == 0) return;
+
+        static bool IsRequest(string status) => status == JoinRequestService.PendingStatus;
+        var mine = await _db.Invites
+            .Where(i => i.AppUserId == from && openStatuses.Contains(i.Status))
+            .ToListAsync(cancellationToken);
+        _db.Invites.RemoveRange(mine.Where(invite => theirs.Any(t =>
+            t.LinkshellId == invite.LinkshellId && IsRequest(t.Status) == IsRequest(invite.Status))));
     }
 
     // One rating per rater per target job (unique index over linkshell, target, rater, character
