@@ -91,8 +91,9 @@ public static class TodDurationFormat
     // PendingTodSubmissions) for a label: what TryParseMinutes reads, or null when it reads nothing,
     // zero, or more minutes than an integer column holds.
     //
-    // KEEP IN STEP with AddTodDurationsAndSpawnKeys.DurationMinutesSql: the migration fills old
-    // rows with that SQL and the save hook stamps new ones with this (TodDerivedColumnsParityTests).
+    // KEEP IN STEP with TodDerivedSql.DurationMinutesSql: a fill in SQL (as AddTodDurationsAndSpawnKeys
+    // did for old rows) uses that SQL and the save hook stamps new ones with this
+    // (TodDerivedColumnsParityTests).
     public static int? StoredMinutes(string? text, string bareUnit)
     {
         if (!TryParseRawMinutes(text, bareUnit, out var raw))

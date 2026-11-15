@@ -1,4 +1,4 @@
-using LinkshellManagerDiscordApp.Migrations;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
 using Npgsql;
@@ -7,10 +7,11 @@ using Xunit;
 
 namespace LinkshellManager.PostgresTests;
 
-// AddTodDurationsAndSpawnKeys fills CooldownMinutes / IntervalMinutes / SpawnKey with SQL, and the
-// save hook stamps new rows with C# (TodDurationFormat.StoredMinutes, HnmConfig.SpawnKey). A later
-// deploy looks rows up by comparing the two, so they must agree on every value. Each input runs
-// through the migration's own SQL expressions on real Postgres and is compared with the C#.
+// TodDerivedSql holds SQL copies of the C# the save hook uses to stamp CooldownMinutes /
+// IntervalMinutes / SpawnKey (TodDurationFormat.StoredMinutes, HnmConfig.SpawnKey). The
+// AddTodDurationsAndSpawnKeys migration filled old rows with that SQL (before the squash), and any
+// later SQL fill uses it too, so the two must agree on every value. Each input runs through the SQL
+// expressions on real Postgres and is compared with the C#.
 //
 // The lists hold every distinct Cooldown, Interval and monster name production holds (from the
 // pre-deploy check), plus the edge cases: bare numbers, mixed units, padding, capitals, zero,
@@ -105,8 +106,8 @@ public class TodDerivedColumnsParityTests
         await using var c = await OpenAsync();
         await using var command = c.CreateCommand();
         command.CommandText =
-            $"SELECT q.v, {AddTodDurationsAndSpawnKeys.DurationMinutesSql("q.v", 60)}, " +
-            $"{AddTodDurationsAndSpawnKeys.DurationMinutesSql("q.v", 1)} " +
+            $"SELECT q.v, {TodDerivedSql.DurationMinutesSql("q.v", 60)}, " +
+            $"{TodDerivedSql.DurationMinutesSql("q.v", 1)} " +
             "FROM unnest(@v::text[]) AS q(v)";
         command.Parameters.Add(new NpgsqlParameter("v", NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = texts.ToArray() });
         await using var reader = await command.ExecuteReaderAsync();
@@ -168,14 +169,14 @@ public class TodDerivedColumnsParityTests
         Assert.True(mismatches.Count == 0, string.Join("\n", mismatches));
     }
 
-    // Runs the migration's three expressions on one value, the way the fill runs them on a column.
+    // Runs the three SQL expressions on one value, the way a fill runs them on a column.
     private static async Task<(int? Cooldown, int? Interval, string? SpawnKey)> DeriveAsync(NpgsqlConnection c, string? value)
     {
         await using var command = c.CreateCommand();
         command.CommandText =
-            $"SELECT {AddTodDurationsAndSpawnKeys.DurationMinutesSql("q.v", 60)}, " +
-            $"{AddTodDurationsAndSpawnKeys.DurationMinutesSql("q.v", 1)}, " +
-            $"{AddTodDurationsAndSpawnKeys.SpawnKeySql("q.v")} " +
+            $"SELECT {TodDerivedSql.DurationMinutesSql("q.v", 60)}, " +
+            $"{TodDerivedSql.DurationMinutesSql("q.v", 1)}, " +
+            $"{TodDerivedSql.SpawnKeySql("q.v")} " +
             "FROM (SELECT @v::text AS v) q";
         command.Parameters.Add(new NpgsqlParameter("v", NpgsqlDbType.Text) { Value = (object?)value ?? DBNull.Value });
         await using var reader = await command.ExecuteReaderAsync();

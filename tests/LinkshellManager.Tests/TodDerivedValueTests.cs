@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
@@ -8,7 +9,7 @@ namespace LinkshellManager.Tests;
 
 // The two C# helpers the save hook uses to fill Tod.SpawnKey / CooldownMinutes / IntervalMinutes
 // (and the same columns on PendingTodSubmissions and HnmRecurringBoards). The Postgres suite checks
-// the migration's SQL gives the same answers (TodDerivedColumnsParityTests); these pin the answers.
+// the SQL copies in TodDerivedSql give the same answers (TodDerivedColumnsParityTests); these pin the answers.
 public class TodDerivedValueTests
 {
     [Theory]
@@ -104,7 +105,7 @@ public class TodDerivedValueTests
     public void MergePairs_AgreeAcrossHnmConfigTheBoardMergeAndTheSpawnKeySql()
     {
         var fromSql = Regex.Matches(
-                AddTodDurationsAndSpawnKeys.SpawnKeySql("x"),
+                TodDerivedSql.SpawnKeySql("x"),
                 @"WHEN '([^']+)' = ANY\(s\.l\) OR '([^']+)' = ANY\(s\.l\) THEN '([^']+)'")
             .Select(m => (m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Value))
             .ToArray();
@@ -120,13 +121,13 @@ public class TodDerivedValueTests
         Assert.Equal(3, fromSql.Length);
     }
 
-    // The migration spells out .NET's whitespace for Postgres (whose own \s depends on the server's
+    // TodDerivedSql spells out .NET's whitespace for Postgres (whose own \s depends on the server's
     // locale). Its set must be exactly what string.Trim and the duration patterns' \s treat as
     // whitespace, or the SQL fill and the save hook would disagree on padded text.
     [Fact]
-    public void MigrationWhitespaceSet_IsExactlyDotNetWhitespace()
+    public void SqlWhitespaceSet_IsExactlyDotNetWhitespace()
     {
-        var spelledOut = new Regex("^[" + AddTodDurationsAndSpawnKeys.WhitespaceChars + "]$");
+        var spelledOut = new Regex("^[" + TodDerivedSql.WhitespaceChars + "]$");
         var dotNet = new Regex(@"^\s$");
         for (var code = 0; code <= char.MaxValue; code++)
         {

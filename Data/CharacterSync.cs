@@ -1,5 +1,4 @@
 using System.Globalization;
-using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Models;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -21,7 +20,7 @@ namespace LinkshellManagerDiscordApp.Data;
 // The InMemory test database has no SQL: there the same rules run in C# (DesiredRows).
 //
 // The rules (the migrations' too): names are trimmed of the same whitespace .NET's Trim removes
-// (AddTodDurationsAndSpawnKeys.WhitespaceChars), a blank name has no row, a name longer than 256
+// (TodDerivedSql.WhitespaceChars), a blank name has no row, a name longer than 256
 // characters has no row, and NormalizedName is lower(Name). Since CharactersSwitch, a slot that
 // repeats an earlier slot's name in the same account (an alt equal to the main, say) has no row
 // either: the earlier slot already gives that name to the account, and the unique
@@ -40,7 +39,7 @@ public static class CharacterSync
         nameof(AppUser.Alt2MeritJobs), nameof(AppUser.Alt2CraftLevels),
     };
 
-    private const string Ws = AddTodDurationsAndSpawnKeys.WhitespaceChars;
+    private const string Ws = TodDerivedSql.WhitespaceChars;
 
     // One row per account per slot: (account, slot, trimmed name, jobs...). accountFilter is an
     // extra WHERE on "AspNetUsers" u, or null for every account.

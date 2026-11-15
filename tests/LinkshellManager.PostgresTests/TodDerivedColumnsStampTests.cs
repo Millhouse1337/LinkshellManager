@@ -1,4 +1,4 @@
-using LinkshellManagerDiscordApp.Migrations;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.EntityFrameworkCore;
@@ -10,8 +10,8 @@ namespace LinkshellManager.PostgresTests;
 
 // The save hook stamps SpawnKey / CooldownMinutes / IntervalMinutes (AddTodDurationsAndSpawnKeys)
 // on real Postgres, through a real writer (TodRecorder, the path the addon and the ToD forms use),
-// a plain edit, the approval queue's table and a standing board. Afterwards the migration's own fill
-// finds nothing to change: the hook and the SQL wrote the same values.
+// a plain edit, the approval queue's table and a standing board. Afterwards the SQL copies of the
+// rules (TodDerivedSql, what the migration's fill used) give the same value for every row.
 [Collection("postgres")]
 public class TodDerivedColumnsStampTests : IAsyncLifetime
 {
@@ -26,7 +26,7 @@ public class TodDerivedColumnsStampTests : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
-    public async Task EveryWriter_StampsWhatTheMigrationFillWould()
+    public async Task EveryWriter_StampsWhatTheSqlFillWould()
     {
         int linkshellId;
         await using (var db = _pg.CreateContext())
@@ -84,11 +84,17 @@ public class TodDerivedColumnsStampTests : IAsyncLifetime
                 "SELECT concat_ws('|', \"SpawnKey\", \"CooldownMinutes\", \"IntervalMinutes\") FROM \"PendingTodSubmissions\""));
             Assert.Equal("adamantoise/aspidochelone", await ScalarAsync(c, "SELECT \"SpawnKey\" FROM \"HnmRecurringBoards\""));
 
-            // The migration's fill agrees with every value the hook wrote.
-            var notices = new List<string>();
-            c.Notice += (_, e) => notices.Add(e.Notice.MessageText);
-            await ScalarAsync(c, AddTodDurationsAndSpawnKeys.FillSql);
-            Assert.Contains("AddTodDurationsAndSpawnKeys: filled 0 ToD(s), 0 pending ToD(s), 0 standing board(s).", notices);
+            // The SQL a fill would run agrees with every value the hook wrote.
+            foreach (var table in new[] { "Tods", "PendingTodSubmissions" })
+            {
+                Assert.Equal(0L, await ScalarAsync(c,
+                    $"SELECT count(*) FROM \"{table}\" t WHERE (t.\"CooldownMinutes\", t.\"IntervalMinutes\", t.\"SpawnKey\") " +
+                    $"IS DISTINCT FROM ({TodDerivedSql.DurationMinutesSql("t.\"Cooldown\"", 60)}, " +
+                    $"{TodDerivedSql.DurationMinutesSql("t.\"Interval\"", 1)}, {TodDerivedSql.SpawnKeySql("t.\"MonsterName\"")})"));
+            }
+            Assert.Equal(0L, await ScalarAsync(c,
+                "SELECT count(*) FROM \"HnmRecurringBoards\" b " +
+                $"WHERE b.\"SpawnKey\" IS DISTINCT FROM {TodDerivedSql.SpawnKeySql("b.\"MonsterName\"")}"));
         }
     }
 

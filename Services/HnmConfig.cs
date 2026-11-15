@@ -149,9 +149,9 @@ public static class HnmConfig
     // combined key ("fafnir/nidhogg"); any other name gives its trimmed, lower-case pieces joined
     // by '/'. Blank gives null.
     //
-    // KEEP IN STEP with AddTodDurationsAndSpawnKeys.SpawnKeySql: the migration fills old rows with
-    // that SQL and the save hook stamps new ones with this, so both must give the same answer
-    // (TodDerivedColumnsParityTests checks it on Postgres).
+    // KEEP IN STEP with TodDerivedSql.SpawnKeySql: a fill in SQL (as AddTodDurationsAndSpawnKeys
+    // did for old rows) uses that SQL and the save hook stamps new ones with this, so both must give
+    // the same answer (TodDerivedColumnsParityTests checks it on Postgres).
     public static string? SpawnKey(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
