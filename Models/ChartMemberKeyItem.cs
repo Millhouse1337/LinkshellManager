@@ -38,10 +38,12 @@ public class ChartMemberKeyItem
     [MaxLength(128)]
     public string KeyItemName { get; set; } = string.Empty;
 
-    // The membership the tick was made on. Plain int with no relationship. Still written, because
-    // the previous build reads the grid by it, but this build reads by AppUserId below; a later
-    // deploy stops writing it and then drops it.
-    public int MembershipId { get; set; }
+    // The membership the tick was made on. Plain int with no relationship. This build reads ticks by
+    // AppUserId below and only writes this for older builds: the build before RosterSwitch reads the
+    // grid by it, and its model has it as a plain int, so a NULL here would break its key-item grid
+    // after a rollback. Nullable since AddCharacters so the next deploy can stop writing it (a
+    // rollback from that deploy lands on this build, which reads NULL fine); the deploy after drops it.
+    public int? MembershipId { get; set; }
 
     // WHOSE tick it is: the member's account (AccountJobsAndKeyItemAccounts, RosterSwitch). The grid
     // matches ticks to the roster by this, because membership ids are not stable - a membership is

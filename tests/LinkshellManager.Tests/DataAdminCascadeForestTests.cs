@@ -100,17 +100,20 @@ public class DataAdminCascadeForestTests
     }
 
     [Fact]
-    public void RealModel_AppUserReachesInviteJobRatingAndKeyItemOnly_AndNeverIdentityTables()
+    public void RealModel_AppUserReachesInviteJobRatingKeyItemAndCharacterOnly_AndNeverIdentityTables()
     {
         var catalog = NewCatalog();
         var node = NodeOf(catalog, typeof(AppUser));
 
-        // JobRating joined Invite with JobRatingsForeignKeys (its rated account and its rater), and
-        // ChartMemberKeyItem with RosterSwitch (the tick's account).
+        // JobRating joined Invite with JobRatingsForeignKeys (its rated account and its rater),
+        // ChartMemberKeyItem with RosterSwitch (the tick's account), and Character with AddCharacters.
         Assert.Equal(
-            new[] { typeof(Invite), typeof(JobRating), typeof(ChartMemberKeyItem) }.OrderBy(t => t.Name),
+            new[] { typeof(Invite), typeof(JobRating), typeof(ChartMemberKeyItem), typeof(Character) }.OrderBy(t => t.Name),
             node.CascadeDescendants.Select(m => m.ClrType).OrderBy(t => t.Name));
-        Assert.Empty(node.Children); // all three file under Linkshell by the tie rule
+        // Character belongs to the account alone; the other three file under Linkshell by the tie rule.
+        Assert.Equal(new[] { typeof(Character) }, node.Children.Select(child => child.Item.ClrType));
+        Assert.Equal(typeof(AppUser), ParentOf(catalog, typeof(Character)));
+        Assert.Empty(AlsoOf(catalog, typeof(Character)));
         Assert.Equal(typeof(Linkshell), ParentOf(catalog, typeof(JobRating)));
         Assert.Equal(new[] { typeof(AppUser) }, AlsoOf(catalog, typeof(JobRating)));
         Assert.Equal(typeof(Linkshell), ParentOf(catalog, typeof(ChartMemberKeyItem)));

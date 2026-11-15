@@ -375,6 +375,19 @@ public class DataAdminSchemaGraphTests
         Assert.Equal("cascade", tickAccount.OnDelete);
         Assert.True(Column(graph, "ChartMemberKeyItem", "AppUserId").Fk);
         Assert.False(Column(graph, "ChartMemberKeyItem", "AppUserId").Nullable);
+        // AddCharacters: the old membership column is now optional (still no foreign key).
+        Assert.True(Column(graph, "ChartMemberKeyItem", "MembershipId").Nullable);
+        Assert.False(Column(graph, "ChartMemberKeyItem", "MembershipId").Fk);
+
+        // AddCharacters: an account's characters go with the account.
+        var characterAccount = Relationship(graph, "Character.AppUserId");
+        Assert.Equal("Character", characterAccount.From);
+        Assert.Equal("AppUser", characterAccount.To);
+        Assert.True(characterAccount.Required);
+        Assert.False(characterAccount.Unique);
+        Assert.Equal("cascade", characterAccount.OnDelete);
+        Assert.True(Column(graph, "Character", "AppUserId").Fk);
+        Assert.False(Column(graph, "Character", "AppUserId").Nullable);
 
         var cloned = Relationship(graph, "PartySetup.ClonedFromPartySetupId");
         Assert.Equal("PartySetup", cloned.From);

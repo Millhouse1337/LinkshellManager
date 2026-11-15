@@ -97,6 +97,11 @@ public sealed class DataAdminPolicy
             [typeof(AppUserEventHistory)] = readOnly,
             [typeof(AppUserEventStatusLedger)] = readOnly,
 
+            // ---- copies the app keeps in step itself -----------------------------------------------
+            // A copy of each account's names and jobs (AddCharacters), rewritten from the account after
+            // every save (CharacterSync). Edit the account instead; an edit here would be overwritten.
+            [typeof(Character)] = readOnly,
+
             // ---- tenant roots and identity ---------------------------------------------------------
             [typeof(EventHistory)] = new()
             {

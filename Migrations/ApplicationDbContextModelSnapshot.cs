@@ -949,6 +949,62 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.ToTable("Bids");
                 });
 
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Character", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AppUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.PrimitiveCollection<string>("CraftLevels")
+                        .HasColumnType("jsonb");
+
+                    b.PrimitiveCollection<string>("JobLevels")
+                        .HasColumnType("jsonb");
+
+                    b.PrimitiveCollection<string>("MeritJobs")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<short>("Slot")
+                        .HasColumnType("smallint");
+
+                    b.PrimitiveCollection<string>("StrongJobs")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedName");
+
+                    b.HasIndex("AppUserId", "Slot")
+                        .IsUnique();
+
+                    b.ToTable("Characters", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Characters_Name_NotBlank", "\"Name\" ~ '[^ \\t\\n\\v\\f\\r\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]'");
+
+                            t.HasCheckConstraint("CK_Characters_Slot", "\"Slot\" IN (0, 1, 2)");
+                        });
+                });
+
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ChartMemberKeyItem", b =>
                 {
                     b.Property<int>("Id")
@@ -975,7 +1031,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("MembershipId")
+                    b.Property<int?>("MembershipId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("SetAt")
@@ -3834,6 +3890,15 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("AppUser");
 
                     b.Navigation("AuctionItem");
+                });
+
+            modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Character", b =>
+                {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ChartMemberKeyItem", b =>

@@ -252,7 +252,8 @@ public sealed class ChartKeyItemService
             LinkshellId = linkshellId,
             Board = catalog.Key,
             KeyItemName = canonicalName,
-            // Both: this build reads AppUserId, the previous build reads MembershipId.
+            // Both: this build reads AppUserId. MembershipId is nullable since AddCharacters but still
+            // written, because the build before RosterSwitch reads the grid by it (a rollback target).
             MembershipId = membershipId,
             AppUserId = member.AppUserId,
             SetByAppUserId = actor.AppUserId,

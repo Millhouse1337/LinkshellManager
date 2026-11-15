@@ -14,6 +14,7 @@
 --           LinkshellMonsterTimings, LinkshellBanners, DkpPools, DkpPoolEventTypes,
 --           HnmRecurringBoards), AddonApiTokens, AddonPairingCodes,
 --           AppSettings, DiscordActivityUsers, AspNet* (users/identity),
+--           Characters (the copy of each account's names and jobs),
 --           PartySetups templates (+Alliances/Parties/Slots), Announcements,
 --           Rules, Invites, Charts (Chart* tables), JobRatings,
 --           LinkshellPresences, PlaceholderClaimRequests, and the

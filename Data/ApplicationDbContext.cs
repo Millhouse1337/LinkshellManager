@@ -908,8 +908,9 @@ namespace LinkshellManagerDiscordApp.Data
         // A new row is always stamped. A saved one is re-stamped when its MembershipId (or linkshell)
         // changed and nobody set the account in the same save. When the membership gives no account
         // (gone, another linkshell's, none, or added in this same save so not in the database yet),
-        // the row keeps the account it already has. The column is required since RosterSwitch, so a
-        // row with no account at all is refused by the save rather than written as NULL.
+        // the row keeps the account it already has. So does a row with no MembershipId (nullable since
+        // AddCharacters; only Data Admin can clear it). The column is required since RosterSwitch, so
+        // a row with no account at all is refused by the save rather than written as NULL.
         private List<EntityEntry<ChartMemberKeyItem>> CollectKeyItemsNeedingAccountStamp() =>
             ChangeTracker.Entries<ChartMemberKeyItem>()
                 .Where(entry => entry.State == EntityState.Added
@@ -926,7 +927,7 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 return;
             }
-            var membershipIds = rows.Select(row => row.Entity.MembershipId).Distinct().ToList();
+            var membershipIds = rows.Select(row => row.Entity.MembershipId).OfType<int>().Distinct().ToList();
             var memberships = await AppUserLinkshells.AsNoTracking()
                 .Where(member => membershipIds.Contains(member.Id))
                 .Select(member => new KeyItemMembership(member.Id, member.LinkshellId, member.AppUserId))
@@ -940,7 +941,7 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 return;
             }
-            var membershipIds = rows.Select(row => row.Entity.MembershipId).Distinct().ToList();
+            var membershipIds = rows.Select(row => row.Entity.MembershipId).OfType<int>().Distinct().ToList();
             var memberships = AppUserLinkshells.AsNoTracking()
                 .Where(member => membershipIds.Contains(member.Id))
                 .Select(member => new KeyItemMembership(member.Id, member.LinkshellId, member.AppUserId))
@@ -956,7 +957,8 @@ namespace LinkshellManagerDiscordApp.Data
             var byId = memberships.ToDictionary(member => member.Id);
             foreach (var row in rows)
             {
-                if (byId.TryGetValue(row.Entity.MembershipId, out var member)
+                if (row.Entity.MembershipId is { } membershipId
+                    && byId.TryGetValue(membershipId, out var member)
                     && member.LinkshellId == row.Entity.LinkshellId
                     && member.AppUserId is not null)
                 {
@@ -1357,6 +1359,7 @@ namespace LinkshellManagerDiscordApp.Data
         public DbSet<ChartWishlistRequest> ChartWishlistRequests => Set<ChartWishlistRequest>();
         public DbSet<ChartWishlistRequestZone> ChartWishlistRequestZones => Set<ChartWishlistRequestZone>();
         public DbSet<ChartMemberKeyItem> ChartMemberKeyItems => Set<ChartMemberKeyItem>();
+        public DbSet<Character> Characters => Set<Character>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
         public DbSet<PlaceholderClaimRequest> PlaceholderClaimRequests => Set<PlaceholderClaimRequest>();
 
@@ -2252,6 +2255,29 @@ namespace LinkshellManagerDiscordApp.Data
                     item.KeyItemName,
                     item.MembershipId,
                 }).IsUnique();
+            });
+
+            // An account's characters (AddCharacters): a shadow copy of the account's main and two
+            // alts, kept in step after every save (CharacterSync). See Character.
+            builder.Entity<Character>(entity =>
+            {
+                entity.ToTable("Characters", table =>
+                {
+                    table.HasCheckConstraint("CK_Characters_Slot", "\"Slot\" IN (0, 1, 2)");
+                    table.HasCheckConstraint("CK_Characters_Name_NotBlank", CharacterSync.NameNotBlankCheckSql);
+                });
+                entity.Property(item => item.AppUserId).HasMaxLength(450).IsRequired();
+                entity.Property(item => item.Name).HasMaxLength(Character.MaxNameLength).IsRequired();
+                entity.Property(item => item.NormalizedName).HasMaxLength(Character.MaxNameLength).IsRequired();
+                // One row per slot per account. No unique NAME index yet: accounts may share a name.
+                entity.HasIndex(item => new { item.AppUserId, item.Slot }).IsUnique();
+                entity.HasIndex(item => item.NormalizedName);
+                // A deleted account takes its characters with it (a claimed placeholder too).
+                // No navigation: nothing reads characters through the account yet.
+                entity.HasOne<AppUser>()
+                    .WithMany()
+                    .HasForeignKey(item => item.AppUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // A by-name claim of an imported member, waiting for an officer. See PlaceholderClaimRequest.

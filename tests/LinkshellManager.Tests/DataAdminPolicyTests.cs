@@ -48,7 +48,8 @@ public class DataAdminPolicyTests
     {
         var catalog = NewCatalog();
 
-        foreach (var ledger in new[] { typeof(DkpLedgerEntry), typeof(JournalEntry), typeof(JournalEntryLine), typeof(AuctionHistory), typeof(AppUserEventHistory), typeof(AppUserEventStatusLedger) })
+        // Character is a copy the app rewrites from the account after every save (AddCharacters).
+        foreach (var ledger in new[] { typeof(DkpLedgerEntry), typeof(JournalEntry), typeof(JournalEntryLine), typeof(AuctionHistory), typeof(AppUserEventHistory), typeof(AppUserEventStatusLedger), typeof(Character) })
         {
             Assert.True(Table(catalog, ledger).IsReadOnly, $"{ledger.Name} should be read-only.");
         }
