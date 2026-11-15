@@ -55,4 +55,10 @@ public class HnmRecurringBoard
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
+
+    // MonsterName's one-per-spawn key (HnmConfig.SpawnKey), stamped on every save
+    // (ApplicationDbContext.StampDerivedColumns). Nothing reads it yet; a later deploy looks boards
+    // up by it and makes it the unique key instead of MonsterName.
+    [MaxLength(256)]
+    public string? SpawnKey { get; set; }
 }

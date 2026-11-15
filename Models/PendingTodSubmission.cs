@@ -57,4 +57,13 @@ public class PendingTodSubmission
     // by the time an officer gets round to the queue the mob's band has cycled on and any fresh
     // reading would name a window it was never up in. Null = not recorded, same as everywhere else.
     public int? PopWindow { get; set; }
+
+    // The same derived columns as Tod.CooldownMinutes / IntervalMinutes / SpawnKey, stamped on
+    // every save (ApplicationDbContext.StampDerivedColumns). Nothing reads them yet.
+    public int? CooldownMinutes { get; set; }
+
+    public int? IntervalMinutes { get; set; }
+
+    [MaxLength(256)]
+    public string? SpawnKey { get; set; }
 }

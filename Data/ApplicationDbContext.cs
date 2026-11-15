@@ -1334,6 +1334,9 @@ namespace LinkshellManagerDiscordApp.Data
             {
                 // One recurring-board template per monster per linkshell.
                 entity.HasIndex(board => new { board.LinkshellId, board.MonsterName }).IsUnique();
+                // Derived (AddTodDurationsAndSpawnKeys), stamped by StampDerivedColumns. Not unique
+                // yet: a later deploy merges any two boards for one spawn first.
+                entity.HasIndex(board => new { board.LinkshellId, board.SpawnKey });
                 entity.HasOne(board => board.Linkshell)
                     .WithMany()
                     .HasForeignKey(board => board.LinkshellId)
@@ -1610,6 +1613,28 @@ namespace LinkshellManagerDiscordApp.Data
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => new { item.LinkshellId, item.Time });
                 entity.HasIndex(item => new { item.LinkshellId, item.MonsterName });
+                // Derived columns (AddTodDurationsAndSpawnKeys), stamped by StampDerivedColumns.
+                entity.HasIndex(item => new { item.LinkshellId, item.SpawnKey, item.Time });
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_Tods_CooldownMinutes_Positive", "\"CooldownMinutes\" IS NULL OR \"CooldownMinutes\" > 0");
+                    table.HasCheckConstraint(
+                        "CK_Tods_IntervalMinutes_Positive", "\"IntervalMinutes\" IS NULL OR \"IntervalMinutes\" > 0");
+                });
+            });
+
+            builder.Entity<PendingTodSubmission>(entity =>
+            {
+                // Derived columns (AddTodDurationsAndSpawnKeys), stamped by StampDerivedColumns.
+                entity.HasIndex(item => new { item.LinkshellId, item.SpawnKey });
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_PendingTodSubmissions_CooldownMinutes_Positive", "\"CooldownMinutes\" IS NULL OR \"CooldownMinutes\" > 0");
+                    table.HasCheckConstraint(
+                        "CK_PendingTodSubmissions_IntervalMinutes_Positive", "\"IntervalMinutes\" IS NULL OR \"IntervalMinutes\" > 0");
+                });
             });
 
             // EventHistory has no config block of its own — conventions cover it — except for

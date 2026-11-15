@@ -64,4 +64,16 @@ public class Tod
 
     [MaxLength(512)]
     public string? ImagePath { get; set; }
+
+    // Cooldown and Interval in whole minutes (TodDurationFormat.StoredMinutes), and the
+    // MonsterName's one-per-spawn key (HnmConfig.SpawnKey). Derived columns: every save stamps
+    // them from the text (ApplicationDbContext.StampDerivedColumns), so nothing sets them by hand.
+    // null = the text reads as no duration / no name. Nothing reads them yet; a later deploy
+    // switches the repop maths and the monster lookups onto them.
+    public int? CooldownMinutes { get; set; }
+
+    public int? IntervalMinutes { get; set; }
+
+    [MaxLength(256)]
+    public string? SpawnKey { get; set; }
 }

@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+using LinkshellManagerDiscordApp.Migrations;
 using LinkshellManagerDiscordApp.Services;
 using LinkshellManagerDiscordApp.Utils;
 using Xunit;
@@ -91,8 +93,47 @@ public class TodDerivedValueTests
     [Fact]
     public void NonAsciiDigits_AreNotADuration()
     {
-        Assert.False(TodDurationFormat.TryParseMinutes("٢٢ Hour", TodDurationFormat.HoursUnit, out _));
-        Assert.Null(TodDurationFormat.StoredMinutes("٢٢", TodDurationFormat.HoursUnit));
+        Assert.False(TodDurationFormat.TryParseMinutes("\u0662\u0662 Hour", TodDurationFormat.HoursUnit, out _));
+        Assert.Null(TodDurationFormat.StoredMinutes("\u0662\u0662", TodDurationFormat.HoursUnit));
+    }
+
+    // Three copies of the merge pairs must agree: HnmConfig (the app), the 2026-11-05 board merge
+    // migration, and the SpawnKey SQL, in the same order (a name with halves of two pairs takes the
+    // first pair's key on both sides).
+    [Fact]
+    public void MergePairs_AgreeAcrossHnmConfigTheBoardMergeAndTheSpawnKeySql()
+    {
+        var fromSql = Regex.Matches(
+                AddTodDurationsAndSpawnKeys.SpawnKeySql("x"),
+                @"WHEN '([^']+)' = ANY\(s\.l\) OR '([^']+)' = ANY\(s\.l\) THEN '([^']+)'")
+            .Select(m => (m.Groups[1].Value, m.Groups[2].Value, m.Groups[3].Value))
+            .ToArray();
+        var fromConfig = HnmConfig.MonsterMergePairs
+            .Select(pair => (
+                pair.Base.ToLowerInvariant(),
+                pair.Stronger.ToLowerInvariant(),
+                $"{pair.Base}/{pair.Stronger}".ToLowerInvariant()))
+            .ToArray();
+
+        Assert.Equal(fromConfig, fromSql);
+        Assert.Equal(HnmConfig.MonsterMergePairs.ToArray(), MergeHnmRecurringBoardsPerSpawn.Pairs);
+        Assert.Equal(3, fromSql.Length);
+    }
+
+    // The migration spells out .NET's whitespace for Postgres (whose own \s depends on the server's
+    // locale). Its set must be exactly what string.Trim and the duration patterns' \s treat as
+    // whitespace, or the SQL fill and the save hook would disagree on padded text.
+    [Fact]
+    public void MigrationWhitespaceSet_IsExactlyDotNetWhitespace()
+    {
+        var spelledOut = new Regex("^[" + AddTodDurationsAndSpawnKeys.WhitespaceChars + "]$");
+        var dotNet = new Regex(@"^\s$");
+        for (var code = 0; code <= char.MaxValue; code++)
+        {
+            var text = ((char)code).ToString();
+            Assert.True(char.IsWhiteSpace((char)code) == spelledOut.IsMatch(text), $"U+{code:X4}");
+            Assert.True(char.IsWhiteSpace((char)code) == dotNet.IsMatch(text), $"U+{code:X4}");
+        }
     }
 
     // StoredMinutes agrees with TryParseMinutes wherever the minutes fit an integer column.

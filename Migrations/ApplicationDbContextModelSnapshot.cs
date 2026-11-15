@@ -2075,6 +2075,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int?>("PartySetupId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SpawnKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2084,6 +2088,8 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("LinkshellId", "MonsterName")
                         .IsUnique();
+
+                    b.HasIndex("LinkshellId", "SpawnKey");
 
                     b.ToTable("HnmRecurringBoards");
                 });
@@ -3123,6 +3129,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int?>("CooldownMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("DayNumber")
                         .HasColumnType("integer");
 
@@ -3137,6 +3146,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int?>("IntervalMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
@@ -3150,6 +3162,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("RepopTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("SpawnKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<DateTime>("SubmittedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -3161,11 +3177,16 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("LinkshellId");
-
                     b.HasIndex("SubmittedByAppUserId");
 
-                    b.ToTable("PendingTodSubmissions");
+                    b.HasIndex("LinkshellId", "SpawnKey");
+
+                    b.ToTable("PendingTodSubmissions", t =>
+                        {
+                            t.HasCheckConstraint("CK_PendingTodSubmissions_CooldownMinutes_Positive", "\"CooldownMinutes\" IS NULL OR \"CooldownMinutes\" > 0");
+
+                            t.HasCheckConstraint("CK_PendingTodSubmissions_IntervalMinutes_Positive", "\"IntervalMinutes\" IS NULL OR \"IntervalMinutes\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.PlaceholderClaimRequest", b =>
@@ -3285,6 +3306,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<int?>("CooldownMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("DayNumber")
                         .HasColumnType("integer");
 
@@ -3298,6 +3322,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<string>("Interval")
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("IntervalMinutes")
+                        .HasColumnType("integer");
 
                     b.Property<bool?>("Killed")
                         .HasColumnType("boolean");
@@ -3315,6 +3342,10 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("RepopTime")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("SpawnKey")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<DateTime?>("Time")
                         .HasColumnType("timestamp with time zone");
 
@@ -3327,7 +3358,14 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("LinkshellId", "Time");
 
-                    b.ToTable("Tods", (string)null);
+                    b.HasIndex("LinkshellId", "SpawnKey", "Time");
+
+                    b.ToTable("Tods", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Tods_CooldownMinutes_Positive", "\"CooldownMinutes\" IS NULL OR \"CooldownMinutes\" > 0");
+
+                            t.HasCheckConstraint("CK_Tods_IntervalMinutes_Positive", "\"IntervalMinutes\" IS NULL OR \"IntervalMinutes\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.WindowEvent", b =>

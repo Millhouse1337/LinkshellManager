@@ -1,0 +1,142 @@
+using LinkshellManagerDiscordApp.Migrations;
+using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
+using Npgsql;
+using NpgsqlTypes;
+using Xunit;
+
+namespace LinkshellManager.PostgresTests;
+
+// AddTodDurationsAndSpawnKeys fills CooldownMinutes / IntervalMinutes / SpawnKey with SQL, and the
+// save hook stamps new rows with C# (TodDurationFormat.StoredMinutes, HnmConfig.SpawnKey). A later
+// deploy looks rows up by comparing the two, so they must agree on every value. Each input runs
+// through the migration's own SQL expressions on real Postgres and is compared with the C#.
+//
+// The lists hold every distinct Cooldown, Interval and monster name production holds (from the
+// pre-deploy check), plus the edge cases: bare numbers, mixed units, padding, capitals, zero,
+// overflow, words, blank and NULL.
+[Collection("postgres")]
+public class TodDerivedColumnsParityTests
+{
+    public static readonly string?[] Durations =
+    {
+        // Production: every Cooldown and Interval value.
+        "22 Hour", "48 Hour", "72 Hour", "84 Hour", "10 Min", "1 Hour", "6 Hour", null,
+        // The plan's edge cases.
+        "22", "1 Hour 30 Min", "90 Min", "0 Min", "5 min", " 72 ", "1.5 h", "2hrs",
+        "99999999999 Hour", "abc", "",
+        // More: rounding, overflow edges, spacing, capitals, unit spellings, things that are not durations.
+        "0", "0.5", "0.4", "0.025 h", "0.5 Min", "1.25 Min", "2.5 Min",
+        "2147483647", "2147483648", "35791394 Hour", "35791395 Hour", "35791394 Hour 7 Min", "35791394 Hour 8 Min",
+        "HOURS", "1 HOURS 5 MINUTES", "1 Hr", "3 hrs 2 mins", "1h 30m", "1h30m", "90Min", "90 M", "2 H",
+        "\t22\n", "   ", "1.", ".5", "1e3", "-5", "22 Hours ago", "Min", "1 Hour 30", "30 Min 1 Hour",
+        "1 Hour 1 Hour", "22 Hourly", "1 h m", "007", "1.50 h", "\u0662\u0662", "22\u00A0Hour",
+        new string('9', 40), new string('9', 40) + " Min",
+        // Whitespace .NET trims but Postgres's locale-dependent \s may not.
+        "\u00A0", "22\u2009Hour", "\u300010 Min\u2028", "1 Hour\u0085", "1\u000B Hour",
+    };
+
+    public static readonly string?[] MonsterNames =
+    {
+        // Production: every monster name on Tods and on standing boards.
+        "Adamantoise", "Adamantoise/Aspidochelone", "Behemoth/King Behemoth", "Cerberus", "Fafnir/Nidhogg",
+        "Khimaira", "Tiamat", "Hydra", "Jormungand", "King Arthro", "Misc Monster", "Testing", "Vrtra",
+        // The plan's edge cases.
+        " Fafnir ", "fafnir/NIDHOGG", "King Behemoth", "Foo / Bar", "/", "Tiamat",
+        // More: each half alone, reversed and padded pairs, two pairs in one name, empty pieces, blank.
+        "Aspidochelone", "Behemoth", "Fafnir", "Nidhogg", "Nidhogg/Fafnir", "\tKing Behemoth\n",
+        "KING BEHEMOTH/behemoth", "Fafnir/Behemoth", "Nidhogg/Aspidochelone", "Foo//Bar/", "//", " / ",
+        "Behemoth King", "Fafnirs", "King  Behemoth", "", "   ", null,
+        // Whitespace .NET trims but Postgres's locale-dependent \s may not, and a non-ASCII name.
+        "\u00A0Fafnir\u00A0", "\u2003Tiamat\u3000", "Foo\u00A0/\u00A0Bar", "\u00A0", "\u00A0/\u2009", "\u00C9l\u00E9phant",
+    };
+
+    private readonly PostgresFixture _pg;
+
+    public TodDerivedColumnsParityTests(PostgresFixture pg) => _pg = pg;
+
+    [Fact]
+    public async Task DurationMinutesSql_MatchesStoredMinutes_ForEveryInput()
+    {
+        await using var c = await OpenAsync();
+        var mismatches = new List<string>();
+        foreach (var text in Durations)
+        {
+            var (cooldown, interval, _) = await DeriveAsync(c, text);
+            var expectedCooldown = TodDurationFormat.StoredMinutes(text, TodDurationFormat.HoursUnit);
+            var expectedInterval = TodDurationFormat.StoredMinutes(text, TodDurationFormat.MinutesUnit);
+            if (cooldown != expectedCooldown || interval != expectedInterval)
+            {
+                mismatches.Add($"{Show(text)}: SQL ({cooldown}, {interval}) vs C# ({expectedCooldown}, {expectedInterval})");
+            }
+        }
+        Assert.True(mismatches.Count == 0, string.Join("\n", mismatches));
+    }
+
+    // The production values come out as the minutes the ToD board shows.
+    [Theory]
+    [InlineData("22 Hour", 1320)]
+    [InlineData("48 Hour", 2880)]
+    [InlineData("72 Hour", 4320)]
+    [InlineData("84 Hour", 5040)]
+    public async Task ProductionCooldowns_FillTheirMinutes(string text, int minutes)
+    {
+        await using var c = await OpenAsync();
+        Assert.Equal(minutes, (await DeriveAsync(c, text)).Cooldown);
+    }
+
+    [Theory]
+    [InlineData("10 Min", 10)]
+    [InlineData("1 Hour", 60)]
+    [InlineData("6 Hour", 360)]
+    public async Task ProductionIntervals_FillTheirMinutes(string text, int minutes)
+    {
+        await using var c = await OpenAsync();
+        Assert.Equal(minutes, (await DeriveAsync(c, text)).Interval);
+    }
+
+    [Fact]
+    public async Task SpawnKeySql_MatchesSpawnKey_ForEveryInput()
+    {
+        await using var c = await OpenAsync();
+        var mismatches = new List<string>();
+        foreach (var name in MonsterNames)
+        {
+            var key = (await DeriveAsync(c, name)).SpawnKey;
+            var expected = HnmConfig.SpawnKey(name);
+            if (key != expected)
+            {
+                mismatches.Add($"{Show(name)}: SQL {Show(key)} vs C# {Show(expected)}");
+            }
+        }
+        Assert.True(mismatches.Count == 0, string.Join("\n", mismatches));
+    }
+
+    // Runs the migration's three expressions on one value, the way the fill runs them on a column.
+    private static async Task<(int? Cooldown, int? Interval, string? SpawnKey)> DeriveAsync(NpgsqlConnection c, string? value)
+    {
+        await using var command = c.CreateCommand();
+        command.CommandText =
+            $"SELECT {AddTodDurationsAndSpawnKeys.DurationMinutesSql("q.v", 60)}, " +
+            $"{AddTodDurationsAndSpawnKeys.DurationMinutesSql("q.v", 1)}, " +
+            $"{AddTodDurationsAndSpawnKeys.SpawnKeySql("q.v")} " +
+            "FROM (SELECT @v::text AS v) q";
+        command.Parameters.Add(new NpgsqlParameter("v", NpgsqlDbType.Text) { Value = (object?)value ?? DBNull.Value });
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return (
+            reader.IsDBNull(0) ? null : reader.GetInt32(0),
+            reader.IsDBNull(1) ? null : reader.GetInt32(1),
+            reader.IsDBNull(2) ? null : reader.GetString(2));
+    }
+
+    private static string Show(string? value) =>
+        value is null ? "NULL" : "\"" + value.Replace("\t", "\\t").Replace("\n", "\\n") + "\"";
+
+    private async Task<NpgsqlConnection> OpenAsync()
+    {
+        var connection = new NpgsqlConnection(_pg.ConnectionString);
+        await connection.OpenAsync();
+        return connection;
+    }
+}
