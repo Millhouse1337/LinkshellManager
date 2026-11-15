@@ -21,8 +21,9 @@ Changes from the plan below:
 - The rollback SQL also deletes Round4Contract's row from `__EFMigrationsHistory`, so the next
   deploy 4 start runs the drops again (see "Rolling back deploy 4" below).
 - `NormalizeNamesForSquash` (migration 2 below) also VALIDATEs the NOT VALID checks, not only
-  renames. If an old row breaks a check, that check is left NOT VALID with a WARNING instead of
-  stopping the app's start.
+  renames. If an old row breaks a check, that check is left NOT VALID with a Postgres WARNING
+  instead of stopping the app's start. The WARNING is not in the normal startup log, so check
+  with the query under "Squash prep" below.
 - `git grep -n "ROUND4-DROP"` now finds only this file.
 
 What the dropped columns held on production (read-only counts, 2026-11-15): `ChartMemberKeyItems`
@@ -221,9 +222,19 @@ What the migration does (raw SQL, every step guarded, safe to run twice):
 1. `ALTER TABLE ... VALIDATE CONSTRAINT` for each of the 7 checks that is still NOT VALID.
    Production had 0 rows breaking any of them (2026-11-15), and a NOT VALID check still refuses
    every new bad write, so that cannot have changed. VALIDATE only reads; reads and writes go on
-   while it runs. If an old row does break one, that check stays NOT VALID and the startup log
-   shows a WARNING naming it; fix the row and run `NormalizeNamesForSquash.ValidateChecksSql` by
-   hand.
+   while it runs. If an old row does break one, that check stays NOT VALID and Postgres sends a
+   WARNING naming it. That WARNING does NOT show in the normal startup log: Npgsql logs Postgres
+   notices only at Debug level, and the app logs at Information. So after the deploy, check with
+   this read-only query (it must return 0 rows; the I3 fingerprint matching the golden file
+   proves the same):
+
+   ```sql
+   SELECT conrelid::regclass, conname FROM pg_constraint
+   WHERE connamespace = 'public'::regnamespace AND contype = 'c' AND NOT convalidated;
+   ```
+
+   If it lists a check, fix the row and run `NormalizeNamesForSquash.ValidateChecksSql` by hand
+   in psql (psql does show the WARNING or NOTICE).
 2. `ALTER TABLE ... RENAME CONSTRAINT` / `ALTER SEQUENCE ... RENAME TO` for the 15 names, each
    only when the old name is there and the new one is not.
 

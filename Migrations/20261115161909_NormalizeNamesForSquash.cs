@@ -16,8 +16,10 @@ namespace LinkshellManagerDiscordApp.Migrations
     //    update, so that count cannot have grown. VALIDATE only reads the rows; it does not block
     //    reads or writes while it runs.
     //    A check that is already validated is skipped. If an old row did break one, that check is
-    //    left NOT VALID with a WARNING in the startup log instead of failing the app's start; the
-    //    owner fixes the row and runs ValidateChecksSql again by hand (safe to run twice).
+    //    left NOT VALID with a Postgres WARNING instead of failing the app's start. The WARNING does
+    //    not reach the normal startup log (Npgsql logs notices only at Debug), so the owner checks
+    //    pg_constraint for "NOT convalidated" after the deploy (docs/round4-drop-manifest.md), fixes
+    //    the row and runs ValidateChecksSql again by hand (safe to run twice).
     //
     // 2. Rename the names PostgreSQL kept from before a table or column rename, to the names a table
     //    built from the model gets. Postgres 18 names each NOT NULL constraint "<table>_<column>_not_null"
