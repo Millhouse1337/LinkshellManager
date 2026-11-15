@@ -994,6 +994,9 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.HasIndex("NormalizedName");
 
+                    b.HasIndex("AppUserId", "NormalizedName")
+                        .IsUnique();
+
                     b.HasIndex("AppUserId", "Slot")
                         .IsUnique();
 

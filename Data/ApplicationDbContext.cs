@@ -1114,14 +1114,8 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
-        private static object[] CharacterSyncParameters(List<string> accountIds) => new object[]
-        {
-            new Npgsql.NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
-            {
-                Value = accountIds.ToArray(),
-            },
-            new Npgsql.NpgsqlParameter("now", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = DateTime.UtcNow },
-        };
+        private static object[] CharacterSyncParameters(List<string> accountIds) =>
+            CharacterSync.Parameters(accountIds, DateTime.UtcNow);
 
         // A warning in the app log. Logging must not fail a save either, so a context built without
         // a logger simply logs nothing.
@@ -2387,8 +2381,8 @@ namespace LinkshellManagerDiscordApp.Data
                 }).IsUnique();
             });
 
-            // An account's characters (AddCharacters): a shadow copy of the account's main and two
-            // alts, kept in step after every save (CharacterSync). See Character.
+            // An account's characters (AddCharacters): a copy of the account's main and two alts,
+            // kept in step after every save (CharacterSync), that the name lookups read. See Character.
             builder.Entity<Character>(entity =>
             {
                 entity.ToTable("Characters", table =>
@@ -2399,8 +2393,11 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.AppUserId).HasMaxLength(450).IsRequired();
                 entity.Property(item => item.Name).HasMaxLength(Character.MaxNameLength).IsRequired();
                 entity.Property(item => item.NormalizedName).HasMaxLength(Character.MaxNameLength).IsRequired();
-                // One row per slot per account. No unique NAME index yet: accounts may share a name.
+                // One row per slot per account, and one row per name per account (CharactersSwitch; a
+                // slot repeating an earlier slot's name has no row). Different accounts may share a
+                // name: placeholders often carry a real player's name.
                 entity.HasIndex(item => new { item.AppUserId, item.Slot }).IsUnique();
+                entity.HasIndex(item => new { item.AppUserId, item.NormalizedName }).IsUnique();
                 entity.HasIndex(item => item.NormalizedName);
                 // A deleted account takes its characters with it (a claimed placeholder too).
                 // No navigation: nothing reads characters through the account yet.

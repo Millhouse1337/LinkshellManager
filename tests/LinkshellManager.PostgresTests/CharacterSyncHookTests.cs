@@ -230,6 +230,154 @@ public class CharacterSyncHookTests : IAsyncLifetime
         await AssertEqualToAccountsAsync();
     }
 
+    // Since CharactersSwitch an account holds each name once (IX_Characters_AppUserId_NormalizedName).
+    // Swapping the main and an alt in one save must still copy: the renamed rows are replaced, not
+    // updated one by one (which would hit the index half-way).
+    [Fact]
+    public async Task SwappingMainAndAlt_InOneSave_IsCopied()
+    {
+        await using (var db = _pg.CreateContext())
+        {
+            await PostgresFixture.AssertIndexExistsAsync(db, "IX_Characters_AppUserId_NormalizedName");
+            db.Users.Add(new AppUser { Id = "u1", UserName = "u1", CharacterName = "Ann", AltCharacterName1 = "Bea", AltCharacterName2 = "Cid" });
+            await db.SaveChangesAsync();
+        }
+        var cid = (await RowsAsync()).Single(r => r.Slot == 2);
+
+        await using (var db = _pg.CreateContext())
+        {
+            var user = await db.Users.SingleAsync(u => u.Id == "u1");
+            user.CharacterName = "bea";
+            user.AltCharacterName1 = "ANN";
+            await db.SaveChangesAsync();
+        }
+
+        var rows = await RowsAsync();
+        Assert.Equal(new[] { ((short)0, "bea"), ((short)1, "ANN"), ((short)2, "Cid") }, rows.Select(r => (r.Slot, r.Name)));
+        // The untouched slot keeps its row.
+        Assert.Equal(cid, rows[2]);
+        await AssertEqualToAccountsAsync();
+    }
+
+    // A slot that repeats an earlier slot's name in the same account has no row (the earlier slot
+    // already gives the account that name), and the save still works. Data Admin can save such an
+    // account even though the profile refuses it.
+    [Fact]
+    public async Task ANameRepeatedInsideOneAccount_KeepsItsFirstSlotOnly()
+    {
+        await using (var db = _pg.CreateContext())
+        {
+            db.Users.Add(new AppUser
+            {
+                Id = "u1", UserName = "u1", CharacterName = "Twin", AltCharacterName1 = " twin ", Alt1JobLevels = new[] { 5 },
+                AltCharacterName2 = "Other",
+            });
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(new[] { ((short)0, "Twin"), ((short)2, "Other") }, (await RowsAsync()).Select(r => (r.Slot, r.Name)));
+
+        // The main moves to alt 2's name: now alt 2 is the repeat, and alt 1 gets its row.
+        await using (var db = _pg.CreateContext())
+        {
+            var user = await db.Users.SingleAsync(u => u.Id == "u1");
+            user.CharacterName = "OTHER";
+            db.SaveChanges();
+        }
+        var rows = await RowsAsync();
+        Assert.Equal(new[] { ((short)0, "OTHER"), ((short)1, "twin") }, rows.Select(r => (r.Slot, r.Name)));
+        Assert.Equal(new[] { 5 }, rows[1].JobLevels);
+        await AssertEqualToAccountsAsync();
+    }
+
+    // Two copies of one account run one after the other (CharacterSync.SyncSql's advisory lock), and
+    // the later one reads the account as saved by then. Here another connection holds the lock, the
+    // save goes in and its copy waits; meanwhile the account is changed again (a save whose own copy
+    // never ran); when the lock is let go the waiting copy writes that newest name, not its own.
+    [Fact]
+    public async Task ACopyThatWaitsForTheLock_WritesTheAccountAsSavedByThen()
+    {
+        await using (var db = _pg.CreateContext())
+        {
+            db.Users.Add(new AppUser { Id = "u1", UserName = "u1", CharacterName = "Bob" });
+            await db.SaveChangesAsync();
+        }
+
+        await using var holder = new Npgsql.NpgsqlConnection(_pg.ConnectionString);
+        await holder.OpenAsync();
+        await using var hold = await holder.BeginTransactionAsync();
+        await using (var take = new Npgsql.NpgsqlCommand(
+            $"SELECT pg_advisory_xact_lock({CharacterSync.LockClassId}, hashtext('u1'))", holder, hold))
+        {
+            await take.ExecuteNonQueryAsync();
+        }
+
+        var save = Task.Run(async () =>
+        {
+            await using var db = _pg.CreateContext();
+            (await db.Users.SingleAsync(u => u.Id == "u1")).CharacterName = "Rob";
+            await db.SaveChangesAsync();
+        });
+
+        // Wait until the copy is queued behind the lock (the save itself is in by then).
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        await using (var watcher = new Npgsql.NpgsqlConnection(_pg.ConnectionString))
+        {
+            await watcher.OpenAsync();
+            while (true)
+            {
+                await using var waiting = new Npgsql.NpgsqlCommand(
+                    "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted", watcher);
+                if ((long)(await waiting.ExecuteScalarAsync())! > 0)
+                {
+                    break;
+                }
+                Assert.False(save.IsCompleted, "The copy did not wait for the lock.");
+                Assert.True(DateTime.UtcNow < deadline, "The copy never queued behind the lock.");
+                await Task.Delay(20);
+            }
+            Assert.Equal("Rob", (await _pg.CreateContext().Users.AsNoTracking().SingleAsync()).CharacterName);
+            await using var later = new Npgsql.NpgsqlCommand(
+                "UPDATE \"AspNetUsers\" SET \"CharacterName\" = 'Late' WHERE \"Id\" = 'u1'", watcher);
+            await later.ExecuteNonQueryAsync();
+        }
+
+        await hold.CommitAsync();
+        await save.WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(new[] { ((short)0, "Late") }, (await RowsAsync()).Select(r => (r.Slot, r.Name)));
+    }
+
+    // Start-up runs the copy for every account, so rows a failed copy left behind are repaired.
+    [Fact]
+    public async Task ResyncAll_RepairsEveryAccount_AndChangesNothingWhenRight()
+    {
+        await using (var db = _pg.CreateContext())
+        {
+            db.Users.Add(new AppUser { Id = "u1", UserName = "u1", CharacterName = "Bob", AltCharacterName1 = "Bobalt" });
+            db.Users.Add(new AppUser { Id = "u2", UserName = "u2", CharacterName = "Ann" });
+            await db.SaveChangesAsync();
+        }
+        await using (var db = _pg.CreateContext())
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE \"AspNetUsers\" SET \"CharacterName\" = 'Robert', \"AltCharacterName1\" = NULL WHERE \"Id\" = 'u1'");
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM \"Characters\" WHERE \"AppUserId\" = 'u2'");
+        }
+
+        await using (var db = _pg.CreateContext())
+        {
+            Assert.Equal(2, await CharacterSync.ResyncAllAsync(db, CancellationToken.None));
+        }
+        await AssertEqualToAccountsAsync();
+        var repaired = await RowsAsync();
+
+        await using (var db = _pg.CreateContext())
+        {
+            await CharacterSync.ResyncAllAsync(db, CancellationToken.None);
+        }
+        Assert.Equal(repaired, await RowsAsync());
+    }
+
     // The copy runs after the save. Without a transaction the save is already in; inside the
     // caller's transaction it runs in a savepoint, so a failure leaves the transaction usable and
     // the caller's later work and commit go through.
@@ -322,7 +470,8 @@ public class CharacterSyncHookTests : IAsyncLifetime
             .ToList();
     }
 
-    // Every account's Characters rows are exactly what the C# Trim and the 256 limit give.
+    // Every account's Characters rows are exactly what the C# Trim, the 256 limit and (since
+    // CharactersSwitch) the one-name-per-account rule give.
     private async Task AssertEqualToAccountsAsync()
     {
         await using var db = _pg.CreateContext();
@@ -333,11 +482,15 @@ public class CharacterSyncHookTests : IAsyncLifetime
             for (short slot = 0; slot < 3; slot++)
             {
                 var name = names[slot]?.Trim();
-                if (!string.IsNullOrEmpty(name) && name.EnumerateRunes().Count() <= Character.MaxNameLength)
+                if (!string.IsNullOrEmpty(name) && name.EnumerateRunes().Count() <= Character.MaxNameLength
+                    && !expected.Any(row => row.Item1 == user.Id && row.Item4 == name.ToLowerInvariant()))
                 {
                     expected.Add((user.Id, slot, name, name.ToLowerInvariant()));
                 }
             }
+            Assert.Equal(
+                CharacterSync.DesiredRows(user).Select(row => (user.Id, row.Slot, row.Name, row.NormalizedName)),
+                expected.Where(row => row.Item1 == user.Id));
         }
         Assert.Equal(expected, (await RowsAsync()).Select(r => (r.AppUserId, r.Slot, r.Name, r.NormalizedName)));
     }

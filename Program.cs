@@ -615,6 +615,22 @@ if (!app.Environment.IsDevelopment())
                 .LogCritical(ex, "Database migration on startup failed; aborting startup.");
             throw;
         }
+
+        // The name lookups read Characters, a copy of the accounts' names kept in step on every
+        // save. Copy every account again now, so a copy that failed (or one an older build skipped
+        // while it was rolled back to) never outlives a restart. Never stops start-up.
+        try
+        {
+            var checkedAccounts = await CharacterSync.ResyncAllAsync(
+                services.GetRequiredService<ApplicationDbContext>(), CancellationToken.None);
+            services.GetRequiredService<ILogger<Program>>()
+                .LogInformation("Characters: checked the copy of {Count} account(s).", checkedAccounts);
+        }
+        catch (Exception ex)
+        {
+            services.GetRequiredService<ILogger<Program>>()
+                .LogWarning(ex, "Characters: the start-up copy failed; each account is copied again on its next save.");
+        }
     }
 }
 

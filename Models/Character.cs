@@ -7,14 +7,15 @@ namespace LinkshellManagerDiscordApp.Models;
 /// One of an account's characters: slot 0 is the main, 1 and 2 the two alts (the same numbering as
 /// JobRating.CharacterSlot).
 ///
-/// A SHADOW of AspNetUsers for now (AddCharacters). The account's name and job columns are still
-/// the ones the app writes and reads; this table is a copy of them, one row per non-blank name,
-/// kept in step on every save by ApplicationDbContext (CharacterSync). Nothing reads it yet. A
-/// later deploy switches the name lookups to it, so one search covers every character of every
-/// account instead of four separate name columns.
+/// A copy of AspNetUsers (AddCharacters). The account's name and job columns are still the ones
+/// the app WRITES; this table is a copy of them, one row per non-blank name, kept in step on every
+/// save by ApplicationDbContext (CharacterSync). Since CharactersSwitch the name lookups READ it
+/// (CharacterResolver.LoadMembershipsAsync, LinkshellRosterNames.LoadCandidatesAsync, the addon
+/// /roster alts), so one query covers every character of every account.
 ///
-/// No unique name index yet: two accounts may share a name today (placeholders often carry a real
-/// player's name), and a copy must never make a user's save fail.
+/// One row per name per account (unique AppUserId + NormalizedName): a slot that repeats an earlier
+/// slot's name in the same account has no row, as the earlier slot already gives the account that
+/// name. Different accounts may share a name (placeholders often carry a real player's name).
 /// </summary>
 public class Character
 {

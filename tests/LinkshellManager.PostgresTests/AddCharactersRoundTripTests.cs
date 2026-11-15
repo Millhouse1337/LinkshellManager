@@ -22,9 +22,10 @@ namespace LinkshellManager.PostgresTests;
 // alt of the same account, padding with tabs, no-break and ideographic spaces, a blank main, an
 // empty alt, an account with no names at all, a 300-character name, a non-ASCII name, a name that is
 // only a zero-width space (not whitespace to .NET), and alts with jobs. The rows the migration
-// writes are exactly what the C# rules give (Trim, 256 characters, ToLowerInvariant), and exactly
-// what the app's own copy (CharacterSync.SyncSql) gives: running it over every account changes no
-// row. The new keys and checks are tested. Down drops the table, gives NULL-membership ticks their
+// writes are exactly what the C# rules give (Trim, 256 characters, ToLowerInvariant), and what the
+// app's own copy (CharacterSync.SyncSql) gives: running it over every account changes no row except
+// that, since CharactersSwitch, it leaves out a slot repeating the same account's name (u-twin's
+// alts). The new keys and checks are tested. Down drops the table, gives NULL-membership ticks their
 // membership back (or deletes them) and makes the column required; an older build then adds an
 // account, and Up again copies it.
 //
@@ -105,11 +106,13 @@ public class AddCharactersRoundTripTests
                 await ScalarAsync(c, AddCharacters.FillSql);
                 Assert.Contains("AddCharacters: copied 0 character name(s) from the accounts; left out 1 longer than 256 characters.", again);
 
-                // The app's own copy agrees with the migration row for row: over every account it
-                // changes nothing, not even UpdatedAt.
-                var before = await DumpAsync(c);
-                Assert.Equal(0, await SyncAsync(c, Accounts.Select(a => a.Id).ToArray()));
+                // The app's own copy agrees with the migration row for row, not even changing
+                // UpdatedAt, except that since CharactersSwitch it drops the two alts of u-twin that
+                // repeat its main (the repeat rule).
+                var before = await DumpAsync(c, "NOT (t.\"AppUserId\" = 'u-twin' AND t.\"Slot\" > 0)");
+                await SyncAsync(c, Accounts.Select(a => a.Id).ToArray());
                 Assert.Equal(before, await DumpAsync(c));
+                Assert.Equal(1L, await ScalarAsync(c, "SELECT count(*) FROM \"Characters\" WHERE \"AppUserId\" = 'u-twin'"));
 
                 // The new keys and checks.
                 await AssertRefusedAsync(c, Character("u-bob", 2, "   "), PostgresErrorCodes.CheckViolation);
@@ -252,9 +255,9 @@ public class AddCharactersRoundTripTests
         return rows;
     }
 
-    // Every column of every row, for "nothing changed".
-    private static async Task<string> DumpAsync(NpgsqlConnection c) => (string)(await ScalarAsync(c,
-        "SELECT coalesce(string_agg(row_to_json(t)::text, E'\\n' ORDER BY t.\"Id\"), '') FROM \"Characters\" t"))!;
+    // Every column of every row (or of the rows the filter on t keeps), for "nothing changed".
+    private static async Task<string> DumpAsync(NpgsqlConnection c, string filter = "true") => (string)(await ScalarAsync(c,
+        "SELECT coalesce(string_agg(row_to_json(t)::text, E'\\n' ORDER BY t.\"Id\"), '') FROM \"Characters\" t WHERE " + filter))!;
 
     // The app's copy, exactly as ApplicationDbContext runs it. Returns the rows it changed.
     private static async Task<int> SyncAsync(NpgsqlConnection c, string[] accountIds)
