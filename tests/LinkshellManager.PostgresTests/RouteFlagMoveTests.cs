@@ -11,18 +11,16 @@ using Xunit;
 
 namespace LinkshellManager.PostgresTests;
 
-// A later migration adds "one route per linkshell posts Loot" (and the same for Auctions, the ToD
-// board and the DKP sheet) as unique indexes. Postgres checks those row by row, so moving Loot from
-// one route to another in a single save fails for a moment where both routes hold it.
-// ChannelRouteEditor saves in two steps to avoid that. These tests build such an index by hand
-// inside a transaction that is rolled back, so the shared database is left as the migrations made it.
+// OneCloseOneRouteOneInvite adds "one route per linkshell posts Loot" (and the same for Auctions,
+// the ToD board and the DKP sheet) as unique indexes. Postgres checks those row by row, so moving
+// Loot from one route to another in a single save fails for a moment where both routes hold it.
+// ChannelRouteEditor saves in two steps to avoid that. These tests run against the real indexes
+// (each test first checks they are there), inside a transaction that is rolled back.
 [Collection("postgres")]
 public class RouteFlagMoveTests : IAsyncLifetime
 {
-    private const string OneLootRouteSql =
-        "CREATE UNIQUE INDEX \"IX_Test_OneLootRoute\" ON \"LinkshellChannelRoutes\" (\"LinkshellId\") WHERE \"PostLoot\"";
-    private const string OneTodBoardRouteSql =
-        "CREATE UNIQUE INDEX \"IX_Test_OneTodBoardRoute\" ON \"LinkshellChannelRoutes\" (\"LinkshellId\") WHERE \"PostTodBoard\"";
+    private const string OneLootRoute = "IX_LinkshellChannelRoutes_OneLootRoute";
+    private const string OneTodBoardRoute = "IX_LinkshellChannelRoutes_OneTodBoardRoute";
 
     private static readonly IReadOnlyList<DiscordChannelInfo> Channels = new[]
     {
@@ -71,8 +69,8 @@ public class RouteFlagMoveTests : IAsyncLifetime
 
         await using var db = _pg.CreateContext();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlRawAsync(OneLootRouteSql);
-        await db.Database.ExecuteSqlRawAsync(OneTodBoardRouteSql);
+        await PostgresFixture.AssertIndexExistsAsync(db, OneLootRoute);
+        await PostgresFixture.AssertIndexExistsAsync(db, OneTodBoardRoute);
 
         // Loot moves from route 2 to route 1; route 2 keeps the ToD board in the same channel.
         var error = await Editor(db).SaveAsync(
@@ -104,7 +102,7 @@ public class RouteFlagMoveTests : IAsyncLifetime
 
         await using var db = _pg.CreateContext();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlRawAsync(OneTodBoardRouteSql);
+        await PostgresFixture.AssertIndexExistsAsync(db, OneTodBoardRoute);
 
         var error = await Editor(db).SaveAsync(
             linkshellId,
@@ -135,7 +133,7 @@ public class RouteFlagMoveTests : IAsyncLifetime
 
         await using var db = _pg.CreateContext();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlRawAsync(OneLootRouteSql);
+        await PostgresFixture.AssertIndexExistsAsync(db, OneLootRoute);
 
         var routes = await db.LinkshellChannelRoutes.Where(r => r.Id == first || r.Id == second).ToListAsync();
         routes.Single(r => r.Id == first).PostLoot = true;

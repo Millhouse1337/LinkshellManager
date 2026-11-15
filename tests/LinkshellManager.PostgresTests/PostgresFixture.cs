@@ -98,6 +98,17 @@ public sealed class PostgresFixture : IAsyncLifetime
         return new ApplicationDbContext(options, auctionChannelQueue: auctionChannelQueue);
     }
 
+    // Fails the test unless the migrations created this index, so a test that relies on a real
+    // unique index cannot pass just because the index is missing.
+    public static async Task AssertIndexExistsAsync(ApplicationDbContext db, string indexName)
+    {
+        var qualified = $"public.\"{indexName}\"";
+        var found = await db.Database
+            .SqlQuery<bool>($"SELECT to_regclass({qualified}) IS NOT NULL AS \"Value\"")
+            .SingleAsync();
+        Assert.True(found, $"Index {indexName} is missing.");
+    }
+
     // Empties every app table (ids start again from 1) so each test begins from a blank database.
     // The migrations history is kept, so the schema itself stays in place. Call it at the START of
     // each test rather than the end, so a failed test never leaves rows behind for the next one.

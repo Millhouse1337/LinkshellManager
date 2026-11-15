@@ -10,16 +10,14 @@ using Xunit;
 
 namespace LinkshellManager.PostgresTests;
 
-// A later migration adds "at most one closing window per camp" as a unique index, which Postgres
-// checks row by row. ClosingWindowMark moves the tick in two saves so the move is never refused.
-// The index is built by hand inside a transaction that is rolled back, so the shared database
-// stays as the migrations made it.
+// OneCloseOneRouteOneInvite adds "at most one closing window per camp" as a unique index, which
+// Postgres checks row by row. ClosingWindowMark moves the tick in two saves so the move is never
+// refused. These tests run against the real index (each test first checks it is there), inside a
+// transaction that is rolled back.
 [Collection("postgres")]
 public class ClosingWindowMoveTests : IAsyncLifetime
 {
-    private const string OneClosePerEventSql =
-        "CREATE UNIQUE INDEX \"IX_Test_OneClosePerEvent\" ON \"EventAttendanceWindows\" (\"EventId\") " +
-        "WHERE \"IsClosingWindow\" AND NOT \"IsKillWindow\"";
+    private const string OneClosePerEvent = "IX_EventAttendanceWindows_OneClosePerEvent";
 
     private readonly PostgresFixture _pg;
 
@@ -70,7 +68,7 @@ public class ClosingWindowMoveTests : IAsyncLifetime
 
         await using var db = _pg.CreateContext();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlRawAsync(OneClosePerEventSql);
+        await PostgresFixture.AssertIndexExistsAsync(db, OneClosePerEvent);
 
         var windows = await ClosingWindowMark.MoveAsync(db, camp, windowIds[0], CancellationToken.None);
 
@@ -89,7 +87,7 @@ public class ClosingWindowMoveTests : IAsyncLifetime
 
         await using var db = _pg.CreateContext();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlRawAsync(OneClosePerEventSql);
+        await PostgresFixture.AssertIndexExistsAsync(db, OneClosePerEvent);
 
         await ClosingWindowMark.MoveAsync(db, camp, null, CancellationToken.None);
 
@@ -108,7 +106,7 @@ public class ClosingWindowMoveTests : IAsyncLifetime
 
         await using var db = _pg.CreateContext();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        await db.Database.ExecuteSqlRawAsync(OneClosePerEventSql);
+        await PostgresFixture.AssertIndexExistsAsync(db, OneClosePerEvent);
 
         var windows = await db.EventAttendanceWindows.Where(w => w.EventId == camp).ToListAsync();
         foreach (var window in windows)
