@@ -1,7 +1,9 @@
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
+using LinkshellManagerDiscordApp.Utils;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace LinkshellManagerDiscordApp.Data
 {
@@ -897,6 +899,52 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // Keeps the derived ToD columns (AddTodDurationsAndSpawnKeys) in step with their text on every
+        // save that adds or changes a row: SpawnKey from MonsterName (HnmConfig.SpawnKey), and
+        // CooldownMinutes / IntervalMinutes from Cooldown / Interval (TodDurationFormat
+        // .StoredMinutes; a bare number is hours for a cooldown, minutes for an interval). Done here
+        // so every writer gets it -- TodRecorder, the ToD forms, End Camp, the approval queue, the
+        // addon and Data Admin -- and the next one cannot forget it. Always re-derived from the text,
+        // so a value set by hand never sticks. No database work: both helpers are plain C#.
+        private void StampDerivedColumns()
+        {
+            foreach (var entry in ChangeTracker.Entries<Tod>().Where(IsAddedOrModified))
+            {
+                var tod = entry.Entity;
+                SetDerived(entry, nameof(Tod.SpawnKey), HnmConfig.SpawnKey(tod.MonsterName));
+                SetDerived(entry, nameof(Tod.CooldownMinutes),
+                    TodDurationFormat.StoredMinutes(tod.Cooldown, TodDurationFormat.HoursUnit));
+                SetDerived(entry, nameof(Tod.IntervalMinutes),
+                    TodDurationFormat.StoredMinutes(tod.Interval, TodDurationFormat.MinutesUnit));
+            }
+            foreach (var entry in ChangeTracker.Entries<PendingTodSubmission>().Where(IsAddedOrModified))
+            {
+                var pending = entry.Entity;
+                SetDerived(entry, nameof(PendingTodSubmission.SpawnKey), HnmConfig.SpawnKey(pending.MonsterName));
+                SetDerived(entry, nameof(PendingTodSubmission.CooldownMinutes),
+                    TodDurationFormat.StoredMinutes(pending.Cooldown, TodDurationFormat.HoursUnit));
+                SetDerived(entry, nameof(PendingTodSubmission.IntervalMinutes),
+                    TodDurationFormat.StoredMinutes(pending.Interval, TodDurationFormat.MinutesUnit));
+            }
+            foreach (var entry in ChangeTracker.Entries<HnmRecurringBoard>().Where(IsAddedOrModified))
+            {
+                SetDerived(entry, nameof(HnmRecurringBoard.SpawnKey), HnmConfig.SpawnKey(entry.Entity.MonsterName));
+            }
+        }
+
+        private static bool IsAddedOrModified(EntityEntry entry) =>
+            entry.State is EntityState.Added or EntityState.Modified;
+
+        // Through the entry, so a value that did not change is not marked modified.
+        private static void SetDerived(EntityEntry entry, string property, object? value)
+        {
+            var current = entry.Property(property);
+            if (!Equals(current.CurrentValue, value))
+            {
+                current.CurrentValue = value;
+            }
+        }
+
         // INV-1: every move of AppUserLinkshell.LinkshellDkp is matched, amount for amount, by
         // DkpLedgerEntry rows in the SAME save. That invariant is what lets pool balances be
         // DERIVED from the ledger (DkpPoolBalanceService) instead of cached in a second table.
@@ -1113,6 +1161,7 @@ namespace LinkshellManagerDiscordApp.Data
         {
             await StampNewMembershipDkpEpochAsync(CollectNewMembershipsNeedingDkpEpoch(), cancellationToken);
             await StampMembershipRoleIdsAsync(CollectMembershipsNeedingRoleStamp(), cancellationToken);
+            StampDerivedColumns();
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();
             AssertConfirmedTreasuryEntriesAreImmutable();
@@ -1155,6 +1204,7 @@ namespace LinkshellManagerDiscordApp.Data
         {
             StampNewMembershipDkpEpoch(CollectNewMembershipsNeedingDkpEpoch());
             StampMembershipRoleIds(CollectMembershipsNeedingRoleStamp());
+            StampDerivedColumns();
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();
             AssertConfirmedTreasuryEntriesAreImmutable();

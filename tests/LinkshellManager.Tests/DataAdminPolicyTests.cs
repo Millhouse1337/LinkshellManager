@@ -126,6 +126,25 @@ public class DataAdminPolicyTests
         Assert.Contains(table.EditableColumns, c => c.Name == nameof(DkpPoolEventType.EventType));
     }
 
+    // The derived ToD columns are re-stamped from their text on every save, so Data Admin shows
+    // them but edits the text instead.
+    [Theory]
+    [InlineData(typeof(Tod), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
+    [InlineData(typeof(PendingTodSubmission), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
+    [InlineData(typeof(HnmRecurringBoard), "MonsterName", new[] { "SpawnKey" })]
+    public void DerivedTodColumns_AreShownButNeverEdited(Type entityType, string textColumn, string[] derived)
+    {
+        var table = Table(NewCatalog(), entityType);
+
+        foreach (var column in derived)
+        {
+            Assert.Contains(table.DetailColumns, c => c.Name == column);
+            Assert.DoesNotContain(table.EditableColumns, c => c.Name == column);
+            Assert.DoesNotContain(table.CreateColumns, c => c.Name == column);
+        }
+        Assert.Contains(table.EditableColumns, c => c.Name == textColumn);
+    }
+
     // Keys the database generates are never typed in; keys the caller supplies (AppSetting.Key)
     // are asked for on create and locked on edit.
     [Fact]

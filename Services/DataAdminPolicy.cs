@@ -165,7 +165,22 @@ public sealed class DataAdminPolicy
             },
 
             // ---- rows whose SaveChanges posts to Discord -----------------------------------------
-            [typeof(Tod)] = new() { DiscordSideEffect = "Saving or deleting a ToD rebuilds the linkshell's Discord ToD board." },
+            // SpawnKey and the *Minutes columns follow MonsterName / Cooldown / Interval: every save
+            // re-stamps them from the text (ApplicationDbContext.StampDerivedColumns), so they are
+            // edited by editing the text.
+            [typeof(Tod)] = new()
+            {
+                DiscordSideEffect = "Saving or deleting a ToD rebuilds the linkshell's Discord ToD board.",
+                ReadOnlyColumns = Names(nameof(Tod.SpawnKey), nameof(Tod.CooldownMinutes), nameof(Tod.IntervalMinutes)),
+            },
+            [typeof(PendingTodSubmission)] = new()
+            {
+                ReadOnlyColumns = Names(
+                    nameof(PendingTodSubmission.SpawnKey),
+                    nameof(PendingTodSubmission.CooldownMinutes),
+                    nameof(PendingTodSubmission.IntervalMinutes)),
+            },
+            [typeof(HnmRecurringBoard)] = new() { ReadOnlyColumns = Names(nameof(HnmRecurringBoard.SpawnKey)) },
             [typeof(EventLootDetail)] = new() { DiscordSideEffect = "Adding loot posts a loot announcement to Discord." },
             [typeof(Event)] = new()
             {
