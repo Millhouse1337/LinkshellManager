@@ -14,8 +14,8 @@ using Xunit;
 namespace LinkshellManager.Tests;
 
 // The main character's jobs live on the account (AccountJobsAndKeyItemAccounts) and are read and
-// written there; since RosterSwitch nothing writes the old membership copies (the previous build
-// reads the account too). The addon may write only its token owner's own main character.
+// written there (the old membership copies were dropped by Round4Contract). The addon may write only
+// its token owner's own main character.
 public class MainCharacterJobsTests
 {
     private const int Ls = 1;
@@ -40,9 +40,9 @@ public class MainCharacterJobsTests
             new AppUser { Id = "carol", UserName = "carol", CharacterName = "Carol", JobLevels = new[] { 0, 50 } },
             new AppUser { Id = "dave", UserName = "dave", CharacterName = "Dave" });
         db.AppUserLinkshells.AddRange(
-            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bob", JobLevels = new[] { 0, 1 } },
-            new AppUserLinkshell { Id = 2, LinkshellId = OtherLs, AppUserId = "bob", CharacterName = " bob ", JobLevels = new[] { 0, 1 } },
-            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "carol", CharacterName = "Carol", JobLevels = new[] { 0, 50 } },
+            new AppUserLinkshell { Id = 1, LinkshellId = Ls, AppUserId = "bob", CharacterName = "Bob" },
+            new AppUserLinkshell { Id = 2, LinkshellId = OtherLs, AppUserId = "bob", CharacterName = " bob " },
+            new AppUserLinkshell { Id = 3, LinkshellId = Ls, AppUserId = "carol", CharacterName = "Carol" },
             new AppUserLinkshell { Id = 4, LinkshellId = OtherLs, AppUserId = "dave", CharacterName = "Dave" });
         db.SaveChanges();
         return db;
@@ -69,8 +69,7 @@ public class MainCharacterJobsTests
 
     // ---- Write -----------------------------------------------------------------------------
 
-    // RosterSwitch: only the account is written. The membership copies are no longer kept in step
-    // (nothing reads them, not even the previous build).
+    // Only the account is written: it is the one home of the main's jobs.
     [Fact]
     public void Write_SetsTheAccount_AndLeavesNullArgumentsAlone()
     {
@@ -129,11 +128,8 @@ public class MainCharacterJobsTests
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.Contains("\"characterName\":\"Bob\"", JsonSerializer.Serialize(ok.Value));
         Assert.Equal(new[] { 0, 75, 37 }, db.Users.Single(u => u.Id == "bob").JobLevels);
-        // Bob's old membership copies are left as they were (RosterSwitch: no longer written).
-        Assert.All(db.AppUserLinkshells.Where(m => m.AppUserId == "bob"), m => Assert.Equal(new[] { 0, 1 }, m.JobLevels));
         // Nobody else's.
         Assert.Equal(new[] { 0, 50 }, db.Users.Single(u => u.Id == "carol").JobLevels);
-        Assert.Equal(new[] { 0, 50 }, db.AppUserLinkshells.Single(m => m.Id == 3).JobLevels);
     }
 
     // What the old guard let through: any name on the token's roster.
@@ -153,15 +149,13 @@ public class MainCharacterJobsTests
 
         Assert.IsType<ForbidResult>(result);
         Assert.DoesNotContain(db.Users.ToList(), u => u.JobLevels is { Length: 2 } levels && levels[1] == 99);
-        Assert.DoesNotContain(db.AppUserLinkshells.ToList(), m => m.JobLevels is { Length: 2 } levels && levels[1] == 99);
     }
 
     [Fact]
     public async Task AddonRoster_ReadsTheMainsJobsFromTheAccount()
     {
         await using var db = Seeded();
-        // A membership that drifted (an old build wrote it): the account's value is the answer.
-        db.AppUserLinkshells.Single(m => m.Id == 1).JobLevels = new[] { 0, 9 };
+        // The roster row has no jobs of its own: the account's value is the answer.
         db.Users.Single(u => u.Id == "bob").JobLevels = new[] { 0, 70 };
         db.SaveChanges();
 

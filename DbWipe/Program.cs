@@ -241,7 +241,7 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
 
         // --- Reset member DKP balances ---
         // (This used to clear AppUserLinkshells.JobLevels too. Jobs live on the account now, and
-        // the next deploy drops that column, so the wipe no longer names it.)
+        // Round4Contract dropped that column.)
         // The imported seed (SeededDkp*) and the two ledger watermarks go too: the DKP sheet adds the
         // seed to the ledger, so leaving it would bring the old balance back on top of the new one.
         ("AppUserLinkshells (reset DKP)", "UPDATE \"AppUserLinkshells\" SET \"LinkshellDkp\" = 0, \"SeededDkpEarned\" = 0, \"SeededDkpSpent\" = 0, \"DkpSeedLedgerId\" = 0, \"DkpPoolLedgerFromId\" = 0 WHERE \"LinkshellId\" = @ls"),

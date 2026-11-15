@@ -38,7 +38,7 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
     [Fact]
     public async Task ClaimingAPlaceholderWithHistory_LeavesNoReferenceToIt_AndAddsTheBalances()
     {
-        int linkshellId, phMembershipId, realMembershipId;
+        int linkshellId, realMembershipId;
         await using (var db = _pg.CreateContext())
         {
             var linkshell = new Linkshell { LinkshellName = "LS" };
@@ -50,7 +50,6 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             db.AppUserLinkshells.AddRange(realMember, phMember);
             await db.SaveChangesAsync();
             linkshellId = linkshell.Id;
-            phMembershipId = phMember.Id;
             realMembershipId = realMember.Id;
 
             // Balances with the ledger rows that explain them: Bob earned 30, the import gave
@@ -93,12 +92,11 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
                 new AppUserEventHistory { EventHistoryId = history.Id, AppUserId = Real, EventDkp = 5 },
                 new AppUserEventHistory { EventHistoryId = history.Id, AppUserId = Ph, EventDkp = 7 });
 
-            // Chart ticks of the placeholder's account, one the real member also has. The old
-            // membership ids are filled the way an older build wrote them (ROUND4-DROP).
+            // Chart ticks of the placeholder's account, one the real member also has.
             db.ChartMemberKeyItems.AddRange(
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = realMembershipId, AppUserId = Real },
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = phMembershipId, AppUserId = Ph, SetByAppUserId = Ph },
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "B", MembershipId = phMembershipId, AppUserId = Ph });
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", AppUserId = Real },
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", AppUserId = Ph, SetByAppUserId = Ph },
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "B", AppUserId = Ph });
 
             // Ratings, a Claim Shield capture, loot won.
             db.JobRatings.Add(new JobRating { LinkshellId = linkshellId, TargetAppUserId = Ph, RaterAppUserId = Real, JobIndex = 1, UpdatedAt = When });
@@ -155,11 +153,9 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             var attended = await db.AppUserEventHistories.AsNoTracking().SingleAsync();
             Assert.Equal(12d, attended.EventDkp);
 
-            // Chart ticks: A once, B moved onto the real account. The old membership ids are left
-            // as they were: nothing reads or writes them any more (ROUND4-DROP).
+            // Chart ticks: A once, B moved onto the real account.
             var ticks = await db.ChartMemberKeyItems.AsNoTracking().OrderBy(k => k.KeyItemName).ToListAsync();
             Assert.Equal(new[] { "A", "B" }, ticks.Select(k => k.KeyItemName));
-            Assert.Equal(new int?[] { realMembershipId, phMembershipId }, ticks.Select(k => k.MembershipId));
             Assert.All(ticks, k => Assert.Equal(Real, k.AppUserId));
 
             Assert.Single(await db.ClaimShieldCaptureMembers.AsNoTracking().ToListAsync());
@@ -174,7 +170,7 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
     [Fact]
     public async Task Claim_WhenBothAccountsTickedTheSameKeyItem_KeepsOneTick()
     {
-        int linkshellId, phMembershipId, bobsOldTick;
+        int linkshellId, bobsOldTick;
         await using (var db = _pg.CreateContext())
         {
             var linkshell = new Linkshell { LinkshellName = "LS" };
@@ -185,12 +181,11 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             db.AppUserLinkshells.Add(phMember);
             await db.SaveChangesAsync();
             linkshellId = linkshell.Id;
-            phMembershipId = phMember.Id;
 
-            var old = new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "A", MembershipId = 987654, AppUserId = Real };
+            var old = new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "A", AppUserId = Real };
             db.ChartMemberKeyItems.AddRange(
                 old,
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "A", MembershipId = phMembershipId, AppUserId = Ph },
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "A", AppUserId = Ph },
                 new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "B", AppUserId = Ph });
             await db.SaveChangesAsync();
             bobsOldTick = old.Id;
@@ -210,8 +205,6 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             Assert.Equal(new[] { "A", "B" }, ticks.Select(k => k.KeyItemName));
             Assert.All(ticks, k => Assert.Equal(Real, k.AppUserId));
             Assert.Equal(bobsOldTick, ticks[0].Id);
-            // "B" was ticked by this build (no membership id): it moves by account all the same.
-            Assert.Null(ticks[1].MembershipId);
         }
     }
 

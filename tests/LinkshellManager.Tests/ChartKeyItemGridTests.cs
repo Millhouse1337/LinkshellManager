@@ -32,30 +32,29 @@ public class ChartKeyItemGridTests
         LinkshellId = 1,
         Board = ChartBoardCatalog.Dynamis,
         KeyItemName = keyItem,
-        MembershipId = membershipId,
         AppUserId = $"user-{membershipId}",
     };
 
-    // RosterSwitch: a tick belongs to the ACCOUNT. A member whose membership was re-created (a new
-    // membership id, the same account) still sees their ticks; a tick on somebody else's account
-    // does not leak onto a member who happens to have its old membership id.
+    // RosterSwitch: a tick belongs to the ACCOUNT, not to a membership. A member's tick shows on
+    // their roster row whatever their membership id is; a tick on an account that is not on the
+    // roster shows on nobody's.
     [Fact]
-    public void BuildGrid_MatchesTicksByAccount_NotByMembershipId()
+    public void BuildGrid_MatchesTicksByAccount()
     {
         var lantern = Dynamis.KeyItems.ToList().FindIndex(item => item.Name == "Hydra Corps Lantern");
         var rows = new[]
         {
-            // Aeris ticked it on her old membership 41; she is membership 1 now.
+            // Aeris's tick (her account is user-1).
             new ChartMemberKeyItem
             {
                 LinkshellId = 1, Board = ChartBoardCatalog.Dynamis, KeyItemName = "Hydra Corps Lantern",
-                MembershipId = 41, AppUserId = "user-1",
+                AppUserId = "user-1",
             },
-            // A departed member's tick that carries Bob's membership id 2 but not his account.
+            // A departed member's tick: an account that is not on the roster.
             new ChartMemberKeyItem
             {
                 LinkshellId = 1, Board = ChartBoardCatalog.Dynamis, KeyItemName = "Hydra Corps Lantern",
-                MembershipId = 2, AppUserId = "someone-gone",
+                AppUserId = "someone-gone",
             },
         };
         var noAccount = new ChartRosterEntry(3, null, "Sheet", "Member", Array.Empty<string>());
@@ -254,8 +253,6 @@ public class ChartKeyItemGridTests
         // Canonicalised on the way in, so it can never land in a column the grid does not draw.
         Assert.Equal("Hydra Corps Lantern", row.KeyItemName);
         Assert.Equal("Dynamis", row.Board);
-        // The old membership column is no longer written (ROUND4-DROP; the next deploy drops it).
-        Assert.Null(row.MembershipId);
         Assert.Equal("user-1", row.SetByAppUserId);
         // The member's account is stored too: the grid reads ticks by it.
         Assert.Equal("user-1", row.AppUserId);
@@ -270,7 +267,7 @@ public class ChartKeyItemGridTests
         db.ChartMemberKeyItems.Add(new ChartMemberKeyItem
         {
             LinkshellId = 1, Board = "Dynamis", KeyItemName = "Hydra Corps Lantern",
-            MembershipId = 41, AppUserId = "user-1",
+            AppUserId = "user-1",
         });
         await db.SaveChangesAsync();
         var service = new ChartKeyItemService(db);

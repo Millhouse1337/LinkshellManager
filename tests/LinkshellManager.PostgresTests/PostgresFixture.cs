@@ -49,7 +49,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         await _container.StartAsync();
 
         // Same data source settings as Program.cs: without EnableDynamicJson, writing the jsonb
-        // int[] column (AppUserLinkshell.JobLevels) throws.
+        // int[] column (AppUser.JobLevels) throws.
         var builder = new NpgsqlDataSourceBuilder(ConnectionString);
         builder.EnableDynamicJson();
         _dataSource = builder.Build();

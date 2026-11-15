@@ -81,10 +81,9 @@ public class JsonbArrayColumnTests : IAsyncLifetime
     }
 
     // The main character's jobs (AccountJobsAndKeyItemAccounts): written to the account as JSON the
-    // app reads back as the same arrays. Since RosterSwitch they are no longer copied onto the
-    // membership (nothing reads it there, the previous build included).
+    // app reads back as the same arrays. (The old membership copies were dropped by Round4Contract.)
     [Fact]
-    public async Task MainJobs_AreWrittenAsJsonOnTheAccount_AndNoLongerOnTheMembership()
+    public async Task MainJobs_AreWrittenAsJsonOnTheAccount()
     {
         await using (var db = _pg.CreateContext())
         {
@@ -109,14 +108,7 @@ public class JsonbArrayColumnTests : IAsyncLifetime
                     "SELECT concat_ws('|', \"JobLevels\"::text, \"StrongJobs\"::text, \"MeritJobs\"::text) AS \"Value\" " +
                     "FROM \"AspNetUsers\" WHERE \"Id\" = 'user-1'")
                 .SingleAsync();
-            var member = await db.Database
-                .SqlQueryRaw<string>(
-                    "SELECT concat_ws('|', \"JobLevels\"::text, \"StrongJobs\"::text, \"MeritJobs\"::text) AS \"Value\" " +
-                    "FROM \"AppUserLinkshells\" WHERE \"AppUserId\" = 'user-1'")
-                .SingleAsync();
             Assert.Equal("[0, 75, 37]|[0, 1, 0]|[\"\", \"Axe x5\"]", account);
-            // RosterSwitch: the membership's old columns are not written any more.
-            Assert.Equal("", member);
             var user = await db.Users.SingleAsync(u => u.Id == "user-1");
             Assert.Equal(new[] { 0, 75, 37 }, user.JobLevels);
             Assert.Equal(new[] { "", "Axe x5" }, user.MeritJobs);

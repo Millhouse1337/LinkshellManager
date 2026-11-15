@@ -375,9 +375,8 @@ public class DataAdminSchemaGraphTests
         Assert.Equal("cascade", tickAccount.OnDelete);
         Assert.True(Column(graph, "ChartMemberKeyItem", "AppUserId").Fk);
         Assert.False(Column(graph, "ChartMemberKeyItem", "AppUserId").Nullable);
-        // AddCharacters: the old membership column is now optional (still no foreign key).
-        Assert.True(Column(graph, "ChartMemberKeyItem", "MembershipId").Nullable);
-        Assert.False(Column(graph, "ChartMemberKeyItem", "MembershipId").Fk);
+        // Round4Contract dropped the old membership column.
+        Assert.DoesNotContain(Table(graph, "ChartMemberKeyItem").Columns, column => column.Name == "MembershipId");
 
         // AddCharacters: an account's characters go with the account.
         var characterAccount = Relationship(graph, "Character.AppUserId");
@@ -731,7 +730,7 @@ public class DataAdminSchemaGraphTests
         var id = Column(graph, "Linkshell", "Id");
         Assert.Equal("integer", id.StoreType);
         Assert.Equal("int", id.Type);
-        var jobLevels = Column(graph, nameof(AppUserLinkshell), nameof(AppUserLinkshell.JobLevels));
+        var jobLevels = Column(graph, nameof(AppUser), nameof(AppUser.JobLevels));
         Assert.Equal("jsonb", jobLevels.StoreType);
         Assert.True(jobLevels.Protected);
         var poolName = Column(graph, nameof(DkpPool), nameof(DkpPool.Name));

@@ -133,9 +133,6 @@ public class DataAdminPolicyTests
     [InlineData(typeof(Tod), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
     [InlineData(typeof(PendingTodSubmission), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
     [InlineData(typeof(HnmRecurringBoard), "MonsterName", new[] { "SpawnKey" })]
-    // Not a ToD: a key-item tick's account is typed in now (nothing stamps it from the membership
-    // any more), and the old membership column is shown but never edited (ROUND4-DROP).
-    [InlineData(typeof(ChartMemberKeyItem), "AppUserId", new[] { "MembershipId" })]
     public void DerivedTodColumns_AreShownButNeverEdited(Type entityType, string textColumn, string[] derived)
     {
         var table = Table(NewCatalog(), entityType);

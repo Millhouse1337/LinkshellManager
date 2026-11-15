@@ -546,9 +546,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("DkpSeedLedgerId")
                         .HasColumnType("integer");
 
-                    b.PrimitiveCollection<string>("JobLevels")
-                        .HasColumnType("jsonb");
-
                     b.Property<double?>("LinkshellDkp")
                         .HasColumnType("double precision");
 
@@ -567,9 +564,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<DateTime?>("ManualStreakSetAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.PrimitiveCollection<string>("MeritJobs")
-                        .HasColumnType("jsonb");
-
                     b.Property<string>("Rank")
                         .HasColumnType("text");
 
@@ -581,9 +575,6 @@ namespace LinkshellManagerDiscordApp.Migrations
 
                     b.Property<string>("Status")
                         .HasColumnType("text");
-
-                    b.PrimitiveCollection<string>("StrongJobs")
-                        .HasColumnType("jsonb");
 
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
@@ -1034,9 +1025,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("MembershipId")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("SetAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1053,9 +1041,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("AppUserId");
 
                     b.HasIndex("LinkshellId", "Board", "KeyItemName", "AppUserId")
-                        .IsUnique();
-
-                    b.HasIndex("LinkshellId", "Board", "KeyItemName", "MembershipId")
                         .IsUnique();
 
                     b.ToTable("ChartMemberKeyItems", (string)null);
@@ -2164,9 +2149,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("PartySetupId");
-
-                    b.HasIndex("LinkshellId", "MonsterName")
-                        .IsUnique();
 
                     b.HasIndex("LinkshellId", "SpawnKey")
                         .IsUnique();
@@ -3433,8 +3415,6 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("LinkshellId", "MonsterName");
 
                     b.HasIndex("LinkshellId", "Time");
 

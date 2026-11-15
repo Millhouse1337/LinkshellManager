@@ -101,20 +101,7 @@ public class AppUserLinkshell
 
     public DateTime? DateJoined { get; set; }
 
-    // ROUND4-DROP (all three below): the OLD home of the main character's jobs. The app reads and
-    // writes them on the account now (AppUser.JobLevels / StrongJobs / MeritJobs, MainCharacterJobs).
-    // Nothing has written them since RosterSwitch or read them since AccountJobsAndKeyItemAccounts;
-    // Data Admin never lists them (array columns are protected) and the wipe tools no longer touch
-    // them. Kept mapped only so the model still matches the database; deploy 4 drops them
-    // (docs/round4-drop-manifest.md). Whatever they held stays as it was until then.
-    [Column(TypeName = "jsonb")]
-    public int[]? JobLevels { get; set; }
-
-    // ROUND4-DROP: per-job "strong" flags, parallel to JobLevels (FFXI-job-id-indexed).
-    [Column(TypeName = "jsonb")]
-    public int[]? StrongJobs { get; set; }
-
-    // ROUND4-DROP: per-job merit notes, catalog-aligned (index 0 = WAR ... 17 = PUP).
-    [Column(TypeName = "jsonb")]
-    public string[]? MeritJobs { get; set; }
+    // (The main character's jobs used to have a copy here too. They live on the account:
+    // AppUser.JobLevels / StrongJobs / MeritJobs, see MainCharacterJobs. Round4Contract dropped the
+    // old copies.)
 }

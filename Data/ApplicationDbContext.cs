@@ -899,11 +899,6 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
-        // (A save hook used to stamp ChartMemberKeyItem.AppUserId from the row's MembershipId. Round 4
-        // deploy 3 removed it: MembershipId is no longer written (ROUND4-DROP), so every writer --
-        // ChartKeyItemService, a placeholder claim (UserMergeService) and Data Admin -- sets the
-        // account itself. The column is required, so a tick with no account is refused by the save.)
-
         // Keeps the derived ToD columns (AddTodDurationsAndSpawnKeys) in step with their text on every
         // save that adds or changes a row: SpawnKey from MonsterName (HnmConfig.SpawnKey), and
         // CooldownMinutes / IntervalMinutes from Cooldown / Interval (TodDurationFormat
@@ -1601,10 +1596,6 @@ namespace LinkshellManagerDiscordApp.Data
 
             builder.Entity<HnmRecurringBoard>(entity =>
             {
-                // ROUND4-DROP: the old one-board-per-monster-NAME rule. Every lookup finds a board by
-                // SpawnKey now, and the SpawnKey index below is stricter (one name always gives one
-                // spawn key), so nothing needs this. Deploy 4 drops it.
-                entity.HasIndex(board => new { board.LinkshellId, board.MonsterName }).IsUnique();
                 // One standing board per SPAWN (TodSwitch merged any second one). SpawnKey is
                 // derived from MonsterName by StampDerivedColumns, and a board always names a
                 // monster, so it is required.
@@ -1885,10 +1876,6 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => new { item.LinkshellId, item.Time });
-                // ROUND4-DROP: no query looks ToDs up by MonsterName any more (they match on
-                // SpawnKey, index below; the per-linkshell lists start with LinkshellId, which the
-                // Time index covers). Deploy 4 drops it.
-                entity.HasIndex(item => new { item.LinkshellId, item.MonsterName });
                 // Derived columns (AddTodDurationsAndSpawnKeys), stamped by StampDerivedColumns.
                 entity.HasIndex(item => new { item.LinkshellId, item.SpawnKey, item.Time });
                 entity.ToTable(table =>
@@ -2396,16 +2383,6 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
-                // ROUND4-DROP: the old one-tick-per-MEMBERSHIP rule. MembershipId is no longer
-                // written (new ticks leave it NULL, which this index never compares), so the
-                // per-account index above does the job. Deploy 4 drops it with the column.
-                entity.HasIndex(item => new
-                {
-                    item.LinkshellId,
-                    item.Board,
-                    item.KeyItemName,
-                    item.MembershipId,
-                }).IsUnique();
             });
 
             // An account's characters (AddCharacters): a copy of the account's main and two alts,

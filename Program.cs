@@ -30,7 +30,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 // Build a Npgsql data source with dynamic JSON enabled. CLR types mapped to
-// jsonb columns (notably AppUserLinkshell.JobLevels = int[]) only serialize when
+// jsonb columns (notably AppUser.JobLevels = int[]) only serialize when
 // this is on; Npgsql 8 disables it by default, so without it any write to
 // JobLevels throws "Writing values of 'System.Int32[]' ... is not supported".
 // Since EF Core 10 those array columns are turned into JSON text by EF itself

@@ -222,13 +222,6 @@ public sealed class DataAdminPolicy
             {
                 Options = Opts((nameof(ChartWishlistRequest.Status), ChartWishlistStatuses.All)),
             },
-            // A tick's account (AppUserId) is typed in: nothing stamps it from the membership any
-            // more. ROUND4-DROP: MembershipId is shown but never edited, because nothing reads or
-            // writes it now and deploy 4 drops it. Take this entry out with the column.
-            [typeof(ChartMemberKeyItem)] = new()
-            {
-                ReadOnlyColumns = Names(nameof(ChartMemberKeyItem.MembershipId)),
-            },
             [typeof(WindowEvent)] = new()
             {
                 Options = Opts(

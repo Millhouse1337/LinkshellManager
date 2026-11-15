@@ -82,19 +82,16 @@ column	AppUserLinkshells.DiscordUserId	character varying(32)
 column	AppUserLinkshells.DkpPoolLedgerFromId	integer NOT NULL DEFAULT 0
 column	AppUserLinkshells.DkpSeedLedgerId	integer NOT NULL
 column	AppUserLinkshells.Id	integer NOT NULL IDENTITY BY DEFAULT
-column	AppUserLinkshells.JobLevels	jsonb
 column	AppUserLinkshells.LinkshellDkp	double precision
 column	AppUserLinkshells.LinkshellId	integer NOT NULL
 column	AppUserLinkshells.LinkshellRoleId	integer
 column	AppUserLinkshells.ManualAbsentStreak	integer
 column	AppUserLinkshells.ManualActiveCreditStreak	integer
 column	AppUserLinkshells.ManualStreakSetAt	timestamp with time zone
-column	AppUserLinkshells.MeritJobs	jsonb
 column	AppUserLinkshells.Rank	text
 column	AppUserLinkshells.SeededDkpEarned	double precision NOT NULL
 column	AppUserLinkshells.SeededDkpSpent	double precision NOT NULL
 column	AppUserLinkshells.Status	text
-column	AppUserLinkshells.StrongJobs	jsonb
 column	AspNetUserClaims.ClaimType	text
 column	AspNetUserClaims.ClaimValue	text
 column	AspNetUserClaims.Id	integer NOT NULL IDENTITY BY DEFAULT
@@ -227,7 +224,6 @@ column	ChartMemberKeyItems.Board	character varying(16) NOT NULL
 column	ChartMemberKeyItems.Id	integer NOT NULL IDENTITY BY DEFAULT
 column	ChartMemberKeyItems.KeyItemName	character varying(128) NOT NULL
 column	ChartMemberKeyItems.LinkshellId	integer NOT NULL
-column	ChartMemberKeyItems.MembershipId	integer
 column	ChartMemberKeyItems.SetAt	timestamp with time zone NOT NULL
 column	ChartMemberKeyItems.SetByAppUserId	character varying(450)
 column	ChartMemberKeyItems.SetByCharacterName	character varying(256)
@@ -1383,7 +1379,6 @@ index	Characters.IX_Characters_NormalizedName	CREATE INDEX "IX_Characters_Normal
 index	Characters.PK_Characters	CREATE UNIQUE INDEX "PK_Characters" ON public."Characters" USING btree ("Id")
 index	ChartMemberKeyItems.IX_ChartMemberKeyItems_AppUserId	CREATE INDEX "IX_ChartMemberKeyItems_AppUserId" ON public."ChartMemberKeyItems" USING btree ("AppUserId")
 index	ChartMemberKeyItems.IX_ChartMemberKeyItems_LinkshellId_Board_KeyItemName_AppUserId	CREATE UNIQUE INDEX "IX_ChartMemberKeyItems_LinkshellId_Board_KeyItemName_AppUserId" ON public."ChartMemberKeyItems" USING btree ("LinkshellId", "Board", "KeyItemName", "AppUserId")
-index	ChartMemberKeyItems.IX_ChartMemberKeyItems_LinkshellId_Board_KeyItemName_Membershi~	CREATE UNIQUE INDEX "IX_ChartMemberKeyItems_LinkshellId_Board_KeyItemName_Membershi~" ON public."ChartMemberKeyItems" USING btree ("LinkshellId", "Board", "KeyItemName", "MembershipId")
 index	ChartMemberKeyItems.PK_ChartMemberKeyItems	CREATE UNIQUE INDEX "PK_ChartMemberKeyItems" ON public."ChartMemberKeyItems" USING btree ("Id")
 index	ChartPopItemCredits.IX_ChartPopItemCredits_ChartPopItemId	CREATE INDEX "IX_ChartPopItemCredits_ChartPopItemId" ON public."ChartPopItemCredits" USING btree ("ChartPopItemId")
 index	ChartPopItemCredits.PK_ChartPopItemCredits	CREATE UNIQUE INDEX "PK_ChartPopItemCredits" ON public."ChartPopItemCredits" USING btree ("Id")
@@ -1444,7 +1439,6 @@ index	Events.IX_Events_LinkshellId	CREATE INDEX "IX_Events_LinkshellId" ON publi
 index	Events.IX_Events_PartySetupId	CREATE INDEX "IX_Events_PartySetupId" ON public."Events" USING btree ("PartySetupId")
 index	Events.IX_Events_SourceTodId	CREATE INDEX "IX_Events_SourceTodId" ON public."Events" USING btree ("SourceTodId")
 index	Events.PK_Events	CREATE UNIQUE INDEX "PK_Events" ON public."Events" USING btree ("Id")
-index	HnmRecurringBoards.IX_HnmRecurringBoards_LinkshellId_MonsterName	CREATE UNIQUE INDEX "IX_HnmRecurringBoards_LinkshellId_MonsterName" ON public."HnmRecurringBoards" USING btree ("LinkshellId", "MonsterName")
 index	HnmRecurringBoards.IX_HnmRecurringBoards_LinkshellId_SpawnKey	CREATE UNIQUE INDEX "IX_HnmRecurringBoards_LinkshellId_SpawnKey" ON public."HnmRecurringBoards" USING btree ("LinkshellId", "SpawnKey")
 index	HnmRecurringBoards.IX_HnmRecurringBoards_PartySetupId	CREATE INDEX "IX_HnmRecurringBoards_PartySetupId" ON public."HnmRecurringBoards" USING btree ("PartySetupId")
 index	HnmRecurringBoards.PK_HnmRecurringBoards	CREATE UNIQUE INDEX "PK_HnmRecurringBoards" ON public."HnmRecurringBoards" USING btree ("Id")
@@ -1512,7 +1506,6 @@ index	PlaceholderClaimRequests.IX_PlaceholderClaimRequests_PlaceholderAppUserId_
 index	PlaceholderClaimRequests.PK_PlaceholderClaimRequests	CREATE UNIQUE INDEX "PK_PlaceholderClaimRequests" ON public."PlaceholderClaimRequests" USING btree ("Id")
 index	Rules.IX_Rules_LinkshellId_CreatedAt	CREATE INDEX "IX_Rules_LinkshellId_CreatedAt" ON public."Rules" USING btree ("LinkshellId", "CreatedAt")
 index	Rules.PK_Rules	CREATE UNIQUE INDEX "PK_Rules" ON public."Rules" USING btree ("Id")
-index	Tods.IX_Tods_LinkshellId_MonsterName	CREATE INDEX "IX_Tods_LinkshellId_MonsterName" ON public."Tods" USING btree ("LinkshellId", "MonsterName")
 index	Tods.IX_Tods_LinkshellId_SpawnKey_Time	CREATE INDEX "IX_Tods_LinkshellId_SpawnKey_Time" ON public."Tods" USING btree ("LinkshellId", "SpawnKey", "Time")
 index	Tods.IX_Tods_LinkshellId_Time	CREATE INDEX "IX_Tods_LinkshellId_Time" ON public."Tods" USING btree ("LinkshellId", "Time")
 index	Tods.PK_Tods	CREATE UNIQUE INDEX "PK_Tods" ON public."Tods" USING btree ("Id")

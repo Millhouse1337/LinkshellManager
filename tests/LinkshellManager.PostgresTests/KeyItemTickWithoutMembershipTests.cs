@@ -8,10 +8,10 @@ using Xunit;
 
 namespace LinkshellManager.PostgresTests;
 
-// Round 4 deploy 3: a new key-item tick no longer writes ChartMemberKeyItems.MembershipId
-// (ROUND4-DROP). On the real database that column is still there with its old unique index
-// (LinkshellId, Board, KeyItemName, MembershipId). Postgres never treats two NULLs as equal, so the
-// old index cannot refuse a NULL tick; the per-account index is what still stops a second tick.
+// A key-item tick belongs to an account, not a membership (Round4Contract dropped the old
+// ChartMemberKeyItems.MembershipId column and its one-tick-per-membership index). On the real
+// database: two members can tick the same key item, ticking twice keeps one row, and the
+// per-account unique index refuses a second row for the same account.
 [Collection("postgres")]
 public class KeyItemTickWithoutMembershipTests : IAsyncLifetime
 {
@@ -26,7 +26,7 @@ public class KeyItemTickWithoutMembershipTests : IAsyncLifetime
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
-    public async Task TwoMembersTickTheSameKeyItem_BothWithNoMembershipId_AndATickTwiceStaysOne()
+    public async Task TwoMembersTickTheSameKeyItem_AndATickTwiceStaysOne()
     {
         int linkshellId, aerisId, bobId;
         await using (var db = _pg.CreateContext())
@@ -58,7 +58,6 @@ public class KeyItemTickWithoutMembershipTests : IAsyncLifetime
         {
             var ticks = await check.ChartMemberKeyItems.AsNoTracking().OrderBy(k => k.AppUserId).ToListAsync();
             Assert.Equal(new[] { "aeris", "bob" }, ticks.Select(k => k.AppUserId));
-            Assert.All(ticks, k => Assert.Null(k.MembershipId));
         }
 
         // A second row for the same account is still refused by the per-account index.

@@ -6,9 +6,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // (AppUser.JobLevels / StrongJobs / MeritJobs, AccountJobsAndKeyItemAccounts), and every screen
 // reads them there. Both writers (the profile and the addon) go through Write.
 //
-// The old copies on each membership (AppUserLinkshell.JobLevels / StrongJobs / MeritJobs) are no
-// longer written (RosterSwitch). Nothing reads them: the build before this one already read the
-// account, so a rollback still shows the jobs saved here. A later deploy drops those columns.
+// (They used to have a copy on each membership too. Round4Contract dropped those old columns.)
 public static class MainCharacterJobs
 {
     // Sets each value that is not null on the account. A null argument leaves that column alone.

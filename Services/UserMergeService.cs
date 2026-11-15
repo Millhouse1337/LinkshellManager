@@ -37,7 +37,7 @@ public sealed class UserMergeService
     // `fromAppUserId` are left (0 = safe to delete it).
     //
     // (There used to be a membershipIdMap argument, to move key-item ticks between memberships by
-    // id. Ticks are matched by account now, and their old membership id is no longer written.)
+    // id. Ticks are matched by account now, and the old membership column is gone.)
     //
     // Memberships themselves must already be dealt with by the caller where both accounts are in
     // the same linkshell: joining two DKP balances is a money decision (PlaceholderClaimService), not
@@ -157,8 +157,7 @@ public sealed class UserMergeService
         yield return Column(_db.Rules, x => x.CreatedByAppUserId);
         yield return Column(_db.ChartMemberKeyItems, x => x.SetByAppUserId);
         // The tick's own account (AccountJobsAndKeyItemAccounts): whose tick it is. A tick both
-        // accounts had was already dropped by DropDuplicateKeyItemsAsync; this moves the rest. The
-        // tick's old MembershipId is left as it was (ROUND4-DROP: no longer read or written).
+        // accounts had was already dropped by DropDuplicateKeyItemsAsync; this moves the rest.
         yield return Column(_db.ChartMemberKeyItems, x => x.AppUserId);
         yield return Column(_db.ChartPopItems, x => x.CreatedByAppUserId);
         yield return Column(_db.ChartPopItemCredits, x => x.CreditedByAppUserId);

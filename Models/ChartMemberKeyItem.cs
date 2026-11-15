@@ -38,12 +38,6 @@ public class ChartMemberKeyItem
     [MaxLength(128)]
     public string KeyItemName { get; set; } = string.Empty;
 
-    // ROUND4-DROP: the membership an older build made the tick on. Plain int with no relationship.
-    // Nothing reads or writes it any more: ticks are matched by AppUserId below, new ticks leave it
-    // NULL, and a placeholder claim no longer moves it. Kept mapped only so the model still matches
-    // the database; deploy 4 drops it (docs/round4-drop-manifest.md).
-    public int? MembershipId { get; set; }
-
     // WHOSE tick it is: the member's account (AccountJobsAndKeyItemAccounts, RosterSwitch). The grid
     // matches ticks to the roster by this, because membership ids are not stable - a membership is
     // re-created on unsync/resync - while the account stays, as wishlist requests already use.

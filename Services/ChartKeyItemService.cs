@@ -252,8 +252,7 @@ public sealed class ChartKeyItemService
             LinkshellId = linkshellId,
             Board = catalog.Key,
             KeyItemName = canonicalName,
-            // Whose tick it is, by account. MembershipId is no longer written (ROUND4-DROP): every
-            // build this one can roll back to reads ticks by AppUserId and reads a NULL fine.
+            // Whose tick it is: the ticked member's account (ticks are matched by account).
             AppUserId = member.AppUserId,
             SetByAppUserId = actor.AppUserId,
             SetByCharacterName = actor.CharacterName,
