@@ -121,7 +121,7 @@ public static class LinkshellRosterNames
                 link.AppUser?.AltCharacterName2,
                 link.AppUserId)));
 
-    // One query, four columns. Memberships with no AppUserId are skipped for the same reason the
+    // The memberships plus their accounts' Characters rows (LoadCandidatesAsync). Memberships with no AppUserId are skipped for the same reason the
     // DKP paths skip them: without an account there is nothing to credit, so such a row cannot make
     // anyone "registered" no matter what name it carries.
     public static async Task<RosterNameSet> LoadAsync(
@@ -130,19 +130,28 @@ public static class LinkshellRosterNames
 
     // The same four-name rows, one per member, for callers that need to know WHICH member a name
     // belongs to rather than only whether anyone has it (RosterMemberSearch).
-    public static Task<List<RosterNameCandidate>> LoadCandidatesAsync(
+    //
+    // The roster name is the membership's own; the account's main and alts come from Characters
+    // (AccountCharacters), so they arrive trimmed, and a blank slot (or one repeating the same
+    // account's name) is null.
+    public static async Task<List<RosterNameCandidate>> LoadCandidatesAsync(
         ApplicationDbContext db, int linkshellId, CancellationToken cancellationToken)
-        => db.AppUserLinkshells
+    {
+        var memberships = await db.AppUserLinkshells
             .AsNoTracking()
             .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
             .Join(db.Users.AsNoTracking(),
                   link => link.AppUserId,
                   user => user.Id,
-                  (link, user) => new RosterNameCandidate(
-                      link.CharacterName,
-                      user.CharacterName,
-                      user.AltCharacterName1,
-                      user.AltCharacterName2,
-                      link.AppUserId))
+                  (link, user) => new { link.CharacterName, link.AppUserId })
             .ToListAsync(cancellationToken);
+        var characters = await AccountCharacters.LoadForLinkshellAsync(db, linkshellId, cancellationToken);
+        return memberships
+            .Select(link =>
+            {
+                var names = AccountCharacters.Names(link.CharacterName, AccountCharacters.For(characters, link.AppUserId));
+                return new RosterNameCandidate(names.Membership, names.Account, names.Alt1, names.Alt2, link.AppUserId);
+            })
+            .ToList();
+    }
 }

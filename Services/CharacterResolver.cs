@@ -139,7 +139,9 @@ public static class CharacterResolver
             .Select(pair => (pair.Membership, CharacterNames.Of(pair.Membership, pair.User))));
 
     // The linkshell's members with an account, TRACKED and with AppUser, for a caller that goes on
-    // to move DKP through the membership it finds.
+    // to move DKP through the membership it finds. The account's main and alts come from
+    // Characters (AccountCharacters); the roster name is still the membership's own and still
+    // decides first, so the answers are the ones ForMemberships gives from the account columns.
     public static async Task<CharacterResolver<AppUserLinkshell>> LoadMembershipsAsync(
         ApplicationDbContext db, int linkshellId, CancellationToken cancellationToken)
     {
@@ -148,6 +150,10 @@ public static class CharacterResolver
             .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
             .OrderBy(link => link.Id)
             .ToListAsync(cancellationToken);
-        return ForMemberships(memberships);
+        var characters = await AccountCharacters.LoadForLinkshellAsync(db, linkshellId, cancellationToken);
+        return Build(memberships
+            .Where(link => !string.IsNullOrWhiteSpace(link.AppUserId))
+            .OrderBy(link => link.Id)
+            .Select(link => (link, AccountCharacters.Names(link.CharacterName, AccountCharacters.For(characters, link.AppUserId)))));
     }
 }

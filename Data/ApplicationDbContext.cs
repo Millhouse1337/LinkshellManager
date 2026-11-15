@@ -1026,11 +1026,17 @@ namespace LinkshellManagerDiscordApp.Data
                 var changed = entry.State == EntityState.Added
                     || (entry.State == EntityState.Modified
                         && CharacterSync.SourceProperties.Any(name => entry.Property(name).IsModified));
-                if (!changed || string.IsNullOrEmpty(entry.Entity.Id))
+                // A deleted account's rows go with it: Postgres cascades, the InMemory copy is told.
+                var deletedWithoutSql = entry.State == EntityState.Deleted && !Database.IsRelational();
+                if (!(changed || deletedWithoutSql) || string.IsNullOrEmpty(entry.Entity.Id))
                 {
                     continue;
                 }
                 ids.Add(entry.Entity.Id);
+                if (deletedWithoutSql)
+                {
+                    continue;
+                }
                 var tooLong = CharacterSync.TooLongNames(entry.Entity).ToList();
                 if (tooLong.Count > 0)
                 {
@@ -1048,10 +1054,15 @@ namespace LinkshellManagerDiscordApp.Data
         // a failure here is only logged. Inside the caller's transaction it runs in a savepoint, so a
         // failure is undone on its own and the caller's work carries on. No cancellation token: a
         // copy stopped half-way inside a transaction would leave that transaction unusable.
-        private async Task SyncCharactersAsync(List<string> accountIds)
+        private async Task SyncCharactersAsync(List<string> accountIds, bool acceptedAllChanges)
         {
-            if (accountIds.Count == 0 || !Database.IsRelational())
+            if (accountIds.Count == 0)
             {
+                return;
+            }
+            if (!Database.IsRelational())
+            {
+                await CopyCharactersWithoutSqlAsync(accountIds, acceptedAllChanges);
                 return;
             }
             var transaction = Database.CurrentTransaction;
@@ -1084,10 +1095,15 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
-        private void SyncCharacters(List<string> accountIds)
+        private void SyncCharacters(List<string> accountIds, bool acceptedAllChanges)
         {
-            if (accountIds.Count == 0 || !Database.IsRelational())
+            if (accountIds.Count == 0)
             {
+                return;
+            }
+            if (!Database.IsRelational())
+            {
+                CopyCharactersWithoutSql(accountIds, acceptedAllChanges);
                 return;
             }
             var transaction = Database.CurrentTransaction;
@@ -1116,6 +1132,79 @@ namespace LinkshellManagerDiscordApp.Data
 
         private static object[] CharacterSyncParameters(List<string> accountIds) =>
             CharacterSync.Parameters(accountIds, DateTime.UtcNow);
+
+        // The InMemory test database has no SQL, and the name lookups read Characters, so there the
+        // copy is made in C# by the same rules (CharacterSync.DesiredRows), as a second save of just
+        // these rows. Only after a save that accepted its changes: otherwise that second save would
+        // also save the caller's pending changes.
+        private void CopyCharactersWithoutSql(List<string> accountIds, bool acceptedAllChanges)
+        {
+            if (acceptedAllChanges && StageCharacterCopyWithoutSql(accountIds))
+            {
+                base.SaveChanges(acceptAllChangesOnSuccess: true);
+            }
+        }
+
+        private async Task CopyCharactersWithoutSqlAsync(List<string> accountIds, bool acceptedAllChanges)
+        {
+            if (acceptedAllChanges && StageCharacterCopyWithoutSql(accountIds))
+            {
+                await base.SaveChangesAsync(acceptAllChangesOnSuccess: true);
+            }
+        }
+
+        // Adds, updates and removes tracked Characters rows to match the accounts as saved. Returns
+        // whether anything changed. An account no longer tracked (deleted) loses its rows.
+        private bool StageCharacterCopyWithoutSql(List<string> accountIds)
+        {
+            var users = ChangeTracker.Entries<AppUser>()
+                .Where(entry => entry.State is EntityState.Unchanged or EntityState.Modified)
+                .Select(entry => entry.Entity)
+                .Where(user => accountIds.Contains(user.Id, StringComparer.Ordinal))
+                .ToDictionary(user => user.Id, StringComparer.Ordinal);
+            var existing = Characters.Where(character => accountIds.Contains(character.AppUserId)).ToList();
+            var changed = false;
+            foreach (var accountId in accountIds)
+            {
+                var desired = users.TryGetValue(accountId, out var user)
+                    ? CharacterSync.DesiredRows(user)
+                    : Array.Empty<CharacterSync.DesiredRow>();
+                var rows = existing.Where(row => row.AppUserId == accountId).ToList();
+                foreach (var row in rows.Where(row => !desired.Any(want =>
+                             want.Slot == row.Slot && want.NormalizedName == row.NormalizedName)).ToList())
+                {
+                    Characters.Remove(row);
+                    rows.Remove(row);
+                    changed = true;
+                }
+                foreach (var want in desired)
+                {
+                    var row = rows.SingleOrDefault(row => row.Slot == want.Slot);
+                    if (row is null)
+                    {
+                        row = new Character { AppUserId = accountId, Slot = want.Slot };
+                        Characters.Add(row);
+                    }
+                    else if (row.Name == want.Name
+                             && Same(row.JobLevels, want.JobLevels) && Same(row.StrongJobs, want.StrongJobs)
+                             && Same(row.MeritJobs, want.MeritJobs) && Same(row.CraftLevels, want.CraftLevels))
+                    {
+                        continue;
+                    }
+                    row.Name = want.Name;
+                    row.NormalizedName = want.NormalizedName;
+                    row.JobLevels = want.JobLevels?.ToArray();
+                    row.StrongJobs = want.StrongJobs?.ToArray();
+                    row.MeritJobs = want.MeritJobs?.ToArray();
+                    row.CraftLevels = want.CraftLevels?.ToArray();
+                    row.UpdatedAt = DateTime.UtcNow;
+                    changed = true;
+                }
+            }
+            return changed;
+
+            static bool Same<T>(T[]? a, T[]? b) => a is null ? b is null : b is not null && a.SequenceEqual(b);
+        }
 
         // A warning in the app log. Logging must not fail a save either, so a context built without
         // a logger simply logs nothing.
@@ -1376,7 +1465,7 @@ namespace LinkshellManagerDiscordApp.Data
                 liveChanges.BidAuctionItemIds.Clear();
             }
             CountCommittedSave();
-            await SyncCharactersAsync(characterAccounts);
+            await SyncCharactersAsync(characterAccounts, acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
@@ -1413,7 +1502,7 @@ namespace LinkshellManagerDiscordApp.Data
             var characterAccounts = CollectAccountsNeedingCharacterSync();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
             CountCommittedSave();
-            SyncCharacters(characterAccounts);
+            SyncCharacters(characterAccounts, acceptAllChangesOnSuccess);
             EnqueueTodBoardRefreshes(affected);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
