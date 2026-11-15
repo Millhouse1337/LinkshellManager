@@ -39,6 +39,8 @@ them up.
   Nobody sets an alliance number; the addon reads the alliance leader.
 - **Only a Post pays.** The Lobby is for looking.
 - **End Event does not pay.** It hands the camp to the app, where an officer posts the DKP.
+- **Job levels fill in by themselves** for the character you are playing: your main or either
+  alt saved on your app profile. Log in on each one once.
 
 ## Gone
 

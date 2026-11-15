@@ -165,6 +165,18 @@ gets the number wrong, an officer can change it on the post (the **Alliance** bo
 
 ---
 
+## Your job levels
+
+While the addon is paired, it sends the job levels of the character you are playing to the app,
+so your profile's **Jobs** and the linkshell's job lists stay up to date. Nothing to press.
+
+- It works on your **main and both alts** — the characters saved on your app profile. Log in on
+  each one once to fill in its levels.
+- A character that is **not on your profile** is skipped. Add it as an alt in the app first, then
+  reload the addon (`/addon reload lsm`).
+
+---
+
 ## Commands
 
 | Command | What it does |
