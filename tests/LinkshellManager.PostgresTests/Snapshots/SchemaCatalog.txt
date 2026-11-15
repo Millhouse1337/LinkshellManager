@@ -1,0 +1,1581 @@
+column	AddonApiTokens.CreatedAt	timestamp with time zone NOT NULL
+column	AddonApiTokens.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AddonApiTokens.IssuedToAppUserId	character varying(450)
+column	AddonApiTokens.LastUsedAt	timestamp with time zone
+column	AddonApiTokens.LinkshellId	integer NOT NULL
+column	AddonApiTokens.PairingBatchId	uuid
+column	AddonApiTokens.RevokedAt	timestamp with time zone
+column	AddonApiTokens.TokenHash	character varying(128) NOT NULL
+column	AddonApiTokens.TokenPrefix	character varying(16) NOT NULL
+column	AddonPairingCodes.Code	character varying(16) NOT NULL
+column	AddonPairingCodes.ConsumedAt	timestamp with time zone
+column	AddonPairingCodes.CreatedAt	timestamp with time zone NOT NULL
+column	AddonPairingCodes.ExpiresAt	timestamp with time zone NOT NULL
+column	AddonPairingCodes.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AddonPairingCodes.IssuedToAppUserId	character varying(450)
+column	AddonPairingCodes.LinkshellId	integer NOT NULL
+column	Announcements.AnnouncementDetails	character varying(4000) NOT NULL
+column	Announcements.AnnouncementTitle	character varying(256) NOT NULL
+column	Announcements.Category	character varying(32)
+column	Announcements.CreatedAt	timestamp with time zone NOT NULL
+column	Announcements.CreatedByAppUserId	character varying(450)
+column	Announcements.CreatedByCharacterName	character varying(256)
+column	Announcements.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Announcements.LinkshellId	integer NOT NULL
+column	AppSettings.Key	character varying(128) NOT NULL
+column	AppSettings.Value	character varying(512)
+column	AppUserEventHistories.ActiveCredit	boolean NOT NULL DEFAULT true
+column	AppUserEventHistories.AppUserId	text
+column	AppUserEventHistories.CharacterName	text
+column	AppUserEventHistories.Duration	double precision
+column	AppUserEventHistories.EventDkp	double precision
+column	AppUserEventHistories.EventHistoryId	integer NOT NULL
+column	AppUserEventHistories.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AppUserEventHistories.JobName	text
+column	AppUserEventHistories.JobType	text
+column	AppUserEventHistories.SubJobName	text
+column	AppUserEventHistories.WindowsAttended	integer
+column	AppUserEventStatusLedgers.ActionType	character varying(32) NOT NULL
+column	AppUserEventStatusLedgers.AppUserEventId	integer NOT NULL
+column	AppUserEventStatusLedgers.DeniedAt	timestamp with time zone
+column	AppUserEventStatusLedgers.EventId	integer NOT NULL
+column	AppUserEventStatusLedgers.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AppUserEventStatusLedgers.OccurredAt	timestamp with time zone NOT NULL
+column	AppUserEventStatusLedgers.RequiresVerification	boolean NOT NULL
+column	AppUserEventStatusLedgers.VerifiedAt	timestamp with time zone
+column	AppUserEventWindows.AllianceKey	character varying(256)
+column	AppUserEventWindows.AllianceNumber	integer
+column	AppUserEventWindows.AppUserEventId	integer
+column	AppUserEventWindows.AppUserId	character varying(450)
+column	AppUserEventWindows.CharacterName	character varying(256)
+column	AppUserEventWindows.EventAttendanceWindowId	integer NOT NULL
+column	AppUserEventWindows.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AppUserEventWindows.MainCharacterName	character varying(256)
+column	AppUserEventWindows.VerifiedAt	timestamp with time zone NOT NULL
+column	AppUserEventWindows.VerifiedBy	character varying(256)
+column	AppUserEventWindows.Zone	character varying(64)
+column	AppUserEvents.AppUserId	text
+column	AppUserEvents.CharacterName	text
+column	AppUserEvents.DiscordUserId	character varying(32)
+column	AppUserEvents.Duration	double precision
+column	AppUserEvents.EnfeebReady	boolean NOT NULL DEFAULT false
+column	AppUserEvents.EventId	integer NOT NULL
+column	AppUserEvents.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AppUserEvents.IsOnBreak	boolean
+column	AppUserEvents.IsQuickJoin	boolean NOT NULL
+column	AppUserEvents.IsVerified	boolean
+column	AppUserEvents.JobName	text
+column	AppUserEvents.JobType	text
+column	AppUserEvents.RelicWeapon	boolean NOT NULL DEFAULT false
+column	AppUserEvents.ResistReady	boolean NOT NULL DEFAULT false
+column	AppUserEvents.ResumeTime	timestamp with time zone
+column	AppUserEvents.StartTime	timestamp with time zone
+column	AppUserEvents.SubJobName	text
+column	AppUserEvents.WdArrivalWindow	integer
+column	AppUserEvents.WdDepartureWindow	integer
+column	AppUserEvents.WithdrewFromEvent	boolean NOT NULL DEFAULT false
+column	AppUserLinkshells.AppUserId	text
+column	AppUserLinkshells.CharacterName	text
+column	AppUserLinkshells.DateJoined	timestamp with time zone
+column	AppUserLinkshells.DiscordIdConfirmed	boolean NOT NULL DEFAULT false
+column	AppUserLinkshells.DiscordUserId	character varying(32)
+column	AppUserLinkshells.DkpPoolLedgerFromId	integer NOT NULL DEFAULT 0
+column	AppUserLinkshells.DkpSeedLedgerId	integer NOT NULL
+column	AppUserLinkshells.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AppUserLinkshells.JobLevels	jsonb
+column	AppUserLinkshells.LinkshellDkp	double precision
+column	AppUserLinkshells.LinkshellId	integer NOT NULL
+column	AppUserLinkshells.LinkshellRoleId	integer
+column	AppUserLinkshells.ManualAbsentStreak	integer
+column	AppUserLinkshells.ManualActiveCreditStreak	integer
+column	AppUserLinkshells.ManualStreakSetAt	timestamp with time zone
+column	AppUserLinkshells.MeritJobs	jsonb
+column	AppUserLinkshells.Rank	text
+column	AppUserLinkshells.SeededDkpEarned	double precision NOT NULL
+column	AppUserLinkshells.SeededDkpSpent	double precision NOT NULL
+column	AppUserLinkshells.Status	text
+column	AppUserLinkshells.StrongJobs	jsonb
+column	AspNetUserClaims.ClaimType	text
+column	AspNetUserClaims.ClaimValue	text
+column	AspNetUserClaims.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AspNetUserClaims.UserId	text NOT NULL
+column	AspNetUserLogins.LoginProvider	character varying(128) NOT NULL
+column	AspNetUserLogins.ProviderDisplayName	text
+column	AspNetUserLogins.ProviderKey	character varying(128) NOT NULL
+column	AspNetUserLogins.UserId	text NOT NULL
+column	AspNetUserTokens.LoginProvider	character varying(128) NOT NULL
+column	AspNetUserTokens.Name	character varying(128) NOT NULL
+column	AspNetUserTokens.UserId	text NOT NULL
+column	AspNetUserTokens.Value	text
+column	AspNetUsers.AccessFailedCount	integer NOT NULL
+column	AspNetUsers.Alt1CraftLevels	jsonb
+column	AspNetUsers.Alt1JobLevels	jsonb
+column	AspNetUsers.Alt1MeritJobs	jsonb
+column	AspNetUsers.Alt1StrongJobs	jsonb
+column	AspNetUsers.Alt2CraftLevels	jsonb
+column	AspNetUsers.Alt2JobLevels	jsonb
+column	AspNetUsers.Alt2MeritJobs	jsonb
+column	AspNetUsers.Alt2StrongJobs	jsonb
+column	AspNetUsers.AltCharacterName1	character varying(64)
+column	AspNetUsers.AltCharacterName2	character varying(64)
+column	AspNetUsers.CharacterName	text
+column	AspNetUsers.ConcurrencyStamp	text
+column	AspNetUsers.CraftLevels	jsonb
+column	AspNetUsers.Email	character varying(256)
+column	AspNetUsers.EmailConfirmed	boolean NOT NULL
+column	AspNetUsers.Id	text NOT NULL
+column	AspNetUsers.IsPlaceholder	boolean NOT NULL DEFAULT false
+column	AspNetUsers.IsSuperAdmin	boolean NOT NULL
+column	AspNetUsers.JobLevels	jsonb
+column	AspNetUsers.LockoutEnabled	boolean NOT NULL
+column	AspNetUsers.LockoutEnd	timestamp with time zone
+column	AspNetUsers.MeritJobs	jsonb
+column	AspNetUsers.NormalizedEmail	character varying(256)
+column	AspNetUsers.NormalizedUserName	character varying(256)
+column	AspNetUsers.PasswordHash	text
+column	AspNetUsers.PhoneNumber	text
+column	AspNetUsers.PhoneNumberConfirmed	boolean NOT NULL
+column	AspNetUsers.PrimaryLinkshellId	integer
+column	AspNetUsers.SecurityStamp	text
+column	AspNetUsers.StrongJobs	jsonb
+column	AspNetUsers.TimeZone	text
+column	AspNetUsers.TwoFactorEnabled	boolean NOT NULL
+column	AspNetUsers.UserName	character varying(256)
+column	AttendanceSnapshotEntries.AddedManually	boolean NOT NULL DEFAULT false
+column	AttendanceSnapshotEntries.AppUserId	character varying(450)
+column	AttendanceSnapshotEntries.CharacterName	character varying(256) NOT NULL
+column	AttendanceSnapshotEntries.DkpAmount	double precision
+column	AttendanceSnapshotEntries.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AttendanceSnapshotEntries.MainJob	character varying(8)
+column	AttendanceSnapshotEntries.MainJobLevel	integer
+column	AttendanceSnapshotEntries.SnapshotId	integer NOT NULL
+column	AttendanceSnapshotEntries.SubJob	character varying(8)
+column	AttendanceSnapshotEntries.SubJobLevel	integer
+column	AttendanceSnapshotEntries.Zone	character varying(128)
+column	AttendanceSnapshots.AllianceKey	character varying(256)
+column	AttendanceSnapshots.AllianceLeaderName	character varying(256)
+column	AttendanceSnapshots.AllianceNumber	integer
+column	AttendanceSnapshots.CampWindowId	integer
+column	AttendanceSnapshots.CapturedAtUtc	timestamp with time zone NOT NULL
+column	AttendanceSnapshots.CapturedByCharacterName	character varying(256)
+column	AttendanceSnapshots.DkpAmount	double precision
+column	AttendanceSnapshots.EntryCount	integer NOT NULL
+column	AttendanceSnapshots.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AttendanceSnapshots.LinkedEventId	integer
+column	AttendanceSnapshots.LinkshellId	integer NOT NULL
+column	AttendanceSnapshots.Name	character varying(128)
+column	AttendanceSnapshots.PostSource	character varying(16)
+column	AttendanceSnapshots.PostedByAppUserId	character varying(450)
+column	AttendanceSnapshots.SlotKind	character varying(16) NOT NULL DEFAULT 'Window'::character varying
+column	AttendanceSnapshots.SnapshotStatus	character varying(32) NOT NULL DEFAULT 'Active'::character varying
+column	AttendanceSnapshots.VerifiedAtUtc	timestamp with time zone
+column	AttendanceSnapshots.VerifiedByAppUserId	character varying(450)
+column	AttendanceSnapshots.WindowEventId	integer
+column	AttendanceSnapshots.WindowNumber	integer
+column	AuctionHistories.AuctionTitle	character varying(256)
+column	AuctionHistories.ClosedAt	timestamp with time zone NOT NULL
+column	AuctionHistories.CreatedBy	character varying(256)
+column	AuctionHistories.CreatedByUserId	character varying(450)
+column	AuctionHistories.EndTime	timestamp with time zone
+column	AuctionHistories.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AuctionHistories.LinkshellId	integer NOT NULL
+column	AuctionHistories.StartTime	timestamp with time zone
+column	AuctionHistories.StartedAt	timestamp with time zone
+column	AuctionItems.AuctionHistoryId	integer
+column	AuctionItems.AuctionId	integer
+column	AuctionItems.CurrentHighestBid	integer
+column	AuctionItems.CurrentHighestBidder	character varying(256)
+column	AuctionItems.CurrentHighestBidderAppUserId	character varying(450)
+column	AuctionItems.GilAmount	bigint
+column	AuctionItems.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	AuctionItems.ItemName	character varying(256)
+column	AuctionItems.ItemType	character varying(128)
+column	AuctionItems.Notes	character varying(1024)
+column	AuctionItems.SourceItemId	integer
+column	AuctionItems.StartingBidDkp	integer
+column	AuctionItems.Status	character varying(32)
+column	Auctions.AuctionTitle	character varying(256)
+column	Auctions.CreatedBy	character varying(256)
+column	Auctions.CreatedByUserId	character varying(450)
+column	Auctions.DiscordChannelId	character varying(32)
+column	Auctions.DiscordMessageId	character varying(32)
+column	Auctions.DiscordMessageIds	text
+column	Auctions.DkpPoolId	integer
+column	Auctions.EndTime	timestamp with time zone
+column	Auctions.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Auctions.LinkshellId	integer NOT NULL
+column	Auctions.StartTime	timestamp with time zone
+column	Auctions.StartedAt	timestamp with time zone
+column	Bids.AppUserId	character varying(450)
+column	Bids.AuctionItemId	integer NOT NULL
+column	Bids.BidAmount	integer NOT NULL
+column	Bids.CharacterName	character varying(256) NOT NULL
+column	Bids.CreatedAt	timestamp with time zone NOT NULL
+column	Bids.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Characters.AppUserId	character varying(450) NOT NULL
+column	Characters.CraftLevels	jsonb
+column	Characters.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Characters.JobLevels	jsonb
+column	Characters.MeritJobs	jsonb
+column	Characters.Name	character varying(256) NOT NULL
+column	Characters.NormalizedName	character varying(256) NOT NULL
+column	Characters.Slot	smallint NOT NULL
+column	Characters.StrongJobs	jsonb
+column	Characters.UpdatedAt	timestamp with time zone NOT NULL
+column	ChartMemberKeyItems.AppUserId	character varying(450) NOT NULL
+column	ChartMemberKeyItems.Board	character varying(16) NOT NULL
+column	ChartMemberKeyItems.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	ChartMemberKeyItems.KeyItemName	character varying(128) NOT NULL
+column	ChartMemberKeyItems.LinkshellId	integer NOT NULL
+column	ChartMemberKeyItems.MembershipId	integer
+column	ChartMemberKeyItems.SetAt	timestamp with time zone NOT NULL
+column	ChartMemberKeyItems.SetByAppUserId	character varying(450)
+column	ChartMemberKeyItems.SetByCharacterName	character varying(256)
+column	ChartPopItemCredits.CharacterName	character varying(256) NOT NULL
+column	ChartPopItemCredits.ChartPopItemId	integer NOT NULL
+column	ChartPopItemCredits.CreditedAt	timestamp with time zone NOT NULL
+column	ChartPopItemCredits.CreditedByAppUserId	character varying(450)
+column	ChartPopItemCredits.CreditedByCharacterName	character varying(256)
+column	ChartPopItemCredits.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	ChartPopItems.Board	character varying(16) NOT NULL
+column	ChartPopItems.Boss	character varying(64) NOT NULL
+column	ChartPopItems.CreatedAt	timestamp with time zone NOT NULL
+column	ChartPopItems.CreatedByAppUserId	character varying(450)
+column	ChartPopItems.CreatedByCharacterName	character varying(256)
+column	ChartPopItems.HeldByCharacterName	character varying(256)
+column	ChartPopItems.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	ChartPopItems.ItemName	character varying(128) NOT NULL
+column	ChartPopItems.Kind	character varying(8) NOT NULL DEFAULT 'Pop'::character varying
+column	ChartPopItems.LinkshellId	integer NOT NULL
+column	ChartPopItems.Notes	character varying(512)
+column	ChartPopItems.Quantity	integer NOT NULL
+column	ChartPopItems.SortOrder	integer NOT NULL
+column	ChartPopItems.UpdatedAt	timestamp with time zone NOT NULL
+column	ChartWishlistRequestZones.Boss	character varying(64) NOT NULL
+column	ChartWishlistRequestZones.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	ChartWishlistRequestZones.RequestId	integer NOT NULL
+column	ChartWishlistRequests.Board	character varying(16) NOT NULL
+column	ChartWishlistRequests.FulfilledAt	timestamp with time zone
+column	ChartWishlistRequests.FulfilledByAppUserId	character varying(450)
+column	ChartWishlistRequests.FulfilledByCharacterName	character varying(256)
+column	ChartWishlistRequests.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	ChartWishlistRequests.ItemName	character varying(128) NOT NULL
+column	ChartWishlistRequests.LinkshellId	integer NOT NULL
+column	ChartWishlistRequests.Notes	character varying(512)
+column	ChartWishlistRequests.Priority	integer NOT NULL
+column	ChartWishlistRequests.Quantity	integer NOT NULL
+column	ChartWishlistRequests.RequestedAt	timestamp with time zone NOT NULL
+column	ChartWishlistRequests.RequestedByAppUserId	character varying(450)
+column	ChartWishlistRequests.RequestedByCharacterName	character varying(256) NOT NULL
+column	ChartWishlistRequests.Status	character varying(16) NOT NULL DEFAULT 'Pending'::character varying
+column	ClaimShieldCaptureMembers.ActionMessage	character varying(512)
+column	ClaimShieldCaptureMembers.AppUserId	character varying(450)
+column	ClaimShieldCaptureMembers.CaptureId	integer NOT NULL
+column	ClaimShieldCaptureMembers.CharacterName	character varying(256) NOT NULL
+column	ClaimShieldCaptureMembers.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	ClaimShieldCaptureMembers.Matched	boolean NOT NULL
+column	ClaimShieldCaptures.CapturedAtUtc	timestamp with time zone NOT NULL
+column	ClaimShieldCaptures.CapturedByCharacterName	character varying(256)
+column	ClaimShieldCaptures.CapturedMessage	character varying(512)
+column	ClaimShieldCaptures.CreatedAtUtc	timestamp with time zone NOT NULL
+column	ClaimShieldCaptures.EventHistoryId	integer
+column	ClaimShieldCaptures.EventId	integer
+column	ClaimShieldCaptures.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	ClaimShieldCaptures.LinkshellId	integer NOT NULL
+column	ClaimShieldCaptures.MonsterName	character varying(128) NOT NULL
+column	ClaimShieldCaptures.TotalPlayers	integer NOT NULL
+column	ClaimShieldCaptures.Won	boolean NOT NULL
+column	DiscordActivityUsers.Avatar	character varying(128)
+column	DiscordActivityUsers.CreatedAtUtc	timestamp with time zone NOT NULL
+column	DiscordActivityUsers.DiscordUserId	character varying(32) NOT NULL
+column	DiscordActivityUsers.GlobalName	character varying(64)
+column	DiscordActivityUsers.Id	uuid NOT NULL
+column	DiscordActivityUsers.IdentityUserId	character varying(450)
+column	DiscordActivityUsers.Username	character varying(32) NOT NULL
+column	DkpLedgerEntries.Amount	double precision NOT NULL
+column	DkpLedgerEntries.AppUserId	text
+column	DkpLedgerEntries.AuditRelatedLedgerEntryId	integer
+column	DkpLedgerEntries.CharacterName	character varying(256)
+column	DkpLedgerEntries.Details	character varying(1024)
+column	DkpLedgerEntries.DkpPoolId	integer
+column	DkpLedgerEntries.DkpPoolPinned	boolean NOT NULL DEFAULT false
+column	DkpLedgerEntries.EditReason	character varying(512)
+column	DkpLedgerEntries.EntryType	character varying(32) NOT NULL
+column	DkpLedgerEntries.EventHistoryId	integer
+column	DkpLedgerEntries.EventLocation	character varying(256)
+column	DkpLedgerEntries.EventName	character varying(256)
+column	DkpLedgerEntries.EventType	character varying(256)
+column	DkpLedgerEntries.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	DkpLedgerEntries.ItemName	character varying(256)
+column	DkpLedgerEntries.LinkshellId	integer NOT NULL
+column	DkpLedgerEntries.OccurredAt	timestamp with time zone NOT NULL
+column	DkpLedgerEntries.Sequence	integer NOT NULL
+column	DkpLedgerEntries.SourceEventLootDetailId	integer
+column	DkpLedgerEntries.SourceWindowEventId	integer
+column	DkpPoolEventTypes.DkpPoolId	integer NOT NULL
+column	DkpPoolEventTypes.EventType	character varying(256) NOT NULL
+column	DkpPoolEventTypes.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	DkpPoolEventTypes.LinkshellId	integer NOT NULL
+column	DkpPoolEventTypes.NormalizedEventType	character varying(256) NOT NULL
+column	DkpPools.Accent	character varying(16)
+column	DkpPools.CreatedAtUtc	timestamp with time zone NOT NULL
+column	DkpPools.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	DkpPools.IsDefault	boolean NOT NULL
+column	DkpPools.LinkshellId	integer NOT NULL
+column	DkpPools.Name	character varying(64) NOT NULL
+column	DkpPools.SortOrder	integer NOT NULL
+column	EventAttendanceWindows.DkpAmount	double precision
+column	EventAttendanceWindows.EventHistoryId	integer
+column	EventAttendanceWindows.EventId	integer
+column	EventAttendanceWindows.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	EventAttendanceWindows.IsClosingWindow	boolean NOT NULL DEFAULT false
+column	EventAttendanceWindows.IsKillWindow	boolean NOT NULL DEFAULT false
+column	EventAttendanceWindows.Label	character varying(64)
+column	EventAttendanceWindows.PostedAt	timestamp with time zone NOT NULL
+column	EventAttendanceWindows.PostedBySource	character varying(64)
+column	EventAttendanceWindows.SequenceNumber	integer NOT NULL
+column	EventAttendanceWindows.SpawnWindow	integer
+column	EventComments.AppUserId	character varying(450)
+column	EventComments.Body	character varying(2000) NOT NULL
+column	EventComments.CharacterName	character varying(256)
+column	EventComments.CreatedAt	timestamp with time zone NOT NULL
+column	EventComments.DiscordMessageId	character varying(20)
+column	EventComments.EventHistoryId	integer NOT NULL
+column	EventComments.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	EventComments.IsAnonymous	boolean NOT NULL
+column	EventComments.LinkshellId	integer NOT NULL
+column	EventHistories.CommencementStartTime	timestamp with time zone
+column	EventHistories.CountsTowardActive	boolean NOT NULL DEFAULT true
+column	EventHistories.DkpPerHour	integer
+column	EventHistories.Duration	double precision
+column	EventHistories.EndTime	timestamp with time zone
+column	EventHistories.EventLocation	text
+column	EventHistories.EventName	text
+column	EventHistories.EventType	text
+column	EventHistories.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	EventHistories.LinkshellId	integer NOT NULL
+column	EventHistories.PartySetupId	integer
+column	EventHistories.PopWindow	integer
+column	EventHistories.PopWindowCount	integer
+column	EventHistories.StartTime	timestamp with time zone
+column	EventHistories.TimeStamp	timestamp with time zone
+column	EventLootDetails.ActualDeductedDkp	double precision
+column	EventLootDetails.DkpDebitedAt	timestamp with time zone
+column	EventLootDetails.DkpPoolId	integer
+column	EventLootDetails.EditedAt	timestamp with time zone
+column	EventLootDetails.EditedByAppUserId	character varying(450)
+column	EventLootDetails.EditedByCharacterName	character varying(256)
+column	EventLootDetails.EventHistoryId	integer
+column	EventLootDetails.EventId	integer
+column	EventLootDetails.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	EventLootDetails.ItemName	character varying(256)
+column	EventLootDetails.ItemWinner	character varying(256)
+column	EventLootDetails.ItemWinnerAppUserId	character varying(450)
+column	EventLootDetails.LastEditReason	character varying(512)
+column	EventLootDetails.LinkshellId	integer
+column	EventLootDetails.RecordedByAppUserId	character varying(450)
+column	EventLootDetails.WinningDkpSpent	integer
+column	EventPartySlotSignups.AppUserId	character varying(450)
+column	EventPartySlotSignups.CharacterName	character varying(256)
+column	EventPartySlotSignups.DiscordUserId	character varying(32)
+column	EventPartySlotSignups.EnfeebReady	boolean NOT NULL DEFAULT false
+column	EventPartySlotSignups.EventId	integer NOT NULL
+column	EventPartySlotSignups.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	EventPartySlotSignups.IsAllianceLeader	boolean NOT NULL DEFAULT false
+column	EventPartySlotSignups.IsPartyLeader	boolean NOT NULL DEFAULT false
+column	EventPartySlotSignups.MainJob	character varying(8)
+column	EventPartySlotSignups.PartySetupSlotId	integer NOT NULL
+column	EventPartySlotSignups.RelicWeapon	boolean NOT NULL DEFAULT false
+column	EventPartySlotSignups.ResistReady	boolean NOT NULL DEFAULT false
+column	EventPartySlotSignups.Role	character varying(16)
+column	EventPartySlotSignups.SignedUpAtUtc	timestamp with time zone NOT NULL
+column	EventPartySlotSignups.StayNextWindow	boolean NOT NULL DEFAULT false
+column	EventPartySlotSignups.SubJob	character varying(8)
+column	EventWindowRosterSnapshots.AllianceName	character varying(64)
+column	EventWindowRosterSnapshots.AllianceSortOrder	integer NOT NULL
+column	EventWindowRosterSnapshots.CapturedAtUtc	timestamp with time zone NOT NULL
+column	EventWindowRosterSnapshots.CharacterName	character varying(256)
+column	EventWindowRosterSnapshots.EventId	integer NOT NULL
+column	EventWindowRosterSnapshots.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	EventWindowRosterSnapshots.IsAllianceLeader	boolean NOT NULL
+column	EventWindowRosterSnapshots.IsPartyLeader	boolean NOT NULL
+column	EventWindowRosterSnapshots.MainJob	character varying(8)
+column	EventWindowRosterSnapshots.PartyName	character varying(64)
+column	EventWindowRosterSnapshots.PartySortOrder	integer NOT NULL
+column	EventWindowRosterSnapshots.Role	character varying(16)
+column	EventWindowRosterSnapshots.SlotLabel	character varying(64)
+column	EventWindowRosterSnapshots.SlotSortOrder	integer NOT NULL
+column	EventWindowRosterSnapshots.SubJob	character varying(8)
+column	EventWindowRosterSnapshots.WasLocked	boolean NOT NULL
+column	EventWindowRosterSnapshots.WindowNumber	integer NOT NULL
+column	Events.AssignedMonsterName	character varying(256)
+column	Events.AttendanceMode	character varying(16)
+column	Events.AutoStart	boolean NOT NULL
+column	Events.CommencementStartTime	timestamp with time zone
+column	Events.CountsTowardActive	boolean NOT NULL DEFAULT true
+column	Events.CreatorUserId	text
+column	Events.DayNumber	integer
+column	Events.Details	text
+column	Events.DiscordChannelId	character varying(20)
+column	Events.DiscordMessageId	character varying(20)
+column	Events.DkpPerHour	integer
+column	Events.Duration	double precision
+column	Events.EndTime	timestamp with time zone
+column	Events.EventLocation	text
+column	Events.EventName	text
+column	Events.EventType	text
+column	Events.HnmClaimBonusOverride	double precision
+column	Events.HnmClearedWindow	integer
+column	Events.HnmCloseBonusOverride	double precision
+column	Events.HnmDefeatedAt	timestamp with time zone
+column	Events.HnmKillBonusOverride	double precision
+column	Events.HnmNextDayOverride	integer
+column	Events.HnmOpenBonusOverride	double precision
+column	Events.HnmPerWindowOverride	double precision
+column	Events.HnmRepostAt	timestamp with time zone
+column	Events.HnmWindowNumber	integer NOT NULL DEFAULT 1
+column	Events.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Events.LinkshellId	integer NOT NULL
+column	Events.NextWindowAt	timestamp with time zone
+column	Events.PartySetupId	integer
+column	Events.SourceTodId	integer
+column	Events.SpawnWindowCount	integer
+column	Events.SpawnWindowMinutes	integer
+column	Events.StartTime	timestamp with time zone
+column	Events.StarterUserId	text
+column	Events.TimeStamp	timestamp with time zone
+column	Events.WdClaimed	boolean NOT NULL DEFAULT false
+column	Events.WdFinalizedAt	timestamp with time zone
+column	Events.WdKilled	boolean NOT NULL DEFAULT false
+column	Events.WdPopWindow	integer
+column	Events.WindowAnchorAt	timestamp with time zone
+column	Events.WindowCountOverride	integer
+column	Events.WindowMethod	character varying(16)
+column	HnmRecurringBoards.CreatedAt	timestamp with time zone NOT NULL
+column	HnmRecurringBoards.CreatedByAppUserId	text
+column	HnmRecurringBoards.Details	character varying(2048)
+column	HnmRecurringBoards.Enabled	boolean NOT NULL
+column	HnmRecurringBoards.EventLocation	character varying(256)
+column	HnmRecurringBoards.EventNameTemplate	character varying(256)
+column	HnmRecurringBoards.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	HnmRecurringBoards.LastSourceTodId	integer
+column	HnmRecurringBoards.LeadHours	double precision NOT NULL
+column	HnmRecurringBoards.LinkshellId	integer NOT NULL
+column	HnmRecurringBoards.MonsterName	character varying(256) NOT NULL
+column	HnmRecurringBoards.PartySetupId	integer
+column	HnmRecurringBoards.SpawnKey	character varying(256) NOT NULL
+column	HnmRecurringBoards.UpdatedAt	timestamp with time zone NOT NULL
+column	Invites.AppUserId	character varying(450)
+column	Invites.CreatedAtUtc	timestamp with time zone
+column	Invites.DiscordDisplayName	character varying(64)
+column	Invites.DiscordUserId	character varying(32)
+column	Invites.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Invites.LinkshellId	integer NOT NULL
+column	Invites.Message	character varying(200)
+column	Invites.ResolvedAtUtc	timestamp with time zone
+column	Invites.ResolvedByAppUserId	character varying(450)
+column	Invites.Status	character varying(32) NOT NULL
+column	Items.CreatedAt	timestamp with time zone NOT NULL
+column	Items.CreatedByAppUserId	character varying(450)
+column	Items.CreatedByCharacterName	character varying(256)
+column	Items.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Items.IsSold	boolean NOT NULL DEFAULT false
+column	Items.ItemName	character varying(256) NOT NULL
+column	Items.ItemType	character varying(128)
+column	Items.JournalEntryId	integer
+column	Items.LinkshellId	integer NOT NULL
+column	Items.Notes	character varying(1024)
+column	Items.Quantity	integer NOT NULL
+column	Items.SoldAt	timestamp with time zone
+column	Items.SoldByCharacterName	text
+column	Items.SoldPrice	bigint
+column	Items.UpdatedAt	timestamp with time zone NOT NULL
+column	JobRatings.CharacterSlot	integer NOT NULL DEFAULT 0
+column	JobRatings.Comment	character varying(1000)
+column	JobRatings.Gear	integer NOT NULL
+column	JobRatings.HasRelic	boolean NOT NULL
+column	JobRatings.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	JobRatings.JobIndex	integer NOT NULL
+column	JobRatings.LinkshellId	integer NOT NULL
+column	JobRatings.RaterAppUserId	character varying(450) NOT NULL
+column	JobRatings.RelicNames	jsonb
+column	JobRatings.Skill	integer NOT NULL
+column	JobRatings.TargetAppUserId	character varying(450) NOT NULL
+column	JobRatings.UpdatedAt	timestamp with time zone NOT NULL
+column	JournalEntries.ConfirmedAt	timestamp with time zone
+column	JournalEntries.ConfirmedByAppUserId	character varying(450)
+column	JournalEntries.ConfirmedByCharacterName	character varying(256)
+column	JournalEntries.CorrectionReason	character varying(512)
+column	JournalEntries.CreatedAt	timestamp with time zone NOT NULL
+column	JournalEntries.CreatedByAppUserId	character varying(450)
+column	JournalEntries.CreatedByCharacterName	character varying(256)
+column	JournalEntries.EntryNumber	character varying(24) NOT NULL
+column	JournalEntries.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	JournalEntries.Kind	character varying(16) NOT NULL
+column	JournalEntries.LegacyCategory	character varying(128)
+column	JournalEntries.LegacyEntryType	character varying(32)
+column	JournalEntries.LinkshellId	integer NOT NULL
+column	JournalEntries.LinkshellName	character varying(256)
+column	JournalEntries.Memo	character varying(1024)
+column	JournalEntries.ReversesJournalEntryId	integer
+column	JournalEntries.Sequence	integer NOT NULL
+column	JournalEntries.Source	character varying(16) NOT NULL
+column	JournalEntries.SourceItemId	integer
+column	JournalEntries.Status	character varying(16) NOT NULL
+column	JournalEntries.TransactionDate	timestamp with time zone NOT NULL
+column	JournalEntries.TransactionKind	character varying(48)
+column	JournalEntryLines.AccountName	character varying(96) NOT NULL
+column	JournalEntryLines.AccountNumber	integer NOT NULL
+column	JournalEntryLines.Amount	bigint NOT NULL
+column	JournalEntryLines.CounterpartyAppUserId	character varying(450)
+column	JournalEntryLines.CounterpartyCharacterName	character varying(256)
+column	JournalEntryLines.HolderAppUserId	character varying(450)
+column	JournalEntryLines.HolderCharacterName	character varying(256)
+column	JournalEntryLines.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	JournalEntryLines.JournalEntryId	integer NOT NULL
+column	JournalEntryLines.LedgerAccountId	integer NOT NULL
+column	JournalEntryLines.LineNumber	integer NOT NULL
+column	JournalEntryLines.LinkshellId	integer NOT NULL
+column	JournalEntryLines.TransactionDate	timestamp with time zone NOT NULL
+column	LedgerAccounts.AccountNumber	integer NOT NULL
+column	LedgerAccounts.CreatedAt	timestamp with time zone NOT NULL
+column	LedgerAccounts.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	LedgerAccounts.IsActive	boolean NOT NULL
+column	LedgerAccounts.IsCash	boolean NOT NULL
+column	LedgerAccounts.LinkshellId	integer NOT NULL
+column	LedgerAccounts.Name	character varying(96) NOT NULL
+column	LinkshellBanners.ContentType	character varying(64) NOT NULL
+column	LinkshellBanners.ImageData	bytea NOT NULL
+column	LinkshellBanners.LinkshellId	integer NOT NULL
+column	LinkshellBanners.UpdatedAt	timestamp with time zone NOT NULL
+column	LinkshellChannelRoutes.ChannelId	character varying(20) NOT NULL
+column	LinkshellChannelRoutes.ChannelName	character varying(128)
+column	LinkshellChannelRoutes.CreatedAtUtc	timestamp with time zone NOT NULL
+column	LinkshellChannelRoutes.DkpSheetExtraMessageIds	character varying(512)
+column	LinkshellChannelRoutes.DkpSheetMessageId	character varying(32)
+column	LinkshellChannelRoutes.EventTypeFilter	character varying(256)
+column	LinkshellChannelRoutes.HnmMonsterFilter	character varying(512)
+column	LinkshellChannelRoutes.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	LinkshellChannelRoutes.LinkshellId	integer NOT NULL
+column	LinkshellChannelRoutes.Name	character varying(64)
+column	LinkshellChannelRoutes.PostAuctions	boolean NOT NULL
+column	LinkshellChannelRoutes.PostDkpSheet	boolean NOT NULL DEFAULT false
+column	LinkshellChannelRoutes.PostEvents	boolean NOT NULL
+column	LinkshellChannelRoutes.PostLoot	boolean NOT NULL
+column	LinkshellChannelRoutes.PostTodBoard	boolean NOT NULL
+column	LinkshellChannelRoutes.TodBoardMessageId	character varying(32)
+column	LinkshellMonsterTimings.AdditionalSeconds	integer NOT NULL DEFAULT 0
+column	LinkshellMonsterTimings.Category	character varying(32)
+column	LinkshellMonsterTimings.ClaimShieldEnabled	boolean NOT NULL DEFAULT true
+column	LinkshellMonsterTimings.CooldownMinutes	integer NOT NULL
+column	LinkshellMonsterTimings.CreatedAtUtc	timestamp with time zone NOT NULL
+column	LinkshellMonsterTimings.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	LinkshellMonsterTimings.IsCustom	boolean NOT NULL
+column	LinkshellMonsterTimings.LinkshellId	integer NOT NULL
+column	LinkshellMonsterTimings.MonsterName	character varying(128) NOT NULL
+column	LinkshellMonsterTimings.NormalizedMonsterName	character varying(128) NOT NULL
+column	LinkshellMonsterTimings.SortOrder	integer NOT NULL
+column	LinkshellMonsterTimings.UpdatedAtUtc	timestamp with time zone NOT NULL
+column	LinkshellMonsterTimings.WindowCadenceMinutes	integer
+column	LinkshellMonsterTimings.WindowCount	integer
+column	LinkshellMonsterTimings.WindowMethod	character varying(16)
+column	LinkshellPresences.AllianceKey	character varying(256)
+column	LinkshellPresences.AllianceNumber	integer NOT NULL
+column	LinkshellPresences.CharacterName	character varying(256) NOT NULL
+column	LinkshellPresences.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	LinkshellPresences.IsAllianceLeader	boolean NOT NULL
+column	LinkshellPresences.LastSeenUtc	timestamp with time zone NOT NULL
+column	LinkshellPresences.LinkshellId	integer NOT NULL
+column	LinkshellPresences.MainCharacterName	character varying(256)
+column	LinkshellPresences.MainJob	character varying(8)
+column	LinkshellPresences.MainJobLevel	integer
+column	LinkshellPresences.SubJob	character varying(8)
+column	LinkshellPresences.SubJobLevel	integer
+column	LinkshellPresences.ZoneId	integer
+column	LinkshellRoles.CanAddLoot	boolean NOT NULL
+column	LinkshellRoles.CanAuditDkp	boolean NOT NULL
+column	LinkshellRoles.CanBid	boolean NOT NULL DEFAULT true
+column	LinkshellRoles.CanCustomizeLinkshell	boolean NOT NULL
+column	LinkshellRoles.CanLockAuctions	boolean NOT NULL
+column	LinkshellRoles.CanManageAnnouncements	boolean NOT NULL
+column	LinkshellRoles.CanManageAttendanceWithAddon	boolean NOT NULL DEFAULT false
+column	LinkshellRoles.CanManageAuctions	boolean NOT NULL
+column	LinkshellRoles.CanManageCharts	boolean NOT NULL DEFAULT false
+column	LinkshellRoles.CanManageEvents	boolean NOT NULL
+column	LinkshellRoles.CanManageInventory	boolean NOT NULL
+column	LinkshellRoles.CanManageInvites	boolean NOT NULL
+column	LinkshellRoles.CanManageMembers	boolean NOT NULL
+column	LinkshellRoles.CanManageParties	boolean NOT NULL
+column	LinkshellRoles.CanManageRoles	boolean NOT NULL
+column	LinkshellRoles.CanManageRules	boolean NOT NULL
+column	LinkshellRoles.CanManageTods	boolean NOT NULL
+column	LinkshellRoles.CanManageTreasury	boolean NOT NULL
+column	LinkshellRoles.CanModerateLiveEvent	boolean NOT NULL
+column	LinkshellRoles.CanSubmitTodForApproval	boolean NOT NULL
+column	LinkshellRoles.CanUseAddon	boolean NOT NULL DEFAULT false
+column	LinkshellRoles.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	LinkshellRoles.IsSystem	boolean NOT NULL
+column	LinkshellRoles.LinkshellId	integer NOT NULL
+column	LinkshellRoles.Name	character varying(64) NOT NULL
+column	LinkshellRoles.SortOrder	integer NOT NULL
+column	Linkshells.ActiveAfterAttendances	integer NOT NULL DEFAULT 2
+column	Linkshells.AppUserId	text
+column	Linkshells.AuctionsLocked	boolean NOT NULL
+column	Linkshells.Details	text
+column	Linkshells.DiscordGuildId	character varying(20)
+column	Linkshells.DiscordGuildName	character varying(256)
+column	Linkshells.DiscussionChannelId	character varying(20)
+column	Linkshells.DkpRoundingIncrement	character varying(16) NOT NULL
+column	Linkshells.EnableActivityTracking	boolean NOT NULL DEFAULT false
+column	Linkshells.EnableAuctions	boolean NOT NULL
+column	Linkshells.EnableDkp	boolean NOT NULL
+column	Linkshells.EnableEndgame	boolean NOT NULL
+column	Linkshells.EnableEvents	boolean NOT NULL
+column	Linkshells.EnableHnmSection	boolean NOT NULL
+column	Linkshells.EnableToDs	boolean NOT NULL
+column	Linkshells.EnableTreasury	boolean NOT NULL
+column	Linkshells.HiddenTodMonsters	text NOT NULL
+column	Linkshells.HnmAttendanceMode	character varying(16) NOT NULL DEFAULT 'Standard'::character varying
+column	Linkshells.HnmStandardClaimBonus	double precision NOT NULL DEFAULT 0.0
+column	Linkshells.HnmStandardCloseBonus	double precision NOT NULL DEFAULT 0.0
+column	Linkshells.HnmStandardKillBonus	double precision NOT NULL DEFAULT 0.0
+column	Linkshells.HnmStandardMiscBonus	double precision NOT NULL DEFAULT 0.0
+column	Linkshells.HnmStandardOpenBonus	double precision NOT NULL DEFAULT 0.0
+column	Linkshells.HnmStandardWindowBonus	double precision NOT NULL DEFAULT 0.0
+column	Linkshells.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Linkshells.InactiveAfterAbsences	integer NOT NULL DEFAULT 3
+column	Linkshells.LinkshellName	text
+column	Linkshells.LockToDiscordGuild	boolean NOT NULL DEFAULT false
+column	Linkshells.LootStructure	character varying(32) NOT NULL
+column	Linkshells.OutsidePartySignupEnabled	boolean NOT NULL DEFAULT false
+column	Linkshells.WdClaimBonus	double precision NOT NULL DEFAULT 0.0
+column	Linkshells.WdCloseBonus	double precision NOT NULL DEFAULT 0.0
+column	Linkshells.WdDkpPerWindow	double precision NOT NULL DEFAULT 0.25
+column	Linkshells.WdKillBonus	double precision NOT NULL DEFAULT 0.0
+column	Linkshells.WdOpenBonus	double precision NOT NULL DEFAULT 0.0
+column	PartySetupAlliances.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	PartySetupAlliances.Name	character varying(64) NOT NULL
+column	PartySetupAlliances.PartySetupId	integer NOT NULL
+column	PartySetupAlliances.SortOrder	integer NOT NULL
+column	PartySetupParties.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	PartySetupParties.Name	character varying(64)
+column	PartySetupParties.PartySetupAllianceId	integer NOT NULL
+column	PartySetupParties.SortOrder	integer NOT NULL
+column	PartySetupSlots.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	PartySetupSlots.IsPartyLeader	boolean NOT NULL
+column	PartySetupSlots.MainJob	character varying(8)
+column	PartySetupSlots.PartySetupPartyId	integer NOT NULL
+column	PartySetupSlots.RequirementType	character varying(16) NOT NULL
+column	PartySetupSlots.Role	character varying(16)
+column	PartySetupSlots.SortOrder	integer NOT NULL
+column	PartySetupSlots.SubJob	character varying(8)
+column	PartySetups.AssignedMonsterName	character varying(256)
+column	PartySetups.ClonedFromPartySetupId	integer
+column	PartySetups.CreatedAt	timestamp with time zone NOT NULL
+column	PartySetups.CreatedByAppUserId	character varying(450)
+column	PartySetups.CreatedByCharacterName	character varying(256)
+column	PartySetups.EventType	character varying(64)
+column	PartySetups.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	PartySetups.LinkshellId	integer NOT NULL
+column	PartySetups.Name	character varying(128) NOT NULL
+column	PartySetups.Notes	character varying(1024)
+column	PartySetups.OwnerEventId	integer
+column	PartySetups.UpdatedAt	timestamp with time zone NOT NULL
+column	PendingTodSubmissions.AdditionalSeconds	integer NOT NULL DEFAULT 0
+column	PendingTodSubmissions.Claim	boolean
+column	PendingTodSubmissions.Cooldown	character varying(32)
+column	PendingTodSubmissions.CooldownMinutes	integer
+column	PendingTodSubmissions.DayNumber	integer
+column	PendingTodSubmissions.Hq	boolean NOT NULL DEFAULT false
+column	PendingTodSubmissions.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	PendingTodSubmissions.ImagePath	character varying(256)
+column	PendingTodSubmissions.Interval	character varying(32)
+column	PendingTodSubmissions.IntervalMinutes	integer
+column	PendingTodSubmissions.LinkshellId	integer NOT NULL
+column	PendingTodSubmissions.MonsterName	character varying(64)
+column	PendingTodSubmissions.PopWindow	integer
+column	PendingTodSubmissions.RepopTime	timestamp with time zone
+column	PendingTodSubmissions.SpawnKey	character varying(256)
+column	PendingTodSubmissions.SubmittedAtUtc	timestamp with time zone NOT NULL
+column	PendingTodSubmissions.SubmittedByAppUserId	text
+column	PendingTodSubmissions.Time	timestamp with time zone
+column	PlaceholderClaimRequests.Approved	boolean
+column	PlaceholderClaimRequests.CreatedAtUtc	timestamp with time zone NOT NULL
+column	PlaceholderClaimRequests.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	PlaceholderClaimRequests.LinkshellId	integer NOT NULL
+column	PlaceholderClaimRequests.PlaceholderAppUserId	character varying(450) NOT NULL
+column	PlaceholderClaimRequests.RequesterAppUserId	character varying(450)
+column	PlaceholderClaimRequests.RequesterDiscordUserId	character varying(32)
+column	PlaceholderClaimRequests.RequesterName	character varying(256)
+column	PlaceholderClaimRequests.ResolvedAtUtc	timestamp with time zone
+column	PlaceholderClaimRequests.ResolvedByAppUserId	character varying(450)
+column	Rules.Category	character varying(32)
+column	Rules.CreatedAt	timestamp with time zone NOT NULL
+column	Rules.CreatedByAppUserId	character varying(450)
+column	Rules.CreatedByCharacterName	character varying(256)
+column	Rules.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Rules.LinkshellId	integer NOT NULL
+column	Rules.RuleDetails	character varying(4000) NOT NULL
+column	Rules.RuleTitle	character varying(256) NOT NULL
+column	Tods.AdditionalSeconds	integer NOT NULL DEFAULT 0
+column	Tods.Claim	boolean
+column	Tods.Cooldown	character varying(32)
+column	Tods.CooldownMinutes	integer
+column	Tods.DayNumber	integer
+column	Tods.Hq	boolean NOT NULL DEFAULT false
+column	Tods.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	Tods.ImagePath	character varying(512)
+column	Tods.Interval	character varying(32)
+column	Tods.IntervalMinutes	integer
+column	Tods.Killed	boolean
+column	Tods.LinkshellId	integer NOT NULL
+column	Tods.MonsterName	character varying(256)
+column	Tods.PopWindow	integer
+column	Tods.RepopTime	timestamp with time zone
+column	Tods.SpawnKey	character varying(256)
+column	Tods.Time	timestamp with time zone
+column	Tods.TimeStamp	timestamp with time zone
+column	WindowEventMemberDkps.CharacterName	character varying(256) NOT NULL
+column	WindowEventMemberDkps.DkpAmount	double precision NOT NULL
+column	WindowEventMemberDkps.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	WindowEventMemberDkps.WindowEventId	integer NOT NULL
+column	WindowEvents.CampEndedAtUtc	timestamp with time zone
+column	WindowEvents.CampEventHistoryId	integer
+column	WindowEvents.CampEventLocation	character varying(256)
+column	WindowEvents.CampEventType	character varying(64)
+column	WindowEvents.CampStartedAtUtc	timestamp with time zone
+column	WindowEvents.CreatedAtUtc	timestamp with time zone NOT NULL
+column	WindowEvents.CreatedByCharacterName	character varying(256)
+column	WindowEvents.DkpAmount	double precision
+column	WindowEvents.EntryType	character varying(32)
+column	WindowEvents.FirstCapturedAtUtc	timestamp with time zone NOT NULL
+column	WindowEvents.Id	integer NOT NULL IDENTITY BY DEFAULT
+column	WindowEvents.LastCapturedAtUtc	timestamp with time zone NOT NULL
+column	WindowEvents.LinkshellId	integer NOT NULL
+column	WindowEvents.MiscDkpAmount	double precision
+column	WindowEvents.Name	character varying(128)
+column	WindowEvents.NormalizedName	character varying(128)
+column	WindowEvents.PerCaptureDkp	boolean NOT NULL DEFAULT false
+column	WindowEvents.PostedToSheetAt	timestamp with time zone
+column	WindowEvents.SourceEventId	integer
+column	WindowEvents.Status	character varying(32) NOT NULL DEFAULT 'Open'::character varying
+column	WindowEvents.WindowAnchorAtUtc	timestamp with time zone
+column	WindowEvents.WindowCount	integer
+column	WindowEvents.WindowMinutes	integer
+column	__EFMigrationsHistory.MigrationId	character varying(150) NOT NULL
+column	__EFMigrationsHistory.ProductVersion	character varying(32) NOT NULL
+constraint	"AddonApiTokens".AddonApiTokens_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"AddonApiTokens".AddonApiTokens_Id_not_null	NOT NULL "Id"
+constraint	"AddonApiTokens".AddonApiTokens_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"AddonApiTokens".AddonApiTokens_TokenHash_not_null	NOT NULL "TokenHash"
+constraint	"AddonApiTokens".AddonApiTokens_TokenPrefix_not_null	NOT NULL "TokenPrefix"
+constraint	"AddonApiTokens".FK_AddonApiTokens_AspNetUsers_IssuedToAppUserId	FOREIGN KEY ("IssuedToAppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE SET NULL
+constraint	"AddonApiTokens".FK_AddonApiTokens_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"AddonApiTokens".PK_AddonApiTokens	PRIMARY KEY ("Id")
+constraint	"AddonPairingCodes".AddonPairingCodes_Code_not_null	NOT NULL "Code"
+constraint	"AddonPairingCodes".AddonPairingCodes_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"AddonPairingCodes".AddonPairingCodes_ExpiresAt_not_null	NOT NULL "ExpiresAt"
+constraint	"AddonPairingCodes".AddonPairingCodes_Id_not_null	NOT NULL "Id"
+constraint	"AddonPairingCodes".AddonPairingCodes_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"AddonPairingCodes".FK_AddonPairingCodes_AspNetUsers_IssuedToAppUserId	FOREIGN KEY ("IssuedToAppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE SET NULL
+constraint	"AddonPairingCodes".FK_AddonPairingCodes_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"AddonPairingCodes".PK_AddonPairingCodes	PRIMARY KEY ("Id")
+constraint	"Announcements".Announcements_AnnouncementDetails_not_null	NOT NULL "AnnouncementDetails"
+constraint	"Announcements".Announcements_AnnouncementTitle_not_null	NOT NULL "AnnouncementTitle"
+constraint	"Announcements".Announcements_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"Announcements".Announcements_Id_not_null	NOT NULL "Id"
+constraint	"Announcements".Announcements_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"Announcements".FK_Announcements_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"Announcements".PK_Announcements	PRIMARY KEY ("Id")
+constraint	"AppSettings".AppSettings_Key_not_null	NOT NULL "Key"
+constraint	"AppSettings".PK_AppSettings	PRIMARY KEY ("Key")
+constraint	"AppUserEventHistories".AppUserEventHistories_ActiveCredit_not_null	NOT NULL "ActiveCredit"
+constraint	"AppUserEventHistories".AppUserEventHistories_EventHistoryId_not_null	NOT NULL "EventHistoryId"
+constraint	"AppUserEventHistories".AppUserEventHistories_Id_not_null	NOT NULL "Id"
+constraint	"AppUserEventHistories".FK_AppUserEventHistories_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id")
+constraint	"AppUserEventHistories".FK_AppUserEventHistories_EventHistories_EventHistoryId	FOREIGN KEY ("EventHistoryId") REFERENCES "EventHistories"("Id") ON DELETE CASCADE
+constraint	"AppUserEventHistories".PK_AppUserEventHistories	PRIMARY KEY ("Id")
+constraint	"AppUserEventStatusLedgers".AppUserEventStatusLedgers_ActionType_not_null	NOT NULL "ActionType"
+constraint	"AppUserEventStatusLedgers".AppUserEventStatusLedgers_AppUserEventId_not_null	NOT NULL "AppUserEventId"
+constraint	"AppUserEventStatusLedgers".AppUserEventStatusLedgers_EventId_not_null	NOT NULL "EventId"
+constraint	"AppUserEventStatusLedgers".AppUserEventStatusLedgers_Id_not_null	NOT NULL "Id"
+constraint	"AppUserEventStatusLedgers".AppUserEventStatusLedgers_OccurredAt_not_null	NOT NULL "OccurredAt"
+constraint	"AppUserEventStatusLedgers".AppUserEventStatusLedgers_RequiresVerification_not_null	NOT NULL "RequiresVerification"
+constraint	"AppUserEventStatusLedgers".FK_AppUserEventStatusLedgers_AppUserEvents_AppUserEventId	FOREIGN KEY ("AppUserEventId") REFERENCES "AppUserEvents"("Id") ON DELETE CASCADE
+constraint	"AppUserEventStatusLedgers".FK_AppUserEventStatusLedgers_Events_EventId	FOREIGN KEY ("EventId") REFERENCES "Events"("Id") ON DELETE CASCADE
+constraint	"AppUserEventStatusLedgers".PK_AppUserEventStatusLedgers	PRIMARY KEY ("Id")
+constraint	"AppUserEventWindows".AppUserEventWindows_EventAttendanceWindowId_not_null	NOT NULL "EventAttendanceWindowId"
+constraint	"AppUserEventWindows".AppUserEventWindows_Id_not_null	NOT NULL "Id"
+constraint	"AppUserEventWindows".AppUserEventWindows_VerifiedAt_not_null	NOT NULL "VerifiedAt"
+constraint	"AppUserEventWindows".FK_AppUserEventWindows_AppUserEvents_AppUserEventId	FOREIGN KEY ("AppUserEventId") REFERENCES "AppUserEvents"("Id") ON DELETE SET NULL
+constraint	"AppUserEventWindows".FK_AppUserEventWindows_EventAttendanceWindows_EventAttendanceW~	FOREIGN KEY ("EventAttendanceWindowId") REFERENCES "EventAttendanceWindows"("Id") ON DELETE CASCADE
+constraint	"AppUserEventWindows".PK_AppUserEventWindows	PRIMARY KEY ("Id")
+constraint	"AppUserEvents".AppUserEvents_EnfeebReady_not_null	NOT NULL "EnfeebReady"
+constraint	"AppUserEvents".AppUserEvents_EventId_not_null	NOT NULL "EventId"
+constraint	"AppUserEvents".AppUserEvents_Id_not_null	NOT NULL "Id"
+constraint	"AppUserEvents".AppUserEvents_IsQuickJoin_not_null	NOT NULL "IsQuickJoin"
+constraint	"AppUserEvents".AppUserEvents_RelicWeapon_not_null	NOT NULL "RelicWeapon"
+constraint	"AppUserEvents".AppUserEvents_ResistReady_not_null	NOT NULL "ResistReady"
+constraint	"AppUserEvents".AppUserEvents_WithdrewFromEvent_not_null	NOT NULL "WithdrewFromEvent"
+constraint	"AppUserEvents".FK_AppUserEvents_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id")
+constraint	"AppUserEvents".FK_AppUserEvents_Events_EventId	FOREIGN KEY ("EventId") REFERENCES "Events"("Id") ON DELETE CASCADE
+constraint	"AppUserEvents".PK_AppUserEvents	PRIMARY KEY ("Id")
+constraint	"AppUserLinkshells".AppUserLinkshells_DiscordIdConfirmed_not_null	NOT NULL "DiscordIdConfirmed"
+constraint	"AppUserLinkshells".AppUserLinkshells_DkpPoolLedgerFromId_not_null	NOT NULL "DkpPoolLedgerFromId"
+constraint	"AppUserLinkshells".AppUserLinkshells_DkpSeedLedgerId_not_null	NOT NULL "DkpSeedLedgerId"
+constraint	"AppUserLinkshells".AppUserLinkshells_Id_not_null	NOT NULL "Id"
+constraint	"AppUserLinkshells".AppUserLinkshells_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"AppUserLinkshells".AppUserLinkshells_SeededDkpEarned_not_null	NOT NULL "SeededDkpEarned"
+constraint	"AppUserLinkshells".AppUserLinkshells_SeededDkpSpent_not_null	NOT NULL "SeededDkpSpent"
+constraint	"AppUserLinkshells".FK_AppUserLinkshells_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id")
+constraint	"AppUserLinkshells".FK_AppUserLinkshells_LinkshellRoles_LinkshellId_LinkshellRoleId	FOREIGN KEY ("LinkshellId", "LinkshellRoleId") REFERENCES "LinkshellRoles"("LinkshellId", "Id")
+constraint	"AppUserLinkshells".FK_AppUserLinkshells_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"AppUserLinkshells".PK_AppUserLinkshells	PRIMARY KEY ("Id")
+constraint	"AspNetUserClaims".AspNetUserClaims_Id_not_null	NOT NULL "Id"
+constraint	"AspNetUserClaims".AspNetUserClaims_UserId_not_null	NOT NULL "UserId"
+constraint	"AspNetUserClaims".FK_AspNetUserClaims_AspNetUsers_UserId	FOREIGN KEY ("UserId") REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
+constraint	"AspNetUserClaims".PK_AspNetUserClaims	PRIMARY KEY ("Id")
+constraint	"AspNetUserLogins".AspNetUserLogins_LoginProvider_not_null	NOT NULL "LoginProvider"
+constraint	"AspNetUserLogins".AspNetUserLogins_ProviderKey_not_null	NOT NULL "ProviderKey"
+constraint	"AspNetUserLogins".AspNetUserLogins_UserId_not_null	NOT NULL "UserId"
+constraint	"AspNetUserLogins".FK_AspNetUserLogins_AspNetUsers_UserId	FOREIGN KEY ("UserId") REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
+constraint	"AspNetUserLogins".PK_AspNetUserLogins	PRIMARY KEY ("LoginProvider", "ProviderKey")
+constraint	"AspNetUserTokens".AspNetUserTokens_LoginProvider_not_null	NOT NULL "LoginProvider"
+constraint	"AspNetUserTokens".AspNetUserTokens_Name_not_null	NOT NULL "Name"
+constraint	"AspNetUserTokens".AspNetUserTokens_UserId_not_null	NOT NULL "UserId"
+constraint	"AspNetUserTokens".FK_AspNetUserTokens_AspNetUsers_UserId	FOREIGN KEY ("UserId") REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
+constraint	"AspNetUserTokens".PK_AspNetUserTokens	PRIMARY KEY ("UserId", "LoginProvider", "Name")
+constraint	"AspNetUsers".AspNetUsers_AccessFailedCount_not_null	NOT NULL "AccessFailedCount"
+constraint	"AspNetUsers".AspNetUsers_EmailConfirmed_not_null	NOT NULL "EmailConfirmed"
+constraint	"AspNetUsers".AspNetUsers_Id_not_null	NOT NULL "Id"
+constraint	"AspNetUsers".AspNetUsers_IsPlaceholder_not_null	NOT NULL "IsPlaceholder"
+constraint	"AspNetUsers".AspNetUsers_IsSuperAdmin_not_null	NOT NULL "IsSuperAdmin"
+constraint	"AspNetUsers".AspNetUsers_LockoutEnabled_not_null	NOT NULL "LockoutEnabled"
+constraint	"AspNetUsers".AspNetUsers_PhoneNumberConfirmed_not_null	NOT NULL "PhoneNumberConfirmed"
+constraint	"AspNetUsers".AspNetUsers_TwoFactorEnabled_not_null	NOT NULL "TwoFactorEnabled"
+constraint	"AspNetUsers".PK_AspNetUsers	PRIMARY KEY ("Id")
+constraint	"AttendanceSnapshotEntries".AttendanceSnapshotEntries_AddedManually_not_null	NOT NULL "AddedManually"
+constraint	"AttendanceSnapshotEntries".AttendanceSnapshotEntries_CharacterName_not_null	NOT NULL "CharacterName"
+constraint	"AttendanceSnapshotEntries".AttendanceSnapshotEntries_Id_not_null	NOT NULL "Id"
+constraint	"AttendanceSnapshotEntries".AttendanceSnapshotEntries_SnapshotId_not_null	NOT NULL "SnapshotId"
+constraint	"AttendanceSnapshotEntries".FK_AttendanceSnapshotEntries_AttendanceSnapshots_SnapshotId	FOREIGN KEY ("SnapshotId") REFERENCES "AttendanceSnapshots"("Id") ON DELETE CASCADE
+constraint	"AttendanceSnapshotEntries".PK_AttendanceSnapshotEntries	PRIMARY KEY ("Id")
+constraint	"AttendanceSnapshots".AttendanceSnapshots_CapturedAtUtc_not_null	NOT NULL "CapturedAtUtc"
+constraint	"AttendanceSnapshots".AttendanceSnapshots_EntryCount_not_null	NOT NULL "EntryCount"
+constraint	"AttendanceSnapshots".AttendanceSnapshots_Id_not_null	NOT NULL "Id"
+constraint	"AttendanceSnapshots".AttendanceSnapshots_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"AttendanceSnapshots".AttendanceSnapshots_SlotKind_not_null	NOT NULL "SlotKind"
+constraint	"AttendanceSnapshots".AttendanceSnapshots_SnapshotStatus_not_null	NOT NULL "SnapshotStatus"
+constraint	"AttendanceSnapshots".CK_AttendanceSnapshots_SlotKind	CHECK ((("SlotKind")::text = ANY ((ARRAY['Window'::character varying, 'Misc'::character varying])::text[]))) NOT VALID [NOT VALID]
+constraint	"AttendanceSnapshots".CK_AttendanceSnapshots_SnapshotStatus	CHECK ((("SnapshotStatus")::text = ANY ((ARRAY['Active'::character varying, 'Ignored'::character varying, 'Pending'::character varying])::text[]))) NOT VALID [NOT VALID]
+constraint	"AttendanceSnapshots".FK_AttendanceSnapshots_Events_LinkedEventId	FOREIGN KEY ("LinkedEventId") REFERENCES "Events"("Id") ON DELETE SET NULL
+constraint	"AttendanceSnapshots".FK_AttendanceSnapshots_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"AttendanceSnapshots".FK_AttendanceSnapshots_WindowEvents_WindowEventId	FOREIGN KEY ("WindowEventId") REFERENCES "WindowEvents"("Id") ON DELETE SET NULL
+constraint	"AttendanceSnapshots".PK_AttendanceSnapshots	PRIMARY KEY ("Id")
+constraint	"AuctionHistories".AuctionHistories_ClosedAt_not_null	NOT NULL "ClosedAt"
+constraint	"AuctionHistories".AuctionHistories_Id_not_null	NOT NULL "Id"
+constraint	"AuctionHistories".AuctionHistories_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"AuctionHistories".FK_AuctionHistories_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"AuctionHistories".PK_AuctionHistories	PRIMARY KEY ("Id")
+constraint	"AuctionItems".AuctionItems_Id_not_null	NOT NULL "Id"
+constraint	"AuctionItems".CK_AuctionItems_OneParent	CHECK ((num_nonnulls("AuctionId", "AuctionHistoryId") = 1)) NOT VALID [NOT VALID]
+constraint	"AuctionItems".FK_AuctionItems_AuctionHistories_AuctionHistoryId	FOREIGN KEY ("AuctionHistoryId") REFERENCES "AuctionHistories"("Id") ON DELETE CASCADE
+constraint	"AuctionItems".FK_AuctionItems_Auctions_AuctionId	FOREIGN KEY ("AuctionId") REFERENCES "Auctions"("Id") ON DELETE CASCADE
+constraint	"AuctionItems".FK_AuctionItems_Items_SourceItemId	FOREIGN KEY ("SourceItemId") REFERENCES "Items"("Id") ON DELETE SET NULL
+constraint	"AuctionItems".PK_AuctionItems	PRIMARY KEY ("Id")
+constraint	"Auctions".Auctions_Id_not_null	NOT NULL "Id"
+constraint	"Auctions".Auctions_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"Auctions".FK_Auctions_DkpPools_DkpPoolId	FOREIGN KEY ("DkpPoolId") REFERENCES "DkpPools"("Id")
+constraint	"Auctions".FK_Auctions_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"Auctions".PK_Auctions	PRIMARY KEY ("Id")
+constraint	"Bids".Bids_AuctionItemId_not_null	NOT NULL "AuctionItemId"
+constraint	"Bids".Bids_BidAmount_not_null	NOT NULL "BidAmount"
+constraint	"Bids".Bids_CharacterName_not_null	NOT NULL "CharacterName"
+constraint	"Bids".Bids_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"Bids".Bids_Id_not_null	NOT NULL "Id"
+constraint	"Bids".FK_Bids_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE SET NULL
+constraint	"Bids".FK_Bids_AuctionItems_AuctionItemId	FOREIGN KEY ("AuctionItemId") REFERENCES "AuctionItems"("Id") ON DELETE CASCADE
+constraint	"Bids".PK_Bids	PRIMARY KEY ("Id")
+constraint	"Characters".CK_Characters_Name_NotBlank	CHECK ((("Name")::text ~ '[^ \t\n\v\f\r\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]'::text))
+constraint	"Characters".CK_Characters_Slot	CHECK (("Slot" = ANY (ARRAY[0, 1, 2])))
+constraint	"Characters".Characters_AppUserId_not_null	NOT NULL "AppUserId"
+constraint	"Characters".Characters_Id_not_null	NOT NULL "Id"
+constraint	"Characters".Characters_Name_not_null	NOT NULL "Name"
+constraint	"Characters".Characters_NormalizedName_not_null	NOT NULL "NormalizedName"
+constraint	"Characters".Characters_Slot_not_null	NOT NULL "Slot"
+constraint	"Characters".Characters_UpdatedAt_not_null	NOT NULL "UpdatedAt"
+constraint	"Characters".FK_Characters_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
+constraint	"Characters".PK_Characters	PRIMARY KEY ("Id")
+constraint	"ChartMemberKeyItems".ChartMemberKeyItems_AppUserId_not_null	NOT NULL "AppUserId"
+constraint	"ChartMemberKeyItems".ChartMemberKeyItems_Board_not_null	NOT NULL "Board"
+constraint	"ChartMemberKeyItems".ChartMemberKeyItems_Id_not_null	NOT NULL "Id"
+constraint	"ChartMemberKeyItems".ChartMemberKeyItems_KeyItemName_not_null	NOT NULL "KeyItemName"
+constraint	"ChartMemberKeyItems".ChartMemberKeyItems_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"ChartMemberKeyItems".ChartMemberKeyItems_SetAt_not_null	NOT NULL "SetAt"
+constraint	"ChartMemberKeyItems".FK_ChartMemberKeyItems_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
+constraint	"ChartMemberKeyItems".FK_ChartMemberKeyItems_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"ChartMemberKeyItems".PK_ChartMemberKeyItems	PRIMARY KEY ("Id")
+constraint	"ChartPopItemCredits".FK_ChartPopItemCredits_ChartPopItems_ChartPopItemId	FOREIGN KEY ("ChartPopItemId") REFERENCES "ChartPopItems"("Id") ON DELETE CASCADE
+constraint	"ChartPopItemCredits".PK_ChartPopItemCredits	PRIMARY KEY ("Id")
+constraint	"ChartPopItemCredits".SkyPopItemCredits_CharacterName_not_null	NOT NULL "CharacterName"
+constraint	"ChartPopItemCredits".SkyPopItemCredits_CreditedAt_not_null	NOT NULL "CreditedAt"
+constraint	"ChartPopItemCredits".SkyPopItemCredits_Id_not_null	NOT NULL "Id"
+constraint	"ChartPopItemCredits".SkyPopItemCredits_SkyPopItemId_not_null	NOT NULL "ChartPopItemId"
+constraint	"ChartPopItems".CK_ChartPopItems_Kind	CHECK ((("Kind")::text = ANY ((ARRAY['Pop'::character varying, 'Drop'::character varying])::text[])))
+constraint	"ChartPopItems".CK_ChartPopItems_Quantity_NonNegative	CHECK (("Quantity" >= 0))
+constraint	"ChartPopItems".ChartPopItems_Board_not_null	NOT NULL "Board"
+constraint	"ChartPopItems".ChartPopItems_Kind_not_null	NOT NULL "Kind"
+constraint	"ChartPopItems".FK_ChartPopItems_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"ChartPopItems".PK_ChartPopItems	PRIMARY KEY ("Id")
+constraint	"ChartPopItems".SkyPopItems_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"ChartPopItems".SkyPopItems_God_not_null	NOT NULL "Boss"
+constraint	"ChartPopItems".SkyPopItems_Id_not_null	NOT NULL "Id"
+constraint	"ChartPopItems".SkyPopItems_ItemName_not_null	NOT NULL "ItemName"
+constraint	"ChartPopItems".SkyPopItems_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"ChartPopItems".SkyPopItems_Quantity_not_null	NOT NULL "Quantity"
+constraint	"ChartPopItems".SkyPopItems_SortOrder_not_null	NOT NULL "SortOrder"
+constraint	"ChartPopItems".SkyPopItems_UpdatedAt_not_null	NOT NULL "UpdatedAt"
+constraint	"ChartWishlistRequestZones".ChartWishlistRequestZones_Boss_not_null	NOT NULL "Boss"
+constraint	"ChartWishlistRequestZones".ChartWishlistRequestZones_Id_not_null	NOT NULL "Id"
+constraint	"ChartWishlistRequestZones".ChartWishlistRequestZones_RequestId_not_null	NOT NULL "RequestId"
+constraint	"ChartWishlistRequestZones".FK_ChartWishlistRequestZones_ChartWishlistRequests_RequestId	FOREIGN KEY ("RequestId") REFERENCES "ChartWishlistRequests"("Id") ON DELETE CASCADE
+constraint	"ChartWishlistRequestZones".PK_ChartWishlistRequestZones	PRIMARY KEY ("Id")
+constraint	"ChartWishlistRequests".CK_ChartWishlistRequests_Quantity_Positive	CHECK (("Quantity" >= 1))
+constraint	"ChartWishlistRequests".CK_ChartWishlistRequests_Status	CHECK ((("Status")::text = ANY ((ARRAY['Pending'::character varying, 'Fulfilled'::character varying])::text[])))
+constraint	"ChartWishlistRequests".ChartWishlistRequests_Board_not_null	NOT NULL "Board"
+constraint	"ChartWishlistRequests".ChartWishlistRequests_Id_not_null	NOT NULL "Id"
+constraint	"ChartWishlistRequests".ChartWishlistRequests_ItemName_not_null	NOT NULL "ItemName"
+constraint	"ChartWishlistRequests".ChartWishlistRequests_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"ChartWishlistRequests".ChartWishlistRequests_Priority_not_null	NOT NULL "Priority"
+constraint	"ChartWishlistRequests".ChartWishlistRequests_Quantity_not_null	NOT NULL "Quantity"
+constraint	"ChartWishlistRequests".ChartWishlistRequests_RequestedAt_not_null	NOT NULL "RequestedAt"
+constraint	"ChartWishlistRequests".ChartWishlistRequests_RequestedByCharacterName_not_null	NOT NULL "RequestedByCharacterName"
+constraint	"ChartWishlistRequests".ChartWishlistRequests_Status_not_null	NOT NULL "Status"
+constraint	"ChartWishlistRequests".FK_ChartWishlistRequests_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"ChartWishlistRequests".PK_ChartWishlistRequests	PRIMARY KEY ("Id")
+constraint	"ClaimShieldCaptureMembers".ClaimShieldCaptureMembers_CaptureId_not_null	NOT NULL "CaptureId"
+constraint	"ClaimShieldCaptureMembers".ClaimShieldCaptureMembers_CharacterName_not_null	NOT NULL "CharacterName"
+constraint	"ClaimShieldCaptureMembers".ClaimShieldCaptureMembers_Id_not_null	NOT NULL "Id"
+constraint	"ClaimShieldCaptureMembers".ClaimShieldCaptureMembers_Matched_not_null	NOT NULL "Matched"
+constraint	"ClaimShieldCaptureMembers".FK_ClaimShieldCaptureMembers_ClaimShieldCaptures_CaptureId	FOREIGN KEY ("CaptureId") REFERENCES "ClaimShieldCaptures"("Id") ON DELETE CASCADE
+constraint	"ClaimShieldCaptureMembers".PK_ClaimShieldCaptureMembers	PRIMARY KEY ("Id")
+constraint	"ClaimShieldCaptures".ClaimShieldCaptures_CapturedAtUtc_not_null	NOT NULL "CapturedAtUtc"
+constraint	"ClaimShieldCaptures".ClaimShieldCaptures_CreatedAtUtc_not_null	NOT NULL "CreatedAtUtc"
+constraint	"ClaimShieldCaptures".ClaimShieldCaptures_Id_not_null	NOT NULL "Id"
+constraint	"ClaimShieldCaptures".ClaimShieldCaptures_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"ClaimShieldCaptures".ClaimShieldCaptures_MonsterName_not_null	NOT NULL "MonsterName"
+constraint	"ClaimShieldCaptures".ClaimShieldCaptures_TotalPlayers_not_null	NOT NULL "TotalPlayers"
+constraint	"ClaimShieldCaptures".ClaimShieldCaptures_Won_not_null	NOT NULL "Won"
+constraint	"ClaimShieldCaptures".FK_ClaimShieldCaptures_EventHistories_EventHistoryId	FOREIGN KEY ("EventHistoryId") REFERENCES "EventHistories"("Id") ON DELETE SET NULL
+constraint	"ClaimShieldCaptures".FK_ClaimShieldCaptures_Events_EventId	FOREIGN KEY ("EventId") REFERENCES "Events"("Id") ON DELETE SET NULL
+constraint	"ClaimShieldCaptures".FK_ClaimShieldCaptures_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"ClaimShieldCaptures".PK_ClaimShieldCaptures	PRIMARY KEY ("Id")
+constraint	"DiscordActivityUsers".DiscordActivityUsers_CreatedAtUtc_not_null	NOT NULL "CreatedAtUtc"
+constraint	"DiscordActivityUsers".DiscordActivityUsers_DiscordUserId_not_null	NOT NULL "DiscordUserId"
+constraint	"DiscordActivityUsers".DiscordActivityUsers_Id_not_null	NOT NULL "Id"
+constraint	"DiscordActivityUsers".DiscordActivityUsers_Username_not_null	NOT NULL "Username"
+constraint	"DiscordActivityUsers".FK_DiscordActivityUsers_AspNetUsers_IdentityUserId	FOREIGN KEY ("IdentityUserId") REFERENCES "AspNetUsers"("Id") ON DELETE SET NULL
+constraint	"DiscordActivityUsers".PK_DiscordActivityUsers	PRIMARY KEY ("Id")
+constraint	"DkpLedgerEntries".DkpLedgerEntries_Amount_not_null	NOT NULL "Amount"
+constraint	"DkpLedgerEntries".DkpLedgerEntries_DkpPoolPinned_not_null	NOT NULL "DkpPoolPinned"
+constraint	"DkpLedgerEntries".DkpLedgerEntries_EntryType_not_null	NOT NULL "EntryType"
+constraint	"DkpLedgerEntries".DkpLedgerEntries_Id_not_null	NOT NULL "Id"
+constraint	"DkpLedgerEntries".DkpLedgerEntries_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"DkpLedgerEntries".DkpLedgerEntries_OccurredAt_not_null	NOT NULL "OccurredAt"
+constraint	"DkpLedgerEntries".DkpLedgerEntries_Sequence_not_null	NOT NULL "Sequence"
+constraint	"DkpLedgerEntries".FK_DkpLedgerEntries_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE SET NULL
+constraint	"DkpLedgerEntries".FK_DkpLedgerEntries_EventHistories_EventHistoryId	FOREIGN KEY ("EventHistoryId") REFERENCES "EventHistories"("Id") ON DELETE SET NULL
+constraint	"DkpLedgerEntries".FK_DkpLedgerEntries_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"DkpLedgerEntries".PK_DkpLedgerEntries	PRIMARY KEY ("Id")
+constraint	"DkpPoolEventTypes".DkpPoolEventTypes_DkpPoolId_not_null	NOT NULL "DkpPoolId"
+constraint	"DkpPoolEventTypes".DkpPoolEventTypes_EventType_not_null	NOT NULL "EventType"
+constraint	"DkpPoolEventTypes".DkpPoolEventTypes_Id_not_null	NOT NULL "Id"
+constraint	"DkpPoolEventTypes".DkpPoolEventTypes_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"DkpPoolEventTypes".DkpPoolEventTypes_NormalizedEventType_not_null	NOT NULL "NormalizedEventType"
+constraint	"DkpPoolEventTypes".FK_DkpPoolEventTypes_DkpPools_DkpPoolId	FOREIGN KEY ("DkpPoolId") REFERENCES "DkpPools"("Id") ON DELETE CASCADE
+constraint	"DkpPoolEventTypes".FK_DkpPoolEventTypes_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"DkpPoolEventTypes".PK_DkpPoolEventTypes	PRIMARY KEY ("Id")
+constraint	"DkpPools".DkpPools_CreatedAtUtc_not_null	NOT NULL "CreatedAtUtc"
+constraint	"DkpPools".DkpPools_Id_not_null	NOT NULL "Id"
+constraint	"DkpPools".DkpPools_IsDefault_not_null	NOT NULL "IsDefault"
+constraint	"DkpPools".DkpPools_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"DkpPools".DkpPools_Name_not_null	NOT NULL "Name"
+constraint	"DkpPools".DkpPools_SortOrder_not_null	NOT NULL "SortOrder"
+constraint	"DkpPools".FK_DkpPools_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"DkpPools".PK_DkpPools	PRIMARY KEY ("Id")
+constraint	"EventAttendanceWindows".CK_EventAttendanceWindows_OneParent	CHECK ((num_nonnulls("EventId", "EventHistoryId") = 1)) NOT VALID [NOT VALID]
+constraint	"EventAttendanceWindows".EventAttendanceWindows_Id_not_null	NOT NULL "Id"
+constraint	"EventAttendanceWindows".EventAttendanceWindows_IsClosingWindow_not_null	NOT NULL "IsClosingWindow"
+constraint	"EventAttendanceWindows".EventAttendanceWindows_IsKillWindow_not_null	NOT NULL "IsKillWindow"
+constraint	"EventAttendanceWindows".EventAttendanceWindows_PostedAt_not_null	NOT NULL "PostedAt"
+constraint	"EventAttendanceWindows".EventAttendanceWindows_SequenceNumber_not_null	NOT NULL "SequenceNumber"
+constraint	"EventAttendanceWindows".FK_EventAttendanceWindows_EventHistories_EventHistoryId	FOREIGN KEY ("EventHistoryId") REFERENCES "EventHistories"("Id") ON DELETE CASCADE
+constraint	"EventAttendanceWindows".FK_EventAttendanceWindows_Events_EventId	FOREIGN KEY ("EventId") REFERENCES "Events"("Id") ON DELETE CASCADE
+constraint	"EventAttendanceWindows".PK_EventAttendanceWindows	PRIMARY KEY ("Id")
+constraint	"EventComments".EventComments_Body_not_null	NOT NULL "Body"
+constraint	"EventComments".EventComments_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"EventComments".EventComments_EventHistoryId_not_null	NOT NULL "EventHistoryId"
+constraint	"EventComments".EventComments_Id_not_null	NOT NULL "Id"
+constraint	"EventComments".EventComments_IsAnonymous_not_null	NOT NULL "IsAnonymous"
+constraint	"EventComments".EventComments_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"EventComments".FK_EventComments_EventHistories_EventHistoryId	FOREIGN KEY ("EventHistoryId") REFERENCES "EventHistories"("Id") ON DELETE CASCADE
+constraint	"EventComments".PK_EventComments	PRIMARY KEY ("Id")
+constraint	"EventHistories".EventHistories_CountsTowardActive_not_null	NOT NULL "CountsTowardActive"
+constraint	"EventHistories".EventHistories_Id_not_null	NOT NULL "Id"
+constraint	"EventHistories".EventHistories_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"EventHistories".FK_EventHistories_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"EventHistories".FK_EventHistories_PartySetups_PartySetupId	FOREIGN KEY ("PartySetupId") REFERENCES "PartySetups"("Id") ON DELETE SET NULL
+constraint	"EventHistories".PK_EventHistories	PRIMARY KEY ("Id")
+constraint	"EventLootDetails".EventLootDetails_Id_not_null	NOT NULL "Id"
+constraint	"EventLootDetails".FK_EventLootDetails_DkpPools_DkpPoolId	FOREIGN KEY ("DkpPoolId") REFERENCES "DkpPools"("Id") ON DELETE SET NULL
+constraint	"EventLootDetails".FK_EventLootDetails_EventHistories_EventHistoryId	FOREIGN KEY ("EventHistoryId") REFERENCES "EventHistories"("Id") ON DELETE SET NULL
+constraint	"EventLootDetails".FK_EventLootDetails_Events_EventId	FOREIGN KEY ("EventId") REFERENCES "Events"("Id") ON DELETE SET NULL
+constraint	"EventLootDetails".FK_EventLootDetails_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"EventLootDetails".PK_EventLootDetails	PRIMARY KEY ("Id")
+constraint	"EventPartySlotSignups".EventPartySlotSignups_EnfeebReady_not_null	NOT NULL "EnfeebReady"
+constraint	"EventPartySlotSignups".EventPartySlotSignups_EventId_not_null	NOT NULL "EventId"
+constraint	"EventPartySlotSignups".EventPartySlotSignups_Id_not_null	NOT NULL "Id"
+constraint	"EventPartySlotSignups".EventPartySlotSignups_IsAllianceLeader_not_null	NOT NULL "IsAllianceLeader"
+constraint	"EventPartySlotSignups".EventPartySlotSignups_IsPartyLeader_not_null	NOT NULL "IsPartyLeader"
+constraint	"EventPartySlotSignups".EventPartySlotSignups_PartySetupSlotId_not_null	NOT NULL "PartySetupSlotId"
+constraint	"EventPartySlotSignups".EventPartySlotSignups_RelicWeapon_not_null	NOT NULL "RelicWeapon"
+constraint	"EventPartySlotSignups".EventPartySlotSignups_ResistReady_not_null	NOT NULL "ResistReady"
+constraint	"EventPartySlotSignups".EventPartySlotSignups_SignedUpAtUtc_not_null	NOT NULL "SignedUpAtUtc"
+constraint	"EventPartySlotSignups".EventPartySlotSignups_StayNextWindow_not_null	NOT NULL "StayNextWindow"
+constraint	"EventPartySlotSignups".FK_EventPartySlotSignups_Events_EventId	FOREIGN KEY ("EventId") REFERENCES "Events"("Id") ON DELETE CASCADE
+constraint	"EventPartySlotSignups".FK_EventPartySlotSignups_PartySetupSlots_PartySetupSlotId	FOREIGN KEY ("PartySetupSlotId") REFERENCES "PartySetupSlots"("Id") ON DELETE CASCADE
+constraint	"EventPartySlotSignups".PK_EventPartySlotSignups	PRIMARY KEY ("Id")
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_AllianceSortOrder_not_null	NOT NULL "AllianceSortOrder"
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_CapturedAtUtc_not_null	NOT NULL "CapturedAtUtc"
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_EventId_not_null	NOT NULL "EventId"
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_Id_not_null	NOT NULL "Id"
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_IsAllianceLeader_not_null	NOT NULL "IsAllianceLeader"
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_IsPartyLeader_not_null	NOT NULL "IsPartyLeader"
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_PartySortOrder_not_null	NOT NULL "PartySortOrder"
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_SlotSortOrder_not_null	NOT NULL "SlotSortOrder"
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_WasLocked_not_null	NOT NULL "WasLocked"
+constraint	"EventWindowRosterSnapshots".EventWindowRosterSnapshots_WindowNumber_not_null	NOT NULL "WindowNumber"
+constraint	"EventWindowRosterSnapshots".FK_EventWindowRosterSnapshots_Events_EventId	FOREIGN KEY ("EventId") REFERENCES "Events"("Id") ON DELETE CASCADE
+constraint	"EventWindowRosterSnapshots".PK_EventWindowRosterSnapshots	PRIMARY KEY ("Id")
+constraint	"Events".Events_AutoStart_not_null	NOT NULL "AutoStart"
+constraint	"Events".Events_CountsTowardActive_not_null	NOT NULL "CountsTowardActive"
+constraint	"Events".Events_HnmWindowNumber_not_null	NOT NULL "HnmWindowNumber"
+constraint	"Events".Events_Id_not_null	NOT NULL "Id"
+constraint	"Events".Events_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"Events".Events_WdClaimed_not_null	NOT NULL "WdClaimed"
+constraint	"Events".Events_WdKilled_not_null	NOT NULL "WdKilled"
+constraint	"Events".FK_Events_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"Events".FK_Events_PartySetups_PartySetupId	FOREIGN KEY ("PartySetupId") REFERENCES "PartySetups"("Id") ON DELETE SET NULL
+constraint	"Events".FK_Events_Tods_SourceTodId	FOREIGN KEY ("SourceTodId") REFERENCES "Tods"("Id")
+constraint	"Events".PK_Events	PRIMARY KEY ("Id")
+constraint	"HnmRecurringBoards".FK_HnmRecurringBoards_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"HnmRecurringBoards".FK_HnmRecurringBoards_PartySetups_PartySetupId	FOREIGN KEY ("PartySetupId") REFERENCES "PartySetups"("Id") ON DELETE SET NULL
+constraint	"HnmRecurringBoards".HnmRecurringBoards_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"HnmRecurringBoards".HnmRecurringBoards_Enabled_not_null	NOT NULL "Enabled"
+constraint	"HnmRecurringBoards".HnmRecurringBoards_Id_not_null	NOT NULL "Id"
+constraint	"HnmRecurringBoards".HnmRecurringBoards_LeadHours_not_null	NOT NULL "LeadHours"
+constraint	"HnmRecurringBoards".HnmRecurringBoards_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"HnmRecurringBoards".HnmRecurringBoards_MonsterName_not_null	NOT NULL "MonsterName"
+constraint	"HnmRecurringBoards".HnmRecurringBoards_SpawnKey_not_null	NOT NULL "SpawnKey"
+constraint	"HnmRecurringBoards".HnmRecurringBoards_UpdatedAt_not_null	NOT NULL "UpdatedAt"
+constraint	"HnmRecurringBoards".PK_HnmRecurringBoards	PRIMARY KEY ("Id")
+constraint	"Invites".FK_Invites_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
+constraint	"Invites".FK_Invites_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"Invites".Invites_Id_not_null	NOT NULL "Id"
+constraint	"Invites".Invites_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"Invites".Invites_Status_not_null	NOT NULL "Status"
+constraint	"Invites".PK_Invites	PRIMARY KEY ("Id")
+constraint	"Items".FK_Items_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"Items".Items_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"Items".Items_Id_not_null	NOT NULL "Id"
+constraint	"Items".Items_IsSold_not_null	NOT NULL "IsSold"
+constraint	"Items".Items_ItemName_not_null	NOT NULL "ItemName"
+constraint	"Items".Items_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"Items".Items_Quantity_not_null	NOT NULL "Quantity"
+constraint	"Items".Items_UpdatedAt_not_null	NOT NULL "UpdatedAt"
+constraint	"Items".PK_Items	PRIMARY KEY ("Id")
+constraint	"JobRatings".FK_JobRatings_AspNetUsers_RaterAppUserId	FOREIGN KEY ("RaterAppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
+constraint	"JobRatings".FK_JobRatings_AspNetUsers_TargetAppUserId	FOREIGN KEY ("TargetAppUserId") REFERENCES "AspNetUsers"("Id") ON DELETE CASCADE
+constraint	"JobRatings".FK_JobRatings_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"JobRatings".JobRatings_CharacterSlot_not_null	NOT NULL "CharacterSlot"
+constraint	"JobRatings".JobRatings_Gear_not_null	NOT NULL "Gear"
+constraint	"JobRatings".JobRatings_HasRelic_not_null	NOT NULL "HasRelic"
+constraint	"JobRatings".JobRatings_Id_not_null	NOT NULL "Id"
+constraint	"JobRatings".JobRatings_JobIndex_not_null	NOT NULL "JobIndex"
+constraint	"JobRatings".JobRatings_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"JobRatings".JobRatings_RaterAppUserId_not_null	NOT NULL "RaterAppUserId"
+constraint	"JobRatings".JobRatings_Skill_not_null	NOT NULL "Skill"
+constraint	"JobRatings".JobRatings_TargetAppUserId_not_null	NOT NULL "TargetAppUserId"
+constraint	"JobRatings".JobRatings_UpdatedAt_not_null	NOT NULL "UpdatedAt"
+constraint	"JobRatings".PK_JobRatings	PRIMARY KEY ("Id")
+constraint	"JournalEntries".CK_JournalEntries_ReasonRequiredForFixes	CHECK (((("Kind")::text <> ALL ((ARRAY['Reversal'::character varying, 'Correction'::character varying])::text[])) OR (("CorrectionReason" IS NOT NULL) AND (length(btrim(("CorrectionReason")::text)) > 0))))
+constraint	"JournalEntries".FK_JournalEntries_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"JournalEntries".JournalEntries_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"JournalEntries".JournalEntries_EntryNumber_not_null	NOT NULL "EntryNumber"
+constraint	"JournalEntries".JournalEntries_Id_not_null	NOT NULL "Id"
+constraint	"JournalEntries".JournalEntries_Kind_not_null	NOT NULL "Kind"
+constraint	"JournalEntries".JournalEntries_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"JournalEntries".JournalEntries_Sequence_not_null	NOT NULL "Sequence"
+constraint	"JournalEntries".JournalEntries_Source_not_null	NOT NULL "Source"
+constraint	"JournalEntries".JournalEntries_Status_not_null	NOT NULL "Status"
+constraint	"JournalEntries".JournalEntries_TransactionDate_not_null	NOT NULL "TransactionDate"
+constraint	"JournalEntries".PK_JournalEntries	PRIMARY KEY ("Id")
+constraint	"JournalEntryLines".CK_JournalEntryLines_LineNumber_Positive	CHECK (("LineNumber" >= 1))
+constraint	"JournalEntryLines".FK_JournalEntryLines_JournalEntries_JournalEntryId	FOREIGN KEY ("JournalEntryId") REFERENCES "JournalEntries"("Id") ON DELETE CASCADE
+constraint	"JournalEntryLines".FK_JournalEntryLines_LedgerAccounts_LedgerAccountId	FOREIGN KEY ("LedgerAccountId") REFERENCES "LedgerAccounts"("Id") ON DELETE RESTRICT
+constraint	"JournalEntryLines".JournalEntryLines_AccountName_not_null	NOT NULL "AccountName"
+constraint	"JournalEntryLines".JournalEntryLines_AccountNumber_not_null	NOT NULL "AccountNumber"
+constraint	"JournalEntryLines".JournalEntryLines_Amount_not_null	NOT NULL "Amount"
+constraint	"JournalEntryLines".JournalEntryLines_Id_not_null	NOT NULL "Id"
+constraint	"JournalEntryLines".JournalEntryLines_JournalEntryId_not_null	NOT NULL "JournalEntryId"
+constraint	"JournalEntryLines".JournalEntryLines_LedgerAccountId_not_null	NOT NULL "LedgerAccountId"
+constraint	"JournalEntryLines".JournalEntryLines_LineNumber_not_null	NOT NULL "LineNumber"
+constraint	"JournalEntryLines".JournalEntryLines_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"JournalEntryLines".JournalEntryLines_TransactionDate_not_null	NOT NULL "TransactionDate"
+constraint	"JournalEntryLines".PK_JournalEntryLines	PRIMARY KEY ("Id")
+constraint	"LedgerAccounts".CK_LedgerAccounts_AccountNumber_Range	CHECK ((("AccountNumber" >= 1000) AND ("AccountNumber" <= 5999)))
+constraint	"LedgerAccounts".FK_LedgerAccounts_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"LedgerAccounts".LedgerAccounts_AccountNumber_not_null	NOT NULL "AccountNumber"
+constraint	"LedgerAccounts".LedgerAccounts_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"LedgerAccounts".LedgerAccounts_Id_not_null	NOT NULL "Id"
+constraint	"LedgerAccounts".LedgerAccounts_IsActive_not_null	NOT NULL "IsActive"
+constraint	"LedgerAccounts".LedgerAccounts_IsCash_not_null	NOT NULL "IsCash"
+constraint	"LedgerAccounts".LedgerAccounts_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"LedgerAccounts".LedgerAccounts_Name_not_null	NOT NULL "Name"
+constraint	"LedgerAccounts".PK_LedgerAccounts	PRIMARY KEY ("Id")
+constraint	"LinkshellBanners".FK_LinkshellBanners_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"LinkshellBanners".LinkshellBanners_ContentType_not_null	NOT NULL "ContentType"
+constraint	"LinkshellBanners".LinkshellBanners_ImageData_not_null	NOT NULL "ImageData"
+constraint	"LinkshellBanners".LinkshellBanners_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"LinkshellBanners".LinkshellBanners_UpdatedAt_not_null	NOT NULL "UpdatedAt"
+constraint	"LinkshellBanners".PK_LinkshellBanners	PRIMARY KEY ("LinkshellId")
+constraint	"LinkshellChannelRoutes".FK_LinkshellChannelRoutes_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"LinkshellChannelRoutes".LinkshellChannelRoutes_ChannelId_not_null	NOT NULL "ChannelId"
+constraint	"LinkshellChannelRoutes".LinkshellChannelRoutes_CreatedAtUtc_not_null	NOT NULL "CreatedAtUtc"
+constraint	"LinkshellChannelRoutes".LinkshellChannelRoutes_Id_not_null	NOT NULL "Id"
+constraint	"LinkshellChannelRoutes".LinkshellChannelRoutes_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"LinkshellChannelRoutes".LinkshellChannelRoutes_PostAuctions_not_null	NOT NULL "PostAuctions"
+constraint	"LinkshellChannelRoutes".LinkshellChannelRoutes_PostDkpSheet_not_null	NOT NULL "PostDkpSheet"
+constraint	"LinkshellChannelRoutes".LinkshellChannelRoutes_PostEvents_not_null	NOT NULL "PostEvents"
+constraint	"LinkshellChannelRoutes".LinkshellChannelRoutes_PostLoot_not_null	NOT NULL "PostLoot"
+constraint	"LinkshellChannelRoutes".LinkshellChannelRoutes_PostTodBoard_not_null	NOT NULL "PostTodBoard"
+constraint	"LinkshellChannelRoutes".PK_LinkshellChannelRoutes	PRIMARY KEY ("Id")
+constraint	"LinkshellMonsterTimings".FK_LinkshellMonsterTimings_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_AdditionalSeconds_not_null	NOT NULL "AdditionalSeconds"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_ClaimShieldEnabled_not_null	NOT NULL "ClaimShieldEnabled"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_CooldownMinutes_not_null	NOT NULL "CooldownMinutes"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_CreatedAtUtc_not_null	NOT NULL "CreatedAtUtc"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_Id_not_null	NOT NULL "Id"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_IsCustom_not_null	NOT NULL "IsCustom"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_MonsterName_not_null	NOT NULL "MonsterName"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_NormalizedMonsterName_not_null	NOT NULL "NormalizedMonsterName"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_SortOrder_not_null	NOT NULL "SortOrder"
+constraint	"LinkshellMonsterTimings".LinkshellMonsterTimings_UpdatedAtUtc_not_null	NOT NULL "UpdatedAtUtc"
+constraint	"LinkshellMonsterTimings".PK_LinkshellMonsterTimings	PRIMARY KEY ("Id")
+constraint	"LinkshellPresences".FK_LinkshellPresences_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"LinkshellPresences".LinkshellPresences_AllianceNumber_not_null	NOT NULL "AllianceNumber"
+constraint	"LinkshellPresences".LinkshellPresences_CharacterName_not_null	NOT NULL "CharacterName"
+constraint	"LinkshellPresences".LinkshellPresences_Id_not_null	NOT NULL "Id"
+constraint	"LinkshellPresences".LinkshellPresences_IsAllianceLeader_not_null	NOT NULL "IsAllianceLeader"
+constraint	"LinkshellPresences".LinkshellPresences_LastSeenUtc_not_null	NOT NULL "LastSeenUtc"
+constraint	"LinkshellPresences".LinkshellPresences_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"LinkshellPresences".PK_LinkshellPresences	PRIMARY KEY ("Id")
+constraint	"LinkshellRoles".AK_LinkshellRoles_LinkshellId_Id	UNIQUE ("LinkshellId", "Id")
+constraint	"LinkshellRoles".FK_LinkshellRoles_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"LinkshellRoles".LinkshellRoles_CanAddLoot_not_null	NOT NULL "CanAddLoot"
+constraint	"LinkshellRoles".LinkshellRoles_CanAuditDkp_not_null	NOT NULL "CanAuditDkp"
+constraint	"LinkshellRoles".LinkshellRoles_CanBid_not_null	NOT NULL "CanBid"
+constraint	"LinkshellRoles".LinkshellRoles_CanCustomizeLinkshell_not_null	NOT NULL "CanCustomizeLinkshell"
+constraint	"LinkshellRoles".LinkshellRoles_CanLockAuctions_not_null	NOT NULL "CanLockAuctions"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageAnnouncements_not_null	NOT NULL "CanManageAnnouncements"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageAttendanceWithAddon_not_null	NOT NULL "CanManageAttendanceWithAddon"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageAuctions_not_null	NOT NULL "CanManageAuctions"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageCharts_not_null	NOT NULL "CanManageCharts"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageEvents_not_null	NOT NULL "CanManageEvents"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageInventory_not_null	NOT NULL "CanManageInventory"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageInvites_not_null	NOT NULL "CanManageInvites"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageMembers_not_null	NOT NULL "CanManageMembers"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageParties_not_null	NOT NULL "CanManageParties"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageRoles_not_null	NOT NULL "CanManageRoles"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageRules_not_null	NOT NULL "CanManageRules"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageTods_not_null	NOT NULL "CanManageTods"
+constraint	"LinkshellRoles".LinkshellRoles_CanManageTreasury_not_null	NOT NULL "CanManageTreasury"
+constraint	"LinkshellRoles".LinkshellRoles_CanModerateLiveEvent_not_null	NOT NULL "CanModerateLiveEvent"
+constraint	"LinkshellRoles".LinkshellRoles_CanSubmitTodForApproval_not_null	NOT NULL "CanSubmitTodForApproval"
+constraint	"LinkshellRoles".LinkshellRoles_CanUseAddon_not_null	NOT NULL "CanUseAddon"
+constraint	"LinkshellRoles".LinkshellRoles_Id_not_null	NOT NULL "Id"
+constraint	"LinkshellRoles".LinkshellRoles_IsSystem_not_null	NOT NULL "IsSystem"
+constraint	"LinkshellRoles".LinkshellRoles_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"LinkshellRoles".LinkshellRoles_Name_not_null	NOT NULL "Name"
+constraint	"LinkshellRoles".LinkshellRoles_SortOrder_not_null	NOT NULL "SortOrder"
+constraint	"LinkshellRoles".PK_LinkshellRoles	PRIMARY KEY ("Id")
+constraint	"Linkshells".CK_Linkshells_HnmAttendanceMode	CHECK ((("HnmAttendanceMode")::text = ANY ((ARRAY['Standard'::character varying, 'Wd'::character varying])::text[]))) NOT VALID [NOT VALID]
+constraint	"Linkshells".FK_Linkshells_AspNetUsers_AppUserId	FOREIGN KEY ("AppUserId") REFERENCES "AspNetUsers"("Id")
+constraint	"Linkshells".Linkshells_ActiveAfterAttendances_not_null	NOT NULL "ActiveAfterAttendances"
+constraint	"Linkshells".Linkshells_AuctionsLocked_not_null	NOT NULL "AuctionsLocked"
+constraint	"Linkshells".Linkshells_DkpRoundingIncrement_not_null	NOT NULL "DkpRoundingIncrement"
+constraint	"Linkshells".Linkshells_EnableActivityTracking_not_null	NOT NULL "EnableActivityTracking"
+constraint	"Linkshells".Linkshells_EnableAuctions_not_null	NOT NULL "EnableAuctions"
+constraint	"Linkshells".Linkshells_EnableDkp_not_null	NOT NULL "EnableDkp"
+constraint	"Linkshells".Linkshells_EnableEndgame_not_null	NOT NULL "EnableEndgame"
+constraint	"Linkshells".Linkshells_EnableEvents_not_null	NOT NULL "EnableEvents"
+constraint	"Linkshells".Linkshells_EnableHnmSection_not_null	NOT NULL "EnableHnmSection"
+constraint	"Linkshells".Linkshells_EnableRevenue_not_null	NOT NULL "EnableTreasury"
+constraint	"Linkshells".Linkshells_EnableToDs_not_null	NOT NULL "EnableToDs"
+constraint	"Linkshells".Linkshells_HiddenTodMonsters_not_null	NOT NULL "HiddenTodMonsters"
+constraint	"Linkshells".Linkshells_HnmAttendanceMode_not_null	NOT NULL "HnmAttendanceMode"
+constraint	"Linkshells".Linkshells_HnmStandardClaimBonus_not_null	NOT NULL "HnmStandardClaimBonus"
+constraint	"Linkshells".Linkshells_HnmStandardCloseBonus_not_null	NOT NULL "HnmStandardCloseBonus"
+constraint	"Linkshells".Linkshells_HnmStandardKillBonus_not_null	NOT NULL "HnmStandardKillBonus"
+constraint	"Linkshells".Linkshells_HnmStandardMiscBonus_not_null	NOT NULL "HnmStandardMiscBonus"
+constraint	"Linkshells".Linkshells_HnmStandardOpenBonus_not_null	NOT NULL "HnmStandardOpenBonus"
+constraint	"Linkshells".Linkshells_HnmStandardWindowBonus_not_null	NOT NULL "HnmStandardWindowBonus"
+constraint	"Linkshells".Linkshells_Id_not_null	NOT NULL "Id"
+constraint	"Linkshells".Linkshells_InactiveAfterAbsences_not_null	NOT NULL "InactiveAfterAbsences"
+constraint	"Linkshells".Linkshells_LockToDiscordGuild_not_null	NOT NULL "LockToDiscordGuild"
+constraint	"Linkshells".Linkshells_LootStructure_not_null	NOT NULL "LootStructure"
+constraint	"Linkshells".Linkshells_OutsidePartySignupEnabled_not_null	NOT NULL "OutsidePartySignupEnabled"
+constraint	"Linkshells".Linkshells_WdClaimBonus_not_null	NOT NULL "WdClaimBonus"
+constraint	"Linkshells".Linkshells_WdCloseBonus_not_null	NOT NULL "WdCloseBonus"
+constraint	"Linkshells".Linkshells_WdDkpPerWindow_not_null	NOT NULL "WdDkpPerWindow"
+constraint	"Linkshells".Linkshells_WdKillBonus_not_null	NOT NULL "WdKillBonus"
+constraint	"Linkshells".Linkshells_WdOpenBonus_not_null	NOT NULL "WdOpenBonus"
+constraint	"Linkshells".PK_Linkshells	PRIMARY KEY ("Id")
+constraint	"PartySetupAlliances".FK_PartySetupAlliances_PartySetups_PartySetupId	FOREIGN KEY ("PartySetupId") REFERENCES "PartySetups"("Id") ON DELETE CASCADE
+constraint	"PartySetupAlliances".PK_PartySetupAlliances	PRIMARY KEY ("Id")
+constraint	"PartySetupAlliances".PartySetupAlliances_Id_not_null	NOT NULL "Id"
+constraint	"PartySetupAlliances".PartySetupAlliances_Name_not_null	NOT NULL "Name"
+constraint	"PartySetupAlliances".PartySetupAlliances_PartySetupId_not_null	NOT NULL "PartySetupId"
+constraint	"PartySetupAlliances".PartySetupAlliances_SortOrder_not_null	NOT NULL "SortOrder"
+constraint	"PartySetupParties".FK_PartySetupParties_PartySetupAlliances_PartySetupAllianceId	FOREIGN KEY ("PartySetupAllianceId") REFERENCES "PartySetupAlliances"("Id") ON DELETE CASCADE
+constraint	"PartySetupParties".PK_PartySetupParties	PRIMARY KEY ("Id")
+constraint	"PartySetupParties".PartySetupParties_Id_not_null	NOT NULL "Id"
+constraint	"PartySetupParties".PartySetupParties_PartySetupAllianceId_not_null	NOT NULL "PartySetupAllianceId"
+constraint	"PartySetupParties".PartySetupParties_SortOrder_not_null	NOT NULL "SortOrder"
+constraint	"PartySetupSlots".FK_PartySetupSlots_PartySetupParties_PartySetupPartyId	FOREIGN KEY ("PartySetupPartyId") REFERENCES "PartySetupParties"("Id") ON DELETE CASCADE
+constraint	"PartySetupSlots".PK_PartySetupSlots	PRIMARY KEY ("Id")
+constraint	"PartySetupSlots".PartySetupSlots_Id_not_null	NOT NULL "Id"
+constraint	"PartySetupSlots".PartySetupSlots_IsPartyLeader_not_null	NOT NULL "IsPartyLeader"
+constraint	"PartySetupSlots".PartySetupSlots_PartySetupPartyId_not_null	NOT NULL "PartySetupPartyId"
+constraint	"PartySetupSlots".PartySetupSlots_RequirementType_not_null	NOT NULL "RequirementType"
+constraint	"PartySetupSlots".PartySetupSlots_SortOrder_not_null	NOT NULL "SortOrder"
+constraint	"PartySetups".FK_PartySetups_Events_OwnerEventId	FOREIGN KEY ("OwnerEventId") REFERENCES "Events"("Id") ON DELETE CASCADE
+constraint	"PartySetups".FK_PartySetups_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"PartySetups".FK_PartySetups_PartySetups_ClonedFromPartySetupId	FOREIGN KEY ("ClonedFromPartySetupId") REFERENCES "PartySetups"("Id") ON DELETE SET NULL
+constraint	"PartySetups".PK_PartySetups	PRIMARY KEY ("Id")
+constraint	"PartySetups".PartySetups_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"PartySetups".PartySetups_Id_not_null	NOT NULL "Id"
+constraint	"PartySetups".PartySetups_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"PartySetups".PartySetups_Name_not_null	NOT NULL "Name"
+constraint	"PartySetups".PartySetups_UpdatedAt_not_null	NOT NULL "UpdatedAt"
+constraint	"PendingTodSubmissions".CK_PendingTodSubmissions_CooldownMinutes_Positive	CHECK ((("CooldownMinutes" IS NULL) OR ("CooldownMinutes" > 0)))
+constraint	"PendingTodSubmissions".CK_PendingTodSubmissions_IntervalMinutes_Positive	CHECK ((("IntervalMinutes" IS NULL) OR ("IntervalMinutes" > 0)))
+constraint	"PendingTodSubmissions".FK_PendingTodSubmissions_AspNetUsers_SubmittedByAppUserId	FOREIGN KEY ("SubmittedByAppUserId") REFERENCES "AspNetUsers"("Id")
+constraint	"PendingTodSubmissions".FK_PendingTodSubmissions_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"PendingTodSubmissions".PK_PendingTodSubmissions	PRIMARY KEY ("Id")
+constraint	"PendingTodSubmissions".PendingTodSubmissions_AdditionalSeconds_not_null	NOT NULL "AdditionalSeconds"
+constraint	"PendingTodSubmissions".PendingTodSubmissions_Hq_not_null	NOT NULL "Hq"
+constraint	"PendingTodSubmissions".PendingTodSubmissions_Id_not_null	NOT NULL "Id"
+constraint	"PendingTodSubmissions".PendingTodSubmissions_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"PendingTodSubmissions".PendingTodSubmissions_SubmittedAtUtc_not_null	NOT NULL "SubmittedAtUtc"
+constraint	"PlaceholderClaimRequests".FK_PlaceholderClaimRequests_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"PlaceholderClaimRequests".PK_PlaceholderClaimRequests	PRIMARY KEY ("Id")
+constraint	"PlaceholderClaimRequests".PlaceholderClaimRequests_CreatedAtUtc_not_null	NOT NULL "CreatedAtUtc"
+constraint	"PlaceholderClaimRequests".PlaceholderClaimRequests_Id_not_null	NOT NULL "Id"
+constraint	"PlaceholderClaimRequests".PlaceholderClaimRequests_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"PlaceholderClaimRequests".PlaceholderClaimRequests_PlaceholderAppUserId_not_null	NOT NULL "PlaceholderAppUserId"
+constraint	"Rules".FK_Rules_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"Rules".PK_Rules	PRIMARY KEY ("Id")
+constraint	"Rules".Rules_CreatedAt_not_null	NOT NULL "CreatedAt"
+constraint	"Rules".Rules_Id_not_null	NOT NULL "Id"
+constraint	"Rules".Rules_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"Rules".Rules_RuleDetails_not_null	NOT NULL "RuleDetails"
+constraint	"Rules".Rules_RuleTitle_not_null	NOT NULL "RuleTitle"
+constraint	"Tods".CK_Tods_CooldownMinutes_Positive	CHECK ((("CooldownMinutes" IS NULL) OR ("CooldownMinutes" > 0)))
+constraint	"Tods".CK_Tods_IntervalMinutes_Positive	CHECK ((("IntervalMinutes" IS NULL) OR ("IntervalMinutes" > 0)))
+constraint	"Tods".FK_Tods_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"Tods".PK_Tods	PRIMARY KEY ("Id")
+constraint	"Tods".Tods_AdditionalSeconds_not_null	NOT NULL "AdditionalSeconds"
+constraint	"Tods".Tods_Hq_not_null	NOT NULL "Hq"
+constraint	"Tods".Tods_Id_not_null	NOT NULL "Id"
+constraint	"Tods".Tods_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"WindowEventMemberDkps".FK_WindowEventMemberDkps_WindowEvents_WindowEventId	FOREIGN KEY ("WindowEventId") REFERENCES "WindowEvents"("Id") ON DELETE CASCADE
+constraint	"WindowEventMemberDkps".PK_WindowEventMemberDkps	PRIMARY KEY ("Id")
+constraint	"WindowEventMemberDkps".WindowEventMemberDkps_CharacterName_not_null	NOT NULL "CharacterName"
+constraint	"WindowEventMemberDkps".WindowEventMemberDkps_DkpAmount_not_null	NOT NULL "DkpAmount"
+constraint	"WindowEventMemberDkps".WindowEventMemberDkps_Id_not_null	NOT NULL "Id"
+constraint	"WindowEventMemberDkps".WindowEventMemberDkps_WindowEventId_not_null	NOT NULL "WindowEventId"
+constraint	"WindowEvents".CK_WindowEvents_EntryType	CHECK ((("EntryType" IS NULL) OR (("EntryType")::text = ANY ((ARRAY['Kings Camp'::character varying, 'Wyrms Camp'::character varying, 'Misc Camp'::character varying, 'Kill'::character varying])::text[])))) NOT VALID [NOT VALID]
+constraint	"WindowEvents".CK_WindowEvents_Status	CHECK ((("Status")::text = ANY ((ARRAY['Open'::character varying, 'Closed'::character varying, 'Archived'::character varying])::text[]))) NOT VALID [NOT VALID]
+constraint	"WindowEvents".FK_WindowEvents_EventHistories_CampEventHistoryId	FOREIGN KEY ("CampEventHistoryId") REFERENCES "EventHistories"("Id") ON DELETE SET NULL
+constraint	"WindowEvents".FK_WindowEvents_Events_SourceEventId	FOREIGN KEY ("SourceEventId") REFERENCES "Events"("Id") ON DELETE SET NULL
+constraint	"WindowEvents".FK_WindowEvents_Linkshells_LinkshellId	FOREIGN KEY ("LinkshellId") REFERENCES "Linkshells"("Id") ON DELETE CASCADE
+constraint	"WindowEvents".PK_WindowEvents	PRIMARY KEY ("Id")
+constraint	"WindowEvents".WindowEvents_CreatedAtUtc_not_null	NOT NULL "CreatedAtUtc"
+constraint	"WindowEvents".WindowEvents_FirstCapturedAtUtc_not_null	NOT NULL "FirstCapturedAtUtc"
+constraint	"WindowEvents".WindowEvents_Id_not_null	NOT NULL "Id"
+constraint	"WindowEvents".WindowEvents_LastCapturedAtUtc_not_null	NOT NULL "LastCapturedAtUtc"
+constraint	"WindowEvents".WindowEvents_LinkshellId_not_null	NOT NULL "LinkshellId"
+constraint	"WindowEvents".WindowEvents_PerCaptureDkp_not_null	NOT NULL "PerCaptureDkp"
+constraint	"WindowEvents".WindowEvents_Status_not_null	NOT NULL "Status"
+constraint	"__EFMigrationsHistory".PK___EFMigrationsHistory	PRIMARY KEY ("MigrationId")
+constraint	"__EFMigrationsHistory".__EFMigrationsHistory_MigrationId_not_null	NOT NULL "MigrationId"
+constraint	"__EFMigrationsHistory".__EFMigrationsHistory_ProductVersion_not_null	NOT NULL "ProductVersion"
+index	AddonApiTokens.IX_AddonApiTokens_IssuedToAppUserId	CREATE INDEX "IX_AddonApiTokens_IssuedToAppUserId" ON public."AddonApiTokens" USING btree ("IssuedToAppUserId")
+index	AddonApiTokens.IX_AddonApiTokens_LinkshellId	CREATE INDEX "IX_AddonApiTokens_LinkshellId" ON public."AddonApiTokens" USING btree ("LinkshellId")
+index	AddonApiTokens.IX_AddonApiTokens_TokenHash	CREATE UNIQUE INDEX "IX_AddonApiTokens_TokenHash" ON public."AddonApiTokens" USING btree ("TokenHash")
+index	AddonApiTokens.PK_AddonApiTokens	CREATE UNIQUE INDEX "PK_AddonApiTokens" ON public."AddonApiTokens" USING btree ("Id")
+index	AddonPairingCodes.IX_AddonPairingCodes_Code	CREATE UNIQUE INDEX "IX_AddonPairingCodes_Code" ON public."AddonPairingCodes" USING btree ("Code")
+index	AddonPairingCodes.IX_AddonPairingCodes_ExpiresAt	CREATE INDEX "IX_AddonPairingCodes_ExpiresAt" ON public."AddonPairingCodes" USING btree ("ExpiresAt")
+index	AddonPairingCodes.IX_AddonPairingCodes_IssuedToAppUserId	CREATE INDEX "IX_AddonPairingCodes_IssuedToAppUserId" ON public."AddonPairingCodes" USING btree ("IssuedToAppUserId")
+index	AddonPairingCodes.IX_AddonPairingCodes_LinkshellId	CREATE INDEX "IX_AddonPairingCodes_LinkshellId" ON public."AddonPairingCodes" USING btree ("LinkshellId")
+index	AddonPairingCodes.PK_AddonPairingCodes	CREATE UNIQUE INDEX "PK_AddonPairingCodes" ON public."AddonPairingCodes" USING btree ("Id")
+index	Announcements.IX_Announcements_LinkshellId_CreatedAt	CREATE INDEX "IX_Announcements_LinkshellId_CreatedAt" ON public."Announcements" USING btree ("LinkshellId", "CreatedAt")
+index	Announcements.PK_Announcements	CREATE UNIQUE INDEX "PK_Announcements" ON public."Announcements" USING btree ("Id")
+index	AppSettings.PK_AppSettings	CREATE UNIQUE INDEX "PK_AppSettings" ON public."AppSettings" USING btree ("Key")
+index	AppUserEventHistories.IX_AppUserEventHistories_AppUserId	CREATE INDEX "IX_AppUserEventHistories_AppUserId" ON public."AppUserEventHistories" USING btree ("AppUserId")
+index	AppUserEventHistories.IX_AppUserEventHistories_EventHistoryId_AppUserId	CREATE UNIQUE INDEX "IX_AppUserEventHistories_EventHistoryId_AppUserId" ON public."AppUserEventHistories" USING btree ("EventHistoryId", "AppUserId") WHERE ("AppUserId" IS NOT NULL)
+index	AppUserEventHistories.PK_AppUserEventHistories	CREATE UNIQUE INDEX "PK_AppUserEventHistories" ON public."AppUserEventHistories" USING btree ("Id")
+index	AppUserEventStatusLedgers.IX_AppUserEventStatusLedgers_AppUserEventId_OccurredAt	CREATE INDEX "IX_AppUserEventStatusLedgers_AppUserEventId_OccurredAt" ON public."AppUserEventStatusLedgers" USING btree ("AppUserEventId", "OccurredAt")
+index	AppUserEventStatusLedgers.IX_AppUserEventStatusLedgers_EventId	CREATE INDEX "IX_AppUserEventStatusLedgers_EventId" ON public."AppUserEventStatusLedgers" USING btree ("EventId")
+index	AppUserEventStatusLedgers.PK_AppUserEventStatusLedgers	CREATE UNIQUE INDEX "PK_AppUserEventStatusLedgers" ON public."AppUserEventStatusLedgers" USING btree ("Id")
+index	AppUserEventWindows.IX_AppUserEventWindows_AppUserEventId_EventAttendanceWindowId	CREATE UNIQUE INDEX "IX_AppUserEventWindows_AppUserEventId_EventAttendanceWindowId" ON public."AppUserEventWindows" USING btree ("AppUserEventId", "EventAttendanceWindowId")
+index	AppUserEventWindows.IX_AppUserEventWindows_EventAttendanceWindowId_AppUserId	CREATE UNIQUE INDEX "IX_AppUserEventWindows_EventAttendanceWindowId_AppUserId" ON public."AppUserEventWindows" USING btree ("EventAttendanceWindowId", "AppUserId")
+index	AppUserEventWindows.PK_AppUserEventWindows	CREATE UNIQUE INDEX "PK_AppUserEventWindows" ON public."AppUserEventWindows" USING btree ("Id")
+index	AppUserEvents.IX_AppUserEvents_AppUserId	CREATE INDEX "IX_AppUserEvents_AppUserId" ON public."AppUserEvents" USING btree ("AppUserId")
+index	AppUserEvents.IX_AppUserEvents_EventId_AppUserId	CREATE UNIQUE INDEX "IX_AppUserEvents_EventId_AppUserId" ON public."AppUserEvents" USING btree ("EventId", "AppUserId") WHERE ("AppUserId" IS NOT NULL)
+index	AppUserEvents.PK_AppUserEvents	CREATE UNIQUE INDEX "PK_AppUserEvents" ON public."AppUserEvents" USING btree ("Id")
+index	AppUserLinkshells.IX_AppUserLinkshells_AppUserId	CREATE INDEX "IX_AppUserLinkshells_AppUserId" ON public."AppUserLinkshells" USING btree ("AppUserId")
+index	AppUserLinkshells.IX_AppUserLinkshells_LinkshellId_AppUserId	CREATE UNIQUE INDEX "IX_AppUserLinkshells_LinkshellId_AppUserId" ON public."AppUserLinkshells" USING btree ("LinkshellId", "AppUserId") WHERE ("AppUserId" IS NOT NULL)
+index	AppUserLinkshells.IX_AppUserLinkshells_LinkshellId_LinkshellRoleId	CREATE INDEX "IX_AppUserLinkshells_LinkshellId_LinkshellRoleId" ON public."AppUserLinkshells" USING btree ("LinkshellId", "LinkshellRoleId")
+index	AppUserLinkshells.PK_AppUserLinkshells	CREATE UNIQUE INDEX "PK_AppUserLinkshells" ON public."AppUserLinkshells" USING btree ("Id")
+index	AspNetUserClaims.IX_AspNetUserClaims_UserId	CREATE INDEX "IX_AspNetUserClaims_UserId" ON public."AspNetUserClaims" USING btree ("UserId")
+index	AspNetUserClaims.PK_AspNetUserClaims	CREATE UNIQUE INDEX "PK_AspNetUserClaims" ON public."AspNetUserClaims" USING btree ("Id")
+index	AspNetUserLogins.IX_AspNetUserLogins_UserId	CREATE INDEX "IX_AspNetUserLogins_UserId" ON public."AspNetUserLogins" USING btree ("UserId")
+index	AspNetUserLogins.PK_AspNetUserLogins	CREATE UNIQUE INDEX "PK_AspNetUserLogins" ON public."AspNetUserLogins" USING btree ("LoginProvider", "ProviderKey")
+index	AspNetUserTokens.PK_AspNetUserTokens	CREATE UNIQUE INDEX "PK_AspNetUserTokens" ON public."AspNetUserTokens" USING btree ("UserId", "LoginProvider", "Name")
+index	AspNetUsers.EmailIndex	CREATE INDEX "EmailIndex" ON public."AspNetUsers" USING btree ("NormalizedEmail")
+index	AspNetUsers.PK_AspNetUsers	CREATE UNIQUE INDEX "PK_AspNetUsers" ON public."AspNetUsers" USING btree ("Id")
+index	AspNetUsers.UserNameIndex	CREATE UNIQUE INDEX "UserNameIndex" ON public."AspNetUsers" USING btree ("NormalizedUserName")
+index	AttendanceSnapshotEntries.IX_AttendanceSnapshotEntries_SnapshotId	CREATE INDEX "IX_AttendanceSnapshotEntries_SnapshotId" ON public."AttendanceSnapshotEntries" USING btree ("SnapshotId")
+index	AttendanceSnapshotEntries.PK_AttendanceSnapshotEntries	CREATE UNIQUE INDEX "PK_AttendanceSnapshotEntries" ON public."AttendanceSnapshotEntries" USING btree ("Id")
+index	AttendanceSnapshots.IX_AttendanceSnapshots_LinkedEventId	CREATE INDEX "IX_AttendanceSnapshots_LinkedEventId" ON public."AttendanceSnapshots" USING btree ("LinkedEventId")
+index	AttendanceSnapshots.IX_AttendanceSnapshots_LinkshellId_CapturedAtUtc	CREATE INDEX "IX_AttendanceSnapshots_LinkshellId_CapturedAtUtc" ON public."AttendanceSnapshots" USING btree ("LinkshellId", "CapturedAtUtc")
+index	AttendanceSnapshots.IX_AttendanceSnapshots_LinkshellId_SnapshotStatus	CREATE INDEX "IX_AttendanceSnapshots_LinkshellId_SnapshotStatus" ON public."AttendanceSnapshots" USING btree ("LinkshellId", "SnapshotStatus")
+index	AttendanceSnapshots.IX_AttendanceSnapshots_WindowEventId	CREATE INDEX "IX_AttendanceSnapshots_WindowEventId" ON public."AttendanceSnapshots" USING btree ("WindowEventId")
+index	AttendanceSnapshots.PK_AttendanceSnapshots	CREATE UNIQUE INDEX "PK_AttendanceSnapshots" ON public."AttendanceSnapshots" USING btree ("Id")
+index	AuctionHistories.IX_AuctionHistories_LinkshellId	CREATE INDEX "IX_AuctionHistories_LinkshellId" ON public."AuctionHistories" USING btree ("LinkshellId")
+index	AuctionHistories.PK_AuctionHistories	CREATE UNIQUE INDEX "PK_AuctionHistories" ON public."AuctionHistories" USING btree ("Id")
+index	AuctionItems.IX_AuctionItems_AuctionHistoryId	CREATE INDEX "IX_AuctionItems_AuctionHistoryId" ON public."AuctionItems" USING btree ("AuctionHistoryId")
+index	AuctionItems.IX_AuctionItems_AuctionId	CREATE INDEX "IX_AuctionItems_AuctionId" ON public."AuctionItems" USING btree ("AuctionId")
+index	AuctionItems.IX_AuctionItems_SourceItemId	CREATE INDEX "IX_AuctionItems_SourceItemId" ON public."AuctionItems" USING btree ("SourceItemId")
+index	AuctionItems.PK_AuctionItems	CREATE UNIQUE INDEX "PK_AuctionItems" ON public."AuctionItems" USING btree ("Id")
+index	Auctions.IX_Auctions_DkpPoolId	CREATE INDEX "IX_Auctions_DkpPoolId" ON public."Auctions" USING btree ("DkpPoolId")
+index	Auctions.IX_Auctions_LinkshellId	CREATE INDEX "IX_Auctions_LinkshellId" ON public."Auctions" USING btree ("LinkshellId")
+index	Auctions.PK_Auctions	CREATE UNIQUE INDEX "PK_Auctions" ON public."Auctions" USING btree ("Id")
+index	Bids.IX_Bids_AppUserId	CREATE INDEX "IX_Bids_AppUserId" ON public."Bids" USING btree ("AppUserId")
+index	Bids.IX_Bids_AuctionItemId_CreatedAt	CREATE INDEX "IX_Bids_AuctionItemId_CreatedAt" ON public."Bids" USING btree ("AuctionItemId", "CreatedAt")
+index	Bids.PK_Bids	CREATE UNIQUE INDEX "PK_Bids" ON public."Bids" USING btree ("Id")
+index	Characters.IX_Characters_AppUserId_NormalizedName	CREATE UNIQUE INDEX "IX_Characters_AppUserId_NormalizedName" ON public."Characters" USING btree ("AppUserId", "NormalizedName")
+index	Characters.IX_Characters_AppUserId_Slot	CREATE UNIQUE INDEX "IX_Characters_AppUserId_Slot" ON public."Characters" USING btree ("AppUserId", "Slot")
+index	Characters.IX_Characters_NormalizedName	CREATE INDEX "IX_Characters_NormalizedName" ON public."Characters" USING btree ("NormalizedName")
+index	Characters.PK_Characters	CREATE UNIQUE INDEX "PK_Characters" ON public."Characters" USING btree ("Id")
+index	ChartMemberKeyItems.IX_ChartMemberKeyItems_AppUserId	CREATE INDEX "IX_ChartMemberKeyItems_AppUserId" ON public."ChartMemberKeyItems" USING btree ("AppUserId")
+index	ChartMemberKeyItems.IX_ChartMemberKeyItems_LinkshellId_Board_KeyItemName_AppUserId	CREATE UNIQUE INDEX "IX_ChartMemberKeyItems_LinkshellId_Board_KeyItemName_AppUserId" ON public."ChartMemberKeyItems" USING btree ("LinkshellId", "Board", "KeyItemName", "AppUserId")
+index	ChartMemberKeyItems.IX_ChartMemberKeyItems_LinkshellId_Board_KeyItemName_Membershi~	CREATE UNIQUE INDEX "IX_ChartMemberKeyItems_LinkshellId_Board_KeyItemName_Membershi~" ON public."ChartMemberKeyItems" USING btree ("LinkshellId", "Board", "KeyItemName", "MembershipId")
+index	ChartMemberKeyItems.PK_ChartMemberKeyItems	CREATE UNIQUE INDEX "PK_ChartMemberKeyItems" ON public."ChartMemberKeyItems" USING btree ("Id")
+index	ChartPopItemCredits.IX_ChartPopItemCredits_ChartPopItemId	CREATE INDEX "IX_ChartPopItemCredits_ChartPopItemId" ON public."ChartPopItemCredits" USING btree ("ChartPopItemId")
+index	ChartPopItemCredits.PK_ChartPopItemCredits	CREATE UNIQUE INDEX "PK_ChartPopItemCredits" ON public."ChartPopItemCredits" USING btree ("Id")
+index	ChartPopItems.IX_ChartPopItems_LinkshellId_Board_Boss_SortOrder	CREATE INDEX "IX_ChartPopItems_LinkshellId_Board_Boss_SortOrder" ON public."ChartPopItems" USING btree ("LinkshellId", "Board", "Boss", "SortOrder")
+index	ChartPopItems.PK_ChartPopItems	CREATE UNIQUE INDEX "PK_ChartPopItems" ON public."ChartPopItems" USING btree ("Id")
+index	ChartWishlistRequestZones.IX_ChartWishlistRequestZones_RequestId_Boss	CREATE UNIQUE INDEX "IX_ChartWishlistRequestZones_RequestId_Boss" ON public."ChartWishlistRequestZones" USING btree ("RequestId", "Boss")
+index	ChartWishlistRequestZones.PK_ChartWishlistRequestZones	CREATE UNIQUE INDEX "PK_ChartWishlistRequestZones" ON public."ChartWishlistRequestZones" USING btree ("Id")
+index	ChartWishlistRequests.IX_ChartWishlistRequests_LinkshellId_Board_Status_Priority	CREATE INDEX "IX_ChartWishlistRequests_LinkshellId_Board_Status_Priority" ON public."ChartWishlistRequests" USING btree ("LinkshellId", "Board", "Status", "Priority")
+index	ChartWishlistRequests.PK_ChartWishlistRequests	CREATE UNIQUE INDEX "PK_ChartWishlistRequests" ON public."ChartWishlistRequests" USING btree ("Id")
+index	ClaimShieldCaptureMembers.IX_ClaimShieldCaptureMembers_CaptureId_AppUserId	CREATE UNIQUE INDEX "IX_ClaimShieldCaptureMembers_CaptureId_AppUserId" ON public."ClaimShieldCaptureMembers" USING btree ("CaptureId", "AppUserId")
+index	ClaimShieldCaptureMembers.IX_ClaimShieldCaptureMembers_CaptureId_CharacterName	CREATE UNIQUE INDEX "IX_ClaimShieldCaptureMembers_CaptureId_CharacterName" ON public."ClaimShieldCaptureMembers" USING btree ("CaptureId", "CharacterName")
+index	ClaimShieldCaptureMembers.PK_ClaimShieldCaptureMembers	CREATE UNIQUE INDEX "PK_ClaimShieldCaptureMembers" ON public."ClaimShieldCaptureMembers" USING btree ("Id")
+index	ClaimShieldCaptures.IX_ClaimShieldCaptures_EventHistoryId	CREATE INDEX "IX_ClaimShieldCaptures_EventHistoryId" ON public."ClaimShieldCaptures" USING btree ("EventHistoryId")
+index	ClaimShieldCaptures.IX_ClaimShieldCaptures_EventId	CREATE UNIQUE INDEX "IX_ClaimShieldCaptures_EventId" ON public."ClaimShieldCaptures" USING btree ("EventId")
+index	ClaimShieldCaptures.IX_ClaimShieldCaptures_LinkshellId_CapturedAtUtc	CREATE INDEX "IX_ClaimShieldCaptures_LinkshellId_CapturedAtUtc" ON public."ClaimShieldCaptures" USING btree ("LinkshellId", "CapturedAtUtc")
+index	ClaimShieldCaptures.PK_ClaimShieldCaptures	CREATE UNIQUE INDEX "PK_ClaimShieldCaptures" ON public."ClaimShieldCaptures" USING btree ("Id")
+index	DiscordActivityUsers.IX_DiscordActivityUsers_DiscordUserId	CREATE UNIQUE INDEX "IX_DiscordActivityUsers_DiscordUserId" ON public."DiscordActivityUsers" USING btree ("DiscordUserId")
+index	DiscordActivityUsers.IX_DiscordActivityUsers_IdentityUserId	CREATE INDEX "IX_DiscordActivityUsers_IdentityUserId" ON public."DiscordActivityUsers" USING btree ("IdentityUserId")
+index	DiscordActivityUsers.PK_DiscordActivityUsers	CREATE UNIQUE INDEX "PK_DiscordActivityUsers" ON public."DiscordActivityUsers" USING btree ("Id")
+index	DkpLedgerEntries.IX_DkpLedgerEntries_AppUserId	CREATE INDEX "IX_DkpLedgerEntries_AppUserId" ON public."DkpLedgerEntries" USING btree ("AppUserId")
+index	DkpLedgerEntries.IX_DkpLedgerEntries_AuditRelatedLedgerEntryId	CREATE INDEX "IX_DkpLedgerEntries_AuditRelatedLedgerEntryId" ON public."DkpLedgerEntries" USING btree ("AuditRelatedLedgerEntryId")
+index	DkpLedgerEntries.IX_DkpLedgerEntries_EventHistoryId	CREATE INDEX "IX_DkpLedgerEntries_EventHistoryId" ON public."DkpLedgerEntries" USING btree ("EventHistoryId")
+index	DkpLedgerEntries.IX_DkpLedgerEntries_LinkshellId_AppUserId_OccurredAt_Sequence	CREATE INDEX "IX_DkpLedgerEntries_LinkshellId_AppUserId_OccurredAt_Sequence" ON public."DkpLedgerEntries" USING btree ("LinkshellId", "AppUserId", "OccurredAt", "Sequence")
+index	DkpLedgerEntries.IX_DkpLedgerEntries_LinkshellId_DkpPoolId	CREATE INDEX "IX_DkpLedgerEntries_LinkshellId_DkpPoolId" ON public."DkpLedgerEntries" USING btree ("LinkshellId", "DkpPoolId")
+index	DkpLedgerEntries.IX_DkpLedgerEntries_SourceEventLootDetailId	CREATE INDEX "IX_DkpLedgerEntries_SourceEventLootDetailId" ON public."DkpLedgerEntries" USING btree ("SourceEventLootDetailId")
+index	DkpLedgerEntries.IX_DkpLedgerEntries_SourceWindowEventId	CREATE INDEX "IX_DkpLedgerEntries_SourceWindowEventId" ON public."DkpLedgerEntries" USING btree ("SourceWindowEventId")
+index	DkpLedgerEntries.IX_DkpLedgerEntries_SourceWindowEventId_AppUserId	CREATE UNIQUE INDEX "IX_DkpLedgerEntries_SourceWindowEventId_AppUserId" ON public."DkpLedgerEntries" USING btree ("SourceWindowEventId", "AppUserId") WHERE ((("EntryType")::text = 'SnapshotEarned'::text) AND ("AppUserId" IS NOT NULL) AND ("SourceWindowEventId" IS NOT NULL))
+index	DkpLedgerEntries.PK_DkpLedgerEntries	CREATE UNIQUE INDEX "PK_DkpLedgerEntries" ON public."DkpLedgerEntries" USING btree ("Id")
+index	DkpPoolEventTypes.IX_DkpPoolEventTypes_DkpPoolId	CREATE INDEX "IX_DkpPoolEventTypes_DkpPoolId" ON public."DkpPoolEventTypes" USING btree ("DkpPoolId")
+index	DkpPoolEventTypes.IX_DkpPoolEventTypes_LinkshellId_NormalizedEventType	CREATE UNIQUE INDEX "IX_DkpPoolEventTypes_LinkshellId_NormalizedEventType" ON public."DkpPoolEventTypes" USING btree ("LinkshellId", "NormalizedEventType")
+index	DkpPoolEventTypes.PK_DkpPoolEventTypes	CREATE UNIQUE INDEX "PK_DkpPoolEventTypes" ON public."DkpPoolEventTypes" USING btree ("Id")
+index	DkpPools.IX_DkpPools_LinkshellId_Default	CREATE UNIQUE INDEX "IX_DkpPools_LinkshellId_Default" ON public."DkpPools" USING btree ("LinkshellId") WHERE ("IsDefault" = true)
+index	DkpPools.IX_DkpPools_LinkshellId_Name	CREATE UNIQUE INDEX "IX_DkpPools_LinkshellId_Name" ON public."DkpPools" USING btree ("LinkshellId", "Name")
+index	DkpPools.PK_DkpPools	CREATE UNIQUE INDEX "PK_DkpPools" ON public."DkpPools" USING btree ("Id")
+index	EventAttendanceWindows.IX_EventAttendanceWindows_EventHistoryId_SequenceNumber	CREATE INDEX "IX_EventAttendanceWindows_EventHistoryId_SequenceNumber" ON public."EventAttendanceWindows" USING btree ("EventHistoryId", "SequenceNumber")
+index	EventAttendanceWindows.IX_EventAttendanceWindows_EventId_SequenceNumber	CREATE UNIQUE INDEX "IX_EventAttendanceWindows_EventId_SequenceNumber" ON public."EventAttendanceWindows" USING btree ("EventId", "SequenceNumber")
+index	EventAttendanceWindows.IX_EventAttendanceWindows_OneClosePerEvent	CREATE UNIQUE INDEX "IX_EventAttendanceWindows_OneClosePerEvent" ON public."EventAttendanceWindows" USING btree ("EventId") WHERE ("IsClosingWindow" AND (NOT "IsKillWindow"))
+index	EventAttendanceWindows.IX_EventAttendanceWindows_OneClosePerEventHistory	CREATE UNIQUE INDEX "IX_EventAttendanceWindows_OneClosePerEventHistory" ON public."EventAttendanceWindows" USING btree ("EventHistoryId") WHERE ("IsClosingWindow" AND (NOT "IsKillWindow"))
+index	EventAttendanceWindows.PK_EventAttendanceWindows	CREATE UNIQUE INDEX "PK_EventAttendanceWindows" ON public."EventAttendanceWindows" USING btree ("Id")
+index	EventComments.IX_EventComments_EventHistoryId_CreatedAt	CREATE INDEX "IX_EventComments_EventHistoryId_CreatedAt" ON public."EventComments" USING btree ("EventHistoryId", "CreatedAt")
+index	EventComments.PK_EventComments	CREATE UNIQUE INDEX "PK_EventComments" ON public."EventComments" USING btree ("Id")
+index	EventHistories.IX_EventHistories_LinkshellId_EventName	CREATE INDEX "IX_EventHistories_LinkshellId_EventName" ON public."EventHistories" USING btree ("LinkshellId", "EventName")
+index	EventHistories.IX_EventHistories_PartySetupId	CREATE INDEX "IX_EventHistories_PartySetupId" ON public."EventHistories" USING btree ("PartySetupId")
+index	EventHistories.PK_EventHistories	CREATE UNIQUE INDEX "PK_EventHistories" ON public."EventHistories" USING btree ("Id")
+index	EventLootDetails.IX_EventLootDetails_DkpPoolId	CREATE INDEX "IX_EventLootDetails_DkpPoolId" ON public."EventLootDetails" USING btree ("DkpPoolId")
+index	EventLootDetails.IX_EventLootDetails_EventHistoryId	CREATE INDEX "IX_EventLootDetails_EventHistoryId" ON public."EventLootDetails" USING btree ("EventHistoryId")
+index	EventLootDetails.IX_EventLootDetails_EventId	CREATE INDEX "IX_EventLootDetails_EventId" ON public."EventLootDetails" USING btree ("EventId")
+index	EventLootDetails.IX_EventLootDetails_LinkshellId	CREATE INDEX "IX_EventLootDetails_LinkshellId" ON public."EventLootDetails" USING btree ("LinkshellId")
+index	EventLootDetails.PK_EventLootDetails	CREATE UNIQUE INDEX "PK_EventLootDetails" ON public."EventLootDetails" USING btree ("Id")
+index	EventPartySlotSignups.IX_EventPartySlotSignups_EventId_AppUserId	CREATE INDEX "IX_EventPartySlotSignups_EventId_AppUserId" ON public."EventPartySlotSignups" USING btree ("EventId", "AppUserId")
+index	EventPartySlotSignups.IX_EventPartySlotSignups_EventId_DiscordUserId	CREATE INDEX "IX_EventPartySlotSignups_EventId_DiscordUserId" ON public."EventPartySlotSignups" USING btree ("EventId", "DiscordUserId")
+index	EventPartySlotSignups.IX_EventPartySlotSignups_EventId_PartySetupSlotId	CREATE UNIQUE INDEX "IX_EventPartySlotSignups_EventId_PartySetupSlotId" ON public."EventPartySlotSignups" USING btree ("EventId", "PartySetupSlotId")
+index	EventPartySlotSignups.IX_EventPartySlotSignups_PartySetupSlotId	CREATE INDEX "IX_EventPartySlotSignups_PartySetupSlotId" ON public."EventPartySlotSignups" USING btree ("PartySetupSlotId")
+index	EventPartySlotSignups.PK_EventPartySlotSignups	CREATE UNIQUE INDEX "PK_EventPartySlotSignups" ON public."EventPartySlotSignups" USING btree ("Id")
+index	EventWindowRosterSnapshots.IX_EventWindowRosterSnapshots_EventId_WindowNumber	CREATE INDEX "IX_EventWindowRosterSnapshots_EventId_WindowNumber" ON public."EventWindowRosterSnapshots" USING btree ("EventId", "WindowNumber")
+index	EventWindowRosterSnapshots.PK_EventWindowRosterSnapshots	CREATE UNIQUE INDEX "PK_EventWindowRosterSnapshots" ON public."EventWindowRosterSnapshots" USING btree ("Id")
+index	Events.IX_Events_LinkshellId	CREATE INDEX "IX_Events_LinkshellId" ON public."Events" USING btree ("LinkshellId")
+index	Events.IX_Events_PartySetupId	CREATE INDEX "IX_Events_PartySetupId" ON public."Events" USING btree ("PartySetupId")
+index	Events.IX_Events_SourceTodId	CREATE INDEX "IX_Events_SourceTodId" ON public."Events" USING btree ("SourceTodId")
+index	Events.PK_Events	CREATE UNIQUE INDEX "PK_Events" ON public."Events" USING btree ("Id")
+index	HnmRecurringBoards.IX_HnmRecurringBoards_LinkshellId_MonsterName	CREATE UNIQUE INDEX "IX_HnmRecurringBoards_LinkshellId_MonsterName" ON public."HnmRecurringBoards" USING btree ("LinkshellId", "MonsterName")
+index	HnmRecurringBoards.IX_HnmRecurringBoards_LinkshellId_SpawnKey	CREATE UNIQUE INDEX "IX_HnmRecurringBoards_LinkshellId_SpawnKey" ON public."HnmRecurringBoards" USING btree ("LinkshellId", "SpawnKey")
+index	HnmRecurringBoards.IX_HnmRecurringBoards_PartySetupId	CREATE INDEX "IX_HnmRecurringBoards_PartySetupId" ON public."HnmRecurringBoards" USING btree ("PartySetupId")
+index	HnmRecurringBoards.PK_HnmRecurringBoards	CREATE UNIQUE INDEX "PK_HnmRecurringBoards" ON public."HnmRecurringBoards" USING btree ("Id")
+index	Invites.IX_Invites_AppUserId	CREATE INDEX "IX_Invites_AppUserId" ON public."Invites" USING btree ("AppUserId")
+index	Invites.IX_Invites_DiscordUserId	CREATE INDEX "IX_Invites_DiscordUserId" ON public."Invites" USING btree ("DiscordUserId")
+index	Invites.IX_Invites_LinkshellId	CREATE INDEX "IX_Invites_LinkshellId" ON public."Invites" USING btree ("LinkshellId")
+index	Invites.IX_Invites_OneOpenDiscordInvite	CREATE UNIQUE INDEX "IX_Invites_OneOpenDiscordInvite" ON public."Invites" USING btree ("LinkshellId", "DiscordUserId") WHERE ((("Status")::text = ANY ((ARRAY['Pending'::character varying, 'PendingInvite'::character varying])::text[])) AND ("AppUserId" IS NULL) AND ("DiscordUserId" IS NOT NULL))
+index	Invites.IX_Invites_OneOpenInvite	CREATE UNIQUE INDEX "IX_Invites_OneOpenInvite" ON public."Invites" USING btree ("LinkshellId", "AppUserId") WHERE ((("Status")::text = ANY ((ARRAY['Pending'::character varying, 'PendingInvite'::character varying])::text[])) AND ("AppUserId" IS NOT NULL))
+index	Invites.IX_Invites_OneOpenJoinRequest	CREATE UNIQUE INDEX "IX_Invites_OneOpenJoinRequest" ON public."Invites" USING btree ("LinkshellId", "AppUserId") WHERE (("Status")::text = 'PendingJoinRequest'::text)
+index	Invites.PK_Invites	CREATE UNIQUE INDEX "PK_Invites" ON public."Invites" USING btree ("Id")
+index	Items.IX_Items_LinkshellId_ItemName	CREATE INDEX "IX_Items_LinkshellId_ItemName" ON public."Items" USING btree ("LinkshellId", "ItemName")
+index	Items.PK_Items	CREATE UNIQUE INDEX "PK_Items" ON public."Items" USING btree ("Id")
+index	JobRatings.IX_JobRatings_LinkshellId_TargetAppUserId_RaterAppUserId_Chara~	CREATE UNIQUE INDEX "IX_JobRatings_LinkshellId_TargetAppUserId_RaterAppUserId_Chara~" ON public."JobRatings" USING btree ("LinkshellId", "TargetAppUserId", "RaterAppUserId", "CharacterSlot", "JobIndex")
+index	JobRatings.IX_JobRatings_RaterAppUserId	CREATE INDEX "IX_JobRatings_RaterAppUserId" ON public."JobRatings" USING btree ("RaterAppUserId")
+index	JobRatings.IX_JobRatings_TargetAppUserId	CREATE INDEX "IX_JobRatings_TargetAppUserId" ON public."JobRatings" USING btree ("TargetAppUserId")
+index	JobRatings.PK_JobRatings	CREATE UNIQUE INDEX "PK_JobRatings" ON public."JobRatings" USING btree ("Id")
+index	JournalEntries.IX_JournalEntries_LinkshellId_EntryNumber	CREATE UNIQUE INDEX "IX_JournalEntries_LinkshellId_EntryNumber" ON public."JournalEntries" USING btree ("LinkshellId", "EntryNumber")
+index	JournalEntries.IX_JournalEntries_LinkshellId_Sequence	CREATE UNIQUE INDEX "IX_JournalEntries_LinkshellId_Sequence" ON public."JournalEntries" USING btree ("LinkshellId", "Sequence")
+index	JournalEntries.IX_JournalEntries_LinkshellId_TransactionDate	CREATE INDEX "IX_JournalEntries_LinkshellId_TransactionDate" ON public."JournalEntries" USING btree ("LinkshellId", "TransactionDate")
+index	JournalEntries.IX_JournalEntries_OneReversalPerEntry	CREATE UNIQUE INDEX "IX_JournalEntries_OneReversalPerEntry" ON public."JournalEntries" USING btree ("ReversesJournalEntryId") WHERE (("Kind")::text = 'Reversal'::text)
+index	JournalEntries.IX_JournalEntries_ReversesJournalEntryId	CREATE INDEX "IX_JournalEntries_ReversesJournalEntryId" ON public."JournalEntries" USING btree ("ReversesJournalEntryId")
+index	JournalEntries.PK_JournalEntries	CREATE UNIQUE INDEX "PK_JournalEntries" ON public."JournalEntries" USING btree ("Id")
+index	JournalEntryLines.IX_JournalEntryLines_JournalEntryId	CREATE INDEX "IX_JournalEntryLines_JournalEntryId" ON public."JournalEntryLines" USING btree ("JournalEntryId")
+index	JournalEntryLines.IX_JournalEntryLines_LedgerAccountId	CREATE INDEX "IX_JournalEntryLines_LedgerAccountId" ON public."JournalEntryLines" USING btree ("LedgerAccountId")
+index	JournalEntryLines.IX_JournalEntryLines_LinkshellId_LedgerAccountId_TransactionDa~	CREATE INDEX "IX_JournalEntryLines_LinkshellId_LedgerAccountId_TransactionDa~" ON public."JournalEntryLines" USING btree ("LinkshellId", "LedgerAccountId", "TransactionDate")
+index	JournalEntryLines.IX_JournalEntryLines_LinkshellId_TransactionDate	CREATE INDEX "IX_JournalEntryLines_LinkshellId_TransactionDate" ON public."JournalEntryLines" USING btree ("LinkshellId", "TransactionDate")
+index	JournalEntryLines.PK_JournalEntryLines	CREATE UNIQUE INDEX "PK_JournalEntryLines" ON public."JournalEntryLines" USING btree ("Id")
+index	LedgerAccounts.IX_LedgerAccounts_LinkshellId_AccountNumber	CREATE UNIQUE INDEX "IX_LedgerAccounts_LinkshellId_AccountNumber" ON public."LedgerAccounts" USING btree ("LinkshellId", "AccountNumber")
+index	LedgerAccounts.IX_LedgerAccounts_LinkshellId_Cash	CREATE UNIQUE INDEX "IX_LedgerAccounts_LinkshellId_Cash" ON public."LedgerAccounts" USING btree ("LinkshellId") WHERE ("IsCash" = true)
+index	LedgerAccounts.PK_LedgerAccounts	CREATE UNIQUE INDEX "PK_LedgerAccounts" ON public."LedgerAccounts" USING btree ("Id")
+index	LinkshellBanners.PK_LinkshellBanners	CREATE UNIQUE INDEX "PK_LinkshellBanners" ON public."LinkshellBanners" USING btree ("LinkshellId")
+index	LinkshellChannelRoutes.IX_LinkshellChannelRoutes_LinkshellId	CREATE INDEX "IX_LinkshellChannelRoutes_LinkshellId" ON public."LinkshellChannelRoutes" USING btree ("LinkshellId")
+index	LinkshellChannelRoutes.IX_LinkshellChannelRoutes_OneAuctionRoute	CREATE UNIQUE INDEX "IX_LinkshellChannelRoutes_OneAuctionRoute" ON public."LinkshellChannelRoutes" USING btree ("LinkshellId") WHERE "PostAuctions"
+index	LinkshellChannelRoutes.IX_LinkshellChannelRoutes_OneDkpSheetRoute	CREATE UNIQUE INDEX "IX_LinkshellChannelRoutes_OneDkpSheetRoute" ON public."LinkshellChannelRoutes" USING btree ("LinkshellId") WHERE "PostDkpSheet"
+index	LinkshellChannelRoutes.IX_LinkshellChannelRoutes_OneLootRoute	CREATE UNIQUE INDEX "IX_LinkshellChannelRoutes_OneLootRoute" ON public."LinkshellChannelRoutes" USING btree ("LinkshellId") WHERE "PostLoot"
+index	LinkshellChannelRoutes.IX_LinkshellChannelRoutes_OneTodBoardRoute	CREATE UNIQUE INDEX "IX_LinkshellChannelRoutes_OneTodBoardRoute" ON public."LinkshellChannelRoutes" USING btree ("LinkshellId") WHERE "PostTodBoard"
+index	LinkshellChannelRoutes.PK_LinkshellChannelRoutes	CREATE UNIQUE INDEX "PK_LinkshellChannelRoutes" ON public."LinkshellChannelRoutes" USING btree ("Id")
+index	LinkshellMonsterTimings.IX_LinkshellMonsterTimings_LinkshellId_NormalizedMonsterName	CREATE UNIQUE INDEX "IX_LinkshellMonsterTimings_LinkshellId_NormalizedMonsterName" ON public."LinkshellMonsterTimings" USING btree ("LinkshellId", "NormalizedMonsterName")
+index	LinkshellMonsterTimings.PK_LinkshellMonsterTimings	CREATE UNIQUE INDEX "PK_LinkshellMonsterTimings" ON public."LinkshellMonsterTimings" USING btree ("Id")
+index	LinkshellPresences.IX_LinkshellPresences_LinkshellId_CharacterName	CREATE UNIQUE INDEX "IX_LinkshellPresences_LinkshellId_CharacterName" ON public."LinkshellPresences" USING btree ("LinkshellId", "CharacterName")
+index	LinkshellPresences.IX_LinkshellPresences_LinkshellId_LastSeenUtc	CREATE INDEX "IX_LinkshellPresences_LinkshellId_LastSeenUtc" ON public."LinkshellPresences" USING btree ("LinkshellId", "LastSeenUtc")
+index	LinkshellPresences.PK_LinkshellPresences	CREATE UNIQUE INDEX "PK_LinkshellPresences" ON public."LinkshellPresences" USING btree ("Id")
+index	LinkshellRoles.AK_LinkshellRoles_LinkshellId_Id	CREATE UNIQUE INDEX "AK_LinkshellRoles_LinkshellId_Id" ON public."LinkshellRoles" USING btree ("LinkshellId", "Id")
+index	LinkshellRoles.IX_LinkshellRoles_LinkshellId_Name	CREATE UNIQUE INDEX "IX_LinkshellRoles_LinkshellId_Name" ON public."LinkshellRoles" USING btree ("LinkshellId", "Name")
+index	LinkshellRoles.PK_LinkshellRoles	CREATE UNIQUE INDEX "PK_LinkshellRoles" ON public."LinkshellRoles" USING btree ("Id")
+index	Linkshells.IX_Linkshells_AppUserId	CREATE INDEX "IX_Linkshells_AppUserId" ON public."Linkshells" USING btree ("AppUserId")
+index	Linkshells.PK_Linkshells	CREATE UNIQUE INDEX "PK_Linkshells" ON public."Linkshells" USING btree ("Id")
+index	PartySetupAlliances.IX_PartySetupAlliances_PartySetupId_SortOrder	CREATE INDEX "IX_PartySetupAlliances_PartySetupId_SortOrder" ON public."PartySetupAlliances" USING btree ("PartySetupId", "SortOrder")
+index	PartySetupAlliances.PK_PartySetupAlliances	CREATE UNIQUE INDEX "PK_PartySetupAlliances" ON public."PartySetupAlliances" USING btree ("Id")
+index	PartySetupParties.IX_PartySetupParties_PartySetupAllianceId_SortOrder	CREATE INDEX "IX_PartySetupParties_PartySetupAllianceId_SortOrder" ON public."PartySetupParties" USING btree ("PartySetupAllianceId", "SortOrder")
+index	PartySetupParties.PK_PartySetupParties	CREATE UNIQUE INDEX "PK_PartySetupParties" ON public."PartySetupParties" USING btree ("Id")
+index	PartySetupSlots.IX_PartySetupSlots_PartySetupPartyId_SortOrder	CREATE INDEX "IX_PartySetupSlots_PartySetupPartyId_SortOrder" ON public."PartySetupSlots" USING btree ("PartySetupPartyId", "SortOrder")
+index	PartySetupSlots.PK_PartySetupSlots	CREATE UNIQUE INDEX "PK_PartySetupSlots" ON public."PartySetupSlots" USING btree ("Id")
+index	PartySetups.IX_PartySetups_ClonedFromPartySetupId	CREATE INDEX "IX_PartySetups_ClonedFromPartySetupId" ON public."PartySetups" USING btree ("ClonedFromPartySetupId")
+index	PartySetups.IX_PartySetups_LinkshellId_AssignedMonsterName	CREATE INDEX "IX_PartySetups_LinkshellId_AssignedMonsterName" ON public."PartySetups" USING btree ("LinkshellId", "AssignedMonsterName")
+index	PartySetups.IX_PartySetups_LinkshellId_Name	CREATE INDEX "IX_PartySetups_LinkshellId_Name" ON public."PartySetups" USING btree ("LinkshellId", "Name")
+index	PartySetups.IX_PartySetups_OwnerEventId	CREATE UNIQUE INDEX "IX_PartySetups_OwnerEventId" ON public."PartySetups" USING btree ("OwnerEventId") WHERE ("OwnerEventId" IS NOT NULL)
+index	PartySetups.PK_PartySetups	CREATE UNIQUE INDEX "PK_PartySetups" ON public."PartySetups" USING btree ("Id")
+index	PendingTodSubmissions.IX_PendingTodSubmissions_LinkshellId_SpawnKey	CREATE INDEX "IX_PendingTodSubmissions_LinkshellId_SpawnKey" ON public."PendingTodSubmissions" USING btree ("LinkshellId", "SpawnKey")
+index	PendingTodSubmissions.IX_PendingTodSubmissions_SubmittedByAppUserId	CREATE INDEX "IX_PendingTodSubmissions_SubmittedByAppUserId" ON public."PendingTodSubmissions" USING btree ("SubmittedByAppUserId")
+index	PendingTodSubmissions.PK_PendingTodSubmissions	CREATE UNIQUE INDEX "PK_PendingTodSubmissions" ON public."PendingTodSubmissions" USING btree ("Id")
+index	PlaceholderClaimRequests.IX_PlaceholderClaimRequests_LinkshellId_ResolvedAtUtc	CREATE INDEX "IX_PlaceholderClaimRequests_LinkshellId_ResolvedAtUtc" ON public."PlaceholderClaimRequests" USING btree ("LinkshellId", "ResolvedAtUtc")
+index	PlaceholderClaimRequests.IX_PlaceholderClaimRequests_PlaceholderAppUserId_RequesterAppU~	CREATE UNIQUE INDEX "IX_PlaceholderClaimRequests_PlaceholderAppUserId_RequesterAppU~" ON public."PlaceholderClaimRequests" USING btree ("PlaceholderAppUserId", "RequesterAppUserId") WHERE (("ResolvedAtUtc" IS NULL) AND ("RequesterAppUserId" IS NOT NULL))
+index	PlaceholderClaimRequests.IX_PlaceholderClaimRequests_PlaceholderAppUserId_RequesterDisc~	CREATE UNIQUE INDEX "IX_PlaceholderClaimRequests_PlaceholderAppUserId_RequesterDisc~" ON public."PlaceholderClaimRequests" USING btree ("PlaceholderAppUserId", "RequesterDiscordUserId") WHERE (("ResolvedAtUtc" IS NULL) AND ("RequesterDiscordUserId" IS NOT NULL))
+index	PlaceholderClaimRequests.PK_PlaceholderClaimRequests	CREATE UNIQUE INDEX "PK_PlaceholderClaimRequests" ON public."PlaceholderClaimRequests" USING btree ("Id")
+index	Rules.IX_Rules_LinkshellId_CreatedAt	CREATE INDEX "IX_Rules_LinkshellId_CreatedAt" ON public."Rules" USING btree ("LinkshellId", "CreatedAt")
+index	Rules.PK_Rules	CREATE UNIQUE INDEX "PK_Rules" ON public."Rules" USING btree ("Id")
+index	Tods.IX_Tods_LinkshellId_MonsterName	CREATE INDEX "IX_Tods_LinkshellId_MonsterName" ON public."Tods" USING btree ("LinkshellId", "MonsterName")
+index	Tods.IX_Tods_LinkshellId_SpawnKey_Time	CREATE INDEX "IX_Tods_LinkshellId_SpawnKey_Time" ON public."Tods" USING btree ("LinkshellId", "SpawnKey", "Time")
+index	Tods.IX_Tods_LinkshellId_Time	CREATE INDEX "IX_Tods_LinkshellId_Time" ON public."Tods" USING btree ("LinkshellId", "Time")
+index	Tods.PK_Tods	CREATE UNIQUE INDEX "PK_Tods" ON public."Tods" USING btree ("Id")
+index	WindowEventMemberDkps.IX_WindowEventMemberDkps_WindowEventId_CharacterName	CREATE UNIQUE INDEX "IX_WindowEventMemberDkps_WindowEventId_CharacterName" ON public."WindowEventMemberDkps" USING btree ("WindowEventId", "CharacterName")
+index	WindowEventMemberDkps.PK_WindowEventMemberDkps	CREATE UNIQUE INDEX "PK_WindowEventMemberDkps" ON public."WindowEventMemberDkps" USING btree ("Id")
+index	WindowEvents.IX_WindowEvents_CampEventHistoryId	CREATE INDEX "IX_WindowEvents_CampEventHistoryId" ON public."WindowEvents" USING btree ("CampEventHistoryId")
+index	WindowEvents.IX_WindowEvents_LinkshellId_LastCapturedAtUtc	CREATE INDEX "IX_WindowEvents_LinkshellId_LastCapturedAtUtc" ON public."WindowEvents" USING btree ("LinkshellId", "LastCapturedAtUtc")
+index	WindowEvents.IX_WindowEvents_LinkshellId_Status_NormalizedName	CREATE INDEX "IX_WindowEvents_LinkshellId_Status_NormalizedName" ON public."WindowEvents" USING btree ("LinkshellId", "Status", "NormalizedName")
+index	WindowEvents.IX_WindowEvents_SourceEventId	CREATE INDEX "IX_WindowEvents_SourceEventId" ON public."WindowEvents" USING btree ("SourceEventId")
+index	WindowEvents.PK_WindowEvents	CREATE UNIQUE INDEX "PK_WindowEvents" ON public."WindowEvents" USING btree ("Id")
+index	__EFMigrationsHistory.PK___EFMigrationsHistory	CREATE UNIQUE INDEX "PK___EFMigrationsHistory" ON public."__EFMigrationsHistory" USING btree ("MigrationId")
+sequence	AddonApiTokens_Id_seq	
+sequence	AddonPairingCodes_Id_seq	
+sequence	Announcements_Id_seq	
+sequence	AppUserEventHistories_Id_seq	
+sequence	AppUserEventStatusLedgers_Id_seq	
+sequence	AppUserEventWindows_Id_seq	
+sequence	AppUserEvents_Id_seq	
+sequence	AppUserLinkshells_Id_seq	
+sequence	AspNetUserClaims_Id_seq	
+sequence	AttendanceSnapshotEntries_Id_seq	
+sequence	AttendanceSnapshots_Id_seq	
+sequence	AuctionHistories_Id_seq	
+sequence	AuctionItems_Id_seq	
+sequence	Auctions_Id_seq	
+sequence	Bids_Id_seq	
+sequence	Characters_Id_seq	
+sequence	ChartMemberKeyItems_Id_seq	
+sequence	ChartWishlistRequestZones_Id_seq	
+sequence	ChartWishlistRequests_Id_seq	
+sequence	ClaimShieldCaptureMembers_Id_seq	
+sequence	ClaimShieldCaptures_Id_seq	
+sequence	DkpLedgerEntries_Id_seq	
+sequence	DkpPoolEventTypes_Id_seq	
+sequence	DkpPools_Id_seq	
+sequence	EventAttendanceWindows_Id_seq	
+sequence	EventComments_Id_seq	
+sequence	EventHistories_Id_seq	
+sequence	EventLootDetails_Id_seq	
+sequence	EventPartySlotSignups_Id_seq	
+sequence	EventWindowRosterSnapshots_Id_seq	
+sequence	Events_Id_seq	
+sequence	HnmRecurringBoards_Id_seq	
+sequence	Invites_Id_seq	
+sequence	Items_Id_seq	
+sequence	JobRatings_Id_seq	
+sequence	JournalEntries_Id_seq	
+sequence	JournalEntryLines_Id_seq	
+sequence	LedgerAccounts_Id_seq	
+sequence	LinkshellChannelRoutes_Id_seq	
+sequence	LinkshellMonsterTimings_Id_seq	
+sequence	LinkshellPresences_Id_seq	
+sequence	LinkshellRoles_Id_seq	
+sequence	Linkshells_Id_seq	
+sequence	PartySetupAlliances_Id_seq	
+sequence	PartySetupParties_Id_seq	
+sequence	PartySetupSlots_Id_seq	
+sequence	PartySetups_Id_seq	
+sequence	PendingTodSubmissions_Id_seq	
+sequence	PlaceholderClaimRequests_Id_seq	
+sequence	Rules_Id_seq	
+sequence	SkyPopItemCredits_Id_seq	
+sequence	SkyPopItems_Id_seq	
+sequence	Tods_Id_seq	
+sequence	WindowEventMemberDkps_Id_seq	
+sequence	WindowEvents_Id_seq	
