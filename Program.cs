@@ -611,21 +611,45 @@ if (!app.Environment.IsDevelopment())
             // chain built gets Baseline's history row added here, so Migrate does not try to build
             // it again; an older database stops start-up with a plain message. See
             // docs/migration-squash.md.
-            var adoption = await MigrationBaseline.AdoptAsync(services.GetRequiredService<ApplicationDbContext>());
-            if (adoption == MigrationBaseline.Outcome.Adopted)
+            //
+            // Both steps run with Postgres notices sent to the log, so a migration's RAISE WARNING
+            // shows as "Postgres WARNING during migration: ..." (Round 5, ops item 6).
+            var migrationDb = services.GetRequiredService<ApplicationDbContext>();
+            var migrationLog = services.GetRequiredService<ILogger<Program>>();
+            await MigrationNotices.RunWithNoticesLoggedAsync(migrationDb, migrationLog, async () =>
             {
-                services.GetRequiredService<ILogger<Program>>().LogInformation(
-                    "Migration squash: added {Baseline} to the migration history (old rows kept).",
-                    MigrationBaseline.BaselineMigrationId);
-            }
+                var adoption = await MigrationBaseline.AdoptAsync(migrationDb);
+                if (adoption == MigrationBaseline.Outcome.Adopted)
+                {
+                    migrationLog.LogInformation(
+                        "Migration squash: added {Baseline} to the migration history (old rows kept).",
+                        MigrationBaseline.BaselineMigrationId);
+                }
 
-            services.GetRequiredService<ApplicationDbContext>().Database.Migrate();
+                migrationDb.Database.Migrate();
+                return adoption;
+            });
         }
         catch (Exception ex)
         {
             services.GetRequiredService<ILogger<Program>>()
                 .LogCritical(ex, "Database migration on startup failed; aborting startup.");
             throw;
+        }
+
+        // Read-only: warn about a NOT VALID constraint, an invalid index or a missing guarded index
+        // ("Migration health: ..." lines). Never stops start-up.
+        try
+        {
+            await MigrationHealth.LogProblemsAsync(
+                services.GetRequiredService<ApplicationDbContext>(),
+                services.GetRequiredService<ILogger<Program>>(),
+                CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            services.GetRequiredService<ILogger<Program>>()
+                .LogWarning(ex, "Migration health: the check could not run; start-up continues.");
         }
 
         // The name lookups read Characters, a copy of the accounts' names kept in step on every

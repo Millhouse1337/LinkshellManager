@@ -439,6 +439,29 @@ DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" < '20261115190359_Baseli
 Never run `dotnet ef migrations remove` or `dotnet ef database update <older migration>` against
 production.
 
+## Check the start-up log after every deploy (from Round 5)
+
+Some migrations skip a step on purpose instead of crashing start-up (for example, a unique index
+that old rows would break). They say so with a Postgres warning, and the app now writes it to the
+service log. After each deploy, read-only:
+
+```bash
+ssh root@<IP> "sudo journalctl -u lsmanager --since '15 min ago' | grep -E 'Postgres WARNING|Migration health'"
+```
+
+Expect **no output**. What a line means:
+
+| Line starts with | Meaning |
+|---|---|
+| `Postgres WARNING during migration:` | A migration skipped something and says why. The app still runs. Read the message, then fix the data it names before the next deploy. |
+| `Postgres NOTICE during migration:` | Information only (for example a count of rows a migration fixed). Not a warning, so the grep above does not show it. |
+| `Migration health: guarded index ... is missing` | A guarded index is not there, so the rule it enforces is off. Usually follows a `Postgres WARNING` line. |
+| `Migration health: constraint ... is NOT VALID` | A constraint was added without checking old rows. New rows are checked; old ones may break it. |
+| `Migration health: index ... is invalid` | A failed index build left an unusable index behind. |
+| `Migration health: the check could not run` | The read-only check itself failed; start-up continued. Look at the error under it. |
+
+The health check runs on every start, so a problem keeps showing until it is fixed. It only reads.
+
 ## .NET 10 runtime (November 2026)
 
 The app needs the **ASP.NET Core 10 runtime** on the droplet. `deploy.ps1` checks for it first
