@@ -105,24 +105,16 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "A Post Kill roster cannot be the closing window." });
         }
 
-        // Load the whole camp's windows: marking one has to unmark the others.
-        var siblings = await _dbContext.EventAttendanceWindows
-            .Where(w => w.EventId == window.EventId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var sibling in siblings)
-        {
-            // Exactly one close per camp, enforced here rather than trusted to callers. Two marked
-            // windows would make ResolveCloseWindow's answer depend on row order.
-            sibling.IsClosingWindow = isClosing && sibling.Id == window.Id;
-        }
-
+        // Marking one has to unmark the others: exactly one close per camp, enforced here rather
+        // than trusted to callers. Two marked windows would make ResolveCloseWindow's answer depend
+        // on row order. Returns the whole camp's windows, saved.
+        //
         // The window's own price is left alone. The close bonus ADDS to it now
         // (HnmStandardCampFinalizer.WindowValue), so there is nothing for the tick to clear. It used
         // to wipe DkpAmount, back when an explicit price replaced the close bonus and would have
         // swallowed it.
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var siblings = await ClosingWindowMark.MoveAsync(
+            _dbContext, eventEntity.Id, isClosing ? window.Id : null, cancellationToken);
 
         var linkshell = await _dbContext.Linkshells
             .AsNoTracking()

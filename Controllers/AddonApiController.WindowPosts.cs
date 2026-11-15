@@ -108,15 +108,8 @@ public sealed partial class AddonApiController
             if (postsOpenAndClose && !isKillWindow && windowSequence == 2
                 && !attendanceWindow.IsClosingWindow)
             {
-                var siblings = await _dbContext.EventAttendanceWindows
-                    .Where(w => w.EventId == eventEntity.Id)
-                    .ToListAsync(cancellationToken);
-                foreach (var sibling in siblings)
-                {
-                    // One close per camp, the same rule SetClosingWindowAsync enforces.
-                    sibling.IsClosingWindow = sibling.Id == attendanceWindow.Id;
-                }
-                await _dbContext.SaveChangesAsync(cancellationToken);
+                // One close per camp, through the same helper SetClosingWindowAsync uses.
+                await ClosingWindowMark.MoveAsync(_dbContext, eventEntity.Id, attendanceWindow.Id, cancellationToken);
             }
         }
 
