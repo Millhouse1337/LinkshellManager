@@ -220,6 +220,8 @@ public class ChartKeyItemGridTests
         Assert.Equal("Dynamis", row.Board);
         Assert.Equal(1, row.MembershipId);
         Assert.Equal("user-1", row.SetByAppUserId);
+        // The membership's account rides along (stamped on save from MembershipId).
+        Assert.Equal("user-1", row.AppUserId);
     }
 
     // Presence is the fact, so unticking DELETES rather than storing a false.

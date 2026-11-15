@@ -49,8 +49,10 @@ public class ChartMemberKeyItem
 
     // The account of that membership (AccountJobsAndKeyItemAccounts). Membership ids are not
     // stable - a membership is re-created on unsync/resync - so the chart is moving to the account
-    // id, as wishlist requests already use. For now nothing reads it: the grid still reads
-    // MembershipId. A later deploy makes it required, gives it a foreign key and reads by it. Null
+    // id, as wishlist requests already use. For now it is only written: every save that adds a row
+    // or changes its membership stamps it from the membership (ApplicationDbContext
+    // .StampKeyItemAccounts), a placeholder claim moves it (UserMergeService), and the grid still
+    // reads MembershipId. A later deploy makes it required, gives it a foreign key and reads by it. Null
     // when the membership has no account (or is not in the row's linkshell).
     [MaxLength(450)]
     public string? AppUserId { get; set; }

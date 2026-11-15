@@ -899,6 +899,69 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // Keeps ChartMemberKeyItem.AppUserId (AccountJobsAndKeyItemAccounts) in step with the row's
+        // membership: the account of the membership whose Id is MembershipId, if that membership is
+        // in the row's own linkshell, else null -- exactly what the migration's fill does. Done here
+        // so every writer gets it: ticking a cell (ChartKeyItemService), a placeholder claim moving
+        // ticks onto the kept membership (UserMergeService) and Data Admin.
+        //
+        // A new row is always stamped. A saved one is re-stamped when its MembershipId (or linkshell)
+        // changed and nobody set the account in the same save. Memberships are looked up in the
+        // database, so one added in this same save is not found yet; that row stays null.
+        private List<EntityEntry<ChartMemberKeyItem>> CollectKeyItemsNeedingAccountStamp() =>
+            ChangeTracker.Entries<ChartMemberKeyItem>()
+                .Where(entry => entry.State == EntityState.Added
+                    || (entry.State == EntityState.Modified
+                        && (entry.Property(nameof(ChartMemberKeyItem.MembershipId)).IsModified
+                            || entry.Property(nameof(ChartMemberKeyItem.LinkshellId)).IsModified)
+                        && !entry.Property(nameof(ChartMemberKeyItem.AppUserId)).IsModified))
+                .ToList();
+
+        private async Task StampKeyItemAccountsAsync(
+            List<EntityEntry<ChartMemberKeyItem>> rows, CancellationToken cancellationToken)
+        {
+            if (rows.Count == 0)
+            {
+                return;
+            }
+            var membershipIds = rows.Select(row => row.Entity.MembershipId).Distinct().ToList();
+            var memberships = await AppUserLinkshells.AsNoTracking()
+                .Where(member => membershipIds.Contains(member.Id))
+                .Select(member => new KeyItemMembership(member.Id, member.LinkshellId, member.AppUserId))
+                .ToListAsync(cancellationToken);
+            ApplyKeyItemAccounts(rows, memberships);
+        }
+
+        private void StampKeyItemAccounts(List<EntityEntry<ChartMemberKeyItem>> rows)
+        {
+            if (rows.Count == 0)
+            {
+                return;
+            }
+            var membershipIds = rows.Select(row => row.Entity.MembershipId).Distinct().ToList();
+            var memberships = AppUserLinkshells.AsNoTracking()
+                .Where(member => membershipIds.Contains(member.Id))
+                .Select(member => new KeyItemMembership(member.Id, member.LinkshellId, member.AppUserId))
+                .ToList();
+            ApplyKeyItemAccounts(rows, memberships);
+        }
+
+        private sealed record KeyItemMembership(int Id, int LinkshellId, string? AppUserId);
+
+        private static void ApplyKeyItemAccounts(
+            List<EntityEntry<ChartMemberKeyItem>> rows, List<KeyItemMembership> memberships)
+        {
+            var byId = memberships.ToDictionary(member => member.Id);
+            foreach (var row in rows)
+            {
+                var account = byId.TryGetValue(row.Entity.MembershipId, out var member)
+                    && member.LinkshellId == row.Entity.LinkshellId
+                        ? member.AppUserId
+                        : null;
+                SetDerived(row, nameof(ChartMemberKeyItem.AppUserId), account);
+            }
+        }
+
         // Keeps the derived ToD columns (AddTodDurationsAndSpawnKeys) in step with their text on every
         // save that adds or changes a row: SpawnKey from MonsterName (HnmConfig.SpawnKey), and
         // CooldownMinutes / IntervalMinutes from Cooldown / Interval (TodDurationFormat
@@ -1161,6 +1224,7 @@ namespace LinkshellManagerDiscordApp.Data
         {
             await StampNewMembershipDkpEpochAsync(CollectNewMembershipsNeedingDkpEpoch(), cancellationToken);
             await StampMembershipRoleIdsAsync(CollectMembershipsNeedingRoleStamp(), cancellationToken);
+            await StampKeyItemAccountsAsync(CollectKeyItemsNeedingAccountStamp(), cancellationToken);
             StampDerivedColumns();
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();
@@ -1204,6 +1268,7 @@ namespace LinkshellManagerDiscordApp.Data
         {
             StampNewMembershipDkpEpoch(CollectNewMembershipsNeedingDkpEpoch());
             StampMembershipRoleIds(CollectMembershipsNeedingRoleStamp());
+            StampKeyItemAccounts(CollectKeyItemsNeedingAccountStamp());
             StampDerivedColumns();
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();

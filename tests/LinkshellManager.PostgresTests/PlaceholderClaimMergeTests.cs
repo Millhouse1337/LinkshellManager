@@ -158,6 +158,7 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             var ticks = await db.ChartMemberKeyItems.AsNoTracking().OrderBy(k => k.KeyItemName).ToListAsync();
             Assert.Equal(new[] { "A", "B" }, ticks.Select(k => k.KeyItemName));
             Assert.All(ticks, k => Assert.Equal(realMembershipId, k.MembershipId));
+            Assert.All(ticks, k => Assert.Equal(Real, k.AppUserId));
 
             Assert.Single(await db.ClaimShieldCaptureMembers.AsNoTracking().ToListAsync());
         }

@@ -132,6 +132,8 @@ public class DataAdminPolicyTests
     [InlineData(typeof(Tod), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
     [InlineData(typeof(PendingTodSubmission), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
     [InlineData(typeof(HnmRecurringBoard), "MonsterName", new[] { "SpawnKey" })]
+    // Not a ToD, but the same rule: a key-item tick's account is stamped from its membership.
+    [InlineData(typeof(ChartMemberKeyItem), "MembershipId", new[] { "AppUserId" })]
     public void DerivedTodColumns_AreShownButNeverEdited(Type entityType, string textColumn, string[] derived)
     {
         var table = Table(NewCatalog(), entityType);

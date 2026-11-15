@@ -217,6 +217,12 @@ public sealed class DataAdminPolicy
             {
                 Options = Opts((nameof(ChartWishlistRequest.Status), ChartWishlistStatuses.All)),
             },
+            // AppUserId follows MembershipId: every save re-stamps it from the membership
+            // (ApplicationDbContext.StampKeyItemAccounts), so it is edited by editing MembershipId.
+            [typeof(ChartMemberKeyItem)] = new()
+            {
+                ReadOnlyColumns = Names(nameof(ChartMemberKeyItem.AppUserId)),
+            },
             [typeof(WindowEvent)] = new()
             {
                 Options = Opts(

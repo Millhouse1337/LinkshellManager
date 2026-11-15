@@ -158,6 +158,10 @@ public sealed class UserMergeService
         yield return Column(_db.Items, x => x.CreatedByAppUserId);
         yield return Column(_db.Rules, x => x.CreatedByAppUserId);
         yield return Column(_db.ChartMemberKeyItems, x => x.SetByAppUserId);
+        // The tick's own account (AccountJobsAndKeyItemAccounts). A tick MoveChartMembershipsAsync
+        // moved onto the kept membership was already re-stamped with the new account on save; this
+        // moves the rest (ticks on a membership that moved to the new account as it is).
+        yield return Column(_db.ChartMemberKeyItems, x => x.AppUserId);
         yield return Column(_db.ChartPopItems, x => x.CreatedByAppUserId);
         yield return Column(_db.ChartPopItemCredits, x => x.CreditedByAppUserId);
         yield return Column(_db.ChartWishlistRequests, x => x.RequestedByAppUserId);
