@@ -15,8 +15,9 @@ namespace LinkshellManager.PostgresTests;
 //
 // Seeded at the migration before with every kind of Rank the app could hold: exact, padded with
 // spaces or tabs, different capitals only, unknown, NULL, empty and blank, and a linkshell with two
-// custom roles that differ only in capitals (today's case-sensitive unique index allows that), plus
-// a linkshell with no role rows at all. Up must link exactly the rows today's name lookup finds and
+// custom roles that differ only in capitals (today's case-sensitive unique index allows that) and a
+// role with an empty name (Data Admin can make one; an empty or blank Rank must never land on it),
+// plus a linkshell with no role rows at all. Up must link exactly the rows today's name lookup finds and
 // leave every other row NULL (so nobody gets more rights), and the SQL must agree with the C# the
 // save hook uses (MembershipRoleMatch). Then the key is checked: another linkshell's role is
 // refused, a held role cannot be deleted, and deleting a whole linkshell still works. Down drops it
@@ -171,6 +172,7 @@ public class MembershipRoleIdBackfillTests
                 .Append(new LinkshellRole { LinkshellId = main, Name = "Raider", SortOrder = 10 })
                 .Append(new LinkshellRole { LinkshellId = main, Name = "raider", SortOrder = 11 })
                 .Append(new LinkshellRole { LinkshellId = main, Name = "Unused", SortOrder = 12 })
+                .Append(new LinkshellRole { LinkshellId = main, Name = "", SortOrder = 13 })
                 .ToList();
             db.LinkshellRoles.AddRange(added);
             await db.SaveChangesAsync();

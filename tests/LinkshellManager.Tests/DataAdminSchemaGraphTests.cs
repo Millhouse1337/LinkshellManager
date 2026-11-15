@@ -366,7 +366,7 @@ public class DataAdminSchemaGraphTests
         Assert.True(Column(graph, "AppUserLinkshell", "LinkshellRoleId").Fk);
         Assert.True(Column(graph, "AppUserLinkshell", "LinkshellRoleId").Nullable);
 
-        var cloned =Relationship(graph, "PartySetup.ClonedFromPartySetupId");
+        var cloned = Relationship(graph, "PartySetup.ClonedFromPartySetupId");
         Assert.Equal("PartySetup", cloned.From);
         Assert.Equal(cloned.From, cloned.To);
     }
