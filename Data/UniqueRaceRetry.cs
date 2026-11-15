@@ -55,4 +55,18 @@ internal static class UniqueRaceRetry
 
     internal static bool IsDuplicateParticipation(DbUpdateException ex) =>
         IsUniqueRejectionOn(ex, new[] { Participations });
+
+    // One open invite per person per linkshell: by account, and by Discord id for someone with no
+    // account yet. The indexes come with the OneCloseOneRouteOneInvite migration; until then this
+    // never matches. Matched by index name, because Invites has a third unique index (one open
+    // join request) that means something else.
+    internal const string OneOpenInviteIndex = "IX_Invites_OneOpenInvite";
+    internal const string OneOpenDiscordInviteIndex = "IX_Invites_OneOpenDiscordInvite";
+
+    // Two officers inviting the same person at the same moment (or one double click): both find no
+    // open invite, both add one, and the index says no to the later. That person is invited, which
+    // is what both asked for.
+    internal static bool IsDuplicateOpenInvite(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } rejection
+        && rejection.ConstraintName is OneOpenInviteIndex or OneOpenDiscordInviteIndex;
 }

@@ -357,6 +357,12 @@ public sealed class InviteCandidateService
             // index said no.
             return new AddDiscordMemberResult(false, "That player is already a member of this linkshell.");
         }
+        catch (DbUpdateException ex) when (UniqueRaceRetry.IsDuplicateOpenInvite(ex))
+        {
+            // Another officer (or a double click) invited them between the check above and this
+            // save; the one-open-invite index said no. Same answer as the check gives.
+            return new AddDiscordMemberResult(false, "That person has already been invited.");
+        }
         return new AddDiscordMemberResult(true, null);
     }
 }
