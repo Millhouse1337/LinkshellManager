@@ -197,7 +197,7 @@ public sealed partial class ActivityRosterController
 
             if (string.Equals(currentMembership!.Rank, LinkshellRanks.Leader, StringComparison.OrdinalIgnoreCase))
             {
-                // Its role id follows on save (ApplicationDbContext.StampMembershipRoleIds).
+                // Its role id follows on save (ApplicationDbContext.StampMembershipRoles).
                 currentMembership.Rank = LinkshellRanks.Officer;
             }
             targetMembership.Rank = LinkshellRanks.Leader;

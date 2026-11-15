@@ -120,9 +120,11 @@ public class LinkshellPermissionsTests
     public async Task CustomRole_UsesItsOwnFlags()
     {
         await using var db = NewDb();
-        var membership = await SeedMemberAsync(db, UserId, "Raid Lead");
+        // The role first: a rank saved before its role exists is given the Member role.
+        db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS1", LootStructure = "Dkp" });
         db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = Ls, Name = "Raid Lead", CanManageEvents = true });
         await db.SaveChangesAsync();
+        var membership = await SeedMemberAsync(db, UserId, "Raid Lead");
         var permissions = await NewServiceAsync(db);
 
         Assert.True(await permissions.CanAsync(membership, r => r.CanManageEvents, CancellationToken.None));
@@ -170,10 +172,12 @@ public class LinkshellPermissionsTests
 
     // ---- RosterSwitch: the role is read by id (AppUserLinkshell.LinkshellRoleId) ----------------
 
-    // For every kind of Rank a member can hold, the id path and the old name path give the SAME
-    // role and the same answer to every permission. The save hook stamps the id from Rank, so this
-    // is the proof that switching the read changed nobody's rights.
+    // For every kind of Rank a writer can save, the id the save hook picks gives the SAME role and
+    // the same answer to every permission as the name path (GetEffectiveRoleAsync by rank), so
+    // making the id the source changed nobody's rights. The hook also makes Rank that role's exact
+    // name ("officer" becomes "Member", which is what it already got).
     [Theory]
+    [InlineData("leader")]
     [InlineData("Officer")]
     [InlineData(" Officer ")]
     [InlineData("officer")]
@@ -195,24 +199,33 @@ public class LinkshellPermissionsTests
         var permissions = await NewServiceAsync(db);
 
         var byId = await permissions.GetEffectiveRoleAsync(membership, CancellationToken.None);
-        var byRank = await permissions.GetEffectiveRoleAsync(rank, Ls, CancellationToken.None);
+        // "leader" in any capitals is the Leader by rank (rule 3), whatever role the name finds.
+        var byRank = LinkshellRanks.IsLeader(rank)
+            ? await permissions.GetEffectiveRoleAsync(LinkshellRanks.Leader, Ls, CancellationToken.None)
+            : await permissions.GetEffectiveRoleAsync(rank, Ls, CancellationToken.None);
         Assert.NotNull(byId);
         Assert.Equal(byRank!.Id, byId!.Id);
+        Assert.Equal(byRank.Name, membership.Rank);
+        Assert.Equal(LinkshellRanks.IsLeader(rank), LinkshellRanks.IsLeader(membership.Rank));
 
         foreach (var flag in AllFlags)
         {
-            Assert.Equal(byRank is not null && flag(byRank), await permissions.CanAsync(membership, flag, CancellationToken.None));
+            var before = LinkshellRanks.IsLeader(rank) || flag(byRank);
+            Assert.Equal(before, await permissions.CanAsync(membership, flag, CancellationToken.None));
         }
 
-        // The overview and the bid check read the same role.
+        // The overview reads the same role by id as the name path finds. (Its own name path matched
+        // any capitals, so for "officer" it showed Officer rights that nothing else gave; the id now
+        // shows the Member rights the member really had.)
         var roles = await db.LinkshellRoles.AsNoTracking().Where(r => r.LinkshellId == Ls).ToListAsync();
         var byName = new Dictionary<int, Dictionary<string, LinkshellRole>>
         {
             [Ls] = roles.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase),
         };
         Assert.Equal(
-            LinkshellManagerDiscordApp.Controllers.ActivityMappers.ResolvePermissionsFor(Ls, rank, byName, adminOverrideActive: false),
+            LinkshellManagerDiscordApp.Controllers.ActivityMappers.ResolvePermissionsFor(Ls, byRank.Name, byName, adminOverrideActive: false),
             LinkshellManagerDiscordApp.Controllers.ActivityMappers.ResolvePermissionsFor(Ls, rank, byName, adminOverrideActive: false, membership.LinkshellRoleId));
+        // And the bid check gives what the rank gave before the save.
         Assert.Equal(
             await AuctionBidService.CanRankBidAsync(db, Ls, rank, CancellationToken.None),
             await AuctionBidService.CanMembershipBidAsync(db, membership, CancellationToken.None));
@@ -241,7 +254,9 @@ public class LinkshellPermissionsTests
     }
 
     // The Leader rule still comes first: a Leader whose role id points at a role with no rights
-    // (hand-edited, or stale) keeps every permission.
+    // (edited straight in the database, or stale) keeps every permission. A save would now copy
+    // that role's name into Rank, so the stale pair is made in memory only, the way such a row
+    // would be read.
     [Fact]
     public async Task Leader_IsAllowed_EvenWhenTheirRoleIdNamesARoleWithNoRights()
     {
@@ -250,8 +265,9 @@ public class LinkshellPermissionsTests
         var empty = new LinkshellRole { LinkshellId = Ls, Name = "Nothing" };
         db.LinkshellRoles.Add(empty);
         await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
         membership.LinkshellRoleId = empty.Id;
-        await db.SaveChangesAsync();
+        Assert.Equal(LinkshellRanks.Leader, membership.Rank);
         var permissions = await NewServiceAsync(db);
 
         Assert.True(await permissions.CanAsync(membership, r => r.CanManageRoles, CancellationToken.None));

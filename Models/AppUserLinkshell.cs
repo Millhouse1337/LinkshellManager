@@ -38,15 +38,20 @@ public class AppUserLinkshell
 
     public string? Rank { get; set; }
 
-    // The LinkshellRoles row Rank names, by id: the role whose Name equals the trimmed Rank
-    // exactly (case matters), in this member's own linkshell. Null when Rank is blank or names no
-    // role, which is "look the role up by name", the same as before this column existed.
-    //
-    // Kept in step with Rank on every save (ApplicationDbContext.StampMembershipRoleIds), so no
-    // writer has to remember it. Permissions still read Rank for now; a later deploy switches them
-    // to this id, so renaming a custom role can never strip its holders' rights. The foreign key is
-    // on (LinkshellId, LinkshellRoleId), so a member can never hold another linkshell's role.
+    // The role this member holds. This id is the source; Rank above is only the role's name, copied
+    // on every save (ApplicationDbContext.StampMembershipRoles), so a writer sets one of them and
+    // the save fills in the other:
+    //   - set the id (or Role), and Rank becomes that role's Name;
+    //   - set only Rank, and the id becomes the role whose Name equals the trimmed Rank exactly
+    //     (case matters). A Rank that names no role gets the Member role, and Rank says "Member".
+    // Still nullable; a later deploy makes it required. Permissions read this id first and fall
+    // back to the Rank name. The foreign key is on (LinkshellId, LinkshellRoleId), so a member can
+    // never hold another linkshell's role.
     public int? LinkshellRoleId { get; set; }
+
+    // The role row LinkshellRoleId names (the same two-column foreign key). It lets one save add a
+    // linkshell's default roles and point a member at one of them before either has an id.
+    public LinkshellRole? Role { get; set; }
 
     public string? Status { get; set; }
 

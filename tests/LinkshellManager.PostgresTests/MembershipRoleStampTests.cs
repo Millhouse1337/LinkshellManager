@@ -12,15 +12,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using Xunit;
 
 namespace LinkshellManager.PostgresTests;
 
-// The save hook keeps AppUserLinkshells.LinkshellRoleId in step with Rank (AddMembershipRoleId),
-// here on real Postgres, where the two-column foreign key actually checks what EF writes: a new
-// member is linked to the role their Rank names, a rank change through the app's own endpoint
-// moves the link (both halves of a Leader hand-over), a Rank that names no role leaves it empty,
-// and deleting a role or a whole linkshell still works the way the app does it.
+// The save hook keeps a membership's role id (the source) and its Rank text (a copy of the role's
+// name) in step, here on real Postgres, where the two-column foreign key actually checks what EF
+// writes: a new member is given the role their Rank names, a rank change through the app's own
+// endpoint moves it (both halves of a Leader hand-over), a Rank that names no role gets Member, a
+// Data Admin id edit moves Rank with it, another linkshell's role is refused, a new linkshell gets
+// its default roles, and deleting a role or a whole linkshell still works the way the app does it.
 [Collection("postgres")]
 public class MembershipRoleStampTests : IAsyncLifetime
 {
@@ -89,8 +91,13 @@ public class MembershipRoleStampTests : IAsyncLifetime
         Assert.Equal(seed.Roles[(seed.Main, LinkshellRanks.Leader)], await RoleIdOfAsync(seed.Members[Leader]));
         Assert.Equal(seed.Roles[(seed.Main, "Raider")], await RoleIdOfAsync(seed.Members[Raider]));
         Assert.Equal(seed.Roles[(seed.Main, "Raider")], await RoleIdOfAsync(seed.Members[Padded]));
-        Assert.Null(await RoleIdOfAsync(seed.Members[Shouty]));  // capitals only: looked up by name, as today
+        // Capitals only: permissions already gave it the Member role, and now the id says so too.
+        Assert.Equal(seed.Roles[(seed.Main, LinkshellRanks.Member)], await RoleIdOfAsync(seed.Members[Shouty]));
         Assert.Equal(seed.Roles[(seed.Other, LinkshellRanks.Officer)], await RoleIdOfAsync(seed.Members[Elsewhere]));
+
+        // Rank is the held role's exact name.
+        Assert.Equal("Raider", await RankOfAsync(seed.Members[Padded]));
+        Assert.Equal(LinkshellRanks.Member, await RankOfAsync(seed.Members[Shouty]));
     }
 
     [Fact]
@@ -117,7 +124,7 @@ public class MembershipRoleStampTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RankThatNamesNoRole_ClearsTheLink_AndAnUnrelatedSaveLeavesItAlone()
+    public async Task RankThatNamesNoRole_GetsTheMemberRole_AndAnUnrelatedSaveLeavesItAlone()
     {
         var seed = await SeedAsync();
 
@@ -135,7 +142,118 @@ public class MembershipRoleStampTests : IAsyncLifetime
             member.Rank = "Auctionner";
             await db.SaveChangesAsync();
         }
-        Assert.Null(await RoleIdOfAsync(seed.Members[Raider]));
+        Assert.Equal(seed.Roles[(seed.Main, LinkshellRanks.Member)], await RoleIdOfAsync(seed.Members[Raider]));
+        Assert.Equal(LinkshellRanks.Member, await RankOfAsync(seed.Members[Raider]));
+    }
+
+    // The id is the source: setting it (as Data Admin does) copies the role's name into Rank.
+    [Fact]
+    public async Task IdSet_ThroughDataAdmin_MovesTheRole_AndRankFollows()
+    {
+        var seed = await SeedAsync();
+
+        await using (var db = _pg.CreateContext())
+        {
+            var result = await DataAdminSetRoleIdAsync(db, seed.Members[Shouty], seed.Roles[(seed.Main, "Raider")]);
+            Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(e => e.Message)));
+        }
+
+        Assert.Equal(seed.Roles[(seed.Main, "Raider")], await RoleIdOfAsync(seed.Members[Shouty]));
+        Assert.Equal("Raider", await RankOfAsync(seed.Members[Shouty]));
+    }
+
+    // The two-column foreign key refuses a role from another linkshell, whoever writes it: the
+    // save hook leaves such an id alone (it is not one of this linkshell's roles), and the database
+    // says no. Data Admin turns that into a form error, and nothing changes.
+    [Fact]
+    public async Task AnotherLinkshellsRole_IsRefused_ByTheForeignKey()
+    {
+        var seed = await SeedAsync();
+        var otherOfficer = seed.Roles[(seed.Other, LinkshellRanks.Officer)];
+
+        await using (var db = _pg.CreateContext())
+        {
+            var member = await db.AppUserLinkshells.SingleAsync(m => m.Id == seed.Members[Raider]);
+            member.LinkshellRoleId = otherOfficer;
+            var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+            Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, Assert.IsType<PostgresException>(error.InnerException).SqlState);
+        }
+
+        await using (var db = _pg.CreateContext())
+        {
+            var result = await DataAdminSetRoleIdAsync(db, seed.Members[Raider], otherOfficer);
+            Assert.False(result.Succeeded);
+            Assert.Contains("referenced row", Assert.Single(result.Errors).Message, StringComparison.Ordinal);
+        }
+
+        await using (var db = _pg.CreateContext())
+        {
+            db.AppUserLinkshells.Add(new AppUserLinkshell
+            {
+                LinkshellId = seed.Main, AppUserId = null, Rank = LinkshellRanks.Member,
+                LinkshellRoleId = otherOfficer, LinkshellDkp = 0,
+            });
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+
+        Assert.Equal(seed.Roles[(seed.Main, "Raider")], await RoleIdOfAsync(seed.Members[Raider]));
+        Assert.Equal("Raider", await RankOfAsync(seed.Members[Raider]));
+    }
+
+    // A linkshell with no roles yet gets the four default roles in the same save as its first
+    // member, and the member holds the right one -- here with the linkshell itself added in that
+    // save too, so nothing has a real id until Postgres hands them out.
+    [Fact]
+    public async Task LinkshellAndLeaderInOneSave_GetTheDefaultRoles_AndTheLeaderRole()
+    {
+        await using (var db = _pg.CreateContext())
+        {
+            db.Users.Add(new AppUser { Id = "founder", UserName = "founder", CharacterName = "Founder" });
+            var linkshell = new Linkshell { LinkshellName = "Fresh LS" };
+            db.Linkshells.Add(linkshell);
+            db.AppUserLinkshells.Add(new AppUserLinkshell
+            {
+                Linkshell = linkshell, AppUserId = "founder", CharacterName = "Founder",
+                Rank = LinkshellRanks.Leader, LinkshellDkp = 0,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await using var check = _pg.CreateContext();
+        var member = await check.AppUserLinkshells.AsNoTracking().SingleAsync(m => m.AppUserId == "founder");
+        var roles = await check.LinkshellRoles.AsNoTracking().Where(r => r.LinkshellId == member.LinkshellId).ToListAsync();
+        Assert.Equal(
+            LinkshellRoleDefaults.BuildDefaultRoles(member.LinkshellId).Select(r => r.Name).OrderBy(n => n),
+            roles.Select(r => r.Name).OrderBy(n => n));
+        Assert.Equal(roles.Single(r => r.Name == LinkshellRanks.Leader).Id, member.LinkshellRoleId);
+        Assert.Equal(LinkshellRanks.Leader, member.Rank);
+    }
+
+    // The create-linkshell endpoint adds the roles first, so its leader is saved holding the
+    // Leader role, and the linkshell has exactly one set of default roles.
+    [Fact]
+    public async Task CreateLinkshell_TheLeaderHoldsTheLeaderRole()
+    {
+        await SeedAsync();
+
+        int linkshellId;
+        await using (var db = _pg.CreateContext())
+        {
+            var result = await SettingsController(db, Raider).CreateLinkshellAsync(
+                new ActivityCreateLinkshellRequest("Brand New LS", null), CancellationToken.None);
+            var ok = Assert.IsType<OkObjectResult>(result);
+            linkshellId = (int)ok.Value!.GetType().GetProperty("linkshellId")!.GetValue(ok.Value)!;
+        }
+
+        await using var check = _pg.CreateContext();
+        var member = await check.AppUserLinkshells.AsNoTracking().SingleAsync(m => m.LinkshellId == linkshellId);
+        var leaderRole = await check.LinkshellRoles.AsNoTracking()
+            .SingleAsync(r => r.LinkshellId == linkshellId && r.Name == LinkshellRanks.Leader);
+        Assert.Equal(leaderRole.Id, member.LinkshellRoleId);
+        Assert.Equal(LinkshellRanks.Leader, member.Rank);
+        Assert.Equal(
+            LinkshellRoleDefaults.BuildDefaultRoles(linkshellId).Count(),
+            await check.LinkshellRoles.CountAsync(r => r.LinkshellId == linkshellId));
     }
 
     // The role delete checks holders by name AND by id: " Raider " holds Raider by id only, and
@@ -206,6 +324,19 @@ public class MembershipRoleStampTests : IAsyncLifetime
         }
         // Nobody else picked the role up.
         Assert.False(await CanManageEventsAsync(seed.Members[Shouty]));
+
+        // After the rename the id still decides: an unrelated save keeps the new name, and a
+        // member moved onto the role by id gets the new name too.
+        await using (var db = _pg.CreateContext())
+        {
+            (await db.AppUserLinkshells.SingleAsync(m => m.Id == seed.Members[Raider])).Status = "Active";
+            await db.SaveChangesAsync();
+            var result = await DataAdminSetRoleIdAsync(db, seed.Members[Shouty], raiderRole);
+            Assert.True(result.Succeeded, string.Join("; ", result.Errors.Select(e => e.Message)));
+        }
+        Assert.Equal("Strikers", await RankOfAsync(seed.Members[Raider]));
+        Assert.Equal("Strikers", await RankOfAsync(seed.Members[Shouty]));
+        Assert.True(await CanManageEventsAsync(seed.Members[Shouty]));
     }
 
     // A role renamed straight in the table (Data Admin edits only the role row): the holders keep
@@ -275,7 +406,44 @@ public class MembershipRoleStampTests : IAsyncLifetime
             .SingleAsync();
     }
 
+    private async Task<string?> RankOfAsync(int membershipId)
+    {
+        await using var db = _pg.CreateContext();
+        return await db.AppUserLinkshells.AsNoTracking()
+            .Where(m => m.Id == membershipId)
+            .Select(m => m.Rank)
+            .SingleAsync();
+    }
+
+    // Data Admin's edit of the role id: Rank is read-only there, the id is the field.
+    private static Task<DataAdminEditResult> DataAdminSetRoleIdAsync(ApplicationDbContext db, int membershipId, int roleId)
+    {
+        var catalog = new DataAdminCatalog(db.Model, DataAdminPolicy.Default);
+        var editor = new DataAdminEditor(db, new GlobalSettingsService(db, new MemoryCache(new MemoryCacheOptions())), NullLogger<DataAdminEditor>.Instance);
+        return editor.UpdateAsync(
+            catalog.FindByClrType(typeof(AppUserLinkshell))!,
+            membershipId,
+            new Dictionary<string, string?> { [nameof(AppUserLinkshell.LinkshellRoleId)] = roleId.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+            new AppUser { Id = "admin-1", UserName = "millhouse", IsSuperAdmin = true },
+            CancellationToken.None);
+    }
+
+    private static ActivitySettingsController SettingsController(ApplicationDbContext db, string userId)
+    {
+        var (http, userManager, adminOverride) = ControllerParts(db, userId);
+        return ActivityControllerFactory.Create<ActivitySettingsController>(
+            http, db, userManager, adminOverride, new LinkshellPermissions(db, adminOverride));
+    }
+
     private static ActivityRosterController Controller(ApplicationDbContext db, string userId)
+    {
+        var (http, userManager, adminOverride) = ControllerParts(db, userId);
+        return ActivityControllerFactory.Create<ActivityRosterController>(
+            http, db, userManager, adminOverride, new LinkshellPermissions(db, adminOverride));
+    }
+
+    private static (DefaultHttpContext Http, UserManager<AppUser> UserManager, AdminOverrideService AdminOverride) ControllerParts(
+        ApplicationDbContext db, string userId)
     {
         var userManager = new UserManager<AppUser>(
             new UserStore<AppUser>(db),
@@ -294,7 +462,6 @@ public class MembershipRoleStampTests : IAsyncLifetime
             User = new ClaimsPrincipal(new ClaimsIdentity(
                 new[] { new Claim(ClaimTypes.NameIdentifier, userId) }, authenticationType: "Test")),
         };
-        return ActivityControllerFactory.Create<ActivityRosterController>(
-            http, db, userManager, adminOverride, new LinkshellPermissions(db, adminOverride));
+        return (http, userManager, adminOverride);
     }
 }

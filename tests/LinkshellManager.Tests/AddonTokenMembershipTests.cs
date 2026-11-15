@@ -171,6 +171,10 @@ public class AddonTokenMembershipTests
         db.LinkshellRoles.Add(new LinkshellRole { LinkshellId = LinkshellId, Name = "Mule", CanUseAddon = false });
         db.AppUserLinkshells.Add(new AppUserLinkshell { AppUserId = SomeoneElse, LinkshellId = LinkshellId, Rank = "Mule" });
         await db.SaveChangesAsync();
+        // The seed saved "Scout" before that role existed, so the save gave it the Member role. Now
+        // that it exists, the rank change picks it up.
+        (await db.AppUserLinkshells.SingleAsync(m => m.AppUserId == Me)).Rank = "Scout";
+        await db.SaveChangesAsync();
         var scoutRaw = await AddTokenAsync(db, 1);
         var muleRaw = await AddTokenAsync(db, 2, issuedTo: SomeoneElse);
 

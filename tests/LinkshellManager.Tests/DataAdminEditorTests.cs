@@ -128,17 +128,18 @@ public class DataAdminEditorTests
     {
         using var db = await SeededAsync();
         var (catalog, editor, _) = Harness(db);
-        var memberships = Table(catalog, typeof(AppUserLinkshell));
-
-        var bad = await editor.UpdateAsync(memberships, 1, Values(("Rank", "Boss")), Actor, CancellationToken.None);
-        Assert.Contains("must be one of", Assert.Single(bad.Errors, e => e.Field == "Rank").Message, StringComparison.Ordinal);
-        Assert.Equal(LinkshellRanks.Member, (await db.AppUserLinkshells.AsNoTracking().SingleAsync()).Rank);
-
-        var good = await editor.UpdateAsync(memberships, 1, Values(("Rank", LinkshellRanks.Officer)), Actor, CancellationToken.None);
-        Assert.True(good.Succeeded);
-        Assert.Equal(LinkshellRanks.Officer, (await db.AppUserLinkshells.AsNoTracking().SingleAsync()).Rank);
-
+        // (This used the membership Rank list until Rank became a read-only copy of the role.)
         var linkshells = Table(catalog, typeof(Linkshell));
+        var mode = nameof(Linkshell.HnmAttendanceMode);
+
+        var bad = await editor.UpdateAsync(linkshells, 1, Values((mode, "Boss")), Actor, CancellationToken.None);
+        Assert.Contains("must be one of", Assert.Single(bad.Errors, e => e.Field == mode).Message, StringComparison.Ordinal);
+        Assert.Equal(HnmAttendanceModes.Standard, (await db.Linkshells.AsNoTracking().SingleAsync(l => l.Id == 1)).HnmAttendanceMode);
+
+        var good = await editor.UpdateAsync(linkshells, 1, Values((mode, HnmAttendanceModes.Wd)), Actor, CancellationToken.None);
+        Assert.True(good.Succeeded);
+        Assert.Equal(HnmAttendanceModes.Wd, (await db.Linkshells.AsNoTracking().SingleAsync(l => l.Id == 1)).HnmAttendanceMode);
+
         var max = linkshells.FindColumn(nameof(Linkshell.LootStructure))?.MaxLength ?? throw new InvalidOperationException("LootStructure has no max length");
         var tooLong = await editor.UpdateAsync(linkshells, 1, Values(("LootStructure", new string('x', max + 1))), Actor, CancellationToken.None);
         Assert.Contains("characters or fewer", Assert.Single(tooLong.Errors, e => e.Field == "LootStructure").Message, StringComparison.Ordinal);
@@ -301,11 +302,18 @@ public class DataAdminEditorTests
 
         var membership = await db.AppUserLinkshells.AsNoTracking().SingleAsync();
         var edit = await editor.BuildFormAsync(Table(catalog, typeof(AppUserLinkshell)), membership, posted: null, Array.Empty<DataAdminFieldError>(), CancellationToken.None);
-        var rank = Assert.Single(edit.Fields, f => f.Name == nameof(AppUserLinkshell.Rank));
-        Assert.Equal("select", rank.InputType);
-        Assert.Equal(DataAdminOptions.FromConsts(typeof(LinkshellRanks)), rank.Options?.Select(o => o.Value));
-        Assert.Equal(LinkshellRanks.Member, rank.Value);
-        Assert.False(rank.IsRequired);
+        // Rank is a read-only copy of the role; the role is edited by its id.
+        Assert.DoesNotContain(edit.Fields, f => f.Name == nameof(AppUserLinkshell.Rank));
+        var roleId = Assert.Single(edit.Fields, f => f.Name == nameof(AppUserLinkshell.LinkshellRoleId));
+        Assert.Equal("number", roleId.InputType);
+        Assert.False(roleId.IsRequired);
+
+        var linkshellRow = await db.Linkshells.AsNoTracking().SingleAsync(l => l.Id == 1);
+        var linkshellForm = await editor.BuildFormAsync(Table(catalog, typeof(Linkshell)), linkshellRow, posted: null, Array.Empty<DataAdminFieldError>(), CancellationToken.None);
+        var mode = Assert.Single(linkshellForm.Fields, f => f.Name == nameof(Linkshell.HnmAttendanceMode));
+        Assert.Equal("select", mode.InputType);
+        Assert.Equal(HnmAttendanceModes.All, mode.Options?.Select(o => o.Value));
+        Assert.Equal(HnmAttendanceModes.Standard, mode.Value);
 
         var user = await db.Users.AsNoTracking().SingleAsync(u => u.Id == "u1");
         var userForm = await editor.BuildFormAsync(Table(catalog, typeof(AppUser)), user, posted: null, Array.Empty<DataAdminFieldError>(), CancellationToken.None);

@@ -3757,7 +3757,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("LinkshellManagerDiscordApp.Models.LinkshellRole", null)
+                    b.HasOne("LinkshellManagerDiscordApp.Models.LinkshellRole", "Role")
                         .WithMany()
                         .HasForeignKey("LinkshellId", "LinkshellRoleId")
                         .HasPrincipalKey("LinkshellId", "Id")
@@ -3766,6 +3766,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("AppUser");
 
                     b.Navigation("Linkshell");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AttendanceSnapshot", b =>

@@ -130,15 +130,15 @@ public sealed class DataAdminPolicy
             {
                 // The DKP epoch watermark is stamped on insert (ApplicationDbContext), so rows are born in the app.
                 Flags = DataAdminPolicyFlags.NoCreate,
-                Options = Opts((nameof(AppUserLinkshell.Rank), DataAdminOptions.FromConsts(typeof(LinkshellRanks)))),
                 // The balance and its ledger watermarks are only ever moved by DkpLedgerWriter, which keeps
                 // them in step with the ledger (INV-1 in ApplicationDbContext); shown here, never edited.
-                // LinkshellRoleId follows Rank: every save re-stamps it from the Rank (ApplicationDbContext),
-                // so it is edited by editing Rank.
+                // The role is edited by its id (LinkshellRoleId, the source); every save copies that role's
+                // name into Rank (ApplicationDbContext.StampMembershipRoles), so Rank is shown, never edited.
+                // The two-column foreign key refuses another linkshell's role.
                 ReadOnlyColumns = Names(
                     nameof(AppUserLinkshell.LinkshellDkp), nameof(AppUserLinkshell.SeededDkpEarned), nameof(AppUserLinkshell.SeededDkpSpent),
                     nameof(AppUserLinkshell.DkpSeedLedgerId), nameof(AppUserLinkshell.DkpPoolLedgerFromId),
-                    nameof(AppUserLinkshell.LinkshellRoleId)),
+                    nameof(AppUserLinkshell.Rank)),
             },
             [typeof(DiscordActivityUser)] = new()
             {

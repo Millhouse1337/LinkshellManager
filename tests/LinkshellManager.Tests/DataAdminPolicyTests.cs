@@ -93,8 +93,6 @@ public class DataAdminPolicyTests
     {
         var catalog = NewCatalog();
 
-        Assert.Equal(DataAdminOptions.FromConsts(typeof(LinkshellRanks)), Options(catalog, typeof(AppUserLinkshell), nameof(AppUserLinkshell.Rank)));
-        Assert.Contains(LinkshellRanks.Trial, Options(catalog, typeof(AppUserLinkshell), nameof(AppUserLinkshell.Rank)));
         Assert.Equal(HnmAttendanceModes.All, Options(catalog, typeof(Linkshell), nameof(Linkshell.HnmAttendanceMode)));
         Assert.Equal(DkpPoolAccents.All, Options(catalog, typeof(DkpPool), nameof(DkpPool.Accent)));
         Assert.Equal(DataAdminOptions.FromConsts(typeof(WindowEventStatuses)), Options(catalog, typeof(WindowEvent), nameof(WindowEvent.Status)));
@@ -217,15 +215,17 @@ public class DataAdminPolicyTests
     }
 
     // A membership's DKP balance and ledger watermarks are only ever moved by DkpLedgerWriter,
-    // which keeps them in step with the ledger; a raw edit here would desync them.
+    // which keeps them in step with the ledger; a raw edit here would desync them. Rank is a copy
+    // of the role's name, stamped from the role id on every save, so the role is edited by its id.
     [Fact]
-    public void MembershipDkpColumns_AreShownButNeverEditable()
+    public void MembershipDkpColumnsAndRank_AreShownButNeverEditable_TheRoleIdIs()
     {
         var table = Table(NewCatalog(), typeof(AppUserLinkshell));
         var locked = new[]
         {
             nameof(AppUserLinkshell.LinkshellDkp), nameof(AppUserLinkshell.SeededDkpEarned), nameof(AppUserLinkshell.SeededDkpSpent),
             nameof(AppUserLinkshell.DkpSeedLedgerId), nameof(AppUserLinkshell.DkpPoolLedgerFromId),
+            nameof(AppUserLinkshell.Rank),
         };
 
         foreach (var name in locked)
@@ -233,7 +233,8 @@ public class DataAdminPolicyTests
             Assert.Contains(table.DetailColumns, c => c.Name == name);
             Assert.DoesNotContain(table.EditableColumns, c => c.Name == name);
         }
-        Assert.Contains(table.EditableColumns, c => c.Name == nameof(AppUserLinkshell.Rank));
+        Assert.Contains(table.EditableColumns, c => c.Name == nameof(AppUserLinkshell.LinkshellRoleId));
+        Assert.Null(table.FindColumn(nameof(AppUserLinkshell.Rank))?.Options);
     }
 
     // Memberships point at a role by (LinkshellId, Id), so a role's linkshell is part of a key: it

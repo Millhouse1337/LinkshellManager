@@ -55,6 +55,10 @@ public sealed partial class ActivitySettingsController
         _dbContext.Linkshells.Add(linkshell);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // The roles first, so the leader below is saved holding the Leader role by id. (The save
+        // hook would add them too, but this is the one place a linkshell is born.)
+        await EnsureDefaultRolesAsync(linkshell.Id, cancellationToken);
+
         _dbContext.AppUserLinkshells.Add(new AppUserLinkshell
         {
             AppUserId = appUser.Id,

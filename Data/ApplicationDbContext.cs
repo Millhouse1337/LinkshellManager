@@ -819,83 +819,238 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
-        // Keeps AppUserLinkshell.LinkshellRoleId in step with Rank (AddMembershipRoleId): the role in
-        // the member's own linkshell whose Name equals the trimmed Rank, case mattering, else null
-        // (MembershipRoleMatch). Done here, like the epoch above, so every writer gets it -- the
-        // seven join paths, the rank change, a placeholder claim's best-rank merge and Data Admin --
-        // and the next one added cannot forget it.
-        //
-        // A new membership is always stamped. A saved one is re-stamped when its Rank (or linkshell)
-        // changed and nobody set the id in the same save. A role rename needs nothing: holders keep
-        // the same role id. Roles are looked up in the database, so a role added in this same save
-        // is not found yet; that member stays null, which still means "look it up by name".
-        private List<AppUserLinkshell> CollectMembershipsNeedingRoleStamp() =>
+        // Keeps a membership's role id (AppUserLinkshell.LinkshellRoleId, the source) and its Rank
+        // text (a copy of the role's name) in step. Done here, like the epoch above, so every writer
+        // gets it -- the seven join paths, the rank change, a placeholder claim and Data Admin --
+        // and the next one added cannot forget it. For each membership that is new, or whose Rank,
+        // linkshell or role id changed:
+        //   1. The id was set (a new row with an id, or the id changed to a value): Rank becomes
+        //      that role's Name. An id that is not one of the member's own linkshell's roles is left
+        //      alone, and the two-column foreign key refuses the save.
+        //   2. Otherwise the role is looked up from Rank (MembershipRoleMatch): the role whose Name
+        //      equals the trimmed Rank exactly; else Leader for "leader" in other capitals, and the
+        //      Member role for anything else, with a warning in the log. Either way the id is set
+        //      and Rank becomes the role's exact Name. Permissions already gave such a Rank that same
+        //      role, so nobody's rights change.
+        //   3. A linkshell missing any of its built-in roles (a brand new one has none) gets the
+        //      missing ones added in this same save, the way LinkshellPermissions.EnsureDefaultRoles
+        //      adds them. EF inserts them first and fills in the member's id.
+        // A role rename needs nothing here: holders keep the same id, and the rename endpoint moves
+        // their Rank text itself. Roles are found among the tracked rows first (one added or renamed
+        // in this save), then in one query.
+        private List<EntityEntry<AppUserLinkshell>> CollectMembershipsNeedingRoleStamp() =>
             ChangeTracker.Entries<AppUserLinkshell>()
                 .Where(entry => entry.State == EntityState.Added
                     || (entry.State == EntityState.Modified
                         && (entry.Property(nameof(AppUserLinkshell.Rank)).IsModified
-                            || entry.Property(nameof(AppUserLinkshell.LinkshellId)).IsModified)
-                        && !entry.Property(nameof(AppUserLinkshell.LinkshellRoleId)).IsModified))
-                .Select(entry => entry.Entity)
+                            || entry.Property(nameof(AppUserLinkshell.LinkshellId)).IsModified
+                            || entry.Property(nameof(AppUserLinkshell.LinkshellRoleId)).IsModified)))
                 .ToList();
 
-        private async Task StampMembershipRoleIdsAsync(
-            List<AppUserLinkshell> memberships, CancellationToken cancellationToken)
+        private async Task StampMembershipRolesAsync(
+            List<EntityEntry<AppUserLinkshell>> memberships, CancellationToken cancellationToken)
         {
             if (memberships.Count == 0)
             {
                 return;
             }
-            var (linkshellIds, names) = RoleLookupKeys(memberships);
-            var roles = linkshellIds.Count == 0 || names.Count == 0
+            var (linkshellIds, roleIds) = RoleLookupKeys(memberships);
+            var saved = linkshellIds.Count == 0 && roleIds.Count == 0
                 ? new List<LinkshellRole>()
-                : await LinkshellRoles.AsNoTracking()
-                    .Where(role => linkshellIds.Contains(role.LinkshellId) && names.Contains(role.Name))
-                    .ToListAsync(cancellationToken);
-            ApplyRoleStamps(memberships, roles);
+                : await SavedRolesQuery(linkshellIds, roleIds).ToListAsync(cancellationToken);
+            ApplyRoleStamps(memberships, saved);
         }
 
-        private void StampMembershipRoleIds(List<AppUserLinkshell> memberships)
+        private void StampMembershipRoles(List<EntityEntry<AppUserLinkshell>> memberships)
         {
             if (memberships.Count == 0)
             {
                 return;
             }
-            var (linkshellIds, names) = RoleLookupKeys(memberships);
-            var roles = linkshellIds.Count == 0 || names.Count == 0
+            var (linkshellIds, roleIds) = RoleLookupKeys(memberships);
+            var saved = linkshellIds.Count == 0 && roleIds.Count == 0
                 ? new List<LinkshellRole>()
-                : LinkshellRoles.AsNoTracking()
-                    .Where(role => linkshellIds.Contains(role.LinkshellId) && names.Contains(role.Name))
-                    .ToList();
-            ApplyRoleStamps(memberships, roles);
+                : SavedRolesQuery(linkshellIds, roleIds).ToList();
+            ApplyRoleStamps(memberships, saved);
         }
 
-        // One query for the whole save: the saved linkshells (a linkshell added in this save has no
-        // roles yet) and the role names the Ranks ask for.
-        private static (List<int> LinkshellIds, List<string> Names) RoleLookupKeys(List<AppUserLinkshell> memberships)
+        private IQueryable<LinkshellRole> SavedRolesQuery(List<int> linkshellIds, List<int> roleIds) =>
+            LinkshellRoles.AsNoTracking()
+                .Where(role => linkshellIds.Contains(role.LinkshellId) || roleIds.Contains(role.Id));
+
+        // A membership whose save names its role by id (rule 1 above): a new row with an id, or the
+        // id itself changed to a value.
+        private static bool SetsRoleById(EntityEntry<AppUserLinkshell> entry)
         {
-            var linkshellIds = memberships
-                .Where(m => m.LinkshellId > 0)
-                .Select(m => m.LinkshellId)
-                .Distinct()
-                .ToList();
-            var names = memberships
-                .Select(m => MembershipRoleMatch.RoleName(m.Rank))
-                .OfType<string>()
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-            return (linkshellIds, names);
+            var id = entry.Property(nameof(AppUserLinkshell.LinkshellRoleId));
+            return id.CurrentValue is not null
+                && (entry.State == EntityState.Added || id.IsModified);
         }
 
-        private void ApplyRoleStamps(List<AppUserLinkshell> memberships, List<LinkshellRole> roles)
+        private static int LinkshellKeyOf(EntityEntry entry) =>
+            (int)entry.Property(nameof(AppUserLinkshell.LinkshellId)).CurrentValue!;
+
+        // One query for the whole save: every role of the linkshells whose members are looked up by
+        // Rank (to find the name, the Member role, or that a built-in role is missing), and the
+        // roles named by id. Keys EF has not given a real value yet are skipped: nothing is saved
+        // under them.
+        private static (List<int> LinkshellIds, List<int> RoleIds) RoleLookupKeys(
+            List<EntityEntry<AppUserLinkshell>> memberships)
         {
-            foreach (var membership in memberships)
+            var linkshellIds = new HashSet<int>();
+            var roleIds = new HashSet<int>();
+            foreach (var entry in memberships)
             {
-                var roleId = membership.LinkshellId > 0
-                    ? MembershipRoleMatch.RoleIdFor(membership.Rank, membership.LinkshellId, roles)
-                    : null;
-                // Through the entry, so an unchanged id is not marked modified.
-                Entry(membership).Property(nameof(AppUserLinkshell.LinkshellRoleId)).CurrentValue = roleId;
+                if (SetsRoleById(entry))
+                {
+                    var id = entry.Property(nameof(AppUserLinkshell.LinkshellRoleId));
+                    if (!id.IsTemporary && (int)id.CurrentValue! > 0)
+                    {
+                        roleIds.Add((int)id.CurrentValue!);
+                    }
+                    continue;
+                }
+                var linkshell = entry.Property(nameof(AppUserLinkshell.LinkshellId));
+                if (!linkshell.IsTemporary && LinkshellKeyOf(entry) > 0)
+                {
+                    linkshellIds.Add(LinkshellKeyOf(entry));
+                }
+            }
+            return (linkshellIds.ToList(), roleIds.ToList());
+        }
+
+        // A role as this save sees it: its id and linkshell as EF holds them (temporary for a role
+        // or linkshell added in this save), and whether it is a tracked row.
+        private sealed record RoleInSave(int Id, int LinkshellKey, LinkshellRole Role, bool Tracked);
+
+        private void ApplyRoleStamps(List<EntityEntry<AppUserLinkshell>> memberships, List<LinkshellRole> saved)
+        {
+            // The tracked rows win over what the query read: one may be renamed or deleted in this
+            // save, or added and not in the database at all.
+            var tracked = ChangeTracker.Entries<LinkshellRole>()
+                .Where(entry => entry.State != EntityState.Detached)
+                .ToList();
+            var trackedIds = tracked
+                .Where(entry => !entry.Property(nameof(LinkshellRole.Id)).IsTemporary)
+                .Select(entry => (int)entry.Property(nameof(LinkshellRole.Id)).CurrentValue!)
+                .ToHashSet();
+            var roles = tracked
+                .Where(entry => entry.State != EntityState.Deleted)
+                .Select(entry => new RoleInSave(
+                    (int)entry.Property(nameof(LinkshellRole.Id)).CurrentValue!,
+                    LinkshellKeyOf(entry),
+                    entry.Entity,
+                    Tracked: true))
+                .Concat(saved
+                    .Where(role => !trackedIds.Contains(role.Id))
+                    .Select(role => new RoleInSave(role.Id, role.LinkshellId, role, Tracked: false)))
+                .ToList();
+
+            foreach (var entry in memberships)
+            {
+                var membership = entry.Entity;
+                var linkshellKey = LinkshellKeyOf(entry);
+
+                if (SetsRoleById(entry))
+                {
+                    var roleId = (int)entry.Property(nameof(AppUserLinkshell.LinkshellRoleId)).CurrentValue!;
+                    var held = roles.FirstOrDefault(role => role.Id == roleId && role.LinkshellKey == linkshellKey);
+                    if (held is not null)
+                    {
+                        SetDerived(entry, nameof(AppUserLinkshell.Rank), held.Role.Name);
+                    }
+                    continue;
+                }
+
+                var linkshellRoles = roles.Where(role => role.LinkshellKey == linkshellKey).ToList();
+                foreach (var added in AddMissingDefaultRoles(entry, linkshellKey, linkshellRoles))
+                {
+                    var addedEntry = Entry(added);
+                    var role = new RoleInSave(
+                        (int)addedEntry.Property(nameof(LinkshellRole.Id)).CurrentValue!,
+                        linkshellKey,
+                        added,
+                        Tracked: true);
+                    roles.Add(role);
+                    linkshellRoles.Add(role);
+                }
+
+                var (picked, fellBack) = MembershipRoleMatch.Pick(
+                    membership.Rank, linkshellRoles.Select(role => role.Role).ToList());
+                if (fellBack)
+                {
+                    LogMembershipRole(
+                        "Membership {MembershipId} in linkshell {LinkshellId}: rank '{Rank}' does not name a role exactly, so it was given the {Role} role.",
+                        membership.Id, linkshellKey, membership.Rank, picked?.Name ?? "(none: the linkshell has no Member role)");
+                }
+                if (picked is null)
+                {
+                    continue;
+                }
+                var chosen = linkshellRoles.First(role => ReferenceEquals(role.Role, picked));
+                if (chosen.Tracked && Entry(picked).Property(nameof(LinkshellRole.Id)).IsTemporary)
+                {
+                    // Through the navigation, so a role added in this save is linked before it has
+                    // a real id; EF fills the id in when it inserts the role.
+                    entry.Reference(nameof(AppUserLinkshell.Role)).CurrentValue = picked;
+                }
+                else
+                {
+                    // Through the entry, so an unchanged id is not marked modified.
+                    SetDerived(entry, nameof(AppUserLinkshell.LinkshellRoleId), (int?)chosen.Id);
+                }
+                SetDerived(entry, nameof(AppUserLinkshell.Rank), picked.Name);
+            }
+        }
+
+        // Adds the built-in roles this linkshell is missing (all four for a brand new one), the way
+        // LinkshellPermissions.EnsureDefaultRolesForLinkshellsAsync does: a role counts as present
+        // when one has the same name in any capitals. A linkshell added in this same save is linked
+        // through its navigation, as it has no id yet.
+        private List<LinkshellRole> AddMissingDefaultRoles(
+            EntityEntry<AppUserLinkshell> membership, int linkshellKey, List<RoleInSave> linkshellRoles)
+        {
+            var present = new HashSet<string>(
+                linkshellRoles.Select(role => role.Role.Name), StringComparer.OrdinalIgnoreCase);
+            var missing = LinkshellRoleDefaults.BuildDefaultRoles(linkshellKey)
+                .Where(role => !present.Contains(role.Name))
+                .ToList();
+            if (missing.Count == 0)
+            {
+                return missing;
+            }
+            if (membership.Property(nameof(AppUserLinkshell.LinkshellId)).IsTemporary)
+            {
+                var linkshell = ChangeTracker.Entries<Linkshell>()
+                    .FirstOrDefault(entry => Equals(entry.Property(nameof(Linkshell.Id)).CurrentValue, linkshellKey))
+                    ?.Entity;
+                if (linkshell is null)
+                {
+                    return new List<LinkshellRole>();
+                }
+                foreach (var role in missing)
+                {
+                    role.LinkshellId = 0;
+                    role.Linkshell = linkshell;
+                }
+            }
+            LinkshellRoles.AddRange(missing);
+            return missing;
+        }
+
+        // A warning in the app log. Logging must not fail a save, so a context built without a
+        // logger simply logs nothing.
+        private void LogMembershipRole(string message, params object?[] args)
+        {
+            try
+            {
+                Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions
+                    .GetService<Microsoft.Extensions.Logging.ILoggerFactory>(this)
+                    .CreateLogger(typeof(MembershipRoleMatch).FullName!)
+                    .Log(Microsoft.Extensions.Logging.LogLevel.Warning, message, args);
+            }
+            catch (InvalidOperationException)
+            {
             }
         }
 
@@ -1369,7 +1524,7 @@ namespace LinkshellManagerDiscordApp.Data
             bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
             await StampNewMembershipDkpEpochAsync(CollectNewMembershipsNeedingDkpEpoch(), cancellationToken);
-            await StampMembershipRoleIdsAsync(CollectMembershipsNeedingRoleStamp(), cancellationToken);
+            await StampMembershipRolesAsync(CollectMembershipsNeedingRoleStamp(), cancellationToken);
             StampDerivedColumns();
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();
@@ -1414,7 +1569,7 @@ namespace LinkshellManagerDiscordApp.Data
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
             StampNewMembershipDkpEpoch(CollectNewMembershipsNeedingDkpEpoch());
-            StampMembershipRoleIds(CollectMembershipsNeedingRoleStamp());
+            StampMembershipRoles(CollectMembershipsNeedingRoleStamp());
             StampDerivedColumns();
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();
@@ -1575,8 +1730,9 @@ namespace LinkshellManagerDiscordApp.Data
                 // must belong to the member's own linkshell. NO ACTION, not RESTRICT: deleting a
                 // linkshell cascades to its members and its roles in one statement, and NO ACTION
                 // only checks at the end of that statement. Deleting a role someone still holds
-                // is refused. No navigation: nothing reads the role through it yet.
-                entity.HasOne<LinkshellRole>()
+                // is refused. The Role navigation is model-only (no schema change): the save hook
+                // uses it to link a member to a role added in the same save (StampMembershipRoles).
+                entity.HasOne(item => item.Role)
                     .WithMany()
                     .HasForeignKey(item => new { item.LinkshellId, item.LinkshellRoleId })
                     .HasPrincipalKey(role => new { role.LinkshellId, role.Id })

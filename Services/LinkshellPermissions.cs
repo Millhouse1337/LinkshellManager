@@ -19,11 +19,13 @@ namespace LinkshellManagerDiscordApp.Services;
 //   4. the member's role decides: the one their role id names (AppUserLinkshell.LinkshellRoleId),
 //      else the one their rank names; an unknown rank falls back to the Member role
 //
-// Role id vs rank (RosterSwitch): every save keeps the id in step with Rank (the role whose name
-// is the trimmed Rank, case mattering; else no id), and the migration re-filled it, so for every
-// member both give the same role. They only part when a role is RENAMED: the holders keep the id,
-// so they keep the role's rights. A NULL id (a Rank naming no role, or a role made after the
-// member) means "look it up by name", exactly as before the id existed.
+// Role id vs rank: the id is the source, and every save keeps Rank a copy of that role's name
+// (ApplicationDbContext.StampMembershipRoles). A save that sets only Rank is given the role this
+// file would pick for that Rank (exact trimmed name, else Leader for "leader" in any capitals,
+// else Member; MembershipRoleMatch), so both give the same role for every member. They only part
+// when a role is renamed straight in its table: the holders keep the id, so they keep the role's
+// rights. A NULL id (a row no save has touched since the id existed) still means "look it up by
+// name"; a later deploy makes the id required and drops the name fallback.
 //
 // What this does NOT do: the per-linkshell Discord guild lock. That needs the request's
 // Discord bearer token and guild header, so it stays in ActivityControllerBase, which
