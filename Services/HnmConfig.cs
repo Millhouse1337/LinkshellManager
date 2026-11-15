@@ -143,6 +143,36 @@ public static class HnmConfig
     public static List<string> MonsterMatchNamesLower(string? name) =>
         MonsterMatchNames(name).Select(n => n.ToLowerInvariant()).ToList();
 
+    // One lower-case key per SPAWN, stored as SpawnKey on Tods, PendingTodSubmissions and
+    // HnmRecurringBoards so a later deploy can look rows up with one equality instead of the
+    // MonsterMatchNames list. Either half of a merge pair, or the combined label, gives the pair's
+    // combined key ("fafnir/nidhogg"); any other name gives its trimmed, lower-case pieces joined
+    // by '/'. Blank gives null.
+    //
+    // KEEP IN STEP with AddTodDurationsAndSpawnKeys.SpawnKeySql: the migration fills old rows with
+    // that SQL and the save hook stamps new ones with this, so both must give the same answer
+    // (TodDerivedColumnsParityTests checks it on Postgres).
+    public static string? SpawnKey(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        var pieces = MonsterSegments(name)
+            .Select(piece => piece.ToLowerInvariant())
+            .ToList();
+        foreach (var (baseName, stronger) in MonsterMergePairs)
+        {
+            if (pieces.Contains(baseName.ToLowerInvariant())
+                || pieces.Contains(stronger.ToLowerInvariant()))
+            {
+                return $"{baseName}/{stronger}".ToLowerInvariant();
+            }
+        }
+        return string.Join('/', pieces);
+    }
+
     // The chat line each HNM's pop prints, which the in-game addon watches for to start a Claim
     // Shield capture (and to mark a pop on its ToD Tracker). Shown as hover text on the monster's
     // name in the Monster Setups card; the addon's Settings window used to list them.
