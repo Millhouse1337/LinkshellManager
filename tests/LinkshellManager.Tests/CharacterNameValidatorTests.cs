@@ -78,19 +78,25 @@ public class CharacterNameValidatorTests
         Assert.Null(error);
     }
 
-    // An account that already repeats a name (saved before this check, or by Data Admin) can still
-    // save when that repeat is not what changed; making a new repeat is refused.
+    // Owner rule: an alt may never repeat the main, even on an account that already did (saved
+    // before this check, or by Data Admin). That account must fix the alt before the profile saves;
+    // once it does, the save goes through.
     [Fact]
-    public async Task AnOldRepeatInsideTheAccount_StillSaves_ButANewOneIsRefused()
+    public async Task AnOldRepeatInsideTheAccount_IsRefused_UntilTheAltIsFixed()
     {
         using var db = NewInMemoryContext();
         var user = new AppUser { Id = "user-1", UserName = "tester", CharacterName = "Twin", AltCharacterName1 = "Twin" };
         var validator = new CharacterNameValidator(db);
 
-        Assert.Equal((true, (string?)null), await validator.ValidateAsync(user, "Twin", "twin", "Third"));
-        var (ok, error) = await validator.ValidateAsync(user, "Twin", "Twin", "TWIN");
+        var (ok, error) = await validator.ValidateAsync(user, "Twin", "twin", "Third");
+        Assert.False(ok);
+        Assert.Contains("matches your main", error);
+
+        (ok, error) = await validator.ValidateAsync(user, "Twin", "Twin", "TWIN");
         Assert.False(ok);
         Assert.Contains("cannot be the same", error);
+
+        Assert.Equal((true, (string?)null), await validator.ValidateAsync(user, "Twin", "Other", "Third"));
     }
 
     [Fact]

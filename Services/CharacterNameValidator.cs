@@ -16,8 +16,8 @@ namespace LinkshellManagerDiscordApp.Services;
 // Placeholders (members an officer added who have not signed in) do not count: they often carry a
 // real player's name on purpose, and the player claims them later (PlaceholderClaimService).
 //
-// Also, only for names that changed: the two alts must differ, an alt must differ from the main,
-// and no name may be longer than the Characters table holds (256 characters).
+// Always: the two alts must differ and an alt must differ from the main.
+// Only for names that changed: no name may be longer than the Characters table holds (256 characters).
 //
 // Names are compared trimmed and ignoring capitals, the way CharacterResolver compares them.
 public sealed class CharacterNameValidator
@@ -46,16 +46,18 @@ public sealed class CharacterNameValidator
             changed[slot] = !string.Equals(wanted[slot], current[slot], StringComparison.OrdinalIgnoreCase);
         }
 
+        // Owner rule: one account never repeats a name between its own main and alts, on EVERY
+        // save (an account that already repeats one must fix it before the profile saves).
         var (main, alt1, alt2) = (wanted[0], wanted[1], wanted[2]);
-        if (alt1 is not null && Same(alt1, alt2) && (changed[1] || changed[2]))
+        if (alt1 is not null && Same(alt1, alt2))
         {
             return (false, "Both alternate character names cannot be the same.");
         }
-        if (alt1 is not null && Same(alt1, main) && (changed[0] || changed[1]))
+        if (alt1 is not null && Same(alt1, main))
         {
             return (false, $"Alternate character \"{alt1}\" matches your main character name.");
         }
-        if (alt2 is not null && Same(alt2, main) && (changed[0] || changed[2]))
+        if (alt2 is not null && Same(alt2, main))
         {
             return (false, $"Alternate character \"{alt2}\" matches your main character name.");
         }
