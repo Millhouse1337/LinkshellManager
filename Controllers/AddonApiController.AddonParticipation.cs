@@ -681,13 +681,15 @@ public sealed partial class AddonApiController
     // Stores the calling player's job-level array on their account (see MainCharacterJobs) so
     // other addon installations can see
     // (via /roster) which jobs each member has leveled. Used by the in-game loot panel's "Can
-    // equip" filter. Idempotent: overwrites the previous array on each call.
+    // equip" filter and the Jobs Roster. Idempotent: overwrites that character's previous array on
+    // each call.
     //
-    // Only the token owner's OWN main character: the name must be the owner account's character
-    // name or the name on one of its memberships. It used to accept any name on the token's
-    // linkshell roster, so one member's addon could overwrite another member's jobs. The addon only
-    // ever posts the logged-in character (party slot 0) and already treats 403 as "not mine, stop
-    // asking" (an alt, or someone else's character on this login).
+    // Only the token owner's OWN characters: the main or one of the two alts
+    // (MainCharacterJobs.OwnCharacterSlot). The main's levels go to the account's main columns, an
+    // alt's to Alt1JobLevels / Alt2JobLevels. It used to accept any name on the token's linkshell
+    // roster, so one member's addon could overwrite another member's jobs. The addon only ever posts
+    // the logged-in character (party slot 0) and treats 403 as "not one of mine, stop asking"
+    // (someone else's character on this login). Alts were refused before Round 5.
     [HttpPost("character/jobs")]
     [AddonApiAuth]
     public async Task<IActionResult> PostCharacterJobsAsync(
@@ -706,8 +708,8 @@ public sealed partial class AddonApiController
 
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
 
-        // Owner guard: the token's own account, still on the token's linkshell roster, posting its
-        // own main character (capitals and spaces around the name do not matter).
+        // Owner guard: the token's own account, still on the token's linkshell roster, posting one
+        // of its own characters (capitals and spaces around the name do not matter).
         var owner = string.IsNullOrWhiteSpace(token.IssuedToAppUserId)
             ? null
             : await _dbContext.Users.FirstOrDefaultAsync(user => user.Id == token.IssuedToAppUserId, cancellationToken);
@@ -718,18 +720,22 @@ public sealed partial class AddonApiController
         var memberships = await _dbContext.AppUserLinkshells
             .Where(link => link.AppUserId == owner.Id)
             .ToListAsync(cancellationToken);
-        var matchedName = memberships.Any(link => link.LinkshellId == token.LinkshellId)
-            ? MainCharacterJobs.MatchOwnMain(characterName, owner, memberships, token.LinkshellId)
-            : null;
-        if (matchedName is null)
+        if (!memberships.Any(link => link.LinkshellId == token.LinkshellId))
+        {
+            return Forbid();
+        }
+        var characters = await _dbContext.Characters
+            .Where(character => character.AppUserId == owner.Id)
+            .ToListAsync(cancellationToken);
+        if (MainCharacterJobs.OwnCharacterSlot(characterName, owner, characters, memberships, token.LinkshellId) is not { } own)
         {
             return Forbid();
         }
 
-        MainCharacterJobs.Write(owner, jobLevels: request.JobLevels);
+        MainCharacterJobs.WriteJobLevels(owner, own.Slot, request.JobLevels);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(new { success = true, characterName = matchedName });
+        return Ok(new { success = true, characterName = own.Name, slot = (int)own.Slot });
     }
 
     // Posts one loot row from the addon Loot Pool panel, addressed by EVENT.

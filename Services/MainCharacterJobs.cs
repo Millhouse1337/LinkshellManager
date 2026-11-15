@@ -21,15 +21,40 @@ public static class MainCharacterJobs
         if (meritJobs is not null) account.MeritJobs = meritJobs;
     }
 
-    // The addon may publish job levels only for the main character of the account its token was
-    // issued to: the account's own CharacterName, or the name on one of that account's memberships
-    // (the roster spelling of the same character). Returns the stored spelling it matched, the
-    // token's own linkshell first, or null when the name is someone else's (or an alt: alts have
-    // their own jobs on the account, which the addon does not write). Spaces around a name and
-    // capitals do not matter.
-    public static string? MatchOwnMain(
+    // Replaces the job levels of one character of the account: slot 0 is the main (Write above),
+    // 1 and 2 the alts. The account columns are still the written source; the save copies them to
+    // that character's Characters row (CharacterSync).
+    public static void WriteJobLevels(AppUser account, short slot, int[] jobLevels)
+    {
+        switch (slot)
+        {
+            case Character.MainSlot:
+                Write(account, jobLevels: jobLevels);
+                break;
+            case Character.Alt1Slot:
+                account.Alt1JobLevels = jobLevels;
+                break;
+            case Character.Alt2Slot:
+                account.Alt2JobLevels = jobLevels;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(slot), slot, "A character slot is 0, 1 or 2.");
+        }
+    }
+
+    // The addon may publish job levels only for a character of the account its token was issued to.
+    // Returns which of the owner's characters the name is (slot 0 main, 1 or 2 an alt) and the stored
+    // spelling, or null when it is none of them (another member's main or alt included). Spaces
+    // around a name and capitals do not matter.
+    //
+    // The owner's Characters rows are checked first, lowest slot first. A name that is not there
+    // still counts as the main when it is the account's own CharacterName or the name on one of its
+    // memberships (the token's linkshell first): the old match, kept until Round 5 stops reading
+    // roster names.
+    public static (short Slot, string Name)? OwnCharacterSlot(
         string? characterName,
         AppUser owner,
+        IReadOnlyCollection<Character> ownerCharacters,
         IReadOnlyCollection<AppUserLinkshell> ownerMemberships,
         int tokenLinkshellId)
     {
@@ -38,10 +63,16 @@ public static class MainCharacterJobs
 
         bool Same(string? stored) => string.Equals(stored?.Trim(), name, StringComparison.OrdinalIgnoreCase);
 
+        var character = ownerCharacters
+            .Where(c => c.AppUserId == owner.Id && c.Slot is >= Character.MainSlot and <= Character.Alt2Slot)
+            .OrderBy(c => c.Slot)
+            .FirstOrDefault(c => Same(c.Name));
+        if (character is not null) return (character.Slot, character.Name.Trim());
+
         var here = ownerMemberships.FirstOrDefault(m => m.LinkshellId == tokenLinkshellId && Same(m.CharacterName));
-        if (here is not null) return here.CharacterName!.Trim();
-        if (Same(owner.CharacterName)) return owner.CharacterName!.Trim();
+        if (here is not null) return (Character.MainSlot, here.CharacterName!.Trim());
+        if (Same(owner.CharacterName)) return (Character.MainSlot, owner.CharacterName!.Trim());
         var elsewhere = ownerMemberships.FirstOrDefault(m => Same(m.CharacterName));
-        return elsewhere?.CharacterName!.Trim();
+        return elsewhere is null ? null : (Character.MainSlot, elsewhere.CharacterName!.Trim());
     }
 }

@@ -192,6 +192,60 @@ public class CharacterSyncHookTests : IAsyncLifetime
             (await RowsAsync()).Select(r => (r.AppUserId, r.Slot, r.Name)));
     }
 
+    // The addon posting an alt's job levels (POST character/jobs, Round 5) writes the account's
+    // Alt1JobLevels, and the save copies them to that alt's row only.
+    [Fact]
+    public async Task AddonAltJobLevels_AreCopiedToTheAltsRow()
+    {
+        int linkshellId;
+        await using (var db = _pg.CreateContext())
+        {
+            var linkshell = new Linkshell { LinkshellName = "LS" };
+            db.Linkshells.Add(linkshell);
+            db.Users.Add(new AppUser
+            {
+                Id = "u1", UserName = "u1", CharacterName = "Bob", JobLevels = new[] { 0, 1 },
+                AltCharacterName1 = "Bobalt", AltCharacterName2 = "Bobtwo", Alt2JobLevels = new[] { 0, 22 },
+            });
+            await db.SaveChangesAsync();
+            linkshellId = linkshell.Id;
+            db.AppUserLinkshells.Add(new AppUserLinkshell { LinkshellId = linkshellId, AppUserId = "u1", CharacterName = "Bob" });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _pg.CreateContext())
+        {
+            var http = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+            http.Items[LinkshellManagerDiscordApp.Authorization.AddonApiAuthAttribute.TokenContextKey] = new AddonApiToken
+            {
+                Id = 1, LinkshellId = linkshellId, IssuedToAppUserId = "u1", TokenPrefix = "att_1", TokenHash = "hash-1",
+                CreatedAt = DateTime.UtcNow,
+            };
+            http.Items[LinkshellManagerDiscordApp.Authorization.AddonApiAuthAttribute.LinkshellIdContextKey] = linkshellId;
+            var controller = new LinkshellManagerDiscordApp.Controllers.AddonApiController(
+                db, null!, null!, null!, null!, null!, null!, null!, null!, null!, null!,
+                NullLogger<LinkshellManagerDiscordApp.Controllers.AddonApiController>.Instance)
+            {
+                ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext { HttpContext = http },
+            };
+
+            var result = await controller.PostCharacterJobsAsync(
+                new LinkshellManagerDiscordApp.Controllers.AddonApiController.AddonPostJobLevelsRequest(" BOBALT ", new[] { 0, 75, 37 }),
+                CancellationToken.None);
+            Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(result);
+        }
+
+        var rows = await RowsAsync();
+        Assert.Equal(new[] { "Bob", "Bobalt", "Bobtwo" }, rows.Select(r => r.Name));
+        Assert.Equal(new[] { 0, 1 }, rows[0].JobLevels);
+        Assert.Equal(new[] { 0, 75, 37 }, rows[1].JobLevels);
+        Assert.Equal(new[] { 0, 22 }, rows[2].JobLevels);
+        await using (var db = _pg.CreateContext())
+        {
+            Assert.Equal(new[] { 0, 75, 37 }, (await db.Users.AsNoTracking().SingleAsync(u => u.Id == "u1")).Alt1JobLevels);
+        }
+    }
+
     // A claim copies missing names and jobs onto the real account, and deleting the placeholder
     // takes its rows with it (the foreign key cascades), so no Characters row keeps its id.
     [Fact]
