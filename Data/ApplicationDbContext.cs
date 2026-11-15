@@ -817,6 +817,86 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // Keeps AppUserLinkshell.LinkshellRoleId in step with Rank (AddMembershipRoleId): the role in
+        // the member's own linkshell whose Name equals the trimmed Rank, case mattering, else null
+        // (MembershipRoleMatch). Done here, like the epoch above, so every writer gets it -- the
+        // seven join paths, the rank change, a placeholder claim's best-rank merge and Data Admin --
+        // and the next one added cannot forget it.
+        //
+        // A new membership is always stamped. A saved one is re-stamped when its Rank (or linkshell)
+        // changed and nobody set the id in the same save. A role rename needs nothing: holders keep
+        // the same role id. Roles are looked up in the database, so a role added in this same save
+        // is not found yet; that member stays null, which still means "look it up by name".
+        private List<AppUserLinkshell> CollectMembershipsNeedingRoleStamp() =>
+            ChangeTracker.Entries<AppUserLinkshell>()
+                .Where(entry => entry.State == EntityState.Added
+                    || (entry.State == EntityState.Modified
+                        && (entry.Property(nameof(AppUserLinkshell.Rank)).IsModified
+                            || entry.Property(nameof(AppUserLinkshell.LinkshellId)).IsModified)
+                        && !entry.Property(nameof(AppUserLinkshell.LinkshellRoleId)).IsModified))
+                .Select(entry => entry.Entity)
+                .ToList();
+
+        private async Task StampMembershipRoleIdsAsync(
+            List<AppUserLinkshell> memberships, CancellationToken cancellationToken)
+        {
+            if (memberships.Count == 0)
+            {
+                return;
+            }
+            var (linkshellIds, names) = RoleLookupKeys(memberships);
+            var roles = linkshellIds.Count == 0 || names.Count == 0
+                ? new List<LinkshellRole>()
+                : await LinkshellRoles.AsNoTracking()
+                    .Where(role => linkshellIds.Contains(role.LinkshellId) && names.Contains(role.Name))
+                    .ToListAsync(cancellationToken);
+            ApplyRoleStamps(memberships, roles);
+        }
+
+        private void StampMembershipRoleIds(List<AppUserLinkshell> memberships)
+        {
+            if (memberships.Count == 0)
+            {
+                return;
+            }
+            var (linkshellIds, names) = RoleLookupKeys(memberships);
+            var roles = linkshellIds.Count == 0 || names.Count == 0
+                ? new List<LinkshellRole>()
+                : LinkshellRoles.AsNoTracking()
+                    .Where(role => linkshellIds.Contains(role.LinkshellId) && names.Contains(role.Name))
+                    .ToList();
+            ApplyRoleStamps(memberships, roles);
+        }
+
+        // One query for the whole save: the saved linkshells (a linkshell added in this save has no
+        // roles yet) and the role names the Ranks ask for.
+        private static (List<int> LinkshellIds, List<string> Names) RoleLookupKeys(List<AppUserLinkshell> memberships)
+        {
+            var linkshellIds = memberships
+                .Where(m => m.LinkshellId > 0)
+                .Select(m => m.LinkshellId)
+                .Distinct()
+                .ToList();
+            var names = memberships
+                .Select(m => MembershipRoleMatch.RoleName(m.Rank))
+                .OfType<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            return (linkshellIds, names);
+        }
+
+        private void ApplyRoleStamps(List<AppUserLinkshell> memberships, List<LinkshellRole> roles)
+        {
+            foreach (var membership in memberships)
+            {
+                var roleId = membership.LinkshellId > 0
+                    ? MembershipRoleMatch.RoleIdFor(membership.Rank, membership.LinkshellId, roles)
+                    : null;
+                // Through the entry, so an unchanged id is not marked modified.
+                Entry(membership).Property(nameof(AppUserLinkshell.LinkshellRoleId)).CurrentValue = roleId;
+            }
+        }
+
         // INV-1: every move of AppUserLinkshell.LinkshellDkp is matched, amount for amount, by
         // DkpLedgerEntry rows in the SAME save. That invariant is what lets pool balances be
         // DERIVED from the ledger (DkpPoolBalanceService) instead of cached in a second table.
@@ -1032,6 +1112,7 @@ namespace LinkshellManagerDiscordApp.Data
             bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
             await StampNewMembershipDkpEpochAsync(CollectNewMembershipsNeedingDkpEpoch(), cancellationToken);
+            await StampMembershipRoleIdsAsync(CollectMembershipsNeedingRoleStamp(), cancellationToken);
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();
             AssertConfirmedTreasuryEntriesAreImmutable();
@@ -1073,6 +1154,7 @@ namespace LinkshellManagerDiscordApp.Data
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
             StampNewMembershipDkpEpoch(CollectNewMembershipsNeedingDkpEpoch());
+            StampMembershipRoleIds(CollectMembershipsNeedingRoleStamp());
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();
             AssertConfirmedTreasuryEntriesAreImmutable();

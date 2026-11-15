@@ -128,9 +128,12 @@ public sealed class DataAdminPolicy
                 Options = Opts((nameof(AppUserLinkshell.Rank), DataAdminOptions.FromConsts(typeof(LinkshellRanks)))),
                 // The balance and its ledger watermarks are only ever moved by DkpLedgerWriter, which keeps
                 // them in step with the ledger (INV-1 in ApplicationDbContext); shown here, never edited.
+                // LinkshellRoleId follows Rank: every save re-stamps it from the Rank (ApplicationDbContext),
+                // so it is edited by editing Rank.
                 ReadOnlyColumns = Names(
                     nameof(AppUserLinkshell.LinkshellDkp), nameof(AppUserLinkshell.SeededDkpEarned), nameof(AppUserLinkshell.SeededDkpSpent),
-                    nameof(AppUserLinkshell.DkpSeedLedgerId), nameof(AppUserLinkshell.DkpPoolLedgerFromId)),
+                    nameof(AppUserLinkshell.DkpSeedLedgerId), nameof(AppUserLinkshell.DkpPoolLedgerFromId),
+                    nameof(AppUserLinkshell.LinkshellRoleId)),
             },
             [typeof(DiscordActivityUser)] = new()
             {
