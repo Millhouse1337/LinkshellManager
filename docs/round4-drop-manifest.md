@@ -1,6 +1,34 @@
 # Round 4 drop manifest (deploy 4, "D10 part B")
 
-## Status: PENDING
+## Status: DONE in the repo (2026-11-15), not deployed yet
+
+Everything in "What deploy 4 drops" below is dropped by one migration. Kept as the record of what
+went and why, in case a value ever has to be fished back out of the pre-deploy-4 `pg_dump`.
+
+| Commit | Migration | What it dropped |
+|---|---|---|
+| `d76ecf2` | `20261115154156_Round4Contract` | `AppUserLinkshells.JobLevels/StrongJobs/MeritJobs`, `ChartMemberKeyItems.MembershipId` and its unique index, `IX_HnmRecurringBoards_LinkshellId_MonsterName`, `IX_Tods_LinkshellId_MonsterName` |
+
+The commit after it added `tests/LinkshellManager.PostgresTests/Round4ContractRoundTripTests.cs`:
+it fills a deploy 3 database with rows, runs the migration Up, Down and Up again, then runs the
+rollback SQL (below) twice and checks that every column the deploy 3 build maps is back.
+
+Changes from the plan below:
+
+- The migration is raw SQL with `IF EXISTS` / `IF NOT EXISTS` (safe to run twice), not EF's
+  `DropColumn` / `DropIndex` calls. `Down` runs `Round4Contract.ReAddSql`.
+- The rollback SQL also deletes Round4Contract's row from `__EFMigrationsHistory`, so the next
+  deploy 4 start runs the drops again (see "Rolling back deploy 4" below).
+- `NormalizeNamesForSquash` (migration 2 below) is NOT part of this step. It is the next step of
+  deploy 4, decided from the catalog diff.
+- `git grep -n "ROUND4-DROP"` now finds only this file.
+
+What the dropped columns held on production (read-only counts, 2026-11-15): `ChartMemberKeyItems`
+had 0 rows, so `MembershipId` held nothing. The membership job columns held only OLD copies of job
+levels that `AccountJobsAndKeyItemAccounts` had already copied to `AspNetUsers` (252 memberships);
+nothing has read them since deploy 2 or written them since `RosterSwitch`.
+
+---
 
 Deploy 3 (Round 4 D9 + "D10 part A") took every reader and writer away from the columns and
 indexes below. Nothing was dropped: the model properties and `ApplicationDbContext` config were
@@ -129,8 +157,11 @@ database). EF names every mapped column when it loads a row, so after deploy 4's
 3 build fails on every query that loads a membership or a key-item tick ("column does not exist").
 A plain swap is NOT enough for this one deploy: the columns must come back first.
 
-The swapped-in build does not run migrations backwards, so the owner runs deploy 4's `Down` by
-hand (after a backup). The columns come back empty; deploy 3 never reads them, so that is fine:
+The swapped-in build does not run migrations backwards, so the owner runs this by hand in `psql`
+(after a backup), BEFORE the folder swap (RUNBOOK "Rollback", step 1 stops the service first). It is
+`Round4Contract.RollbackSql` word for word; `Round4ContractRoundTripTests` runs that constant,
+twice, and checks every column the deploy 3 model maps is back. The columns come back EMPTY;
+deploy 3 never reads them, so that is fine. Safe to run twice.
 
 ```sql
 ALTER TABLE "AppUserLinkshells"
@@ -138,23 +169,25 @@ ALTER TABLE "AppUserLinkshells"
     ADD COLUMN IF NOT EXISTS "StrongJobs" jsonb NULL,
     ADD COLUMN IF NOT EXISTS "MeritJobs" jsonb NULL;
 ALTER TABLE "ChartMemberKeyItems" ADD COLUMN IF NOT EXISTS "MembershipId" integer NULL;
-```
-
-The three indexes are optional for the deploy 3 build (EF never checks indexes at runtime), but
-putting them back makes the schema match deploy 3 exactly:
-
-```sql
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_ChartMemberKeyItems_LinkshellId_Board_KeyItemName_Membershi~"
     ON "ChartMemberKeyItems" ("LinkshellId", "Board", "KeyItemName", "MembershipId");
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_HnmRecurringBoards_LinkshellId_MonsterName"
     ON "HnmRecurringBoards" ("LinkshellId", "MonsterName");
-CREATE INDEX IF NOT EXISTS "IX_Tods_LinkshellId_MonsterName" ON "Tods" ("LinkshellId", "MonsterName");
+CREATE INDEX IF NOT EXISTS "IX_Tods_LinkshellId_MonsterName"
+    ON "Tods" ("LinkshellId", "MonsterName");
+DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261115154156_Round4Contract';
 ```
 
-(The board index cannot fail: the `SpawnKey` unique index already allows one board per name.)
-Deploy 4's rows in `__EFMigrationsHistory` can stay: the deploy 3 build ignores ids it does not
-know (`UnknownMigrationHistoryRowTests`). Renames from `NormalizeNamesForSquash` need no undo:
-EF does not check constraint or index names at runtime.
+- The four `ADD COLUMN` lines are what the deploy 3 build needs. The three indexes make the
+  schema match deploy 3 exactly; they cannot fail (`MembershipId` comes back all NULL, and the
+  `SpawnKey` unique index already allows only one board per monster name).
+- The `DELETE` forgets Round4Contract, so the next deploy 4 start runs its drops again. Without
+  it EF would think the drops already ran, the columns would stay, and production's catalog would
+  no longer match the golden file the squash (D11) needs. The deploy 3 build does not know that id
+  anyway, so removing it changes nothing for that build.
+- If deploy 4 also adds `NormalizeNamesForSquash`, its history row can stay: the deploy 3 build
+  ignores ids it does not know (`UnknownMigrationHistoryRowTests`), and its renames need no undo
+  because EF does not check constraint or index names at runtime.
 
 Rolling back deploy 3 itself (to `a6a35a7`) needs no SQL for these items: that build reads ticks
 by account, treats a NULL `MembershipId` as "no membership", and never reads the membership job

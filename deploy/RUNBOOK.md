@@ -370,6 +370,10 @@ the old build may fail on startup or misread data. Then either undo that migrati
 (like the SQL under **Board images removed** below) or restore the pre-deploy dump
 (**Restoring a dump** above) together with the swap.
 
+**Round 4 deploy 4 (migration `Round4Contract`) is one of these.** The build before it still
+maps the columns it drops, so stop the service, run the SQL under "Rolling back deploy 4" in
+`docs/round4-drop-manifest.md` (it puts the columns back empty), then swap.
+
 ```bash
 ssh root@<IP>
 sudo systemctl stop lsmanager                                         # 1
