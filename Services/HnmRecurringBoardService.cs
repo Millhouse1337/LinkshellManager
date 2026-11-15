@@ -79,7 +79,8 @@ public static class HnmRecurringBoardService
     // RefreshRepostAtAsync after saving so the card advertises the new time. Stages only.
     //
     // EVERY enabled board for the spawn takes the lead, not just FindAsync's lowest id. Older
-    // linkshells can hold two rows for one spawn ("Adamantoise" and "Adamantoise/Aspidochelone"):
+    // linkshells could hold two rows for one spawn ("Adamantoise" and "Adamantoise/Aspidochelone";
+    // TodSwitch merged them and the database now allows one, so this is belt and braces):
     // the form reads the lead from one of them and this used to write only the other, so the
     // saved lead never showed in the form, and the poller fired on whichever lead came first.
     public static async Task<bool> ApplyEditedLeadAsync(
@@ -91,15 +92,15 @@ public static class HnmRecurringBoardService
             return false;
         }
 
-        var names = HnmConfig.MonsterMatchNamesLower(monster);
-        if (names.Count == 0)
+        var spawnKey = HnmConfig.SpawnKey(monster);
+        if (spawnKey is null)
         {
             return false;
         }
         var boards = await db.HnmRecurringBoards
             .Where(board => board.LinkshellId == ev.LinkshellId
                 && board.Enabled
-                && names.Contains(board.MonsterName.ToLower()))
+                && board.SpawnKey == spawnKey)
             .ToListAsync(cancellationToken);
 
         var changed = false;
@@ -128,13 +129,13 @@ public static class HnmRecurringBoardService
             return;
         }
 
-        // Matched on every spelling of the spawn, the same way the poller finds the board.
-        var names = HnmConfig.MonsterMatchNamesLower(monster);
-        var leadHours = names.Count == 0
+        // Matched on the spawn key, the same way the poller finds the board.
+        var spawnKey = HnmConfig.SpawnKey(monster);
+        var leadHours = spawnKey is null
             ? null
             : await db.HnmRecurringBoards
                 .Where(b => b.LinkshellId == ev.LinkshellId
-                    && names.Contains(b.MonsterName.ToLower())
+                    && b.SpawnKey == spawnKey
                     && b.Enabled)
                 .Select(b => (double?)b.LeadHours)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -144,12 +145,11 @@ public static class HnmRecurringBoardService
         // Update can never open the board ahead of either. This used to read the ToD the board was
         // parked on. That ToD goes stale when a newer one is logged, and its long-gone pop read as
         // "the re-post time has come", so Update opened a board hours before its time.
-        var newestRepop = names.Count == 0
+        var newestRepop = spawnKey is null
             ? null
             : await db.Tods
                 .Where(tod => tod.LinkshellId == ev.LinkshellId
-                    && tod.MonsterName != null
-                    && names.Contains(tod.MonsterName.ToLower())
+                    && tod.SpawnKey == spawnKey
                     && tod.RepopTime != null)
                 .OrderByDescending(tod => tod.RepopTime)
                 .Select(tod => tod.RepopTime)
@@ -218,10 +218,11 @@ public static class HnmRecurringBoardService
 
         // Derive from the monster's NEWEST ToD, not necessarily the row that was just touched —
         // that's the one the poller acts on, so it's the only honest source for the display.
+        // (Events are still matched by name above; ToDs by their spawn key.)
+        var spawnKey = HnmConfig.SpawnKey(monster);
         var latest = await db.Tods
             .Where(tod => tod.LinkshellId == linkshellId
-                && tod.MonsterName != null
-                && names.Contains(tod.MonsterName.ToLower())
+                && tod.SpawnKey == spawnKey
                 && tod.RepopTime != null)
             .OrderByDescending(tod => tod.RepopTime)
             .ThenByDescending(tod => tod.Id)
@@ -346,11 +347,10 @@ public static class HnmRecurringBoardService
         var monster = ev.AssignedMonsterName?.Trim() ?? string.Empty;
         var board = await FindAsync(db, ev.LinkshellId, monster, cancellationToken);
         var spawn = board?.MonsterName.Trim() ?? monster;
-        var names = HnmConfig.MonsterMatchNamesLower(spawn);
-        var tod = names.Count == 0 ? null : await db.Tods
+        var spawnKey = HnmConfig.SpawnKey(spawn);
+        var tod = spawnKey is null ? null : await db.Tods
             .Where(t => t.LinkshellId == ev.LinkshellId
-                && t.MonsterName != null
-                && names.Contains(t.MonsterName.ToLower())
+                && t.SpawnKey == spawnKey
                 && t.RepopTime != null)
             .OrderByDescending(t => t.RepopTime)
             .ThenByDescending(t => t.Id)
@@ -453,14 +453,13 @@ public static class HnmRecurringBoardService
     public static async Task<Tod?> FindLinkedTodAsync(
         ApplicationDbContext db, Event ev, CancellationToken cancellationToken)
     {
-        var names = HnmConfig.MonsterMatchNamesLower(ev.AssignedMonsterName);
-        if (names.Count == 0)
+        var spawnKey = HnmConfig.SpawnKey(ev.AssignedMonsterName);
+        if (spawnKey is null)
         {
             return null;
         }
         var tods = db.Tods.Where(tod => tod.LinkshellId == ev.LinkshellId
-            && tod.MonsterName != null
-            && names.Contains(tod.MonsterName.ToLower())
+            && tod.SpawnKey == spawnKey
             && tod.RepopTime != null);
 
         if (ev.HnmDefeatedAt is not null)
@@ -508,21 +507,22 @@ public static class HnmRecurringBoardService
         tod.TimeStamp = nowUtc;
     }
 
-    // The standing board for this SPAWN. Matched on every spelling of the monster (both
-    // halves of a merge pair and the combined label) so a board first created under
+    // The standing board for this SPAWN. Matched on the spawn key (HnmConfig.SpawnKey: both
+    // halves of a merge pair and the combined label give one key) so a board first created under
     // "Fafnir" on day 2 is the same row the day-4 "Fafnir/Nidhogg" event updates. Keying
     // on the exact string instead would leave two enabled rows for one spawn, and both
-    // would fire on the same ToD — two boards posted for one pop.
+    // would fire on the same ToD — two boards posted for one pop. The database now refuses a
+    // second board for one spawn (TodSwitch), so there is at most one.
     public static Task<HnmRecurringBoard?> FindAsync(
         ApplicationDbContext db, int linkshellId, string monster, CancellationToken cancellationToken)
     {
-        var names = HnmConfig.MonsterMatchNamesLower(monster);
-        if (names.Count == 0)
+        var spawnKey = HnmConfig.SpawnKey(monster);
+        if (spawnKey is null)
         {
             return Task.FromResult<HnmRecurringBoard?>(null);
         }
         return db.HnmRecurringBoards
-            .Where(board => board.LinkshellId == linkshellId && names.Contains(board.MonsterName.ToLower()))
+            .Where(board => board.LinkshellId == linkshellId && board.SpawnKey == spawnKey)
             .OrderBy(board => board.Id)
             .FirstOrDefaultAsync(cancellationToken);
     }
@@ -536,17 +536,16 @@ public static class HnmRecurringBoardService
         // A recurring board may be keyed on a combined "Base/Stronger" name (e.g.
         // "Adamantoise/Aspidochelone"). A ToD may be recorded under either half OR under
         // that same combined label (board-posted ToDs copy AssignedMonsterName verbatim),
-        // so match every spelling of the spawn. Must stay in step with the poller's lookup
+        // so match on the spawn key. Must stay in step with the poller's lookup
         // — this stamp is what tells it which pop cycle was already handled.
-        var names = HnmConfig.MonsterMatchNamesLower(monster);
-        if (names.Count == 0)
+        var spawnKey = HnmConfig.SpawnKey(monster);
+        if (spawnKey is null)
         {
             return Task.FromResult<int?>(null);
         }
         return db.Tods
             .Where(tod => tod.LinkshellId == linkshellId
-                && tod.MonsterName != null
-                && names.Contains(tod.MonsterName.ToLower())
+                && tod.SpawnKey == spawnKey
                 && tod.RepopTime != null)
             .OrderByDescending(tod => tod.RepopTime)
             .ThenByDescending(tod => tod.Id)

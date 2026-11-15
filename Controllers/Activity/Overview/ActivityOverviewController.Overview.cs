@@ -699,33 +699,28 @@ public sealed partial class ActivityOverviewController
         // create-event form reads them for whichever linkshell the camp is being made in.
         var hnmBoardLeadsByLinkshell = (await _dbContext.HnmRecurringBoards
                 .Where(b => linkshellIds.Contains(b.LinkshellId) && b.Enabled)
-                .Select(b => new { b.LinkshellId, b.MonsterName, b.LeadHours })
+                .Select(b => new { b.LinkshellId, b.SpawnKey, b.LeadHours })
                 .ToListAsync(cancellationToken))
             .GroupBy(b => b.LinkshellId)
             .ToDictionary(
                 byLinkshell => byLinkshell.Key,
                 byLinkshell => byLinkshell
-                    .GroupBy(b => (b.MonsterName ?? string.Empty).Trim().ToLowerInvariant())
-                    .ToDictionary(g => g.Key, g => g.First().LeadHours));
+                    .Where(b => b.SpawnKey is not null)
+                    .GroupBy(b => b.SpawnKey!, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().LeadHours, StringComparer.Ordinal));
         var hnmBoardLeadByMonster =
             primaryLinkshellId.HasValue
             && hnmBoardLeadsByLinkshell.TryGetValue(primaryLinkshellId.Value, out var primaryLeads)
                 ? primaryLeads
                 : new Dictionary<string, double>();
-        // Matched on every spelling of the spawn (either half of a merge pair and the
-        // combined "Base/Stronger" label) so a board keyed on one still pre-fills the
-        // End Camp form's re-post toggle + lead for an event keyed on another.
-        double? HnmLead(Event e)
-        {
-            foreach (var name in HnmConfig.MonsterMatchNamesLower(e.AssignedMonsterName))
-            {
-                if (hnmBoardLeadByMonster.TryGetValue(name, out var lh))
-                {
-                    return lh;
-                }
-            }
-            return null;
-        }
+        // Keyed by spawn key (either half of a merge pair and the combined "Base/Stronger"
+        // label give one key) so a board keyed on one still pre-fills the End Camp form's
+        // re-post toggle + lead for an event keyed on another.
+        double? HnmLead(Event e) =>
+            HnmConfig.SpawnKey(e.AssignedMonsterName) is { } key
+            && hnmBoardLeadByMonster.TryGetValue(key, out var lh)
+                ? lh
+                : null;
 
         // Source ToDs that carry NO observed Time of Death — the camp was ended without one, so
         // there is no predicted repop and the board's StartTime still points at the pop that just
@@ -741,13 +736,13 @@ public sealed partial class ActivityOverviewController
             e.SourceTodId is not { } todId || !todlessSourceTodIds.Contains(todId);
 
         // The live card's "New ToD Updated" label: the latest ToD logged for a live HNM camp's
-        // monster since that camp started. Matched by MonsterMatchNames, the way the recurring
-        // board matches a ToD, so a Fafnir camp lights up on a Nidhogg ToD too.
+        // monster since that camp started. Matched by spawn key, the way the recurring board
+        // matches a ToD, so a Fafnir camp lights up on a Nidhogg ToD too.
         var liveHnmCamps = activeEvents
             .Where(e => e.CommencementStartTime != null && e.EndTime == null
                         && HnmCampRules.IsHnm(e))
             .ToList();
-        var campTods = new List<(int LinkshellId, string MonsterName, DateTime TimeStamp)>();
+        var campTods = new List<(int LinkshellId, string SpawnKey, DateTime TimeStamp)>();
         if (liveHnmCamps.Count > 0)
         {
             var campLinkshellIds = liveHnmCamps.Select(e => e.LinkshellId).Distinct().ToList();
@@ -756,10 +751,10 @@ public sealed partial class ActivityOverviewController
                     .AsNoTracking()
                     .Where(t => campLinkshellIds.Contains(t.LinkshellId)
                                 && t.TimeStamp != null && t.TimeStamp >= earliestStart
-                                && t.MonsterName != null)
-                    .Select(t => new { t.LinkshellId, t.MonsterName, t.TimeStamp })
+                                && t.SpawnKey != null)
+                    .Select(t => new { t.LinkshellId, t.SpawnKey, t.TimeStamp })
                     .ToListAsync(cancellationToken))
-                .Select(t => (t.LinkshellId, t.MonsterName!, t.TimeStamp!.Value))
+                .Select(t => (t.LinkshellId, t.SpawnKey!, t.TimeStamp!.Value))
                 .ToList();
         }
         DateTime? CampTodPostedAt(Event e)
@@ -769,11 +764,10 @@ public sealed partial class ActivityOverviewController
             {
                 return null;
             }
-            var names = HnmConfig.MonsterMatchNames(e.AssignedMonsterName ?? e.EventName);
-            if (names.Count == 0) return null;
+            if (HnmConfig.SpawnKey(e.AssignedMonsterName ?? e.EventName) is not { } spawnKey) return null;
             var latest = campTods
                 .Where(t => t.LinkshellId == e.LinkshellId && t.TimeStamp >= started
-                            && names.Contains(t.MonsterName.Trim()))
+                            && t.SpawnKey == spawnKey)
                 .Select(t => (DateTime?)t.TimeStamp)
                 .DefaultIfEmpty(null)
                 .Max();
@@ -1169,8 +1163,8 @@ public sealed partial class ActivityOverviewController
     // The compact per-linkshell monster catalog for the polled overview. Falls back to the built-in
     // defaults when the linkshell has no rows yet, which is what lets the client drop its own copies
     // of the cadence / cooldown tables entirely.
-    // `repeatLeadsByMonster` is the linkshell's ENABLED Repeat-on-ToD leads keyed by lower-cased
-    // monster name (null/absent = it has none). Each row is matched on every spelling of its spawn,
+    // `repeatLeadsByMonster` is the linkshell's ENABLED Repeat-on-ToD leads keyed by spawn key
+    // (HnmConfig.SpawnKey; null/absent = it has none). Each row is matched on its spawn key,
     // so a board first created under "Fafnir" still answers for the catalog's combined
     // "Fafnir/Nidhogg" row — the same rule HnmRecurringBoardService.FindAsync applies, and the one
     // thing that keeps the create form's toggle from opening OFF on a monster that is repeating.
@@ -1184,14 +1178,10 @@ public sealed partial class ActivityOverviewController
             {
                 return null;
             }
-            foreach (var name in HnmConfig.MonsterMatchNamesLower(monsterName))
-            {
-                if (repeatLeadsByMonster.TryGetValue(name, out var lead))
-                {
-                    return lead;
-                }
-            }
-            return null;
+            return HnmConfig.SpawnKey(monsterName) is { } key
+                && repeatLeadsByMonster.TryGetValue(key, out var lead)
+                    ? lead
+                    : null;
         }
 
         if (maps.TryGetValue(linkshellId, out var map) && map.IsSeeded)

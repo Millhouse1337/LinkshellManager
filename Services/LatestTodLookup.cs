@@ -41,25 +41,21 @@ public static class LatestTodLookup
             .Where(tod => tod.LinkshellId == linkshellId && tod.MonsterName != null)
             .OrderByDescending(tod => tod.Time ?? tod.TimeStamp)
             .ThenByDescending(tod => tod.Id)
-            .Select(tod => new { tod.Id, tod.MonsterName, tod.Time, tod.Hq, tod.DayNumber })
+            .Select(tod => new { tod.Id, tod.MonsterName, tod.SpawnKey, tod.Time, tod.Hq, tod.DayNumber })
             .ToListAsync(cancellationToken);
 
         var entries = new List<Entry>();
-        var answered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var answered = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var row in rows)
         {
-            var matchNames = HnmConfig.MonsterMatchNames(row.MonsterName).ToList();
-            // An older row of a spawn already answered under another spelling is superseded.
-            if (matchNames.Count == 0 || matchNames.Any(answered.Contains))
+            // One answer per spawn key: an older row of a spawn already answered under another
+            // spelling is superseded. A row with no key (a blank name) answers for nothing.
+            if (row.SpawnKey is not { } spawnKey || !answered.Add(spawnKey))
             {
                 continue;
             }
-
-            foreach (var name in matchNames)
-            {
-                answered.Add(name);
-            }
+            var matchNames = HnmConfig.MonsterMatchNames(row.MonsterName).ToList();
 
             var tod = new Tod { MonsterName = row.MonsterName, Hq = row.Hq, DayNumber = row.DayNumber };
             entries.Add(new Entry(

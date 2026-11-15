@@ -93,23 +93,17 @@ public sealed partial class AddonApiController
         var repeatLeadByMonster = (await _dbContext.HnmRecurringBoards
                 .AsNoTracking()
                 .Where(b => b.LinkshellId == linkshellId && b.Enabled)
-                .Select(b => new { b.MonsterName, b.LeadHours })
+                .Select(b => new { b.SpawnKey, b.LeadHours })
                 .ToListAsync(cancellationToken))
-            .GroupBy(b => (b.MonsterName ?? string.Empty).Trim().ToLowerInvariant())
-            .ToDictionary(g => g.Key, g => g.First().LeadHours);
-        // Matched on every spelling of the spawn (either half of a merge pair and the combined
-        // "Base/Stronger" label), the same rule HnmRecurringBoardService.FindAsync applies.
-        double? RepeatLeadFor(string? monsterName)
-        {
-            foreach (var name in HnmConfig.MonsterMatchNamesLower(monsterName))
-            {
-                if (repeatLeadByMonster.TryGetValue(name, out var lead))
-                {
-                    return lead;
-                }
-            }
-            return null;
-        }
+            .Where(b => b.SpawnKey is not null)
+            .GroupBy(b => b.SpawnKey!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().LeadHours, StringComparer.Ordinal);
+        // Matched on the spawn key (either half of a merge pair and the combined "Base/Stronger"
+        // label give one key), the same rule HnmRecurringBoardService.FindAsync applies.
+        double? RepeatLeadFor(string? monsterName) =>
+            HnmConfig.SpawnKey(monsterName) is { } key && repeatLeadByMonster.TryGetValue(key, out var lead)
+                ? lead
+                : null;
 
         var shapes = raw.ToDictionary(evt => evt.Id, AddonEventWindowShape.For);
         var monsterTimings = await _monsterTimings.GetMapAsync(linkshellId, cancellationToken);

@@ -60,12 +60,12 @@ public static class PartySetupInheritance
     {
         if (!string.IsNullOrWhiteSpace(monster))
         {
-            var monsterNames = HnmConfig.MonsterMatchNamesLower(monster);
+            var spawnKey = HnmConfig.SpawnKey(monster);
             var boardSetupId = await db.HnmRecurringBoards
                 .AsNoTracking()
                 .Where(board => board.LinkshellId == linkshellId
                                 && board.PartySetupId != null
-                                && monsterNames.Contains(board.MonsterName.ToLower()))
+                                && board.SpawnKey == spawnKey)
                 .OrderByDescending(board => board.UpdatedAt)
                 .Select(board => board.PartySetupId)
                 .FirstOrDefaultAsync(cancellationToken);

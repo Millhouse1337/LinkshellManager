@@ -236,12 +236,13 @@ public sealed class TodRecorder
             Math.Max(0, input.AdditionalSeconds ?? timing.AdditionalSeconds));
     }
 
-    // pg_advisory_xact_lock(int, int): the linkshell, and a hash of the spawn's stored name, so every
-    // spelling of one spawn ("Fafnir", "Nidhogg", "Fafnir/Nidhogg") takes the same lock. FNV-1a
-    // rather than string.GetHashCode, which changes every time the app starts.
+    // pg_advisory_xact_lock(int, int): the linkshell, and a hash of the spawn key (HnmConfig.SpawnKey),
+    // so every spelling of one spawn ("Fafnir", "Nidhogg", "Fafnir/Nidhogg") takes the same lock, and
+    // the lock covers exactly the rows TodSameKill looks for. FNV-1a rather than string.GetHashCode,
+    // which changes every time the app starts.
     internal static (int LinkshellKey, int SpawnKey) LockKeys(int linkshellId, string? storedName)
     {
-        var text = (storedName ?? string.Empty).Trim().ToLowerInvariant();
+        var text = HnmConfig.SpawnKey(storedName) ?? string.Empty;
         unchecked
         {
             var hash = 2166136261u;

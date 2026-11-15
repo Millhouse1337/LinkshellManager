@@ -19,8 +19,10 @@ public static class TodSameKill
     public static Task<Tod?> FindAsync(
         ApplicationDbContext db, int linkshellId, string? monster, DateTime defeatedAtUtc, CancellationToken cancellationToken)
     {
-        var names = HnmConfig.MonsterMatchNamesLower(monster);
-        if (names.Count == 0)
+        // One key per spawn (HnmConfig.SpawnKey), so "Fafnir", "Nidhogg" and "Fafnir/Nidhogg" are one
+        // kill. A blank name has no key and is nobody's kill.
+        var spawnKey = HnmConfig.SpawnKey(monster);
+        if (spawnKey is null)
         {
             return Task.FromResult<Tod?>(null);
         }
@@ -28,8 +30,7 @@ public static class TodSameKill
         var to = defeatedAtUtc + Tolerance;
         return db.Tods
             .Where(tod => tod.LinkshellId == linkshellId
-                && tod.MonsterName != null
-                && names.Contains(tod.MonsterName.ToLower())
+                && tod.SpawnKey == spawnKey
                 && tod.Time >= from
                 && tod.Time <= to)
             .OrderBy(tod => tod.Id)
@@ -39,8 +40,8 @@ public static class TodSameKill
     public static Task<PendingTodSubmission?> FindPendingAsync(
         ApplicationDbContext db, int linkshellId, string? monster, DateTime defeatedAtUtc, CancellationToken cancellationToken)
     {
-        var names = HnmConfig.MonsterMatchNamesLower(monster);
-        if (names.Count == 0)
+        var spawnKey = HnmConfig.SpawnKey(monster);
+        if (spawnKey is null)
         {
             return Task.FromResult<PendingTodSubmission?>(null);
         }
@@ -48,8 +49,7 @@ public static class TodSameKill
         var to = defeatedAtUtc + Tolerance;
         return db.PendingTodSubmissions
             .Where(pending => pending.LinkshellId == linkshellId
-                && pending.MonsterName != null
-                && names.Contains(pending.MonsterName.ToLower())
+                && pending.SpawnKey == spawnKey
                 && pending.Time >= from
                 && pending.Time <= to)
             .OrderBy(pending => pending.Id)

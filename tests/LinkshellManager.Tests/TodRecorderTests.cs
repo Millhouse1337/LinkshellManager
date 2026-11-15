@@ -223,6 +223,18 @@ public class TodRecorderTests
         Assert.NotEqual(keys[0], TodRecorder.LockKeys(7, "Behemoth/King Behemoth"));
     }
 
+    // The lock follows the spawn key, the same key TodSameKill looks the kill up by, so two names
+    // with one key always wait for each other -- even un-normalised ones.
+    [Theory]
+    [InlineData("Nidhogg", "Fafnir/Nidhogg")]
+    [InlineData(" Tiamat ", "tiamat")]
+    [InlineData("Foo / Bar", "foo/bar")]
+    public void NamesWithOneSpawnKey_TakeTheSameLock(string first, string second)
+    {
+        Assert.Equal(HnmConfig.SpawnKey(first), HnmConfig.SpawnKey(second));
+        Assert.Equal(TodRecorder.LockKeys(7, first), TodRecorder.LockKeys(7, second));
+    }
+
     private static uint Fnv1a(string text)
     {
         var hash = 2166136261u;

@@ -147,12 +147,11 @@ public sealed class HnmCampPopService
         var adoptedPostedTod = false;
         if (tod is null && ev.CommencementStartTime is { } liveSince)
         {
-            var campMonsterNames = HnmConfig.MonsterMatchNamesLower(monster);
+            var campSpawnKey = HnmConfig.SpawnKey(monster);
             tod = await _db.Tods
                 .Where(t => t.LinkshellId == ev.LinkshellId
                             && t.Id != (ev.SourceTodId ?? 0)
-                            && t.MonsterName != null
-                            && campMonsterNames.Contains(t.MonsterName.ToLower())
+                            && t.SpawnKey == campSpawnKey
                             && t.TimeStamp != null
                             && t.TimeStamp >= liveSince)
                 .OrderByDescending(t => t.TimeStamp)
@@ -251,12 +250,12 @@ public sealed class HnmCampPopService
         }
 
         // Auto-re-post lead (only when Repeat-on-ToD is on for this monster) — re-read after the
-        // upsert so HnmRepostAt reflects the officer's just-made choice. Matched on every
-        // spelling of the spawn, the same way the poller finds the board.
-        var monsterNames = HnmConfig.MonsterMatchNamesLower(monster);
+        // upsert so HnmRepostAt reflects the officer's just-made choice. Matched on the spawn
+        // key, the same way the poller finds the board.
+        var spawnKey = HnmConfig.SpawnKey(monster);
         var leadHours = await _db.HnmRecurringBoards
             .Where(b => b.LinkshellId == ev.LinkshellId
-                && monsterNames.Contains(b.MonsterName.ToLower())
+                && b.SpawnKey == spawnKey
                 && b.Enabled)
             .Select(b => (double?)b.LeadHours)
             .FirstOrDefaultAsync(cancellationToken);

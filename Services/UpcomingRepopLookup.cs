@@ -48,31 +48,22 @@ public static class UpcomingRepopLookup
             // HnmRecurringBoardService.SyncParkedBoardsForTodAsync).
             .OrderByDescending(tod => tod.RepopTime)
             .ThenByDescending(tod => tod.Id)
-            .Select(tod => new { tod.Id, tod.MonsterName, tod.RepopTime, tod.DayNumber })
+            .Select(tod => new { tod.Id, tod.MonsterName, tod.SpawnKey, tod.RepopTime, tod.DayNumber })
             .ToListAsync(cancellationToken);
 
         var entries = new List<Entry>();
-        var answered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var answered = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var row in rows)
         {
+            // One answer per spawn key. A newer ToD already speaks for this spawn under one of its
+            // other spellings ("Fafnir" vs "Fafnir/Nidhogg"), so this older row is superseded. A
+            // row with no key (a blank name) answers for nothing.
+            if (row.SpawnKey is not { } spawnKey || !answered.Add(spawnKey))
+            {
+                continue;
+            }
             var matchNames = HnmConfig.MonsterMatchNames(row.MonsterName).ToList();
-            if (matchNames.Count == 0)
-            {
-                continue;
-            }
-
-            // A newer ToD already speaks for this spawn under one of its other spellings
-            // ("Fafnir" vs "Fafnir/Nidhogg"), so this older row is superseded.
-            if (matchNames.Any(answered.Contains))
-            {
-                continue;
-            }
-
-            foreach (var name in matchNames)
-            {
-                answered.Add(name);
-            }
 
             entries.Add(new Entry(
                 row.Id,

@@ -108,15 +108,16 @@ public sealed class HnmRecurringBoardBackgroundService : BackgroundService
         // A board may be keyed on a combined "Base/Stronger" name, and the ToD logged from
         // that board records the same combined name — so match on every spelling of the
         // spawn (the combined label AND either half), not just the segments.
+        // Events are still matched on that list of names; ToDs on the board's spawn key.
         var names = HnmConfig.MonsterMatchNamesLower(monster);
+        var spawnKey = HnmConfig.SpawnKey(monster);
 
         // Latest ToD for this monster that has a predicted pop time. "Latest" is the latest POP, not
         // the highest row id: an edited ToD keeps its old id, so going by id let an older kill logged
         // after it hide the real next pop, and the board never came back (OnlyFrens Turtle, 2026-11-05).
-        var tod = names.Count == 0 ? null : await db.Tods
+        var tod = spawnKey is null ? null : await db.Tods
             .Where(t => t.LinkshellId == board.LinkshellId
-                && t.MonsterName != null
-                && names.Contains(t.MonsterName.ToLower())
+                && t.SpawnKey == spawnKey
                 && t.RepopTime != null)
             .OrderByDescending(t => t.RepopTime)
             .ThenByDescending(t => t.Id)
