@@ -63,33 +63,39 @@ public sealed class ChartKeyItemService
     /// to show what is outstanding, and deriving its columns from what people already hold would
     /// hide exactly the rows that matter.
     ///
-    /// ROWS ARE ROSTER-DRIVEN, and a stored row for a membership no longer on the roster is ignored.
+    /// ROWS ARE ROSTER-DRIVEN, and a stored row for an account no longer on the roster is ignored.
     /// Deliberately unlike the pop item credits, which keep departed farmers: farming
     /// credit is a historical fact worth preserving, while "does this person have the key item" is
-    /// only a question about people who are here. Those orphan rows are harmless - there is no FK to
-    /// delete them, by the second-cascade-path design on the model - and re-adding the same person
-    /// restores what they had.
+    /// only a question about people who are here. Those rows are harmless, and the same person
+    /// coming back restores what they had.
+    ///
+    /// A tick belongs to the member's ACCOUNT (ChartMemberKeyItem.AppUserId), not to the membership
+    /// row, so a member whose membership was re-created still sees their ticks. A roster entry with
+    /// no account can hold none.
     /// </summary>
     public static ChartKeyItemGrid BuildGrid(
         ChartBoard board,
         IReadOnlyList<ChartMemberKeyItem> rows,
         IReadOnlyList<ChartRosterEntry> roster)
     {
-        // Membership ids that hold each key item. Keyed by the CATALOG spelling so a row stored in
-        // another case still lands in its column.
-        var holders = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
+        // Accounts that hold each key item. Keyed by the CATALOG spelling so a row stored in
+        // another case still lands in its column. Account ids compare exactly, as the database does.
+        var holders = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in board.KeyItems)
         {
-            holders[item.Name] = new HashSet<int>();
+            holders[item.Name] = new HashSet<string>(StringComparer.Ordinal);
         }
 
         foreach (var row in rows)
         {
-            if (holders.TryGetValue(row.KeyItemName.Trim(), out var set))
+            if (row.AppUserId is not null && holders.TryGetValue(row.KeyItemName.Trim(), out var set))
             {
-                set.Add(row.MembershipId);
+                set.Add(row.AppUserId);
             }
         }
+
+        static bool Holds(HashSet<string> set, ChartRosterEntry member) =>
+            member.AppUserId is not null && set.Contains(member.AppUserId);
 
         // De-duplicated by name: one row per person, first sighting wins.
         var members = new List<ChartRosterEntry>();
@@ -107,7 +113,7 @@ public sealed class ChartKeyItemService
             {
                 var set = holders[item.Name];
                 var missing = members
-                    .Where(member => !set.Contains(member.MembershipId))
+                    .Where(member => !Holds(set, member))
                     .Select(member => member.CharacterName)
                     .ToList();
 
@@ -125,7 +131,7 @@ public sealed class ChartKeyItemService
             .Select(member =>
             {
                 var has = board.KeyItems
-                    .Select(item => holders[item.Name].Contains(member.MembershipId))
+                    .Select(item => Holds(holders[item.Name], member))
                     .ToList();
 
                 return new ChartKeyItemGridRow(
@@ -195,24 +201,30 @@ public sealed class ChartKeyItemService
             return "That is not a key item on this board.";
         }
 
-        // The membership check only: the grid reads names off the roster, so the row stores none.
-        var characterName = await _db.AppUserLinkshells
+        // The membership check, and whose tick it is: the grid reads names off the roster, so the
+        // row stores none, but it does store the member's account (the grid matches by account).
+        var member = await _db.AppUserLinkshells
             .AsNoTracking()
-            .Where(member => member.LinkshellId == linkshellId && member.Id == membershipId)
-            .Select(member => member.CharacterName)
+            .Where(link => link.LinkshellId == linkshellId && link.Id == membershipId)
+            .Select(link => new { link.CharacterName, link.AppUserId })
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(characterName))
+        if (member is null || string.IsNullOrWhiteSpace(member.CharacterName))
         {
             return "That member is not in this linkshell.";
         }
+        if (string.IsNullOrWhiteSpace(member.AppUserId))
+        {
+            return "That member has no account yet, so their key items can't be tracked.";
+        }
 
+        // By account, so a tick made on an older membership of the same person is found too.
         var existing = await _db.ChartMemberKeyItems
             .FirstOrDefaultAsync(
                 row => row.LinkshellId == linkshellId
                     && row.Board == catalog.Key
                     && row.KeyItemName == canonicalName
-                    && row.MembershipId == membershipId,
+                    && row.AppUserId == member.AppUserId,
                 cancellationToken);
 
         if (!has)
@@ -240,7 +252,9 @@ public sealed class ChartKeyItemService
             LinkshellId = linkshellId,
             Board = catalog.Key,
             KeyItemName = canonicalName,
+            // Both: this build reads AppUserId, the previous build reads MembershipId.
             MembershipId = membershipId,
+            AppUserId = member.AppUserId,
             SetByAppUserId = actor.AppUserId,
             SetByCharacterName = actor.CharacterName,
             SetAt = DateTime.UtcNow,

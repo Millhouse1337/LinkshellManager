@@ -25,14 +25,50 @@ public class ChartKeyItemGridTests
     private static ChartRosterEntry Member(int id, string name) =>
         new(id, $"user-{id}", name, "Member", Array.Empty<string>());
 
-    // No name: the grid takes names off the roster, never off the tick row.
+    // No name: the grid takes names off the roster, never off the tick row. The tick carries the
+    // account of that member (Member gives member N the account "user-N"); the grid matches by it.
     private static ChartMemberKeyItem Has(int membershipId, string keyItem) => new()
     {
         LinkshellId = 1,
         Board = ChartBoardCatalog.Dynamis,
         KeyItemName = keyItem,
         MembershipId = membershipId,
+        AppUserId = $"user-{membershipId}",
     };
+
+    // RosterSwitch: a tick belongs to the ACCOUNT. A member whose membership was re-created (a new
+    // membership id, the same account) still sees their ticks; a tick on somebody else's account
+    // does not leak onto a member who happens to have its old membership id.
+    [Fact]
+    public void BuildGrid_MatchesTicksByAccount_NotByMembershipId()
+    {
+        var lantern = Dynamis.KeyItems.ToList().FindIndex(item => item.Name == "Hydra Corps Lantern");
+        var rows = new[]
+        {
+            // Aeris ticked it on her old membership 41; she is membership 1 now.
+            new ChartMemberKeyItem
+            {
+                LinkshellId = 1, Board = ChartBoardCatalog.Dynamis, KeyItemName = "Hydra Corps Lantern",
+                MembershipId = 41, AppUserId = "user-1",
+            },
+            // A departed member's tick that carries Bob's membership id 2 but not his account.
+            new ChartMemberKeyItem
+            {
+                LinkshellId = 1, Board = ChartBoardCatalog.Dynamis, KeyItemName = "Hydra Corps Lantern",
+                MembershipId = 2, AppUserId = "someone-gone",
+            },
+        };
+        var noAccount = new ChartRosterEntry(3, null, "Sheet", "Member", Array.Empty<string>());
+
+        var grid = ChartKeyItemService.BuildGrid(
+            Dynamis, rows, new[] { Member(1, "Aeris"), Member(2, "Bob"), noAccount });
+
+        Assert.True(grid.Rows.Single(row => row.CharacterName == "Aeris").Has[lantern]);
+        Assert.False(grid.Rows.Single(row => row.CharacterName == "Bob").Has[lantern]);
+        Assert.False(grid.Rows.Single(row => row.CharacterName == "Sheet").Has[lantern]);
+        Assert.Equal(1, grid.Columns[lantern].HaveCount);
+        Assert.Equal(new[] { "Bob", "Sheet" }, grid.Columns[lantern].MissingCharacterNames);
+    }
 
     /// <summary>
     /// Columns come from the CATALOG, in catalog order - never from the data. A key item nobody has
@@ -220,8 +256,50 @@ public class ChartKeyItemGridTests
         Assert.Equal("Dynamis", row.Board);
         Assert.Equal(1, row.MembershipId);
         Assert.Equal("user-1", row.SetByAppUserId);
-        // The membership's account rides along (stamped on save from MembershipId).
+        // The member's account is stored too: the grid reads ticks by it.
         Assert.Equal("user-1", row.AppUserId);
+    }
+
+    // RosterSwitch: the same person on a re-created membership finds the tick they made on the old
+    // one, so ticking again adds no second row (one per account) and unticking removes it.
+    [Fact]
+    public async Task SetAsync_FindsTheTickByAccount_AcrossARecreatedMembership()
+    {
+        using var db = WithRoster();
+        db.ChartMemberKeyItems.Add(new ChartMemberKeyItem
+        {
+            LinkshellId = 1, Board = "Dynamis", KeyItemName = "Hydra Corps Lantern",
+            MembershipId = 41, AppUserId = "user-1",
+        });
+        await db.SaveChangesAsync();
+        var service = new ChartKeyItemService(db);
+
+        Assert.Null(await service.SetAsync(1, "Dynamis", "Hydra Corps Lantern", 1, true, Actor, CancellationToken.None));
+        await db.SaveChangesAsync();
+        var row = Assert.Single(db.ChartMemberKeyItems);
+        Assert.Equal("user-1", row.SetByAppUserId);
+
+        Assert.Null(await service.SetAsync(1, "Dynamis", "Hydra Corps Lantern", 1, false, Actor, CancellationToken.None));
+        await db.SaveChangesAsync();
+        Assert.Empty(db.ChartMemberKeyItems);
+    }
+
+    // The tick's account is required, so a roster row with no account cannot be ticked.
+    [Fact]
+    public async Task SetAsync_RefusesAMemberWithNoAccount()
+    {
+        using var db = WithRoster();
+        db.AppUserLinkshells.Add(new AppUserLinkshell
+        {
+            Id = 3, LinkshellId = 1, AppUserId = null, CharacterName = "Sheet", Rank = "Member",
+        });
+        await db.SaveChangesAsync();
+
+        var error = await new ChartKeyItemService(db).SetAsync(
+            1, "Dynamis", "Hydra Corps Lantern", 3, true, Actor, CancellationToken.None);
+
+        Assert.NotNull(error);
+        Assert.Empty(db.ChartMemberKeyItems);
     }
 
     // Presence is the fact, so unticking DELETES rather than storing a false.

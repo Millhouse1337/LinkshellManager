@@ -164,6 +164,54 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
         }
     }
 
+    // RosterSwitch: one key-item tick per account. Bob left the linkshell once and kept his tick of
+    // "A" (on a membership that no longer exists); his imported placeholder is on the roster now
+    // with "A" and "B" ticked. The claim must not trip the per-account unique index: the
+    // placeholder's "A" is one fact about the same person, so Bob's own tick stays and only "B"
+    // moves.
+    [Fact]
+    public async Task Claim_WhenBothAccountsTickedTheSameKeyItem_KeepsOneTick()
+    {
+        int linkshellId, phMembershipId, bobsOldTick;
+        await using (var db = _pg.CreateContext())
+        {
+            var linkshell = new Linkshell { LinkshellName = "LS" };
+            db.Linkshells.Add(linkshell);
+            db.Users.Add(new AppUser { Id = Real, UserName = "real", CharacterName = "Bob" });
+            db.Users.Add(new AppUser { Id = Ph, UserName = "ph", CharacterName = "Bobalt", IsPlaceholder = true });
+            var phMember = new AppUserLinkshell { Linkshell = linkshell, AppUserId = Ph, CharacterName = "Bobalt" };
+            db.AppUserLinkshells.Add(phMember);
+            await db.SaveChangesAsync();
+            linkshellId = linkshell.Id;
+            phMembershipId = phMember.Id;
+
+            var old = new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "A", MembershipId = 987654, AppUserId = Real };
+            db.ChartMemberKeyItems.AddRange(
+                old,
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "A", MembershipId = phMembershipId },
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "B", MembershipId = phMembershipId });
+            await db.SaveChangesAsync();
+            bobsOldTick = old.Id;
+        }
+
+        await using (var db = _pg.CreateContext())
+        {
+            var result = await new PlaceholderClaimService(db, new UserMergeService(db))
+                .ClaimPlaceholderAsync(Ph, Real, linkshellId, CancellationToken.None);
+            Assert.True(result.Success, result.Error);
+        }
+
+        Assert.Empty(await FindTextColumnsHoldingAsync(Ph));
+        await using (var db = _pg.CreateContext())
+        {
+            var ticks = await db.ChartMemberKeyItems.AsNoTracking().OrderBy(k => k.KeyItemName).ToListAsync();
+            Assert.Equal(new[] { "A", "B" }, ticks.Select(k => k.KeyItemName));
+            Assert.All(ticks, k => Assert.Equal(Real, k.AppUserId));
+            Assert.Equal(bobsOldTick, ticks[0].Id);
+            Assert.Equal(phMembershipId, ticks[1].MembershipId);
+        }
+    }
+
     // Every (table, column) of a text type whose value equals `id`, as "Table.Column".
     private async Task<List<string>> FindTextColumnsHoldingAsync(string id)
     {

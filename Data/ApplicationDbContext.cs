@@ -901,13 +901,15 @@ namespace LinkshellManagerDiscordApp.Data
 
         // Keeps ChartMemberKeyItem.AppUserId (AccountJobsAndKeyItemAccounts) in step with the row's
         // membership: the account of the membership whose Id is MembershipId, if that membership is
-        // in the row's own linkshell, else null -- exactly what the migration's fill does. Done here
-        // so every writer gets it: ticking a cell (ChartKeyItemService), a placeholder claim moving
-        // ticks onto the kept membership (UserMergeService) and Data Admin.
+        // in the row's own linkshell and has an account -- exactly what RosterSwitch's re-fill does.
+        // Done here so every writer gets it: ticking a cell (ChartKeyItemService), a placeholder claim
+        // moving ticks onto the kept membership (UserMergeService) and Data Admin.
         //
         // A new row is always stamped. A saved one is re-stamped when its MembershipId (or linkshell)
-        // changed and nobody set the account in the same save. Memberships are looked up in the
-        // database, so one added in this same save is not found yet; that row stays null.
+        // changed and nobody set the account in the same save. When the membership gives no account
+        // (gone, another linkshell's, none, or added in this same save so not in the database yet),
+        // the row keeps the account it already has. The column is required since RosterSwitch, so a
+        // row with no account at all is refused by the save rather than written as NULL.
         private List<EntityEntry<ChartMemberKeyItem>> CollectKeyItemsNeedingAccountStamp() =>
             ChangeTracker.Entries<ChartMemberKeyItem>()
                 .Where(entry => entry.State == EntityState.Added
@@ -954,11 +956,12 @@ namespace LinkshellManagerDiscordApp.Data
             var byId = memberships.ToDictionary(member => member.Id);
             foreach (var row in rows)
             {
-                var account = byId.TryGetValue(row.Entity.MembershipId, out var member)
+                if (byId.TryGetValue(row.Entity.MembershipId, out var member)
                     && member.LinkshellId == row.Entity.LinkshellId
-                        ? member.AppUserId
-                        : null;
-                SetDerived(row, nameof(ChartMemberKeyItem.AppUserId), account);
+                    && member.AppUserId is not null)
+                {
+                    SetDerived(row, nameof(ChartMemberKeyItem.AppUserId), member.AppUserId);
+                }
             }
         }
 
@@ -2211,10 +2214,26 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.Property(item => item.KeyItemName).HasMaxLength(128).IsRequired();
                 entity.Property(item => item.SetByAppUserId).HasMaxLength(450);
                 entity.Property(item => item.SetByCharacterName).HasMaxLength(256);
-                // The membership's account (AccountJobsAndKeyItemAccounts). Plain column and plain
-                // index for now; a later deploy adds the foreign key and the per-account unique key.
-                entity.Property(item => item.AppUserId).HasMaxLength(450);
+                // The member's account (AccountJobsAndKeyItemAccounts, RosterSwitch): required, and
+                // a real foreign key, so a tick goes when its account is deleted. A claimed
+                // placeholder's ticks are moved first (UserMergeService), so a claim keeps them.
+                // No navigation: nothing reads a tick through its account.
+                entity.Property(item => item.AppUserId).HasMaxLength(450).IsRequired();
                 entity.HasIndex(item => item.AppUserId);
+                entity.HasOne<AppUser>()
+                    .WithMany()
+                    .HasForeignKey(item => item.AppUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                // One tick per account per key item (RosterSwitch). The grid reads ticks by account,
+                // so a second row for the same person would read as one. The old per-membership
+                // index below stays until a later deploy drops MembershipId.
+                entity.HasIndex(item => new
+                {
+                    item.LinkshellId,
+                    item.Board,
+                    item.KeyItemName,
+                    item.AppUserId,
+                }).IsUnique();
                 entity.HasOne(item => item.Linkshell)
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)

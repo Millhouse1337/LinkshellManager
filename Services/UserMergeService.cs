@@ -80,6 +80,7 @@ public sealed class UserMergeService
         await DropDuplicateCaptureMembersAsync(fromAppUserId, toAppUserId, cancellationToken);
         await MergeJobRatingsAsync(fromAppUserId, toAppUserId, cancellationToken);
         await DropDuplicateOpenInvitesAsync(fromAppUserId, toAppUserId, cancellationToken);
+        await DropDuplicateKeyItemsAsync(fromAppUserId, toAppUserId, cancellationToken);
         await MoveChartMembershipsAsync(membershipIdMap, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -373,6 +374,22 @@ public sealed class UserMergeService
         }
     }
 
+    // One key-item tick per account per key item (unique index, RosterSwitch). A key item both
+    // accounts ticked is one fact about one person, so the new account's tick stays. No DKP or gil.
+    private async Task DropDuplicateKeyItemsAsync(string from, string to, CancellationToken cancellationToken)
+    {
+        var theirs = await _db.ChartMemberKeyItems
+            .Where(k => k.AppUserId == to)
+            .Select(k => new { k.LinkshellId, k.Board, k.KeyItemName })
+            .ToListAsync(cancellationToken);
+        if (theirs.Count == 0) return;
+        var mine = await _db.ChartMemberKeyItems
+            .Where(k => k.AppUserId == from)
+            .ToListAsync(cancellationToken);
+        _db.ChartMemberKeyItems.RemoveRange(mine.Where(tick => theirs.Any(t =>
+            t.LinkshellId == tick.LinkshellId && t.Board == tick.Board && t.KeyItemName == tick.KeyItemName)));
+    }
+
     // The key-item chart points at a membership by id, with no foreign key (the other chart tables
     // match people by name or account id). Rows of a membership the
     // caller folded into another move to that one. A key item ticked on both is one tick (that
@@ -390,6 +407,8 @@ public sealed class UserMergeService
             var ticks = await _db.ChartMemberKeyItems.Where(k => k.MembershipId == oldId).ToListAsync(cancellationToken);
             foreach (var tick in ticks)
             {
+                // Already dropped by DropDuplicateKeyItemsAsync.
+                if (_db.Entry(tick).State == EntityState.Deleted) continue;
                 if (keptTicks.Any(k => k.LinkshellId == tick.LinkshellId && k.Board == tick.Board && k.KeyItemName == tick.KeyItemName))
                 {
                     _db.ChartMemberKeyItems.Remove(tick);

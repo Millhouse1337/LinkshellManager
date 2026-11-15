@@ -7,8 +7,9 @@ namespace LinkshellManager.Tests;
 
 // Every save keeps ChartMemberKeyItem.AppUserId in step with MembershipId (ApplicationDbContext,
 // AccountJobsAndKeyItemAccounts): the account of that membership when it is in the tick's own
-// linkshell, else null -- the same rule as the migration's fill. The grid still reads MembershipId,
-// so this only has to be right, not used.
+// linkshell and has one -- the same rule as RosterSwitch's re-fill. Since RosterSwitch the column
+// is required and the grid reads it, so when the membership gives no account the tick keeps the one
+// it has, and a tick with none at all is refused.
 public class KeyItemAccountStampTests
 {
     private static ApplicationDbContext NewInMemoryContext(string name) =>
@@ -36,16 +37,15 @@ public class KeyItemAccountStampTests
     };
 
     [Theory]
-    [InlineData(1, 1, "a-1")]   // a member's own tick
-    [InlineData(1, 2, null)]    // no account (sheet-only row)
-    [InlineData(1, 3, null)]    // membership of ANOTHER linkshell: never borrows its account
-    [InlineData(1, 99, null)]   // membership gone
-    public async Task NewTick_GetsItsMembershipsAccount(int linkshellId, int membershipId, string? expected)
+    [InlineData(1, 1, "a-1")]             // a member's own tick: a value set by hand is replaced
+    [InlineData(1, 2, "typed-by-hand")]   // no account (sheet-only row): the given account stays
+    [InlineData(1, 3, "typed-by-hand")]   // membership of ANOTHER linkshell: never borrows its account
+    [InlineData(1, 99, "typed-by-hand")]  // membership gone
+    public async Task NewTick_GetsItsMembershipsAccount(int linkshellId, int membershipId, string expected)
     {
         var name = await SeededAsync();
         await using (var db = NewInMemoryContext(name))
         {
-            // A wrong value set by hand is replaced: the membership decides.
             db.ChartMemberKeyItems.Add(Tick(1, linkshellId, membershipId, appUserId: "typed-by-hand"));
             await db.SaveChangesAsync();
         }
@@ -54,20 +54,33 @@ public class KeyItemAccountStampTests
         Assert.Equal(expected, (await check.ChartMemberKeyItems.SingleAsync()).AppUserId);
     }
 
+    // RosterSwitch made the account required: a tick nobody can give an account to is not saved.
+    [Theory]
+    [InlineData(2)]
+    [InlineData(99)]
+    public async Task NewTick_WithNoAccountAnywhere_IsRefused(int membershipId)
+    {
+        var name = await SeededAsync();
+        await using var db = NewInMemoryContext(name);
+        db.ChartMemberKeyItems.Add(Tick(1, 1, membershipId));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+    }
+
     [Fact]
     public async Task SynchronousSave_StampsToo()
     {
         var name = await SeededAsync();
         using (var db = NewInMemoryContext(name))
         {
-            db.ChartMemberKeyItems.AddRange(Tick(1, 1, 1), Tick(2, 2, 3), Tick(3, 2, 1));
+            db.ChartMemberKeyItems.AddRange(Tick(1, 1, 1), Tick(2, 2, 3), Tick(3, 2, 1, appUserId: "kept"));
             db.SaveChanges();
         }
 
         using var check = NewInMemoryContext(name);
         Assert.Equal("a-1", check.ChartMemberKeyItems.Single(k => k.Id == 1).AppUserId);
         Assert.Equal("b-2", check.ChartMemberKeyItems.Single(k => k.Id == 2).AppUserId);
-        Assert.Null(check.ChartMemberKeyItems.Single(k => k.Id == 3).AppUserId);
+        Assert.Equal("kept", check.ChartMemberKeyItems.Single(k => k.Id == 3).AppUserId);
     }
 
     [Fact]
@@ -96,7 +109,7 @@ public class KeyItemAccountStampTests
             Assert.Equal("a-1", (await check.ChartMemberKeyItems.SingleAsync()).AppUserId);
         }
 
-        // MembershipId changes (what a placeholder claim does): re-stamped from the new membership.
+        // Moved onto a membership with no account: the tick keeps the account it has.
         await using (var db = NewInMemoryContext(name))
         {
             (await db.ChartMemberKeyItems.SingleAsync()).MembershipId = 2;
@@ -104,7 +117,18 @@ public class KeyItemAccountStampTests
         }
         await using (var check = NewInMemoryContext(name))
         {
-            Assert.Null((await check.ChartMemberKeyItems.SingleAsync()).AppUserId);
+            Assert.Equal("a-1", (await check.ChartMemberKeyItems.SingleAsync()).AppUserId);
+        }
+
+        // MembershipId changes (what a placeholder claim does): re-stamped from the new membership.
+        await using (var db = NewInMemoryContext(name))
+        {
+            (await db.ChartMemberKeyItems.SingleAsync()).MembershipId = 1;
+            await db.SaveChangesAsync();
+        }
+        await using (var check = NewInMemoryContext(name))
+        {
+            Assert.Equal("someone-else", (await check.ChartMemberKeyItems.SingleAsync()).AppUserId);
         }
 
         // Account set in the same save as the move: the caller's value is kept.

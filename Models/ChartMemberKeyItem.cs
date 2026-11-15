@@ -38,22 +38,22 @@ public class ChartMemberKeyItem
     [MaxLength(128)]
     public string KeyItemName { get; set; } = string.Empty;
 
-    // Plain int with no relationship. (It was once explained as "an FK would be a second cascade
-    // path from Linkshells into this table". That is a SQL Server rule; Postgres allows it, so an FK
-    // is possible. Do not copy that reason to new tables.)
-    //
-    // The consequence, accepted deliberately: removing somebody from the roster leaves their rows
-    // behind. They never render - ChartKeyItemService.BuildGrid is roster-driven - and re-adding the
-    // same person restores what they had, which is the friendlier of the two failures.
+    // The membership the tick was made on. Plain int with no relationship. Still written, because
+    // the previous build reads the grid by it, but this build reads by AppUserId below; a later
+    // deploy stops writing it and then drops it.
     public int MembershipId { get; set; }
 
-    // The account of that membership (AccountJobsAndKeyItemAccounts). Membership ids are not
-    // stable - a membership is re-created on unsync/resync - so the chart is moving to the account
-    // id, as wishlist requests already use. For now it is only written: every save that adds a row
-    // or changes its membership stamps it from the membership (ApplicationDbContext
-    // .StampKeyItemAccounts), a placeholder claim moves it (UserMergeService), and the grid still
-    // reads MembershipId. A later deploy makes it required, gives it a foreign key and reads by it. Null
-    // when the membership has no account (or is not in the row's linkshell).
+    // WHOSE tick it is: the member's account (AccountJobsAndKeyItemAccounts, RosterSwitch). The grid
+    // matches ticks to the roster by this, because membership ids are not stable - a membership is
+    // re-created on unsync/resync - while the account stays, as wishlist requests already use.
+    // Required, with a foreign key to the account (a deleted account takes its ticks with it) and
+    // one tick per account per key item. Every save that adds a row or changes its membership stamps
+    // it from the membership (ApplicationDbContext.StampKeyItemAccounts), and a placeholder claim
+    // moves it (UserMergeService).
+    //
+    // Removing somebody from the roster leaves their rows behind. They never render - BuildGrid is
+    // roster-driven - and the same person coming back gets what they had, even on a new membership.
+    // Typed string? only because the save hook fills it; the database never holds NULL here.
     [MaxLength(450)]
     public string? AppUserId { get; set; }
 

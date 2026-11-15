@@ -366,6 +366,16 @@ public class DataAdminSchemaGraphTests
         Assert.True(Column(graph, "AppUserLinkshell", "LinkshellRoleId").Fk);
         Assert.True(Column(graph, "AppUserLinkshell", "LinkshellRoleId").Nullable);
 
+        // RosterSwitch: a key-item tick belongs to an account and goes with it.
+        var tickAccount = Relationship(graph, "ChartMemberKeyItem.AppUserId");
+        Assert.Equal("ChartMemberKeyItem", tickAccount.From);
+        Assert.Equal("AppUser", tickAccount.To);
+        Assert.True(tickAccount.Required);
+        Assert.False(tickAccount.Unique);
+        Assert.Equal("cascade", tickAccount.OnDelete);
+        Assert.True(Column(graph, "ChartMemberKeyItem", "AppUserId").Fk);
+        Assert.False(Column(graph, "ChartMemberKeyItem", "AppUserId").Nullable);
+
         var cloned = Relationship(graph, "PartySetup.ClonedFromPartySetupId");
         Assert.Equal("PartySetup", cloned.From);
         Assert.Equal(cloned.From, cloned.To);

@@ -958,6 +958,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("AppUserId")
+                        .IsRequired()
                         .HasMaxLength(450)
                         .HasColumnType("character varying(450)");
 
@@ -991,6 +992,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AppUserId");
+
+                    b.HasIndex("LinkshellId", "Board", "KeyItemName", "AppUserId")
+                        .IsUnique();
 
                     b.HasIndex("LinkshellId", "Board", "KeyItemName", "MembershipId")
                         .IsUnique();
@@ -3832,6 +3836,12 @@ namespace LinkshellManagerDiscordApp.Migrations
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.ChartMemberKeyItem", b =>
                 {
+                    b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("LinkshellManagerDiscordApp.Models.Linkshell", "Linkshell")
                         .WithMany()
                         .HasForeignKey("LinkshellId")

@@ -214,6 +214,27 @@ public class PlaceholderClaimServiceTests
         Assert.Equal(Real, tick.AppUserId);
     }
 
+    // RosterSwitch: one tick per account per key item. The real account still has a tick of "A"
+    // from a membership that is gone; the placeholder ticked "A" and "B". Its "A" is dropped (the
+    // same person, the same fact) and its "B" moves, so the per-account unique index holds.
+    [Fact]
+    public async Task NotYetAMember_AKeyItemBothAccountsTicked_KeepsTheRealAccountsTick()
+    {
+        using var db = NewDb();
+        Member(db, 11, Ph, "Bobalt", 0);
+        db.ChartMemberKeyItems.AddRange(
+            new ChartMemberKeyItem { Id = 1, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 9, AppUserId = Real },
+            new ChartMemberKeyItem { Id = 2, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11 },
+            new ChartMemberKeyItem { Id = 3, LinkshellId = Ls, Board = "Sky", KeyItemName = "B", MembershipId = 11 });
+        db.SaveChanges();
+
+        var result = await NewService(db).ClaimPlaceholderAsync(Ph, Real, Ls, CancellationToken.None);
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(new[] { 1, 3 }, db.ChartMemberKeyItems.OrderBy(k => k.Id).Select(k => k.Id));
+        Assert.All(db.ChartMemberKeyItems, k => Assert.Equal(Real, k.AppUserId));
+    }
+
     [Fact]
     public async Task AlreadyAMember_ChartRowsFollowTheFoldedMembership()
     {
