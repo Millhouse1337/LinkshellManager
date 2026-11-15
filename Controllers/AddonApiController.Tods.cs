@@ -63,7 +63,9 @@ public sealed partial class AddonApiController
                 t.Time,
                 t.RepopTime,
                 t.Cooldown,
-                t.Interval
+                t.Interval,
+                t.CooldownMinutes,
+                t.IntervalMinutes
             })
             .ToListAsync(cancellationToken);
 
@@ -88,6 +90,10 @@ public sealed partial class AddonApiController
                     repopTimeUtc = r.RepopTime,
                     cooldown = r.Cooldown,
                     interval = r.Interval,
+                    // The same two in whole minutes, as stored; null when the text reads as no
+                    // duration. Additive: today's addon reads only the texts above.
+                    cooldownMinutes = r.CooldownMinutes,
+                    intervalMinutes = r.IntervalMinutes,
                     // Always a bool, never null: the addon turns null fields into nil, so this is
                     // what tells "no grid" (windows left blank) apart from a server too old to say.
                     hasSpawnGrid = timing.HasSpawnGrid,

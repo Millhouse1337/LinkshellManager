@@ -1289,7 +1289,11 @@ public sealed record ActivityTodDto(
     // When the row was written, as distinct from Time (the observed ToD). A camp that ended with
     // no ToD has a null Time, so the client sorts on Time ?? TimeStamp to keep that row as the
     // monster's newest entry instead of letting the pop it superseded show as current.
-    DateTime? TimeStamp = null);
+    DateTime? TimeStamp = null,
+    // Cooldown / Interval in whole minutes, as stored (Tod.CooldownMinutes / IntervalMinutes).
+    // Null when the text reads as no duration. Additive: Cooldown and Interval stay the display.
+    int? CooldownMinutes = null,
+    int? IntervalMinutes = null);
 
 // One row of the HNM claim-rate chart: Claimed of Attempts (every ToD marked Claimed or
 // Unclaimed), and ClaimRate, the two as a percentage. ColorClass is the palette letter the row

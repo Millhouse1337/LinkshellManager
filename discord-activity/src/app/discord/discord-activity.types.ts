@@ -1020,6 +1020,11 @@ export interface ActivityTodEntry {
   repopTime?: string | null;
   interval?: string | null;
   imagePath?: string | null;
+  // The cooldown and interval texts above in whole minutes, as the server stored them. Null when
+  // the text reads as no duration (the repop then used the 22-hour fallback). Undefined from a
+  // server predating the fields. Nothing reads them yet; the texts stay what the UI shows.
+  cooldownMinutes?: number | null;
+  intervalMinutes?: number | null;
 }
 
 // One pop the linkshell is still waiting on: the newest ToD for a spawn whose predicted repop

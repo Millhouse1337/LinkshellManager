@@ -17,10 +17,20 @@ public static class TodCooldowns
     // Every preset the form used to offer parses through the shared parser identically ("84 Hour"
     // -> 84, "5 Min" -> 5/60), so the old preset-by-preset chain is gone rather than kept beside
     // it. A bare number still means HOURS, which is the unit this field has always been written in.
+    //
+    // It reads the same whole minutes the save hook stores in Tod.CooldownMinutes
+    // (TodDurationFormat.StoredMinutes), so a ToD's repop and its stored cooldown always agree. No
+    // stored minutes (blank, zero, not a duration, or more minutes than an integer holds) means the
+    // 22-hour fallback, as it always has.
     internal static double ResolveTodCooldownHours(string? cooldown) =>
-        TodDurationFormat.TryParseMinutes(cooldown, TodDurationFormat.HoursUnit, out var minutes)
-            ? minutes / 60d
-            : 22d;
+        CooldownMinutesOrFallback(TodDurationFormat.StoredMinutes(cooldown, TodDurationFormat.HoursUnit)) / 60d;
+
+    // The repop fallback when a ToD has no readable cooldown: 22 hours.
+    public const int FallbackCooldownMinutes = 22 * 60;
+
+    // A ToD's stored CooldownMinutes, or the fallback when it has none.
+    public static int CooldownMinutesOrFallback(int? cooldownMinutes) =>
+        cooldownMinutes ?? FallbackCooldownMinutes;
 
     // Cooldowns and intervals are free-form now that each monster carries its own configured
     // value: anything the shared parser reads as a positive duration is acceptable. The preset

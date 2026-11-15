@@ -255,7 +255,9 @@ internal static class ActivityMappers
             tod.Hq,
             tod.AdditionalSeconds,
             tod.PopWindow,
-            tod.TimeStamp);
+            tod.TimeStamp,
+            tod.CooldownMinutes,
+            tod.IntervalMinutes);
     }
 
     // One row of a capture linked to a live camp. Asks the roster the same question, in the same

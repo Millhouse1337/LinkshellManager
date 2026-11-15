@@ -57,6 +57,36 @@ public class TodCooldownVocabularyTests
     public void UnreadableCooldown_FallsBackToTwentyTwoHours(string? label) =>
         Assert.Equal(22d, TodCooldowns.ResolveTodCooldownHours(label), 6);
 
+    // The repop reads the minutes the save hook stores in Tod.CooldownMinutes, so the two always
+    // agree: the same number for every label, and the 22-hour fallback exactly when nothing is
+    // stored -- including a cooldown too long for the column, which used to give a repop some
+    // four thousand years out.
+    [Theory]
+    [InlineData("22 Hour")]
+    [InlineData("48 Hour")]
+    [InlineData("72 Hour")]
+    [InlineData("84 Hour")]
+    [InlineData("1 Hour 30 Min")]
+    [InlineData("1.025 h")]
+    [InlineData("72")]
+    [InlineData("0 Min")]
+    [InlineData("soon")]
+    [InlineData("99999999999 Hour")]
+    [InlineData(null)]
+    public void RepopCooldown_IsTheStoredMinutes_OrTwentyTwoHours(string? label)
+    {
+        var stored = TodDurationFormat.StoredMinutes(label, TodDurationFormat.HoursUnit);
+        Assert.Equal(stored ?? 22 * 60, TodCooldowns.CooldownMinutesOrFallback(stored));
+        Assert.Equal((stored ?? 22 * 60) / 60d, TodCooldowns.ResolveTodCooldownHours(label), 9);
+    }
+
+    [Fact]
+    public void ACooldownTooLongToStore_FallsBackToTwentyTwoHours()
+    {
+        Assert.Null(TodDurationFormat.StoredMinutes("99999999999 Hour", TodDurationFormat.HoursUnit));
+        Assert.Equal(22d, TodCooldowns.ResolveTodCooldownHours("99999999999 Hour"), 6);
+    }
+
     [Theory]
     [InlineData("22 Hour")]
     [InlineData("45 Min")]
