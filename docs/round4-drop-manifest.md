@@ -5,9 +5,10 @@
 Everything in "What deploy 4 drops" below is dropped by one migration. Kept as the record of what
 went and why, in case a value ever has to be fished back out of the pre-deploy-4 `pg_dump`.
 
-| Commit | Migration | What it dropped |
+| Commit | Migration | What it does |
 |---|---|---|
-| `d76ecf2` | `20261115154156_Round4Contract` | `AppUserLinkshells.JobLevels/StrongJobs/MeritJobs`, `ChartMemberKeyItems.MembershipId` and its unique index, `IX_HnmRecurringBoards_LinkshellId_MonsterName`, `IX_Tods_LinkshellId_MonsterName` |
+| `d76ecf2` | `20261115154156_Round4Contract` | Drops `AppUserLinkshells.JobLevels/StrongJobs/MeritJobs`, `ChartMemberKeyItems.MembershipId` and its unique index, `IX_HnmRecurringBoards_LinkshellId_MonsterName`, `IX_Tods_LinkshellId_MonsterName` |
+| `7a17615` | `20261115161909_NormalizeNamesForSquash` | Validates the 7 NOT VALID checks; renames 13 NOT NULL constraints and 2 sequences to the names a model-built table gets (see "Squash prep" below). Changes no row or column. |
 
 The commit after it added `tests/LinkshellManager.PostgresTests/Round4ContractRoundTripTests.cs`:
 it fills a deploy 3 database with rows, runs the migration Up, Down and Up again, then runs the
@@ -19,8 +20,9 @@ Changes from the plan below:
   `DropColumn` / `DropIndex` calls. `Down` runs `Round4Contract.ReAddSql`.
 - The rollback SQL also deletes Round4Contract's row from `__EFMigrationsHistory`, so the next
   deploy 4 start runs the drops again (see "Rolling back deploy 4" below).
-- `NormalizeNamesForSquash` (migration 2 below) is NOT part of this step. It is the next step of
-  deploy 4, decided from the catalog diff.
+- `NormalizeNamesForSquash` (migration 2 below) also VALIDATEs the NOT VALID checks, not only
+  renames. If an old row breaks a check, that check is left NOT VALID with a WARNING instead of
+  stopping the app's start.
 - `git grep -n "ROUND4-DROP"` now finds only this file.
 
 What the dropped columns held on production (read-only counts, 2026-11-15): `ChartMemberKeyItems`
@@ -78,6 +80,7 @@ config and tests still named them.)
      They need the same guarded `ALTER TABLE ... RENAME CONSTRAINT`.
    - Also compare production's I3 output with the golden file (read-only, on the owner's machine;
      never commit it). A name only production has needs a guarded rename too.
+   - DONE: see "Squash prep (NormalizeNamesForSquash)" below for what the diffs found.
 3. Run both test suites; `MigrationsUpToDateTests` must pass with the new snapshot, and
    `SchemaCatalogGoldenTests` must pass after the golden file is regenerated and its diff reviewed
    (it should lose exactly the lines for the items below, plus any renames).
@@ -185,10 +188,61 @@ DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261115154156_Round4
   it EF would think the drops already ran, the columns would stay, and production's catalog would
   no longer match the golden file the squash (D11) needs. The deploy 3 build does not know that id
   anyway, so removing it changes nothing for that build.
-- If deploy 4 also adds `NormalizeNamesForSquash`, its history row can stay: the deploy 3 build
-  ignores ids it does not know (`UnknownMigrationHistoryRowTests`), and its renames need no undo
-  because EF does not check constraint or index names at runtime.
+- `NormalizeNamesForSquash` needs nothing in this SQL. Its history row stays: the deploy 3 build
+  ignores ids it does not know (`UnknownMigrationHistoryRowTests`). Its validated checks and new
+  names stay too: EF does not look at constraint or sequence names, or at whether a check is
+  validated. On the next deploy 4 start EF runs only Round4Contract again, although the newer
+  migration is already applied (`NormalizeNamesForSquashRoundTripTests` runs exactly this).
 
 Rolling back deploy 3 itself (to `a6a35a7`) needs no SQL for these items: that build reads ticks
 by account, treats a NULL `MembershipId` as "no membership", and never reads the membership job
 columns.
+
+## Squash prep (NormalizeNamesForSquash)
+
+The squash (D11) needs three catalogs (pre-check I3) to be the same: production's, a fresh
+database built from the migration chain (the golden file), and a fresh database built from the
+model (what a Baseline migration makes). Two diffs were run before writing this migration:
+
+- **Production (before deploy 4) vs the golden file:** the same, except that production had
+  `CK_AuctionItems_OneParent` and `CK_EventAttendanceWindows_OneParent` validated by hand. No name
+  differences.
+- **Model-built vs the golden file** (a scratch test: `EnsureCreated` on an empty database, then
+  the I3 query; not committed):
+  - the 7 NOT VALID checks are fully checked in a model-built database;
+  - 13 NOT NULL constraints and 2 identity sequences kept the names they had before a rename
+    (`SkyPopItems_*` and `SkyPopItemCredits_*` on `ChartPopItems` / `ChartPopItemCredits`,
+    `SkyPopItems_God_not_null`, `SkyPopItemCredits_SkyPopItemId_not_null`,
+    `Linkshells_EnableRevenue_not_null`). Postgres 18 names these when a column is made and never
+    renames them. Production has the same old names.
+
+What the migration does (raw SQL, every step guarded, safe to run twice):
+
+1. `ALTER TABLE ... VALIDATE CONSTRAINT` for each of the 7 checks that is still NOT VALID.
+   Production had 0 rows breaking any of them (2026-11-15), and a NOT VALID check still refuses
+   every new bad write, so that cannot have changed. VALIDATE only reads; reads and writes go on
+   while it runs. If an old row does break one, that check stays NOT VALID and the startup log
+   shows a WARNING naming it; fix the row and run `NormalizeNamesForSquash.ValidateChecksSql` by
+   hand.
+2. `ALTER TABLE ... RENAME CONSTRAINT` / `ALTER SEQUENCE ... RENAME TO` for the 15 names, each
+   only when the old name is there and the new one is not.
+
+`Down` renames back. It does not un-validate: Postgres can only do that by dropping and re-adding
+the check, and a validated check is the same rule.
+
+Result: production's catalog with deploy 4's drops, the 5 validations it still needed and the 15
+renames applied, is line for line the new golden file (checked on the owner's machine with the
+read-only I3 output; that output is never committed). The model-built catalog now has the same
+names as the golden file.
+
+### Left for the squash (D11)
+
+The model-built catalog still differs from the golden file in one way: **54 column defaults**.
+These were added by `AddColumn(defaultValue: ...)` so old rows got a value, but the model has no
+`HasDefaultValue` for them, so a Baseline made from the model would not create them. Examples:
+`Linkshells.WdDkpPerWindow DEFAULT 0.25`, `Linkshells.HnmAttendanceMode DEFAULT 'Standard'`,
+`Tods.Hq DEFAULT false`, `Events.HnmWindowNumber DEFAULT 1`. EF always sends these columns on
+insert, so the app does not need them, but raw-SQL inserts (tests, tools) may. D11 must either
+keep them in the Baseline (raw SQL `ALTER COLUMN ... SET DEFAULT`) or drop them from production
+first; it must not let the catalogs drift. To list them, repeat the model-built diff above. (The
+`__EFMigrationsHistory` table is the only other difference; `EnsureCreated` does not make it.)
