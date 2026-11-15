@@ -101,24 +101,20 @@ public class AppUserLinkshell
 
     public DateTime? DateJoined { get; set; }
 
-    // JobLevels, StrongJobs and MeritJobs below are the OLD home of the main character's jobs. The
-    // app reads and writes them on the account now (AppUser.JobLevels / StrongJobs / MeritJobs,
-    // MainCharacterJobs); nothing writes these any more (RosterSwitch), and a later deploy drops
-    // them. Whatever they held before stays as it was.
+    // ROUND4-DROP (all three below): the OLD home of the main character's jobs. The app reads and
+    // writes them on the account now (AppUser.JobLevels / StrongJobs / MeritJobs, MainCharacterJobs).
+    // Nothing has written them since RosterSwitch or read them since AccountJobsAndKeyItemAccounts;
+    // Data Admin never lists them (array columns are protected) and the wipe tools no longer touch
+    // them. Kept mapped only so the model still matches the database; deploy 4 drops them
+    // (docs/round4-drop-manifest.md). Whatever they held stays as it was until then.
     [Column(TypeName = "jsonb")]
     public int[]? JobLevels { get; set; }
 
-    // Per-job "strong" flags for the main character, parallel to JobLevels and in
-    // the same FFXI-job-id-indexed format (see ProfileJobLevels). A non-zero entry
-    // marks the job as well-geared/merited so the linkshell can see at a glance who
-    // brings a strong setup. No longer written, like JobLevels.
+    // ROUND4-DROP: per-job "strong" flags, parallel to JobLevels (FFXI-job-id-indexed).
     [Column(TypeName = "jsonb")]
     public int[]? StrongJobs { get; set; }
 
-    // Per-job free-text merit notes for the main character, catalog-aligned (index
-    // 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP, NOT the FFXI-job-id format the level
-    // arrays use). Set
-    // when a job is marked merited; empty otherwise. No longer written, like JobLevels.
+    // ROUND4-DROP: per-job merit notes, catalog-aligned (index 0 = WAR ... 17 = PUP).
     [Column(TypeName = "jsonb")]
     public string[]? MeritJobs { get; set; }
 }

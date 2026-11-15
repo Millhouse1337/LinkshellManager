@@ -1601,8 +1601,9 @@ namespace LinkshellManagerDiscordApp.Data
 
             builder.Entity<HnmRecurringBoard>(entity =>
             {
-                // One recurring-board template per monster name per linkshell. Kept until the name
-                // indexes are retired; the SpawnKey index below is the rule the app relies on.
+                // ROUND4-DROP: the old one-board-per-monster-NAME rule. Every lookup finds a board by
+                // SpawnKey now, and the SpawnKey index below is stricter (one name always gives one
+                // spawn key), so nothing needs this. Deploy 4 drops it.
                 entity.HasIndex(board => new { board.LinkshellId, board.MonsterName }).IsUnique();
                 // One standing board per SPAWN (TodSwitch merged any second one). SpawnKey is
                 // derived from MonsterName by StampDerivedColumns, and a board always names a
@@ -1884,6 +1885,9 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => new { item.LinkshellId, item.Time });
+                // ROUND4-DROP: no query looks ToDs up by MonsterName any more (they match on
+                // SpawnKey, index below; the per-linkshell lists start with LinkshellId, which the
+                // Time index covers). Deploy 4 drops it.
                 entity.HasIndex(item => new { item.LinkshellId, item.MonsterName });
                 // Derived columns (AddTodDurationsAndSpawnKeys), stamped by StampDerivedColumns.
                 entity.HasIndex(item => new { item.LinkshellId, item.SpawnKey, item.Time });

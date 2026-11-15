@@ -14,7 +14,7 @@
 //           attendance snapshots, claim shields, party setups, pending
 //           submissions, DKP ledger, inventory items, gil treasury, and addon
 //           tokens. Also zeroes each member's DKP (balance, imported seed and
-//           watermarks) + cached JobLevels.
+//           watermarks). Profile jobs live on the account and are kept.
 //
 // Excluded from the main web-app build (see LinkshellManagerDiscordApp.csproj);
 // run by hand against a local or test database only. NEVER point it at production.
@@ -239,10 +239,12 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("AddonPairingCodes", "DELETE FROM \"AddonPairingCodes\" WHERE \"LinkshellId\" = @ls"),
         ("AddonApiTokens", "DELETE FROM \"AddonApiTokens\" WHERE \"LinkshellId\" = @ls"),
 
-        // --- Reset member DKP balances + cached job levels ---
+        // --- Reset member DKP balances ---
+        // (This used to clear AppUserLinkshells.JobLevels too. Jobs live on the account now, and
+        // the next deploy drops that column, so the wipe no longer names it.)
         // The imported seed (SeededDkp*) and the two ledger watermarks go too: the DKP sheet adds the
         // seed to the ledger, so leaving it would bring the old balance back on top of the new one.
-        ("AppUserLinkshells (reset DKP/jobs)", "UPDATE \"AppUserLinkshells\" SET \"LinkshellDkp\" = 0, \"SeededDkpEarned\" = 0, \"SeededDkpSpent\" = 0, \"DkpSeedLedgerId\" = 0, \"DkpPoolLedgerFromId\" = 0, \"JobLevels\" = NULL WHERE \"LinkshellId\" = @ls"),
+        ("AppUserLinkshells (reset DKP)", "UPDATE \"AppUserLinkshells\" SET \"LinkshellDkp\" = 0, \"SeededDkpEarned\" = 0, \"SeededDkpSpent\" = 0, \"DkpSeedLedgerId\" = 0, \"DkpPoolLedgerFromId\" = 0 WHERE \"LinkshellId\" = @ls"),
 
         // (The old "disconnect Google Sheet" UPDATE is gone: Google Sheets was removed, and it named
         // two columns dropped in June, so it failed and rolled the whole scrub back.)
