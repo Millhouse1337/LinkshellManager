@@ -197,7 +197,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<DiscordIdentityService>();
 builder.Services.AddScoped<InviteCandidateService>();
 builder.Services.AddScoped<ManualMemberService>();
-builder.Services.AddScoped<AltCharacterValidator>();
+builder.Services.AddScoped<CharacterNameValidator>();
 builder.Services.AddScoped<AppUserProfileService>();
 builder.Services.AddScoped<AddonApiAuthService>();
 builder.Services.AddScoped<GlobalSettingsService>();

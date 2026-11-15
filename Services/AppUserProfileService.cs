@@ -9,16 +9,16 @@ public sealed class AppUserProfileService
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly UserManager<AppUser> _userManager;
-    private readonly AltCharacterValidator _altCharacterValidator;
+    private readonly CharacterNameValidator _characterNameValidator;
 
     public AppUserProfileService(
         ApplicationDbContext dbContext,
         UserManager<AppUser> userManager,
-        AltCharacterValidator altCharacterValidator)
+        CharacterNameValidator characterNameValidator)
     {
         _dbContext = dbContext;
         _userManager = userManager;
-        _altCharacterValidator = altCharacterValidator;
+        _characterNameValidator = characterNameValidator;
     }
 
     public Task<IdentityResult> UpdateProfileAsync(
@@ -53,23 +53,22 @@ public sealed class AppUserProfileService
             ? user.AltCharacterName2
             : (string.IsNullOrWhiteSpace(altCharacterName2) ? null : altCharacterName2.Trim());
 
-        if (!preserveExistingAlts)
-        {
-            var (ok, error) = await _altCharacterValidator.ValidateAsync(
-                user,
-                normalizedCharacterName,
-                normalizedAlt1,
-                normalizedAlt2,
-                cancellationToken);
+        // Every name that changes is checked, the main too (CharacterNameValidator). Kept alts are
+        // passed as they are, so they count as unchanged.
+        var (ok, error) = await _characterNameValidator.ValidateAsync(
+            user,
+            normalizedCharacterName,
+            normalizedAlt1,
+            normalizedAlt2,
+            cancellationToken);
 
-            if (!ok)
+        if (!ok)
+        {
+            return IdentityResult.Failed(new IdentityError
             {
-                return IdentityResult.Failed(new IdentityError
-                {
-                    Code = "AltConflict",
-                    Description = error ?? "Alternate character validation failed."
-                });
-            }
+                Code = "CharacterNameConflict",
+                Description = error ?? "Character name validation failed."
+            });
         }
 
         user.CharacterName = normalizedCharacterName;
