@@ -1178,6 +1178,10 @@ public sealed partial class AddonApiController
         repopTimeUtc = tod.RepopTime,
         cooldown = tod.Cooldown,
         interval = tod.Interval,
+        // The same two in whole minutes (null when the text reads as no duration), so the addon
+        // need not parse "22 Hour" itself. Older addons ignore them.
+        cooldownMinutes = tod.CooldownMinutes,
+        intervalMinutes = tod.IntervalMinutes,
         claim = tod.Claim,
         // So the addon can say why the repop it prints carries these seconds.
         additionalSeconds = tod.AdditionalSeconds,

@@ -68,8 +68,8 @@ public class Tod
     // Cooldown and Interval in whole minutes (TodDurationFormat.StoredMinutes), and the
     // MonsterName's one-per-spawn key (HnmConfig.SpawnKey). Derived columns: every save stamps
     // them from the text (ApplicationDbContext.StampDerivedColumns), so nothing sets them by hand.
-    // null = the text reads as no duration / no name. Nothing reads them yet; a later deploy
-    // switches the repop maths and the monster lookups onto them.
+    // null = the text reads as no duration / no name. The addon's POST /tod answer passes the
+    // minutes on (Round 5); a later deploy switches the repop maths and the monster lookups onto them.
     public int? CooldownMinutes { get; set; }
 
     public int? IntervalMinutes { get; set; }

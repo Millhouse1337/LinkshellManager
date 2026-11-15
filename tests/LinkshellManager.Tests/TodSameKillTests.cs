@@ -199,6 +199,66 @@ public class TodSameKillTests
         Assert.True(second.GetProperty("claim").GetBoolean());
     }
 
+    // The answer carries the cooldown and interval in whole minutes too (Round 5), so the addon
+    // need not parse "22 Hour". Both for a new ToD and for a kill another character already posted.
+    [Fact]
+    public async Task TheAnswer_CarriesTheCooldownAndIntervalInMinutes()
+    {
+        await using var db = await SeededAsync();
+
+        var first = await PostAsync(db, Monster, KilledAt);
+        var second = await PostAsync(db, Monster, KilledAt.AddSeconds(40));
+
+        var tod = await db.Tods.AsNoTracking().SingleAsync();
+        Assert.Equal(22 * 60, tod.CooldownMinutes);
+        Assert.NotNull(tod.IntervalMinutes);
+        foreach (var answer in new[] { first, second })
+        {
+            Assert.Equal(tod.CooldownMinutes, answer.GetProperty("cooldownMinutes").GetInt32());
+            Assert.Equal(tod.IntervalMinutes, answer.GetProperty("intervalMinutes").GetInt32());
+            // The text stays for older addons.
+            Assert.Equal(tod.Cooldown, answer.GetProperty("cooldown").GetString());
+            Assert.Equal(tod.Interval, answer.GetProperty("interval").GetString());
+        }
+    }
+
+    // A member without ToD rights whose kill is already posted gets the same minutes back.
+    [Fact]
+    public async Task TheAlreadyPostedAnswer_ForAMember_CarriesTheMinutes()
+    {
+        await using var db = await SeededAsync(canManageTods: false);
+        db.Tods.Add(new Tod
+        {
+            LinkshellId = LinkshellId, MonsterName = Monster, Time = KilledAt, RepopTime = KilledAt.AddHours(22),
+            Cooldown = "22 Hour", Interval = "10 Minute",
+        });
+        await db.SaveChangesAsync();
+
+        var result = await PostAsync(db, Monster, KilledAt.AddSeconds(5));
+
+        Assert.True(result.GetProperty("alreadyPosted").GetBoolean());
+        Assert.Equal(22 * 60, result.GetProperty("cooldownMinutes").GetInt32());
+        Assert.Equal(10, result.GetProperty("intervalMinutes").GetInt32());
+    }
+
+    // A ToD whose text reads as no duration answers null minutes, which the addon treats as "use
+    // the text".
+    [Fact]
+    public async Task TheAnswer_GivesNullMinutes_WhenTheTextIsNoDuration()
+    {
+        await using var db = await SeededAsync(canManageTods: false);
+        db.Tods.Add(new Tod
+        {
+            LinkshellId = LinkshellId, MonsterName = Monster, Time = KilledAt, RepopTime = KilledAt.AddHours(22),
+        });
+        await db.SaveChangesAsync();
+
+        var result = await PostAsync(db, Monster, KilledAt.AddSeconds(5));
+
+        Assert.Equal(JsonValueKind.Null, result.GetProperty("cooldownMinutes").ValueKind);
+        Assert.Equal(JsonValueKind.Null, result.GetProperty("intervalMinutes").ValueKind);
+    }
+
     // The second poster is told what is saved, so their panel can't show a different answer.
     [Fact]
     public async Task ADifferentClaim_LeavesTheFirstAnswer_AndReportsIt()
