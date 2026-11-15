@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Authorization;
+using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -107,65 +108,11 @@ public sealed partial class AddonApiController
                 member.CharacterName, member.AccountCharacterName,
                 member.AltCharacterName1, member.AltCharacterName2))));
 
-        // The game reports exactly one alliance leader. Two means a client bug, so the first wins
-        // rather than letting one roster carry two crowns.
-        var leaderTaken = false;
-        var accepted = 0;
-        var unregistered = 0;
-
-        var existing = await _dbContext.LinkshellPresences
-            .Where(item => item.LinkshellId == token.LinkshellId)
-            .ToListAsync(cancellationToken);
-        var existingByName = existing
-            .GroupBy(item => item.CharacterName, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-
-        foreach (var member in reported)
-        {
-            var name = TruncateString(member.CharacterName!.Trim(), 256)!;
-            var isKnown = knownByName.TryResolve(name, out var known);
-            if (!isKnown) unregistered++;
-
-            var isLeader = member.IsAllianceLeader && !leaderTaken;
-            if (isLeader) leaderTaken = true;
-
-            if (!existingByName.TryGetValue(name, out var row))
-            {
-                row = new LinkshellPresence { LinkshellId = token.LinkshellId, CharacterName = name };
-                _dbContext.LinkshellPresences.Add(row);
-                existingByName[name] = row;
-            }
-
-            // The roster name, shown as "alt of ..." -- only when this name was NOT the roster name.
-            row.MainCharacterName = isKnown && known.Slot != CharacterNameSlot.Membership
-                ? known.Member.CharacterName
-                : null;
-            row.ZoneId = member.ZoneId;
-            row.AllianceNumber = allianceNumber;
-            row.AllianceKey = allianceKey;
-            row.IsAllianceLeader = isLeader;
-            row.MainJob = TruncateString(member.MainJob, 8);
-            row.MainJobLevel = member.MainJobLevel;
-            row.SubJob = TruncateString(member.SubJob, 8);
-            row.SubJobLevel = member.SubJobLevel;
-            row.LastSeenUtc = nowUtc;
-            accepted++;
-        }
-
-        // Opportunistic sweep rather than a background service. Presence is worthless once stale,
-        // so the only thing that has to happen is that the table does not grow without bound.
-        //
-        // Rows a reporter STOPPED listing are deliberately left alone: somebody leaving your
-        // alliance has not left the world, and another alliance's poster may legitimately own that
-        // row on the next beat. Age is the only thing that removes anyone.
-        var purgeBefore = nowUtc.AddMinutes(-LinkshellPresenceWindow.PurgeMinutes);
-        var stale = existing.Where(item => item.LastSeenUtc < purgeBefore).ToList();
-        if (stale.Count > 0)
-        {
-            _dbContext.LinkshellPresences.RemoveRange(stale);
-        }
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        // Every officer's addon reports the same alliance, often within the same moment. Two of them
+        // both find no row for a new name, both add one, and the one-row-per-name index refuses the
+        // later save. Re-running reads again and updates the row the other saved instead.
+        var (accepted, unregistered) = await UniqueRaceRetry.RunAsync(
+            _dbContext, SavePresenceRowsAsync, "LinkshellPresences");
 
         var (members, alliances) = await BuildPresencePayloadAsync(token.LinkshellId, nowUtc, cancellationToken);
         return Ok(new
@@ -177,6 +124,74 @@ public sealed partial class AddonApiController
             members,
             alliances,
         });
+
+        // Upserts one row per reported name, sweeps rows past the purge age, and saves. Safe to
+        // re-run: it reads the table afresh and starts its counts again each time.
+        async Task<(int Accepted, int Unregistered)> SavePresenceRowsAsync()
+        {
+            // The game reports exactly one alliance leader. Two means a client bug, so the first
+            // wins rather than letting one roster carry two crowns.
+            var leaderTaken = false;
+            var accepted = 0;
+            var unregistered = 0;
+
+            var existing = await _dbContext.LinkshellPresences
+                .Where(item => item.LinkshellId == token.LinkshellId)
+                .ToListAsync(cancellationToken);
+            var existingByName = existing
+                .GroupBy(item => item.CharacterName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var member in reported)
+            {
+                var name = TruncateString(member.CharacterName!.Trim(), 256)!;
+                var isKnown = knownByName.TryResolve(name, out var known);
+                if (!isKnown) unregistered++;
+
+                var isLeader = member.IsAllianceLeader && !leaderTaken;
+                if (isLeader) leaderTaken = true;
+
+                if (!existingByName.TryGetValue(name, out var row))
+                {
+                    row = new LinkshellPresence { LinkshellId = token.LinkshellId, CharacterName = name };
+                    _dbContext.LinkshellPresences.Add(row);
+                    existingByName[name] = row;
+                }
+
+                // The roster name, shown as "alt of ..." -- only when this name was NOT the roster
+                // name.
+                row.MainCharacterName = isKnown && known.Slot != CharacterNameSlot.Membership
+                    ? known.Member.CharacterName
+                    : null;
+                row.ZoneId = member.ZoneId;
+                row.AllianceNumber = allianceNumber;
+                row.AllianceKey = allianceKey;
+                row.IsAllianceLeader = isLeader;
+                row.MainJob = TruncateString(member.MainJob, 8);
+                row.MainJobLevel = member.MainJobLevel;
+                row.SubJob = TruncateString(member.SubJob, 8);
+                row.SubJobLevel = member.SubJobLevel;
+                row.LastSeenUtc = nowUtc;
+                accepted++;
+            }
+
+            // Opportunistic sweep rather than a background service. Presence is worthless once
+            // stale, so the only thing that has to happen is that the table does not grow without
+            // bound.
+            //
+            // Rows a reporter STOPPED listing are deliberately left alone: somebody leaving your
+            // alliance has not left the world, and another alliance's poster may legitimately own
+            // that row on the next beat. Age is the only thing that removes anyone.
+            var purgeBefore = nowUtc.AddMinutes(-LinkshellPresenceWindow.PurgeMinutes);
+            var stale = existing.Where(item => item.LastSeenUtc < purgeBefore).ToList();
+            if (stale.Count > 0)
+            {
+                _dbContext.LinkshellPresences.RemoveRange(stale);
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return (accepted, unregistered);
+        }
     }
 
     // GET /api/addon/presence — the same read without reporting, for a manual refresh.
