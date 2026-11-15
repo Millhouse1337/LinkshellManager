@@ -5,6 +5,7 @@ import { DiscordActivityService } from '../discord/discord-activity.service';
 import { offDkpStepMessage } from '../discord/discord-activity.helpers';
 import type { ActivityJobRatingCommentSummary, ActivityJobRatingsResponse } from '../discord/discord-activity.types';
 import { JOB_RELIC_OPTIONS, PROFILE_CRAFT_OPTIONS, PROFILE_JOB_OPTIONS } from './event-job-options';
+import { JobsRosterStore } from './jobs-roster.store';
 import { canManageLinkshellIn, defaultDkpPoolId, dkpPoolOptionsFor } from './activity-home.helpers';
 import type { ProfileView } from './activity-home.types';
 import { resolveBrowserTimeZone, resolveTimeZoneOptions } from './sidebar-panel.helpers';
@@ -180,6 +181,7 @@ export class ActivitySidebarPanelComponent {
   // Which part of the profile shows; the strip that picks it sits by the Profile tab's heading.
   readonly profileView = input<ProfileView>('profile');
   protected readonly activity = inject(DiscordActivityService);
+  private readonly jobsRoster = inject(JobsRosterStore);
 
   protected showSection(name: string): boolean {
     return !this.visibleSections || this.visibleSections.includes(name);
@@ -709,6 +711,9 @@ export class ActivitySidebarPanelComponent {
       alt1MeritJobs,
       alt2MeritJobs
     });
+    // The roster's job bars and pills read a cached copy; fetch it again so the
+    // new levels show without relaunching the app.
+    await this.jobsRoster.reload();
   }
 
   protected formatDuration(duration: number | null | undefined): string {

@@ -64,6 +64,17 @@ export class JobsRosterStore {
     }
   }
 
+  /**
+   * Fetches the cached linkshell's roster again (e.g. after the viewer saved their own
+   * job levels on the profile). Keeps showing the old copy until the new one arrives;
+   * does nothing when no roster was loaded yet (the next ensure() fetches fresh data).
+   */
+  async reload(): Promise<void> {
+    const linkshellId = this.loadedFor();
+    if (linkshellId === null) return;
+    await this.fetch(linkshellId);
+  }
+
   private async fetch(linkshellId: number): Promise<void> {
     this.busy.set(true);
     try {
