@@ -54,6 +54,13 @@
   Id=6 | AllianceKey="ally-1" | AllianceLeaderName=null | AllianceNumber=1 | CampWindowId=3 | CapturedAtUtc=T0-150m | CapturedByCharacterName="lsm-addon (lsm)" | DkpAmount=null | EntryCount=3 | LinkedEventId=1 | LinkshellId=1 | Name="Window 3" | PostSource=null | PostedByAppUserId=null | SlotKind="Window" | SnapshotStatus="Active" | VerifiedAtUtc=null | VerifiedByAppUserId=null | WindowEventId=1 | WindowNumber=3
   Id=7 | AllianceKey="ally-1" | AllianceLeaderName=null | AllianceNumber=1 | CampWindowId=3 | CapturedAtUtc=T0-150m | CapturedByCharacterName="lsm-addon (lsm)" | DkpAmount=null | EntryCount=3 | LinkedEventId=1 | LinkshellId=1 | Name="Close" | PostSource=null | PostedByAppUserId=null | SlotKind="Window" | SnapshotStatus="Active" | VerifiedAtUtc=null | VerifiedByAppUserId=null | WindowEventId=1 | WindowNumber=3
   Id=8 | AllianceKey="ally-1" | AllianceLeaderName=null | AllianceNumber=1 | CampWindowId=4 | CapturedAtUtc=T0-140m | CapturedByCharacterName="lsm-addon (lsm)" | DkpAmount=null | EntryCount=2 | LinkedEventId=1 | LinkshellId=1 | Name="Kill" | PostSource=null | PostedByAppUserId=null | SlotKind="Window" | SnapshotStatus="Active" | VerifiedAtUtc=null | VerifiedByAppUserId=null | WindowEventId=1 | WindowNumber=3
+[Characters] 6 row(s)
+  Id=1 | AppUserId="alpha" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Alpha" | NormalizedName="alpha" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=2 | AppUserId="beta" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Beta" | NormalizedName="beta" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=3 | AppUserId="beta" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Betalt" | NormalizedName="betalt" | Slot=1 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=4 | AppUserId="delta" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Delta" | NormalizedName="delta" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=5 | AppUserId="echo" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Echo" | NormalizedName="echo" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=6 | AppUserId="gamma" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Gamma" | NormalizedName="gamma" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
 [ClaimShieldCaptureMembers] 3 row(s)
   Id=1 | ActionMessage="hits" | AppUserId="alpha" | CaptureId=1 | CharacterName="Alpha" | Matched=true
   Id=2 | ActionMessage="hits" | AppUserId="delta" | CaptureId=1 | CharacterName="Delta" | Matched=true
@@ -152,6 +159,13 @@
   Id=6 | AllianceKey="ally-1" | AllianceLeaderName=null | AllianceNumber=1 | CampWindowId=3 | CapturedAtUtc=T0-150m | CapturedByCharacterName="lsm-addon (lsm)" | DkpAmount=null | EntryCount=3 | LinkedEventId=1 | LinkshellId=1 | Name="Window 3" | PostSource=null | PostedByAppUserId=null | SlotKind="Window" | SnapshotStatus="Active" | VerifiedAtUtc=null | VerifiedByAppUserId=null | WindowEventId=1 | WindowNumber=3
   Id=7 | AllianceKey="ally-1" | AllianceLeaderName=null | AllianceNumber=1 | CampWindowId=3 | CapturedAtUtc=T0-150m | CapturedByCharacterName="lsm-addon (lsm)" | DkpAmount=null | EntryCount=3 | LinkedEventId=1 | LinkshellId=1 | Name="Close" | PostSource=null | PostedByAppUserId=null | SlotKind="Window" | SnapshotStatus="Active" | VerifiedAtUtc=null | VerifiedByAppUserId=null | WindowEventId=1 | WindowNumber=3
   Id=8 | AllianceKey="ally-1" | AllianceLeaderName=null | AllianceNumber=1 | CampWindowId=4 | CapturedAtUtc=T0-140m | CapturedByCharacterName="lsm-addon (lsm)" | DkpAmount=null | EntryCount=2 | LinkedEventId=1 | LinkshellId=1 | Name="Kill" | PostSource=null | PostedByAppUserId=null | SlotKind="Window" | SnapshotStatus="Active" | VerifiedAtUtc=null | VerifiedByAppUserId=null | WindowEventId=1 | WindowNumber=3
+[Characters] 6 row(s)
+  Id=1 | AppUserId="alpha" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Alpha" | NormalizedName="alpha" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=2 | AppUserId="beta" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Beta" | NormalizedName="beta" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=3 | AppUserId="beta" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Betalt" | NormalizedName="betalt" | Slot=1 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=4 | AppUserId="delta" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Delta" | NormalizedName="delta" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=5 | AppUserId="echo" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Echo" | NormalizedName="echo" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=6 | AppUserId="gamma" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Gamma" | NormalizedName="gamma" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
 [ClaimShieldCaptureMembers] 3 row(s)
   Id=1 | ActionMessage="hits" | AppUserId="alpha" | CaptureId=1 | CharacterName="Alpha" | Matched=true
   Id=2 | ActionMessage="hits" | AppUserId="delta" | CaptureId=1 | CharacterName="Delta" | Matched=true

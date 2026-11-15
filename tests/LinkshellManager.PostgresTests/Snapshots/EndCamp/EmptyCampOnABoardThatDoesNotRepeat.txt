@@ -15,6 +15,13 @@
   Id=1 | AddedManually=false | AppUserId=null | CharacterName="Alpha" | DkpAmount=null | MainJob=null | MainJobLevel=null | SnapshotId=1 | SubJob=null | SubJobLevel=null | Zone="Dragon's Aery"
 [AttendanceSnapshots] 1 row(s)
   Id=1 | AllianceKey=null | AllianceLeaderName=null | AllianceNumber=null | CampWindowId=null | CapturedAtUtc=T0-155m | CapturedByCharacterName="Alpha" | DkpAmount=null | EntryCount=1 | LinkedEventId=null | LinkshellId=1 | Name="Duplicate post" | PostSource="lsm now" | PostedByAppUserId=null | SlotKind="Misc" | SnapshotStatus="Ignored" | VerifiedAtUtc=null | VerifiedByAppUserId=null | WindowEventId=null | WindowNumber=null
+[Characters] 6 row(s)
+  Id=1 | AppUserId="alpha" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Alpha" | NormalizedName="alpha" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=2 | AppUserId="beta" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Beta" | NormalizedName="beta" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=3 | AppUserId="beta" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Betalt" | NormalizedName="betalt" | Slot=1 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=4 | AppUserId="delta" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Delta" | NormalizedName="delta" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=5 | AppUserId="echo" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Echo" | NormalizedName="echo" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
+  Id=6 | AppUserId="gamma" | CraftLevels=null | JobLevels=null | MeritJobs=null | Name="Gamma" | NormalizedName="gamma" | Slot=0 | StrongJobs=null | UpdatedAt=T0+0m
 [ClaimShieldCaptureMembers] 1 row(s)
   Id=1 | ActionMessage="hits" | AppUserId=null | CaptureId=1 | CharacterName="Randomguy" | Matched=false
 [ClaimShieldCaptures] 1 row(s)

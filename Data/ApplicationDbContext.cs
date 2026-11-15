@@ -1013,6 +1013,132 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
+        // Characters (AddCharacters) follows the accounts. A save that adds an account, or changes
+        // one of its names, jobs or crafts, is followed by CharacterSync.SyncSql for that account,
+        // which copies its three slots from the row AS SAVED. See CharacterSync for why it is SQL run
+        // after the save and not tracked rows inside it. Collected before the save, because the
+        // entry states are reset by it. A name too long to copy is left out and logged here.
+        private List<string> CollectAccountsNeedingCharacterSync()
+        {
+            var ids = new List<string>();
+            foreach (var entry in ChangeTracker.Entries<AppUser>())
+            {
+                var changed = entry.State == EntityState.Added
+                    || (entry.State == EntityState.Modified
+                        && CharacterSync.SourceProperties.Any(name => entry.Property(name).IsModified));
+                if (!changed || string.IsNullOrEmpty(entry.Entity.Id))
+                {
+                    continue;
+                }
+                ids.Add(entry.Entity.Id);
+                var tooLong = CharacterSync.TooLongNames(entry.Entity).ToList();
+                if (tooLong.Count > 0)
+                {
+                    LogCharacterSync(null,
+                        "Characters: account {AppUserId} has a name longer than {MaxLength} characters ({Names}); it is not copied.",
+                        entry.Entity.Id, Character.MaxNameLength, CharacterSync.Describe(tooLong));
+                }
+            }
+            return ids.Distinct(StringComparer.Ordinal).ToList();
+        }
+
+        private const string CharacterSyncSavepoint = "character_sync";
+
+        // Never fails the save it follows. Without a transaction the save is already committed, and
+        // a failure here is only logged. Inside the caller's transaction it runs in a savepoint, so a
+        // failure is undone on its own and the caller's work carries on. No cancellation token: a
+        // copy stopped half-way inside a transaction would leave that transaction unusable.
+        private async Task SyncCharactersAsync(List<string> accountIds)
+        {
+            if (accountIds.Count == 0 || !Database.IsRelational())
+            {
+                return;
+            }
+            var transaction = Database.CurrentTransaction;
+            try
+            {
+                if (transaction is not null)
+                {
+                    await transaction.CreateSavepointAsync(CharacterSyncSavepoint);
+                }
+                await Database.ExecuteSqlRawAsync(CharacterSync.SyncSql, CharacterSyncParameters(accountIds));
+                if (transaction is not null)
+                {
+                    await transaction.ReleaseSavepointAsync(CharacterSyncSavepoint);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (transaction is not null)
+                {
+                    try
+                    {
+                        await transaction.RollbackToSavepointAsync(CharacterSyncSavepoint);
+                    }
+                    catch (Exception rollbackError)
+                    {
+                        LogCharacterSync(rollbackError, "Characters: could not undo a failed copy.");
+                    }
+                }
+                LogCharacterSync(ex, "Characters: copying {Count} account(s) failed; the save itself went through.", accountIds.Count);
+            }
+        }
+
+        private void SyncCharacters(List<string> accountIds)
+        {
+            if (accountIds.Count == 0 || !Database.IsRelational())
+            {
+                return;
+            }
+            var transaction = Database.CurrentTransaction;
+            try
+            {
+                transaction?.CreateSavepoint(CharacterSyncSavepoint);
+                Database.ExecuteSqlRaw(CharacterSync.SyncSql, CharacterSyncParameters(accountIds));
+                transaction?.ReleaseSavepoint(CharacterSyncSavepoint);
+            }
+            catch (Exception ex)
+            {
+                if (transaction is not null)
+                {
+                    try
+                    {
+                        transaction.RollbackToSavepoint(CharacterSyncSavepoint);
+                    }
+                    catch (Exception rollbackError)
+                    {
+                        LogCharacterSync(rollbackError, "Characters: could not undo a failed copy.");
+                    }
+                }
+                LogCharacterSync(ex, "Characters: copying {Count} account(s) failed; the save itself went through.", accountIds.Count);
+            }
+        }
+
+        private static object[] CharacterSyncParameters(List<string> accountIds) => new object[]
+        {
+            new Npgsql.NpgsqlParameter("ids", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text)
+            {
+                Value = accountIds.ToArray(),
+            },
+            new Npgsql.NpgsqlParameter("now", NpgsqlTypes.NpgsqlDbType.TimestampTz) { Value = DateTime.UtcNow },
+        };
+
+        // A warning in the app log. Logging must not fail a save either, so a context built without
+        // a logger simply logs nothing.
+        private void LogCharacterSync(Exception? error, string message, params object?[] args)
+        {
+            try
+            {
+                Microsoft.EntityFrameworkCore.Infrastructure.AccessorExtensions
+                    .GetService<Microsoft.Extensions.Logging.ILoggerFactory>(this)
+                    .CreateLogger(typeof(CharacterSync).FullName!)
+                    .Log(Microsoft.Extensions.Logging.LogLevel.Warning, error, message, args);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+
         // INV-1: every move of AppUserLinkshell.LinkshellDkp is matched, amount for amount, by
         // DkpLedgerEntry rows in the SAME save. That invariant is what lets pool balances be
         // DERIVED from the ledger (DkpPoolBalanceService) instead of cached in a second table.
@@ -1245,6 +1371,7 @@ namespace LinkshellManagerDiscordApp.Data
             var bidItemIds = CollectAddedBidAuctionItemIds();
             var dkpChangedLinkshells = CollectDkpChangedLinkshellIds();
             var liveChanges = CollectLiveChanges();
+            var characterAccounts = CollectAccountsNeedingCharacterSync();
             var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
             if (_bidAnnouncementsHeld is not null)
             {
@@ -1255,6 +1382,7 @@ namespace LinkshellManagerDiscordApp.Data
                 liveChanges.BidAuctionItemIds.Clear();
             }
             CountCommittedSave();
+            await SyncCharactersAsync(characterAccounts);
             EnqueueTodBoardRefreshes(affected);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);
@@ -1288,8 +1416,10 @@ namespace LinkshellManagerDiscordApp.Data
             var deletedAuctionCards = CollectDeletedAuctionCards();
             var dkpChangedLinkshells = CollectDkpChangedLinkshellIds();
             var liveChanges = CollectLiveChanges();
+            var characterAccounts = CollectAccountsNeedingCharacterSync();
             var result = base.SaveChanges(acceptAllChangesOnSuccess);
             CountCommittedSave();
+            SyncCharacters(characterAccounts);
             EnqueueTodBoardRefreshes(affected);
             EnqueueAuctionChannelWork(createdAuctions, closedAuctions, retimedAuctions);
             EnqueueEventPosts(createdEvents);

@@ -172,6 +172,10 @@ public sealed class UserMergeService
         yield return Column(_db.Invites, x => x.ResolvedByAppUserId);
         // Not PlaceholderClaimRequests.PlaceholderAppUserId: that row is the record of which
         // placeholder someone asked for, and it is kept after the placeholder is gone.
+        // Not Characters.AppUserId (AddCharacters): those rows are a copy of the account's own name
+        // columns, not facts to keep. The claim copies the names the real account lacks onto it
+        // (which re-copies the real account's rows on save), and deleting the placeholder deletes
+        // its rows by foreign key. Moving them would clash with the real account's own slots.
     }
 
     // ---- step 1: rows that may exist only once per account ---------------------------------
