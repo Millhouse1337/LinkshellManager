@@ -252,9 +252,8 @@ public sealed class ChartKeyItemService
             LinkshellId = linkshellId,
             Board = catalog.Key,
             KeyItemName = canonicalName,
-            // Both: this build reads AppUserId. MembershipId is nullable since AddCharacters but still
-            // written, because the build before RosterSwitch reads the grid by it (a rollback target).
-            MembershipId = membershipId,
+            // Whose tick it is, by account. MembershipId is no longer written (ROUND4-DROP): every
+            // build this one can roll back to reads ticks by AppUserId and reads a NULL fine.
             AppUserId = member.AppUserId,
             SetByAppUserId = actor.AppUserId,
             SetByCharacterName = actor.CharacterName,

@@ -133,8 +133,9 @@ public class DataAdminPolicyTests
     [InlineData(typeof(Tod), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
     [InlineData(typeof(PendingTodSubmission), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
     [InlineData(typeof(HnmRecurringBoard), "MonsterName", new[] { "SpawnKey" })]
-    // Not a ToD, but the same rule: a key-item tick's account is stamped from its membership.
-    [InlineData(typeof(ChartMemberKeyItem), "MembershipId", new[] { "AppUserId" })]
+    // Not a ToD: a key-item tick's account is typed in now (nothing stamps it from the membership
+    // any more), and the old membership column is shown but never edited (ROUND4-DROP).
+    [InlineData(typeof(ChartMemberKeyItem), "AppUserId", new[] { "MembershipId" })]
     public void DerivedTodColumns_AreShownButNeverEdited(Type entityType, string textColumn, string[] derived)
     {
         var table = Table(NewCatalog(), entityType);
@@ -146,6 +147,16 @@ public class DataAdminPolicyTests
             Assert.DoesNotContain(table.CreateColumns, c => c.Name == column);
         }
         Assert.Contains(table.EditableColumns, c => c.Name == textColumn);
+    }
+
+    // The tick's account is required and nothing fills it in, so a tick made in Data Admin must be
+    // able to name it.
+    [Fact]
+    public void KeyItemTick_AsksForItsAccountOnCreate()
+    {
+        var table = Table(NewCatalog(), typeof(ChartMemberKeyItem));
+
+        Assert.Contains(table.CreateColumns, c => c.Name == nameof(ChartMemberKeyItem.AppUserId));
     }
 
     // Keys the database generates are never typed in; keys the caller supplies (AppSetting.Key)

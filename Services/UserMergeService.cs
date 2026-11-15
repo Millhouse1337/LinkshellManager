@@ -36,9 +36,8 @@ public sealed class UserMergeService
     // Moves every row of `fromAppUserId` onto `toAppUserId` and returns how many references to
     // `fromAppUserId` are left (0 = safe to delete it).
     //
-    // membershipIdMap: old membership id -> the membership id that replaces it. The chart tables
-    // point at a MEMBERSHIP by id (not at the account), so when the caller folded one membership
-    // into another those ids move too.
+    // (There used to be a membershipIdMap argument, to move key-item ticks between memberships by
+    // id. Ticks are matched by account now, and their old membership id is no longer written.)
     //
     // Memberships themselves must already be dealt with by the caller where both accounts are in
     // the same linkshell: joining two DKP balances is a money decision (PlaceholderClaimService), not
@@ -49,7 +48,6 @@ public sealed class UserMergeService
     public async Task<int> RepointAsync(
         string fromAppUserId,
         string toAppUserId,
-        IReadOnlyDictionary<int, int> membershipIdMap,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(fromAppUserId) || string.IsNullOrWhiteSpace(toAppUserId)
@@ -81,7 +79,6 @@ public sealed class UserMergeService
         await MergeJobRatingsAsync(fromAppUserId, toAppUserId, cancellationToken);
         await DropDuplicateOpenInvitesAsync(fromAppUserId, toAppUserId, cancellationToken);
         await DropDuplicateKeyItemsAsync(fromAppUserId, toAppUserId, cancellationToken);
-        await MoveChartMembershipsAsync(membershipIdMap, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
 
         // Step 2: everything else is a plain "this id becomes that id".
@@ -159,9 +156,9 @@ public sealed class UserMergeService
         yield return Column(_db.Items, x => x.CreatedByAppUserId);
         yield return Column(_db.Rules, x => x.CreatedByAppUserId);
         yield return Column(_db.ChartMemberKeyItems, x => x.SetByAppUserId);
-        // The tick's own account (AccountJobsAndKeyItemAccounts). A tick MoveChartMembershipsAsync
-        // moved onto the kept membership was already re-stamped with the new account on save; this
-        // moves the rest (ticks on a membership that moved to the new account as it is).
+        // The tick's own account (AccountJobsAndKeyItemAccounts): whose tick it is. A tick both
+        // accounts had was already dropped by DropDuplicateKeyItemsAsync; this moves the rest. The
+        // tick's old MembershipId is left as it was (ROUND4-DROP: no longer read or written).
         yield return Column(_db.ChartMemberKeyItems, x => x.AppUserId);
         yield return Column(_db.ChartPopItems, x => x.CreatedByAppUserId);
         yield return Column(_db.ChartPopItemCredits, x => x.CreditedByAppUserId);
@@ -392,37 +389,6 @@ public sealed class UserMergeService
             .ToListAsync(cancellationToken);
         _db.ChartMemberKeyItems.RemoveRange(mine.Where(tick => theirs.Any(t =>
             t.LinkshellId == tick.LinkshellId && t.Board == tick.Board && t.KeyItemName == tick.KeyItemName)));
-    }
-
-    // The key-item chart points at a membership by id, with no foreign key (the other chart tables
-    // match people by name or account id). Rows of a membership the
-    // caller folded into another move to that one. A key item ticked on both is one tick (that
-    // table allows one per member per key item), so the moving copy is dropped.
-    private async Task MoveChartMembershipsAsync(IReadOnlyDictionary<int, int> membershipIdMap, CancellationToken cancellationToken)
-    {
-        foreach (var (oldId, keptId) in membershipIdMap)
-        {
-            if (oldId == keptId) continue;
-
-            var keptTicks = await _db.ChartMemberKeyItems
-                .Where(k => k.MembershipId == keptId)
-                .Select(k => new { k.LinkshellId, k.Board, k.KeyItemName })
-                .ToListAsync(cancellationToken);
-            var ticks = await _db.ChartMemberKeyItems.Where(k => k.MembershipId == oldId).ToListAsync(cancellationToken);
-            foreach (var tick in ticks)
-            {
-                // Already dropped by DropDuplicateKeyItemsAsync.
-                if (_db.Entry(tick).State == EntityState.Deleted) continue;
-                if (keptTicks.Any(k => k.LinkshellId == tick.LinkshellId && k.Board == tick.Board && k.KeyItemName == tick.KeyItemName))
-                {
-                    _db.ChartMemberKeyItems.Remove(tick);
-                }
-                else
-                {
-                    tick.MembershipId = keptId;
-                }
-            }
-        }
     }
 
     // ---- the column list plumbing --------------------------------------------------------

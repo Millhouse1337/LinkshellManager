@@ -91,9 +91,6 @@ public sealed class PlaceholderClaimService
         }
 
         var claimedLs = new List<int>();
-        // Placeholder membership id -> the real membership it was folded into (the chart tables
-        // point at memberships by id).
-        var membershipIdMap = new Dictionary<int, int>();
         var now = DateTime.UtcNow;
 
         await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
@@ -119,7 +116,6 @@ public sealed class PlaceholderClaimService
             {
                 await MergeMembershipAsync(existing, ph, cancellationToken);
                 _db.AppUserLinkshells.Remove(ph);
-                membershipIdMap[ph.Id] = existing.Id;
                 AddMergeRow(realAppUserId, ph.LinkshellId, existing.CharacterName, now,
                     $"Claimed imported member {phName}: {phDkp:0.##} DKP added to this account's balance "
                     + $"(lifetime +{ph.SeededDkpEarned:0.##} earned, +{ph.SeededDkpSpent:0.##} spent). "
@@ -130,7 +126,7 @@ public sealed class PlaceholderClaimService
         await _db.SaveChangesAsync(cancellationToken);
 
         // Everything else: DKP history, attendance, window credits, loot, ratings, chart rows...
-        var referencesLeft = await _merge.RepointAsync(placeholderAppUserId, realAppUserId, membershipIdMap, cancellationToken);
+        var referencesLeft = await _merge.RepointAsync(placeholderAppUserId, realAppUserId, cancellationToken);
 
         // Carry over identity fields the real account is missing (never clobber).
         if (string.IsNullOrWhiteSpace(realUser.CharacterName) && !string.IsNullOrWhiteSpace(placeholder.CharacterName))

@@ -899,73 +899,10 @@ namespace LinkshellManagerDiscordApp.Data
             }
         }
 
-        // Keeps ChartMemberKeyItem.AppUserId (AccountJobsAndKeyItemAccounts) in step with the row's
-        // membership: the account of the membership whose Id is MembershipId, if that membership is
-        // in the row's own linkshell and has an account -- exactly what RosterSwitch's re-fill does.
-        // Done here so every writer gets it: ticking a cell (ChartKeyItemService), a placeholder claim
-        // moving ticks onto the kept membership (UserMergeService) and Data Admin.
-        //
-        // A new row is always stamped. A saved one is re-stamped when its MembershipId (or linkshell)
-        // changed and nobody set the account in the same save. When the membership gives no account
-        // (gone, another linkshell's, none, or added in this same save so not in the database yet),
-        // the row keeps the account it already has. So does a row with no MembershipId (nullable since
-        // AddCharacters; only Data Admin can clear it). The column is required since RosterSwitch, so
-        // a row with no account at all is refused by the save rather than written as NULL.
-        private List<EntityEntry<ChartMemberKeyItem>> CollectKeyItemsNeedingAccountStamp() =>
-            ChangeTracker.Entries<ChartMemberKeyItem>()
-                .Where(entry => entry.State == EntityState.Added
-                    || (entry.State == EntityState.Modified
-                        && (entry.Property(nameof(ChartMemberKeyItem.MembershipId)).IsModified
-                            || entry.Property(nameof(ChartMemberKeyItem.LinkshellId)).IsModified)
-                        && !entry.Property(nameof(ChartMemberKeyItem.AppUserId)).IsModified))
-                .ToList();
-
-        private async Task StampKeyItemAccountsAsync(
-            List<EntityEntry<ChartMemberKeyItem>> rows, CancellationToken cancellationToken)
-        {
-            if (rows.Count == 0)
-            {
-                return;
-            }
-            var membershipIds = rows.Select(row => row.Entity.MembershipId).OfType<int>().Distinct().ToList();
-            var memberships = await AppUserLinkshells.AsNoTracking()
-                .Where(member => membershipIds.Contains(member.Id))
-                .Select(member => new KeyItemMembership(member.Id, member.LinkshellId, member.AppUserId))
-                .ToListAsync(cancellationToken);
-            ApplyKeyItemAccounts(rows, memberships);
-        }
-
-        private void StampKeyItemAccounts(List<EntityEntry<ChartMemberKeyItem>> rows)
-        {
-            if (rows.Count == 0)
-            {
-                return;
-            }
-            var membershipIds = rows.Select(row => row.Entity.MembershipId).OfType<int>().Distinct().ToList();
-            var memberships = AppUserLinkshells.AsNoTracking()
-                .Where(member => membershipIds.Contains(member.Id))
-                .Select(member => new KeyItemMembership(member.Id, member.LinkshellId, member.AppUserId))
-                .ToList();
-            ApplyKeyItemAccounts(rows, memberships);
-        }
-
-        private sealed record KeyItemMembership(int Id, int LinkshellId, string? AppUserId);
-
-        private static void ApplyKeyItemAccounts(
-            List<EntityEntry<ChartMemberKeyItem>> rows, List<KeyItemMembership> memberships)
-        {
-            var byId = memberships.ToDictionary(member => member.Id);
-            foreach (var row in rows)
-            {
-                if (row.Entity.MembershipId is { } membershipId
-                    && byId.TryGetValue(membershipId, out var member)
-                    && member.LinkshellId == row.Entity.LinkshellId
-                    && member.AppUserId is not null)
-                {
-                    SetDerived(row, nameof(ChartMemberKeyItem.AppUserId), member.AppUserId);
-                }
-            }
-        }
+        // (A save hook used to stamp ChartMemberKeyItem.AppUserId from the row's MembershipId. Round 4
+        // deploy 3 removed it: MembershipId is no longer written (ROUND4-DROP), so every writer --
+        // ChartKeyItemService, a placeholder claim (UserMergeService) and Data Admin -- sets the
+        // account itself. The column is required, so a tick with no account is refused by the save.)
 
         // Keeps the derived ToD columns (AddTodDurationsAndSpawnKeys) in step with their text on every
         // save that adds or changes a row: SpawnKey from MonsterName (HnmConfig.SpawnKey), and
@@ -1438,7 +1375,6 @@ namespace LinkshellManagerDiscordApp.Data
         {
             await StampNewMembershipDkpEpochAsync(CollectNewMembershipsNeedingDkpEpoch(), cancellationToken);
             await StampMembershipRoleIdsAsync(CollectMembershipsNeedingRoleStamp(), cancellationToken);
-            await StampKeyItemAccountsAsync(CollectKeyItemsNeedingAccountStamp(), cancellationToken);
             StampDerivedColumns();
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();
@@ -1484,7 +1420,6 @@ namespace LinkshellManagerDiscordApp.Data
         {
             StampNewMembershipDkpEpoch(CollectNewMembershipsNeedingDkpEpoch());
             StampMembershipRoleIds(CollectMembershipsNeedingRoleStamp());
-            StampKeyItemAccounts(CollectKeyItemsNeedingAccountStamp());
             StampDerivedColumns();
             AssertDkpLedgerInvariant();
             AssertTreasuryEntriesBalance();
@@ -2444,8 +2379,8 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.AppUserId)
                     .OnDelete(DeleteBehavior.Cascade);
                 // One tick per account per key item (RosterSwitch). The grid reads ticks by account,
-                // so a second row for the same person would read as one. The old per-membership
-                // index below stays until a later deploy drops MembershipId.
+                // so a second row for the same person would read as one. This is also what stops a
+                // double-clicked tick from writing two rows.
                 entity.HasIndex(item => new
                 {
                     item.LinkshellId,
@@ -2457,10 +2392,9 @@ namespace LinkshellManagerDiscordApp.Data
                     .WithMany()
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
-                // UNIQUE, unlike ChartPopItemCredits directly above. Credits are written set-wise -
-                // the whole list is deleted and re-inserted - so a duplicate cannot survive a write.
-                // A key item is a per-cell TOGGLE instead, and a double-clicked tick would otherwise
-                // write two rows that read as one.
+                // ROUND4-DROP: the old one-tick-per-MEMBERSHIP rule. MembershipId is no longer
+                // written (new ticks leave it NULL, which this index never compares), so the
+                // per-account index above does the job. Deploy 4 drops it with the column.
                 entity.HasIndex(item => new
                 {
                     item.LinkshellId,

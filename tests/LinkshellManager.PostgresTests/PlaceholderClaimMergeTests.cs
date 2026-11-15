@@ -93,11 +93,12 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
                 new AppUserEventHistory { EventHistoryId = history.Id, AppUserId = Real, EventDkp = 5 },
                 new AppUserEventHistory { EventHistoryId = history.Id, AppUserId = Ph, EventDkp = 7 });
 
-            // Chart ticks on the placeholder's MEMBERSHIP (by id), one the real member also has.
+            // Chart ticks of the placeholder's account, one the real member also has. The old
+            // membership ids are filled the way an older build wrote them (ROUND4-DROP).
             db.ChartMemberKeyItems.AddRange(
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = realMembershipId },
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = phMembershipId, SetByAppUserId = Ph },
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "B", MembershipId = phMembershipId });
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = realMembershipId, AppUserId = Real },
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "A", MembershipId = phMembershipId, AppUserId = Ph, SetByAppUserId = Ph },
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Sky", KeyItemName = "B", MembershipId = phMembershipId, AppUserId = Ph });
 
             // Ratings, a Claim Shield capture, loot won.
             db.JobRatings.Add(new JobRating { LinkshellId = linkshellId, TargetAppUserId = Ph, RaterAppUserId = Real, JobIndex = 1, UpdatedAt = When });
@@ -154,10 +155,11 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             var attended = await db.AppUserEventHistories.AsNoTracking().SingleAsync();
             Assert.Equal(12d, attended.EventDkp);
 
-            // Chart ticks: A once, B moved onto the real membership.
+            // Chart ticks: A once, B moved onto the real account. The old membership ids are left
+            // as they were: nothing reads or writes them any more (ROUND4-DROP).
             var ticks = await db.ChartMemberKeyItems.AsNoTracking().OrderBy(k => k.KeyItemName).ToListAsync();
             Assert.Equal(new[] { "A", "B" }, ticks.Select(k => k.KeyItemName));
-            Assert.All(ticks, k => Assert.Equal(realMembershipId, k.MembershipId));
+            Assert.Equal(new int?[] { realMembershipId, phMembershipId }, ticks.Select(k => k.MembershipId));
             Assert.All(ticks, k => Assert.Equal(Real, k.AppUserId));
 
             Assert.Single(await db.ClaimShieldCaptureMembers.AsNoTracking().ToListAsync());
@@ -188,8 +190,8 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             var old = new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "A", MembershipId = 987654, AppUserId = Real };
             db.ChartMemberKeyItems.AddRange(
                 old,
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "A", MembershipId = phMembershipId },
-                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "B", MembershipId = phMembershipId });
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "A", MembershipId = phMembershipId, AppUserId = Ph },
+                new ChartMemberKeyItem { LinkshellId = linkshellId, Board = "Dynamis", KeyItemName = "B", AppUserId = Ph });
             await db.SaveChangesAsync();
             bobsOldTick = old.Id;
         }
@@ -208,7 +210,8 @@ public class PlaceholderClaimMergeTests : IAsyncLifetime
             Assert.Equal(new[] { "A", "B" }, ticks.Select(k => k.KeyItemName));
             Assert.All(ticks, k => Assert.Equal(Real, k.AppUserId));
             Assert.Equal(bobsOldTick, ticks[0].Id);
-            Assert.Equal(phMembershipId, ticks[1].MembershipId);
+            // "B" was ticked by this build (no membership id): it moves by account all the same.
+            Assert.Null(ticks[1].MembershipId);
         }
     }
 

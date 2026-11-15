@@ -38,24 +38,23 @@ public class ChartMemberKeyItem
     [MaxLength(128)]
     public string KeyItemName { get; set; } = string.Empty;
 
-    // The membership the tick was made on. Plain int with no relationship. This build reads ticks by
-    // AppUserId below and only writes this for older builds: the build before RosterSwitch reads the
-    // grid by it, and its model has it as a plain int, so a NULL here would break its key-item grid
-    // after a rollback. Nullable since AddCharacters so the next deploy can stop writing it (a
-    // rollback from that deploy lands on this build, which reads NULL fine); the deploy after drops it.
+    // ROUND4-DROP: the membership an older build made the tick on. Plain int with no relationship.
+    // Nothing reads or writes it any more: ticks are matched by AppUserId below, new ticks leave it
+    // NULL, and a placeholder claim no longer moves it. Kept mapped only so the model still matches
+    // the database; deploy 4 drops it (docs/round4-drop-manifest.md).
     public int? MembershipId { get; set; }
 
     // WHOSE tick it is: the member's account (AccountJobsAndKeyItemAccounts, RosterSwitch). The grid
     // matches ticks to the roster by this, because membership ids are not stable - a membership is
     // re-created on unsync/resync - while the account stays, as wishlist requests already use.
     // Required, with a foreign key to the account (a deleted account takes its ticks with it) and
-    // one tick per account per key item. Every save that adds a row or changes its membership stamps
-    // it from the membership (ApplicationDbContext.StampKeyItemAccounts), and a placeholder claim
-    // moves it (UserMergeService).
+    // one tick per account per key item. The writer sets it: ChartKeyItemService from the ticked
+    // membership's account, a placeholder claim moves it (UserMergeService), Data Admin types it.
     //
     // Removing somebody from the roster leaves their rows behind. They never render - BuildGrid is
     // roster-driven - and the same person coming back gets what they had, even on a new membership.
-    // Typed string? only because the save hook fills it; the database never holds NULL here.
+    // Typed string? for older code and tests that build a row before setting it; the column is
+    // required, so the database never holds NULL here and a save without one is refused.
     [MaxLength(450)]
     public string? AppUserId { get; set; }
 

@@ -195,16 +195,16 @@ public class PlaceholderClaimServiceTests
         Assert.Equal(5, Assert.Single(db.AppUserLinkshells).DkpPoolLedgerFromId);
     }
 
-    // A placeholder NOT yet sharing the linkshell: its roster spot moves as it is, so its ticks keep
-    // their membership id, and their account moves to the real one.
+    // A placeholder NOT yet sharing the linkshell: its roster spot moves as it is, and its ticks'
+    // account moves to the real one. Their old membership id is left as it was (no longer read or
+    // written; ROUND4-DROP).
     [Fact]
     public async Task NotYetAMember_KeyItemTicksMoveToTheRealAccount()
     {
         using var db = NewDb();
         Member(db, 11, Ph, "Bobalt", 0);
-        db.ChartMemberKeyItems.Add(new ChartMemberKeyItem { Id = 1, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11 });
+        db.ChartMemberKeyItems.Add(new ChartMemberKeyItem { Id = 1, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11, AppUserId = Ph });
         db.SaveChanges();
-        Assert.Equal(Ph, db.ChartMemberKeyItems.Single().AppUserId);
 
         var result = await NewService(db).ClaimPlaceholderAsync(Ph, Real, Ls, CancellationToken.None);
 
@@ -224,8 +224,8 @@ public class PlaceholderClaimServiceTests
         Member(db, 11, Ph, "Bobalt", 0);
         db.ChartMemberKeyItems.AddRange(
             new ChartMemberKeyItem { Id = 1, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 9, AppUserId = Real },
-            new ChartMemberKeyItem { Id = 2, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11 },
-            new ChartMemberKeyItem { Id = 3, LinkshellId = Ls, Board = "Sky", KeyItemName = "B", MembershipId = 11 });
+            new ChartMemberKeyItem { Id = 2, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11, AppUserId = Ph },
+            new ChartMemberKeyItem { Id = 3, LinkshellId = Ls, Board = "Sky", KeyItemName = "B", MembershipId = 11, AppUserId = Ph });
         db.SaveChanges();
 
         var result = await NewService(db).ClaimPlaceholderAsync(Ph, Real, Ls, CancellationToken.None);
@@ -235,16 +235,19 @@ public class PlaceholderClaimServiceTests
         Assert.All(db.ChartMemberKeyItems, k => Assert.Equal(Real, k.AppUserId));
     }
 
+    // Ticks follow the ACCOUNT: the placeholder's "A" is the same fact as Bob's and goes, its "B"
+    // moves to Bob's account. Membership ids are left as they were (ROUND4-DROP: no longer read or
+    // written), so the moved tick still says the folded membership's id.
     [Fact]
-    public async Task AlreadyAMember_ChartRowsFollowTheFoldedMembership()
+    public async Task AlreadyAMember_ChartRowsFollowTheAccount()
     {
         using var db = NewDb();
         Member(db, 10, Real, "Bob", 0);
         Member(db, 11, Ph, "Bobalt", 0);
         db.ChartMemberKeyItems.AddRange(
-            new ChartMemberKeyItem { Id = 1, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 10 },
-            new ChartMemberKeyItem { Id = 2, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11 },
-            new ChartMemberKeyItem { Id = 3, LinkshellId = Ls, Board = "Sky", KeyItemName = "B", MembershipId = 11 });
+            new ChartMemberKeyItem { Id = 1, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 10, AppUserId = Real },
+            new ChartMemberKeyItem { Id = 2, LinkshellId = Ls, Board = "Sky", KeyItemName = "A", MembershipId = 11, AppUserId = Ph },
+            new ChartMemberKeyItem { Id = 3, LinkshellId = Ls, Board = "Sky", KeyItemName = "B", MembershipId = 11, AppUserId = Ph });
         db.ChartWishlistRequests.Add(new ChartWishlistRequest { Id = 1, LinkshellId = Ls, RequestedByAppUserId = Ph });
         db.SaveChanges();
 
@@ -252,8 +255,8 @@ public class PlaceholderClaimServiceTests
 
         Assert.True(result.Success, result.Error);
         Assert.Equal(new[] { 1, 3 }, db.ChartMemberKeyItems.OrderBy(k => k.Id).Select(k => k.Id));
-        Assert.All(db.ChartMemberKeyItems, k => Assert.Equal(10, k.MembershipId));
-        // And their account is the real one (the kept membership's), not the deleted placeholder.
+        Assert.Equal(new int?[] { 10, 11 }, db.ChartMemberKeyItems.OrderBy(k => k.Id).Select(k => k.MembershipId));
+        // And their account is the real one, not the deleted placeholder.
         Assert.All(db.ChartMemberKeyItems, k => Assert.Equal(Real, k.AppUserId));
         // A request is owned by its account id (its membership id is no longer used).
         var request = Assert.Single(db.ChartWishlistRequests);

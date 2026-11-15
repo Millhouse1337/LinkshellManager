@@ -254,7 +254,8 @@ public class ChartKeyItemGridTests
         // Canonicalised on the way in, so it can never land in a column the grid does not draw.
         Assert.Equal("Hydra Corps Lantern", row.KeyItemName);
         Assert.Equal("Dynamis", row.Board);
-        Assert.Equal(1, row.MembershipId);
+        // The old membership column is no longer written (ROUND4-DROP; the next deploy drops it).
+        Assert.Null(row.MembershipId);
         Assert.Equal("user-1", row.SetByAppUserId);
         // The member's account is stored too: the grid reads ticks by it.
         Assert.Equal("user-1", row.AppUserId);

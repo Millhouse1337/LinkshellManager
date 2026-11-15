@@ -61,7 +61,7 @@ public class PlaceholderClaimInviteTests : IAsyncLifetime
         await using (var db = _pg.CreateContext())
         {
             await using var transaction = await db.Database.BeginTransactionAsync();
-            var left = await new UserMergeService(db).RepointAsync(Ph, Real, new System.Collections.Generic.Dictionary<int, int>(), CancellationToken.None);
+            var left = await new UserMergeService(db).RepointAsync(Ph, Real, CancellationToken.None);
             await transaction.CommitAsync();
             Assert.Equal(0, left);
         }
