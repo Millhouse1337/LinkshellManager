@@ -352,7 +352,21 @@ public class DataAdminSchemaGraphTests
             Assert.True(Column(graph, "JobRating", column).Fk);
         }
 
-        var cloned = Relationship(graph, "PartySetup.ClonedFromPartySetupId");
+        // AddMembershipRoleId: a member's role, by (linkshell, id), so it is always their own
+        // linkshell's. Optional (no matching role = look it up by name), and a held role is refused.
+        var memberRole = Relationship(graph, "AppUserLinkshell.LinkshellId+LinkshellRoleId");
+        Assert.Equal("AppUserLinkshell", memberRole.From);
+        Assert.Equal("LinkshellRole", memberRole.To);
+        Assert.Equal(new[] { "LinkshellId", "LinkshellRoleId" }, memberRole.FromColumns);
+        Assert.Equal(new[] { "LinkshellId", "Id" }, memberRole.ToColumns);
+        Assert.False(memberRole.Required);
+        Assert.False(memberRole.Unique);
+        Assert.Equal("restrict", memberRole.OnDelete);
+        Assert.Equal("NoAction", memberRole.EfDelete);
+        Assert.True(Column(graph, "AppUserLinkshell", "LinkshellRoleId").Fk);
+        Assert.True(Column(graph, "AppUserLinkshell", "LinkshellRoleId").Nullable);
+
+        var cloned =Relationship(graph, "PartySetup.ClonedFromPartySetupId");
         Assert.Equal("PartySetup", cloned.From);
         Assert.Equal(cloned.From, cloned.To);
     }

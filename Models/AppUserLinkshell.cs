@@ -38,6 +38,16 @@ public class AppUserLinkshell
 
     public string? Rank { get; set; }
 
+    // The LinkshellRoles row Rank names, by id: the role whose Name equals the trimmed Rank
+    // exactly (case matters), in this member's own linkshell. Null when Rank is blank or names no
+    // role, which is "look the role up by name", the same as before this column existed.
+    //
+    // Kept in step with Rank on every save (ApplicationDbContext.StampMembershipRoleIds), so no
+    // writer has to remember it. Permissions still read Rank for now; a later deploy switches them
+    // to this id, so renaming a custom role can never strip its holders' rights. The foreign key is
+    // on (LinkshellId, LinkshellRoleId), so a member can never hold another linkshell's role.
+    public int? LinkshellRoleId { get; set; }
+
     public string? Status { get; set; }
 
     // Officer override of the computed active-credit streak (the roster "Count").

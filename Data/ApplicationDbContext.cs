@@ -1224,6 +1224,17 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.LinkshellId, item.AppUserId })
                     .IsUnique()
                     .HasFilter("\"AppUserId\" IS NOT NULL");
+
+                // The role a member holds, by id (AddMembershipRoleId). Two columns, so the role
+                // must belong to the member's own linkshell. NO ACTION, not RESTRICT: deleting a
+                // linkshell cascades to its members and its roles in one statement, and NO ACTION
+                // only checks at the end of that statement. Deleting a role someone still holds
+                // is refused. No navigation: nothing reads the role through it yet.
+                entity.HasOne<LinkshellRole>()
+                    .WithMany()
+                    .HasForeignKey(item => new { item.LinkshellId, item.LinkshellRoleId })
+                    .HasPrincipalKey(role => new { role.LinkshellId, role.Id })
+                    .OnDelete(DeleteBehavior.NoAction);
             });
 
             builder.Entity<AppUserEvent>(entity =>

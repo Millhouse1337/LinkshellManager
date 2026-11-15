@@ -206,6 +206,20 @@ public class DataAdminPolicyTests
         Assert.Contains(table.EditableColumns, c => c.Name == nameof(AppUserLinkshell.Rank));
     }
 
+    // Memberships point at a role by (LinkshellId, Id), so a role's linkshell is part of a key: it
+    // is chosen when the role is created and never changed (EF would refuse the save, and the
+    // role's holders would be left pointing at another linkshell's role).
+    [Fact]
+    public void RoleLinkshell_IsSetOnCreateButNeverEdited()
+    {
+        var table = Table(NewCatalog(), typeof(LinkshellRole));
+
+        Assert.Contains(table.CreateColumns, c => c.Name == nameof(LinkshellRole.LinkshellId));
+        Assert.DoesNotContain(table.EditableColumns, c => c.Name == nameof(LinkshellRole.LinkshellId));
+        Assert.Contains(table.EditableColumns, c => c.Name == nameof(LinkshellRole.Name));
+        Assert.True(table.CanEdit);
+    }
+
     [Fact]
     public async Task BeforeSaveHook_NormalisesDkpPoolEventType()
     {

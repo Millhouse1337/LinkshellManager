@@ -546,6 +546,9 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Property<int>("LinkshellId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("LinkshellRoleId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("ManualAbsentStreak")
                         .HasColumnType("integer");
 
@@ -586,6 +589,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("LinkshellId", "AppUserId")
                         .IsUnique()
                         .HasFilter("\"AppUserId\" IS NOT NULL");
+
+                    b.HasIndex("LinkshellId", "LinkshellRoleId");
 
                     b.ToTable("AppUserLinkshells");
                 });
@@ -3653,6 +3658,12 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasForeignKey("LinkshellId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("LinkshellManagerDiscordApp.Models.LinkshellRole", null)
+                        .WithMany()
+                        .HasForeignKey("LinkshellId", "LinkshellRoleId")
+                        .HasPrincipalKey("LinkshellId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("AppUser");
 

@@ -216,14 +216,18 @@ public abstract class DataAdminModel
         SearchColumns = visible.Where(column => column.IsString).ToList();
         FilterColumns = visible.Where(column => column.IsKey || column.ForeignKey is not null).ToList();
 
-        var editable = visible
+        var settable = visible
             .Where(column => !column.IsKey && !column.IsReadOnly)
             .Where(column => policy.EditableAllowList is null || policy.EditableAllowList.Contains(column.Name))
             .ToList();
+        // A column that is part of a second, alternate key (LinkshellRole.LinkshellId: memberships
+        // point at a role by linkshell and id) is set when the row is created and never changed:
+        // EF refuses to change a key value, and moving the row would strand what points at it.
+        var editable = settable.Where(column => !column.Metadata.IsKey()).ToList();
         EditableColumns = editable;
         // On create the caller supplies keys the database does not generate (AppSetting.Key).
         CreateColumns = visible
-            .Where(column => editable.Contains(column) || (column.IsKey && !column.IsGenerated))
+            .Where(column => settable.Contains(column) || (column.IsKey && !column.IsGenerated))
             .ToList();
 
         IsHidden = policy.Flags.HasFlag(DataAdminPolicyFlags.Hidden);
