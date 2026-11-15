@@ -52,8 +52,25 @@ public static class EventPartyBoardEditService
     public static async Task<EnsureResult> EnsureEventOwnedSetupAsync(
         ApplicationDbContext db, int eventId, CancellationToken cancellationToken)
     {
+        // One transaction with the event row locked: two first edits on the same board queue up
+        // instead of racing, and the clone + repoint below commit together, so a committed
+        // snapshot the event does not point at is always a leftover (see `stale` below).
+        await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (transaction is not null)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM \"Events\" WHERE \"Id\" = {eventId} FOR UPDATE", cancellationToken);
+        }
+
         var ev = await db.Events.FirstOrDefaultAsync(e => e.Id == eventId, cancellationToken)
             ?? throw new InvalidOperationException($"Event {eventId} not found.");
+        if (transaction is not null)
+        {
+            // The caller may already track this event with values read before the lock.
+            await db.Entry(ev).ReloadAsync(cancellationToken);
+        }
         if (ev.PartySetupId is not { } setupId)
         {
             return new EnsureResult(null, EmptyMap, EmptyMap, EmptyMap);
@@ -128,6 +145,19 @@ public static class EventPartyBoardEditService
             allianceEntities[allianceT.Id] = alliance;
         }
 
+        // A snapshot this event still owns but no longer points at: Edit Event swapped the board
+        // to another setup and left the old copy behind. The one-snapshot-per-event index would
+        // refuse every new clone forever, so remove the leftover first. Its slot signups were
+        // already cleared by that swap; the database cascade removes its alliances/parties/slots.
+        var stale = await db.PartySetups
+            .Where(ps => ps.OwnerEventId == eventId && ps.Id != setupId)
+            .ToListAsync(cancellationToken);
+        if (stale.Count > 0)
+        {
+            db.PartySetups.RemoveRange(stale);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         db.PartySetups.Add(clone);
         try
         {
@@ -136,6 +166,10 @@ public static class EventPartyBoardEditService
         }
         catch (DbUpdateException)
         {
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
             // A concurrent first-edit already created the snapshot (unique OwnerEventId
             // index). Detach our aborted clone subtree so it isn't re-inserted on the
             // next SaveChanges, reload the event, and use the existing copy. The other
@@ -162,6 +196,10 @@ public static class EventPartyBoardEditService
 
         ev.PartySetupId = clone.Id;
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return new EnsureResult(
             clone.Id,
@@ -500,15 +538,17 @@ public static class EventPartyBoardEditService
 
     private static void DetachCloneSubtree(ApplicationDbContext db, PartySetup clone)
     {
-        foreach (var slot in clone.Alliances.SelectMany(a => a.Parties).SelectMany(p => p.Slots))
+        // Copy each list first: detaching a row makes EF take it out of its parent's
+        // collection, which broke the loop ("Collection was modified").
+        foreach (var slot in clone.Alliances.SelectMany(a => a.Parties).SelectMany(p => p.Slots).ToList())
         {
             db.Entry(slot).State = EntityState.Detached;
         }
-        foreach (var party in clone.Alliances.SelectMany(a => a.Parties))
+        foreach (var party in clone.Alliances.SelectMany(a => a.Parties).ToList())
         {
             db.Entry(party).State = EntityState.Detached;
         }
-        foreach (var alliance in clone.Alliances)
+        foreach (var alliance in clone.Alliances.ToList())
         {
             db.Entry(alliance).State = EntityState.Detached;
         }
