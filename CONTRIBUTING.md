@@ -75,7 +75,7 @@ In non-development environments the app applies pending migrations automatically
 | `DbWipe/` | **Destructive** dev utility — empty a local DB (`wipe`), or one linkshell (`scrub`, `scrub-treasury`); `verify` / `treasury` only read |
 | `tools/db-wipe-activity-keep-roster.sql` | **Destructive** psql script — empties events, ToDs, loot, DKP and gil, keeps the roster and settings. Needs `-v confirm=<database name>` |
 | `tools/purge-history.ps1` | **Destructive** — deletes past events and the DKP ledger. Dry run unless `-Execute` |
-| `tools/DbInspector/` | Read-only DB inspection (+ a guarded `reset-public`) |
+| `tools/DbInspector/` | Read-only DB inspection |
 
 The two utility projects are separate console apps, run by hand. Every destructive tool here refuses to run
 unless you name the connected database as confirmation — never point them at production.
@@ -83,8 +83,10 @@ unless you name the connected database as confirmation — never point them at p
 DbInspector reads its connection string only from an environment variable you set for that run; it never
 falls back to user-secrets. Set exactly one:
 
-- `APP_CS` — a local database. Every mode works, including `reset-public <database-name>`.
-- `LSM_PROD_CS` — production. The session is opened read-only and `reset-public` is refused.
+- `APP_CS` — a local database.
+- `LSM_PROD_CS` — production. The session is opened read-only.
+
+(Its old `reset-public` mode, which dropped the whole schema, was removed with the migration squash.)
 
 ```bash
 LSM_PROD_CS="<production connection string>" dotnet run --project tools/DbInspector -- history

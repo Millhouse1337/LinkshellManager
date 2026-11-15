@@ -1,14 +1,13 @@
-// DbInspector — read-only Postgres inspection helper (+ one destructive reset).
+// DbInspector — read-only Postgres inspection helper.
 //
 // The connection string comes ONLY from an environment variable you set on
 // purpose for this run. It never falls back to the app's user-secrets: a
 // default that silently picks up whatever database the app is configured for
 // is how a dev tool ends up pointed at production.
 //
-//   APP_CS       a local / throwaway database. All modes are allowed.
+//   APP_CS       a local / throwaway database.
 //   LSM_PROD_CS  the production database. Read-only: the session is opened
-//                with default_transaction_read_only=on and reset-public is
-//                refused outright.
+//                with default_transaction_read_only=on.
 //
 // Set exactly one of them. Excluded from the main web-app build; run by hand.
 //
@@ -16,16 +15,17 @@
 //   dotnet run --project tools/DbInspector -- tables             # list public tables
 //   dotnet run --project tools/DbInspector -- history            # list applied EF migrations
 //   dotnet run --project tools/DbInspector -- exists:TableName   # check a table exists
-//   dotnet run --project tools/DbInspector -- reset-public <db>  # DESTRUCTIVE: drop+recreate
-//                                                                # the public schema; <db> must
-//                                                                # match the connected DB name
-//                                                                # (APP_CS only)
+//
+// It used to have a destructive "reset-public" mode (drop and recreate the public schema). It was
+// removed with the migration squash (Round 4, D11, ops-17): a wipe one routine command away was
+// never worth it. To start a local database again, drop and create it with psql or Docker, then
+// run "dotnet ef database update".
 using Npgsql;
 
 var argsList = args.ToList();
 if (argsList.Count == 0)
 {
-    Console.Error.WriteLine("Usage: DbInspector <tables|history|exists:TableName|reset-public <db>>");
+    Console.Error.WriteLine("Usage: DbInspector <tables|history|exists:TableName>");
     return 1;
 }
 
@@ -48,15 +48,6 @@ if (!hasLocal && !hasProd)
 }
 
 var mode = argsList[0];
-var isResetPublic = string.Equals(mode, "reset-public", StringComparison.OrdinalIgnoreCase);
-
-if (hasProd && isResetPublic)
-{
-    // Checked before connecting so a production reset can't get as far as
-    // opening a session.
-    Console.Error.WriteLine("reset-public is never allowed through LSM_PROD_CS.");
-    return 1;
-}
 
 string connectionString;
 if (hasProd)
@@ -77,26 +68,6 @@ else
 
 await using var connection = new NpgsqlConnection(connectionString);
 await connection.OpenAsync();
-
-if (isResetPublic)
-{
-    // Destructive: require the connected database name as confirmation so an
-    // accidental run can never drop the wrong schema. The message deliberately
-    // does not fill the real name in: a ready-to-paste command defeats the
-    // point of the confirmation.
-    if (argsList.Count < 2 || !string.Equals(argsList[1], connection.Database, StringComparison.Ordinal))
-    {
-        Console.Error.WriteLine(
-            "Refusing to reset. To confirm, type the name of the database APP_CS points at:\n" +
-            "  dotnet run --project tools/DbInspector -- reset-public <database-name>");
-        return 1;
-    }
-
-    await using var resetCommand = new NpgsqlCommand("drop schema if exists public cascade; create schema public;", connection);
-    await resetCommand.ExecuteNonQueryAsync();
-    Console.WriteLine("reset");
-    return 0;
-}
 
 var commandText = mode switch
 {
