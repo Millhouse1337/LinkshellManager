@@ -1691,6 +1691,14 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("EventId", "SequenceNumber")
                         .IsUnique();
 
+                    b.HasIndex(new[] { "EventId" }, "IX_EventAttendanceWindows_OneClosePerEvent")
+                        .IsUnique()
+                        .HasFilter("\"IsClosingWindow\" AND NOT \"IsKillWindow\"");
+
+                    b.HasIndex(new[] { "EventHistoryId" }, "IX_EventAttendanceWindows_OneClosePerEventHistory")
+                        .IsUnique()
+                        .HasFilter("\"IsClosingWindow\" AND NOT \"IsKillWindow\"");
+
                     b.ToTable("EventAttendanceWindows", null, t =>
                         {
                             t.HasCheckConstraint("CK_EventAttendanceWindows_OneParent", "num_nonnulls(\"EventId\", \"EventHistoryId\") = 1");
@@ -2129,6 +2137,14 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_Invites_OneOpenJoinRequest")
                         .HasFilter("\"Status\" = 'PendingJoinRequest'");
+
+                    b.HasIndex(new[] { "LinkshellId", "DiscordUserId" }, "IX_Invites_OneOpenDiscordInvite")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN ('Pending', 'PendingInvite') AND \"AppUserId\" IS NULL AND \"DiscordUserId\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "LinkshellId", "AppUserId" }, "IX_Invites_OneOpenInvite")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN ('Pending', 'PendingInvite') AND \"AppUserId\" IS NOT NULL");
 
                     b.ToTable("Invites");
                 });
@@ -2692,6 +2708,22 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("LinkshellId");
+
+                    b.HasIndex(new[] { "LinkshellId" }, "IX_LinkshellChannelRoutes_OneAuctionRoute")
+                        .IsUnique()
+                        .HasFilter("\"PostAuctions\"");
+
+                    b.HasIndex(new[] { "LinkshellId" }, "IX_LinkshellChannelRoutes_OneDkpSheetRoute")
+                        .IsUnique()
+                        .HasFilter("\"PostDkpSheet\"");
+
+                    b.HasIndex(new[] { "LinkshellId" }, "IX_LinkshellChannelRoutes_OneLootRoute")
+                        .IsUnique()
+                        .HasFilter("\"PostLoot\"");
+
+                    b.HasIndex(new[] { "LinkshellId" }, "IX_LinkshellChannelRoutes_OneTodBoardRoute")
+                        .IsUnique()
+                        .HasFilter("\"PostTodBoard\"");
 
                     b.ToTable("LinkshellChannelRoutes", (string)null);
                 });

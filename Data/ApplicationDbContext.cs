@@ -1300,6 +1300,16 @@ namespace LinkshellManagerDiscordApp.Data
                     .IsUnique()
                     .HasFilter("\"Status\" = 'PendingJoinRequest'")
                     .HasDatabaseName("IX_Invites_OneOpenJoinRequest");
+                // One open invite per person per linkshell: by account, and by Discord id for
+                // someone invited before they had an account. "Pending" is what the old website
+                // wrote, "PendingInvite" what the Activity writes. Join requests are the index
+                // above, not these. Filters match OneCloseOneRouteOneInvite's SQL exactly.
+                entity.HasIndex(invite => new { invite.LinkshellId, invite.AppUserId }, "IX_Invites_OneOpenInvite")
+                    .IsUnique()
+                    .HasFilter("\"Status\" IN ('Pending', 'PendingInvite') AND \"AppUserId\" IS NOT NULL");
+                entity.HasIndex(invite => new { invite.LinkshellId, invite.DiscordUserId }, "IX_Invites_OneOpenDiscordInvite")
+                    .IsUnique()
+                    .HasFilter("\"Status\" IN ('Pending', 'PendingInvite') AND \"AppUserId\" IS NULL AND \"DiscordUserId\" IS NOT NULL");
                 // Kept: the index above only holds open join requests, so it cannot answer
                 // "every invite of this linkshell" (and EF would otherwise drop this one for it).
                 entity.HasIndex(invite => invite.LinkshellId);
@@ -2067,6 +2077,16 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.EventId, item.SequenceNumber }).IsUnique();
                 // The only archive read path: "the windows for closed event H", in sequence.
                 entity.HasIndex(item => new { item.EventHistoryId, item.SequenceNumber });
+                // At most one closing window per camp, live or archived: the close bonus is paid
+                // to that window. A kill roster is never the close. ClosingWindowMark moves the
+                // tick in two saves so these never refuse a move. OneCloseOneRouteOneInvite skips
+                // them with a warning if a camp already has two (the owner fixes those by hand).
+                entity.HasIndex(item => item.EventId, "IX_EventAttendanceWindows_OneClosePerEvent")
+                    .IsUnique()
+                    .HasFilter("\"IsClosingWindow\" AND NOT \"IsKillWindow\"");
+                entity.HasIndex(item => item.EventHistoryId, "IX_EventAttendanceWindows_OneClosePerEventHistory")
+                    .IsUnique()
+                    .HasFilter("\"IsClosingWindow\" AND NOT \"IsKillWindow\"");
                 // Exactly one parent: the live camp OR its archive, never both and never neither.
                 // A window with neither is invisible on every page. Both close paths
                 // (EventEndService.EndEventCoreAsync and the HNM review handoff) set the history
@@ -2295,6 +2315,20 @@ namespace LinkshellManagerDiscordApp.Data
                     .HasForeignKey(item => item.LinkshellId)
                     .OnDelete(DeleteBehavior.Cascade);
                 entity.HasIndex(item => item.LinkshellId);
+                // One route per linkshell for each one-owner post type (events may go to several).
+                // ChannelRouteEditor checks this and saves in two steps, so a move is never refused.
+                entity.HasIndex(item => item.LinkshellId, "IX_LinkshellChannelRoutes_OneLootRoute")
+                    .IsUnique()
+                    .HasFilter("\"PostLoot\"");
+                entity.HasIndex(item => item.LinkshellId, "IX_LinkshellChannelRoutes_OneAuctionRoute")
+                    .IsUnique()
+                    .HasFilter("\"PostAuctions\"");
+                entity.HasIndex(item => item.LinkshellId, "IX_LinkshellChannelRoutes_OneTodBoardRoute")
+                    .IsUnique()
+                    .HasFilter("\"PostTodBoard\"");
+                entity.HasIndex(item => item.LinkshellId, "IX_LinkshellChannelRoutes_OneDkpSheetRoute")
+                    .IsUnique()
+                    .HasFilter("\"PostDkpSheet\"");
             });
 
 
