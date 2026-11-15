@@ -2095,6 +2095,7 @@ namespace LinkshellManagerDiscordApp.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("SpawnKey")
+                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
@@ -2108,7 +2109,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.HasIndex("LinkshellId", "MonsterName")
                         .IsUnique();
 
-                    b.HasIndex("LinkshellId", "SpawnKey");
+                    b.HasIndex("LinkshellId", "SpawnKey")
+                        .IsUnique();
 
                     b.ToTable("HnmRecurringBoards");
                 });

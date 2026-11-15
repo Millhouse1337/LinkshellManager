@@ -57,8 +57,9 @@ public class HnmRecurringBoard
     public DateTime UpdatedAt { get; set; }
 
     // MonsterName's one-per-spawn key (HnmConfig.SpawnKey), stamped on every save
-    // (ApplicationDbContext.StampDerivedColumns). Nothing reads it yet; a later deploy looks boards
-    // up by it and makes it the unique key instead of MonsterName.
+    // (ApplicationDbContext.StampDerivedColumns). Every board lookup matches on it, and it is unique
+    // per linkshell: one standing board per spawn. Required in the database (TodSwitch); typed as
+    // nullable here only because the save hook is what fills it.
     [MaxLength(256)]
     public string? SpawnKey { get; set; }
 }

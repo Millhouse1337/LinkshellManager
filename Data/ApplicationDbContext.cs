@@ -1450,11 +1450,14 @@ namespace LinkshellManagerDiscordApp.Data
 
             builder.Entity<HnmRecurringBoard>(entity =>
             {
-                // One recurring-board template per monster per linkshell.
+                // One recurring-board template per monster name per linkshell. Kept until the name
+                // indexes are retired; the SpawnKey index below is the rule the app relies on.
                 entity.HasIndex(board => new { board.LinkshellId, board.MonsterName }).IsUnique();
-                // Derived (AddTodDurationsAndSpawnKeys), stamped by StampDerivedColumns. Not unique
-                // yet: a later deploy merges any two boards for one spawn first.
-                entity.HasIndex(board => new { board.LinkshellId, board.SpawnKey });
+                // One standing board per SPAWN (TodSwitch merged any second one). SpawnKey is
+                // derived from MonsterName by StampDerivedColumns, and a board always names a
+                // monster, so it is required.
+                entity.Property(board => board.SpawnKey).IsRequired();
+                entity.HasIndex(board => new { board.LinkshellId, board.SpawnKey }).IsUnique();
                 entity.HasOne(board => board.Linkshell)
                     .WithMany()
                     .HasForeignKey(board => board.LinkshellId)
