@@ -56,17 +56,12 @@ public sealed partial class ActivityOverviewController
 
         // The main character's jobs live on the account, in the addon's FFXI-job-id format; the
         // client sends catalog-aligned arrays (index 0 = WAR ... 14 = SMN), merged into what the
-        // account already holds. MainCharacterJobs also copies them onto every membership, which
-        // the previous build reads (see there), so a rollback still shows them.
+        // account already holds.
         var mainJobsChanged = false;
         if (request.JobLevels is { Length: > 0 } || request.StrongJobs is { Length: > 0 } || request.MeritJobs is { Length: > 0 })
         {
-            var memberships = await _dbContext.AppUserLinkshells
-                .Where(link => link.AppUserId == appUser.Id)
-                .ToListAsync(cancellationToken);
             MainCharacterJobs.Write(
                 appUser,
-                memberships,
                 jobLevels: request.JobLevels is { Length: > 0 }
                     ? ProfileJobLevels.MergeIntoStored(appUser.JobLevels, request.JobLevels)
                     : null,

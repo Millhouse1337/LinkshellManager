@@ -102,25 +102,23 @@ public class AppUserLinkshell
     public DateTime? DateJoined { get; set; }
 
     // JobLevels, StrongJobs and MeritJobs below are the OLD home of the main character's jobs. The
-    // app now reads them from the account (AppUser.JobLevels / StrongJobs / MeritJobs); writers
-    // still copy the account's value here (MainCharacterJobs.Write) only so the previous build,
-    // which reads these, works after a rollback. A later deploy stops writing them, then drops them.
+    // app reads and writes them on the account now (AppUser.JobLevels / StrongJobs / MeritJobs,
+    // MainCharacterJobs); nothing writes these any more (RosterSwitch), and a later deploy drops
+    // them. Whatever they held before stays as it was.
     [Column(TypeName = "jsonb")]
     public int[]? JobLevels { get; set; }
 
     // Per-job "strong" flags for the main character, parallel to JobLevels and in
     // the same FFXI-job-id-indexed format (see ProfileJobLevels). A non-zero entry
     // marks the job as well-geared/merited so the linkshell can see at a glance who
-    // brings a strong setup. Like JobLevels, the profile editor writes the same
-    // value to every membership (one character, one set of strengths).
+    // brings a strong setup. No longer written, like JobLevels.
     [Column(TypeName = "jsonb")]
     public int[]? StrongJobs { get; set; }
 
     // Per-job free-text merit notes for the main character, catalog-aligned (index
     // 0 = WAR … 14 = SMN, 15 = BLU … 17 = PUP, NOT the FFXI-job-id format the level
     // arrays use). Set
-    // when a job is marked merited; empty otherwise. Written to every membership
-    // like JobLevels/StrongJobs (one character, one set of merits).
+    // when a job is marked merited; empty otherwise. No longer written, like JobLevels.
     [Column(TypeName = "jsonb")]
     public string[]? MeritJobs { get; set; }
 }

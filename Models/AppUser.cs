@@ -12,10 +12,8 @@ public class AppUser : IdentityUser
     // linkshell is looking. Same formats as the alts' columns below (levels and strong flags
     // FFXI-job-id-indexed, merit notes catalog-aligned; see ProfileJobLevels). They used to live
     // only on each membership (AppUserLinkshell.JobLevels/StrongJobs/MeritJobs); the migration
-    // AccountJobsAndKeyItemAccounts copied them here, and every read now uses these. Writers still
-    // copy the same value onto every membership as well (MainCharacterJobs.Write), so the build
-    // before this one, which reads the memberships, keeps working after a rollback. Null when
-    // never set.
+    // AccountJobsAndKeyItemAccounts copied them here, and every read and write now uses these
+    // (MainCharacterJobs.Write). Null when never set.
     [Column(TypeName = "jsonb")]
     public int[]? JobLevels { get; set; }
 

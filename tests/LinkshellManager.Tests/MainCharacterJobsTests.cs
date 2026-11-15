@@ -13,9 +13,9 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The main character's jobs live on the account (AccountJobsAndKeyItemAccounts) and are read from
-// there; every writer also copies them onto each membership, which the previous build reads, so a
-// rollback still shows them. The addon may write only its token owner's own main character.
+// The main character's jobs live on the account (AccountJobsAndKeyItemAccounts) and are read and
+// written there; since RosterSwitch nothing writes the old membership copies (the previous build
+// reads the account too). The addon may write only its token owner's own main character.
 public class MainCharacterJobsTests
 {
     private const int Ls = 1;
@@ -69,27 +69,19 @@ public class MainCharacterJobsTests
 
     // ---- Write -----------------------------------------------------------------------------
 
+    // RosterSwitch: only the account is written. The membership copies are no longer kept in step
+    // (nothing reads them, not even the previous build).
     [Fact]
-    public void Write_SetsTheAccountAndEveryMembership_AndLeavesNullArgumentsAlone()
+    public void Write_SetsTheAccount_AndLeavesNullArgumentsAlone()
     {
         var account = new AppUser { StrongJobs = new[] { 0, 1 }, MeritJobs = new[] { "kept" } };
-        var memberships = new[]
-        {
-            new AppUserLinkshell { StrongJobs = new[] { 0, 1 }, MeritJobs = new[] { "kept" } },
-            new AppUserLinkshell(),
-        };
 
-        MainCharacterJobs.Write(account, memberships, jobLevels: new[] { 0, 75 });
+        MainCharacterJobs.Write(account, jobLevels: new[] { 0, 75 });
 
         Assert.Equal(new[] { 0, 75 }, account.JobLevels);
-        Assert.All(memberships, m => Assert.Equal(new[] { 0, 75 }, m.JobLevels));
-        // Each row holds its own copy, so changing one can never change another.
-        Assert.NotSame(account.JobLevels, memberships[0].JobLevels);
-        Assert.NotSame(memberships[0].JobLevels, memberships[1].JobLevels);
-        // Untouched columns stay as they were, everywhere.
+        // Untouched columns stay as they were.
         Assert.Equal(new[] { 0, 1 }, account.StrongJobs);
-        Assert.Equal(new[] { "kept" }, memberships[0].MeritJobs);
-        Assert.Null(memberships[1].StrongJobs);
+        Assert.Equal(new[] { "kept" }, account.MeritJobs);
     }
 
     // ---- MatchOwnMain ----------------------------------------------------------------------
@@ -127,7 +119,7 @@ public class MainCharacterJobsTests
     // ---- the addon routes --------------------------------------------------------------------
 
     [Fact]
-    public async Task AddonPost_OwnMain_WritesTheAccountAndEveryMembership()
+    public async Task AddonPost_OwnMain_WritesTheAccountOnly()
     {
         await using var db = Seeded();
 
@@ -137,8 +129,8 @@ public class MainCharacterJobsTests
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.Contains("\"characterName\":\"Bob\"", JsonSerializer.Serialize(ok.Value));
         Assert.Equal(new[] { 0, 75, 37 }, db.Users.Single(u => u.Id == "bob").JobLevels);
-        // Both of Bob's memberships, the other linkshell's too, for the previous build.
-        Assert.All(db.AppUserLinkshells.Where(m => m.AppUserId == "bob"), m => Assert.Equal(new[] { 0, 75, 37 }, m.JobLevels));
+        // Bob's old membership copies are left as they were (RosterSwitch: no longer written).
+        Assert.All(db.AppUserLinkshells.Where(m => m.AppUserId == "bob"), m => Assert.Equal(new[] { 0, 1 }, m.JobLevels));
         // Nobody else's.
         Assert.Equal(new[] { 0, 50 }, db.Users.Single(u => u.Id == "carol").JobLevels);
         Assert.Equal(new[] { 0, 50 }, db.AppUserLinkshells.Single(m => m.Id == 3).JobLevels);

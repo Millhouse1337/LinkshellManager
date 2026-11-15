@@ -675,8 +675,8 @@ public sealed partial class AddonApiController
         });
     }
 
-    // Stores the calling player's job-level array on their account (and, for the previous build,
-    // on each of their memberships; see MainCharacterJobs) so other addon installations can see
+    // Stores the calling player's job-level array on their account (see MainCharacterJobs) so
+    // other addon installations can see
     // (via /roster) which jobs each member has leveled. Used by the in-game loot panel's "Can
     // equip" filter. Idempotent: overwrites the previous array on each call.
     //
@@ -723,7 +723,7 @@ public sealed partial class AddonApiController
             return Forbid();
         }
 
-        MainCharacterJobs.Write(owner, memberships, jobLevels: request.JobLevels);
+        MainCharacterJobs.Write(owner, jobLevels: request.JobLevels);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new { success = true, characterName = matchedName });

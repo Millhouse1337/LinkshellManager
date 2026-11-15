@@ -80,11 +80,11 @@ public class JsonbArrayColumnTests : IAsyncLifetime
         }
     }
 
-    // The main character's jobs (AccountJobsAndKeyItemAccounts): written to the account and copied
-    // onto each membership, they must be the same JSON in both places, so the previous build (which
-    // reads the membership) sees exactly what this one saved.
+    // The main character's jobs (AccountJobsAndKeyItemAccounts): written to the account as JSON the
+    // app reads back as the same arrays. Since RosterSwitch they are no longer copied onto the
+    // membership (nothing reads it there, the previous build included).
     [Fact]
-    public async Task MainJobs_AreTheSameJsonOnTheAccountAndOnEveryMembership()
+    public async Task MainJobs_AreWrittenAsJsonOnTheAccount_AndNoLongerOnTheMembership()
     {
         await using (var db = _pg.CreateContext())
         {
@@ -98,7 +98,7 @@ public class JsonbArrayColumnTests : IAsyncLifetime
             await db.SaveChangesAsync();
 
             LinkshellManagerDiscordApp.Services.MainCharacterJobs.Write(
-                user, new[] { membership }, new[] { 0, 75, 37 }, new[] { 0, 1, 0 }, new[] { "", "Axe x5" });
+                user, new[] { 0, 75, 37 }, new[] { 0, 1, 0 }, new[] { "", "Axe x5" });
             await db.SaveChangesAsync();
         }
 
@@ -115,7 +115,8 @@ public class JsonbArrayColumnTests : IAsyncLifetime
                     "FROM \"AppUserLinkshells\" WHERE \"AppUserId\" = 'user-1'")
                 .SingleAsync();
             Assert.Equal("[0, 75, 37]|[0, 1, 0]|[\"\", \"Axe x5\"]", account);
-            Assert.Equal(account, member);
+            // RosterSwitch: the membership's old columns are not written any more.
+            Assert.Equal("", member);
             var user = await db.Users.SingleAsync(u => u.Id == "user-1");
             Assert.Equal(new[] { 0, 75, 37 }, user.JobLevels);
             Assert.Equal(new[] { "", "Axe x5" }, user.MeritJobs);
