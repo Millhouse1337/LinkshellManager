@@ -54,36 +54,32 @@ public sealed partial class ActivityOverviewController
             return BadRequest(new { error = errorMessage });
         }
 
-        // Persist per-job levels onto every membership, so the character's jobs are
-        // consistent across linkshells and stored in the addon's FFXI-job-id format.
-        // The client sends a catalog-aligned array (index 0 = WAR ... 14 = SMN).
+        // The main character's jobs live on the account, in the addon's FFXI-job-id format; the
+        // client sends catalog-aligned arrays (index 0 = WAR ... 14 = SMN), merged into what the
+        // account already holds. MainCharacterJobs also copies them onto every membership, which
+        // the previous build reads (see there), so a rollback still shows them.
+        var mainJobsChanged = false;
         if (request.JobLevels is { Length: > 0 } || request.StrongJobs is { Length: > 0 } || request.MeritJobs is { Length: > 0 })
         {
             var memberships = await _dbContext.AppUserLinkshells
                 .Where(link => link.AppUserId == appUser.Id)
                 .ToListAsync(cancellationToken);
-            if (memberships.Count > 0)
-            {
-                foreach (var membership in memberships)
-                {
-                    if (request.JobLevels is { Length: > 0 })
-                    {
-                        membership.JobLevels = ProfileJobLevels.MergeIntoStored(membership.JobLevels, request.JobLevels);
-                    }
-                    // "Strong" flags ride alongside the levels — same value on every
-                    // membership, since it's one character's set of strengths.
-                    if (request.StrongJobs is { Length: > 0 })
-                    {
-                        membership.StrongJobs = ProfileJobLevels.MergeFlagsIntoStored(membership.StrongJobs, request.StrongJobs);
-                    }
-                    // Merit notes (catalog-aligned text), same value on every membership.
-                    if (request.MeritJobs is { Length: > 0 })
-                    {
-                        membership.MeritJobs = ProfileJobLevels.NormalizeMerits(request.MeritJobs);
-                    }
-                }
-                await _dbContext.SaveChangesAsync(cancellationToken);
-            }
+            MainCharacterJobs.Write(
+                appUser,
+                memberships,
+                jobLevels: request.JobLevels is { Length: > 0 }
+                    ? ProfileJobLevels.MergeIntoStored(appUser.JobLevels, request.JobLevels)
+                    : null,
+                // "Strong" flags ride alongside the levels: one character's set of strengths.
+                strongJobs: request.StrongJobs is { Length: > 0 }
+                    ? ProfileJobLevels.MergeFlagsIntoStored(appUser.StrongJobs, request.StrongJobs)
+                    : null,
+                // Merit notes (catalog-aligned text).
+                meritJobs: request.MeritJobs is { Length: > 0 }
+                    ? ProfileJobLevels.NormalizeMerits(request.MeritJobs)
+                    : null);
+            mainJobsChanged = true;
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
         // Alt-character job levels live on the AppUser (not per-membership). Clear
@@ -166,7 +162,8 @@ public sealed partial class ActivityOverviewController
             craftsChanged = true;
         }
 
-        if (craftsChanged)
+        // The account itself (crafts, alts and the main's jobs) is saved through Identity.
+        if (craftsChanged || mainJobsChanged)
         {
             await _userManager.UpdateAsync(appUser);
         }

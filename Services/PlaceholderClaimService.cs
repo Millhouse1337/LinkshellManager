@@ -145,6 +145,13 @@ public sealed class PlaceholderClaimService
         {
             realUser.AltCharacterName2 = placeholder.AltCharacterName2;
         }
+        // The main's jobs live on the account now, and go with the placeholder when it is deleted.
+        // The addon used to file a player's own jobs on whichever roster row had their name, often
+        // the placeholder's, so a real account with none takes them (never clobbered). The
+        // memberships that moved keep their own copies, which the previous build reads.
+        realUser.JobLevels ??= placeholder.JobLevels;
+        realUser.StrongJobs ??= placeholder.StrongJobs;
+        realUser.MeritJobs ??= placeholder.MeritJobs;
         await _db.SaveChangesAsync(cancellationToken);
 
         // Delete the placeholder only when nothing points at it any more. Something left means a

@@ -628,27 +628,19 @@ public sealed partial class ActivityOverviewController
         Response.Headers.CacheControl = "no-store";
         Response.Headers.Pragma = "no-cache";
 
-        // Job levels live per-membership; surface the primary linkshell's (or any
-        // membership's) so the profile "My Jobs" editor can pre-fill. Catalog-
-        // aligned (index 0 = WAR ... 14 = SMN).
-        var profileJobLevels = ProfileJobLevels.ToCatalogLevels(
-            linkshellMemberships.FirstOrDefault(link => link.LinkshellId == primaryLinkshellId)?.JobLevels
-            ?? linkshellMemberships.FirstOrDefault(link => link.JobLevels != null)?.JobLevels);
+        // The main character's job levels live on the account (AccountJobsAndKeyItemAccounts), so
+        // the profile "My Jobs" editor pre-fills from there. Catalog-aligned (index 0 = WAR ...
+        // 14 = SMN).
+        var profileJobLevels = ProfileJobLevels.ToCatalogLevels(appUser.JobLevels);
         // Alt-character job levels live on the AppUser (shared across linkshells).
         var alt1JobLevels = ProfileJobLevels.ToCatalogLevels(appUser.Alt1JobLevels);
         var alt2JobLevels = ProfileJobLevels.ToCatalogLevels(appUser.Alt2JobLevels);
-        // "Strong" flags, parallel to the level arrays above (main from the same
-        // membership, alts from the AppUser).
-        var strongJobs = ProfileJobLevels.ToCatalogFlags(
-            linkshellMemberships.FirstOrDefault(link => link.LinkshellId == primaryLinkshellId)?.StrongJobs
-            ?? linkshellMemberships.FirstOrDefault(link => link.StrongJobs != null)?.StrongJobs);
+        // "Strong" flags, parallel to the level arrays above (main and alts from the AppUser).
+        var strongJobs = ProfileJobLevels.ToCatalogFlags(appUser.StrongJobs);
         var alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(appUser.Alt1StrongJobs);
         var alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(appUser.Alt2StrongJobs);
-        // Per-job merit notes, parallel to the strong flags (main from the primary
-        // membership, alts from the AppUser).
-        var meritJobs = ProfileJobLevels.NormalizeMerits(
-            linkshellMemberships.FirstOrDefault(link => link.LinkshellId == primaryLinkshellId)?.MeritJobs
-            ?? linkshellMemberships.FirstOrDefault(link => link.MeritJobs != null)?.MeritJobs);
+        // Per-job merit notes, parallel to the strong flags (main and alts from the AppUser).
+        var meritJobs = ProfileJobLevels.NormalizeMerits(appUser.MeritJobs);
         var alt1MeritJobs = ProfileJobLevels.NormalizeMerits(appUser.Alt1MeritJobs);
         var alt2MeritJobs = ProfileJobLevels.NormalizeMerits(appUser.Alt2MeritJobs);
 

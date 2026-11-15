@@ -629,7 +629,8 @@ public sealed partial class AddonApiController
                 // addon's "Can equip" test runs unchanged over an alt.
                 Alt1JobLevels = link.AppUser != null ? link.AppUser.Alt1JobLevels : null,
                 Alt2JobLevels = link.AppUser != null ? link.AppUser.Alt2JobLevels : null,
-                JobLevels = link.JobLevels
+                // The main's levels live on the account too (AccountJobsAndKeyItemAccounts).
+                JobLevels = link.AppUser != null ? link.AppUser.JobLevels : null
             })
             .OrderBy(row => row.CharacterName)
             .ToListAsync(cancellationToken);
@@ -674,10 +675,16 @@ public sealed partial class AddonApiController
         });
     }
 
-    // Stores the calling player's job-level array on their AppUserLinkshell
-    // row so other addon installations can see (via /roster) which jobs each
-    // member has leveled. Used by the in-game loot panel's "Can equip" filter.
-    // Idempotent: overwrites the previous array on each call.
+    // Stores the calling player's job-level array on their account (and, for the previous build,
+    // on each of their memberships; see MainCharacterJobs) so other addon installations can see
+    // (via /roster) which jobs each member has leveled. Used by the in-game loot panel's "Can
+    // equip" filter. Idempotent: overwrites the previous array on each call.
+    //
+    // Only the token owner's OWN main character: the name must be the owner account's character
+    // name or the name on one of its memberships. It used to accept any name on the token's
+    // linkshell roster, so one member's addon could overwrite another member's jobs. The addon only
+    // ever posts the logged-in character (party slot 0) and already treats 403 as "not mine, stop
+    // asking" (an alt, or someone else's character on this login).
     [HttpPost("character/jobs")]
     [AddonApiAuth]
     public async Task<IActionResult> PostCharacterJobsAsync(
@@ -696,23 +703,30 @@ public sealed partial class AddonApiController
 
         var token = AddonApiAuthAttribute.GetToken(HttpContext);
 
-        // Membership guard: a token can only publish job levels for a character
-        // that is on its own linkshell roster. Match is case-insensitive on
-        // CharacterName, mirroring the loot-winner validation pattern.
-        var membership = await _dbContext.AppUserLinkshells
-            .FirstOrDefaultAsync(link => link.LinkshellId == token.LinkshellId
-                && link.CharacterName != null
-                && link.CharacterName.ToLower() == characterName!.ToLower(),
-                cancellationToken);
-        if (membership is null)
+        // Owner guard: the token's own account, still on the token's linkshell roster, posting its
+        // own main character (capitals and spaces around the name do not matter).
+        var owner = string.IsNullOrWhiteSpace(token.IssuedToAppUserId)
+            ? null
+            : await _dbContext.Users.FirstOrDefaultAsync(user => user.Id == token.IssuedToAppUserId, cancellationToken);
+        if (owner is null)
+        {
+            return Forbid();
+        }
+        var memberships = await _dbContext.AppUserLinkshells
+            .Where(link => link.AppUserId == owner.Id)
+            .ToListAsync(cancellationToken);
+        var matchedName = memberships.Any(link => link.LinkshellId == token.LinkshellId)
+            ? MainCharacterJobs.MatchOwnMain(characterName, owner, memberships, token.LinkshellId)
+            : null;
+        if (matchedName is null)
         {
             return Forbid();
         }
 
-        membership.JobLevels = request.JobLevels;
+        MainCharacterJobs.Write(owner, memberships, jobLevels: request.JobLevels);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(new { success = true, characterName = membership.CharacterName });
+        return Ok(new { success = true, characterName = matchedName });
     }
 
     // Posts one loot row from the addon Loot Pool panel, addressed by EVENT.

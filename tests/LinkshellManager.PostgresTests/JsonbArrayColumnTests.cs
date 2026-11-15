@@ -79,4 +79,46 @@ public class JsonbArrayColumnTests : IAsyncLifetime
             Assert.True(isSqlNull);
         }
     }
+
+    // The main character's jobs (AccountJobsAndKeyItemAccounts): written to the account and copied
+    // onto each membership, they must be the same JSON in both places, so the previous build (which
+    // reads the membership) sees exactly what this one saved.
+    [Fact]
+    public async Task MainJobs_AreTheSameJsonOnTheAccountAndOnEveryMembership()
+    {
+        await using (var db = _pg.CreateContext())
+        {
+            var linkshell = new Linkshell { LinkshellName = "LS" };
+            var user = new AppUser { Id = "user-1", UserName = "user-1" };
+            db.Linkshells.Add(linkshell);
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+            var membership = new AppUserLinkshell { LinkshellId = linkshell.Id, AppUserId = user.Id, CharacterName = "Main" };
+            db.AppUserLinkshells.Add(membership);
+            await db.SaveChangesAsync();
+
+            LinkshellManagerDiscordApp.Services.MainCharacterJobs.Write(
+                user, new[] { membership }, new[] { 0, 75, 37 }, new[] { 0, 1, 0 }, new[] { "", "Axe x5" });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _pg.CreateContext())
+        {
+            var account = await db.Database
+                .SqlQueryRaw<string>(
+                    "SELECT concat_ws('|', \"JobLevels\"::text, \"StrongJobs\"::text, \"MeritJobs\"::text) AS \"Value\" " +
+                    "FROM \"AspNetUsers\" WHERE \"Id\" = 'user-1'")
+                .SingleAsync();
+            var member = await db.Database
+                .SqlQueryRaw<string>(
+                    "SELECT concat_ws('|', \"JobLevels\"::text, \"StrongJobs\"::text, \"MeritJobs\"::text) AS \"Value\" " +
+                    "FROM \"AppUserLinkshells\" WHERE \"AppUserId\" = 'user-1'")
+                .SingleAsync();
+            Assert.Equal("[0, 75, 37]|[0, 1, 0]|[\"\", \"Axe x5\"]", account);
+            Assert.Equal(account, member);
+            var user = await db.Users.SingleAsync(u => u.Id == "user-1");
+            Assert.Equal(new[] { 0, 75, 37 }, user.JobLevels);
+            Assert.Equal(new[] { "", "Axe x5" }, user.MeritJobs);
+        }
+    }
 }

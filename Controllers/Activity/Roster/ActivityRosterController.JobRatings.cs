@@ -37,12 +37,12 @@ public sealed partial class ActivityRosterController
             .FirstOrDefaultAsync(m => m.LinkshellId == linkshellId && m.AppUserId == targetAppUserId, cancellationToken);
         if (targetMembership is null) return NotFound(new { error = "That member was not found in this linkshell." });
 
-        // Main character levels live on the membership; alts live on the account.
+        // Every character's levels live on the account (the main's since AccountJobsAndKeyItemAccounts).
         var storedLevels = characterSlot switch
         {
             1 => targetMembership.AppUser?.Alt1JobLevels,
             2 => targetMembership.AppUser?.Alt2JobLevels,
-            _ => targetMembership.JobLevels,
+            _ => targetMembership.AppUser?.JobLevels,
         };
         var jobLevels = ProfileJobLevels.ToCatalogLevels(storedLevels);
 

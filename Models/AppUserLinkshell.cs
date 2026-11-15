@@ -101,6 +101,10 @@ public class AppUserLinkshell
 
     public DateTime? DateJoined { get; set; }
 
+    // JobLevels, StrongJobs and MeritJobs below are the OLD home of the main character's jobs. The
+    // app now reads them from the account (AppUser.JobLevels / StrongJobs / MeritJobs); writers
+    // still copy the account's value here (MainCharacterJobs.Write) only so the previous build,
+    // which reads these, works after a rollback. A later deploy stops writing them, then drops them.
     [Column(TypeName = "jsonb")]
     public int[]? JobLevels { get; set; }
 
