@@ -248,6 +248,13 @@ names as the golden file.
 
 ### Left for the squash (D11)
 
+**DONE in the squash (deploy 5):** `Baseline.ChainOnlyDefaultsSql` sets all 54 defaults, and
+`SchemaCatalogGoldenTests` passes against a Baseline-built database with this golden file unchanged.
+See `docs/migration-squash.md`. Since the squash, the migration classes this file names (for
+example `Round4Contract.RollbackSql`, `NormalizeNamesForSquash.ValidateChecksSql`) exist only in
+git history. SQL quoted in this file still works by hand; for the rest, read it with
+`git show 4b05ee2:Migrations/<file>.cs`.
+
 The model-built catalog still differs from the golden file in one way: **54 column defaults**.
 These were added by `AddColumn(defaultValue: ...)` so old rows got a value, but the model has no
 `HasDefaultValue` for them, so a Baseline made from the model would not create them. Examples:

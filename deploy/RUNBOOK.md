@@ -374,6 +374,10 @@ the old build may fail on startup or misread data. Then either undo that migrati
 maps the columns it drops, so stop the service, run the SQL under "Rolling back deploy 4" in
 `docs/round4-drop-manifest.md` (it puts the columns back empty), then swap.
 
+**The migration squash (Round 4 deploy 5) is NOT one of these**, even though
+`git log --stat` shows every file under `Migrations/` changed: rolling it back is a plain swap
+(see **Migration squash** below).
+
 ```bash
 ssh root@<IP>
 sudo systemctl stop lsmanager                                         # 1
@@ -389,6 +393,51 @@ The next normal deploy overwrites `lsmanager.old` again, so roll back before dep
 A rollback starts the old build with the .NET runtime it was built for. Since November 2026 both
 the live build and `lsmanager.old` are .NET 10, the only runtime on the droplet (see
 **.NET 10 runtime (November 2026)**).
+
+## Migration squash (Round 4 deploy 5, November 2026)
+
+The 173 migrations were replaced by one, `20261115190359_Baseline` (details:
+`docs/migration-squash.md`). Production is NOT rebuilt.
+
+**What the first start does (adoption).** Just before it applies migrations, the app looks at
+`__EFMigrationsHistory`. Production's last row is `20261115161909_NormalizeNamesForSquash`, so it
+adds ONE row, `20261115190359_Baseline`, and keeps all 173 old rows. No table, column or data row
+changes. The service log shows, once:
+
+```
+Migration squash: added 20261115190359_Baseline to the migration history (old rows kept).
+```
+
+A database whose history stops before `NormalizeNamesForSquash` makes start-up fail with a
+message saying to deploy commit `4b05ee2` first. That cannot happen on production today (it is
+at `NormalizeNamesForSquash`), but it would on an old restored dump.
+
+**Before the deploy:** take the normal backup (`deploy.ps1` does). Check that the history ends at
+`20261115161909_NormalizeNamesForSquash` (read-only):
+
+```sql
+SELECT max("MigrationId"), count(*) FROM "__EFMigrationsHistory";   -- expect ..._NormalizeNamesForSquash, 173
+```
+
+**After the deploy:** the same query should show `20261115190359_Baseline` and 174. The schema
+fingerprint (pre-check I3) should still match `tests/LinkshellManager.PostgresTests/Snapshots/SchemaCatalog.txt`.
+
+**Rollback:** a plain folder swap (**Rollback** above). No SQL. The build before the squash
+ignores the Baseline row it does not know, and still finds all of its own rows. Deploying the
+squash build again later finds the Baseline row and does nothing.
+
+**Optional cleanup, much later.** Only after a backup, and only when no rollback to a build from
+before the squash (commit `4b05ee2` or older) will ever be needed, the old rows can go. Nothing
+reads them; this only tidies the table. Migrations added after the squash sort after Baseline and
+are kept:
+
+```sql
+-- ONLY after a backup, and ONLY when no pre-squash rollback is needed.
+DELETE FROM "__EFMigrationsHistory" WHERE "MigrationId" < '20261115190359_Baseline';
+```
+
+Never run `dotnet ef migrations remove` or `dotnet ef database update <older migration>` against
+production.
 
 ## .NET 10 runtime (November 2026)
 

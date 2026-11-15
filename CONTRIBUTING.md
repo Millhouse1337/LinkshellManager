@@ -66,6 +66,19 @@ dotnet ef migrations list           # show the full applied/pending set
 
 In non-development environments the app applies pending migrations automatically on startup.
 
+Since the November 2026 squash, `Migrations/` starts with one `Baseline` migration that holds the
+whole schema (`docs/migration-squash.md`). Add migrations exactly as before; each new one comes after
+Baseline. Two rules:
+
+- **Never edit `Baseline`.** Production already counts it as applied, so a change there never
+  reaches production. Change the schema with a new migration.
+- **`MigrationsUpToDateTests` and `SchemaCatalogGoldenTests` must pass.** If your migration changes
+  the schema on purpose, regenerate the golden file (see the comment at the top of
+  `SchemaCatalogGoldenTests.cs`) and review its diff.
+
+A local database built before the squash needs one row added first (the INSERT in
+`docs/migration-squash.md`), or drop it and run `dotnet ef database update` on an empty one.
+
 ## Solution layout
 
 | Project | Purpose |

@@ -192,10 +192,13 @@ check it points at `localhost` first with `dotnet user-secrets list`):
 "$env:USERPROFILE\\.dotnet\\tools\\dotnet-ef.exe" database update
 ```
 
-`database update` applies every migration under `Migrations/` in order. The initial schema is
-`20260512035741_InitialSchema`; later migrations add (and some later drop) features such as job levels,
-attendance snapshots, window events, party setup, and more. Run `dotnet ef migrations list` to see the
+`database update` applies every migration under `Migrations/` in order. The whole schema is one
+migration, `20261115190359_Baseline` (the 173 older migrations were squashed into it in November 2026;
+see `docs/migration-squash.md`); any later ones come after it. Run `dotnet ef migrations list` to see the
 full, current set.
+
+A local database built before the squash needs one row added before `database update` works on it
+(the INSERT in `docs/migration-squash.md`), or drop it and build it again.
 
 The recommended local connection string targets:
 
