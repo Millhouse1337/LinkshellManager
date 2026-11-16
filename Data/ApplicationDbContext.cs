@@ -2598,9 +2598,9 @@ namespace LinkshellManagerDiscordApp.Data
                 entity.HasIndex(item => new { item.AppUserId, item.NormalizedName }).IsUnique();
                 entity.HasIndex(item => item.NormalizedName);
                 // A deleted account takes its characters with it (a claimed placeholder too).
-                // No navigation: nothing reads characters through the account yet.
+                // The account's Characters navigation is the read side of the names (Round 5).
                 entity.HasOne<AppUser>()
-                    .WithMany()
+                    .WithMany(user => user.Characters)
                     .HasForeignKey(item => item.AppUserId)
                     .OnDelete(DeleteBehavior.Cascade);
             });

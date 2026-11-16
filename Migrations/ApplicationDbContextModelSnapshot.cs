@@ -3903,7 +3903,7 @@ namespace LinkshellManagerDiscordApp.Migrations
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.Character", b =>
                 {
                     b.HasOne("LinkshellManagerDiscordApp.Models.AppUser", null)
-                        .WithMany()
+                        .WithMany("Characters")
                         .HasForeignKey("AppUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -4553,6 +4553,8 @@ namespace LinkshellManagerDiscordApp.Migrations
                     b.Navigation("AppUserEvents");
 
                     b.Navigation("AppUserLinkshells");
+
+                    b.Navigation("Characters");
                 });
 
             modelBuilder.Entity("LinkshellManagerDiscordApp.Models.AppUserEvent", b =>

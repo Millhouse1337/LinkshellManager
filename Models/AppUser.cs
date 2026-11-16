@@ -8,6 +8,9 @@ public class AppUser : IdentityUser
 {
     public string? CharacterName { get; set; }
 
+    // Every character of the account (slot 0 main, 1 and 2 the alts): the read side of the names.
+    public ICollection<Character> Characters { get; set; } = new List<Character>();
+
     // The main character's jobs, on the account: one character, one set of jobs, whichever
     // linkshell is looking. Same formats as the alts' columns below (levels and strong flags
     // FFXI-job-id-indexed, merit notes catalog-aligned; see ProfileJobLevels). They used to live
