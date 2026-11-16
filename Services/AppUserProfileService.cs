@@ -37,21 +37,16 @@ public sealed class AppUserProfileService
         bool preserveExistingAlts = false,
         CancellationToken cancellationToken = default)
     {
-        var previousCharacterNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(user.CharacterName))
-        {
-            previousCharacterNames.Add(user.CharacterName.Trim());
-        }
+        // The account's names as saved: the main, and the alts from Characters.
+        var saved = await AccountCharacters.LoadForAccountAsync(_dbContext, user.Id, cancellationToken);
+        var oldDisplayName = AccountCharacters.DisplayName(user);
+        var oldNames = new[] { Clean(user.CharacterName), AccountCharacters.Alt1(saved)?.Name, AccountCharacters.Alt2(saved)?.Name };
 
-        var normalizedCharacterName = string.IsNullOrWhiteSpace(characterName) ? null : characterName.Trim();
-        var normalizedTimeZone = string.IsNullOrWhiteSpace(timeZone) ? null : timeZone.Trim();
+        var normalizedCharacterName = Clean(characterName);
+        var normalizedTimeZone = Clean(timeZone);
 
-        var normalizedAlt1 = preserveExistingAlts
-            ? user.AltCharacterName1
-            : (string.IsNullOrWhiteSpace(altCharacterName1) ? null : altCharacterName1.Trim());
-        var normalizedAlt2 = preserveExistingAlts
-            ? user.AltCharacterName2
-            : (string.IsNullOrWhiteSpace(altCharacterName2) ? null : altCharacterName2.Trim());
+        var normalizedAlt1 = preserveExistingAlts ? oldNames[1] : Clean(altCharacterName1);
+        var normalizedAlt2 = preserveExistingAlts ? oldNames[2] : Clean(altCharacterName2);
 
         // Every name that changes is checked, the main too (CharacterNameValidator). Kept alts are
         // passed as they are, so they count as unchanged.
@@ -74,47 +69,86 @@ public sealed class AppUserProfileService
         user.CharacterName = normalizedCharacterName;
         user.TimeZone = normalizedTimeZone;
 
-        // Alts never propagate to AppUserLinkshell.CharacterName or AppUserEvent.CharacterName — actions stay attributed to main.
-        user.AltCharacterName1 = normalizedAlt1;
-        user.AltCharacterName2 = normalizedAlt2;
+        // The account columns are still where names are written (CharacterSync copies them into
+        // Characters on save). Kept alts are not written at all.
+        if (!preserveExistingAlts)
+        {
+            user.AltCharacterName1 = normalizedAlt1;
+            user.AltCharacterName2 = normalizedAlt2;
+        }
 
-        var displayName = user.CharacterName ?? user.UserName ?? "Unknown";
+        var displayName = AccountCharacters.DisplayName(user);
 
+        // The roster name is still written as a copy of the main (it is no longer read).
         var memberships = await _dbContext.AppUserLinkshells
             .Where(link => link.AppUserId == user.Id)
             .ToListAsync(cancellationToken);
-
         foreach (var membership in memberships)
         {
-            if (!string.IsNullOrWhiteSpace(membership.CharacterName))
-            {
-                previousCharacterNames.Add(membership.CharacterName.Trim());
-            }
-
             membership.CharacterName = displayName;
         }
 
-        // Only rename participations on events that are still in progress. Completed
-        // events live in AppUserEventHistory and should keep their original character
-        // attribution.
+        // Open sign-ups follow a RENAMED character, and only that one. A member signed up on an alt
+        // stays on that alt when they rename their main; renaming the alt renames the sign-up. (This
+        // used to move every open sign-up to the main.) A character whose name was cleared hands its
+        // sign-ups to the main. Completed events live in AppUserEventHistory and keep their name.
+        var renames = RenamedCharacters(
+            oldNames, oldDisplayName, new[] { normalizedCharacterName, normalizedAlt1, normalizedAlt2 }, displayName);
+
         var participations = await _dbContext.AppUserEvents
             .Where(participation => participation.AppUserId == user.Id && participation.Event!.EndTime == null)
             .ToListAsync(cancellationToken);
-
         foreach (var participation in participations)
         {
-            if (!string.IsNullOrWhiteSpace(participation.CharacterName))
+            if (string.IsNullOrWhiteSpace(participation.CharacterName))
             {
-                previousCharacterNames.Add(participation.CharacterName.Trim());
+                participation.CharacterName = displayName;
             }
+            else if (renames.TryGetValue(participation.CharacterName.Trim(), out var renamed))
+            {
+                participation.CharacterName = renamed;
+            }
+        }
 
-            participation.CharacterName = displayName;
+        var slotSignups = await _dbContext.EventPartySlotSignups
+            .Where(signup => signup.AppUserId == user.Id && signup.Event!.EndTime == null)
+            .ToListAsync(cancellationToken);
+        foreach (var signup in slotSignups)
+        {
+            if (!string.IsNullOrWhiteSpace(signup.CharacterName)
+                && renames.TryGetValue(signup.CharacterName.Trim(), out var renamed))
+            {
+                signup.CharacterName = renamed;
+            }
         }
 
         // UserManager.UpdateAsync uses our ApplicationDbContext via Identity's
         // EF stores, so the SaveChangesAsync it calls also flushes the membership /
         // participation mutations above in the same transaction.
-        _ = previousCharacterNames; // retained for potential future audit logging
         return await _userManager.UpdateAsync(user);
     }
+
+    // Old name -> new name for each of the three slots whose name changed (capitals included),
+    // compared trimmed and ignoring capitals. Slot 0 is the main: its old name is the account's
+    // display name, so a sign-up recorded under the login name of an account with no main follows
+    // too. A cleared slot maps to the new display name (the main). The first slot holding a name
+    // wins, so a main and an alt swapping names swap their sign-ups.
+    internal static Dictionary<string, string> RenamedCharacters(
+        string?[] oldNames, string oldDisplayName, string?[] newNames, string newDisplayName)
+    {
+        var renames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        for (var slot = 0; slot < newNames.Length; slot++)
+        {
+            var oldName = slot == 0 ? Clean(oldDisplayName) : Clean(oldNames[slot]);
+            var newName = slot == 0 ? newDisplayName : newNames[slot] ?? newDisplayName;
+            if (oldName is null || string.Equals(oldName, newName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            renames.TryAdd(oldName, newName);
+        }
+        return renames;
+    }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
