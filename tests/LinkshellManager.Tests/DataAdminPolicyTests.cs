@@ -131,6 +131,11 @@ public class DataAdminPolicyTests
     [InlineData(typeof(Tod), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
     [InlineData(typeof(PendingTodSubmission), "MonsterName", new[] { "SpawnKey", "CooldownMinutes", "IntervalMinutes" })]
     [InlineData(typeof(HnmRecurringBoard), "MonsterName", new[] { "SpawnKey" })]
+    // The camp tables' SpawnKey (AddCampSpawnKeys, Round 5).
+    [InlineData(typeof(Event), "AssignedMonsterName", new[] { "SpawnKey" })]
+    [InlineData(typeof(PartySetup), "AssignedMonsterName", new[] { "SpawnKey" })]
+    [InlineData(typeof(ClaimShieldCapture), "MonsterName", new[] { "SpawnKey" })]
+    [InlineData(typeof(LinkshellMonsterTiming), "MonsterName", new[] { "SpawnKey" })]
     public void DerivedTodColumns_AreShownButNeverEdited(Type entityType, string textColumn, string[] derived)
     {
         var table = Table(NewCatalog(), entityType);

@@ -1061,6 +1061,8 @@ namespace LinkshellManagerDiscordApp.Data
         // so every writer gets it -- TodRecorder, the ToD forms, End Camp, the approval queue, the
         // addon and Data Admin -- and the next one cannot forget it. Always re-derived from the text,
         // so a value set by hand never sticks. No database work: both helpers are plain C#.
+        // Since Round 5 it also stamps SpawnKey on the camp tables (AddCampSpawnKeys): Events,
+        // PartySetups, ClaimShieldCaptures and LinkshellMonsterTimings.
         private void StampDerivedColumns()
         {
             foreach (var entry in ChangeTracker.Entries<Tod>().Where(IsAddedOrModified))
@@ -1084,6 +1086,25 @@ namespace LinkshellManagerDiscordApp.Data
             foreach (var entry in ChangeTracker.Entries<HnmRecurringBoard>().Where(IsAddedOrModified))
             {
                 SetDerived(entry, nameof(HnmRecurringBoard.SpawnKey), HnmConfig.SpawnKey(entry.Entity.MonsterName));
+            }
+
+            // The camp tables (AddCampSpawnKeys, Round 5). An event and a party setup take the key
+            // from AssignedMonsterName, never EventName: only the assigned monster is a spawn.
+            foreach (var entry in ChangeTracker.Entries<Event>().Where(IsAddedOrModified))
+            {
+                SetDerived(entry, nameof(Event.SpawnKey), HnmConfig.SpawnKey(entry.Entity.AssignedMonsterName));
+            }
+            foreach (var entry in ChangeTracker.Entries<PartySetup>().Where(IsAddedOrModified))
+            {
+                SetDerived(entry, nameof(PartySetup.SpawnKey), HnmConfig.SpawnKey(entry.Entity.AssignedMonsterName));
+            }
+            foreach (var entry in ChangeTracker.Entries<ClaimShieldCapture>().Where(IsAddedOrModified))
+            {
+                SetDerived(entry, nameof(ClaimShieldCapture.SpawnKey), HnmConfig.SpawnKey(entry.Entity.MonsterName));
+            }
+            foreach (var entry in ChangeTracker.Entries<LinkshellMonsterTiming>().Where(IsAddedOrModified))
+            {
+                SetDerived(entry, nameof(LinkshellMonsterTiming.SpawnKey), HnmConfig.SpawnKey(entry.Entity.MonsterName));
             }
         }
 

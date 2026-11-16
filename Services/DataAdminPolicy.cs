@@ -187,11 +187,16 @@ public sealed class DataAdminPolicy
             },
             [typeof(HnmRecurringBoard)] = new() { ReadOnlyColumns = Names(nameof(HnmRecurringBoard.SpawnKey)) },
             [typeof(EventLootDetail)] = new() { DiscordSideEffect = "Adding loot posts a loot announcement to Discord." },
+            // The camp tables' SpawnKey (AddCampSpawnKeys) follows AssignedMonsterName / MonsterName
+            // the same way. LinkshellMonsterTiming's is set further down, with its Options.
             [typeof(Event)] = new()
             {
                 DiscordSideEffect = "Saving an event posts or edits its Discord board; deleting it removes the Discord message.",
                 Options = Opts((nameof(Event.WindowMethod), MonsterWindowMethods.All)),
+                ReadOnlyColumns = Names(nameof(Event.SpawnKey)),
             },
+            [typeof(PartySetup)] = new() { ReadOnlyColumns = Names(nameof(PartySetup.SpawnKey)) },
+            [typeof(ClaimShieldCapture)] = new() { ReadOnlyColumns = Names(nameof(ClaimShieldCapture.SpawnKey)) },
             [typeof(Auction)] = new() { DiscordSideEffect = "Saving an auction posts or edits its Discord card; deleting it removes the card." },
             [typeof(Bid)] = new() { DiscordSideEffect = "Saving a bid updates the auction's Discord card." },
 
@@ -231,6 +236,7 @@ public sealed class DataAdminPolicy
             [typeof(LinkshellMonsterTiming)] = new()
             {
                 Options = Opts((nameof(LinkshellMonsterTiming.WindowMethod), MonsterWindowMethods.All)),
+                ReadOnlyColumns = Names(nameof(LinkshellMonsterTiming.SpawnKey)),
             },
             [typeof(AttendanceSnapshot)] = new()
             {
