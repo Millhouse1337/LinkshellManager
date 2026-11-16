@@ -31,7 +31,7 @@ public class AppUserEventWindow
 
     // The name the roster read actually SAW this window, which is not necessarily the member's
     // main: the addon scans whatever character is standing there, and a player on an alt is
-    // matched to their account through AppUser.AltCharacterName1/2. Recording the main here (what
+    // matched to their account through its Characters rows (the alts). Recording the main here (what
     // this used to do) threw away the one fact an officer reading the window wants — which
     // character was actually at camp.
     [MaxLength(256)]

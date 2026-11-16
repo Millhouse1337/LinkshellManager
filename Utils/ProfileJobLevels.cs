@@ -1,7 +1,7 @@
 namespace LinkshellManagerDiscordApp.Utils;
 
 // Maps between the profile editor's per-job level inputs (the jobs in
-// EventJobCatalog.MainJobOptions order) and the stored AppUser.JobLevels
+// EventJobCatalog.MainJobOptions order) and the stored Character.JobLevels
 // array, which is indexed by FFXI job id (index 0 = None, 1 = WAR … 15 = SMN,
 // 16 = BLU, 17 = COR, 18 = PUP) — the same contract the game addon writes via AddonPostJobLevelsRequest
 // ("Index = FFXI job id (0..21), value = level"). Centralized here so the single

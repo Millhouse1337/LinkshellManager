@@ -98,7 +98,7 @@ ALTER TABLE "Events" ALTER COLUMN "Id" RESTART WITH 1;
 ALTER TABLE "Tods" ALTER COLUMN "Id" RESTART WITH 1;
 
 -- The roster rows stay, but their cached DKP balance / seed watermarks are
--- reset to 0. Profile jobs are on the account, not here, and are left untouched.
+-- reset to 0. Profile jobs are in Characters, not here, and are left untouched.
 -- DkpPoolLedgerFromId must be reset alongside the seed watermark: this script TRUNCATEs
 -- DkpLedgerEntries with RESTART IDENTITY, so new rows begin again at Id 1. A stale epoch would
 -- silently exclude every one of them from pool attribution.

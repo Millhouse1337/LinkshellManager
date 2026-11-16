@@ -240,7 +240,7 @@ static async Task<int> ScrubLinkshellAsync(NpgsqlConnection c, string[] args)
         ("AddonApiTokens", "DELETE FROM \"AddonApiTokens\" WHERE \"LinkshellId\" = @ls"),
 
         // --- Reset member DKP balances ---
-        // (This used to clear AppUserLinkshells.JobLevels too. Jobs live on the account now, and
+        // (This used to clear AppUserLinkshells.JobLevels too. Jobs live in Characters now, and
         // Round4Contract dropped that column.)
         // The imported seed (SeededDkp*) and the two ledger watermarks go too: the DKP sheet adds the
         // seed to the ledger, so leaving it would bring the old balance back on top of the new one.

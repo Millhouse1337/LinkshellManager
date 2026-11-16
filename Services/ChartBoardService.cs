@@ -7,7 +7,7 @@ namespace LinkshellManagerDiscordApp.Services;
 
 /// <summary>One roster entry, reduced to what the boards need.</summary>
 /// <param name="AltCharacterNames">This member's OWN other characters, off their profile — the same
-/// two AppUser.AltCharacterName1/2 the alt picker elsewhere in the app offers. Empty for an unsynced
+/// two alts (Characters slots 1 and 2) the alt picker elsewhere in the app offers. Empty for an unsynced
 /// member, who has no account behind the name and so no alts on file.
 ///
 /// Carried for the "Held by" list only: a pop item really does sit on somebody's alt, and it sits
