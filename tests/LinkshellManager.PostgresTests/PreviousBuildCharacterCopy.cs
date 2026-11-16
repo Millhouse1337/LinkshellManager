@@ -17,7 +17,7 @@ namespace LinkshellManager.PostgresTests;
 // current build and checks that not one Characters row changed.
 internal static class PreviousBuildCharacterCopy
 {
-    private const string Ws = @" \t\n\v\f\r\u0085   -     　";
+    private const string Ws = @" \t\n\v\f\r\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000";
     private const int MaxNameLength = 256;
     private const int LockClassId = -1128808786;
 
