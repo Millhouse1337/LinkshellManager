@@ -679,19 +679,19 @@ if (!app.Environment.IsDevelopment())
             var log = services.GetRequiredService<ILogger<Program>>();
             if (mirror.AllMatch)
             {
-                log.LogInformation("Characters: the account columns and roster names match Characters.");
+                log.LogInformation("Name copies: the account columns and roster names match Characters.");
             }
             else
             {
                 log.LogWarning(
-                    "Characters: {Accounts} account(s) whose old name/job columns differ from Characters, {Mains} whose CharacterName is not their main's name, {RosterNames} roster name(s) that differ from the account's main. Do not roll back to the build before the name switch until this is 0.",
+                    "Characters mirror: {Accounts} account(s) whose old name/job columns differ from Characters, {Mains} whose CharacterName is not their main's name, {RosterNames} roster name(s) that differ from the account's main. Do not roll back to the build before the name switch until this is 0.",
                     mirror.Accounts, mirror.Mains, mirror.RosterNames);
             }
         }
         catch (Exception ex)
         {
             services.GetRequiredService<ILogger<Program>>()
-                .LogWarning(ex, "Characters: the start-up mirror check could not run; start-up continues.");
+                .LogWarning(ex, "Characters mirror: the start-up check could not run; start-up continues.");
         }
     }
 }

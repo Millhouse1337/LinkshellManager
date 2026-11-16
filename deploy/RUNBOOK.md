@@ -446,7 +446,7 @@ that old rows would break). They say so with a Postgres warning, and the app now
 service log. After each deploy, read-only:
 
 ```bash
-ssh root@<IP> "sudo journalctl -u lsmanager --since '15 min ago' | grep -E 'Postgres WARNING|Migration health'"
+ssh root@<IP> "sudo journalctl -u lsmanager --since '15 min ago' | grep -E 'Postgres WARNING|Migration health|Characters mirror'"
 ```
 
 Expect **no output**. What a line means:
@@ -459,6 +459,8 @@ Expect **no output**. What a line means:
 | `Migration health: constraint ... is NOT VALID` | A constraint was added without checking old rows. New rows are checked; old ones may break it. |
 | `Migration health: index ... is invalid` | A failed index build left an unusable index behind. |
 | `Migration health: the check could not run` | The read-only check itself failed; start-up continued. Look at the error under it. |
+| `Characters mirror: ...` (from Round 5, R5.5) | The account's old name/job columns or the roster names no longer match Characters, the only written source since R5.5. Do not roll back to the build before the name switch (603439d) until this says 0: that build reads those copies and would lose the difference. A rollback to it and back again can leave this non-zero; it only warns; the next change to that account's characters fixes its columns. |
+| `Characters mirror: the start-up check could not run` | The read-only check itself failed; start-up continued. |
 
 The health check runs on every start, so a problem keeps showing until it is fixed. It only reads.
 
