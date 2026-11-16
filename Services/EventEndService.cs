@@ -153,7 +153,7 @@ public static class EventEndService
             timeStamp: DateTime.UtcNow);
 
         var linkshellMemberships = await dbContext.AppUserLinkshells
-            .Include(link => link.AppUser) // alt names, for resolving alt-won loot to the account
+            .Include(link => link.AppUser) // the main's name (alts come from Characters below)
             .Where(link => link.LinkshellId == eventEntity.LinkshellId && link.AppUserId != null)
             .ToListAsync();
         var membershipsByAppUserId = linkshellMemberships
@@ -161,7 +161,9 @@ public static class EventEndService
             .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         // Every name a member could have won loot under, resolved by the one shared rule.
-        var rosterByName = CharacterResolver.ForMemberships(linkshellMemberships);
+        var rosterByName = CharacterResolver.ForMemberships(
+            linkshellMemberships,
+            await AccountCharacters.LoadForLinkshellAsync(dbContext, eventEntity.LinkshellId, CancellationToken.None));
         var participantsByCharacterName = eventEntity.AppUserEvents
             .Where(participation => !string.IsNullOrWhiteSpace(participation.CharacterName))
             .GroupBy(participation => participation.CharacterName!.Trim(), StringComparer.OrdinalIgnoreCase)
@@ -318,7 +320,7 @@ public static class EventEndService
                 endTimeUtc,
                 lootPool,
                 new DkpEntryContext(
-                    CharacterName: winnerMembership.CharacterName,
+                    CharacterName: winnerMembership.AppUser?.CharacterName,
                     EventName: eventEntity.EventName,
                     EventType: eventEntity.EventType,
                     EventLocation: eventEntity.EventLocation,

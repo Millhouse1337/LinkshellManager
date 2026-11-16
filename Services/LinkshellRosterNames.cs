@@ -13,9 +13,9 @@ namespace LinkshellManagerDiscordApp.Services;
 // invite is not membership: those live in the Invites table and no roster row exists until it is
 // accepted.
 //
-// The set indexes every name that player might be standing in the world as — the membership's own
-// CharacterName, the account's CharacterName, and both alts — because the addon captures whatever
-// character is in the alliance, which is often not the one on the roster. These are the same four
+// The set indexes every name that player might be standing in the world as — the account's main
+// (CharacterName) and both alts (Characters) — because the addon captures whatever
+// character is in the alliance, which is often not the one on the roster. These are the same three
 // names CharacterResolver uses to decide WHICH member a name is (and so who gets paid); this set
 // only answers "is it anyone?". Sharing the names is what keeps "shown as credited" and "actually
 // credited" from disagreeing.
@@ -46,7 +46,6 @@ public sealed class RosterNameSet
         {
             foreach (var candidate in new[]
                      {
-                         member.MembershipCharacterName,
                          member.AccountCharacterName,
                          member.AltCharacterName1,
                          member.AltCharacterName2,
@@ -78,7 +77,7 @@ public sealed class RosterNameSet
     // A camp handoff (HnmCampReviewHandoffService) stamps AppUserId straight onto the entry, and
     // WindowEventDkpLedgerService prefers it over the name lookup for a reason it states outright:
     // the roster is keyed on accounts, so a member standing on a character that is none of their
-    // four indexed names resolves to nothing by name and would never be credited. Asking by name
+    // three indexed names resolves to nothing by name and would never be credited. Asking by name
     // alone here would mark exactly those people "not registered" on a camp that is about to pay
     // them — the flag has to agree with the payout, not merely approximate it.
     public bool ContainsAppUserId(string? appUserId)
@@ -96,10 +95,9 @@ public sealed class RosterNameSet
     public int Count => _names?.Count ?? 0;
 }
 
-// One roster member's four candidate names. A record rather than the entity so the set can be
+// One roster member's three candidate names. A record rather than the entity so the set can be
 // built from a projection, from a test, or from rows already in memory.
 public sealed record RosterNameCandidate(
-    string? MembershipCharacterName,
     string? AccountCharacterName,
     string? AltCharacterName1,
     string? AltCharacterName2,
@@ -109,31 +107,32 @@ public sealed record RosterNameCandidate(
 
 public static class LinkshellRosterNames
 {
-    // The same set from memberships already in memory, for a caller that loaded them with their
-    // AppUser anyway. Same rule as LoadCandidatesAsync: no account, nothing to credit.
-    public static RosterNameSet FromMemberships(IEnumerable<AppUserLinkshell> memberships)
+    // The same set from memberships already in memory with their AppUser loaded, plus the
+    // accounts' Characters rows (AccountCharacters.LoadForLinkshellAsync). Same rule as
+    // LoadCandidatesAsync: no account, nothing to credit.
+    public static RosterNameSet FromMemberships(
+        IEnumerable<AppUserLinkshell> memberships, IReadOnlyDictionary<string, Character[]> characters)
         => RosterNameSet.From(memberships
             .Where(link => link.AppUserId != null)
-            .Select(link => new RosterNameCandidate(
-                link.CharacterName,
-                link.AppUser?.CharacterName,
-                link.AppUser?.AltCharacterName1,
-                link.AppUser?.AltCharacterName2,
-                link.AppUserId)));
+            .Select(link =>
+            {
+                var names = AccountCharacters.Names(link.AppUser, AccountCharacters.For(characters, link.AppUserId));
+                return new RosterNameCandidate(names.Account, names.Alt1, names.Alt2, link.AppUserId);
+            }));
 
-    // The memberships plus their accounts' Characters rows (LoadCandidatesAsync). Memberships with no AppUserId are skipped for the same reason the
-    // DKP paths skip them: without an account there is nothing to credit, so such a row cannot make
-    // anyone "registered" no matter what name it carries.
+    // The memberships plus their accounts' Characters rows (LoadCandidatesAsync). Memberships with
+    // no AppUserId are skipped for the same reason the DKP paths skip them: without an account there
+    // is nothing to credit, so such a row cannot make anyone "registered" no matter what name it
+    // carries.
     public static async Task<RosterNameSet> LoadAsync(
         ApplicationDbContext db, int linkshellId, CancellationToken cancellationToken)
         => RosterNameSet.From(await LoadCandidatesAsync(db, linkshellId, cancellationToken));
 
-    // The same four-name rows, one per member, for callers that need to know WHICH member a name
+    // The same three-name rows, one per member, for callers that need to know WHICH member a name
     // belongs to rather than only whether anyone has it (RosterMemberSearch).
     //
-    // The roster name is the membership's own; the account's main and alts come from Characters
-    // (AccountCharacters), so they arrive trimmed, and a blank slot (or one repeating the same
-    // account's name) is null.
+    // The main is the account's CharacterName; the alts come from Characters (AccountCharacters),
+    // so they arrive trimmed, and a blank slot (or one repeating the same account's name) is null.
     public static async Task<List<RosterNameCandidate>> LoadCandidatesAsync(
         ApplicationDbContext db, int linkshellId, CancellationToken cancellationToken)
     {
@@ -143,14 +142,18 @@ public static class LinkshellRosterNames
             .Join(db.Users.AsNoTracking(),
                   link => link.AppUserId,
                   user => user.Id,
-                  (link, user) => new { link.CharacterName, link.AppUserId })
+                  (link, user) => new { user.CharacterName, link.AppUserId })
             .ToListAsync(cancellationToken);
         var characters = await AccountCharacters.LoadForLinkshellAsync(db, linkshellId, cancellationToken);
         return memberships
             .Select(link =>
             {
-                var names = AccountCharacters.Names(link.CharacterName, AccountCharacters.For(characters, link.AppUserId));
-                return new RosterNameCandidate(names.Membership, names.Account, names.Alt1, names.Alt2, link.AppUserId);
+                var accountCharacters = AccountCharacters.For(characters, link.AppUserId);
+                return new RosterNameCandidate(
+                    link.CharacterName,
+                    AccountCharacters.Alt1(accountCharacters)?.Name,
+                    AccountCharacters.Alt2(accountCharacters)?.Name,
+                    link.AppUserId);
             })
             .ToList();
     }

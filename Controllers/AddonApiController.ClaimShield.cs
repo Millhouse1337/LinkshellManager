@@ -133,8 +133,8 @@ public sealed partial class AddonApiController
 
         var totalPlayers = request.TotalPlayers is > 0 ? request.TotalPlayers.Value : 0;
 
-        // Authoritative member resolution: the shared CharacterResolver rule (membership
-        // CharacterName, then the account's CharacterName, then its alts), the same one
+        // Authoritative member resolution: the shared CharacterResolver rule (the account's
+        // CharacterName, then its alts from Characters), the same one
         // PostAttendanceAsync and the window payout use, so a tag and a window credit agree on who
         // a name is.
         var membershipsWithUser = await _dbContext.AppUserLinkshells
@@ -147,7 +147,8 @@ public sealed partial class AddonApiController
             .ToListAsync(cancellationToken);
 
         var membershipByName = CharacterResolver.ForMemberships(
-            membershipsWithUser.Select(pair => (pair.Membership, pair.User)));
+            membershipsWithUser.Select(pair => (pair.Membership, pair.User)),
+            await AccountCharacters.LoadForLinkshellAsync(_dbContext, token.LinkshellId, cancellationToken));
 
         var eventId = await ResolveClaimShieldEventAsync(
             request.EventId, token.LinkshellId, monster, capturedAt, cancellationToken);

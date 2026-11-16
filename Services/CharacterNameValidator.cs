@@ -9,7 +9,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // The name lookups (CharacterResolver) turn a character name into the member who gets paid. Two
 // real players carrying the same name in one linkshell make that answer a coin toss for one of
 // them, so a NEW name is refused when another real member of a linkshell this account is in
-// already uses it, as their main, an alt, or their roster name. "New" means the name was not on
+// already uses it, as their main or an alt (their Characters rows). "New" means the name was not on
 // this account before: a member who already shares a name with someone (from before this check
 // existed) can still save their profile, and swapping a main and an alt is not a new name.
 //
@@ -38,7 +38,14 @@ public sealed class CharacterNameValidator
         string? altName2,
         CancellationToken cancellationToken = default)
     {
-        var current = new[] { Normalize(user.CharacterName), Normalize(user.AltCharacterName1), Normalize(user.AltCharacterName2) };
+        // The account's names as saved: its Characters rows (slot 0 the main, 1 and 2 the alts).
+        var saved = await AccountCharacters.LoadForAccountAsync(_dbContext, user.Id, cancellationToken);
+        var current = new[]
+        {
+            Normalize(user.CharacterName),
+            Normalize(AccountCharacters.Alt1(saved)?.Name),
+            Normalize(AccountCharacters.Alt2(saved)?.Name),
+        };
         var wanted = new[] { Normalize(mainCharacterName), Normalize(altName1), Normalize(altName2) };
         var changed = new bool[wanted.Length];
         for (var slot = 0; slot < wanted.Length; slot++)
@@ -102,7 +109,7 @@ public sealed class CharacterNameValidator
             return null;
         }
 
-        // The other real members of those linkshells, with their roster names there.
+        // The other real members of those linkshells.
         var others = await _dbContext.AppUserLinkshells
             .Where(link => linkshellIds.Contains(link.LinkshellId)
                         && link.AppUserId != null
@@ -110,14 +117,14 @@ public sealed class CharacterNameValidator
             .Join(_dbContext.Users.Where(other => !other.IsPlaceholder),
                   link => link.AppUserId,
                   other => other.Id,
-                  (link, other) => new { AppUserId = other.Id, link.CharacterName })
+                  (link, other) => other.Id)
             .ToListAsync(cancellationToken);
         if (others.Count == 0)
         {
             return null;
         }
 
-        var otherIds = others.Select(other => other.AppUserId).Distinct(StringComparer.Ordinal).ToList();
+        var otherIds = others.Distinct(StringComparer.Ordinal).ToList();
         var lowered = names.Select(name => name.ToLowerInvariant()).Distinct(StringComparer.Ordinal).ToList();
         var usedAsCharacter = await _dbContext.Characters
             .AsNoTracking()
@@ -126,8 +133,7 @@ public sealed class CharacterNameValidator
             .ToListAsync(cancellationToken);
 
         return names.FirstOrDefault(name =>
-            usedAsCharacter.Any(used => Same(used, name))
-            || others.Any(other => Same(Normalize(other.CharacterName), name)));
+            usedAsCharacter.Any(used => Same(used, name)));
     }
 
     private static bool Same(string? a, string? b) =>

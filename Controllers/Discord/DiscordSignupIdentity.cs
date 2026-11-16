@@ -93,11 +93,12 @@ public sealed class DiscordSignupIdentity : DiscordInteractionHandlerBase
                     return SignupContext.Stop(Ephemeral("You're not a member of this linkshell, so you can't sign up for its events."));
                 }
             }
-            if (NeedsCharacterPick(membership, ev.Id, appUserId))
+            var characters = await AccountCharacters.LoadForAccountAsync(_db, appUserId, cancellationToken);
+            if (NeedsCharacterPick(membership, characters, ev.Id, appUserId))
             {
-                return SignupContext.Stop(CharacterPicker(membership, promptTail, ev.EventName));
+                return SignupContext.Stop(CharacterPicker(membership, characters, promptTail, ev.EventName));
             }
-            return SignupContext.Account(appUserId, ResolveSignupCharacter(membership, ev.Id, appUserId));
+            return SignupContext.Account(appUserId, ResolveSignupCharacter(membership, characters, ev.Id, appUserId));
         }
 
         // No linked account → outside path, gated by the one Outside Party Signup setting.
@@ -126,14 +127,15 @@ public sealed class DiscordSignupIdentity : DiscordInteractionHandlerBase
         {
             // Same alt-picker as a linked account, but the choice is cached under the
             // clicker's Discord id (a placeholder has no synced AppUserId of its own to
-            // key on). Their alts come from the onboarding modal (AppUser.AltCharacterName1/2).
-            if (NeedsCharacterPick(linkedMember, ev.Id, Interaction.DiscordUserId))
+            // key on). Their alts come from the onboarding modal (the account's Characters rows).
+            var linkedCharacters = await AccountCharacters.LoadForAccountAsync(_db, linkedMember.AppUserId, cancellationToken);
+            if (NeedsCharacterPick(linkedMember, linkedCharacters, ev.Id, Interaction.DiscordUserId))
             {
-                return SignupContext.Stop(CharacterPicker(linkedMember, promptTail, ev.EventName));
+                return SignupContext.Stop(CharacterPicker(linkedMember, linkedCharacters, promptTail, ev.EventName));
             }
             return SignupContext.PlaceholderMatch(
                 linkedMember.AppUserId, Interaction.DiscordUserId,
-                ResolveSignupCharacter(linkedMember, ev.Id, Interaction.DiscordUserId));
+                ResolveSignupCharacter(linkedMember, linkedCharacters, ev.Id, Interaction.DiscordUserId));
         }
 
         // Not registered yet → onboard via the "you're not synced" modal, which creates
@@ -277,8 +279,8 @@ public sealed class DiscordSignupIdentity : DiscordInteractionHandlerBase
     // the member has alts AND hasn't already chosen for this event. `choiceKey` is the
     // identity the pick is cached under — a linked account's AppUserId, or an unsynced
     // placeholder clicker's Discord id.
-    private bool NeedsCharacterPick(AppUserLinkshell membership, int eventId, string choiceKey)
-        => SignupCharacters.HasAlternatives(membership.AppUser, membership)
+    private bool NeedsCharacterPick(AppUserLinkshell membership, Character[] characters, int eventId, string choiceKey)
+        => SignupCharacters.HasAlternatives(membership.AppUser, characters)
            && _charChoice.Peek(choiceKey, eventId) is null;
 
     // Forget any cached "which character" pick for this event on withdrawal, so a
@@ -293,9 +295,9 @@ public sealed class DiscordSignupIdentity : DiscordInteractionHandlerBase
 
     // Ephemeral select of the member's characters (main + alts). `tail` resumes the
     // original flow after a pick (e.g. "slot:42", "slotL:42", "join:42", "job:42:Warrior").
-    private IActionResult CharacterPicker(AppUserLinkshell membership, string tail, string? eventName)
+    private IActionResult CharacterPicker(AppUserLinkshell membership, Character[] characters, string tail, string? eventName)
     {
-        var options = SignupCharacters.ForMember(membership.AppUser, membership)
+        var options = SignupCharacters.ForMember(membership.AppUser, characters)
             .Select(name => (object)new { label = name, value = name })
             .ToArray();
         return PickerResponse(
@@ -306,6 +308,6 @@ public sealed class DiscordSignupIdentity : DiscordInteractionHandlerBase
     // The character name to record for a Discord signup: the member's cached pick
     // (from the character-pick step) or their main when none was chosen. `choiceKey` is
     // the account's AppUserId or the placeholder clicker's Discord id (see NeedsCharacterPick).
-    private string ResolveSignupCharacter(AppUserLinkshell membership, int eventId, string choiceKey)
-        => SignupCharacters.Resolve(membership.AppUser, membership, _charChoice.Peek(choiceKey, eventId));
+    private string ResolveSignupCharacter(AppUserLinkshell membership, Character[] characters, int eventId, string choiceKey)
+        => SignupCharacters.Resolve(membership.AppUser, characters, _charChoice.Peek(choiceKey, eventId));
 }

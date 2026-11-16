@@ -21,7 +21,7 @@ public class UnregisteredCaptureMemberTests
     private static readonly DateTime Anchor = new(2026, 9, 22, 21, 0, 0, DateTimeKind.Utc);
 
     private static RosterNameSet Roster(params string[] mains)
-        => RosterNameSet.From(mains.Select(m => new RosterNameCandidate(m, null, null, null)));
+        => RosterNameSet.From(mains.Select(m => new RosterNameCandidate(m, null, null)));
 
     private static AttendanceSnapshot Capture(params string[] members)
     {
@@ -95,7 +95,7 @@ public class UnregisteredCaptureMemberTests
     {
         var roster = RosterNameSet.From(new[]
         {
-            new RosterNameCandidate("Edicius", "Edicius", "Athmilk", null),
+            new RosterNameCandidate("Edicius", "Athmilk", null),
         });
 
         var combined = ActivityWindowEventsController.BuildActivityCombinedMembers(
@@ -159,7 +159,7 @@ public class UnregisteredCaptureMemberTests
     {
         var roster = RosterNameSet.From(new[]
         {
-            new RosterNameCandidate("Edicius", null, null, null, AppUserId: "user-1"),
+            new RosterNameCandidate("Edicius", null, null, AppUserId: "user-1"),
         });
 
         var row = ActivityMappers.MapLinkedSnapshotEntry(
@@ -169,11 +169,12 @@ public class UnregisteredCaptureMemberTests
     }
 
     // The overview builds its roster from memberships it already loaded, and must know the same
-    // four names the ledger pays. A membership with no account can't be paid, so it knows nobody.
+    // three names the ledger pays (the account's main and its alts; the roster name is not read).
+    // A membership with no account can't be paid, so it knows nobody.
     [Fact]
-    public void ARosterFromLoadedMemberships_KnowsAllFourNames()
+    public void ARosterFromLoadedMemberships_KnowsTheThreeAccountNames()
     {
-        var roster = LinkshellRosterNames.FromMemberships(new[]
+        var memberships = new[]
         {
             new AppUserLinkshell
             {
@@ -181,15 +182,17 @@ public class UnregisteredCaptureMemberTests
                 CharacterName = "Edicius",
                 AppUser = new AppUser
                 {
+                    Id = "user-1",
                     CharacterName = "Accountname",
                     AltCharacterName1 = "Athmilk",
                     AltCharacterName2 = "Secondalt",
                 },
             },
             new AppUserLinkshell { CharacterName = "Noaccount" },
-        });
+        };
+        var roster = LinkshellRosterNames.FromMemberships(memberships, TestCharacters.Of(memberships));
 
-        Assert.True(roster.Contains("Edicius"));
+        Assert.False(roster.Contains("Edicius")); // a roster name that is not the main
         Assert.True(roster.Contains("Accountname"));
         Assert.True(roster.Contains("Athmilk"));
         Assert.True(roster.Contains("Secondalt"));
@@ -209,7 +212,7 @@ public class UnregisteredCaptureMemberTests
     {
         var roster = RosterNameSet.From(new[]
         {
-            new RosterNameCandidate("Edicius", null, null, null, AppUserId: "user-1"),
+            new RosterNameCandidate("Edicius", null, null, AppUserId: "user-1"),
         });
 
         var capture = Capture();
@@ -231,7 +234,7 @@ public class UnregisteredCaptureMemberTests
     {
         var roster = RosterNameSet.From(new[]
         {
-            new RosterNameCandidate("Edicius", null, null, null, AppUserId: "user-1"),
+            new RosterNameCandidate("Edicius", null, null, AppUserId: "user-1"),
         });
 
         var capture = Capture();

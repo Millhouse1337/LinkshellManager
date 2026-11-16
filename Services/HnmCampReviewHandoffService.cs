@@ -785,13 +785,14 @@ public sealed class HnmCampReviewHandoffService
         if (owed.Count > 0)
         {
             var memberships = await _db.AppUserLinkshells
-                .Include(link => link.AppUser) // alt names, so loot won on an alt finds the account
+                .Include(link => link.AppUser) // the main's name (alts come from Characters below)
                 .Where(link => link.LinkshellId == ev.LinkshellId && link.AppUserId != null)
                 .ToListAsync(cancellationToken);
             var membershipsByAppUserId = memberships
                 .GroupBy(link => link.AppUserId!, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-            var rosterByName = CharacterResolver.ForMemberships(memberships);
+            var rosterByName = CharacterResolver.ForMemberships(
+                memberships, await AccountCharacters.LoadForLinkshellAsync(_db, ev.LinkshellId, cancellationToken));
             var participantsByCharacterName = (await _db.AppUserEvents
                     .Where(participation => participation.EventId == ev.Id && participation.CharacterName != null)
                     .ToListAsync(cancellationToken))
@@ -841,7 +842,7 @@ public sealed class HnmCampReviewHandoffService
                     nowUtc,
                     pool,
                     new DkpEntryContext(
-                        CharacterName: winner.CharacterName,
+                        CharacterName: winner.AppUser?.CharacterName,
                         EventName: ev.EventName,
                         EventType: ev.EventType,
                         EventLocation: ev.EventLocation,

@@ -74,14 +74,18 @@ public class LootWinnerAccountTests
     [Fact]
     public void ARecordedAccountThatLeft_ChargesNobody_NotANamesake()
     {
-        var namesake = new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Oldname" };
+        var namesake = new AppUserLinkshell
+        {
+            Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Oldname",
+            AppUser = new AppUser { Id = "u2", CharacterName = "Oldname" },
+        };
         var loot = new EventLootDetail { ItemWinner = "Oldname", ItemWinnerAppUserId = "gone" };
 
         var winner = EventEndService.ResolveLootWinnerMembership(
             loot,
             new Dictionary<string, AppUserLinkshell> { ["u2"] = namesake },
             new Dictionary<string, AppUserEvent>(),
-            CharacterResolver.ForMemberships(new[] { namesake }));
+            CharacterResolver.ForMemberships(new[] { namesake }, TestCharacters.Of(new[] { namesake })));
 
         Assert.Null(winner);
     }
@@ -89,13 +93,17 @@ public class LootWinnerAccountTests
     [Fact]
     public void ARowWithoutAnAccount_StillMatchesByName()
     {
-        var member = new AppUserLinkshell { Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Oldname" };
+        var member = new AppUserLinkshell
+        {
+            Id = 2, LinkshellId = Ls, AppUserId = "u2", CharacterName = "Oldname",
+            AppUser = new AppUser { Id = "u2", CharacterName = "Oldname" },
+        };
 
         var winner = EventEndService.ResolveLootWinnerMembership(
             new EventLootDetail { ItemWinner = "oldname" },
             new Dictionary<string, AppUserLinkshell> { ["u2"] = member },
             new Dictionary<string, AppUserEvent>(),
-            CharacterResolver.ForMemberships(new[] { member }));
+            CharacterResolver.ForMemberships(new[] { member }, TestCharacters.Of(new[] { member })));
 
         Assert.Same(member, winner);
     }

@@ -2,9 +2,10 @@ using LinkshellManagerDiscordApp.Models;
 
 namespace LinkshellManagerDiscordApp.Services;
 
-// The main character's jobs (levels, strong flags, merit notes) live on the account
-// (AppUser.JobLevels / StrongJobs / MeritJobs, AccountJobsAndKeyItemAccounts), and every screen
-// reads them there. Both writers (the profile and the addon) go through Write.
+// The main character's jobs (levels, strong flags, merit notes) are WRITTEN on the account
+// (AppUser.JobLevels / StrongJobs / MeritJobs), and the save copies them into the main's Characters
+// row (CharacterSync), which is where every screen reads them since Round 5. Both writers (the
+// profile and the addon) go through Write.
 //
 // (They used to have a copy on each membership too. Round4Contract dropped those old columns.)
 public static class MainCharacterJobs
@@ -47,16 +48,13 @@ public static class MainCharacterJobs
     // spelling, or null when it is none of them (another member's main or alt included). Spaces
     // around a name and capitals do not matter.
     //
-    // The owner's Characters rows are checked first, lowest slot first. A name that is not there
-    // still counts as the main when it is the account's own CharacterName or the name on one of its
-    // memberships (the token's linkshell first): the old match, kept until Round 5 stops reading
-    // roster names.
+    // The owner's Characters rows are checked, lowest slot first. A name that is not there still
+    // counts as the main when it is the account's own CharacterName (a main too long for the table).
+    // The membership roster names are not read any more (Round 5): they only ever copied the main.
     public static (short Slot, string Name)? OwnCharacterSlot(
         string? characterName,
         AppUser owner,
-        IReadOnlyCollection<Character> ownerCharacters,
-        IReadOnlyCollection<AppUserLinkshell> ownerMemberships,
-        int tokenLinkshellId)
+        IReadOnlyCollection<Character> ownerCharacters)
     {
         var name = characterName?.Trim();
         if (string.IsNullOrEmpty(name)) return null;
@@ -69,10 +67,6 @@ public static class MainCharacterJobs
             .FirstOrDefault(c => Same(c.Name));
         if (character is not null) return (character.Slot, character.Name.Trim());
 
-        var here = ownerMemberships.FirstOrDefault(m => m.LinkshellId == tokenLinkshellId && Same(m.CharacterName));
-        if (here is not null) return (Character.MainSlot, here.CharacterName!.Trim());
-        if (Same(owner.CharacterName)) return (Character.MainSlot, owner.CharacterName!.Trim());
-        var elsewhere = ownerMemberships.FirstOrDefault(m => Same(m.CharacterName));
-        return elsewhere is null ? null : (Character.MainSlot, elsewhere.CharacterName!.Trim());
+        return Same(owner.CharacterName) ? (Character.MainSlot, owner.CharacterName!.Trim()) : null;
     }
 }

@@ -139,7 +139,7 @@ public class AddonLootPermissionTests
     {
         await using var db = NewDb();
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", LootStructure = "Dkp" });
-        db.Users.Add(new AppUser { Id = "winner", UserName = "alice" });
+        db.Users.Add(new AppUser { Id = "winner", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
             Id = 1, LinkshellId = Ls, AppUserId = "winner", CharacterName = "Alice", LinkshellDkp = 100,

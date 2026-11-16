@@ -218,7 +218,7 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase, IDiscor
         var options = matches
             .Select(match => new
             {
-                Name = (match.MembershipCharacterName ?? match.AccountCharacterName ?? "Member").Trim(),
+                Name = (match.AccountCharacterName ?? "Member").Trim(),
                 Alts = string.Join(", ", new[] { match.AltCharacterName1, match.AltCharacterName2 }
                     .Where(alt => !string.IsNullOrWhiteSpace(alt)).Select(alt => alt!.Trim())),
                 match.AppUserId,
@@ -276,8 +276,8 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase, IDiscor
         var onBoard = new HashSet<string>(slotUserIds.Concat(attendeeUserIds), StringComparer.Ordinal);
 
         var members = await _db.AppUserLinkshells
-            .Where(m => m.LinkshellId == ev.LinkshellId && m.AppUserId != null && m.CharacterName != null)
-            .Select(m => new { m.AppUserId, m.CharacterName })
+            .Where(m => m.LinkshellId == ev.LinkshellId && m.AppUserId != null && m.AppUser!.CharacterName != null)
+            .Select(m => new { m.AppUserId, m.AppUser!.CharacterName })
             .ToListAsync(cancellationToken);
 
         var eligible = members
@@ -339,13 +339,14 @@ public sealed class OfficerToolsHandler : DiscordInteractionHandlerBase, IDiscor
         var membership = string.IsNullOrEmpty(targetAppUserId)
             ? null
             : await _db.AppUserLinkshells
+                .Include(m => m.AppUser)
                 .FirstOrDefaultAsync(m => m.LinkshellId == ev.LinkshellId && m.AppUserId == targetAppUserId, cancellationToken);
         if (membership?.AppUserId is null)
         {
             return Ephemeral("That member isn't in this linkshell anymore.");
         }
 
-        var targetName = membership.CharacterName?.Trim() is { Length: > 0 } cn ? cn : "Member";
+        var targetName = membership.AppUser?.CharacterName?.Trim() is { Length: > 0 } cn ? cn : "Member";
         _officerAddTargets.Set(officerDiscordUserId, ev.Id,
             new OfficerAddTargetCache.Target(membership.AppUserId, targetName, membership.DiscordUserId));
 

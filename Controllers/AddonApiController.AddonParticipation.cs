@@ -207,12 +207,9 @@ public sealed partial class AddonApiController
         // events (single-window events award DKP at end-of-event, not per post).
         var creditedAttendees = new List<object>();
 
-        // Pre-load all linkshell memberships + their AppUser so we can index by
-        // every name the player might be known by (the membership row's own
-        // CharacterName, plus the AppUser's CharacterName / AltCharacterName1 /
-        // AltCharacterName2). This makes the addon match work even when the
-        // membership CharacterName was left null at pair time or when the player
-        // logs in as one of their alts.
+        // Pre-load all linkshell memberships + their AppUser (and the accounts' Characters rows) so
+        // we can index by every name the player might be known by: the account's main and its two
+        // alts. This makes the addon match work when the player logs in as one of their alts.
         var membershipsWithUser = await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(m => m.LinkshellId == token.LinkshellId && m.AppUserId != null)
@@ -221,21 +218,20 @@ public sealed partial class AddonApiController
                   u => u.Id,
                   (m, u) => new { Membership = m, User = u })
             .ToListAsync(cancellationToken);
+        var rosterCharacters = await AccountCharacters.LoadForLinkshellAsync(_dbContext, token.LinkshellId, cancellationToken);
 
         // Every candidate name, by the shared CharacterResolver rule: a name that is one member's
-        // roster name and another's alt belongs to the roster name (rare but possible if two
-        // players share an alt name), and the Claim Shield and the window payout agree.
+        // main and another's alt belongs to the main (rare but possible if two players share an
+        // alt name), and the Claim Shield and the window payout agree.
         var membershipByName = CharacterResolver.ForMemberships(
-            membershipsWithUser.Select(pair => (pair.Membership, pair.User)));
+            membershipsWithUser.Select(pair => (pair.Membership, pair.User)), rosterCharacters);
         // Each member's MAIN, so a scan that matched through one of the alt names above can say so
         // ("Athmilk (alt of Edicius)") instead of silently renaming the alt to the main on the way
-        // into the window row. Same precedence the name lookup uses: the membership's own character
-        // name is the roster main, with the account main as the fallback for a membership that
-        // never had one filled in.
+        // into the window row. The main is the account's CharacterName.
         var mainNameByAppUserId = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var pair in membershipsWithUser)
         {
-            var mainName = pair.Membership.CharacterName ?? pair.User.CharacterName;
+            var mainName = pair.User.CharacterName;
             if (!string.IsNullOrWhiteSpace(mainName) && pair.Membership.AppUserId is { } mainAppUserId)
             {
                 mainNameByAppUserId[mainAppUserId] = mainName.Trim();
@@ -265,20 +261,18 @@ public sealed partial class AddonApiController
 
             if (issuerMembership is not null)
             {
-                if (string.IsNullOrWhiteSpace(issuerMembership.CharacterName))
-                {
-                    issuerMembership.CharacterName = selfName;
-                }
                 if (issuerUser is not null && string.IsNullOrWhiteSpace(issuerUser.CharacterName))
                 {
                     issuerUser.CharacterName = selfName;
+                    // The roster name is still written as a copy of the main (never read).
+                    issuerMembership.CharacterName = selfName;
                 }
 
                 // Make sure the lookup picks up the freshly-known name even
                 // though membershipsWithUser was loaded AsNoTracking — point
                 // the dictionary at the (now-tracked) issuer membership so
                 // downstream entry resolution finds it.
-                membershipByName.AddIfMissing(selfName, issuerMembership, CharacterNameSlot.Membership);
+                membershipByName.AddIfMissing(selfName, issuerMembership, CharacterNameSlot.Account);
 
                 // ...and treat it as their main for the alt readout, unless they already had one.
                 // This is the name the roster has nothing else to offer for them, so calling any
@@ -355,7 +349,7 @@ public sealed partial class AddonApiController
                 {
                     AppUserId = membership.AppUserId,
                     EventId = eventId,
-                    CharacterName = membership.CharacterName,
+                    CharacterName = mainName,
                     JobName = string.IsNullOrWhiteSpace(entry.MainJob) ? null : entry.MainJob.Trim(),
                     SubJobName = string.IsNullOrWhiteSpace(entry.SubJob) ? null : entry.SubJob.Trim(),
                     JobType = null,
@@ -618,16 +612,15 @@ public sealed partial class AddonApiController
             .FirstOrDefaultAsync(ls => ls.Id == token.LinkshellId, cancellationToken);
 
         var memberRows = await _dbContext.AppUserLinkshells
+            // The roster shows each member by the account's main (AppUser.CharacterName). Its levels
+            // are the main's Characters row (slot 0), read with the alts below.
             .Where(link => link.LinkshellId == token.LinkshellId
-                        && !string.IsNullOrWhiteSpace(link.CharacterName))
+                        && link.AppUser != null
+                        && !string.IsNullOrWhiteSpace(link.AppUser.CharacterName))
             .Select(link => new
             {
-                CharacterName = link.CharacterName!,
+                CharacterName = link.AppUser!.CharacterName!,
                 link.AppUserId,
-                // The main's levels live on the account (AccountJobsAndKeyItemAccounts). Read
-                // there, not from Characters: the account keeps them even while its main name is
-                // blank, and Characters has no main row then.
-                JobLevels = link.AppUser != null ? link.AppUser.JobLevels : null
             })
             .OrderBy(row => row.CharacterName)
             .ToListAsync(cancellationToken);
@@ -665,7 +658,7 @@ public sealed partial class AddonApiController
                     characterName = row.CharacterName,
                     alts,
                     altDetails,
-                    jobLevels = row.JobLevels
+                    jobLevels = AccountCharacters.MainCharacter(accountCharacters)?.JobLevels
                 };
             })
             .ToList();
@@ -717,17 +710,16 @@ public sealed partial class AddonApiController
         {
             return Forbid();
         }
-        var memberships = await _dbContext.AppUserLinkshells
-            .Where(link => link.AppUserId == owner.Id)
-            .ToListAsync(cancellationToken);
-        if (!memberships.Any(link => link.LinkshellId == token.LinkshellId))
+        var onTokenLinkshell = await _dbContext.AppUserLinkshells
+            .AnyAsync(link => link.AppUserId == owner.Id && link.LinkshellId == token.LinkshellId, cancellationToken);
+        if (!onTokenLinkshell)
         {
             return Forbid();
         }
         var characters = await _dbContext.Characters
             .Where(character => character.AppUserId == owner.Id)
             .ToListAsync(cancellationToken);
-        if (MainCharacterJobs.OwnCharacterSlot(characterName, owner, characters, memberships, token.LinkshellId) is not { } own)
+        if (MainCharacterJobs.OwnCharacterSlot(characterName, owner, characters) is not { } own)
         {
             return Forbid();
         }
@@ -977,18 +969,19 @@ public sealed partial class AddonApiController
             return BadRequest(new { error = "Deduction % cannot exceed 100." });
         }
 
-        // Winner must be on the linkshell's roster (case-insensitive on CharacterName) -- the same
+        // Winner must be on the linkshell's roster (case-insensitive on the account's main) -- the same
         // guard CreateTodAsync uses.
         var winnerMembership = await _dbContext.AppUserLinkshells
+            .Include(link => link.AppUser)
             .FirstOrDefaultAsync(link => link.LinkshellId == token.LinkshellId
-                        && link.CharacterName != null
-                        && link.CharacterName.ToLower() == itemWinner.ToLower(),
+                        && link.AppUser!.CharacterName != null
+                        && link.AppUser.CharacterName.ToLower() == itemWinner.ToLower(),
                 cancellationToken);
-        if (winnerMembership?.CharacterName is null)
+        if (winnerMembership?.AppUser?.CharacterName is null)
         {
             return BadRequest(new { error = "Winner must be a current linkshell member." });
         }
-        var rosterMatch = winnerMembership.CharacterName;
+        var rosterMatch = winnerMembership.AppUser.CharacterName;
 
         // DKP-structure linkshells: a win cannot exceed the winner's AVAILABLE DKP (total minus
         // whatever is locked by active auction bids). Hybrid spends a % of the current balance so

@@ -86,17 +86,16 @@ public sealed partial class AddonApiController
         var roster = await _dbContext.AppUserLinkshells
             .AsNoTracking()
             .Where(link => link.LinkshellId == token.LinkshellId && link.AppUserId != null)
-            // Only the four names, not the whole AppUser: this runs on every heartbeat.
+            // Only the main's name, not the whole AppUser: this runs on every heartbeat. The alts
+            // come from Characters.
             .Join(_dbContext.Users, link => link.AppUserId, user => user.Id, (link, user) => new
             {
                 link.Id,
                 link.AppUserId,
-                link.CharacterName,
                 AccountCharacterName = user.CharacterName,
-                user.AltCharacterName1,
-                user.AltCharacterName2,
             })
             .ToListAsync(cancellationToken);
+        var rosterCharacters = await AccountCharacters.LoadForLinkshellAsync(_dbContext, token.LinkshellId, cancellationToken);
 
         // Who each name is, by the shared CharacterResolver rule -- the same one the window payout
         // and the Claim Shield credit by, so the "not registered" count and the alt-of hint never
@@ -104,9 +103,14 @@ public sealed partial class AddonApiController
         var knownByName = CharacterResolver.Build(roster
             .Where(member => !string.IsNullOrWhiteSpace(member.AppUserId))
             .OrderBy(member => member.Id)
-            .Select(member => (member, new CharacterNames(
-                member.CharacterName, member.AccountCharacterName,
-                member.AltCharacterName1, member.AltCharacterName2))));
+            .Select(member =>
+            {
+                var own = AccountCharacters.For(rosterCharacters, member.AppUserId);
+                return (member, new CharacterNames(
+                    member.AccountCharacterName,
+                    AccountCharacters.Alt1(own)?.Name,
+                    AccountCharacters.Alt2(own)?.Name));
+            }));
 
         // Every officer's addon reports the same alliance, often within the same moment. Two of them
         // both find no row for a new name, both add one, and the one-row-per-name index refuses the
@@ -158,10 +162,9 @@ public sealed partial class AddonApiController
                     existingByName[name] = row;
                 }
 
-                // The roster name, shown as "alt of ..." -- only when this name was NOT the roster
-                // name.
-                row.MainCharacterName = isKnown && known.Slot != CharacterNameSlot.Membership
-                    ? known.Member.CharacterName
+                // The member's main, shown as "alt of ..." -- only when this name was NOT the main.
+                row.MainCharacterName = isKnown && known.Slot != CharacterNameSlot.Account
+                    ? known.Member.AccountCharacterName
                     : null;
                 row.ZoneId = member.ZoneId;
                 row.AllianceNumber = allianceNumber;

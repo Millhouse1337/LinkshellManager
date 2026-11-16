@@ -276,9 +276,9 @@ public sealed class WindowEventDkpLedgerService
                               && (paid is null || !paid.Contains(appUserId)))
                 .GroupBy(row => row.Membership!.AppUserId!, StringComparer.OrdinalIgnoreCase)
                 .Select(account => account.First())
-                .Select(row => string.IsNullOrWhiteSpace(row.Membership!.CharacterName)
+                .Select(row => string.IsNullOrWhiteSpace(row.Membership!.AppUser?.CharacterName)
                     ? row.Entry.CharacterName.Trim()
-                    : row.Membership.CharacterName.Trim())
+                    : row.Membership.AppUser!.CharacterName!.Trim())
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             if (unpaid.Count > 0)
@@ -372,7 +372,7 @@ public sealed class WindowEventDkpLedgerService
                 account.Snapshot.CapturedAtUtc,
                 windowEventPool,
                 new DkpEntryContext(
-                    CharacterName: account.Membership.CharacterName,
+                    CharacterName: account.Membership.AppUser?.CharacterName,
                     EventName: string.IsNullOrWhiteSpace(windowEvent.Name) ? "Window Event" : windowEvent.Name,
                     EventType: poolEventType,
                     EventLocation: campHistory is not null ? windowEvent.CampEventLocation : account.Entry.Zone,
@@ -686,7 +686,7 @@ public sealed class WindowEventDkpLedgerService
         public required List<(AttendanceSnapshot Snapshot, AttendanceSnapshotEntry Entry)> Combined { get; init; }
         public required CharacterResolver<AppUserLinkshell> MembershipsByCharacterName { get; init; }
         public required Dictionary<string, AppUserLinkshell> MembershipByAppUserId { get; init; }
-        // Every name each account could have been captured under (membership name, account name, alts).
+        // Every name each account could have been captured under (the account's main and its alts).
         public required Dictionary<string, List<string>> NamesByAppUserId { get; init; }
         public required Dictionary<string, double> OverridesByName { get; init; }
         public required double DefaultAmount { get; init; }
@@ -712,7 +712,7 @@ public sealed class WindowEventDkpLedgerService
     {
         public required CharacterResolver<AppUserLinkshell> MembershipsByCharacterName { get; init; }
         public required Dictionary<string, AppUserLinkshell> MembershipByAppUserId { get; init; }
-        // Every name each account could have been captured under (membership name, account name, alts).
+        // Every name each account could have been captured under (the account's main and its alts).
         public required Dictionary<string, List<string>> NamesByAppUserId { get; init; }
 
         public AppUserLinkshell? Resolve(AttendanceSnapshotEntry entry)
@@ -723,7 +723,7 @@ public sealed class WindowEventDkpLedgerService
         // fall through to the by-name path.
         //
         // This is what keeps a camp from silently underpaying: the roster is keyed on AppUserId,
-        // but a member whose in-game character isn't one of the four indexed names would resolve
+        // but a member whose in-game character isn't one of the three indexed names would resolve
         // to nothing by name and simply never be credited — no error, no log.
         public static AppUserLinkshell? Resolve(
             Dictionary<string, AppUserLinkshell> byAppUserId,
@@ -789,11 +789,11 @@ public sealed class WindowEventDkpLedgerService
             var amounts = group.Select(item => payout.AmountForCharacter(item.Entry.CharacterName)).ToList();
             var amount = windowEvent.PerCaptureDkp ? amounts.Sum() : amounts.Max();
 
-            // The row is written from the membership's own character when it was captured, so the
+            // The row is written from the account's main when it was captured, so the
             // ledger and Past Events name the member the roster knows.
             var representative = group
                 .Where(item => string.Equals(
-                    item.Entry.CharacterName.Trim(), membership.CharacterName?.Trim(), StringComparison.OrdinalIgnoreCase))
+                    item.Entry.CharacterName.Trim(), membership.AppUser?.CharacterName?.Trim(), StringComparison.OrdinalIgnoreCase))
                 .DefaultIfEmpty(group.First())
                 .First();
 
@@ -821,14 +821,21 @@ public sealed class WindowEventDkpLedgerService
                   user => user.Id,
                   (link, user) => new { Membership = link, User = user })
             .ToListAsync(cancellationToken);
+        // The rows written from these memberships name the account's main (Membership.AppUser). A
+        // tracked join already links the two; an untracked one does not, so link them here.
+        foreach (var pair in membershipsWithUser)
+        {
+            pair.Membership.AppUser ??= pair.User;
+        }
+        var characters = await AccountCharacters.LoadForLinkshellAsync(_db, linkshellId, cancellationToken);
 
-        // Every name a member might have been captured under -- the membership's own CharacterName,
-        // the account's CharacterName and both alts -- resolved by the one shared rule
+        // Every name a member might have been captured under -- the account's CharacterName and
+        // both alts (Characters) -- resolved by the one shared rule
         // (CharacterResolver). This lets a snapshot credit a member who showed up on an alt: the
         // addon captures whatever character is standing in the alliance, which is often not the
         // one on the roster.
         var membershipsByCharacterName = CharacterResolver.ForMemberships(
-            membershipsWithUser.Select(pair => (pair.Membership, pair.User)));
+            membershipsWithUser.Select(pair => (pair.Membership, pair.User)), characters);
         var namesByAppUserId = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var pair in membershipsWithUser)
         {
@@ -841,10 +848,9 @@ public sealed class WindowEventDkpLedgerService
 
             foreach (var candidate in new[]
                      {
-                         pair.Membership.CharacterName,
                          pair.User.CharacterName,
-                         pair.User.AltCharacterName1,
-                         pair.User.AltCharacterName2,
+                         AccountCharacters.Alt1(AccountCharacters.For(characters, pair.Membership.AppUserId))?.Name,
+                         AccountCharacters.Alt2(AccountCharacters.For(characters, pair.Membership.AppUserId))?.Name,
                      })
             {
                 if (string.IsNullOrWhiteSpace(candidate)) continue;

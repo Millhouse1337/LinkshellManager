@@ -36,7 +36,7 @@ public class DkpOverdraftTests
     private static AppUserLinkshell Seed(ApplicationDbContext db, double balance)
     {
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", LootStructure = "Dkp" });
-        db.Users.Add(new AppUser { Id = "u1", UserName = "alice" });
+        db.Users.Add(new AppUser { Id = "u1", UserName = "alice", CharacterName = "Alice" });
         var member = new AppUserLinkshell
         {
             Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Alice", LinkshellDkp = balance

@@ -10,7 +10,7 @@ namespace LinkshellManager.Tests;
 public class RosterMemberSearchTests
 {
     private static RosterNameCandidate Member(string id, string roster, string? alt1 = null, string? alt2 = null)
-        => new(roster, roster, alt1, alt2, id);
+        => new(roster, alt1, alt2, id);
 
     private static readonly RosterNameCandidate[] Roster =
     {
@@ -75,7 +75,7 @@ public class RosterMemberSearchTests
     [Fact]
     public void BlankNamesOnAMember_NeverMatch()
     {
-        var roster = new[] { new RosterNameCandidate(null, "  ", null, "", "u-blank") };
+        var roster = new[] { new RosterNameCandidate("  ", null, "", "u-blank") };
 
         Assert.Empty(RosterMemberSearch.Find(roster, " "));
         Assert.Empty(RosterMemberSearch.Find(roster, "a"));

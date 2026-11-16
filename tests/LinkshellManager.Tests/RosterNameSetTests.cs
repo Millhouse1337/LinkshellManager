@@ -8,7 +8,7 @@ namespace LinkshellManager.Tests;
 // The addon reports every character standing in the alliance, member or not, and the server decides
 // which of them the linkshell actually knows. Everything that lists a capture — the Event System
 // card, the Activity, the Discord embed, the addon's own post summary — asks this set, so the
-// answer has to be the same four-name rule the DKP paths use to decide who gets paid. A name this
+// answer has to be the same three-name rule the DKP paths use to decide who gets paid. A name this
 // set accepts but the ledger does not would show as credited and be paid nothing.
 public class RosterNameSetTests
 {
@@ -16,8 +16,8 @@ public class RosterNameSetTests
         => RosterNameSet.From(members);
 
     private static RosterNameCandidate Member(
-        string? membershipName, string? accountName = null, string? alt1 = null, string? alt2 = null)
-        => new(membershipName, accountName, alt1, alt2);
+        string? mainName, string? alt1 = null, string? alt2 = null)
+        => new(mainName, alt1, alt2);
 
     [Fact]
     public void RosterMainName_IsRegistered()
@@ -47,17 +47,19 @@ public class RosterNameSetTests
     [Fact]
     public void LinkedAlt_IsRegistered()
     {
-        var roster = Roster(Member("Edicius", accountName: "Edicius", alt1: "Athmilk", alt2: "Millhouse"));
+        var roster = Roster(Member("Edicius", alt1: "Athmilk", alt2: "Millhouse"));
         Assert.True(roster.Contains("Athmilk"));
         Assert.True(roster.Contains("Millhouse"));
     }
 
-    // A membership row created before anyone filled in a character name still carries the account's
-    // name, and that is the one the player is standing as.
+    // The account's main IS the member's roster name (Round 5: the membership's own copy of it is
+    // no longer read), and that is the one the player is standing as.
     [Fact]
-    public void AccountCharacterName_CountsWhenTheMembershipHasNone()
+    public void AccountCharacterName_IsTheMembersName()
     {
-        Assert.True(Roster(Member(null, accountName: "Edicius")).Contains("Edicius"));
+        var roster = Roster(Member("Edicius", alt1: "Athmilk"));
+        Assert.True(roster.Contains("Edicius"));
+        Assert.Equal(2, roster.Count);
     }
 
     // The whole point: someone else's linkshell standing at the same camp.
@@ -107,11 +109,11 @@ public class RosterNameSetTests
     //
     // The order matters and is not cosmetic: it is the order WindowEventDkpLedgerService resolves a
     // capture entry in. A camp handoff stamps the account onto the entry so credit does not depend
-    // on the character name matching one of the four indexed above, and anything that reports on
+    // on the character name matching one of the three indexed above, and anything that reports on
     // who will be paid has to ask the same question the same way.
 
     private static RosterNameSet RosterWithAccount(string name, string appUserId)
-        => RosterNameSet.From(new[] { new RosterNameCandidate(name, null, null, null, appUserId) });
+        => RosterNameSet.From(new[] { new RosterNameCandidate(name, null, null, appUserId) });
 
     [Fact]
     public void Knows_AcceptsAKnownAccount_EvenWhenTheNameIsUnknown()

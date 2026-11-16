@@ -82,7 +82,7 @@ public class DkpPoolPickTests
         db.Linkshells.Add(new Linkshell { Id = Ls, LinkshellName = "LS", LootStructure = "Dkp" });
         db.Linkshells.Add(new Linkshell { Id = 2, LinkshellName = "Other", LootStructure = "Dkp" });
         db.DkpPools.Add(new DkpPool { Id = 50, LinkshellId = 2, Name = "Theirs", IsDefault = true });
-        db.Users.Add(new AppUser { Id = "u1", UserName = "alice" });
+        db.Users.Add(new AppUser { Id = "u1", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
             Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Alice", LinkshellDkp = 100,

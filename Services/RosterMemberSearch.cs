@@ -7,7 +7,7 @@ namespace LinkshellManagerDiscordApp.Services;
 // when it didn't match exactly, which is how a player who had registered as "Comte🧀" got a second
 // roster entry called "Comte". A player joins the roster by signing up from the board themselves.
 //
-// An exact name (roster name, main or either alt, any capitals) wins outright. Otherwise every
+// An exact name (the main or either alt, any capitals) wins outright. Otherwise every
 // member with a name CONTAINING what was typed is a candidate, so "comte" still finds "Comte🧀".
 public static class RosterMemberSearch
 {
@@ -33,7 +33,7 @@ public static class RosterMemberSearch
     }
 
     private static IEnumerable<string> NamesOf(RosterNameCandidate member) =>
-        new[] { member.MembershipCharacterName, member.AccountCharacterName, member.AltCharacterName1, member.AltCharacterName2 }
+        new[] { member.AccountCharacterName, member.AltCharacterName1, member.AltCharacterName2 }
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Select(name => name!.Trim());
 }

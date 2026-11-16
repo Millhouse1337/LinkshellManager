@@ -28,7 +28,7 @@ public class DkpSheetServiceTests
     {
         using var db = NewInMemoryContext();
         db.Linkshells.Add(new Linkshell { Id = 1, LinkshellName = "LS", LootStructure = "Dkp" });
-        db.Users.Add(new AppUser { Id = "u1", UserName = "alice" });
+        db.Users.Add(new AppUser { Id = "u1", UserName = "alice", CharacterName = "Alice" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
             Id = 1, LinkshellId = 1, AppUserId = "u1", CharacterName = "Alice", LinkshellDkp = 100
@@ -61,7 +61,7 @@ public class DkpSheetServiceTests
     {
         using var db = NewInMemoryContext();
         db.Linkshells.Add(new Linkshell { Id = 1, LinkshellName = "LS", LootStructure = "Dkp" });
-        db.Users.Add(new AppUser { Id = "u1", UserName = "bob" });
+        db.Users.Add(new AppUser { Id = "u1", UserName = "bob", CharacterName = "Bob" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
             Id = 1, LinkshellId = 1, AppUserId = "u1", CharacterName = "Bob", LinkshellDkp = 42

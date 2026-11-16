@@ -125,7 +125,8 @@ public sealed partial class ActivityEventsController
 
         // Sign up as the member's main OR a chosen alt (validated against their
         // real characters; falls back to main if the requested name isn't theirs).
-        var characterName = SignupCharacters.Resolve(appUser, membership, request.CharacterName);
+        var characters = await AccountCharacters.LoadForAccountAsync(_dbContext, appUser.Id, cancellationToken);
+        var characterName = SignupCharacters.Resolve(appUser, characters, request.CharacterName);
         var result = await EventPartySignupService.ClaimSlotAsync(
             _dbContext, eventId, slot, appUser.Id, characterName, request.Role, request.MainJob, request.SubJob,
             cancellationToken, request.AsLeader);

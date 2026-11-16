@@ -141,9 +141,8 @@ public class AddonCharacterJobsTests
         using var db = Seeded();
         var owner = db.Users.Single(u => u.Id == "bob");
         var characters = db.Characters.Where(c => c.AppUserId == "bob").ToList();
-        var memberships = db.AppUserLinkshells.Where(m => m.AppUserId == "bob").ToList();
 
-        var matched = MainCharacterJobs.OwnCharacterSlot(typed, owner, characters, memberships, Ls);
+        var matched = MainCharacterJobs.OwnCharacterSlot(typed, owner, characters);
 
         if (stored is null)
         {
@@ -162,25 +161,20 @@ public class AddonCharacterJobsTests
         var owner = new AppUser { Id = "bob", CharacterName = "Bob" };
         var characters = new[] { new Character { AppUserId = "carol", Slot = 1, Name = "Carolalt" } };
 
-        Assert.Null(MainCharacterJobs.OwnCharacterSlot("Carolalt", owner, characters, Array.Empty<AppUserLinkshell>(), Ls));
+        Assert.Null(MainCharacterJobs.OwnCharacterSlot("Carolalt", owner, characters));
     }
 
-    // The old match still makes a name the main when Characters does not have it: the roster
-    // spelling in the token's linkshell, then the account's own name, then another roster.
+    // The account's own name is still the main when Characters does not have it. A roster name is
+    // not read any more (Round 5): it was only ever a copy of the main.
     [Fact]
-    public void OwnCharacterSlot_FallsBackToTheRosters_AndTheAccountName()
+    public void OwnCharacterSlot_FallsBackToTheAccountName_NotTheRosterNames()
     {
         var owner = new AppUser { Id = "me", CharacterName = " Mainname " };
-        var memberships = new[]
-        {
-            new AppUserLinkshell { LinkshellId = Ls, CharacterName = "Rostername" },
-            new AppUserLinkshell { LinkshellId = OtherLs, CharacterName = "Elsewhere" },
-        };
         var none = Array.Empty<Character>();
 
-        Assert.Equal(((short)0, "Mainname"), MainCharacterJobs.OwnCharacterSlot("mainname", owner, none, memberships, Ls));
-        Assert.Equal(((short)0, "Rostername"), MainCharacterJobs.OwnCharacterSlot("ROSTERNAME", owner, none, memberships, Ls));
-        Assert.Equal(((short)0, "Elsewhere"), MainCharacterJobs.OwnCharacterSlot("ELSEWHERE", owner, none, memberships, Ls));
+        Assert.Equal(((short)0, "Mainname"), MainCharacterJobs.OwnCharacterSlot("mainname", owner, none));
+        Assert.Null(MainCharacterJobs.OwnCharacterSlot("ROSTERNAME", owner, none));
+        Assert.Null(MainCharacterJobs.OwnCharacterSlot("ELSEWHERE", owner, none));
     }
 
     // ---- POST character/jobs -------------------------------------------------------------------

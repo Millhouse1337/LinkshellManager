@@ -6,9 +6,10 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// The one rule for "which member is this character?" (Services/CharacterResolver.cs): roster
-// name, then account name, then alt 1, then alt 2; within a slot the oldest membership; trimmed
-// and ignoring capitals; never a membership with no account.
+// The one rule for "which member is this character?" (Services/CharacterResolver.cs): the
+// account's main, then alt 1, then alt 2 (Characters); within a slot the oldest membership; trimmed
+// and ignoring capitals; never a membership with no account. The roster name is not read (Round 5):
+// a member built with only a roster name gets it as their main too, as every saved roster has it.
 public class CharacterResolverTests
 {
     private const int Ls = 7;
@@ -30,12 +31,17 @@ public class CharacterResolverTests
                 ? null
                 : new AppUser
                 {
-                    Id = appUserId, CharacterName = account, AltCharacterName1 = alt1, AltCharacterName2 = alt2,
+                    Id = appUserId, CharacterName = account ?? roster, AltCharacterName1 = alt1, AltCharacterName2 = alt2,
                 },
         };
 
+    // The in-memory builder, with the members' Characters rows made from their account columns.
+    private static CharacterResolver<AppUserLinkshell> ForMemberships(params AppUserLinkshell[] members) =>
+        CharacterResolver.ForMemberships(members, TestCharacters.Of(members));
+
     [Theory]
-    [InlineData("Roster", "u1")]
+    // A roster name that is not the account's main is not one of the member's names any more.
+    [InlineData("Roster", null)]
     [InlineData("ACCOUNT", "u1")]
     [InlineData(" altone", "u1")]
     [InlineData("Alttwo ", "u1")]
@@ -43,26 +49,24 @@ public class CharacterResolverTests
     [InlineData("", null)]
     [InlineData("   ", null)]
     [InlineData(null, null)]
-    public void ResolvesAnyOfTheFourNames(string? typed, string? expected)
+    public void ResolvesAnyOfTheThreeNames(string? typed, string? expected)
     {
-        var roster = CharacterResolver.ForMemberships(new[]
-        {
-            Member(1, "u1", "Roster", "Account", "Altone", "Alttwo"),
-        });
+        var roster = ForMemberships(
+            Member(1, "u1", "Roster", "Account", "Altone", "Alttwo"));
 
         Assert.Equal(expected, roster.Resolve(typed)?.AppUserId);
     }
 
-    // A name that is an older member's alt AND a newer member's roster name belongs to the roster
-    // name. The loops this replaced went member by member, so the older member's alt took it.
+    // A name that is an older member's alt AND a newer member's main belongs to the main. The loops
+    // this replaced went member by member, so the older member's alt took it.
     [Fact]
-    public void ARosterNameBeatsSomebodyElsesAlt_WhateverTheOrder()
+    public void AMainBeatsSomebodyElsesAlt_WhateverTheOrder()
     {
         var altOwner = Member(1, "u1", "First", alt1: "Shared");
         var rosterOwner = Member(2, "u2", "Shared");
 
-        Assert.Equal("u2", CharacterResolver.ForMemberships(new[] { altOwner, rosterOwner }).Resolve("shared")?.AppUserId);
-        Assert.Equal("u2", CharacterResolver.ForMemberships(new[] { rosterOwner, altOwner }).Resolve("shared")?.AppUserId);
+        Assert.Equal("u2", ForMemberships(altOwner, rosterOwner).Resolve("shared")?.AppUserId);
+        Assert.Equal("u2", ForMemberships(rosterOwner, altOwner).Resolve("shared")?.AppUserId);
     }
 
     [Fact]
@@ -71,7 +75,7 @@ public class CharacterResolverTests
         var altOwner = Member(1, "u1", "First", alt2: "Shared");
         var accountOwner = Member(2, "u2", "Second", account: "Shared");
 
-        var roster = CharacterResolver.ForMemberships(new[] { altOwner, accountOwner });
+        var roster = ForMemberships(altOwner, accountOwner);
 
         Assert.True(roster.TryResolve("Shared", out var match));
         Assert.Equal("u2", match.Member.AppUserId);
@@ -85,7 +89,7 @@ public class CharacterResolverTests
         var older = Member(3, "u3", "Twin");
         var newer = Member(9, "u9", "Twin");
 
-        Assert.Equal("u3", CharacterResolver.ForMemberships(new[] { newer, older }).Resolve("Twin")?.AppUserId);
+        Assert.Equal("u3", ForMemberships(newer, older).Resolve("Twin")?.AppUserId);
     }
 
     // Nobody to charge or credit, so it must not take the name from a member who has an account.
@@ -95,7 +99,7 @@ public class CharacterResolverTests
         var noAccount = Member(1, null, "Shared");
         var real = Member(2, "u2", "Other", alt1: "Shared");
 
-        Assert.Equal("u2", CharacterResolver.ForMemberships(new[] { noAccount, real }).Resolve("Shared")?.AppUserId);
+        Assert.Equal("u2", ForMemberships(noAccount, real).Resolve("Shared")?.AppUserId);
     }
 
     [Fact]
@@ -103,10 +107,10 @@ public class CharacterResolverTests
     {
         var holder = Member(1, "u1", "Taken");
         var latecomer = Member(2, "u2", null);
-        var roster = CharacterResolver.ForMemberships(new[] { holder, latecomer });
+        var roster = ForMemberships(holder, latecomer);
 
-        roster.AddIfMissing("taken", latecomer, CharacterNameSlot.Membership);
-        roster.AddIfMissing(" Fresh ", latecomer, CharacterNameSlot.Membership);
+        roster.AddIfMissing("taken", latecomer, CharacterNameSlot.Account);
+        roster.AddIfMissing(" Fresh ", latecomer, CharacterNameSlot.Account);
 
         Assert.Equal("u1", roster.Resolve("Taken")?.AppUserId);
         Assert.Equal("u2", roster.Resolve("fresh")?.AppUserId);
@@ -129,13 +133,15 @@ public class CharacterResolverTests
             .Where(link => link.LinkshellId == Ls)
             .Join(db.Users, link => link.AppUserId, user => user.Id, (link, user) => new { link, user })
             .AsEnumerable()
-            .Select(x => (x.link, x.user)));
+            .Select(x => (x.link, x.user)),
+            await AccountCharacters.LoadForLinkshellAsync(db, Ls, CancellationToken.None));
 
         foreach (var roster in new[] { loaded, pairs })
         {
             Assert.Equal("u2", roster.Resolve("shared")?.AppUserId); // u2's account name beats u1's alt
             Assert.Equal("u1", roster.Resolve("account1")?.AppUserId);
             Assert.Null(roster.Resolve("Elsewhere"));               // another linkshell's roster name
+            Assert.Null(roster.Resolve("Roster1"));                 // a roster name is not read
         }
     }
 }

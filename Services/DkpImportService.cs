@@ -115,7 +115,7 @@ public sealed class DkpImportService
             .Where(m => m.LinkshellId == linkshellId)
             .ToListAsync(cancellationToken);
 
-        var index = BuildNameIndex(members);
+        var index = BuildNameIndex(members, await AccountCharacters.LoadForLinkshellAsync(_db, linkshellId, cancellationToken));
         var withActivity = await LoadPostSeedActivityAsync(linkshellId, members, cancellationToken);
 
         var rows = new List<DkpImportPreviewRow>(parsed.Count);
@@ -192,7 +192,7 @@ public sealed class DkpImportService
             .Include(m => m.AppUser)
             .Where(m => m.LinkshellId == linkshellId)
             .ToListAsync(cancellationToken);
-        var index = BuildNameIndex(members);
+        var index = BuildNameIndex(members, await AccountCharacters.LoadForLinkshellAsync(_db, linkshellId, cancellationToken));
 
         // Watermark: each member's max ledger Id BEFORE this import. Pre-import
         // activity (Id <= watermark) is represented by the seed; later real
@@ -241,6 +241,7 @@ public sealed class DkpImportService
             }
 
             var newMember = await _db.AppUserLinkshells
+                .Include(m => m.AppUser)
                 .FirstOrDefaultAsync(m => m.LinkshellId == linkshellId && m.AppUserId == result.AppUserId, cancellationToken);
             if (newMember is null) { skipped.Add(row.Name); continue; }
 
@@ -287,7 +288,7 @@ public sealed class DkpImportService
                     Amount = newCurrent - oldCurrent,
                     Sequence = 1,
                     OccurredAt = now,
-                    CharacterName = member.CharacterName,
+                    CharacterName = member.AppUser?.CharacterName,
                     DkpPoolId = defaultPoolId,
                     DkpPoolPinned = true,
                     Details = $"Current DKP set from import ({oldCurrent} -> {newCurrent}).",
@@ -324,10 +325,11 @@ public sealed class DkpImportService
             : (DkpImportRowKind.Ambiguous, null);
     }
 
-    // name (case-insensitive) -> distinct memberships that go by it (main, the
-    // resolved AppUser name, or either alt). Count-aware so collisions surface
+    // name (case-insensitive) -> distinct memberships that go by it (the account's main or
+    // either alt, from Characters). Count-aware so collisions surface
     // instead of being silently mis-attributed to the first match.
-    private static Dictionary<string, List<AppUserLinkshell>> BuildNameIndex(IEnumerable<AppUserLinkshell> members)
+    private static Dictionary<string, List<AppUserLinkshell>> BuildNameIndex(
+        IEnumerable<AppUserLinkshell> members, IReadOnlyDictionary<string, Character[]> characters)
     {
         var index = new Dictionary<string, List<AppUserLinkshell>>(StringComparer.OrdinalIgnoreCase);
         void Add(string? name, AppUserLinkshell m)
@@ -340,10 +342,10 @@ public sealed class DkpImportService
         }
         foreach (var m in members)
         {
-            Add(m.CharacterName, m);
-            Add(m.AppUser?.CharacterName, m);
-            Add(m.AppUser?.AltCharacterName1, m);
-            Add(m.AppUser?.AltCharacterName2, m);
+            var names = AccountCharacters.Names(m.AppUser, AccountCharacters.For(characters, m.AppUserId));
+            Add(names.Account, m);
+            Add(names.Alt1, m);
+            Add(names.Alt2, m);
         }
         return index;
     }
@@ -382,7 +384,7 @@ public sealed class DkpImportService
     }
 
     private static string ResolveName(AppUserLinkshell m)
-        => m.CharacterName ?? m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown";
+        => m.AppUser?.CharacterName ?? m.AppUser?.UserName ?? "Unknown";
 
     private static string Normalize(object? cell) => (cell?.ToString() ?? string.Empty).Trim().ToLowerInvariant();
 

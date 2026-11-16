@@ -17,15 +17,15 @@ namespace LinkshellManager.Tests;
 // roster name, either alt, any capitals, stray spaces, a stranger, a blank -- so moving them onto
 // the one CharacterResolver cannot quietly change who gets charged, refunded or credited.
 //
-// u1 is on the roster as "Rostername", their account's main is "Mainacct" and their alts are
-// "Altone" / "Alttwo". u2 is "Other" everywhere, with the alt "Contested". u3, who joined after
-// u2, is on the roster as "Contested".
+// u1's main is "Rostername" and their alts are "Altone" / "Alttwo". u2 is "Other", with the alt
+// "Contested". u3, who joined after u2, has the main "Contested". Every roster name is its
+// account's main, as on production (Round 5 stopped reading the roster name; it was a copy).
 //
 // ChangedCases are the two answers that changed ON PURPOSE when the copies became one rule:
-//   - the account's own CharacterName now resolves everywhere. The close, End Camp, the
-//     affordability guard, hand-entered loot and Presence used to skip it (a loot edit refunded
-//     it while the close never charged it);
-//   - a name that is one member's alt and another's roster name belongs to the roster name.
+//   - (the account's own CharacterName now resolves everywhere: the close, End Camp, the
+//     affordability guard, hand-entered loot and Presence used to skip it. Since Round 5 it is the
+//     only main name, so the SharedCases cover it);
+//   - a name that is one member's alt and another's main belongs to the main.
 //     Every loop went member by member, so the older member's alt used to take it.
 public class CharacterResolverCharacterizationTests
 {
@@ -49,11 +49,11 @@ public class CharacterResolverCharacterizationTests
         });
         db.Users.Add(new AppUser
         {
-            Id = "u1", UserName = "one", CharacterName = "Mainacct",
+            Id = "u1", UserName = "one", CharacterName = "Rostername",
             AltCharacterName1 = "Altone", AltCharacterName2 = "Alttwo",
         });
         db.Users.Add(new AppUser { Id = "u2", UserName = "two", CharacterName = "Other", AltCharacterName1 = "Contested" });
-        db.Users.Add(new AppUser { Id = "u3", UserName = "three", CharacterName = "Third" });
+        db.Users.Add(new AppUser { Id = "u3", UserName = "three", CharacterName = "Contested" });
         db.AppUserLinkshells.Add(new AppUserLinkshell
         {
             Id = 1, LinkshellId = Ls, AppUserId = "u1", CharacterName = "Rostername",
@@ -99,7 +99,6 @@ public class CharacterResolverCharacterizationTests
     // What every copy answers now and some did not before (see the header).
     public static TheoryData<string, string?> ChangedCases => new()
     {
-        { "Mainacct", "u1" },
         { " contested ", "u3" },
     };
 
@@ -127,7 +126,7 @@ public class CharacterResolverCharacterizationTests
             new EventLootDetail { ItemWinner = typed },
             memberships.ToDictionary(m => m.AppUserId!),
             new Dictionary<string, AppUserEvent>(StringComparer.OrdinalIgnoreCase),
-            CharacterResolver.ForMemberships(memberships));
+            CharacterResolver.ForMemberships(memberships, TestCharacters.Of(memberships)));
 
         Assert.Equal(expected, winner?.AppUserId);
     }
@@ -149,7 +148,7 @@ public class CharacterResolverCharacterizationTests
             new EventLootDetail { ItemWinner = " stranger " },
             memberships.ToDictionary(m => m.AppUserId!),
             participants,
-            CharacterResolver.ForMemberships(memberships));
+            CharacterResolver.ForMemberships(memberships, TestCharacters.Of(memberships)));
 
         Assert.Equal("u2", winner?.AppUserId);
     }
@@ -313,7 +312,6 @@ public class CharacterResolverCharacterizationTests
     [InlineData(" ALTTWO ", "u1", "Rostername")]
     [InlineData("Other", "u2", null)]
     [InlineData("Nobody", null, null)]
-    [InlineData("Mainacct", "u1", "Rostername")]
     [InlineData(" contested ", "u3", null)]
     public async Task Presence_TagsEachNameWithItsAccount(string typed, string? expected, string? main)
     {

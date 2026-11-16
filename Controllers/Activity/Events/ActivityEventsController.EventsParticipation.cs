@@ -45,7 +45,8 @@ public sealed partial class ActivityEventsController
             return Forbid();
         }
 
-        var displayName = SignupCharacters.Resolve(appUser, membership, request.CharacterName);
+        var displayName = SignupCharacters.Resolve(
+            appUser, await AccountCharacters.LoadForAccountAsync(_dbContext, appUser.Id, cancellationToken), request.CharacterName);
 
         static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
         var appUserId = appUser.Id;
@@ -151,7 +152,8 @@ public sealed partial class ActivityEventsController
             return Forbid();
         }
 
-        var character = SignupCharacters.Resolve(appUser, membership, request.CharacterName);
+        var character = SignupCharacters.Resolve(
+            appUser, await AccountCharacters.LoadForAccountAsync(_dbContext, appUser.Id, cancellationToken), request.CharacterName);
         var appUserId = appUser.Id;
 
         // Same double-click re-run as SignUpAsync: a lost race finds the other request's row and
@@ -229,12 +231,11 @@ public sealed partial class ActivityEventsController
             .Where(link =>
                 link.LinkshellId == eventEntity.LinkshellId &&
                 link.AppUserId != null)
-            .OrderBy(link => link.CharacterName)
-            .ThenBy(link => link.AppUser!.CharacterName)
+            .OrderBy(link => link.AppUser!.CharacterName)
             .AsNoTracking()
             .Select(link => new ActivityEventAddMemberCandidateDto(
                 link.AppUserId!,
-                link.CharacterName ?? link.AppUser!.CharacterName ?? link.AppUser!.UserName ?? "Unknown member",
+                link.AppUser!.CharacterName ?? link.AppUser!.UserName ?? "Unknown member",
                 link.Rank))
             .ToListAsync(cancellationToken);
 
@@ -314,7 +315,7 @@ public sealed partial class ActivityEventsController
         {
             AppUserId = request.AppUserId,
             EventId = eventId,
-            CharacterName = targetMembership.CharacterName ??
+            CharacterName =
                 targetMembership.AppUser?.CharacterName ??
                 targetMembership.AppUser?.UserName ??
                 "Unknown member",

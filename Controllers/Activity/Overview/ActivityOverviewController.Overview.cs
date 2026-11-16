@@ -184,10 +184,14 @@ public sealed partial class ActivityOverviewController
             ? await _dbContext.AppUserLinkshells
                 .Include(link => link.AppUser)
                 .Where(link => link.LinkshellId == primaryLinkshellId.Value)
-                .OrderBy(link => link.CharacterName)
+                .OrderBy(link => link.AppUser!.CharacterName)
                 .AsNoTracking()
                 .ToListAsync(cancellationToken)
             : new List<AppUserLinkshell>();
+        // The primary members' characters (alts, jobs), for the roster and the name lookups below.
+        var primaryCharacters = primaryLinkshellId.HasValue
+            ? await AccountCharacters.LoadForLinkshellAsync(_dbContext, primaryLinkshellId.Value, cancellationToken)
+            : new Dictionary<string, Character[]>(StringComparer.Ordinal);
 
         // Current credit / absent streaks per member (consecutive recent counting
         // events) for the roster's active-credit + absent-streak indicators.
@@ -315,7 +319,7 @@ public sealed partial class ActivityOverviewController
             : new Dictionary<int, List<AttendanceSnapshot>>();
 
         // Who the shell knows, so each linked capture can say who End Camp will actually pay.
-        var rosterNames = LinkshellRosterNames.FromMemberships(primaryLinkshellMembers);
+        var rosterNames = LinkshellRosterNames.FromMemberships(primaryLinkshellMembers, primaryCharacters);
 
         List<ActivityLinkedSnapshotDto> LinkedSnapshotsFor(Event evt)
         {
@@ -428,7 +432,7 @@ public sealed partial class ActivityOverviewController
         // credits those by name (WindowEventDkpLedgerService), so the Event Total has to as well or
         // a misc post never shows in it -- by the same shared rule the payout uses (CharacterResolver),
         // so the projection and the payout agree on who a shared name belongs to.
-        var rosterByName = CharacterResolver.ForMemberships(primaryLinkshellMembers);
+        var rosterByName = CharacterResolver.ForMemberships(primaryLinkshellMembers, primaryCharacters);
 
         // Each Standard HNM camp's "Event Total" per account: what End Camp would pay if the camp
         // ended right now. Priced by HnmStandardCampFinalizer.PriceMembers, the code End Camp pays
@@ -567,27 +571,15 @@ public sealed partial class ActivityOverviewController
             : HnmBoardNoticeService.ResolveDetails(
                 evt, evt.SourceTodId is { } sourceTodId ? parkedTods.GetValueOrDefault(sourceTodId) : null).NextDay;
 
-        // Resolve creator/starter character names for each active event. Prefer
-        // the user's linkshell-specific character name; fall back to their
-        // top-level AppUser.CharacterName, then UserName.
+        // Resolve creator/starter character names for each active event: the account's main
+        // (AppUser.CharacterName), then its UserName. (The roster name, which used to be tried
+        // first, is always a copy of the main.)
         var creatorStarterUserIds = activeEvents
             .SelectMany(evt => new[] { evt.CreatorUserId, evt.StarterUserId })
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
             .Distinct()
             .ToList();
-
-        var membershipNamesByPair = creatorStarterUserIds.Count > 0
-            ? await _dbContext.AppUserLinkshells
-                .Where(link => creatorStarterUserIds.Contains(link.AppUserId!))
-                .Select(link => new { link.LinkshellId, link.AppUserId, link.CharacterName })
-                .AsNoTracking()
-                .ToListAsync(cancellationToken)
-            : new();
-
-        var membershipNameLookup = membershipNamesByPair
-            .Where(row => !string.IsNullOrWhiteSpace(row.CharacterName))
-            .ToDictionary(row => (row.LinkshellId, row.AppUserId), row => row.CharacterName!);
 
         var fallbackNames = creatorStarterUserIds.Count > 0
             ? await _userManager.Users
@@ -597,10 +589,9 @@ public sealed partial class ActivityOverviewController
                 .ToDictionaryAsync(u => u.Id, u => u.CharacterName ?? u.UserName, cancellationToken)
             : new Dictionary<string, string?>();
 
-        string? ResolveActorName(int linkshellId, string? userId)
+        string? ResolveActorName(string? userId)
         {
             if (string.IsNullOrWhiteSpace(userId)) return null;
-            if (membershipNameLookup.TryGetValue((linkshellId, userId), out var name)) return name;
             return fallbackNames.GetValueOrDefault(userId);
         }
 
@@ -628,21 +619,26 @@ public sealed partial class ActivityOverviewController
         Response.Headers.CacheControl = "no-store";
         Response.Headers.Pragma = "no-cache";
 
-        // The main character's job levels live on the account (AccountJobsAndKeyItemAccounts), so
+        // The account's characters (main and alts, with their jobs and crafts), from Characters.
+        var myCharacters = await AccountCharacters.LoadForAccountAsync(_dbContext, appUser.Id, cancellationToken);
+        var myMain = AccountCharacters.MainCharacter(myCharacters);
+        var myAlt1 = AccountCharacters.Alt1(myCharacters);
+        var myAlt2 = AccountCharacters.Alt2(myCharacters);
+        // The main character's job levels (the Characters slot 0 row), so
         // the profile "My Jobs" editor pre-fills from there. Catalog-aligned (index 0 = WAR ...
         // 14 = SMN).
-        var profileJobLevels = ProfileJobLevels.ToCatalogLevels(appUser.JobLevels);
-        // Alt-character job levels live on the AppUser (shared across linkshells).
-        var alt1JobLevels = ProfileJobLevels.ToCatalogLevels(appUser.Alt1JobLevels);
-        var alt2JobLevels = ProfileJobLevels.ToCatalogLevels(appUser.Alt2JobLevels);
-        // "Strong" flags, parallel to the level arrays above (main and alts from the AppUser).
-        var strongJobs = ProfileJobLevels.ToCatalogFlags(appUser.StrongJobs);
-        var alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(appUser.Alt1StrongJobs);
-        var alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(appUser.Alt2StrongJobs);
-        // Per-job merit notes, parallel to the strong flags (main and alts from the AppUser).
-        var meritJobs = ProfileJobLevels.NormalizeMerits(appUser.MeritJobs);
-        var alt1MeritJobs = ProfileJobLevels.NormalizeMerits(appUser.Alt1MeritJobs);
-        var alt2MeritJobs = ProfileJobLevels.NormalizeMerits(appUser.Alt2MeritJobs);
+        var profileJobLevels = ProfileJobLevels.ToCatalogLevels(myMain?.JobLevels);
+        // Alt-character job levels (shared across linkshells).
+        var alt1JobLevels = ProfileJobLevels.ToCatalogLevels(myAlt1?.JobLevels);
+        var alt2JobLevels = ProfileJobLevels.ToCatalogLevels(myAlt2?.JobLevels);
+        // "Strong" flags, parallel to the level arrays above.
+        var strongJobs = ProfileJobLevels.ToCatalogFlags(myMain?.StrongJobs);
+        var alt1StrongJobs = ProfileJobLevels.ToCatalogFlags(myAlt1?.StrongJobs);
+        var alt2StrongJobs = ProfileJobLevels.ToCatalogFlags(myAlt2?.StrongJobs);
+        // Per-job merit notes, parallel to the strong flags.
+        var meritJobs = ProfileJobLevels.NormalizeMerits(myMain?.MeritJobs);
+        var alt1MeritJobs = ProfileJobLevels.NormalizeMerits(myAlt1?.MeritJobs);
+        var alt2MeritJobs = ProfileJobLevels.NormalizeMerits(myAlt2?.MeritJobs);
 
         // Biddable DKP per (linkshell, member): committed balance − bid locks − pending
         // live-event loot spend. Surfaced on the roster and next to each live-event
@@ -804,8 +800,8 @@ public sealed partial class ActivityOverviewController
                 appUser.Id,
                 appUser.UserName ?? string.Empty,
                 appUser.CharacterName,
-                appUser.AltCharacterName1,
-                appUser.AltCharacterName2,
+                myAlt1?.Name,
+                myAlt2?.Name,
                 appUser.TimeZone,
                 appUser.PrimaryLinkshellId,
                 primaryLinkshellName,
@@ -815,9 +811,9 @@ public sealed partial class ActivityOverviewController
                 strongJobs,
                 alt1StrongJobs,
                 alt2StrongJobs,
-                CraftCatalog.Normalize(appUser.CraftLevels),
-                CraftCatalog.Normalize(appUser.Alt1CraftLevels),
-                CraftCatalog.Normalize(appUser.Alt2CraftLevels),
+                CraftCatalog.Normalize(myMain?.CraftLevels),
+                CraftCatalog.Normalize(myAlt1?.CraftLevels),
+                CraftCatalog.Normalize(myAlt2?.CraftLevels),
                 meritJobs,
                 alt1MeritJobs,
                 alt2MeritJobs),
@@ -851,9 +847,9 @@ public sealed partial class ActivityOverviewController
                     primaryLinkshellMembers.Select(member => new ActivityMemberDto(
                         member.Id,
                         member.AppUserId,
-                        member.CharacterName ?? member.AppUser?.UserName ?? "Unknown member",
-                        member.AppUser?.AltCharacterName1,
-                        member.AppUser?.AltCharacterName2,
+                        member.AppUser?.CharacterName ?? member.AppUser?.UserName ?? "Unknown member",
+                        AccountCharacters.Alt1(AccountCharacters.For(primaryCharacters, member.AppUserId))?.Name,
+                        AccountCharacters.Alt2(AccountCharacters.For(primaryCharacters, member.AppUserId))?.Name,
                         member.Rank,
                         member.Status,
                         member.LinkshellDkp,
@@ -1065,8 +1061,8 @@ public sealed partial class ActivityOverviewController
                     .ToList(),
                 LinkedSnapshotsFor(evt),
                 ClaimShieldsFor(evt),
-                ResolveActorName(evt.LinkshellId, evt.CreatorUserId),
-                ResolveActorName(evt.LinkshellId, evt.StarterUserId),
+                ResolveActorName(evt.CreatorUserId),
+                ResolveActorName(evt.StarterUserId),
                 EventPoolName(evt.LinkshellId, evt.EventType),
                 evt.AttendanceMode,
                 evt.HnmWindowNumber,

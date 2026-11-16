@@ -367,7 +367,8 @@ public sealed class TreasuryJournalWriter
                 .Include(link => link.AppUser)
                 .Where(link => link.LinkshellId == linkshellId && link.AppUserId != null)
                 .ToListAsync(cancellationToken);
-            members = CharacterResolver.ForMemberships(memberships);
+            members = CharacterResolver.ForMemberships(
+                memberships, await AccountCharacters.LoadForLinkshellAsync(_db, linkshellId, cancellationToken));
             _membersByLinkshell[linkshellId] = members;
         }
 

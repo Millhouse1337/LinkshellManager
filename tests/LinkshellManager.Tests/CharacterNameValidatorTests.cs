@@ -144,7 +144,6 @@ public class CharacterNameValidatorTests
     [InlineData("ann", "Bob", null, "ann")]          // a new main that is another member's main
     [InlineData("Mine", "Bob", "  bobalt ", "bobalt")] // a new alt that is another member's alt
     [InlineData("Mine", "Bob", "Annalt", "Annalt")]  // ... their alt 2
-    [InlineData("ANNIE", "Bob", null, "ANNIE")]      // ... their roster name
     public async Task ANewNameAnotherRealMemberUses_IsRefused_WithAFriendlyMessage(
         string main, string alt1, string? alt2, string taken)
     {
@@ -161,6 +160,7 @@ public class CharacterNameValidatorTests
     [InlineData("Pat", "Bob", "Patalt")] // a placeholder's names: the player claims them later
     [InlineData("Zed", "Bob", null)]     // a member of a linkshell this account is not in
     [InlineData("Nobody", "Bob", null)]  // a roster name with no account behind it
+    [InlineData("ANNIE", "Bob", null)]   // Ann's roster name "Annie": not her main, and roster names are not read (Round 5)
     [InlineData("Mine", "BOB", null)]    // the alt it already shares with Bob, in other capitals
     [InlineData("Bob", "Mine", null)]    // main and alt swapped: no new name
     [InlineData("Mine", "Bob", "Fresh")] // a name nobody uses

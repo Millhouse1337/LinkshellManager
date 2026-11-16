@@ -104,7 +104,8 @@ public static class AuctionDkpService
             .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
             .ToListAsync(cancellationToken);
         // Who each winner name is: the shared CharacterResolver rule, the one the close charges by.
-        var rosterByName = CharacterResolver.ForMemberships(memberships);
+        var rosterByName = CharacterResolver.ForMemberships(
+            memberships, await AccountCharacters.LoadForLinkshellAsync(db, linkshellId, cancellationToken));
 
         var result = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var loot in pendingLoot)
@@ -319,7 +320,8 @@ public static class AuctionDkpService
             .Where(m => m.LinkshellId == linkshellId && m.AppUserId != null)
             .ToListAsync(cancellationToken);
         // Who each winner name is: the shared CharacterResolver rule, the one the close charges by.
-        var rosterByName = CharacterResolver.ForMemberships(memberships);
+        var rosterByName = CharacterResolver.ForMemberships(
+            memberships, await AccountCharacters.LoadForLinkshellAsync(db, linkshellId, cancellationToken));
 
         var result = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (var loot in pendingLoot)
