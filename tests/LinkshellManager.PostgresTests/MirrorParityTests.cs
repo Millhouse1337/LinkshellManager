@@ -279,6 +279,75 @@ public class MirrorParityTests : IAsyncLifetime
         Assert.Equal(new AccountNameMirrorCheck.Result(1, 1, 2), await AccountNameMirrorCheck.CountAsync(db, CancellationToken.None));
     }
 
+    // A request that loaded the characters before another request renamed one (the addon job post
+    // has no lock) must copy the database's rows, not its own stale ones, onto the account.
+    [Fact]
+    public async Task AStaleContext_CopiesTheSavedRows_NotItsOwnOldOnes()
+    {
+        await AddMemberAsync("me", "Mine", "Altone", null);
+        await using var stale = _pg.CreateContext();
+        var staleSet = await CharacterWriter.LoadAsync(stale, "me", CancellationToken.None);
+
+        await using (var other = _pg.CreateContext())
+        {
+            var set = await CharacterWriter.LoadAsync(other, "me", CancellationToken.None);
+            set.SetName(Character.Alt1Slot, "Newalt");
+            await other.SaveChangesAsync();
+        }
+
+        Assert.True(staleSet.SetJobs(Character.MainSlot, jobLevels: Levels(75)));
+        await stale.SaveChangesAsync();
+
+        await AssertMirrorExactAsync();
+        Assert.Equal(("Mine", "Newalt", null), await NamesAsync("me"));
+    }
+
+    // Identity's UpdateAsync marks every column modified. An account loaded before another request
+    // changed its characters must not write its old copies back over the new ones.
+    [Fact]
+    public async Task AnIdentityUpdateOfAStaleAccount_DoesNotWriteItsOldCopies()
+    {
+        await AddMemberAsync("me", "Mine", "Altone", null);
+        await using var stale = _pg.CreateContext();
+        var staleUser = await stale.Users.SingleAsync(u => u.Id == "me");
+
+        await using (var other = _pg.CreateContext())
+        {
+            var set = await CharacterWriter.LoadAsync(other, "me", CancellationToken.None);
+            set.SetName(Character.MainSlot, "Newmain");
+            set.SetJobs(Character.Alt1Slot, jobLevels: Levels(50));
+            await other.SaveChangesAsync();
+        }
+
+        staleUser.TimeZone = "America/New_York";
+        Assert.True((await NewUserManager(stale).UpdateAsync(staleUser)).Succeeded);
+
+        await AssertMirrorExactAsync();
+        Assert.Equal(("Newmain", "Altone", null), await NamesAsync("me"));
+    }
+
+    // A new membership gets the account's main as saved in the database, even when the context that
+    // adds it loaded the account before another request renamed the main.
+    [Fact]
+    public async Task ANewMembership_FromAStaleContext_GetsTheSavedMain()
+    {
+        await AddMemberAsync("me", "Mine", null, null, linkshellId: null);
+        await using var stale = _pg.CreateContext();
+        var staleUser = await stale.Users.SingleAsync(u => u.Id == "me");
+
+        await using (var other = _pg.CreateContext())
+        {
+            var set = await CharacterWriter.LoadAsync(other, "me", CancellationToken.None);
+            set.SetName(Character.MainSlot, "Newmain");
+            await other.SaveChangesAsync();
+        }
+
+        stale.AppUserLinkshells.Add(LinkshellMembership.NewMember(staleUser, _linkshellId, DateTime.UtcNow));
+        await stale.SaveChangesAsync();
+
+        await AssertMirrorExactAsync();
+    }
+
     // ---- helpers -------------------------------------------------------------------------------
 
     private static int[] Levels(int level) => new[] { level };

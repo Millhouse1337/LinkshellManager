@@ -94,7 +94,7 @@ namespace LinkshellManagerDiscordApp.Data
                 }
             }
 
-            await StampRosterNamesAsync(renamedAccounts, userEntries, async, cancellationToken);
+            await StampRosterNamesAsync(renamedAccounts, accountIds, userEntries, async, cancellationToken);
         }
 
         // A changed row: the name trimmed (and never blank or too long for the mirror), NormalizedName
@@ -116,8 +116,11 @@ namespace LinkshellManagerDiscordApp.Data
             entry.Entity.UpdatedAt = DateTime.UtcNow;
         }
 
-        // The account's rows as they will be after this save: the saved rows, with this save's
-        // deletes, edits and inserts applied.
+        // The account's rows as they will be after this save: the saved rows (read just now), with
+        // this save's deletes, edits and inserts applied. An edited row takes only its CHANGED columns
+        // from this context; everything else (and every unchanged row) comes from the database, so a
+        // context that loaded the rows before another request changed them never copies its old
+        // values (a row another request deleted is not brought back).
         private static List<Character> CharactersNow(
             string accountId, List<Character> saved, List<EntityEntry<Character>> tracked)
         {
@@ -137,13 +140,38 @@ namespace LinkshellManagerDiscordApp.Data
                     case EntityState.Detached:
                         rows.Remove(entry.Entity.Id);
                         break;
-                    default:
-                        if (belongs) rows[entry.Entity.Id] = entry.Entity;
-                        else rows.Remove(entry.Entity.Id);
+                    case EntityState.Modified:
+                        if (!belongs) rows.Remove(entry.Entity.Id);
+                        else rows[entry.Entity.Id] = rows.TryGetValue(entry.Entity.Id, out var row)
+                            ? WithChangedColumns(row, entry)
+                            : entry.Entity;
                         break;
                 }
             }
             return rows.Values.Concat(added).ToList();
+        }
+
+        // The saved row with this context's changed columns on top (what the UPDATE will leave).
+        private static Character WithChangedColumns(Character saved, EntityEntry<Character> entry)
+        {
+            T Pick<T>(string column, T savedValue)
+            {
+                var property = entry.Property(column);
+                return property.IsModified ? (T)property.CurrentValue! : savedValue;
+            }
+            return new Character
+            {
+                Id = saved.Id,
+                AppUserId = saved.AppUserId,
+                Slot = Pick(nameof(Character.Slot), saved.Slot),
+                Name = Pick(nameof(Character.Name), saved.Name),
+                NormalizedName = Pick(nameof(Character.NormalizedName), saved.NormalizedName),
+                JobLevels = Pick(nameof(Character.JobLevels), saved.JobLevels),
+                StrongJobs = Pick(nameof(Character.StrongJobs), saved.StrongJobs),
+                MeritJobs = Pick(nameof(Character.MeritJobs), saved.MeritJobs),
+                CraftLevels = Pick(nameof(Character.CraftLevels), saved.CraftLevels),
+                UpdatedAt = saved.UpdatedAt,
+            };
         }
 
         // Writes the account's copies of its characters. Every copy column is written, changed or not,
@@ -181,8 +209,12 @@ namespace LinkshellManagerDiscordApp.Data
         // The roster name (see the top of this file): new memberships, memberships moved to another
         // account (a placeholder claim), memberships whose roster name someone set by hand, and every
         // membership of an account whose main was renamed in this save.
+        // The main's name comes from this context only for an account it is creating or whose
+        // characters this save copied (copiedAccounts); any other account's is read from the
+        // database, as this context's copy of it may be older than another request's rename.
         private async Task StampRosterNamesAsync(
             HashSet<string> renamedAccounts,
+            HashSet<string> copiedAccounts,
             Dictionary<string, EntityEntry<AppUser>> userEntries,
             bool async,
             CancellationToken cancellationToken)
@@ -220,7 +252,9 @@ namespace LinkshellManagerDiscordApp.Data
             var unknown = new List<string>();
             foreach (var id in memberships.Select(entry => entry.Entity.AppUserId).OfType<string>().Distinct(StringComparer.Ordinal))
             {
-                if (userEntries.TryGetValue(id, out var account) && account.State != EntityState.Deleted)
+                if (userEntries.TryGetValue(id, out var account)
+                    && (account.State == EntityState.Added
+                        || (account.State != EntityState.Deleted && copiedAccounts.Contains(id))))
                 {
                     mains[id] = account.Entity.CharacterName;
                 }
@@ -315,6 +349,10 @@ namespace LinkshellManagerDiscordApp.Data
                         property.CurrentValue = property.OriginalValue;
                         reverted.Add(column);
                     }
+                    // Not written at all: Identity's UpdateAsync marks every column modified, and an
+                    // account loaded before another request changed its characters would otherwise
+                    // write its old copies back over the new ones.
+                    property.IsModified = false;
                 }
                 if (reverted.Count > 0)
                 {

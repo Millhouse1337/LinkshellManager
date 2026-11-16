@@ -48,7 +48,7 @@ public class CharactersBecomeSourceRoundTripTests
             var log = await MigrateAsync(connectionString, Fill);
             Assert.Contains(
                 "Postgres NOTICE during migration: CharactersBecomeSource: Characters: 1 row(s) removed, 4 row(s) added or updated; " +
-                "CharacterName: 1 set to the main, 2 cleared (no main); 2 account(s) mirrored; 3 roster name(s) set to the main.",
+                "CharacterName: 1 set to the main, 2 cleared (no main); 3 account(s) mirrored; 3 roster name(s) set to the main.",
                 log.Entries.Select(e => e.Message));
             Assert.DoesNotContain(log.Entries, e => e.Level >= LogLevel.Warning);
 
@@ -229,8 +229,14 @@ public class CharactersBecomeSourceRoundTripTests
             // a4: already right.
             "UPDATE \"AspNetUsers\" SET \"CharacterName\" = 'Dee' WHERE \"Id\" = 'a4'",
             "INSERT INTO \"Characters\" (\"AppUserId\", \"Slot\", \"Name\", \"NormalizedName\", \"UpdatedAt\") VALUES ('a4', 0, 'Dee', 'dee', '2026-01-01')",
-            // a5: a main too long to copy.
+            // a5: a main too long to copy, and jobs and crafts on every slot but no other name (step 3
+            // must clear every one of them: the mirror is an exact copy of Characters).
             $"UPDATE \"AspNetUsers\" SET \"CharacterName\" = '{new string('x', 300)}' WHERE \"Id\" = 'a5'",
+            "UPDATE \"AspNetUsers\" SET " +
+                "\"StrongJobs\" = '[1]', \"MeritJobs\" = '[\"m\"]', \"CraftLevels\" = '[2]', " +
+                "\"Alt1JobLevels\" = '[3]', \"Alt1StrongJobs\" = '[4]', \"Alt1MeritJobs\" = '[\"m\"]', \"Alt1CraftLevels\" = '[5]', " +
+                "\"Alt2JobLevels\" = '[6]', \"Alt2StrongJobs\" = '[7]', \"Alt2MeritJobs\" = '[\"m\"]', \"Alt2CraftLevels\" = '[8]' " +
+                "WHERE \"Id\" = 'a5'",
         })
         {
             await SchemaTestDatabase.ExecuteAsync(connectionString, statement);
@@ -280,6 +286,22 @@ public class CharactersBecomeSourceRoundTripTests
     {
         await using var db = SchemaTestDatabase.CreateContext(connectionString);
         Assert.Equal(new AccountNameMirrorCheck.Result(0, 0, 0), await AccountNameMirrorCheck.CountAsync(db, CancellationToken.None));
+
+        // Every one of the 15 old columns is an EXACT copy of its slot's row (null with no row).
+        Assert.Equal(new[] { "0" }, await QueryAsync(connectionString, """
+            SELECT count(*)::text
+            FROM "AspNetUsers" u
+            LEFT JOIN "Characters" m  ON m."AppUserId"  = u."Id" AND m."Slot"  = 0
+            LEFT JOIN "Characters" a1 ON a1."AppUserId" = u."Id" AND a1."Slot" = 1
+            LEFT JOIN "Characters" a2 ON a2."AppUserId" = u."Id" AND a2."Slot" = 2
+            WHERE (u."CharacterName", u."JobLevels", u."StrongJobs", u."MeritJobs", u."CraftLevels",
+                   u."AltCharacterName1"::text, u."Alt1JobLevels", u."Alt1StrongJobs", u."Alt1MeritJobs", u."Alt1CraftLevels",
+                   u."AltCharacterName2"::text, u."Alt2JobLevels", u."Alt2StrongJobs", u."Alt2MeritJobs", u."Alt2CraftLevels")
+                IS DISTINCT FROM
+                  (m."Name"::text, m."JobLevels", m."StrongJobs", m."MeritJobs", m."CraftLevels",
+                   a1."Name"::text, a1."JobLevels", a1."StrongJobs", a1."MeritJobs", a1."CraftLevels",
+                   a2."Name"::text, a2."JobLevels", a2."StrongJobs", a2."MeritJobs", a2."CraftLevels")
+            """));
     }
 
     private static Task<List<string>> CharactersAsync(string connectionString) => QueryAsync(connectionString,
