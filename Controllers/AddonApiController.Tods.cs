@@ -1,4 +1,5 @@
 using LinkshellManagerDiscordApp.Authorization;
+using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,7 +8,7 @@ namespace LinkshellManagerDiscordApp.Controllers;
 public sealed partial class AddonApiController
 {
     // Read-only ToD list for the in-game ToD Tracker window. Returns the
-    // newest ToD per monster for the caller's linkshell so the addon can
+    // newest ToD per SPAWN for the caller's linkshell so the addon can
     // show "next repop" + cycle the spawn windows. Read path mirrors
     // ListEventsAsync: [AddonApiAuth] only (any paired linkshell member);
     // posting a ToD still goes through the permission-checked POST /tod.
@@ -21,6 +22,12 @@ public sealed partial class AddonApiController
     // addon lists the same set the app's ToD tracker does. The addon supplies its
     // own spawn-window cadence where it knows one and falls back to a plain
     // repop countdown where it doesn't.
+    //
+    // ONE row per spawn (HnmConfig.SpawnKey): the same rows as the app's tracker (LatestTodLookup).
+    // It used to be one row per NAME, so a merge pair came as two rows, "Fafnir" and "Nidhogg".
+    // The row carries the spawn's display name: the pair's combined label for a merge pair (what the
+    // app's ToD tab shows), else the trimmed name. The addon only shows and matches that name (either
+    // half matches it); a ToD is posted under the half the kill message named, never under this.
     [HttpGet("tods")]
     [AddonApiAuth]
     public async Task<IActionResult> ListTodsAsync(CancellationToken cancellationToken)
@@ -42,13 +49,14 @@ public sealed partial class AddonApiController
             StringComparer.OrdinalIgnoreCase);
 
         // Pull this linkshell's ToDs newest-first, materialize, then collapse
-        // to the newest per monster in-process (case-insensitive name group +
-        // HashSet.Contains don't translate cleanly across EF providers).
+        // to the newest per spawn in-process (the key is worked out from the name,
+        // so a row's stored SpawnKey is not trusted here, and HashSet.Contains
+        // doesn't translate cleanly across EF providers).
         //
         // Rows with no RepopTime are INCLUDED: a camp that ended without anyone seeing the mob die
         // records neither a time nor a repop, and the in-game panels render that as "Not entered".
         // Filtering them out here would leave the addon showing the superseded pop's countdown.
-        // Ordered by Time ?? TimeStamp so such a row still wins its monster group.
+        // Ordered by Time ?? TimeStamp so such a row still wins its spawn group.
         var rows = await _dbContext.Tods
             .AsNoTracking()
             .Where(t => t.LinkshellId == linkshellId
@@ -74,17 +82,23 @@ public sealed partial class AddonApiController
         // its own built-in table (Cerberus 25 x 60 min) whatever the officer had configured.
         var monsterTimings = await _monsterTimings.GetMapAsync(linkshellId, cancellationToken);
 
+        // Hidden names are left out row by row, by the name each ToD was stored under, BEFORE a
+        // spawn's rows are merged: the same result the addon showed when it merged them itself.
+        // A blank name has no spawn key and answers for no spawn, as in the app.
         var tods = rows
             .Where(r => !hidden.Contains(r.MonsterName!.Trim()))
-            .GroupBy(r => r.MonsterName!.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.First())   // newest per monster (source order preserved)
+            .Select(r => (Row: r, SpawnKey: HnmConfig.SpawnKey(r.MonsterName)))
+            .Where(x => x.SpawnKey is not null)
+            .GroupBy(x => x.SpawnKey!, StringComparer.Ordinal)
+            .Select(g => g.First().Row)   // newest per spawn (source order preserved)
             .Select(r =>
             {
                 var timing = monsterTimings.For(r.MonsterName);
                 return new
                 {
                     id = r.Id,
-                    monsterName = r.MonsterName,
+                    // "Fafnir/Nidhogg" for either half of a merge pair, else the trimmed name.
+                    monsterName = HnmConfig.ClaimGroupName(r.MonsterName),
                     dayNumber = r.DayNumber,
                     defeatedAtUtc = r.Time,
                     repopTimeUtc = r.RepopTime,
