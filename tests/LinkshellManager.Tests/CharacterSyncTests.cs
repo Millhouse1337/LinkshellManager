@@ -34,10 +34,11 @@ public class CharacterSyncTests
     }
 
     // A new account saved with only its old columns (as tests seed members) gets them as its
-    // characters, trimmed, a repeated name and a name too long for the mirror left out; the account
-    // then mirrors exactly those rows.
+    // characters, trimmed, a repeated name and a name too long (CharacterWriter.MaxNameLength) left
+    // out; CharacterName then follows the main's row. Since R5.6 the old columns are not rewritten:
+    // they keep what the new account was saved with.
     [Fact]
-    public async Task ANewAccountsOldColumns_BecomeItsCharacters_AndTheMirrorFollowsThem()
+    public async Task ANewAccountsOldColumns_BecomeItsCharacters_AndTheMainNameFollowsThem()
     {
         var options = NewOptions();
         await using (var db = new ApplicationDbContext(options))
@@ -55,12 +56,12 @@ public class CharacterSyncTests
             await RowsAsync(options));
         await using var check = new ApplicationDbContext(options);
         var u1 = await check.Users.AsNoTracking().SingleAsync(u => u.Id == "u1");
-        Assert.Equal(("Bob", (string?)null, (string?)null), (u1.CharacterName, u1.AltCharacterName1, u1.AltCharacterName2));
+        Assert.Equal(("Bob", new string('x', CharacterWriter.MaxNameLength + 1), "BOB"), (u1.CharacterName, u1.AltCharacterName1, u1.AltCharacterName2));
         Assert.Equal(new[] { 75 }, u1.JobLevels);
     }
 
     // An existing account's copy columns changed straight (not through CharacterWriter): the change
-    // is undone, so the mirror never differs from Characters. Other columns save as usual.
+    // is undone, so they never change by hand. Other columns save as usual.
     [Fact]
     public async Task ChangingAnExistingAccountsColumnsStraight_IsUndone_AndTheRestSaves()
     {

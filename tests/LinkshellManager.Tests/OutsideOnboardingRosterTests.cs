@@ -32,6 +32,10 @@ public class OutsideOnboardingRosterTests
         return db;
     }
 
+    // The name in one of an account's character slots (its Characters row), or null.
+    private static string? SlotName(ApplicationDbContext db, string appUserId, short slot) =>
+        db.Characters.Where(c => c.AppUserId == appUserId && c.Slot == slot).Select(c => c.Name).SingleOrDefault();
+
     // A real UserManager over the in-memory store, so creating the placeholder account runs the
     // same Identity checks (unique user name, allowed characters) it does in the app.
     private static ManualMemberService NewService(ApplicationDbContext db) =>
@@ -83,8 +87,8 @@ public class OutsideOnboardingRosterTests
         // A placeholder can't sign in; opening LSM with this Discord later promotes it in place.
         Assert.True(member.AppUser!.IsPlaceholder);
         Assert.Equal("Millhouse", member.AppUser.CharacterName);
-        Assert.Equal("Milltwo", member.AppUser.AltCharacterName1);
-        Assert.Equal("Millthree", member.AppUser.AltCharacterName2);
+        Assert.Equal("Milltwo", SlotName(db, member.AppUserId!, Character.Alt1Slot));
+        Assert.Equal("Millthree", SlotName(db, member.AppUserId!, Character.Alt2Slot));
     }
 
     [Fact]
@@ -98,8 +102,8 @@ public class OutsideOnboardingRosterTests
 
         Assert.True(result.Success);
         var user = Assert.Single(db.Users);
-        Assert.Null(user.AltCharacterName1);
-        Assert.Null(user.AltCharacterName2);
+        Assert.Null(SlotName(db, user.Id, Character.Alt1Slot));
+        Assert.Null(SlotName(db, user.Id, Character.Alt2Slot));
     }
 
     [Fact]
@@ -115,7 +119,7 @@ public class OutsideOnboardingRosterTests
         Assert.True(second.Success);
         Assert.Equal(first.AppUserId, second.AppUserId);
         Assert.Single(db.AppUserLinkshells);
-        Assert.Equal("Milltwo", Assert.Single(db.Users).AltCharacterName1);
+        Assert.Equal("Milltwo", SlotName(db, Assert.Single(db.Users).Id, Character.Alt1Slot));
     }
 
     // ---- someone of that name is already on the roster -----------------------------
@@ -137,7 +141,7 @@ public class OutsideOnboardingRosterTests
         var member = Assert.Single(db.AppUserLinkshells.Include(m => m.AppUser));
         Assert.Null(member.DiscordUserId);
         Assert.False(member.DiscordIdConfirmed);
-        Assert.Null(member.AppUser!.AltCharacterName1);
+        Assert.Null(SlotName(db, member.AppUserId!, Character.Alt1Slot));
         Assert.Single(db.Users);
 
         var request = Assert.Single(db.PlaceholderClaimRequests);

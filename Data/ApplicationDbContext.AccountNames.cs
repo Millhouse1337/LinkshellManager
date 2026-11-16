@@ -5,31 +5,37 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace LinkshellManagerDiscordApp.Data
 {
-    // Round 5 (R5.5): Characters is the only place names, jobs and crafts are written
-    // (CharacterWriter). Every save then copies the result onto the places that still hold a copy:
+    // Round 5: Characters is the only place names, jobs and crafts are written (CharacterWriter).
+    // Every save then copies the result onto the places that still hold a copy:
     //
     // 1. AppUser.CharacterName, the account's display name: always the main's (slot 0) name, or null
     //    when the account has no main. Derived, the same way Rank follows the role.
-    // 2. The old AspNetUsers alt, job and craft columns: an exact mirror of the three slots, so the
-    //    build before Round 5's name switch (which reads them, and copies them into Characters at
-    //    start-up and on every save) sees exactly what this build wrote if it is swapped back in.
-    // 3. The roster name, AppUserLinkshell.CharacterName: nothing reads it any more, but the build
+    // 2. The roster name, AppUserLinkshell.CharacterName: nothing reads it any more, but the build
     //    before still does, so every new membership, every membership that changes account, and every
     //    membership of an account whose main is renamed gets the account's main name.
+    //
+    // The old AspNetUsers alt, job and craft columns are NOT copied to any more (R5.6): the previous
+    // build (R5.5) never reads them, and R5.7 drops them. They keep whatever R5.5 last wrote.
     //
     // Only accounts whose Characters rows change in the save are copied to (their other rows are read
     // from the database). No SQL is run after the save: everything is part of the save itself.
     //
-    // Two guards keep the copies exact when some code still writes the account columns itself:
-    // - an EXISTING account whose copy columns were changed in a save that does not change its
-    //   Characters rows gets the old values back, and a Warning is logged (use CharacterWriter);
+    // Two guards for code that still writes the account columns itself:
+    // - an EXISTING account whose CharacterName was changed in a save that does not change its
+    //   Characters rows, or whose old columns were changed in any save, gets the old values back, and
+    //   a Warning is logged (use CharacterWriter);
     // - a NEW account saved with names in its old columns and no Characters rows gets those names as
     //   its Characters rows (CharacterSync.DesiredRows; names over CharacterWriter.MaxNameLength are
     //   left out), and a Warning is logged. Only tests still create accounts that way.
     public partial class ApplicationDbContext
     {
-        // The account columns that are copies of the account's characters (the main's name first).
-        private static IReadOnlyList<string> AccountNameColumns => CharacterSync.SourceProperties;
+        // The account's display name: a copy of the main's (slot 0) name.
+        private const string MainNameColumn = nameof(AppUser.CharacterName);
+
+        // ROUND5-DROP: the 14 old account alt, job and craft columns, never written since R5.6. The
+        // guard below keeps them unwritten; R5.7 drops them, and this list and its guard with them.
+        private static readonly IReadOnlyList<string> OldAccountColumns =
+            CharacterSync.SourceProperties.Where(column => column != MainNameColumn).ToArray();
 
         // Sync and async saves share this. With async false every query runs synchronously, so the
         // returned task is already complete (SaveChanges waits on it).
@@ -87,7 +93,7 @@ namespace LinkshellManagerDiscordApp.Data
                         continue;
                     }
                     var rows = CharactersNow(id, saved, characterEntries);
-                    if (CopyCharactersOntoAccount(account, rows))
+                    if (StampMainName(account, rows))
                     {
                         renamedAccounts.Add(id);
                     }
@@ -97,7 +103,7 @@ namespace LinkshellManagerDiscordApp.Data
             await StampRosterNamesAsync(renamedAccounts, accountIds, userEntries, async, cancellationToken);
         }
 
-        // A changed row: the name trimmed (and never blank or too long for the mirror), NormalizedName
+        // A changed row: the name trimmed (and never blank or too long, see CharacterWriter), NormalizedName
         // from it, and UpdatedAt now. A refusal is a DbUpdateException, so callers that show save
         // errors (Data Admin) show it as one.
         private static void StampCharacterRow(EntityEntry<Character> entry)
@@ -174,34 +180,18 @@ namespace LinkshellManagerDiscordApp.Data
             };
         }
 
-        // Writes the account's copies of its characters. Every copy column is written, changed or not,
-        // so the database ends up equal to Characters even if this context's copy of the account was
-        // read before someone else's save. Returns whether the main's name changed.
-        private static bool CopyCharactersOntoAccount(EntityEntry<AppUser> account, List<Character> rows)
+        // Sets the account's CharacterName to its main's (slot 0) name, or null. Written even when it
+        // looks unchanged, so the database ends up equal to Characters even if this context's copy of
+        // the account was read before someone else's save. Returns whether the main's name changed.
+        private static bool StampMainName(EntityEntry<AppUser> account, List<Character> rows)
         {
-            Character? InSlot(short slot) => rows.Where(row => row.Slot == slot).OrderBy(row => row.Id).FirstOrDefault();
-            var main = InSlot(Character.MainSlot);
-            var alt1 = InSlot(Character.Alt1Slot);
-            var alt2 = InSlot(Character.Alt2Slot);
-
-            var oldMain = account.State == EntityState.Added
-                ? null
-                : account.Property(nameof(AppUser.CharacterName)).OriginalValue as string;
-            var values = new object?[]
+            var main = rows.Where(row => row.Slot == Character.MainSlot).OrderBy(row => row.Id).FirstOrDefault();
+            var property = account.Property(MainNameColumn);
+            var oldMain = account.State == EntityState.Added ? null : property.OriginalValue as string;
+            property.CurrentValue = main?.Name;
+            if (account.State != EntityState.Added)
             {
-                main?.Name,
-                main?.JobLevels?.ToArray(), main?.StrongJobs?.ToArray(), main?.MeritJobs?.ToArray(), main?.CraftLevels?.ToArray(),
-                alt1?.Name, alt1?.JobLevels?.ToArray(), alt1?.StrongJobs?.ToArray(), alt1?.MeritJobs?.ToArray(), alt1?.CraftLevels?.ToArray(),
-                alt2?.Name, alt2?.JobLevels?.ToArray(), alt2?.StrongJobs?.ToArray(), alt2?.MeritJobs?.ToArray(), alt2?.CraftLevels?.ToArray(),
-            };
-            for (var i = 0; i < AccountNameColumns.Count; i++)
-            {
-                var property = account.Property(AccountNameColumns[i]);
-                property.CurrentValue = values[i];
-                if (account.State != EntityState.Added)
-                {
-                    property.IsModified = true;
-                }
+                property.IsModified = true;
             }
             return account.State != EntityState.Added && !string.Equals(oldMain, main?.Name, StringComparison.Ordinal);
         }
@@ -329,19 +319,23 @@ namespace LinkshellManagerDiscordApp.Data
             return adopted;
         }
 
-        // An existing account whose copy columns were changed by hand, in a save that does not change
-        // its Characters rows: the change is undone, so the copy stays exact. Compared by value, so
-        // Identity's UpdateAsync (which marks every column modified) is not a change.
+        // An existing account whose CharacterName was changed by hand in a save that does not change
+        // its Characters rows (a save that does stamps it right after this), or whose old columns were
+        // changed by hand in any save: the change is undone. Compared by value, so Identity's
+        // UpdateAsync (which marks every column modified) is not a change.
         private void RevertCopiesChangedByHand(Dictionary<string, EntityEntry<AppUser>> userEntries, HashSet<string> copiedAccounts)
         {
             foreach (var (id, account) in userEntries)
             {
-                if (account.State != EntityState.Modified || copiedAccounts.Contains(id))
+                if (account.State != EntityState.Modified)
                 {
                     continue;
                 }
+                var columns = copiedAccounts.Contains(id)
+                    ? OldAccountColumns
+                    : OldAccountColumns.Prepend(MainNameColumn);
                 var reverted = new List<string>();
-                foreach (var column in AccountNameColumns)
+                foreach (var column in columns)
                 {
                     var property = account.Property(column);
                     if (!SameValue(property.CurrentValue, property.OriginalValue))

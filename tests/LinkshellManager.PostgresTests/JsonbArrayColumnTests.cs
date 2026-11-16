@@ -80,11 +80,11 @@ public class JsonbArrayColumnTests : IAsyncLifetime
         }
     }
 
-    // The main character's jobs: written to its Characters row (CharacterWriter, Round 5) and
-    // mirrored onto the account, both as JSON the app reads back as the same arrays. (The old
-    // membership copies were dropped by Round4Contract.)
+    // The main character's jobs: written to its Characters row (CharacterWriter, Round 5) as JSON the
+    // app reads back as the same arrays. Since R5.6 they are not copied onto the old account columns,
+    // which stay as they were (here: empty). (The old membership copies were dropped by Round4Contract.)
     [Fact]
-    public async Task MainJobs_AreWrittenAsJsonOnTheAccount()
+    public async Task MainJobs_AreWrittenAsJsonOnTheCharactersRow()
     {
         await using (var db = _pg.CreateContext())
         {
@@ -110,16 +110,16 @@ public class JsonbArrayColumnTests : IAsyncLifetime
                     "SELECT concat_ws('|', \"JobLevels\"::text, \"StrongJobs\"::text, \"MeritJobs\"::text) AS \"Value\" " +
                     "FROM \"AspNetUsers\" WHERE \"Id\" = 'user-1'")
                 .SingleAsync();
-            Assert.Equal("[0, 75, 37]|[0, 1, 0]|[\"\", \"Axe x5\"]", account);
+            Assert.Equal("", account);
             var row = await db.Database
                 .SqlQueryRaw<string>(
                     "SELECT concat_ws('|', \"JobLevels\"::text, \"StrongJobs\"::text, \"MeritJobs\"::text) AS \"Value\" " +
                     "FROM \"Characters\" WHERE \"AppUserId\" = 'user-1' AND \"Slot\" = 0")
                 .SingleAsync();
-            Assert.Equal(account, row);
-            var user = await db.Users.SingleAsync(u => u.Id == "user-1");
-            Assert.Equal(new[] { 0, 75, 37 }, user.JobLevels);
-            Assert.Equal(new[] { "", "Axe x5" }, user.MeritJobs);
+            Assert.Equal("[0, 75, 37]|[0, 1, 0]|[\"\", \"Axe x5\"]", row);
+            var main = await db.Characters.SingleAsync(c => c.AppUserId == "user-1" && c.Slot == Character.MainSlot);
+            Assert.Equal(new[] { 0, 75, 37 }, main.JobLevels);
+            Assert.Equal(new[] { "", "Axe x5" }, main.MeritJobs);
         }
     }
 }

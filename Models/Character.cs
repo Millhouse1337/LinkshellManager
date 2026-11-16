@@ -8,8 +8,8 @@ namespace LinkshellManagerDiscordApp.Models;
 /// JobRating.CharacterSlot).
 ///
 /// Since Round 5 (R5.5) the only place names, jobs and crafts are written: every writer goes through
-/// CharacterWriter, and every save copies the rows onto the account (AppUser.CharacterName from slot
-/// 0, and the old AspNetUsers columns as a mirror). The name lookups read it
+/// CharacterWriter, and every save copies slot 0's name onto the account (AppUser.CharacterName).
+/// The name lookups read it
 /// (CharacterResolver.LoadMembershipsAsync, LinkshellRosterNames.LoadCandidatesAsync, the addon
 /// /roster alts), so one query covers every character of every account.
 ///
@@ -23,7 +23,7 @@ public class Character
     public const short Alt1Slot = 1;
     public const short Alt2Slot = 2;
 
-    // Longest name the table holds. While the old columns are mirrored, CharacterWriter takes at most
+    // Longest name the table holds. While the old account columns exist, CharacterWriter takes at most
     // 64 (CharacterWriter.MaxNameLength).
     public const int MaxNameLength = 256;
 

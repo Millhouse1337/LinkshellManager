@@ -99,8 +99,8 @@ public sealed class DataAdminPolicy
 
             // ---- characters --------------------------------------------------------------------------
             // An account's characters (slot 0 the main, 1 and 2 the alts): since Round 5 the only place
-            // names, jobs and crafts are written. A name is edited here; every save copies it onto the
-            // account (its CharacterName and the old columns) and the roster names. NormalizedName
+            // names, jobs and crafts are written. A name is edited here; every save copies the main's
+            // onto the account's CharacterName and the roster names. NormalizedName
             // follows Name. Rows come and go with the profile (CharacterWriter), never here. The job
             // and craft lists are jsonb arrays, which Data Admin never edits (IsProtected).
             [typeof(Character)] = new()

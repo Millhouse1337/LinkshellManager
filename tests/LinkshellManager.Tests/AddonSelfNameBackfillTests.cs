@@ -12,12 +12,12 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-#pragma warning disable CS0618 // These tests check the mirror columns and the roster name, which only the save hook writes.
+#pragma warning disable CS0618 // These tests check the old columns and the roster name, which only the save hook writes.
 
-// Round 5 (R5.5): the addon's self-name backfill (an attendance post that says which character the
-// token owner is logged in as) writes the owner's main through CharacterWriter when the account has
-// none. The save copies it onto the account, its old columns and its roster name, exactly as every
-// other writer (MirrorParityTests covers the others on Postgres).
+// Round 5: the addon's self-name backfill (an attendance post that says which character the token
+// owner is logged in as) writes the owner's main through CharacterWriter when the account has none.
+// The save copies it onto the account's CharacterName and its roster name, exactly as every other
+// writer (AccountNameStampTests covers the others on Postgres). The old alt columns are not written.
 public class AddonSelfNameBackfillTests
 {
     private const int Ls = 7;
@@ -86,7 +86,9 @@ public class AddonSelfNameBackfillTests
         var rows = await db.Characters.AsNoTracking().Where(c => c.AppUserId == "me").OrderBy(c => c.Slot).ToListAsync();
         Assert.Equal(new[] { ((short)0, "Selfy"), ((short)1, "Myalt") }, rows.Select(c => (c.Slot, c.Name)));
         var me = await db.Users.AsNoTracking().SingleAsync(u => u.Id == "me");
-        Assert.Equal(("Selfy", "Myalt", (string?)null), (me.CharacterName, me.AltCharacterName1, me.AltCharacterName2));
+        Assert.Equal("Selfy", me.CharacterName);
+        // Since R5.6 the old alt columns are not written.
+        Assert.Equal(((string?)null, (string?)null), (me.AltCharacterName1, me.AltCharacterName2));
         Assert.Equal("Selfy", (await db.AppUserLinkshells.AsNoTracking().SingleAsync()).CharacterName);
         // The attendance went to the owner.
         Assert.Equal("me", (await db.AppUserEvents.AsNoTracking().SingleAsync()).AppUserId);
@@ -105,7 +107,8 @@ public class AddonSelfNameBackfillTests
         Assert.Equal(new[] { ((short)1, "Selfy") }, rows.Select(c => (c.Slot, c.Name)));
         var me = await db.Users.AsNoTracking().SingleAsync(u => u.Id == "me");
         Assert.Null(me.CharacterName);
-        Assert.Equal("Selfy", me.AltCharacterName1);
+        // Since R5.6 the old alt column is not written.
+        Assert.Null(me.AltCharacterName1);
         Assert.Null((await db.AppUserLinkshells.AsNoTracking().SingleAsync()).CharacterName);
     }
 }

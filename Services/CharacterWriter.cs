@@ -12,9 +12,9 @@ namespace LinkshellManagerDiscordApp.Services;
 // that table is the only place names, jobs and crafts are written. Every writer (the profile, the
 // addon, the Discord sign-in and sign-up, placeholder create and claim) loads a CharacterSet here,
 // changes it, and saves the context as usual. The save hook (ApplicationDbContext
-// .StampAccountFromCharacters) then copies the result onto the account: AppUser.CharacterName (the
-// main's name, the account's display name) and, while the old build may still be swapped back in,
-// the old AspNetUsers name/job/craft columns as an exact mirror.
+// .StampAccountsFromCharactersAsync) then copies the main's name onto the account's CharacterName
+// (the account's display name). Since R5.6 nothing copies onto the old AspNetUsers alt, job and
+// craft columns any more.
 //
 // Rules:
 // - names are trimmed; a blank name removes that slot's row (and its jobs and crafts with it);
@@ -24,7 +24,7 @@ namespace LinkshellManagerDiscordApp.Services;
 //   first, so a main and an alt can swap names in one save without tripping the one-name-per-account
 //   index (IX_Characters_AppUserId_NormalizedName);
 // - one account never holds a name twice (SetName refuses it; TrySetName skips it);
-// - names are at most MaxNameLength characters while the old columns are mirrored.
+// - names are at most MaxNameLength characters (see MaxNameLength).
 //
 // Two saves of one account: when the caller has a transaction open (BeginTransactionAsync), LoadAsync
 // first takes a per-account advisory lock, so the second waits for the first to commit and then
@@ -32,8 +32,10 @@ namespace LinkshellManagerDiscordApp.Services;
 // are simply loaded.
 public static class CharacterWriter
 {
-    // The longest name while the old account columns are mirrored: AltCharacterName1/2 are
-    // varchar(64). (The game's own limit is 15, CharacterNameFormat.MaxLength.)
+    // The longest name while the old account columns exist: AltCharacterName1/2 are varchar(64), and
+    // the R5.5 build (the one a rollback swaps in) still copies every name into them, so a longer
+    // name saved now would make its saves of that account fail. (The game's own limit is 15,
+    // CharacterNameFormat.MaxLength.)
     public const int MaxNameLength = 64;
 
     // pg_advisory_xact_lock(class, key) class for "changing this account's characters", the same class

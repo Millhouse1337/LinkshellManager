@@ -73,7 +73,7 @@ public class PlaceholderClaimServiceTests
         // alt the next (owner decision 2, Round 5), so both names still find this account. The moved
         // roster row takes the real account's main.
         var real = db.Users.Find(Real)!;
-        Assert.Equal(("Bob", "Bobalt", "Bobthree"), (real.CharacterName, real.AltCharacterName1, real.AltCharacterName2));
+        Assert.Equal("Bob", real.CharacterName);
         Assert.Equal(new[] { "Bob", "Bobalt", "Bobthree" },
             db.Characters.AsNoTracking().Where(c => c.AppUserId == Real).OrderBy(c => c.Slot).Select(c => c.Name).ToArray());
         Assert.Empty(result.NamesNotKept);

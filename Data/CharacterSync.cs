@@ -7,9 +7,10 @@ namespace LinkshellManagerDiscordApp.Data;
 // What is left of the old copy from the account columns into Characters (AddCharacters).
 //
 // Since Round 5 (R5.5) Characters is the only written source of names, jobs and crafts
-// (CharacterWriter), and the account columns are a mirror the save writes FROM Characters
-// (ApplicationDbContext.StampAccountsFromCharactersAsync). The copy the other way (a SQL copy after
-// every save and again at every start-up) is gone. Two rules of it stay:
+// (CharacterWriter). The copy from the account columns into Characters (a SQL copy after every save
+// and again at every start-up) is gone, and since R5.6 nothing writes the old account columns at
+// all (only CharacterName, from the main's row: ApplicationDbContext.StampAccountsFromCharactersAsync).
+// Two rules of the old copy stay:
 //
 // - DesiredRows: the Characters rows an account's old columns describe. The save hook uses it for a
 //   brand-new account saved with names in its old columns and no Characters rows (only tests do that
@@ -24,7 +25,8 @@ namespace LinkshellManagerDiscordApp.Data;
 public static class CharacterSync
 {
     // The account's columns that are copies of its characters: the main's name first, then each
-    // slot's jobs and crafts. The save hook writes every one of them from Characters.
+    // slot's jobs and crafts. The save hook stamps the first (CharacterName) from Characters and
+    // keeps the other 14 unwritten (R5.6).
     public static readonly IReadOnlyList<string> SourceProperties = new[]
     {
         nameof(AppUser.CharacterName), nameof(AppUser.JobLevels), nameof(AppUser.StrongJobs),

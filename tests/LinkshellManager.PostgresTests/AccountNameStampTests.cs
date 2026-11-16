@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using LinkshellManagerDiscordApp.Controllers;
 using LinkshellManagerDiscordApp.Data;
 using LinkshellManagerDiscordApp.Models;
+using LinkshellManagerDiscordApp.Options;
 using LinkshellManagerDiscordApp.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -15,33 +16,67 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
-using LinkshellManagerDiscordApp.Options;
 using Xunit;
 
 namespace LinkshellManager.PostgresTests;
 
-#pragma warning disable CS0618 // These tests read the mirror columns and the roster name on purpose.
+#pragma warning disable CS0618 // These tests read the old account columns and the roster name on purpose.
 
-// Round 5 (R5.5): what makes rolling back to the build before the name switch (603439d) safe.
+// Round 5 (R5.6): Characters is the only written source of names, jobs and crafts, and the save
+// stamps exactly one copy of it: the account's CharacterName (the main's, slot 0, name). After EVERY
+// writer path of this build:
+// - every account's CharacterName is exactly its main's name, and every roster name its account's
+//   main (the R5.5 start-up check's counts, AccountNameMirrorCounts);
+// - the old account alt, job and craft columns are NOT written: an account keeps what the R5.5 build
+//   last copied there (each test starts from that), and a new account has none.
+// Rolling back to R5.5 is safe without SQL: R5.5 reads none of the old columns.
 //
-// Characters is the only written source of names, jobs and crafts now, and every save copies it
-// onto the account's old columns and the roster names. The old build reads those copies, and at
-// start-up (and on every account save) copies the account columns back INTO Characters. So after
-// EVERY writer path of this build:
-// - the pre-check's A7 query finds no account whose columns differ from Characters, CharacterName is
-//   exactly the main's name, and every roster name is exactly its account's main
-//   (AccountNameMirrorCounts, the R5.5 start-up check);
-// - the account columns are an EXACT copy of Characters (not just equal after trimming);
-// - the old build's own copy (PreviousBuildCharacterCopy, frozen from 603439d) changes no row.
+// Going back further (to R5.4, which reads the old columns and copies them INTO Characters) needs
+// the "mirror refill" SQL from docs/round5-drop-manifest.md first. Each test ends by running it
+// (MirrorRefillSql, word for word) and checking that the copies are then exact and that the R5.4
+// build's own copy (PreviousBuildCharacterCopy) changes no Characters row.
 //
-// (These replace CharacterSyncHookTests, which tested the copy the other way, now removed.)
+// (These replace MirrorParityTests, which checked the exact copy R5.5 made on every save.)
 [Collection("postgres")]
-public class MirrorParityTests : IAsyncLifetime
+public class AccountNameStampTests : IAsyncLifetime
 {
+    // docs/round5-drop-manifest.md, "Mirror refill", word for word. Safe to run twice.
+    internal const string MirrorRefillSql = """
+        UPDATE "AspNetUsers" u SET
+          "CharacterName" = m."Name",
+          "JobLevels" = m."JobLevels", "StrongJobs" = m."StrongJobs", "MeritJobs" = m."MeritJobs", "CraftLevels" = m."CraftLevels",
+          "AltCharacterName1" = a1."Name", "Alt1JobLevels" = a1."JobLevels", "Alt1StrongJobs" = a1."StrongJobs",
+          "Alt1MeritJobs" = a1."MeritJobs", "Alt1CraftLevels" = a1."CraftLevels",
+          "AltCharacterName2" = a2."Name", "Alt2JobLevels" = a2."JobLevels", "Alt2StrongJobs" = a2."StrongJobs",
+          "Alt2MeritJobs" = a2."MeritJobs", "Alt2CraftLevels" = a2."CraftLevels"
+        FROM "AspNetUsers" x
+        LEFT JOIN "Characters" m  ON m."AppUserId"  = x."Id" AND m."Slot"  = 0
+        LEFT JOIN "Characters" a1 ON a1."AppUserId" = x."Id" AND a1."Slot" = 1
+        LEFT JOIN "Characters" a2 ON a2."AppUserId" = x."Id" AND a2."Slot" = 2
+        WHERE x."Id" = u."Id";
+        UPDATE "AppUserLinkshells" l SET "CharacterName" = u."CharacterName"
+          FROM "AspNetUsers" u WHERE u."Id" = l."AppUserId" AND l."CharacterName" IS DISTINCT FROM u."CharacterName";
+        """;
+
+    // The 14 old columns of every account, NULL shown as "-", so a test can say "not written".
+    private const string OldColumnsSql = """
+        SELECT u."Id" || '=' || concat_ws('|',
+            coalesce(u."AltCharacterName1", '-'), coalesce(u."AltCharacterName2", '-'),
+            coalesce(u."JobLevels"::text, '-'), coalesce(u."StrongJobs"::text, '-'), coalesce(u."MeritJobs"::text, '-'),
+            coalesce(u."CraftLevels"::text, '-'),
+            coalesce(u."Alt1JobLevels"::text, '-'), coalesce(u."Alt1StrongJobs"::text, '-'),
+            coalesce(u."Alt1MeritJobs"::text, '-'), coalesce(u."Alt1CraftLevels"::text, '-'),
+            coalesce(u."Alt2JobLevels"::text, '-'), coalesce(u."Alt2StrongJobs"::text, '-'),
+            coalesce(u."Alt2MeritJobs"::text, '-'), coalesce(u."Alt2CraftLevels"::text, '-')) AS "Value"
+        FROM "AspNetUsers" u ORDER BY u."Id"
+        """;
+
+    private const string NoOldColumns = "-|-|-|-|-|-|-|-|-|-|-|-|-|-";
+
     private readonly PostgresFixture _pg;
     private int _linkshellId;
 
-    public MirrorParityTests(PostgresFixture pg) => _pg = pg;
+    public AccountNameStampTests(PostgresFixture pg) => _pg = pg;
 
     public async Task InitializeAsync()
     {
@@ -60,7 +95,7 @@ public class MirrorParityTests : IAsyncLifetime
     {
         await AddMemberAsync("me", "Mine", "Altone", null);
         await AddMemberAsync("other", "Other", null, null);
-        await AssertMirrorExactAsync();
+        var before = await AsTheR55BuildLeftItAsync();
 
         // Names, jobs and crafts in one profile save (the Activity profile endpoint).
         Assert.IsType<OkObjectResult>(await PostProfileAsync("me", new ActivityUpdateProfileRequest(
@@ -68,42 +103,56 @@ public class MirrorParityTests : IAsyncLifetime
             JobLevels: Levels(75), StrongJobs: new[] { true }, MeritJobs: new[] { "Axe" },
             Alt1JobLevels: Levels(50), Alt2JobLevels: Levels(30),
             CraftLevels: new[] { 1, 2 }, Alt1CraftLevels: new[] { 3 })));
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("Newmain", "Altone", "Alttwo"), await NamesAsync("me"));
+        // The profile stores each slot's full job list; each slot keeps its own level.
+        var jobs = (await JobsAsync("me")).Split('|');
+        Assert.Contains("75", jobs[0]);
+        Assert.Contains("50", jobs[1]);
+        Assert.Contains("30", jobs[2]);
 
         // The main and alt 1 swap names; alt 2 is cleared (its jobs go with it).
         Assert.IsType<OkObjectResult>(await PostProfileAsync("me", new ActivityUpdateProfileRequest(
             CharacterName: "Altone", TimeZone: null, AltCharacterName1: "Newmain", AltCharacterName2: null)));
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("Altone", "Newmain", null), await NamesAsync("me"));
 
         // A capitals-only rename.
         Assert.IsType<OkObjectResult>(await PostProfileAsync("me", new ActivityUpdateProfileRequest(
             CharacterName: "ALTONE", TimeZone: null, AltCharacterName1: "Newmain", AltCharacterName2: null)));
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
+        Assert.Equal(("ALTONE", "Newmain", null), await NamesAsync("me"));
 
         // A refused save (another member's name) changes nothing.
         Assert.IsType<BadRequestObjectResult>(await PostProfileAsync("me", new ActivityUpdateProfileRequest(
             CharacterName: "ALTONE", TimeZone: null, AltCharacterName1: "Other", AltCharacterName2: null)));
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
+        Assert.Equal(("ALTONE", "Newmain", null), await NamesAsync("me"));
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
     [Fact]
     public async Task Addon_MainAndAltJobs()
     {
         await AddMemberAsync("me", "Mine", "Altone", "Alttwo");
+        var before = await AsTheR55BuildLeftItAsync();
 
         Assert.IsType<OkObjectResult>(await PostAddonJobsAsync("me", " mine ", Levels(75)));
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.IsType<OkObjectResult>(await PostAddonJobsAsync("me", "ALTTWO", Levels(40)));
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.IsType<ForbidResult>(await PostAddonJobsAsync("me", "Nobody", Levels(1)));
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
+        Assert.Equal("[75]|-|[40]", await JobsAsync("me"));
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
     [Fact]
     public async Task PlaceholderCreate_AndAltFillIn_FromTheImportAndTheSignupForm()
     {
+        var before = await AsTheR55BuildLeftItAsync();
         string imported;
         await using (var db = _pg.CreateContext())
         {
@@ -112,7 +161,7 @@ public class MirrorParityTests : IAsyncLifetime
             Assert.True(result.Success, result.Error);
             imported = result.AppUserId!;
         }
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("Newbie", "Newalt", null), await NamesAsync(imported));
 
         // The import again: fills only an empty alt.
@@ -121,7 +170,7 @@ public class MirrorParityTests : IAsyncLifetime
             var result = await NewManualMembers(db).FindOrCreateByNameAsync(_linkshellId, "newbie", "Ignored", "Secondalt", CancellationToken.None);
             Assert.Equal(imported, result.AppUserId);
         }
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("Newbie", "Newalt", "Secondalt"), await NamesAsync(imported));
 
         // The Discord sign-up form: a new placeholder for this Discord user, then its alts replaced.
@@ -137,8 +186,10 @@ public class MirrorParityTests : IAsyncLifetime
             var result = await NewManualMembers(db).FindOrCreateForOutsideAsync(_linkshellId, "Formmain", "Newformalt", "Formtwo", "555", CancellationToken.None);
             Assert.True(result.Success, result.Error);
         }
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("Formmain", "Newformalt", "Formtwo"), await NamesAsync(formMember));
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
     [Fact]
@@ -152,6 +203,7 @@ public class MirrorParityTests : IAsyncLifetime
             characters.SetJobs(Character.MainSlot, jobLevels: Levels(60));
             await db.SaveChangesAsync();
         }
+        var before = await AsTheR55BuildLeftItAsync();
 
         await using (var db = _pg.CreateContext())
         {
@@ -160,16 +212,23 @@ public class MirrorParityTests : IAsyncLifetime
             Assert.True(result.Success, result.Error);
         }
 
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("Bob", "Bobby", "Bobalt"), await NamesAsync("real"));
-        await using var check = _pg.CreateContext();
-        Assert.Equal("Bob", (await check.AppUserLinkshells.AsNoTracking().SingleAsync()).CharacterName);
-        Assert.False(await check.Characters.AnyAsync(c => c.AppUserId == "ph"));
+        await using (var check = _pg.CreateContext())
+        {
+            Assert.Equal("Bob", (await check.AppUserLinkshells.AsNoTracking().SingleAsync()).CharacterName);
+            Assert.False(await check.Characters.AnyAsync(c => c.AppUserId == "ph"));
+            Assert.False(await check.Users.AnyAsync(u => u.Id == "ph"));
+        }
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
     [Fact]
     public async Task DiscordSignIn_NewAccount_PromotedPlaceholder_AndABlankMain()
     {
+        var before = await AsTheR55BuildLeftItAsync();
+
         // A brand-new account.
         await using (var db = _pg.CreateContext())
         {
@@ -177,17 +236,18 @@ public class MirrorParityTests : IAsyncLifetime
                 new DiscordIdentityProfile("100", "newuser", " New User ", null), null, CancellationToken.None);
             Assert.True(result.IsNewAppUser);
         }
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
 
         // A placeholder made by the sign-up form for this Discord user, with no main name yet.
         await AddMemberAsync("ph", null, "Phalt", null, placeholder: true, discordUserId: "200");
+        before = await AsTheR55BuildLeftItAsync();
         await using (var db = _pg.CreateContext())
         {
             var result = await NewIdentity(db).ResolveWebsiteSignInAsync(
                 new DiscordIdentityProfile("200", "phuser", null, null), null, CancellationToken.None);
             Assert.Equal("ph", result.AppUser.Id);
         }
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("phuser", "Phalt", null), await NamesAsync("ph"));
 
         // An account linked already, whose main was cleared: the next sign-in fills it.
@@ -197,14 +257,16 @@ public class MirrorParityTests : IAsyncLifetime
             characters.SetName(Character.MainSlot, null);
             await db.SaveChangesAsync();
         }
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         await using (var db = _pg.CreateContext())
         {
             await NewIdentity(db).ResolveWebsiteSignInAsync(
                 new DiscordIdentityProfile("200", "phuser", "Ph Global", null), null, CancellationToken.None);
         }
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("Ph Global", "Phalt", null), await NamesAsync("ph"));
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
     [Fact]
@@ -212,6 +274,7 @@ public class MirrorParityTests : IAsyncLifetime
     {
         await AddMemberAsync("admin", "Admin", null, null, linkshellId: null);
         await AddMemberAsync("me", "Mine", "Altone", null);
+        var before = await AsTheR55BuildLeftItAsync();
 
         await using (var db = _pg.CreateContext())
         {
@@ -237,16 +300,19 @@ public class MirrorParityTests : IAsyncLifetime
             Assert.False(refused.Succeeded);
         }
 
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("Renamed", "Altone", null), await NamesAsync("me"));
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
-    // A change made straight on the old columns (not through CharacterWriter) is undone by the save,
-    // so the mirror can never drift.
+    // A change made straight on CharacterName or the old columns (not through CharacterWriter) is
+    // undone by the save, alone or in a save that also changes the account's characters.
     [Fact]
-    public async Task AStraightChangeOfTheOldColumns_IsUndone()
+    public async Task AStraightChangeOfTheMainNameOrTheOldColumns_IsUndone()
     {
         await AddMemberAsync("me", "Mine", "Altone", null);
+        var before = await AsTheR55BuildLeftItAsync();
         await using (var db = _pg.CreateContext())
         {
             var user = await db.Users.SingleAsync(u => u.Id == "me");
@@ -255,59 +321,82 @@ public class MirrorParityTests : IAsyncLifetime
             user.Alt1JobLevels = Levels(99);
             await db.SaveChangesAsync();
         }
+        await AssertStampedAsync(before);
 
-        await AssertMirrorExactAsync();
+        await using (var db = _pg.CreateContext())
+        {
+            var user = await db.Users.SingleAsync(u => u.Id == "me");
+            user.CharacterName = "Sneaky";
+            user.AltCharacterName1 = "Sneakyalt";
+            var set = await CharacterWriter.LoadAsync(db, "me", CancellationToken.None);
+            set.SetJobs(Character.Alt1Slot, jobLevels: Levels(10));
+            await db.SaveChangesAsync();
+        }
+        await AssertStampedAsync(before);
         Assert.Equal(("Mine", "Altone", null), await NamesAsync("me"));
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
-    // The start-up check counts what differs (here: drift made with raw SQL, as an older build or a
-    // hand edit could leave it).
+    // The refill fixes any difference (here: drift made with raw SQL, as a hand edit could leave it),
+    // and running it twice changes nothing more.
     [Fact]
-    public async Task TheStartupCheck_CountsDrift()
+    public async Task TheMirrorRefill_FixesDrift_AndIsSafeToRunTwice()
     {
         await AddMemberAsync("me", "Mine", "Altone", null);
         await AddMemberAsync("you", "Yours", null, null);
-        await using var db = _pg.CreateContext();
-        Assert.True((await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None)).AllMatch);
+        await using (var db = _pg.CreateContext())
+        {
+            var set = await CharacterWriter.LoadAsync(db, "me", CancellationToken.None);
+            set.SetJobs(Character.MainSlot, jobLevels: Levels(75), strongJobs: Levels(1));
+            set.SetCrafts(Character.Alt1Slot, new[] { 3 });
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlRawAsync("UPDATE \"AspNetUsers\" SET \"AltCharacterName1\" = 'Changed' WHERE \"Id\" = 'me'");
+            await db.Database.ExecuteSqlRawAsync("UPDATE \"AspNetUsers\" SET \"CharacterName\" = ' Yours ' WHERE \"Id\" = 'you'");
+            await db.Database.ExecuteSqlRawAsync("UPDATE \"AppUserLinkshells\" SET \"CharacterName\" = 'Old' WHERE \"AppUserId\" = 'me'");
+            Assert.False((await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None)).AllMatch);
+        }
 
-        await db.Database.ExecuteSqlRawAsync("UPDATE \"AspNetUsers\" SET \"AltCharacterName1\" = 'Changed' WHERE \"Id\" = 'me'");
-        await db.Database.ExecuteSqlRawAsync("UPDATE \"AspNetUsers\" SET \"CharacterName\" = ' Yours ' WHERE \"Id\" = 'you'");
-        await db.Database.ExecuteSqlRawAsync("UPDATE \"AppUserLinkshells\" SET \"CharacterName\" = 'Old' WHERE \"AppUserId\" = 'me'");
-
-        // ' Yours ' still copies to the same row (A7 trims), but it is not exactly the main's name, and
-        // its roster name no longer equals it either: two roster names differ.
-        Assert.Equal(new AccountNameMirrorCounts.Result(1, 1, 2), await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None));
+        await AssertTheRefillMakesTheCopiesExactAsync();
+        await AssertTheRefillMakesTheCopiesExactAsync();
+        await using var check = _pg.CreateContext();
+        Assert.Equal(new[] { "me=Altone|-|[75]|[1]|-|-|-|-|-|[3]|-|-|-|-", "you=" + NoOldColumns },
+            await check.Database.SqlQueryRaw<string>(OldColumnsSql).ToListAsync());
     }
 
-    // A request that loaded the characters before another request renamed one (the addon job post
-    // has no lock) must copy the database's rows, not its own stale ones, onto the account.
+    // A request that loaded the characters before another request renamed the main (the addon job
+    // post has no lock) must stamp the database's main, not its own stale one, onto the account.
     [Fact]
-    public async Task AStaleContext_CopiesTheSavedRows_NotItsOwnOldOnes()
+    public async Task AStaleContext_StampsTheSavedMain_NotItsOwnOldOne()
     {
         await AddMemberAsync("me", "Mine", "Altone", null);
+        var before = await AsTheR55BuildLeftItAsync();
         await using var stale = _pg.CreateContext();
         var staleSet = await CharacterWriter.LoadAsync(stale, "me", CancellationToken.None);
 
         await using (var other = _pg.CreateContext())
         {
             var set = await CharacterWriter.LoadAsync(other, "me", CancellationToken.None);
-            set.SetName(Character.Alt1Slot, "Newalt");
+            set.SetName(Character.MainSlot, "Newmain");
             await other.SaveChangesAsync();
         }
 
-        Assert.True(staleSet.SetJobs(Character.MainSlot, jobLevels: Levels(75)));
+        Assert.True(staleSet.SetJobs(Character.Alt1Slot, jobLevels: Levels(75)));
         await stale.SaveChangesAsync();
 
-        await AssertMirrorExactAsync();
-        Assert.Equal(("Mine", "Newalt", null), await NamesAsync("me"));
+        await AssertStampedAsync(before);
+        Assert.Equal(("Newmain", "Altone", null), await NamesAsync("me"));
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
     // Identity's UpdateAsync marks every column modified. An account loaded before another request
-    // changed its characters must not write its old copies back over the new ones.
+    // changed its characters must not write its old CharacterName (or any old column) back.
     [Fact]
     public async Task AnIdentityUpdateOfAStaleAccount_DoesNotWriteItsOldCopies()
     {
         await AddMemberAsync("me", "Mine", "Altone", null);
+        var before = await AsTheR55BuildLeftItAsync();
         await using var stale = _pg.CreateContext();
         var staleUser = await stale.Users.SingleAsync(u => u.Id == "me");
 
@@ -318,12 +407,16 @@ public class MirrorParityTests : IAsyncLifetime
             set.SetJobs(Character.Alt1Slot, jobLevels: Levels(50));
             await other.SaveChangesAsync();
         }
+        // The old columns as if R5.5 had made that save (so they differ from what staleUser holds).
+        before = await AsTheR55BuildLeftItAsync();
 
         staleUser.TimeZone = "America/New_York";
         Assert.True((await NewUserManager(stale).UpdateAsync(staleUser)).Succeeded);
 
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
         Assert.Equal(("Newmain", "Altone", null), await NamesAsync("me"));
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
     // A new membership gets the account's main as saved in the database, even when the context that
@@ -332,6 +425,7 @@ public class MirrorParityTests : IAsyncLifetime
     public async Task ANewMembership_FromAStaleContext_GetsTheSavedMain()
     {
         await AddMemberAsync("me", "Mine", null, null, linkshellId: null);
+        var before = await AsTheR55BuildLeftItAsync();
         await using var stale = _pg.CreateContext();
         var staleUser = await stale.Users.SingleAsync(u => u.Id == "me");
 
@@ -345,7 +439,9 @@ public class MirrorParityTests : IAsyncLifetime
         stale.AppUserLinkshells.Add(LinkshellMembership.NewMember(staleUser, _linkshellId, DateTime.UtcNow));
         await stale.SaveChangesAsync();
 
-        await AssertMirrorExactAsync();
+        await AssertStampedAsync(before);
+
+        await AssertTheRefillMakesTheCopiesExactAsync();
     }
 
     // ---- helpers -------------------------------------------------------------------------------
@@ -373,6 +469,24 @@ public class MirrorParityTests : IAsyncLifetime
         await db.SaveChangesAsync();
     }
 
+    // The old columns as the R5.5 build leaves them (an exact copy of Characters, which is what the
+    // refill writes), returned so the test can check nothing writes them after.
+    private async Task<List<string>> AsTheR55BuildLeftItAsync()
+    {
+        await using (var db = _pg.CreateContext())
+        {
+            await db.Database.ExecuteSqlRawAsync(MirrorRefillSql);
+            Assert.True((await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None)).AllMatch);
+        }
+        return await OldColumnsAsync();
+    }
+
+    private async Task<List<string>> OldColumnsAsync()
+    {
+        await using var db = _pg.CreateContext();
+        return await db.Database.SqlQueryRaw<string>(OldColumnsSql).ToListAsync();
+    }
+
     private async Task<(string?, string?, string?)> NamesAsync(string id)
     {
         await using var db = _pg.CreateContext();
@@ -380,48 +494,53 @@ public class MirrorParityTests : IAsyncLifetime
         return (rows.SingleOrDefault(r => r.Slot == 0)?.Name, rows.SingleOrDefault(r => r.Slot == 1)?.Name, rows.SingleOrDefault(r => r.Slot == 2)?.Name);
     }
 
-    private async Task AssertMirrorExactAsync()
+    // The job levels of the three slots, "-" for none.
+    private async Task<string> JobsAsync(string id)
     {
         await using var db = _pg.CreateContext();
-
-        // 1. The start-up check (A7, the main, the roster names).
-        Assert.Equal(new AccountNameMirrorCounts.Result(0, 0, 0), await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None));
-
-        // 2. The account columns are an exact copy of the three slots.
-        var characters = await db.Characters.AsNoTracking().ToListAsync();
-        foreach (var user in await db.Users.AsNoTracking().ToListAsync())
-        {
-            Character? Slot(short slot) => characters.SingleOrDefault(c => c.AppUserId == user.Id && c.Slot == slot);
-            var (main, alt1, alt2) = (Slot(0), Slot(1), Slot(2));
-            Assert.Equal(main?.Name, user.CharacterName);
-            Assert.Equal(alt1?.Name, user.AltCharacterName1);
-            Assert.Equal(alt2?.Name, user.AltCharacterName2);
-            Assert.Equal(main?.JobLevels, user.JobLevels);
-            Assert.Equal(main?.StrongJobs, user.StrongJobs);
-            Assert.Equal(main?.MeritJobs, user.MeritJobs);
-            Assert.Equal(main?.CraftLevels, user.CraftLevels);
-            Assert.Equal(alt1?.JobLevels, user.Alt1JobLevels);
-            Assert.Equal(alt1?.StrongJobs, user.Alt1StrongJobs);
-            Assert.Equal(alt1?.MeritJobs, user.Alt1MeritJobs);
-            Assert.Equal(alt1?.CraftLevels, user.Alt1CraftLevels);
-            Assert.Equal(alt2?.JobLevels, user.Alt2JobLevels);
-            Assert.Equal(alt2?.StrongJobs, user.Alt2StrongJobs);
-            Assert.Equal(alt2?.MeritJobs, user.Alt2MeritJobs);
-            Assert.Equal(alt2?.CraftLevels, user.Alt2CraftLevels);
-        }
-
-        // 3. The old build's copy into Characters changes nothing.
-        var before = await SnapshotAsync(db);
-        await PreviousBuildCharacterCopy.RunForAllAccountsAsync(db);
-        Assert.Equal(before, await SnapshotAsync(db));
+        var rows = await db.Characters.AsNoTracking().Where(c => c.AppUserId == id).ToListAsync();
+        string Show(short slot) => rows.SingleOrDefault(r => r.Slot == slot)?.JobLevels is { } levels
+            ? "[" + string.Join(", ", levels) + "]"
+            : "-";
+        return string.Join("|", Show(0), Show(1), Show(2));
     }
 
-    private static async Task<List<string>> SnapshotAsync(ApplicationDbContext db) =>
-        (await db.Database.SqlQueryRaw<string>(
+    // CharacterName is the main's name and every roster name the account's main; the old columns of
+    // every account in `before` are as they were, and an account made since has none.
+    private async Task AssertStampedAsync(List<string> before)
+    {
+        await using var db = _pg.CreateContext();
+        var counts = await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None);
+        Assert.Equal(0, counts.Mains);
+        Assert.Equal(0, counts.RosterNames);
+
+        var previous = before.ToDictionary(line => line[..line.IndexOf('=')], StringComparer.Ordinal);
+        foreach (var line in await db.Database.SqlQueryRaw<string>(OldColumnsSql).ToListAsync())
+        {
+            var id = line[..line.IndexOf('=')];
+            Assert.Equal(previous.TryGetValue(id, out var was) ? was : id + "=" + NoOldColumns, line);
+        }
+    }
+
+    // After the refill the copies are exact (the R5.5 start-up check's counts are all 0) and the
+    // R5.4 build's own copy into Characters changes nothing.
+    private async Task AssertTheRefillMakesTheCopiesExactAsync()
+    {
+        await using var db = _pg.CreateContext();
+        await db.Database.ExecuteSqlRawAsync(MirrorRefillSql);
+        Assert.Equal(new AccountNameMirrorCounts.Result(0, 0, 0), await AccountNameMirrorCounts.CountAsync(db, CancellationToken.None));
+
+        var before = await CharactersSnapshotAsync(db);
+        await PreviousBuildCharacterCopy.RunForAllAccountsAsync(db);
+        Assert.Equal(before, await CharactersSnapshotAsync(db));
+    }
+
+    private static async Task<List<string>> CharactersSnapshotAsync(ApplicationDbContext db) =>
+        await db.Database.SqlQueryRaw<string>(
                 "SELECT concat_ws('|', \"Id\", \"AppUserId\", \"Slot\", \"Name\", \"NormalizedName\", \"JobLevels\"::text, " +
                 "\"StrongJobs\"::text, \"MeritJobs\"::text, \"CraftLevels\"::text, \"UpdatedAt\"::text) AS \"Value\" " +
                 "FROM \"Characters\" ORDER BY \"Id\"")
-            .ToListAsync());
+            .ToListAsync();
 
     private async Task<IActionResult> PostProfileAsync(string userId, ActivityUpdateProfileRequest request)
     {

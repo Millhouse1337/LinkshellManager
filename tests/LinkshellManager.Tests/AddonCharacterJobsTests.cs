@@ -13,10 +13,10 @@ using Xunit;
 
 namespace LinkshellManager.Tests;
 
-// A character's jobs live on its Characters row (written by CharacterWriter since Round 5); the
-// save mirrors them onto the old account columns (JobLevels, Alt1*, Alt2*), which these tests read. The
-// addon (POST character/jobs) may write the job levels of any of its token owner's OWN characters:
-// the main, or since Round 5 one of the two alts. Anybody else's character is refused with 403.
+// A character's jobs live on its Characters row (written by CharacterWriter since Round 5), which
+// these tests read (the old account columns are not written since R5.6). The addon (POST
+// character/jobs) may write the job levels of any of its token owner's OWN characters: the main, or
+// since Round 5 one of the two alts. Anybody else's character is refused with 403.
 // (This was MainCharacterJobsTests, when the addon could write the main only.)
 public class AddonCharacterJobsTests
 {
@@ -82,11 +82,16 @@ public class AddonCharacterJobsTests
         NewAddonController(db, issuer).PostCharacterJobsAsync(
             new AddonApiController.AddonPostJobLevelsRequest(name, levels), CancellationToken.None);
 
-    // Every job array of every account, so a test can say "nothing else changed".
-    private static List<string> AllJobs(ApplicationDbContext db) =>
-        db.Users.AsNoTracking().OrderBy(u => u.Id).ToList()
-            .Select(u => $"{u.Id}:{Show(u.JobLevels)}|{Show(u.Alt1JobLevels)}|{Show(u.Alt2JobLevels)}")
+    // Every job array of every account (main, alt 1, alt 2, from the Characters rows), so a test can
+    // say "nothing else changed".
+    private static List<string> AllJobs(ApplicationDbContext db)
+    {
+        var rows = db.Characters.AsNoTracking().ToList();
+        string Jobs(string id, short slot) => Show(rows.SingleOrDefault(c => c.AppUserId == id && c.Slot == slot)?.JobLevels);
+        return db.Users.AsNoTracking().OrderBy(u => u.Id).Select(u => u.Id).ToList()
+            .Select(id => $"{id}:{Jobs(id, 0)}|{Jobs(id, 1)}|{Jobs(id, 2)}")
             .ToList();
+    }
 
     private static string Show(int[]? levels) => levels is null ? "-" : string.Join(",", levels);
 
@@ -318,7 +323,7 @@ public class AddonCharacterJobsTests
             .ClaimPlaceholderAsync("ph", "real", Ls, CancellationToken.None);
 
         Assert.True(result.Success, result.Error);
-        var real = db.Users.Single(u => u.Id == "real");
+        var real = db.Characters.AsNoTracking().Single(c => c.AppUserId == "real" && c.Slot == Character.MainSlot);
         Assert.Equal(expected, real.JobLevels);
         Assert.Equal(new[] { 0, 1 }, real.StrongJobs);
         Assert.Equal(new[] { "note" }, real.MeritJobs);

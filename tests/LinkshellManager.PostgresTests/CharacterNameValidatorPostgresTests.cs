@@ -85,7 +85,8 @@ public class CharacterNameValidatorPostgresTests : IAsyncLifetime
     private async Task<string?> AltTwoAsync()
     {
         await using var db = _pg.CreateContext();
-        return (await db.Users.AsNoTracking().SingleAsync(u => u.Id == "me")).AltCharacterName2;
+        return await db.Characters.AsNoTracking()
+            .Where(c => c.AppUserId == "me" && c.Slot == Character.Alt2Slot).Select(c => c.Name).SingleOrDefaultAsync();
     }
 
     private static UserManager<AppUser> NewUserManager(ApplicationDbContext db) => new(
